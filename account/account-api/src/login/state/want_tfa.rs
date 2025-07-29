@@ -10,6 +10,7 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::observability::metrics;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::store::MbpMode;
+use proton_core_common::post_login_check::PostLoginValidator;
 use tracing::info;
 
 /// Represents the login flow state where the user must provide their two-factor authentication code.
@@ -40,7 +41,11 @@ impl WantTfa {
         }
     }
 
-    pub async fn submit_totp(self, code: String) -> Result<State, (State, LoginError)> {
+    pub async fn submit_totp(
+        self,
+        code: String,
+        post_login_validator: &dyn PostLoginValidator,
+    ) -> Result<State, (State, LoginError)> {
         let Self {
             flow,
             data,
@@ -58,7 +63,7 @@ impl WantTfa {
 
         match result {
             Ok(client) => {
-                Self::advance(client, data, pass, mode)
+                Self::advance(client, data, pass, mode, post_login_validator)
                     .map_err(|err| (State::TfaError, err))
                     .await
             }
@@ -73,6 +78,7 @@ impl WantTfa {
     pub async fn submit_fido(
         self,
         fido_request: fido2::Request,
+        post_login_validator: &dyn PostLoginValidator,
     ) -> Result<State, (State, LoginError)> {
         let Self {
             flow,
@@ -91,7 +97,7 @@ impl WantTfa {
 
         match result {
             Ok(client) => {
-                Self::advance(client, data, pass, mode)
+                Self::advance(client, data, pass, mode, post_login_validator)
                     .map_err(|err| (State::TfaError, err))
                     .await
             }
@@ -108,10 +114,11 @@ impl WantTfa {
         data: StateData,
         pass: SecureString,
         mode: MbpMode,
+        post_login_validator: &dyn PostLoginValidator,
     ) -> Result<State, LoginError> {
         data.parts.store.write().await.clear_temp_pass().await?;
 
-        State::inspect_user(client, data, pass, mode).await
+        State::inspect_user(client, data, pass, mode, post_login_validator).await
     }
 
     pub fn fido_details(&self) -> Option<&fido2::Response> {

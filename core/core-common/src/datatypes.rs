@@ -622,6 +622,9 @@ pub enum UserType {
     /// TODO: Document this variant.
     External = 3,
 
+    /// Credentialles user
+    CredentialLess = 4,
+
     Unknown(u8),
 }
 
@@ -631,6 +634,7 @@ impl From<UserType> for i64 {
             UserType::Proton => 1,
             UserType::Managed => 2,
             UserType::External => 3,
+            UserType::CredentialLess => 4,
             UserType::Unknown(v) => i64::from(v),
         }
     }
@@ -642,6 +646,7 @@ impl From<ApiUserType> for UserType {
             ApiUserType::Proton => Self::Proton,
             ApiUserType::Managed => Self::Managed,
             ApiUserType::External => Self::External,
+            ApiUserType::CredentialLess => Self::CredentialLess,
             ApiUserType::Unknown(v) => {
                 warn!("Detected `Unknown` user type: {}", v);
                 Self::Unknown(v)

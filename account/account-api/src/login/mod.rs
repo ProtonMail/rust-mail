@@ -10,6 +10,8 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_api::store::MbpMode;
 use proton_core_api::store::{StoreError, UserData};
+use proton_core_common::post_login_check::PostLoginCheckError;
+use proton_core_common::post_login_check::PostLoginValidator;
 use secrecy::SecretString;
 use std::fmt::Debug;
 use thiserror::Error;
@@ -132,6 +134,9 @@ pub enum LoginError {
     /// Returned when new password setup is aborted
     #[error("New password setup aborted")]
     NewPasswordSetupAborted,
+
+    #[error("Post-login check failed: {0}")]
+    PostLoginCheckFailed(#[from] PostLoginCheckError),
 }
 
 impl ServiceError for LoginError {}
@@ -140,23 +145,33 @@ impl ServiceError for LoginError {}
 ///
 /// The flow is used to guide the user through the login process,
 /// ensuring that all necessary steps are completed in the correct order.
-#[derive(Debug)]
 pub struct LoginFlow {
     session: Session,
     state: State,
+    post_login_validator: Box<dyn PostLoginValidator>,
 }
 
 impl LoginFlow {
     /// Create a new login flow from the beginning.
     #[must_use]
-    pub fn new(session: Session, challenge_info: ChallengeInfo) -> Self {
+    pub fn new(
+        session: Session,
+        challenge_info: ChallengeInfo,
+        post_login_validator: Box<dyn PostLoginValidator>,
+    ) -> Self {
         let (client, parts) = session.to_parts();
+
         let state = State::new(client, parts, Some(challenge_info));
 
-        Self { session, state }
+        Self {
+            session,
+            state,
+            post_login_validator,
+        }
     }
 
     /// Resume the login flow at the 2FA step.
+    #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn new_from_tfa(
         session: Session,
@@ -165,6 +180,7 @@ impl LoginFlow {
         pass: impl Into<SecureString>,
         mode: MbpMode,
         fido_details: Option<fido2::Response>,
+        post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Self {
         let (client, parts) = session.to_parts();
         let state = State::new_from_tfa(
@@ -177,16 +193,29 @@ impl LoginFlow {
             fido_details,
         );
 
-        Self { session, state }
+        Self {
+            session,
+            state,
+            post_login_validator,
+        }
     }
 
     /// Resume the login flow at the mailbox password step.
     #[must_use]
-    pub fn new_from_mbp(session: Session, user_id: UserId, session_id: SessionId) -> Self {
+    pub fn new_from_mbp(
+        session: Session,
+        user_id: UserId,
+        session_id: SessionId,
+        post_login_validator: Box<dyn PostLoginValidator>,
+    ) -> Self {
         let (client, parts) = session.to_parts();
         let state = State::new_from_mbp(client, parts, user_id, session_id);
 
-        Self { session, state }
+        Self {
+            session,
+            state,
+            post_login_validator,
+        }
     }
 
     /// # WARNING
@@ -220,8 +249,8 @@ impl LoginFlow {
         pass: impl Into<SecureString>,
         user_behavior: Option<Behavior>,
     ) -> Result<(), LoginError> {
-        self.transition(|s: State| {
-            s.login_with_credentials(user.into(), pass.into(), user_behavior)
+        self.transition_with_validator(|s: State, validator: &dyn PostLoginValidator| {
+            s.login_with_credentials(user.into(), pass.into(), user_behavior, validator)
         })
         .await
         .inspect_err(|_| self.try_recover())
@@ -267,18 +296,22 @@ impl LoginFlow {
     ///
     /// Returns error if the request failed.
     pub async fn submit_totp(&mut self, code: String) -> Result<(), LoginError> {
-        self.transition(|s: State| s.submit_totp(code))
-            .await
-            .inspect_err(|_| self.try_recover())
+        self.transition_with_validator(|s: State, validator: &dyn PostLoginValidator| {
+            s.submit_totp(code, validator)
+        })
+        .await
+        .inspect_err(|_| self.try_recover())
     }
 
     /// Submit FIDO 2FA code.
     ///
     /// Returns error if the request failed.
     pub async fn submit_fido(&mut self, fido_data: fido2::Request) -> Result<(), LoginError> {
-        self.transition(|s: State| s.submit_fido(fido_data))
-            .await
-            .inspect_err(|_| self.try_recover())
+        self.transition_with_validator(|s: State, validator: &dyn PostLoginValidator| {
+            s.submit_fido(fido_data, validator)
+        })
+        .await
+        .inspect_err(|_| self.try_recover())
     }
 
     #[must_use]
@@ -299,9 +332,11 @@ impl LoginFlow {
         &mut self,
         pass: impl Into<SecureString>,
     ) -> Result<(), LoginError> {
-        self.transition(|s: State| s.submit_mbp(pass.into()))
-            .await
-            .inspect_err(|_| self.try_recover())
+        self.transition_with_validator(|s: State, validator: &dyn PostLoginValidator| {
+            s.submit_mbp(pass.into(), validator)
+        })
+        .await
+        .inspect_err(|_| self.try_recover())
     }
 
     /// Submit a new password for users with temporary passwords.
@@ -309,9 +344,11 @@ impl LoginFlow {
         &mut self,
         new_pass: impl Into<SecureString>,
     ) -> Result<(), LoginError> {
-        self.transition(|s: State| s.submit_new_password(new_pass.into()))
-            .await
-            .inspect_err(|_| self.try_recover())
+        self.transition_with_validator(|s: State, validator: &dyn PostLoginValidator| {
+            s.submit_new_password(new_pass.into(), validator)
+        })
+        .await
+        .inspect_err(|_| self.try_recover())
     }
 
     /// Take the completed session from the flow.
@@ -390,6 +427,25 @@ impl LoginFlow {
     /// Returns an error if the session ID is not yet known.
     pub fn session_id(&self) -> Result<&SessionId, LoginError> {
         self.state.session_id()
+    }
+
+    /// Try to transition the flow to the next state.
+    async fn transition_with_validator<'a, F, Fut>(&'a mut self, f: F) -> Result<(), LoginError>
+    where
+        F: FnOnce(State, &'a dyn PostLoginValidator) -> Fut,
+        Fut: Future<Output = Result<State, (State, LoginError)>> + Send + 'a,
+    {
+        match f(self.take_state(), &*self.post_login_validator).await {
+            Ok(state) => {
+                self.state = state;
+                Ok(())
+            }
+
+            Err((state, err)) => {
+                self.state = state;
+                Err(err)
+            }
+        }
     }
 
     /// Try to transition the flow to the next state.

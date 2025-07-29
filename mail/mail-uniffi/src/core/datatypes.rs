@@ -504,6 +504,9 @@ pub enum UserType {
     /// TODO: Document this variant.
     External,
 
+    /// Credentialless user
+    CredentialLess,
+
     /// TODO: Document this variant.
     Unknown(u8),
 }
@@ -514,6 +517,7 @@ impl From<UserType> for RealUserType {
             UserType::Proton => Self::Proton,
             UserType::Managed => Self::Managed,
             UserType::External => Self::External,
+            UserType::CredentialLess => Self::CredentialLess,
             UserType::Unknown(v) => Self::Unknown(v),
         }
     }
@@ -525,6 +529,7 @@ impl From<RealUserType> for UserType {
             RealUserType::Proton => Self::Proton,
             RealUserType::Managed => Self::Managed,
             RealUserType::External => Self::External,
+            RealUserType::CredentialLess => Self::CredentialLess,
             RealUserType::Unknown(v) => Self::Unknown(v),
         }
     }

@@ -33,6 +33,8 @@ wiremock = { workspace = true }
 insta = { workspace = true }
 proton-core-common = { workspace = true, features = ["test-utils"] }
 proton-mail-api = { path = ".", features = ["mocks"] }
+proton-log-service = { workspace = true }
+tempdir = { workspace = true }
 
 
 [lints]

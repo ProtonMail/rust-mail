@@ -1,9 +1,18 @@
 #![allow(clippy::print_stdout)]
 
+use std::sync::Arc;
+
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::session::{Config, CoreSession, Session};
+use proton_core_common::Context;
+use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::event_loop::EventPollMode;
+use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
+use proton_core_common::post_login_check::FreeAccountCountValidator;
+use proton_log_service::LogService;
+use tempdir::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -34,7 +43,13 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut login_flow = LoginFlow::new(session.clone(), ChallengeInfo::default());
+    let context = create_context().await;
+
+    let mut login_flow = LoginFlow::new(
+        session.clone(),
+        ChallengeInfo::default(),
+        Box::new(FreeAccountCountValidator::new(Some(2), context)),
+    );
     login_flow
         .login_with_credentials(user_email, user_password, None)
         .await
@@ -108,4 +123,32 @@ async fn main() {
     println!("User settings is {settings:?}");
 
     session.logout().await.unwrap();
+}
+
+async fn create_context() -> Arc<Context> {
+    let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
+    let keychain = Arc::new(InMemoryKeyChain::default()).clone();
+    let key = SessionEncryptionKey::random();
+    let log_config = proton_log_service::Config::builder()
+        .name("log".into())
+        .directory(tmp_dir.path().into())
+        .build();
+    keychain
+        .store(key.clone())
+        .expect("failed to store in keychain");
+    Context::new(
+        tmp_dir.path(),
+        tmp_dir.path(),
+        Arc::new(InMemoryKeyChain::default()).clone(),
+        vec![],
+        Config::atlas(),
+        None,
+        None,
+        tmp_dir.path().join("core-cache"),
+        None,
+        LogService::new(log_config),
+        EventPollMode::Manual,
+    )
+    .await
+    .expect("failed to create core context")
 }

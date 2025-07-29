@@ -1,3 +1,4 @@
+use crate::login::PostLoginValidator;
 use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{LoginError, state::State};
 use crate::requests::{AddressKeyInput, AsyncUserInitialization, SetupKeysRequest};
@@ -28,6 +29,7 @@ impl WantNewPassword {
     pub async fn submit_new_password(
         self,
         new_pass: SecureString,
+        post_login_validator: &dyn PostLoginValidator,
     ) -> Result<State, (State, LoginError)> {
         // Initialize crypto providers
         let srp = proton_crypto::new_srp_provider();
@@ -75,7 +77,7 @@ impl WantNewPassword {
             .await?;
 
         // Call finalize to complete the login process with the new password
-        State::finalize(self.client, self.data, new_pass)
+        State::finalize(self.client, self.data, new_pass, post_login_validator)
             .await
             .map_err(|e| (State::Invalid, e))
     }
