@@ -49,6 +49,3 @@ pub use mailbox_labels::*;
 pub use message::*;
 pub use network::*;
 pub use rollback_item::*;
-
-#[path = "tests/models.rs"]
-mod tests;

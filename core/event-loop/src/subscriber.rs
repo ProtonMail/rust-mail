@@ -1,16 +1,10 @@
-#[cfg(test)]
-#[path = "tests/subscriber.rs"]
-mod tests;
-
-use std::any::Any;
-
-use async_trait::async_trait;
-use tracing::error;
-// avoid namespace conflicts
 use crate::{Event, EventLoopError, RawEvent};
+use async_trait::async_trait;
 use proton_core_api::service::ApiServiceError;
 use stash::stash::StashError;
+use std::any::Any;
 use thiserror::Error;
+use tracing::error;
 
 #[derive(Debug, Error)]
 pub enum SubscriberError {

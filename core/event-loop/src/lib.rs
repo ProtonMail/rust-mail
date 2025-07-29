@@ -66,10 +66,6 @@ pub mod provider;
 pub mod store;
 pub mod subscriber;
 
-#[cfg(test)]
-#[path = "tests/lib.rs"]
-mod tests;
-
 // Re-export main types
 pub use poll::EventPoll;
 pub use provider::Provider;

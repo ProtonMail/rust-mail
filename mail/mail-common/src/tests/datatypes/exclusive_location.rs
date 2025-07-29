@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use super::{ExclusiveLocation, SystemLabel};
 use crate::{
     datatypes::LabelType::{self, *},
