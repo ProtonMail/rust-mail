@@ -56,7 +56,7 @@ pub trait ProtonCalendar {
         shared_key_packet: &str,
     ) -> impl Future<Output = ApiServiceResult<()>> + Send;
 
-    /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/put_calendar-%7B_version%7D-%7BcalID%7D-events-sync>
+    /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/put_calendar-%7B_version%7D-%7BcalID%7D-events-%7BeventID%7D-attendees-%7BattendeeID%7D>
     fn update_calendar_event_attendee_status(
         &self,
         cal_id: &CalendarId,

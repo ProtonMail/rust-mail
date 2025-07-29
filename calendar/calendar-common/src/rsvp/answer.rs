@@ -125,7 +125,10 @@ where
         parent.chain(children)
     };
 
+    let parent_calendar_id = &event.raw().calendar_id;
+
     let steps = events
+        .filter(|(event, _, _)| event.calendar_id == *parent_calendar_id)
         .map(|(event, event_ty, event_idx)| {
             plan_event(
                 pgp, keys, calendar, event, event_ty, event_idx, answer, token,
