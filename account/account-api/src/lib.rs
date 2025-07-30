@@ -256,8 +256,6 @@ pub trait AccountApi {
         request: PostAddressesSetupRequest,
     ) -> ApiServiceResult<PostAddressesSetupResponse>;
 
-    async fn auth_request(&self, request: PostAuthRequest) -> ApiServiceResult<AuthResponse>;
-
     /// Checks if the provided email address is valid
     /// [API doc](https://proton.black/api/internal/doc?page=core#tag/Validation/operation/post_core-{_version}-validate-email)
     async fn validate_email(
@@ -436,15 +434,6 @@ impl AccountApi for muon::Client {
         let user_init_flag: i32 = user_init_flag.into();
         Ok(POST!("{CORE_V4}/keys/setup")
             .query(serde_to_query(("AsyncUserInitialization", user_init_flag))?)
-            .body_json(request)?
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
-    async fn auth_request(&self, request: PostAuthRequest) -> ApiServiceResult<AuthResponse> {
-        Ok(POST!("{AUTH_V4}")
             .body_json(request)?
             .send_with(self)
             .await?
