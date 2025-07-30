@@ -5610,7 +5610,6 @@ name = "proton-canonical-email"
 version = "0.1.0"
 dependencies = [
  "serde",
- "velcro",
 ]
 
 [[package]]
