@@ -1,15 +1,16 @@
 use crate::MailContextError;
 use crate::MailUserContext;
 use crate::datatypes::{MimeType, attachment};
-use crate::draft::SendError;
-use crate::draft::compose::REPLY_PREFIX;
+use crate::draft::compose::{REPLY_PREFIX, apply_prefix_to_subject, resolve_sender_alias};
 use crate::draft::send::MailType;
-use crate::draft::{self, send};
+use crate::draft::{SendError, send};
 use crate::models::AttachmentType;
 use crate::models::Message;
+use crate::models::MessageBodyMetadata;
 use crate::models::{Attachment, MailSettings};
 use anyhow::Context;
 use proton_calendar_common::{self as cal};
+use proton_canonical_email as email;
 use proton_core_api::services::proton::{PrivateEmailRef, PrivateString};
 use proton_crypto_account::keys::{PrimaryUnlockedAddressKey, UnlockedAddressKeys};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, EncryptedAttachment};
@@ -36,6 +37,7 @@ where
     pub keys: &'a UnlockedAddressKeys<P>,
     pub tether: &'a mut Tether,
     pub msg_id: &'a MessageId,
+    pub msg_meta: &'a MessageBodyMetadata,
     pub msg_subject: &'a str,
     pub addr_display_name: &'a str,
 }
@@ -140,10 +142,13 @@ where
     ) -> Result<DirectParams, MailContextError> {
         debug!("Building message");
 
-        let subject = draft::compose::apply_prefix_to_subject(REPLY_PREFIX, self.msg_subject);
+        let subject = apply_prefix_to_subject(REPLY_PREFIX, self.msg_subject);
+
+        let from = email::canonicalize_auto(from.as_clear_text_str());
+        let from = resolve_sender_alias(from.as_str(), self.msg_meta);
 
         let sender = DraftSender {
-            address: from.to_owned(),
+            address: from.into(),
             name: self.addr_display_name.into(),
         };
 

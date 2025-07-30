@@ -1,8 +1,9 @@
 use crate::draft::compose::validate_sender_address;
+use crate::models::MessageBodyMetadata;
 use crate::rsvp::RsvpMailSender;
 use crate::{AppError, MailContextResult};
 use crate::{MailUserContext, models::Message};
-use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError};
+use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError, RsvpError};
 use proton_core_common::models::{Address, User};
 use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
@@ -14,15 +15,23 @@ use tracing::{info, instrument, warn};
 pub struct RsvpEvent {
     event: cal::RsvpEvent,
     msg: Message,
+    msg_meta: MessageBodyMetadata,
     addr: Address,
     user: User,
 }
 
 impl RsvpEvent {
-    pub(crate) fn new(event: cal::RsvpEvent, msg: Message, addr: Address, user: User) -> Self {
+    pub(crate) fn new(
+        event: cal::RsvpEvent,
+        msg: Message,
+        msg_meta: MessageBodyMetadata,
+        addr: Address,
+        user: User,
+    ) -> Self {
         Self {
             event,
             msg,
+            msg_meta,
             addr,
             user,
         }
@@ -51,6 +60,10 @@ impl RsvpEvent {
     ) -> MailContextResult<()> {
         info!("Answering RSVP");
 
+        if !self.can_be_answered() {
+            return Err(RsvpError::NonAnswerable.into());
+        }
+
         let pgp = proton_crypto::new_pgp_provider();
 
         let keys = ctx
@@ -71,6 +84,7 @@ impl RsvpEvent {
                 keys: &keys,
                 tether,
                 msg_id,
+                msg_meta: &self.msg_meta,
                 msg_subject: &self.msg.subject,
                 addr_display_name: &self.addr.display_name,
             }
