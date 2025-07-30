@@ -6,6 +6,7 @@ use itertools::Itertools;
 use parking_lot::Mutex;
 use proton_calendar_api as cal_api;
 use proton_calendar_common as cal;
+use proton_core_common::datatypes::UnixTimestamp as RealUnixTimestamp;
 use proton_ical as ical;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::unexpected::Unexpected;
@@ -185,8 +186,8 @@ impl TryFrom<&cal::RsvpEvent> for RsvpEvent {
             location: event.location.clone(),
             description: event.description.clone(),
             recurrence: event.recurrence.as_ref().map(ToString::to_string),
-            starts_at: (&starts_at).into(),
-            ends_at: (&ends_at).into(),
+            starts_at: RealUnixTimestamp::from(&starts_at).into(),
+            ends_at: RealUnixTimestamp::from(&ends_at).into(),
             occurrence,
             organizer: (&event.organizer).into(),
             attendees: event.attendees.iter().map_into().collect(),
