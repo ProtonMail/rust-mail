@@ -1,9 +1,9 @@
+use crate::draft::compose::validate_sender_address;
 use crate::rsvp::RsvpMailSender;
 use crate::{AppError, MailContextResult};
 use crate::{MailUserContext, models::Message};
 use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError};
-use proton_core_common::datatypes::AddressStatus;
-use proton_core_common::models::Address;
+use proton_core_common::models::{Address, User};
 use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -15,21 +15,27 @@ pub struct RsvpEvent {
     event: cal::RsvpEvent,
     msg: Message,
     addr: Address,
+    user: User,
 }
 
 impl RsvpEvent {
-    pub(crate) fn new(event: cal::RsvpEvent, msg: Message, addr: Address) -> Self {
-        Self { event, msg, addr }
+    pub(crate) fn new(event: cal::RsvpEvent, msg: Message, addr: Address, user: User) -> Self {
+        Self {
+            event,
+            msg,
+            addr,
+            user,
+        }
     }
 
     #[must_use]
-    pub fn is_address_enabled(&self) -> bool {
-        self.addr.status == AddressStatus::Enabled
+    pub fn is_address_correct(&self) -> bool {
+        validate_sender_address(&self.addr, &self.user).is_none()
     }
 
     #[must_use]
     pub fn can_be_answered(&self) -> bool {
-        self.event.can_be_answered() && self.is_address_enabled()
+        self.event.can_be_answered() && self.is_address_correct()
     }
 
     // TODO (NGC-57) implement support for offline-mode
