@@ -5,9 +5,15 @@ use crate::shared::challenge::{Behavior, ChallengeInfo};
 use crate::shared::crypto::SharedCryptoError;
 use crate::signup::state::{Recovery, StateKind, Username};
 use crate::{AccountApi, ApiError};
+use futures::TryFutureExt;
+use proton_core_api::services::observability::{
+    ApiServiceObservabilityResponse, ObservabilityRecorder,
+};
 use proton_core_api::store::{DynStore, StoreError};
+use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_crypto_account::errors::{AccountCryptoError, SKLError};
 use proton_crypto_account::{proton_crypto::CryptoError, salts::SaltError};
+use serde::{Deserialize, Serialize};
 use state::State;
 use std::fmt::Debug;
 use thiserror::Error;
@@ -123,7 +129,17 @@ impl SignupFlow {
         store: DynStore,
         challenge_info: ChallengeInfo,
     ) -> Result<Self, ApiError> {
-        let domains = client.get_available_domains(None).await?.domains;
+        let recorder: ObservabilityRecorder = ObservabilityRecorder::default();
+        let domains = client
+            .get_available_domains(None)
+            .inspect_ok(|_| {
+                recorder.record(DomainAvailability::success());
+            })
+            .inspect_err(|err| {
+                recorder.record(DomainAvailability::error(err));
+            })
+            .await?
+            .domains;
         let countries = COUNTRIES.to_owned();
         let state = vec![State::new(client.clone(), challenge_info)];
 
@@ -271,5 +287,94 @@ impl SignupFlow {
 
     fn state(&self) -> Result<State, SignupError> {
         self.state.last().cloned().ok_or(SignupError::InvalidState)
+    }
+}
+
+metric! {
+    #[name = "core_signup_fetch_domains_total"]
+    #[version = 1]
+    #[doc = "Records the outcomes of the `GET core/v4/domains/available` API calls on the origin device."]
+    pub struct DomainAvailability {
+        pub status: ApiServiceObservabilityResponse,
+    }
+}
+
+impl DomainAvailability {
+    fn success() -> Self {
+        DomainAvailability {
+            status: ApiServiceObservabilityResponse::Success,
+        }
+    }
+    fn error(error: &ApiError) -> Self {
+        DomainAvailability {
+            status: error.into(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proton_core_api::services::{
+        observability::ObservabilityRecorder,
+        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    };
+    use serde_json::{self, json};
+
+    fn assert_serialization_deserialization(
+        status: ApiServiceObservabilityResponse,
+        expected_status: &str,
+    ) {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            DomainAvailability { status },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+
+        let expected_json = format!(
+            r#"{{"Name":"core_signup_fetch_domains_total","Version":1,"Timestamp":1741021308,"Data":{{"Labels":{{"status":"{expected_status}"}},"Value":1}}}}"#
+        );
+
+        assert_eq!(serialized, expected_json);
+
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: "core_signup_fetch_domains_total".into(),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({
+                        "status": expected_status,
+                    }),
+                    value: 1,
+                }
+            },
+            serde_json::from_str(&serialized).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_fetch_domains_serialization_deserialization_for_all_variants() {
+        let statuses = vec![
+            (ApiServiceObservabilityResponse::Success, "success"),
+            (ApiServiceObservabilityResponse::Http4xx, "http4xx"),
+            (ApiServiceObservabilityResponse::Http5xx, "http5xx"),
+            (
+                ApiServiceObservabilityResponse::NetworkError,
+                "network_error",
+            ),
+            (
+                ApiServiceObservabilityResponse::SerializationError,
+                "serialization_error",
+            ),
+            (ApiServiceObservabilityResponse::Unknown, "unknown"),
+        ];
+
+        for (status, expected_status) in statuses {
+            assert_serialization_deserialization(status, expected_status);
+        }
     }
 }
