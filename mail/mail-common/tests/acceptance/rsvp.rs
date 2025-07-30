@@ -29,7 +29,7 @@ const SPONGEBOB_NAME: &str = "Sponge Bob";
 const SPONGEBOB_ATTENDEE_ID: &str = "kdLoSTNf";
 const SPONGEBOB_ATTENDEE_TOKEN: &str = "JsgBUhNM";
 
-const TEST_MAIL: &str = "rust_test@proton.ch";
+const TEST_MAIL: &str = "rust_test+lovesinvites@proton.ch";
 const TEST_ATTENDEE_ID: &str = "Rh4V1hbc";
 const TEST_ATTENDEE_TOKEN: &str = "yAFY4dMB";
 const TEST_ATTACHMENT_ID: &str = "EZAYcqch";

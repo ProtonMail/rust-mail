@@ -1,6 +1,6 @@
 use crate::MailContextError;
 use crate::MailUserContext;
-use crate::datatypes::{MessageRecipient, MimeType, attachment};
+use crate::datatypes::{MimeType, attachment};
 use crate::draft::SendError;
 use crate::draft::compose::REPLY_PREFIX;
 use crate::draft::send::MailType;
@@ -37,8 +37,8 @@ where
     pub tether: &'a mut Tether,
     pub msg_id: &'a MessageId,
     pub msg_subject: &'a str,
-    pub msg_recipient: &'a MessageRecipient,
-    pub msg_address_id: &'a AddressId,
+    pub addr_id: &'a AddressId,
+    pub addr_display_name: &'a str,
 }
 
 impl<P> cal::RsvpMailSender for RsvpMailSender<'_, P>
@@ -47,18 +47,19 @@ where
 {
     type Error = MailContextError;
 
-    async fn send(mut self, to: &str, body: &str, ics: &str) -> Result<(), Self::Error> {
+    async fn send(
+        mut self,
+        from: &str,
+        to: &str,
+        body: &str,
+        ics: &str,
+    ) -> Result<(), Self::Error> {
         let key = {
             debug!("Getting mail key");
 
             self.keys
                 .primary_for_mail()
-                .with_context(|| {
-                    format!(
-                        "Couldn't get primary key for address {}",
-                        self.msg_address_id
-                    )
-                })
+                .with_context(|| format!("Couldn't get primary key for address {}", self.addr_id))
                 .map_err(MailContextError::Other)?
         };
 
@@ -68,20 +69,9 @@ where
             RsvpAttachment(ics).attachment_encrypt_and_sign(self.pgp, &key)?
         };
 
-        let message = {
-            debug!("Building message");
-
-            self.build_message(to.into(), body, &key, &ics)?
-        };
-
+        let message = self.build_message(from.into(), to.into(), body, &key, &ics)?;
         let parent = Some((self.msg_id.clone(), DraftAction::Reply));
-
-        let (packages, mut ics) = {
-            debug!("Building packages");
-
-            self.build_packages(to.into(), body, ics).await?
-        };
-
+        let (packages, mut ics) = self.build_packages(to.into(), body, ics).await?;
         let auto_save_contacts = false;
 
         let resp = {
@@ -143,16 +133,19 @@ where
     #[allow(clippy::result_large_err)]
     fn build_message(
         &self,
+        from: PrivateEmailRef,
         to: PrivateEmailRef,
         body: &str,
         key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
         ics: &EncryptedAttachment,
     ) -> Result<DirectParams, MailContextError> {
+        debug!("Building message");
+
         let subject = draft::compose::apply_prefix_to_subject(REPLY_PREFIX, self.msg_subject);
 
         let sender = DraftSender {
-            address: self.msg_recipient.address.clone(),
-            name: self.msg_recipient.name.clone(),
+            address: from.to_owned(),
+            name: self.addr_display_name.into(),
         };
 
         let body = RsvpBody(body)
@@ -185,6 +178,8 @@ where
         body: &str,
         ics: EncryptedAttachment,
     ) -> Result<(Vec<Package>, Attachment), MailContextError> {
+        debug!("Building packages");
+
         let to = to.to_owned();
 
         let ics = self

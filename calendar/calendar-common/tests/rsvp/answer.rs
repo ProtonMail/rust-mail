@@ -134,6 +134,7 @@ async fn basic(case: fn() -> TestCase) {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
+            from: "bar@pm.me".into(),
             to: "foo@pm.me".into(),
             body: case.expected_mail.into(),
             ics: ics! {"
@@ -153,6 +154,118 @@ async fn basic(case: fn() -> TestCase) {
                 END:VCALENDAR
             "}
             .replace("%partstat%", case.expected_ics),
+        }),
+        mail
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn alias() {
+    const ATTENDEES_EVENT: &str = indoc! {"
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        ATTENDEE;CN=foo@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@pm.me
+        ATTENDEE;CN=bar+spam@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar+spam@pm.me
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
+    let world = world().await;
+    let event = world.event(|event| event.basic().with_attendees_event(ATTENDEES_EVENT));
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap_ex(CALENDAR_ID, world.bootstrap(), |mock| mock.expect(2))
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
+        .await;
+
+    let mut event = RsvpEventId::invite(INVITE)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "bar@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    // ---
+
+    let mut mail = None;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_update_calendar_event_attendee_status(
+            CALENDAR_ID,
+            EVENT_ID,
+            BAR_ATTENDEE_ID,
+            CalendarAttendeeStatus::Yes,
+            &world.now,
+        )
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_update_calendar_event_personal_part(
+            CALENDAR_ID,
+            EVENT_ID,
+            Some("#aabbcc"),
+            CalendarNotificationsUpdate::SetToDefault,
+        )
+        .await;
+
+    let sender = FakeRsvpMailSender(&mut mail);
+
+    event
+        .answer(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            sender,
+            &world.now,
+            RsvpAnswer::Yes,
+        )
+        .await
+        .unwrap();
+
+    pa::assert_eq!(
+        Some(FakeRsvpMail {
+            from: "bar+spam@pm.me".into(),
+            to: "foo@pm.me".into(),
+            body: "bar+spam@pm.me accepted your invitation to some title".into(),
+            ics: ics! {"
+                BEGIN:VCALENDAR
+                METHOD:REPLY
+                VERSION:2.0
+                CALSCALE:GREGORIAN
+                BEGIN:VEVENT
+                UID:8maQ3qBa
+                DTSTAMP:20180101T100000Z
+                DTSTART:20180101T120000Z
+                DTEND:20180101T133000Z
+                SUMMARY:some title
+                LOCATION:some location
+                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar+spam@pm.me
+                END:VEVENT
+                END:VCALENDAR
+            "}
         }),
         mail
     );
@@ -528,6 +641,7 @@ async fn recurring_with_single_edits() {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
+            from: "bar@pm.me".into(),
             to: "foo@pm.me".into(),
             body: "bar@pm.me accepted your invitation to ice bucket challenge".into(),
             ics: ics! {"
@@ -764,6 +878,7 @@ async fn multiple_calendars() {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
+            from: "bar@pm.me".into(),
             to: "foo@pm.me".into(),
             body: "bar@pm.me accepted your invitation to some title".into(),
             ics: ics! {"
@@ -792,7 +907,7 @@ struct FakeRsvpMailSender<'a>(&'a mut Option<FakeRsvpMail>);
 impl RsvpMailSender for FakeRsvpMailSender<'_> {
     type Error = io::Error;
 
-    async fn send(self, to: &str, body: &str, ics: &str) -> io::Result<()> {
+    async fn send(self, from: &str, to: &str, body: &str, ics: &str) -> io::Result<()> {
         // PRODID is generated dynamically (it contains app's version), so let's
         // strip it to make the assertion easier
         let ics = ics
@@ -801,6 +916,7 @@ impl RsvpMailSender for FakeRsvpMailSender<'_> {
             .join("\r\n");
 
         *self.0 = Some(FakeRsvpMail {
+            from: from.to_owned(),
             to: to.to_owned(),
             body: body.to_owned(),
             ics,
@@ -812,6 +928,7 @@ impl RsvpMailSender for FakeRsvpMailSender<'_> {
 
 #[derive(Clone, Debug, PartialEq)]
 struct FakeRsvpMail {
+    from: String,
     to: String,
     body: String,
     ics: String,
