@@ -1,24 +1,30 @@
-//! General purpose utilities for dealing with email addresses at Proton.
-use std::fmt::Display;
-
 use serde::{self, Deserialize, Serialize};
-
-use velcro::hash_set;
+use std::collections::HashSet;
+use std::fmt::Display;
+use std::sync::OnceLock;
 
 macro_rules! create_domain_set {
     ($fn_name:ident, $const_name:ident) => {
-        fn $fn_name() -> &'static std::collections::HashSet<&'static str> {
-            use std::collections::HashSet;
-            use std::sync::OnceLock;
+        fn $fn_name() -> &'static HashSet<&'static str> {
             static HASHSET: OnceLock<HashSet<&'static str>> = OnceLock::new();
-            HASHSET.get_or_init(|| hash_set![..$const_name])
+
+            HASHSET.get_or_init(|| $const_name.iter().copied().collect())
         }
     };
 }
 
-const PROTONMAIL_DOMAINS: [&str; 4] = ["protonmail.com", "protonmail.ch", "pm.me", "proton.me"];
-const GMAIL_DOMAINS: [&str; 3] = ["gmail.com", "googlemail.com", "google.com"];
-const PLUS_DOMAINS: [&str; 6] = [
+const PROTONMAIL_DOMAINS: &[&str] = &[
+    "protonmail.com",
+    "protonmail.ch",
+    "pm.me",
+    "proton.me",
+    "proton.ch",
+    "external.proton.ch",
+];
+
+const GMAIL_DOMAINS: &[&str] = &["gmail.com", "googlemail.com", "google.com"];
+
+const PLUS_DOMAINS: &[&str] = &[
     "hotmail.com",
     "hotmail.co.uk",
     "hotmail.fr",
