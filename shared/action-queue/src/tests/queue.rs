@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use super::*;
 use crate::action::{
     Action, DefaultVersionConverter, Factory, MetadataBuilder, NoopError, Priority, Type,

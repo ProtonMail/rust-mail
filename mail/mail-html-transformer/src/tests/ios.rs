@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 #[test]
 fn inject_with_existing_head_element() {
     let input = r"<html><head></head><body></body></html>";

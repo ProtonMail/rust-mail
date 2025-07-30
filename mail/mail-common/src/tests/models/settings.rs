@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use super::*;
 use pretty_assertions::assert_eq;
 use proton_mail_common::test_utils::db::new_test_connection;

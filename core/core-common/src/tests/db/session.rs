@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use crate::datatypes::AuthScopes;
 use crate::db::account::{
     CoreAccount, CoreSession, CoreSessionObserver, CoreSessionObserverNotification,

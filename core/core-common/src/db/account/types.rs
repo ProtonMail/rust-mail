@@ -67,7 +67,6 @@ pub struct CoreAccount {
 }
 
 impl CoreAccount {
-    /// Create a new account.
     #[must_use]
     pub fn new(remote_id: UserId, name_or_addr: String) -> Self {
         Self {
@@ -75,8 +74,6 @@ impl CoreAccount {
             name_or_addr,
             primary_seq: 0,
             is_ready: false,
-
-            // --- Optional fields ---
             username: None,
             password: None,
             display_name: None,
@@ -86,16 +83,10 @@ impl CoreAccount {
         }
     }
 
-    /// List all accounts, ordered by the primary sequence number.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the retrieval fails.
     pub async fn by_primary_seq(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find("ORDER BY primary_seq DESC", vec![], tether).await
     }
 
-    /// Get the largest primary sequence number.
     pub async fn primary_seq_max(tether: &Tether) -> Result<i64, StashError> {
         let query = format!(
             "SELECT MAX(primary_seq) AS value FROM {}",
@@ -105,13 +96,10 @@ impl CoreAccount {
         tether.query_value(query, vec![]).await
     }
 
-    /// Update the username of the account.
     #[must_use]
     pub fn with_username(self, username: String) -> Self {
         Self {
             username: Some(username),
-
-            // --- preserve ---
             ..self
         }
     }
@@ -120,17 +108,10 @@ impl CoreAccount {
     pub fn with_name_or_addr(self, name_or_addr: String) -> Self {
         Self {
             name_or_addr,
-
-            // --- preserve ---
             ..self
         }
     }
 
-    /// Update the password of the account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the encryption fails.
     pub fn with_password(
         self,
         pass: &str,
@@ -138,85 +119,63 @@ impl CoreAccount {
     ) -> Result<Self, CoreSessionError> {
         Ok(Self {
             password: Some(EncryptedPassword::new(pass, key)?),
-
-            // --- preserve ---
             ..self
         })
     }
 
-    /// Clear the password of the account.
     #[must_use]
     pub fn without_password(self) -> Self {
         Self {
             password: None,
-
-            // --- preserve ---
             ..self
         }
     }
 
-    /// Update the display name of the account.
     #[must_use]
     pub fn with_display_name(self, display_name: String) -> Self {
         Self {
             display_name: Some(display_name),
-
-            // --- preserve ---
             ..self
         }
     }
 
-    /// Update the primary email address of the account.
     #[must_use]
     pub fn with_primary_addr(self, primary_addr: String) -> Self {
         Self {
             primary_addr: Some(primary_addr),
-
-            // --- preserve ---
             ..self
         }
     }
 
-    /// Update the 2FA mode of the account.
     #[must_use]
     pub fn with_tfa_mode(self, mode: TfaStatus) -> Self {
         Self {
             second_factor_mode: Some(mode),
-
-            // --- preserve ---
             ..self
         }
     }
 
-    /// Update the mailbox password mode of the account.
     #[must_use]
     pub fn with_mbp_mode(self, mode: PasswordMode) -> Self {
         Self {
             password_mode: Some(mode),
-
-            // --- preserve ---
             ..self
         }
     }
 
-    /// Set the primary sequence number.
     #[must_use]
     pub fn with_primary_seq(self, primary_seq: i64) -> Self {
         Self {
             primary_seq,
 
-            // --- preserve ---
             ..self
         }
     }
 
-    /// Mark the account as ready.
     #[must_use]
     pub fn with_ready(self) -> Self {
         Self {
             is_ready: true,
-
-            // --- preserve ---
             ..self
         }
     }
@@ -225,14 +184,6 @@ impl CoreAccount {
         stash.subscribe_to(|sender| Box::new(CoreAccountWatcher { sender }))
     }
 
-    /// Retrieves account details including the name, email, and avatar information.
-    ///
-    /// This method constructs the account details using the available fields. If the display name
-    /// or username is not set, it falls back to `name_or_addr`. Similarly, the email defaults to
-    /// `name_or_addr` if the primary address is unavailable.
-    ///
-    /// # Returns
-    /// - `AccountDetails`: A struct containing the account's name, email, and avatar information.
     #[must_use]
     pub fn details(&self) -> AccountDetails {
         let name = self

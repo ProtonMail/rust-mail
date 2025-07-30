@@ -39,16 +39,13 @@ mod message;
 mod network;
 mod rollback_item;
 
-pub use attachment::*;
-pub use conversation::*;
-pub use draft::*;
-pub use labels_with_counters::*;
-pub use mail_scroller::*;
-pub use mail_settings::*;
-pub use mailbox_labels::*;
-pub use message::*;
-pub use network::*;
-pub use rollback_item::*;
-
-#[path = "tests/models.rs"]
-mod tests;
+pub use self::attachment::*;
+pub use self::conversation::*;
+pub use self::draft::*;
+pub use self::labels_with_counters::*;
+pub use self::mail_scroller::*;
+pub use self::mail_settings::*;
+pub use self::mailbox_labels::*;
+pub use self::message::*;
+pub use self::network::*;
+pub use self::rollback_item::*;

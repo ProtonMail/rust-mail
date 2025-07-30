@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use crate::Transformer;
 
 const TEST_DOCUMENT: &str = include_str!("test_document.html");

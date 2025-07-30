@@ -30,10 +30,6 @@
 //! way.
 //!
 
-#[cfg(test)]
-#[path = "tests/events.rs"]
-mod tests;
-
 use crate::datatypes::{ConversationLabelsCount, MessageLabelsCount};
 use crate::models::{Conversation, MailSettings};
 use proton_core_api::services::proton::EventId;

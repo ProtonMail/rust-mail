@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use crate::datatypes::{AccountDetails, AvatarInformation};
 use crate::db::account::CoreAccount;
 use proton_core_api::services::proton::UserId;

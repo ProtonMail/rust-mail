@@ -1,4 +1,3 @@
-#![allow(non_snake_case)]
 use super::*;
 
 mod message_detector_test_messages;

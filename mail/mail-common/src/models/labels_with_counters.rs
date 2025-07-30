@@ -1,3 +1,5 @@
+#![allow(clippy::module_inception)]
+
 #[cfg(test)]
 #[path = "../tests/models/labels_with_counters.rs"]
 mod labels_with_counters;
