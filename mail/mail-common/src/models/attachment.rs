@@ -378,6 +378,9 @@ impl Attachment {
 
     /// Get all attachments for a given message with `local_message_id`.
     ///
+    /// These also include attachments that are pgp embedded and do not appear
+    /// in the metadata list.
+    ///
     /// # Errors
     ///
     /// Returns error if the query fails.
@@ -389,7 +392,7 @@ impl Attachment {
             indoc! {"
             WHERE local_id IN (
                 SELECT local_attachment_id FROM message_attachments
-                WHERE local_message_id=?
+                WHERE local_message_id=?1
             )
         "},
             params![local_message_id],

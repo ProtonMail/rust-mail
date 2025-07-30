@@ -531,6 +531,7 @@ impl Attachment {
         let mut files = vec![];
         for (_, at) in attachments_to_delete(atts, bytes_to_delete) {
             files.push(at.path);
+            debug!("Deleting {:?}", at.attachment_id);
             ids.push(Box::new(at.attachment_id));
         }
 
