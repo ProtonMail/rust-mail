@@ -134,7 +134,6 @@ async fn basic(case: fn() -> TestCase) {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            from: "bar@pm.me".into(),
             to: "foo@pm.me".into(),
             body: case.expected_mail.into(),
             ics: ics! {"
@@ -247,7 +246,6 @@ async fn alias() {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            from: "bar+spam@pm.me".into(),
             to: "foo@pm.me".into(),
             body: "bar+spam@pm.me accepted your invitation to some title".into(),
             ics: ics! {"
@@ -641,7 +639,6 @@ async fn recurring_with_single_edits() {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            from: "bar@pm.me".into(),
             to: "foo@pm.me".into(),
             body: "bar@pm.me accepted your invitation to ice bucket challenge".into(),
             ics: ics! {"
@@ -878,7 +875,6 @@ async fn multiple_calendars() {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            from: "bar@pm.me".into(),
             to: "foo@pm.me".into(),
             body: "bar@pm.me accepted your invitation to some title".into(),
             ics: ics! {"
@@ -907,7 +903,7 @@ struct FakeRsvpMailSender<'a>(&'a mut Option<FakeRsvpMail>);
 impl RsvpMailSender for FakeRsvpMailSender<'_> {
     type Error = io::Error;
 
-    async fn send(self, from: &str, to: &str, body: &str, ics: &str) -> io::Result<()> {
+    async fn send(self, to: &str, body: &str, ics: &str) -> io::Result<()> {
         // PRODID is generated dynamically (it contains app's version), so let's
         // strip it to make the assertion easier
         let ics = ics
@@ -916,7 +912,6 @@ impl RsvpMailSender for FakeRsvpMailSender<'_> {
             .join("\r\n");
 
         *self.0 = Some(FakeRsvpMail {
-            from: from.to_owned(),
             to: to.to_owned(),
             body: body.to_owned(),
             ics,
@@ -928,7 +923,6 @@ impl RsvpMailSender for FakeRsvpMailSender<'_> {
 
 #[derive(Clone, Debug, PartialEq)]
 struct FakeRsvpMail {
-    from: String,
     to: String,
     body: String,
     ics: String,
