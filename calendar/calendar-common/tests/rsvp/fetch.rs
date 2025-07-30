@@ -185,10 +185,20 @@ async fn reminder() {
 }
 
 #[tokio::test]
-#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
 async fn alias() {
+    const ATTENDEES_EVENT: &str = indoc! {"
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        ATTENDEE;CN=foo@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@pm.me
+        ATTENDEE;CN=bar+spam@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar+spam@pm.me
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
     let world = world().await;
-    let event = world.event(|event| event.basic());
+    let event = world.event(|event| event.basic().with_attendees_event(ATTENDEES_EVENT));
 
     world
         .ctx
@@ -210,7 +220,7 @@ async fn alias() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar+spam@pm.me",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await

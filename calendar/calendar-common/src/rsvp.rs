@@ -557,6 +557,7 @@ pub trait RsvpMailSender {
 
     /// Sends an email response to the organizer.
     ///
+    /// - `from` is the user's address (with alias, if needed),
     /// - `to` is the organizer's address,
     /// - `body` is the message, unencrypted ("xxx accepted your invitation to yyy"),
     /// - `ics` is the `invite.ics` attachment, unencrypted.
@@ -569,6 +570,7 @@ pub trait RsvpMailSender {
     /// this crate (circular dependency).
     fn send(
         self,
+        from: &str,
         to: &str,
         body: &str,
         ics: &str,

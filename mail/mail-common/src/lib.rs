@@ -97,6 +97,8 @@ pub enum AppError {
     MessageHasNoRemoteId(LocalMessageId),
     #[error("Message missing in database for local_id {0}")]
     MessageMissing(LocalMessageId),
+    #[error("Address missing in database for local_id {0}")]
+    AddressMissing(LocalAddressId),
     #[error("Address {0} does not have a remote id")]
     AddressHasNoRemoteId(LocalAddressId),
     #[error("Could not find remote label {0}")]

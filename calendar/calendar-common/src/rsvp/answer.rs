@@ -614,7 +614,12 @@ where
     let ics = build_ics(api, pgp, keys, calendar, event, now, answer).await?;
 
     sender
-        .send(&event.organizer.email, &body, &ics)
+        .send(
+            &event.user_attendee().email,
+            &event.organizer.email,
+            &body,
+            &ics,
+        )
         .await
         .map_err(RsvpAnswerError::Mail)?;
 
