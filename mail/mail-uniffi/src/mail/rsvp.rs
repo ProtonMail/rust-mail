@@ -111,7 +111,7 @@ impl RsvpEventService {
 
     #[returns(RsvpEventGetResult)]
     pub fn get(&self) -> Result<RsvpEvent, RealProtonMailError> {
-        (&**self.rsvp.lock()).try_into()
+        (&*self.rsvp.lock()).try_into()
     }
 }
 
@@ -132,10 +132,10 @@ pub struct RsvpEvent {
     pub state: RsvpState,
 }
 
-impl TryFrom<&cal::RsvpEvent> for RsvpEvent {
+impl TryFrom<&mail::RsvpEvent> for RsvpEvent {
     type Error = RealProtonMailError;
 
-    fn try_from(event: &cal::RsvpEvent) -> Result<Self, RealProtonMailError> {
+    fn try_from(event: &mail::RsvpEvent) -> Result<Self, RealProtonMailError> {
         // Unwrap-safety: 4 million attendees would make for quite a big party.
         // (uniffi doesn't support `usize`)
         let user_attendee_idx = u32::try_from(event.user_attendee_idx).unwrap();
@@ -305,8 +305,8 @@ pub enum RsvpState {
     CancelledReminder,
 }
 
-impl From<&cal::RsvpEvent> for RsvpState {
-    fn from(event: &cal::RsvpEvent) -> Self {
+impl From<&mail::RsvpEvent> for RsvpState {
+    fn from(event: &mail::RsvpEvent) -> Self {
         let attendance = match event.user_attendee().role {
             ical::Role::ReqParticipant => RsvpAttendance::Required,
             _ => RsvpAttendance::Optional,
@@ -318,6 +318,12 @@ impl From<&cal::RsvpEvent> for RsvpState {
             cal::RsvpProgress::Ended => Some(RsvpProgress::Ended),
             cal::RsvpProgress::Cancelled => None,
         };
+
+        if !event.is_address_correct() {
+            return RsvpState::UnanswerableInvite {
+                reason: RsvpUnanswerableReason::AddressIsIncorrect,
+            };
+        }
 
         match (event.intent, event.recency, progress) {
             (cal::RsvpIntent::Invite, cal::RsvpRecency::Fresh, Some(progress)) => {
@@ -378,6 +384,10 @@ pub enum RsvpUnanswerableReason {
     /// We couldn't confirm whether the invite is stale or fresh; there's
     /// probably no network connection.
     InviteHasUnknownRecency,
+
+    /// User's address is either disabled or otherwise cannot be used to send
+    /// the reply.
+    AddressIsIncorrect,
 }
 
 #[derive(Clone, Copy, Debug, Enum)]
