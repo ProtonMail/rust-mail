@@ -1,7 +1,6 @@
 mod acceptance {
     mod action_label;
     mod action_label_as;
-    mod action_move;
     mod actions_read_unread;
     mod attachment;
     mod attachment_cache;

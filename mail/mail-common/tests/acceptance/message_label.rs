@@ -293,7 +293,8 @@ async fn message_action_ham() {
             unread: 0,
         }],
         ..Default::default()
-    }
+    };
+
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking

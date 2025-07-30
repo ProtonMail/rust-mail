@@ -259,6 +259,7 @@ pub struct QueuedActionOutput<T: Action> {
 }
 
 impl Queue {
+    #[must_use]
     pub fn tether(&self) -> Tether {
         self.shared.stash.connection()
     }
@@ -325,7 +326,7 @@ impl Queue {
     ///
     /// If one fails, everything is rolled back.
     ///
-    /// Additionally, a last_id arg can be provided to say what this should depend on.
+    /// Additionally, a `last_id` arg can be provided to say what this should depend on.
     pub async fn queue_actions<T: Action>(
         &self,
         actions: impl IntoIterator<Item = T>,
@@ -1352,11 +1353,11 @@ fn decode_action(
 /// Enqueues actions of potentially different types directly with the queue.
 ///
 /// Example usage:
-/// let action_id = enqueue!(my_queue, [foo, bar, baz])?;}
+/// `let action_id = enqueue!(my_queue, [foo, bar, baz])?;`
 macro_rules! enqueue {
     ($queue:expr, [$($action:expr),+ $(,)?]) => {{
-        use ::proton_action_queue::queue::Queue;
-        use ::proton_action_queue::action::{ActionId, Metadata};
+        use $crate::queue::Queue;
+        use $crate::action::{ActionId, Metadata};
         use ::anyhow::anyhow;
 
         $queue.tether().tx::<_,_, anyhow::Error>(async |tx| {

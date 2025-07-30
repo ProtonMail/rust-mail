@@ -300,6 +300,8 @@ pub struct Notification {
     pub id: u64,
 }
 
+type QueryResult = Box<dyn Any + Send + 'static>;
+
 /// An operation to be executed by the worker, which returns data.
 ///
 /// This is used for operations such as `SELECT`, where the result is a set of
@@ -313,13 +315,13 @@ struct Query {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
     #[derivative(Debug = "ignore")]
-    sender: OneshotSender<Result<Box<dyn Any + Send + 'static>, StashError>>,
+    sender: OneshotSender<Result<QueryResult, StashError>>,
 
     /// The deserialisation function to use to convert the query results into
     /// the desired type. This is necessary because the [`Rows`] type returned
     /// by the [`rusqlite`] library is not thread-safe.
     #[derivative(Debug = "ignore")]
-    converter: Box<dyn FnOnce(Rows<'_>) -> Box<dyn Any + Send + 'static> + Send + 'static>,
+    converter: Box<dyn FnOnce(Rows<'_>) -> QueryResult + Send + 'static>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
