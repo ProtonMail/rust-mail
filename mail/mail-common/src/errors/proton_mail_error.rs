@@ -564,6 +564,7 @@ impl From<DraftPasswordError> for ProtonMailError {
                 DraftPasswordErrorReason::PasswordTooShort,
             )),
             PasswordError::Encryption => Self::Unexpected(Unexpected::Crypto),
+            PasswordError::Decryption => Self::Unexpected(Unexpected::Crypto),
         }
     }
 }

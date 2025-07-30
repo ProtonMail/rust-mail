@@ -7,7 +7,9 @@ use crate::datatypes::LocalMessageId;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{LocalAttachmentId, LocalConversationId};
 use crate::draft::send::EoData;
-use crate::draft::{AttachmentUploadError, Error, PackageError, ReplyMode, SaveError, SendError};
+use crate::draft::{
+    AttachmentUploadError, Error, PackageError, PasswordError, ReplyMode, SaveError, SendError,
+};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::errors::{
@@ -331,7 +333,7 @@ impl DraftMetadata {
             String::from_utf8(
                 session_encryption_key
                     .decrypt(password.as_ref())
-                    .map_err(|_| SendError::EOPasswordDecrypt)?,
+                    .map_err(|_| PasswordError::Decryption)?,
             )
             .map_err(|_| MailContextError::Other(anyhow!("Draft password is not valid utf8")))?,
         );

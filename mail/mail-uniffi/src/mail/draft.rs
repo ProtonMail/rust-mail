@@ -21,14 +21,15 @@ use crate::{async_runtime, uniffi_async};
 use chrono::Local;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::draft::{
-    Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode, ScheduleSendOptions,
-    compose::DraftAddressValidationError as RealDraftAddressValidationError,
+    Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, EoData, ReplyMode,
+    ScheduleSendOptions, compose::DraftAddressValidationError as RealDraftAddressValidationError,
     compose::DraftAddressValidationResult as RealDraftAddressValidationResult,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::{MailContextError, MailUserContext};
 use recipients::ComposerRecipientList;
+use secrecy::{ExposeSecret, SecretString};
 use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 
@@ -104,6 +105,21 @@ impl From<RealDraftAddressValidationResult> for DraftAddressValidationResult {
         Self {
             email: value.email,
             error: value.error.into(),
+        }
+    }
+}
+
+#[derive(Debug, uniffi::Record)]
+pub struct DraftPassword {
+    pub password: String,
+    pub hint: Option<String>,
+}
+
+impl From<EoData> for DraftPassword {
+    fn from(value: EoData) -> Self {
+        Self {
+            password: value.password.expose_secret().clone(),
+            hint: value.password_hint,
         }
     }
 }
@@ -646,12 +662,27 @@ impl Draft {
         })?)
     }
 
+    pub fn get_password(&self) -> Result<Option<DraftPassword>, ProtonError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
+        };
+        Ok(async_runtime().block_on(async move {
+            let instance = self.instance.read().await;
+            instance
+                .get_password(&ctx)
+                .await
+                .map(|v| v.map(Into::into))
+                .map_err(RealProtonMailError::from)
+        })?)
+    }
+
     #[returns(VoidDraftPasswordResult)]
     pub async fn set_password(
         self: Arc<Self>,
         password: String,
         hint: Option<String>,
     ) -> Result<(), DraftPasswordError> {
+        let password = SecretString::new(password);
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(DraftPasswordError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
@@ -660,7 +691,7 @@ impl Draft {
         uniffi_async(async move {
             let instance = self.instance.read().await;
             instance
-                .set_password(&ctx, &password, hint)
+                .set_password(&ctx, password.expose_secret(), hint)
                 .await
                 .map_err(RealProtonMailError::from)?;
 

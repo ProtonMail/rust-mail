@@ -42,6 +42,7 @@ use proton_mail_common::test_utils::messages::{
 };
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{MailContextError, MailUserContext, draft};
+use secrecy::ExposeSecret;
 use stash::orm::Model;
 use stash::stash::Bond;
 use std::sync::Arc;
@@ -1598,9 +1599,13 @@ async fn send_external_with_password() {
         .unwrap();
 
     draft
-        .set_password(&user_ctx, "password", None)
+        .set_password(&user_ctx, "password", Some("hint".into()))
         .await
         .unwrap();
+
+    let eo_data = draft.get_password(&user_ctx).await.unwrap().unwrap();
+    assert_eq!(eo_data.password.expose_secret(), "password");
+    assert_eq!(eo_data.password_hint.as_deref(), Some("hint"));
 
     draft
         .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
