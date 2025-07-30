@@ -9,8 +9,7 @@ use crate::models::Message;
 use crate::models::MessageBodyMetadata;
 use crate::models::{Attachment, MailSettings};
 use anyhow::Context;
-use proton_calendar_common::{self as cal};
-use proton_canonical_email as email;
+use proton_calendar_common as cal;
 use proton_core_api::services::proton::{PrivateEmailRef, PrivateString};
 use proton_crypto_account::keys::{PrimaryUnlockedAddressKey, UnlockedAddressKeys};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, EncryptedAttachment};
@@ -39,6 +38,7 @@ where
     pub msg_id: &'a MessageId,
     pub msg_meta: &'a MessageBodyMetadata,
     pub msg_subject: &'a str,
+    pub addr_email: PrivateEmailRef<'a>,
     pub addr_display_name: &'a str,
 }
 
@@ -48,13 +48,7 @@ where
 {
     type Error = MailContextError;
 
-    async fn send(
-        mut self,
-        from: &str,
-        to: &str,
-        body: &str,
-        ics: &str,
-    ) -> Result<(), Self::Error> {
+    async fn send(mut self, to: &str, body: &str, ics: &str) -> Result<(), Self::Error> {
         let key = {
             debug!("Getting mail key");
 
@@ -70,7 +64,7 @@ where
             RsvpAttachment(ics).attachment_encrypt_and_sign(self.pgp, &key)?
         };
 
-        let message = self.build_message(from.into(), to.into(), body, &key, &ics)?;
+        let message = self.build_message(to.into(), body, &key, &ics)?;
         let parent = Some((self.msg_id.clone(), DraftAction::Reply));
         let (packages, mut ics) = self.build_packages(to.into(), body, ics).await?;
         let auto_save_contacts = false;
@@ -134,7 +128,6 @@ where
     #[allow(clippy::result_large_err)]
     fn build_message(
         &self,
-        from: PrivateEmailRef,
         to: PrivateEmailRef,
         body: &str,
         key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
@@ -143,9 +136,7 @@ where
         debug!("Building message");
 
         let subject = apply_prefix_to_subject(REPLY_PREFIX, self.msg_subject);
-
-        let from = email::canonicalize_auto(from.as_clear_text_str());
-        let from = resolve_sender_alias(from.as_str(), self.msg_meta);
+        let from = resolve_sender_alias(self.addr_email.as_clear_text_str(), self.msg_meta);
 
         let sender = DraftSender {
             address: from.into(),

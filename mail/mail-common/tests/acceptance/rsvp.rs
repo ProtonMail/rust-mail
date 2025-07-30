@@ -386,7 +386,7 @@ async fn fetch_and_answer() {
 
     ctx.mock_send_direct(
         "Re: Invitation for an event",
-        "rusttest+lovesinvites@proton.ch",
+        "rust_test+lovesinvites@proton.ch",
         SPONGEBOB_MAIL,
         &["invite.ics"],
         Some(
