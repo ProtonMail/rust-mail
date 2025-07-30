@@ -1,4 +1,4 @@
-use crate::UniffiEnum;
+use crate::{UniffiEnum, mail::Origin};
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ContextErrorReason as RealContextErrorReason,
     DraftAttachmentUploadErrorReason as RealDraftAttachmentErrorReason,
@@ -48,6 +48,12 @@ pub enum ContextReason {
     UnknownLabel,
     DuplicateContext,
     UserContextNotInitialized,
+    /// Mobile dev used a method that is supported only in one origin.
+    /// Example: Method that can be called only in the main application process, was called from iOS share extension.
+    MethodCalledInWrongOrigin {
+        expected: Origin,
+        actual: Origin,
+    },
 }
 
 impl From<RealContextErrorReason> for ContextReason {

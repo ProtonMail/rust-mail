@@ -49,7 +49,7 @@ use tokio::task::JoinHandle;
 use tracing::{error, instrument};
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
-const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 4;
+const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
 const DEFAULT_PREFETCH_BOUND: usize = 4;
 
 pub struct MailUserContext {

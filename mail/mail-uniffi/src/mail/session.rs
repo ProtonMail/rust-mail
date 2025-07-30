@@ -5,7 +5,8 @@ use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionS
 use crate::core::{OSKeyChain, StoredAccount};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
-    OtherErrorReason, PinAuthError, PinSetError, ProtonError, UserContextError, VoidSessionResult,
+    ContextReason, OtherErrorReason, PinAuthError, PinSetError, ProtonError, UserContextError,
+    VoidSessionResult,
 };
 use crate::mail::MailUserSession;
 use crate::mail::logging::init_log;
@@ -43,14 +44,28 @@ use tracing::{debug, error, warn};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum Origin {
     App,
-    ShareExt,
+    IosShareExt,
+}
+
+impl Origin {
+    pub fn guard(self, expected: Self) -> Result<(), UserContextError> {
+        if self != expected {
+            return Err(UserContextError::Reason(
+                ContextReason::MethodCalledInWrongOrigin {
+                    expected,
+                    actual: self,
+                },
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl From<Origin> for RealOrigin {
     fn from(origin: Origin) -> Self {
         match origin {
             Origin::App => Self::App,
-            Origin::ShareExt => Self::ShareExt,
+            Origin::IosShareExt => Self::ShareExt,
         }
     }
 }
@@ -97,7 +112,7 @@ pub fn create_mail_session(
 ) -> Result<Arc<MailSession>, UserContextError> {
     let runtime = match params.origin {
         Origin::App => async_runtime,
-        Origin::ShareExt => async_runtime_slim,
+        Origin::IosShareExt => async_runtime_slim,
     };
 
     runtime()
@@ -178,7 +193,7 @@ async fn create_mail_session_inner(
 
     let poll = match params.origin {
         Origin::App => EventPollMode::Automatic(Duration::from_secs(30)),
-        Origin::ShareExt => EventPollMode::Manual,
+        Origin::IosShareExt => EventPollMode::Manual,
     };
 
     let mail_ctx = MailContext::new(
@@ -280,6 +295,7 @@ impl MailSession {
         self: Arc<Self>,
         session: Arc<StoredSession>,
     ) -> Result<Option<Arc<MailUserSession>>, UserContextError> {
+        self.params.origin.guard(Origin::App)?;
         let ctx = self.mail_ctx.clone();
 
         let user_ctx = self.user_ctx.clone();
@@ -300,6 +316,7 @@ impl MailSession {
         &self,
         session: Arc<StoredSession>,
     ) -> Result<Arc<MailUserSession>, UserContextError> {
+        self.params.origin.guard(Origin::App)?;
         let ctx = self.mail_ctx.clone();
 
         let user_ctx = self.user_ctx.clone();
@@ -920,6 +937,8 @@ impl MailSession {
         &self,
         ffi_flow: Arc<LoginFlow>,
     ) -> Result<Arc<MailUserSession>, UserContextError> {
+        self.params.origin.guard(Origin::App)?;
+
         let core_flow = ffi_flow.inner_flow();
         let mut guard = core_flow.lock().await;
         async_runtime()
@@ -939,6 +958,8 @@ impl MailSession {
     /// This is meant to be used only within extensions - in particular, it
     /// assumes that the primary user is already logged in.
     pub async fn to_primary_user_context(&self) -> Result<Arc<MailUserSession>, UserContextError> {
+        self.params.origin.guard(Origin::IosShareExt)?;
+
         let ctx = self.mail_ctx.clone();
         let user_ctxs = self.user_ctx.clone();
 
