@@ -78,6 +78,7 @@ use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as Re
 use proton_sqlite3::rusqlite::Error as SqlError;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use smart_default::SmartDefault;
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
@@ -525,11 +526,12 @@ impl ToSql for TfaStatus {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom, SmartDefault)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum TimeFormat {
     /// TODO: Document this variant.
+    #[default]
     Default = 0,
 
     /// TODO: Document this variant.
@@ -563,11 +565,12 @@ impl ToSql for TimeFormat {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom, SmartDefault)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum UserMnemonicStatus {
     /// TODO: Document this variant.
+    #[default]
     Disabled = 0,
 
     /// TODO: Document this variant.
@@ -609,11 +612,12 @@ impl ToSql for UserMnemonicStatus {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom, SmartDefault)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum UserType {
     /// TODO: Document this variant.
+    #[default]
     Proton = 1,
 
     /// TODO: Document this variant.

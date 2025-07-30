@@ -11,6 +11,7 @@ use proton_core_api::services::proton::User as ApiUser;
 use proton_core_api::services::proton::UserId;
 use proton_core_api::services::proton::{DelinquentState as ApiDelinquentState, ProtonCore};
 use serde::{Deserialize, Serialize};
+use smart_default::SmartDefault;
 use stash::exports::{FromSql, FromSqlError, SqliteError, ToSql, ToSqlOutput, Value};
 use stash::macros::Model;
 use stash::orm::Model;
@@ -19,7 +20,7 @@ use stash::stash::{Bond, Stash};
 
 use super::{InitializationError, InitializationWatcher, InitializedComponent, UserSettings};
 
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("users")]
 pub struct User {
     #[IdField(optional)]
@@ -209,7 +210,7 @@ impl SyncedUserSettings {
 }
 
 /// What services a user has subscribed to
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(transparent)]
 #[repr(transparent)]

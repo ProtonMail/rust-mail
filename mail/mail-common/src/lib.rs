@@ -10,6 +10,7 @@ mod mailbox;
 pub mod models;
 pub mod prefetch;
 pub mod sidebar;
+pub mod snooze;
 mod user_context;
 
 pub mod background_execution;
