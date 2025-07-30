@@ -167,6 +167,7 @@ impl AppModel {
             1 << 25, // 32MiB
             Arc::new(keychain),
             app_config.api_config(),
+            app_config.app_details(),
             None, // TODO(jhoulahan): Support HV challenge (at least sms/email)
             None, // TODO: Add DeviceInfoProvider support for mail-tui.
             log_service,

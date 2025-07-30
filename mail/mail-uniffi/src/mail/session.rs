@@ -1,4 +1,4 @@
-use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, AppSettingsDiff};
+use crate::core::datatypes::{ApiConfig, AppDetails, AppProtection, AppSettings, AppSettingsDiff};
 use crate::core::device::{DeviceInfoProviderWrap, DynDeviceInfoProvider};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
@@ -80,6 +80,7 @@ pub struct MailSessionParams {
     pub log_dir: String,
     pub log_debug: bool,
     pub api_env_config: Option<ApiConfig>,
+    pub app_details: AppDetails,
 }
 
 // NOTE: Callbacks can not be stored in record types, which is why they are still in the
@@ -166,7 +167,7 @@ async fn create_mail_session_inner(
         .api_env_config
         .clone()
         .unwrap_or_default()
-        .try_into()
+        .into_real_api_config(params.app_details.clone())
         .inspect_err(|e| error!("Failed to get api_env_config {e:?}"))
         .map_err(|_| Unexpected::Config)?;
 
@@ -189,6 +190,7 @@ async fn create_mail_session_inner(
         params.mail_cache_size,
         Arc::new(key_chain),
         api_env_config,
+        params.app_details.clone().into(),
         hv_notifier,
         device_info_provider,
         log_service,

@@ -1,6 +1,6 @@
 use derive_more::{Debug, Deref};
 use muon::client::InfoProvider;
-use muon::client::flow::ForkFlowResult;
+use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
 use muon::common::ParseEndpointErr;
 use muon::env::DynEnv;
 use std::borrow::Borrow;
@@ -190,9 +190,15 @@ impl Builder {
         self
     }
 
-    /// Set the app version (`x-pm-appversion`).
-    pub fn with_app_version(mut self, app_version: impl AsRef<str>) -> Self {
-        self.config.app_version = String::from(app_version.as_ref());
+    /// Set the app version (`x-pm-appversion`) based on platform, product, and version.
+    pub fn with_app_version(
+        mut self,
+        platform: impl AsRef<str>,
+        product: impl AsRef<str>,
+        version: impl AsRef<str>,
+    ) -> Self {
+        self.config.app_version =
+            format_api_app_version(platform.as_ref(), product.as_ref(), version.as_ref());
         self
     }
 
@@ -327,6 +333,32 @@ impl Session {
         match self.client.clone().fork(version).send().await {
             ForkFlowResult::Success(_, selector) => Ok(selector),
             ForkFlowResult::Failure { reason, .. } => Err(muon::Error::from(reason))?,
+        }
+    }
+
+    /// Just like [`Self::fork`], but returns a new [`Session`] instead of just a selector.
+    pub async fn fork_session(
+        &self,
+        platform: impl AsRef<str>,
+        product: impl AsRef<str>,
+    ) -> ApiServiceResult<Self> {
+        let selector = self.fork(platform, product).await?;
+        let flow = self
+            .client
+            .clone()
+            .auth()
+            .from_fork()
+            .with_selector(selector)
+            .await;
+
+        match flow {
+            WithSelectorFlow::Ok(client, _payload) => Ok(Self {
+                client,
+                config: self.config.clone(),
+                store: self.store.clone(),
+                status: self.status.clone(),
+            }),
+            WithSelectorFlow::Failed { reason, .. } => Err(muon::Error::from(reason).into()),
         }
     }
 
@@ -477,4 +509,9 @@ impl Session {
             status: parts.status,
         }
     }
+}
+
+#[must_use]
+pub fn format_api_app_version(platform: &str, product: &str, version: &str) -> String {
+    format!("{platform}-{product}@{version}")
 }

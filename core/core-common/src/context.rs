@@ -5,7 +5,8 @@ use crate::app_events::{UserSessionCreatedEvent, UserSessionDeletedEvent};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::core_clock::CoreClock;
 use crate::datatypes::{
-    LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
+    AppDetails, LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey,
+    TfaStatus,
 };
 use crate::db::account::{
     CoreAccount, CoreSession, CoreSessionObserver, CoreSessionObserverNotification,
@@ -255,6 +256,7 @@ pub struct Context {
     active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
     cache_path: PathBuf,
     api_config: ApiConfig,
+    app_details: AppDetails,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
     cancellation_token: CancellationToken,
@@ -276,6 +278,7 @@ impl Context {
         key_chain: Arc<dyn KeyChain>,
         initializers: Vec<Box<dyn UserDatabaseInitializer>>,
         api_config: ApiConfig,
+        app_details: AppDetails,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
         cache_path: impl Into<PathBuf>,
@@ -341,6 +344,7 @@ impl Context {
             active_user_contexts: Mutex::new(HashMap::new()),
             cache_path: cache_path.into(),
             api_config,
+            app_details,
             hv_notifier,
             device_info_provider,
             cancellation_token: CancellationToken::new(),
@@ -936,7 +940,15 @@ impl Context {
 
         let tokens = {
             let acc_tok = session.access_token.decrypt_to_string(&key)?;
-            // TODO explain
+            // There is a risk of race condition when refreshing the token.
+            // Since this share extension is used in a separate process, and main process may be still alive,
+            // there is a risk that both processes may try to refresh the token at the same time.
+            // In that case, only one of them would win, and the Backend would return an error for the other one.
+            // If Share Extension wins, then main application would fail, causing user to log out.
+            // To avoid it, we ensure that this refresh token is invalid - it is better to just get a failure here,
+            // return a message "please try again" or "Session expired, please log in again" - than to log out the main
+            // application.
+            // Therefore, this refresh token is purposefully invalid - empty.
             let ref_tok = "";
             let scopes = session.auth_scopes.clone().into_inner();
 
@@ -958,8 +970,13 @@ impl Context {
             session = session.with_status(status);
         }
 
-        // TODO fork (?)
-        Ok(session.build().await?)
+        let primary_session = session.build().await?;
+
+        let forked_session = primary_session
+            .fork_session(&self.app_details.platform, &self.app_details.product)
+            .await?;
+
+        Ok(forked_session)
     }
 
     /// Get the stash in use

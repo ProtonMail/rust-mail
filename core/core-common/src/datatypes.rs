@@ -977,6 +977,41 @@ impl From<ApiAddressSignedKeyList> for AddressSignedKeyList {
 
 sql_using_serde!(AddressSignedKeyList);
 
+#[derive(Clone)]
+pub struct AppDetails {
+    /// Example: "ios"
+    pub platform: String,
+    /// Example: "mail"
+    pub product: String,
+    /// Example: "1.0.0"
+    pub version: String,
+}
+
+impl Default for AppDetails {
+    fn default() -> Self {
+        Self {
+            platform: "unknown".to_string(),
+            product: "unknown".to_string(),
+            version: "0.0.1".to_string(),
+        }
+    }
+}
+
+impl AppDetails {
+    /// Returns a string in a API format of `{platform}-{product}@{version}`.
+    /// Example: "ios-mail@1.0.0"
+    /// Used to populate `x-pm-appversion` header.
+    #[must_use]
+    pub fn format_api_app_version(&self) -> String {
+        let Self {
+            platform,
+            product,
+            version,
+        } = self;
+        proton_core_api::session::format_api_app_version(platform, product, version)
+    }
+}
+
 /// Wrapper type around `Vec<String>` to implement [`FromSql`] and [`ToSql`].
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ContactTypes(Vec<String>);

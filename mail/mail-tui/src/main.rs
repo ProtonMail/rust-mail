@@ -7,6 +7,7 @@ mod widgets;
 
 use crate::app::App;
 use clap::Parser;
+use proton_core_common::datatypes::AppDetails;
 use proton_mail_common::proton_mail_api::proton_core_api::session::Config;
 
 use crate::app_model::AppModel;
@@ -38,9 +39,16 @@ struct CliArgs {
     #[arg(long, short)]
     api_dev_env: bool,
 
-    /// How the app should introduce itself to the API; might affect available
-    /// authentication methods and other functionalities.
-    #[arg(long, default_value = "ios-mail@7.1.0")]
+    /// Used to identify the app in the API
+    #[arg(long, default_value = "ios")]
+    app_platform: String,
+
+    /// Used to identify the app in the API
+    #[arg(long, default_value = "mail")]
+    app_product: String,
+
+    /// Used to identify the app in the API
+    #[arg(long, default_value = "7.1.0")]
     version: String,
 
     /// Open messages in a browser window. Specify to choose an app or leave empty to use the
@@ -81,8 +89,16 @@ impl CliArgs {
         };
 
         Config {
-            app_version: self.version.clone(),
+            app_version: self.app_details().format_api_app_version(),
             ..cfg
+        }
+    }
+
+    pub fn app_details(&self) -> AppDetails {
+        AppDetails {
+            platform: self.app_platform.clone(),
+            product: self.app_product.clone(),
+            version: self.version.clone(),
         }
     }
 }

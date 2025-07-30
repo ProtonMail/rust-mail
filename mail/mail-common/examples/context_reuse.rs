@@ -3,6 +3,7 @@
 use clap::Parser;
 use proton_core_api::session::Config;
 use proton_core_common::Origin;
+use proton_core_common::datatypes::AppDetails;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
@@ -59,6 +60,7 @@ async fn main() {
             50 * 1204 * 1024,
             Arc::new(keychain),
             Config::atlas(),
+            AppDetails::default(),
             None,
             None,
             LogService::new(config),

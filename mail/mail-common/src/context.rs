@@ -18,6 +18,7 @@ use proton_core_api::session::{Config, CoreSession as _};
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_core_common::auth_store::DecryptExt;
+use proton_core_common::datatypes::AppDetails;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::device::DynDeviceInfoProvider;
 use proton_core_common::event_loop::EventPollMode;
@@ -251,6 +252,7 @@ impl MailContext {
         cache_size: u64,
         key_chain: Arc<dyn KeyChain>,
         api_config: Config,
+        app_details: AppDetails,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
         log_service: LogService,
@@ -266,6 +268,7 @@ impl MailContext {
             key_chain,
             initializers,
             api_config,
+            app_details,
             hv_notifier,
             device_info_provider,
             core_cache_path,
