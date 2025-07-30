@@ -84,6 +84,16 @@ impl From<u64> for UnixTimestamp {
     }
 }
 
+impl From<&jiff::Zoned> for UnixTimestamp {
+    fn from(dt: &jiff::Zoned) -> Self {
+        #[allow(
+            clippy::cast_sign_loss,
+            reason = "jiff::Zoned's timestamp is always positive"
+        )]
+        Self(dt.timestamp().as_second() as u64)
+    }
+}
+
 impl stash::exports::ToSql for UnixTimestamp {
     fn to_sql(&self) -> Result<stash::exports::ToSqlOutput<'_>, stash::exports::SqliteError> {
         self.0.to_sql()

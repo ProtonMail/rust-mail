@@ -49,7 +49,6 @@ uniffi-macros = { workspace = true }
 uniffi-runtime = { workspace = true }
 sqlite-watcher = { workspace = true }
 non-empty-string = { workspace = true }
-jiff = { workspace = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 tracing-oslog = "0.3.0"
