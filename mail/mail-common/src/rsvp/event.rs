@@ -59,12 +59,6 @@ impl RsvpEvent {
                 .as_ref()
                 .ok_or_else(|| AppError::MessageHasNoRemoteId(self.msg.id()))?;
 
-            let addr_id = self
-                .addr
-                .remote_id
-                .as_ref()
-                .ok_or_else(|| AppError::AddressHasNoRemoteId(self.addr.id()))?;
-
             RsvpMailSender {
                 ctx,
                 pgp: &pgp,
@@ -72,7 +66,6 @@ impl RsvpEvent {
                 tether,
                 msg_id,
                 msg_subject: &self.msg.subject,
-                addr_id,
                 addr_display_name: &self.addr.display_name,
             }
         };
