@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.111.0] - 2025-07-30
+
+### Features
+
+- [ET-3094] Post login check for free account count
+- [ET-3956] Add uniffi bindings for snooze actions
+- [ET-3538] Check for user delinquent flag during post login verifications
+- Add observability api for fido screen views needed for clients.
+- [ET-3956] Adjust bindings to discussion
+- [ET-3864] Add snooze action
+- [ET-3943] Add fido2 support to the password change flow
+
+### Fixes
+
+- Clippy.
+- [ET-3787] Vanishing pgp attachments
+
+
 ## [mail-uniffi-v0.110.0] - 2025-07-29
 
 ### Features
