@@ -1687,6 +1687,115 @@ impl Conversation {
         Conversation::split_request(ids, request).await
     }
 
+    pub async fn snooze(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalConversationId> + Clone,
+        snooze_until: UnixTimestamp,
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
+        Self::validate_snooze_location(local_label_id, bond).await?;
+
+        let now = UnixTimestamp::now();
+        if snooze_until <= now {
+            return Err(AppError::SnoozeTimeInThePast);
+        }
+        let local_inbox_id = SystemLabel::Inbox
+            .local_id(bond)
+            .await?
+            .expect("Inbox should be set");
+        let local_snoozed_id = SystemLabel::Snoozed
+            .local_id(bond)
+            .await?
+            .expect("Snoozed should be set");
+
+        Self::remove_label(local_inbox_id, ids.clone(), bond).await?;
+        Self::apply_label(local_snoozed_id, ids.clone(), bond).await?;
+        Self::modify_labels(
+            |label| {
+                let modified = label.context_snooze_time != snooze_until;
+                label.context_snooze_time = snooze_until;
+                modified
+            },
+            ids,
+            bond,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn unsnooze(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalConversationId> + Clone,
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
+        Self::validate_snooze_location(local_label_id, bond).await?;
+
+        let local_inbox_id = SystemLabel::Inbox
+            .local_id(bond)
+            .await?
+            .expect("Inbox should be set");
+        let local_snoozed_id = SystemLabel::Snoozed
+            .local_id(bond)
+            .await?
+            .expect("Snoozed should be set");
+
+        Self::remove_label(local_snoozed_id, ids.clone(), bond).await?;
+        Self::apply_label(local_inbox_id, ids.clone(), bond).await?;
+        Self::modify_labels(
+            |label| {
+                let modified = label.context_snooze_time != label.context_time;
+                label.context_snooze_time = label.context_time;
+                modified
+            },
+            ids,
+            bond,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn validate_snooze_location(
+        local_label_id: LocalLabelId,
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
+        let label = Label::find_by_id(local_label_id, bond)
+            .await?
+            .ok_or(AppError::LabelNotFound(local_label_id))?;
+
+        if !label.is_snooze_location() {
+            return Err(AppError::InvalidSnoozeLocation(label.name.clone()));
+        }
+
+        Ok(())
+    }
+
+    async fn modify_labels(
+        mut modify_label: impl FnMut(&mut ConversationLabel) -> bool,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
+        for id in ids {
+            let conversation = Conversation::find_by_id(id, bond).await?;
+            let Some(mut conversation) = conversation else {
+                warn!("Conversation with id {id} does not exist!");
+                continue;
+            };
+            let mut modified = false;
+
+            for label in conversation.labels.iter_mut() {
+                modified |= modify_label(label);
+            }
+
+            if modified {
+                conversation.save(bond).await?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Given a list of conversations check if there are any missing dependencies like undownloaded
     /// labels.
     ///

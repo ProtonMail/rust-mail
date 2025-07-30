@@ -59,6 +59,10 @@ macro_rules! find_in_query {
 /// Errors that may occur while using the ProtonMail app.
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("Snooze time is in the past")]
+    SnoozeTimeInThePast,
+    #[error("Invalid snooze location: {0}")]
+    InvalidSnoozeLocation(String),
     #[error("Attachment missing in database for local_id {0}")]
     AttachmentMissing(LocalAttachmentId),
     #[error("Attachment decryption failed: {0}")]

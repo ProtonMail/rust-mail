@@ -14,7 +14,7 @@ use proton_mail_common::errors::{
     EventErrorReason as RealEventErrorReason,
     MailScrollerErrorReason as RealMailScrollerErrorReason,
     OtherErrorReason as RealOtherErrorReason, PinAuthErrorReason as RealPinAuthErrorReason,
-    PinSetErrorReason as RealPinSetErrorReason,
+    PinSetErrorReason as RealPinSetErrorReason, SnoozeErrorReason as RealSnoozeErrorReason,
 };
 
 /// Specific Reason for error occurrence within ActionQueue
@@ -410,6 +410,21 @@ impl From<RealMailScrollerErrorReason> for MailScrollerErrorReason {
     fn from(value: RealMailScrollerErrorReason) -> Self {
         match value {
             RealMailScrollerErrorReason::Dirty => Self::Dirty,
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum SnoozeErrorReason {
+    SnoozeTimeInThePast,
+    InvalidSnoozeLocation,
+}
+
+impl From<RealSnoozeErrorReason> for SnoozeErrorReason {
+    fn from(value: RealSnoozeErrorReason) -> Self {
+        match value {
+            RealSnoozeErrorReason::SnoozeTimeInThePast => Self::SnoozeTimeInThePast,
+            RealSnoozeErrorReason::InvalidSnoozeLocation => Self::InvalidSnoozeLocation,
         }
     }
 }

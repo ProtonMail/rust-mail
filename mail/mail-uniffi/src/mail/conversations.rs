@@ -10,7 +10,7 @@
 //!
 
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
-use crate::errors::{ActionError, VoidActionResult};
+use crate::errors::{ActionError, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
     AllBottomBarMessageActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
     ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction, SnoozeActions,
@@ -228,7 +228,7 @@ pub fn available_snooze_actions_for_conversation(
     session: Arc<MailUserSession>,
     week_start: NonDefaultWeekStart,
     id: Id,
-) -> Result<SnoozeActions, ActionError> {
+) -> Result<SnoozeActions, SnoozeError> {
     // TODO: Implement this
     Ok(SnoozeActions {
         options: vec![],
@@ -243,7 +243,7 @@ pub fn snooze_conversations(
     session: Arc<MailUserSession>,
     ids: Vec<Id>,
     snooze_time: UnixTimestamp,
-) -> Result<Option<Arc<Undo>>, ActionError> {
+) -> Result<Option<Arc<Undo>>, SnoozeError> {
     // TODO: Implement this
     Ok(None)
 }
@@ -254,7 +254,7 @@ pub fn snooze_conversations(
 pub fn unsnooze_conversations(
     session: Arc<MailUserSession>,
     ids: Vec<Id>,
-) -> Result<Option<Arc<Undo>>, ActionError> {
+) -> Result<Option<Arc<Undo>>, SnoozeError> {
     // TODO: Implement this
     Ok(None)
 }

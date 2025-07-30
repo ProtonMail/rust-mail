@@ -126,6 +126,7 @@ pub(crate) fn register_mail_actions(queue: &Queue, ctx: &Weak<MailUserContext>, 
     register_action(queue, conversations::MarkReadHandler { api: api.clone() });
     register_action(queue, conversations::MarkUnreadHandler { api: api.clone() });
     register_action(queue, conversations::PrefetchHandler { ctx: ctx.clone() });
+    register_action(queue, conversations::SnoozeHandler { api: api.clone() });
     register_action(queue, block::BlockHandler { api: api.clone() });
     register_action(queue, unblock::UnblockHandler { api: api.clone() });
     register_action(

@@ -256,7 +256,7 @@ pub struct PutMessageHamResponse {
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsSnoozeResponse {
-    code: i64,
+    pub code: i64,
     pub responses: Vec<OperationResult<ConversationId>>,
 }
 

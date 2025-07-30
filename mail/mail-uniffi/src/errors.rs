@@ -6,6 +6,7 @@ mod pin_error;
 mod proton_error;
 mod scroller_error;
 mod session_error;
+mod snooze_error;
 pub(crate) mod unexpected;
 
 use crate::mail::messages::{BodyOutput, EmbeddedAttachmentInfo};
@@ -18,6 +19,7 @@ pub use self::pin_error::*;
 pub use self::proton_error::*;
 pub use self::scroller_error::*;
 pub use self::session_error::*;
+pub use self::snooze_error::*;
 
 #[macro_export]
 macro_rules! export_void_result {
