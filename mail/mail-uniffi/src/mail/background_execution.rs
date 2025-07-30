@@ -1,4 +1,4 @@
-use crate::errors::UserContextError;
+use crate::errors::UserSessionError;
 use crate::mail::MailSession;
 use crate::{async_runtime, spawn_async};
 use proton_mail_common::MailContext;
@@ -26,7 +26,7 @@ impl MailSession {
     pub fn start_background_execution(
         &self,
         callback: Arc<dyn BackgroundExecutionCallback>,
-    ) -> Result<Arc<BackgroundExecutionHandle>, UserContextError> {
+    ) -> Result<Arc<BackgroundExecutionHandle>, UserSessionError> {
         self.start_background_execution_with_duration_impl(Duration::from_secs(30), callback)
     }
 
@@ -40,7 +40,7 @@ impl MailSession {
         &self,
         duration_seconds: u64,
         callback: Arc<dyn BackgroundExecutionCallback>,
-    ) -> Result<Arc<BackgroundExecutionHandle>, UserContextError> {
+    ) -> Result<Arc<BackgroundExecutionHandle>, UserSessionError> {
         self.start_background_execution_with_duration_impl(
             Duration::from_secs(duration_seconds),
             callback,
@@ -53,7 +53,7 @@ impl MailSession {
         &self,
         duration: Duration,
         callback: Arc<dyn BackgroundExecutionCallback>,
-    ) -> Result<Arc<BackgroundExecutionHandle>, UserContextError> {
+    ) -> Result<Arc<BackgroundExecutionHandle>, UserSessionError> {
         let ctx = self.ctx_arc();
         let (sender, mut abort) = mpsc::channel(1);
         let background_context =

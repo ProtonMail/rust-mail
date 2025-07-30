@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    errors::{UserContextError, VoidSessionResult},
+    errors::{UserSessionError, VoidSessionResult},
     mail::MailUserSession,
     uniffi_async,
 };
@@ -15,7 +15,7 @@ use proton_mail_common::{MailContextError, errors::ProtonMailError as RealProton
 pub async fn report_an_issue(
     session: Arc<MailUserSession>,
     issue_report: IssueReport,
-) -> Result<(), UserContextError> {
+) -> Result<(), UserSessionError> {
     let mail_user_ctx = session.ctx()?;
     uniffi_async(async move {
         real_report_an_issue(issue_report.into(), mail_user_ctx.user_context())
@@ -24,6 +24,6 @@ pub async fn report_an_issue(
         Result::<_, RealProtonMailError>::Ok(())
     })
     .await
-    .map_err(UserContextError::from)
+    .map_err(UserSessionError::from)
     .into()
 }

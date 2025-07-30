@@ -1,6 +1,6 @@
 use super::Id;
 use crate::core::datatypes::AvatarInformation;
-use crate::errors::UserContextError;
+use crate::errors::UserSessionError;
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_core_common::datatypes::contact_details::ContactDetailAddress as RealAddress;
@@ -21,7 +21,7 @@ use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 pub async fn get_contact_details(
     session: &MailUserSession,
     contact_id: Id,
-) -> Result<ContactDetailCard, UserContextError> {
+) -> Result<ContactDetailCard, UserSessionError> {
     let ctx = session.ctx()?;
 
     uniffi_async(async move {
@@ -32,7 +32,7 @@ pub async fn get_contact_details(
         Ok::<_, RealProtonMailError>(details.into())
     })
     .await
-    .map_err(UserContextError::from)
+    .map_err(UserSessionError::from)
     .into()
 }
 

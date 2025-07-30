@@ -96,7 +96,7 @@ export_void_result! {
     VoidDraftUndoSendResult(DraftUndoSendError),
     VoidEventResult(EventError),
     VoidProtonResult(ProtonError),
-    VoidSessionResult(UserContextError),
+    VoidSessionResult(UserSessionError),
     VoidDraftPasswordResult(DraftPasswordError),
     VoidDraftExpirationResult(DraftExpirationError),
     VoidAnswerRsvpResult(ProtonError),

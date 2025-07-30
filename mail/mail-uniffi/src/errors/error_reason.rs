@@ -44,10 +44,10 @@ impl From<RealActionErrorReason> for ActionErrorReason {
 /// information to the user. This error type in common library is named `ContextErrorReason`
 /// as context is nomenclature used in the common library.
 #[derive(Debug, UniffiEnum)]
-pub enum ContextReason {
+pub enum SessionReason {
     UnknownLabel,
-    DuplicateContext,
-    UserContextNotInitialized,
+    DuplicateSession,
+    UserSessionNotInitialized,
     /// Mobile dev used a method that is supported only in one origin.
     /// Example: Method that can be called only in the main application process, was called from iOS share extension.
     MethodCalledInWrongOrigin {
@@ -56,12 +56,12 @@ pub enum ContextReason {
     },
 }
 
-impl From<RealContextErrorReason> for ContextReason {
+impl From<RealContextErrorReason> for SessionReason {
     fn from(reason: RealContextErrorReason) -> Self {
         match reason {
-            RealContextErrorReason::DuplicateContext => ContextReason::DuplicateContext,
+            RealContextErrorReason::DuplicateContext => SessionReason::DuplicateSession,
             RealContextErrorReason::UserContextNotInitialized(_) => {
-                ContextReason::UserContextNotInitialized
+                SessionReason::UserSessionNotInitialized
             }
         }
     }
