@@ -63,7 +63,7 @@ impl SnoozeOptions {
             _ => {} // noop
         }
 
-        if week_start == WeekStart::Monday {
+        if week_start != WeekStart::Saturday {
             match weekday {
                 Weekday::Mon | Weekday::Tue | Weekday::Wed | Weekday::Thu => {
                     let this_weekend = today
@@ -77,7 +77,7 @@ impl SnoozeOptions {
                         .into();
                     options.push(SnoozeTime::ThisWeekend(this_weekend));
                 }
-                _ => {} // noop
+                _ => {} // noop: Saturday will be covered by `NextWeek` case
             }
         }
 
@@ -196,25 +196,30 @@ mod tests {
     #[test_case("2025-01-13T12:00:00Z", WeekStart::Sunday, false => vec![
         SnoozeTime::Tomorrow(1736845200.into()), // Tuesday 2025-01-14 09:00:00 UTC
         SnoozeTime::LaterThisWeek(1736931600.into()), // Wednesday 2025-01-15 09:00:00 UTC
+        SnoozeTime::ThisWeekend(1737190800.into()), // Saturday 2025-01-18 09:00:00 UTC
         SnoozeTime::NextWeek(1737277200.into()) // Sunday 2025-01-19 09:00:00 UTC
     ]; "TEST10 - Monday when week starts Sunday, no subscription")]
     #[test_case("2025-01-13T12:00:00Z", WeekStart::Sunday, true => vec![
         SnoozeTime::Tomorrow(1736845200.into()), // Tuesday 2025-01-14 09:00:00 UTC
         SnoozeTime::LaterThisWeek(1736931600.into()), // Wednesday 2025-01-15 09:00:00 UTC
+        SnoozeTime::ThisWeekend(1737190800.into()), // Saturday 2025-01-18 09:00:00 UTC
         SnoozeTime::NextWeek(1737277200.into()), // Sunday 2025-01-19 09:00:00 UTC
         SnoozeTime::Custom
     ]; "TEST11 - Monday when week starts Sunday, with subscription")]
     #[test_case("2025-01-15T12:00:00Z", WeekStart::Sunday, false => vec![
         SnoozeTime::Tomorrow(1737018000.into()), // Thursday 2025-01-16 09:00:00 UTC
         SnoozeTime::LaterThisWeek(1737104400.into()), // Friday 2025-01-17 09:00:00 UTC
+        SnoozeTime::ThisWeekend(1737190800.into()), // Saturday 2025-01-18 09:00:00 UTC
         SnoozeTime::NextWeek(1737277200.into()) // Sunday 2025-01-19 09:00:00 UTC
     ]; "TEST12 - Wednesday when week starts Sunday, no subscription")]
     #[test_case("2025-01-16T12:00:00Z", WeekStart::Sunday, false => vec![
         SnoozeTime::Tomorrow(1737104400.into()), // Friday 2025-01-17 09:00:00 UTC
+        SnoozeTime::ThisWeekend(1737190800.into()), // Saturday 2025-01-18 09:00:00 UTC
         SnoozeTime::NextWeek(1737277200.into()) // Sunday 2025-01-19 09:00:00 UTC
     ]; "TEST13 - Thursday when week starts Sunday, no subscription")]
     #[test_case("2025-01-16T15:30:45+02:00", WeekStart::Sunday, false => vec![
         SnoozeTime::Tomorrow(1737097200.into()), // Friday 2025-01-17 09:00:00 UTC+2 (07:00:00 UTC)
+        SnoozeTime::ThisWeekend(1737183600.into()), // Saturday 2025-01-18 09:00:00 UTC+2 (07:00:00 UTC)
         SnoozeTime::NextWeek(1737270000.into()) // Sunday 2025-01-19 09:00:00 UTC+2 (07:00:00 UTC)
     ]; "TEST14 - Thursday UTC+2 when week starts Sunday, no LaterThisWeek")]
     #[test_case("2025-01-17T08:15:30-08:00", WeekStart::Sunday, true => vec![
