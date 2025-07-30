@@ -25,7 +25,7 @@ pub mod test_utils;
 
 pub use self::context::{MailContext, MailContextError, MailContextResult};
 pub use self::mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
-pub use self::rsvp::RsvpEvent;
+pub use self::rsvp::{RsvpEvent, RsvpEventId};
 pub use self::sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use self::user_context::MailUserContext;
 use proton_core_common::models::LabelError;

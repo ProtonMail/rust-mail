@@ -343,7 +343,7 @@ impl DecryptedMessageBody {
     /// Checks if this mail contains an invitation and, if so, returns its
     /// identifier.
     ///
-    /// Use [`Message::fetch_rsvp()`] to fetch the invitation object.
+    /// Use [`RsvpEventId::fetch()`] to fetch the invitation object.
     ///
     /// TODO (NGC-57) implement support for offline-mode
     #[tracing::instrument(skip(self, ctx))]
