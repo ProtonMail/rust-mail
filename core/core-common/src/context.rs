@@ -976,7 +976,7 @@ impl Context {
         let primary_session = session.build().await?;
 
         let forked_session = primary_session
-            .fork_session(&self.app_details.platform, &self.app_details.product)
+            .downgrade_to_fork(&self.app_details.platform, &self.app_details.product)
             .await?;
 
         Ok(forked_session)

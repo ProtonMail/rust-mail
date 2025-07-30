@@ -301,9 +301,13 @@ impl Session {
         }
     }
 
-    /// Just like [`Self::fork`], but returns a new [`Session`] instead of just a selector.
-    pub async fn fork_session(
-        &self,
+    /// It takes exsiting session and downgrades it to a child session.
+    ///
+    /// Note: Should be used only in a case where `store` is set to `TempStore`.
+    /// Otherwise it may cause uniqueness error in the database (only one core session per user) when
+    /// storing the session to DB.
+    pub async fn downgrade_to_fork(
+        self,
         platform: impl AsRef<str>,
         product: impl AsRef<str>,
     ) -> ApiServiceResult<Self> {
