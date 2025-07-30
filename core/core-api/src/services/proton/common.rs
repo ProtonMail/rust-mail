@@ -8,6 +8,7 @@
 //!
 
 use derive_more::Display;
+use muon::client::middleware::AuthErr;
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use std::fmt::Debug;
@@ -75,6 +76,10 @@ impl From<muon::Error> for ApiServiceError {
         // Check if the error is a HTTP status error.
         if let Some(e) = e.source().and_then(|s| s.downcast_ref::<StatusErr>()) {
             return Self::from(e.to_owned());
+        }
+
+        if let Some(e) = e.source().and_then(|s| s.downcast_ref::<AuthErr>()) {
+            return Self::Unauthorized(e.to_string(), None);
         }
 
         // Otherwise, match on the kind of error we received.
