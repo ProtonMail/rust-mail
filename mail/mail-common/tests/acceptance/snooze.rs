@@ -27,12 +27,12 @@ async fn action_snooze_conversation_from_inbox_to_snoozed() {
 
     // Create snooze time (1 hour from now)
     let snooze_time: DateTime<Local> = Local::now() + Duration::hours(1);
-    let snooze_timestamp = UnixTimestamp::from(snooze_time).as_u64();
+    let snooze_timestamp = UnixTimestamp::from(snooze_time);
 
     // Mock the API call for snoozing conversations
     ctx.mock_put_conversations_snooze(
         vec![conv_id!("test_conv").unwrap()],
-        snooze_timestamp,
+        snooze_timestamp.as_u64(),
         vec![],
     )
     .await;
@@ -67,10 +67,8 @@ async fn action_snooze_conversation_from_inbox_to_snoozed() {
     assert_eq!(conversations_in_inbox.len(), 1);
     assert_eq!(conversations_in_inbox[0].id(), conv.local_id.unwrap());
 
-    let expected_snooze_timestamp: UnixTimestamp = UnixTimestamp::from(snooze_timestamp);
-
     // Action: Snooze the conversation
-    let action = Snooze::new(inbox.id(), vec![conv.local_id.unwrap()], snooze_time);
+    let action = Snooze::new(inbox.id(), vec![conv.local_id.unwrap()], snooze_timestamp);
 
     user_ctx.action_queue().queue_action(action).await.unwrap();
     user_ctx.execute_single_action().await.unwrap();
@@ -96,7 +94,7 @@ async fn action_snooze_conversation_from_inbox_to_snoozed() {
         .find(|label| label.remote_label_id == snoozed.remote_id)
         .expect("Conversation should have snoozed label");
 
-    assert_eq!(snoozed_label.context_snooze_time, expected_snooze_timestamp);
+    assert_eq!(snoozed_label.context_snooze_time, snooze_timestamp);
 }
 
 #[tokio::test]
@@ -228,7 +226,7 @@ async fn action_unsnooze_conversation_from_snoozed_to_inbox() {
     let snoozed = SystemLabel::Snoozed.load(&tether).await.unwrap().unwrap();
     let inbox = SystemLabel::Inbox.load(&tether).await.unwrap().unwrap();
 
-    // Create a conversation in snoozed with snooze time
+    // Create a conversation in inbox (will be snoozed manually in transaction)
     let mut conv_data = hash_map! {
         vec![LabelId::inbox()]: vec![conversation!(remote_id: conv_id!("test_conv"))]
     };

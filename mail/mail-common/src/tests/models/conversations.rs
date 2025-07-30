@@ -2630,7 +2630,7 @@ async fn test_conversation_label_without_message_metadata() {
     assert_eq!(db_conversation.size, 0);
     assert_eq!(db_conversation.time, 0.into());
     assert_eq!(db_conversation.expiration_time, 0.into());
-    assert_eq!(db_conversation.snooze_time, 0.into());
+    assert_eq!(db_conversation.snoozed_until, None);
 
     // Check conversation counts have the new conversation.
     {
@@ -2684,7 +2684,7 @@ async fn test_conversation_double_label_without_message_metadata() {
     assert_eq!(db_conversation.size, 0);
     assert_eq!(db_conversation.time, 0.into());
     assert_eq!(db_conversation.expiration_time, 0.into());
-    assert_eq!(db_conversation.snooze_time, 0.into());
+    assert_eq!(db_conversation.snoozed_until, None);
 
     // Check conversation counts have the new conversation.
     {
@@ -3092,7 +3092,7 @@ async fn test_conversation_move_to() {
     assert_eq!(db_conversation.size, 0);
     assert_eq!(db_conversation.time, 0.into());
     assert_eq!(db_conversation.expiration_time, 0.into());
-    assert_eq!(db_conversation.snooze_time, 0.into());
+    assert_eq!(db_conversation.snoozed_until, None);
 
     // Check conversation counts have the new conversation.
     {

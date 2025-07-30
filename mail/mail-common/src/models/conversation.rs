@@ -3,10 +3,12 @@
 mod conversations;
 
 use super::network::split_request;
-use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::r#move::UndoMoveToConversations;
-use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
+use crate::actions::conversations::{
+    Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel, Unsnooze,
+};
+use crate::actions::conversations::{LabelAs, Snooze};
 use crate::actions::{
     ActionMoveData, ConversationAction, ConversationAvailableActions, ConversationOrMessage,
     LabelAsAction, LabelAsData, LabelAsOutput, LabelPair, MailActionError, MoveAction,
@@ -20,9 +22,11 @@ use crate::datatypes::{
 };
 use crate::datatypes::{LocalConversationId, RollbackItemType};
 use crate::models::*;
+use crate::snooze::SnoozeOptions;
 use crate::{AppError, actions::conversations::Delete};
 use crate::{MailContextError, find_in_query};
 use anyhow::{Context, anyhow};
+use chrono::Local;
 use futures::future;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -33,11 +37,11 @@ use proton_core_api::services::proton::Proton;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{
-    InitializationKey, LabelType, LocalLabelId, SystemLabel, UnixTimestamp,
+    InitializationKey, LabelType, LocalLabelId, SystemLabel, UnixTimestamp, WeekStart,
 };
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent, Label, ModelExtension,
-    ModelIdExtension,
+    ModelIdExtension, User,
 };
 use proton_core_common::utils::MapVec as _;
 use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
@@ -84,6 +88,12 @@ pub struct Conversation {
 
     #[DbField]
     pub display_snooze_reminder: bool,
+
+    /// This field is only present for currently snoozed conversations.
+    /// It is determined by the `ConversationLabel` pointing to Snoozed label of the conversation.
+    /// It is not present (None) for conversations that are not snoozed or already reminded.
+    /// This is important for the client to know when to display the time of reminder.
+    pub snoozed_until: Option<UnixTimestamp>,
 
     /// Exclusive location of the [`Conversation`] (e.g. Inbox, Archive, Outbox
     /// etc.). This field is auto-calculated, and not stored in the database.
@@ -152,6 +162,7 @@ impl Conversation {
             attachments_metadata: vec![],
             deleted: false,
             display_snooze_reminder: false,
+            snoozed_until: None,
             exclusive_location: None,
             expiration_time: UnixTimestamp::new(0),
             labels: vec![],
@@ -424,6 +435,25 @@ impl Conversation {
         })
     }
 
+    pub async fn action_snooze(
+        queue: &Queue,
+        label_id: LocalLabelId,
+        conversation_ids: Vec<LocalConversationId>,
+        snooze_time: UnixTimestamp,
+    ) -> Result<QueuedActionOutput<Snooze>, QueueActionError<Snooze>> {
+        let action = Snooze::new(label_id, conversation_ids, snooze_time);
+        queue.queue_action(action).await
+    }
+
+    pub async fn action_unsnooze(
+        queue: &Queue,
+        label_id: LocalLabelId,
+        conversation_ids: Vec<LocalConversationId>,
+    ) -> Result<QueuedActionOutput<Unsnooze>, QueueActionError<Unsnooze>> {
+        let action = Unsnooze::new(label_id, conversation_ids);
+        queue.queue_action(action).await
+    }
+
     /// Find a group of Conversations by their IDs.
     ///
     /// # Errors
@@ -450,6 +480,7 @@ impl Conversation {
             attachments_metadata: vec![],
             deleted: false,
             display_snooze_reminder: false,
+            snoozed_until: None,
             exclusive_location: None,
             expiration_time: 0.into(),
             labels: vec![],
@@ -2068,6 +2099,27 @@ impl Conversation {
         Ok(res)
     }
 
+    pub async fn available_snooze_actions(
+        local_ids: Vec<LocalConversationId>,
+        user: &User,
+        week_start: WeekStart,
+        tether: &Tether,
+    ) -> Result<SnoozeOptions, AppError> {
+        if local_ids.is_empty() {
+            return Err(AppError::EmptyListOfConversations);
+        }
+
+        let conversations = Conversation::find_by_ids(local_ids, tether).await?;
+        let is_snoozed = conversations.iter().any(|c| c.snoozed_until.is_some());
+        let today = Local::now();
+        let Some(snooze_options) = SnoozeOptions::new(today, week_start, user, is_snoozed) else {
+            // This should never happen, but we handle it just in case.
+            return Err(AppError::CouldNotCalculateSnoozeOptions);
+        };
+
+        Ok(snooze_options)
+    }
+
     /// Get the available `label as` actions for conversations
     ///
     /// # Errors
@@ -2845,6 +2897,12 @@ impl ModelHooks for Conversation {
             })?;
         }
 
+        self.snoozed_until = self
+            .labels
+            .iter()
+            .find(|l| l.remote_label_id == Some(LabelId::snoozed()))
+            .map(|l| l.context_snooze_time);
+
         // If exclusive location is not set, we try to calculate it now.
         if self.exclusive_location.is_none() && !self.labels.is_empty() {
             let label_ids = self
@@ -2865,6 +2923,11 @@ impl ModelHooks for Conversation {
             tether,
         )
         .await?;
+        self.snoozed_until = self
+            .labels
+            .iter()
+            .find(|l| l.remote_label_id == Some(LabelId::snoozed()))
+            .map(|l| l.context_snooze_time);
         let labels = self.load_labels(tether).await?;
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
         self.attachments_metadata =
@@ -2917,6 +2980,7 @@ impl From<ApiConversation> for Conversation {
                 .collect(),
             deleted: false,
             display_snooze_reminder: value.display_snooze_reminder,
+            snoozed_until: None,
             expiration_time: value.expiration_time.into(),
             exclusive_location: None,
             labels: value.labels.map_vec(),

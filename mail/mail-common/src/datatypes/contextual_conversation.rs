@@ -100,8 +100,11 @@ pub struct ContextualConversation {
     /// Time of reception of the last message in this conversation.
     pub time: UnixTimestamp,
 
-    /// TODO: Document this field
+    /// Time of snooze of the conversation - It may not be snoozed at the moment.
     pub snooze_time: UnixTimestamp,
+
+    /// When this conversation is snoozed until - when present it is snoozed at the moment.
+    pub snoozed_until: Option<UnixTimestamp>,
 
     /// Whether the conversation has messages downloaded.
     pub has_messages: bool,
@@ -120,6 +123,7 @@ impl ScrollerEq for ContextualConversation {
             && self.total_messages == other.total_messages
             && self.total_unread == other.total_unread
             && self.snooze_time == other.snooze_time
+            && self.snoozed_until == other.snoozed_until
             && self.recipients == other.recipients
             && self.senders == other.senders
             && self.attachments_metadata == other.attachments_metadata
@@ -159,6 +163,7 @@ impl ContextualConversation {
             subject: conversation.subject,
             time: label.context_time,
             snooze_time: label.context_snooze_time,
+            snoozed_until: conversation.snoozed_until,
             has_messages: conversation.has_messages,
         })
     }

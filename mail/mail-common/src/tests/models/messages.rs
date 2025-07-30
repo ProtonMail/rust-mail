@@ -2569,7 +2569,7 @@ async fn label_messages() {
         db_conversation.expiration_time,
         state.messages[0].expiration_time,
     );
-    assert_eq!(db_conversation.snooze_time, state.messages[0].snooze_time,);
+    assert_eq!(db_conversation.snooze_time, state.messages[0].snooze_time);
 
     // Check conversation counts have the new conversation.
     {

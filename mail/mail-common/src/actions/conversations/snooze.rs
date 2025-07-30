@@ -2,7 +2,6 @@ use crate::AppError;
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::LocalConversationId;
 use crate::models::Conversation;
-use chrono::{DateTime, Local};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
@@ -25,11 +24,11 @@ impl Snooze {
     pub fn new(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
-        snooze_time: DateTime<Local>,
+        snooze_until: UnixTimestamp,
     ) -> Self {
         Self {
             action_data: GenericLabelRelatedActionData::new(label_id, ids),
-            snooze_until: snooze_time.into(),
+            snooze_until,
         }
     }
 }
