@@ -1368,7 +1368,7 @@ async fn open_draft_resets_password() {
     let (draft, status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
 
     assert_eq!(status, DraftSyncStatus::Synced);
-    assert!(!draft.is_password_protected(&tether).await.unwrap());
+    assert!(draft.get_password(&user_ctx).await.unwrap().is_none());
 
     let metadata = DraftMetadata::find_by_id(draft.metadata_id, &tether)
         .await

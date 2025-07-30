@@ -10,7 +10,7 @@ use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
     DraftSendResultOrigin, MailSettings, Message, MessageCounters, MetadataId, RollbackItem,
 };
-use crate::{AppError, MailContextError, MailUserContext};
+use crate::{AppError, MailContextError, MailUserContext, draft};
 use chrono::{DateTime, Local};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, FactoryError, FactoryResult, Handler, Priority, Type,
@@ -380,7 +380,15 @@ impl Send {
         // If the user selects encrypt with password, the password should appear here.
         // The send preference logic will decide for each email if password encryption should be applied.
         // It will only use the password if the recipient is external and has no encryption.
-        let eo_data: Option<EoData> = draft_metadata.to_eo_data(&session_encryption_key)?;
+        let eo_data: Option<EoData> =
+            draft_metadata
+                .to_eo_data(&session_encryption_key)
+                .map_err(|e| match e {
+                    MailContextError::Draft(draft::Error::Password(
+                        draft::PasswordError::Decryption,
+                    )) => SendError::EOPasswordDecrypt.into(),
+                    e => e,
+                })?;
 
         let pgp = new_pgp_provider();
 

@@ -63,6 +63,7 @@ use crate::draft::compose::{
     inject_dark_mode, patch_draft_with_reply_mode, prepare_html_reply, prepare_plain_text_reply,
     resolve_sender_alias, validate_sender_address,
 };
+pub use crate::draft::send::EoData;
 pub use send::ScheduleSendOptions;
 
 pub const MIN_PASSWORD_LEN: usize = 8;
@@ -368,6 +369,8 @@ pub enum PasswordError {
     PasswordTooShort,
     #[error("Failed to encrypt password")]
     Encryption,
+    #[error("Failed to decrypt password")]
+    Decryption,
 }
 
 impl From<PasswordError> for MailContextError {
@@ -1723,6 +1726,18 @@ impl Draft {
             .await?
             .map(|v| v.password.is_some())
             .unwrap_or(false))
+    }
+
+    pub async fn get_password(
+        &self,
+        ctx: &MailUserContext,
+    ) -> Result<Option<EoData>, MailContextError> {
+        let encryption_key = ctx.core_context().get_encryption_key()?;
+        let tether = ctx.user_stash().connection();
+        let metadata = DraftMetadata::find_by_id(self.metadata_id, &tether)
+            .await?
+            .ok_or(PasswordError::MetadataNotFound(self.metadata_id))?;
+        metadata.to_eo_data(&encryption_key)
     }
 
     pub async fn set_password(
