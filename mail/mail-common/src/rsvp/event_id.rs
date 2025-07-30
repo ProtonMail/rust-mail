@@ -1,9 +1,10 @@
 use crate::datatypes::LocalMessageId;
-use crate::models::Message;
+use crate::models::{Message, MessageBodyMetadata};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext, RsvpEvent};
 use anyhow::Context;
 use proton_calendar_common::{self as cal};
 use proton_core_api::services::proton::AddressId;
+use proton_core_common::models::Address;
 use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -14,14 +15,21 @@ use tracing::{debug, info, instrument, warn};
 pub struct RsvpEventId {
     id: cal::RsvpEventId,
     msg_id: LocalMessageId,
+    msg_meta: MessageBodyMetadata,
     address_id: AddressId,
 }
 
 impl RsvpEventId {
-    pub(crate) fn new(id: cal::RsvpEventId, msg_id: LocalMessageId, address_id: AddressId) -> Self {
+    pub(crate) fn new(
+        id: cal::RsvpEventId,
+        msg_id: LocalMessageId,
+        msg_meta: MessageBodyMetadata,
+        address_id: AddressId,
+    ) -> Self {
         Self {
             id,
             msg_id,
+            msg_meta,
             address_id,
         }
     }
@@ -40,33 +48,24 @@ impl RsvpEventId {
         let keys = ctx
             .unlocked_address_keys(&pgp, tether, &self.address_id)
             .await
-            .map_err(|err| {
-                warn!(?err, "Couldn't unlock address keys");
-                err
-            })?;
+            .inspect_err(|err| warn!(?err, "Couldn't unlock address keys"))?;
 
         let cache = ctx.rsvp_cache();
         let contacts = ctx.rsvp_contacts();
         let now = ctx.mail_context().core_context().clock().now();
 
-        let email = {
-            let tether = ctx.user_stash().connection();
+        let msg = Message::load(self.msg_id, tether)
+            .await
+            .context("Couldn't load invite's message")
+            .map_err(MailContextError::Other)?
+            .ok_or_else(|| AppError::MessageMissing(self.msg_id))?;
 
-            let msg = Message::load(self.msg_id, &tether)
-                .await
-                .context("Couldn't load invite's message")
-                .map_err(MailContextError::Other)?
-                .ok_or_else(|| AppError::MessageMissing(self.msg_id))?;
+        let addr = Address::load(msg.local_address_id, tether)
+            .await
+            .context("Couldn't load invite's message's address")?
+            .ok_or_else(|| AppError::AddressMissing(msg.local_address_id))?;
 
-            msg.to_list
-                .value
-                .first()
-                .context("Invite's message has no recipient")
-                .map_err(MailContextError::Other)?
-                .to_owned()
-                .address
-        };
-
+        let user = ctx.user().await?;
         let week_start = ctx.user_settings().await?.week_start.into();
 
         match self
@@ -78,18 +77,22 @@ impl RsvpEventId {
                 cache,
                 contacts,
                 &now,
-                email.as_clear_text_str(),
+                &addr.email,
                 week_start,
             )
             .await
         {
             Ok(event) => {
                 if let Some(event) = event {
-                    Ok(Some(RsvpEvent::new(event, self.msg_id)))
+                    Ok(Some(RsvpEvent::new(
+                        event,
+                        msg,
+                        self.msg_meta.clone(),
+                        addr,
+                        user,
+                    )))
                 } else {
-                    // Can happen if the `invite.ics` attachment isn't really a
-                    // valid invite
-                    debug!("False-positive, API says no such event exists");
+                    debug!("False-positive, not a valid invite");
 
                     Ok(None)
                 }

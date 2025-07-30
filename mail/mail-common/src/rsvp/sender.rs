@@ -1,16 +1,16 @@
 use crate::MailContextError;
 use crate::MailUserContext;
-use crate::datatypes::{MessageRecipient, MimeType, attachment};
-use crate::draft::SendError;
-use crate::draft::compose::REPLY_PREFIX;
+use crate::datatypes::{MimeType, attachment};
+use crate::draft::compose::{REPLY_PREFIX, apply_prefix_to_subject, resolve_sender_alias};
 use crate::draft::send::MailType;
-use crate::draft::{self, send};
+use crate::draft::{SendError, send};
 use crate::models::AttachmentType;
 use crate::models::Message;
+use crate::models::MessageBodyMetadata;
 use crate::models::{Attachment, MailSettings};
 use anyhow::Context;
-use proton_calendar_common::{self as cal};
-use proton_core_api::services::proton::{AddressId, PrivateEmailRef, PrivateString};
+use proton_calendar_common as cal;
+use proton_core_api::services::proton::{PrivateEmailRef, PrivateString};
 use proton_crypto_account::keys::{PrimaryUnlockedAddressKey, UnlockedAddressKeys};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, EncryptedAttachment};
 use proton_crypto_inbox::message::EncryptableDraft;
@@ -36,9 +36,10 @@ where
     pub keys: &'a UnlockedAddressKeys<P>,
     pub tether: &'a mut Tether,
     pub msg_id: &'a MessageId,
+    pub msg_meta: &'a MessageBodyMetadata,
     pub msg_subject: &'a str,
-    pub msg_recipient: &'a MessageRecipient,
-    pub msg_address_id: &'a AddressId,
+    pub addr_email: &'a str,
+    pub addr_display_name: &'a str,
 }
 
 impl<P> cal::RsvpMailSender for RsvpMailSender<'_, P>
@@ -53,12 +54,7 @@ where
 
             self.keys
                 .primary_for_mail()
-                .with_context(|| {
-                    format!(
-                        "Couldn't get primary key for address {}",
-                        self.msg_address_id
-                    )
-                })
+                .context("Couldn't get primary key")
                 .map_err(MailContextError::Other)?
         };
 
@@ -68,20 +64,9 @@ where
             RsvpAttachment(ics).attachment_encrypt_and_sign(self.pgp, &key)?
         };
 
-        let message = {
-            debug!("Building message");
-
-            self.build_message(to.into(), body, &key, &ics)?
-        };
-
+        let message = self.build_message(to.into(), body, &key, &ics)?;
         let parent = Some((self.msg_id.clone(), DraftAction::Reply));
-
-        let (packages, mut ics) = {
-            debug!("Building packages");
-
-            self.build_packages(to.into(), body, ics).await?
-        };
-
+        let (packages, mut ics) = self.build_packages(to.into(), body, ics).await?;
         let auto_save_contacts = false;
 
         let resp = {
@@ -148,11 +133,14 @@ where
         key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
         ics: &EncryptedAttachment,
     ) -> Result<DirectParams, MailContextError> {
-        let subject = draft::compose::apply_prefix_to_subject(REPLY_PREFIX, self.msg_subject);
+        debug!("Building message");
+
+        let subject = apply_prefix_to_subject(REPLY_PREFIX, self.msg_subject);
+        let from = resolve_sender_alias(self.addr_email, self.msg_meta);
 
         let sender = DraftSender {
-            address: self.msg_recipient.address.clone(),
-            name: self.msg_recipient.name.clone(),
+            address: from.into(),
+            name: self.addr_display_name.into(),
         };
 
         let body = RsvpBody(body)
@@ -185,6 +173,8 @@ where
         body: &str,
         ics: EncryptedAttachment,
     ) -> Result<(Vec<Package>, Attachment), MailContextError> {
+        debug!("Building packages");
+
         let to = to.to_owned();
 
         let ics = self
