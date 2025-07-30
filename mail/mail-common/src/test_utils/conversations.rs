@@ -6,7 +6,7 @@ use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::prelude::PutConversationsUnreadRequest;
 use proton_mail_api::services::proton::requests::{
     PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsSnoozeRequest,
-    PutConversationsUnlabelRequest,
+    PutConversationsUnlabelRequest, PutConversationsUnsnoozeRequest,
 };
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel as ApiConversationLabel, MessageMetadata,
@@ -15,7 +15,9 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_api::services::proton::responses::{
     GetConversationResponse, PutConversationsLabelResponse, PutConversationsReadResponse,
     PutConversationsSnoozeResponse, PutConversationsUnlabelResponse,
+    PutConversationsUnsnoozeResponse,
 };
+use serde_json;
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -170,6 +172,35 @@ impl MailTestContext {
 
         Mock::given(method("PUT"))
             .and(path("/api/mail/v4/conversations/snooze"))
+            .and(body_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for unsnoozing conversations.
+    ///
+    /// This function will mock the response for the given `ids` and `failed`
+    /// conversations.
+    ///
+    #[function_name::named]
+    pub async fn mock_put_conversations_unsnooze(
+        &self,
+        ids: Vec<ConversationId>,
+        failed: Vec<ConversationId>,
+    ) {
+        let ids = ids.into_iter().collect::<Vec<_>>();
+        let request = PutConversationsUnsnoozeRequest { ids: ids.clone() };
+        let resp: PutConversationsUnsnoozeResponse = serde_json::from_value(serde_json::json!({
+            "Code": 1000,
+            "Responses": build_conv_responses(&ids, failed)
+        }))
+        .unwrap();
+
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/conversations/unsnooze"))
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)

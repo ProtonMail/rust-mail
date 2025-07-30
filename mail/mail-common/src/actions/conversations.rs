@@ -8,6 +8,7 @@ mod prefetch;
 mod refresh_metadata;
 mod snooze;
 mod unlabel;
+mod unsnooze;
 
 pub use self::delete::*;
 pub use self::label::*;
@@ -19,3 +20,4 @@ pub use self::prefetch::*;
 pub use self::refresh_metadata::*;
 pub use self::snooze::*;
 pub use self::unlabel::*;
+pub use self::unsnooze::*;
