@@ -143,8 +143,6 @@ pub(crate) fn register_actions(
     match origin {
         Origin::App => {
             reg(queue, conversations::DeleteHandler { api: api.clone() });
-            reg(queue, conversations::UnlabelHandler { api: api.clone() });
-            reg(queue, conversations::LabelHandler { api: api.clone() });
             reg(queue, conversations::MarkReadHandler { api: api.clone() });
             reg(queue, conversations::MarkUnreadHandler { api: api.clone() });
             reg(queue, conversations::PrefetchHandler { ctx: ctx.clone() });
@@ -161,8 +159,6 @@ pub(crate) fn register_actions(
                 queue,
                 conversations::RefreshMetadataHandler { ctx: ctx.clone() },
             );
-            reg(queue, messages::LabelHandler { api: api.clone() });
-            reg(queue, messages::UnlabelHandler { api: api.clone() });
             reg(queue, messages::MoveHandler { api: api.clone() });
             reg(queue, messages::DeleteHandler { api: api.clone() });
             reg(
@@ -386,17 +382,6 @@ where
         ActionDependencyKeysBuilder::new()
             .with_optional_many_ext(self.data.target_ids.iter().copied())
             .with_required_related(self.label_id)
-    }
-
-    fn label_unlabel_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
-        self.action_dependency_keys_builder_optional()
-            .with_required_many(label_unlabel_action_dependency_key(
-                self.data.target_ids.iter().copied(),
-            ))
-            // if there is a label as, we should execute after that
-            .with_optional_many(label_as_action_dependency_key(
-                self.data.target_ids.iter().copied(),
-            ))
     }
 
     fn snooze_unsnooze_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
@@ -664,29 +649,57 @@ pub trait ConversationOrMessage:
             .await?
             .expect("AllMail should be set");
 
-        let labels_and_messages: Vec<(LocalLabelId, String)> = bond
+        let mut labels_and_messages: Vec<(LocalLabelId, Vec<Self::IdType>)> = bond
             .do_query(
                 Self::remove_all_labels_except_all_mail_query(ids.len()),
                 ids.to_sql(),
-                |rows| rows.map(|x| Ok((x.get(0)?, x.get(1)?))).collect(),
+                |rows| {
+                    rows.map(|x| {
+                        Ok((
+                            x.get(0)?,
+                            x.get::<_, String>(1)?
+                                .split(',')
+                                .filter_map(|x| x.parse::<u64>().ok())
+                                .map_into()
+                                .collect(),
+                        ))
+                    })
+                    .collect()
+                },
             )
             .await?
             .map_err(StashError::ExecutionError)?;
 
-        let mut res = vec![];
-        for (label_id, unparsed_ids) in labels_and_messages {
-            let parsed_ids: Vec<Self::IdType> = unparsed_ids
-                .split(',')
-                .filter_map(|x| x.parse::<u64>().ok())
-                .map_into()
-                .collect();
+        let idx = labels_and_messages
+            .iter()
+            .position(|(label, _)| *label == all_mail_id);
 
+        match idx {
+            Some(idx) => {
+                // Remove the matching entry and extract its messages
+                let (_, existing_messages) = labels_and_messages.swap_remove(idx);
+
+                // Find IDs that are missing from existing messages
+                let ids = ids
+                    .iter()
+                    .copied()
+                    .filter(|id| !existing_messages.contains(id));
+                Self::apply_label(all_mail_id, ids, bond).await?;
+            }
+            None => {
+                // No matching label found, all IDs are missing
+                Self::apply_label(all_mail_id, ids.iter().copied(), bond).await?;
+            }
+        };
+
+        let mut res = vec![];
+        for (label_id, parsed_ids) in labels_and_messages {
             if label_id == all_mail_id {
                 // It's a good moment to apply all mail label to messages in the case that it slipped by
                 let mut missing = vec![];
-                for id in parsed_ids {
-                    if !ids.contains(&id) {
-                        missing.push(id);
+                for input_id in ids {
+                    if !parsed_ids.contains(input_id) {
+                        missing.push(*input_id);
                     }
                 }
                 if !missing.is_empty() {
@@ -766,6 +779,22 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
             add,
             remove,
             source_label_id,
+        }
+    }
+
+    pub fn new_remove(remove: Vec<LabelPair<T::IdType>>) -> Self {
+        Self {
+            remove,
+            add: vec![],
+            source_label_id: 0.into(),
+        }
+    }
+
+    pub fn new_add(add: Vec<LabelPair<T::IdType>>) -> Self {
+        Self {
+            remove: vec![],
+            add,
+            source_label_id: 0.into(),
         }
     }
 
@@ -917,13 +946,6 @@ fn mark_read_unread_action_dependency_key<T: LocalIdActionDepExt>(
 ) -> impl IntoIterator<Item = ActionDependencyKey> {
     ids.into_iter()
         .map(|id| id.to_custom_dependency_key("mail-mark-read-unread"))
-}
-
-fn label_unlabel_action_dependency_key<T: LocalIdActionDepExt>(
-    ids: impl IntoIterator<Item = T>,
-) -> impl IntoIterator<Item = ActionDependencyKey> {
-    ids.into_iter()
-        .map(|id| id.to_custom_dependency_key("mail-label-unlabel"))
 }
 
 fn snooze_unsnooze_action_dependency_key<T: LocalIdActionDepExt>(

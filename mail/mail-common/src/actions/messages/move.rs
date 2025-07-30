@@ -89,12 +89,13 @@ impl UndoMoveToMessages {
             remove: vec![],
         };
 
-        let q = enqueue![
-            LabelAs(label_as_data),
-            Unread::new(self.action.0.marked_read),
-        ];
-
-        let id = q(queue).await?;
+        let id = enqueue!(
+            queue,
+            [
+                LabelAs(label_as_data),
+                Unread::new(self.action.0.marked_read),
+            ]
+        )?;
 
         queue
             .queue_actions(move_actions, Some(id))

@@ -1,5 +1,5 @@
 use crate::actions::MailActionError;
-use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType, SystemLabelId};
+use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType};
 use crate::models::{Message, RollbackItem};
 use futures::future::try_join_all;
 use proton_action_queue::action::{
@@ -64,16 +64,6 @@ impl Handler for HamHandler {
             return Err(MailActionError::NoInput);
         }
 
-        let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
-            .await?
-            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
-
-        let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
-            .await?
-            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
-
-        Message::move_messages(spam, inbox, action.0.clone(), bond).await?;
-
         for &id in &action.0 {
             Message::set_flags(id, MessageFlags::HAM_MANUAL, bond).await?;
         }
@@ -87,16 +77,6 @@ impl Handler for HamHandler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
-            .await?
-            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
-
-        let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
-            .await?
-            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
-
-        Message::move_messages(inbox, spam, action.0.clone(), bond).await?;
-
         for &id in &action.0 {
             Message::unset_flags(id, MessageFlags::HAM_MANUAL, bond).await?;
         }

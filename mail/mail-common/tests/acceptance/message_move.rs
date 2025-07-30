@@ -20,9 +20,7 @@ use proton_mail_common::models::{Conversation, ConversationCounters, Message, Me
 use proton_mail_common::test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::scroller::StoreLabeledModelMap as _;
-use proton_mail_common::test_utils::test_context::{
-    MailTestContext, MailUserContextTestExtension as _,
-};
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{Mailbox, conv_id, conversation, message, msg_id};
 use stash::orm::Model;
 use stash::params;
@@ -210,7 +208,7 @@ async fn move_between_folders_and_undo() {
     .await
     .unwrap()
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     // * the message is in the second folder
@@ -284,7 +282,7 @@ async fn move_from_label_does_not_unlabel() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     // * the message is in the second label
@@ -359,7 +357,7 @@ async fn move_into_trash_remove_label_and_mark_read() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     // * the message only have `all_mail` label
@@ -433,7 +431,7 @@ async fn move_into_spam_remove_labels() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     // * the message only has the `all_mail` label (and spam)
@@ -512,7 +510,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     // * the message have `almost_all_mail` label
@@ -602,7 +600,7 @@ async fn move_message_also_moves_conversation() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // recheck but in the destination folder
     let msgs = Message::in_label(local_spam, tether).await.unwrap();
@@ -684,7 +682,7 @@ async fn move_conversation_between_folders_and_undo() {
     .await;
 
     ctx.mock_get_conversations(vec![conversation], 1).await;
-    // ctx.catch_all().await;
+    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
@@ -744,7 +742,7 @@ async fn move_conversation_between_folders_and_undo() {
     .await
     .unwrap()
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     conv.reload(&tether).await.unwrap();
     conv_is_labeled(&conv, &LabelId::archive());
@@ -752,7 +750,7 @@ async fn move_conversation_between_folders_and_undo() {
     undo.undo(user_ctx.action_queue(), &mut tether)
         .await
         .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
     conv.reload(&tether).await.unwrap();
     conv_is_labeled(&conv, &LabelId::inbox());
 }

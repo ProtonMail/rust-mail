@@ -5,7 +5,7 @@ use proton_core_api::services::proton::{
 };
 use proton_core_api::services::proton::{AddressId, LabelId, LabelType as ApiLabelType, UserId};
 use proton_core_common::datatypes::SystemLabel;
-use proton_core_common::models::{Label, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
@@ -186,7 +186,7 @@ async fn message_action_read_unread() {
         .await
         .unwrap();
 
-    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
 
     // This message starts as read
     assert!(!message.unread);
@@ -199,10 +199,7 @@ async fn message_action_read_unread() {
 
     // Verification:
     //   * The message is unread
-    let message = Message::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .expect("failed to load message");
+    message.reload(&tether).await.unwrap();
     assert!(message.unread);
 
     // Actions:
@@ -213,10 +210,7 @@ async fn message_action_read_unread() {
 
     // Verification:
     //   * The message is read
-    let message = Message::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .expect("failed to load message");
+    message.reload(&tether).await.unwrap();
     assert!(!message.unread);
 }
 
@@ -281,12 +275,25 @@ async fn message_action_delete() {
 async fn message_action_ham() {
     let ctx = MailTestContext::new().await;
 
-    let spam = LabelId::spam();
-    let label = test_label(&spam);
     let mut message = test_message();
     message.metadata.label_ids = vec![LabelId::spam()];
 
-    let params = test_init_params_label(label);
+    let params = TestParams {
+        user_info: Some(test_user_info()),
+        addresses: ApiAddress::test_addresses(),
+        mail_settings: Some(test_mail_settings()),
+        conversation_count: vec![ConversationCount {
+            label_id: SystemLabel::Inbox.remote_id(),
+            total: 1,
+            unread: 0,
+        }],
+        message_count: vec![MessageCount {
+            label_id: SystemLabel::Inbox.remote_id(),
+            total: 1,
+            unread: 0,
+        }],
+        ..Default::default()
+    }
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -299,7 +306,7 @@ async fn message_action_ham() {
     let user_context = ctx.mail_user_context().await;
     let tether = user_context.user_stash().connection();
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(&user_context.user_stash().connection(), spam.clone())
+    let mailbox = Mailbox::with_remote_id(&user_context.user_stash().connection(), LabelId::spam())
         .await
         .unwrap();
     mailbox
@@ -313,18 +320,16 @@ async fn message_action_ham() {
 
     {
         // First: No messages in inbox
-        let local_inbox = Label::remote_id_counterpart(LabelId::inbox(), &tether)
+        let local_inbox = Label::resolve_local_label_id(LabelId::inbox(), &tether)
             .await
-            .unwrap()
             .unwrap();
 
         let messages = Message::in_label(local_inbox, &tether).await.unwrap();
         assert_eq!(messages.len(), 0);
 
         // Only message is in spam
-        let local_spam = Label::remote_id_counterpart(spam, &tether)
+        let local_spam = Label::resolve_local_label_id(LabelId::spam(), &tether)
             .await
-            .unwrap()
             .unwrap();
 
         let messages = Message::in_label(local_spam, &tether).await.unwrap();
@@ -354,7 +359,7 @@ async fn message_action_ham() {
         .await
         .unwrap();
 
-    user_context.execute_single_action().await.unwrap();
+    user_context.execute_all_actions().await.unwrap();
     let messages = Message::find("WHERE deleted = 1", vec![], &tether)
         .await
         .unwrap();

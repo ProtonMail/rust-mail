@@ -1,25 +1,21 @@
 mod delete;
 mod delete_all;
 mod ham;
-mod label;
 mod label_as;
 mod r#move;
 mod phishing;
 mod prefetch;
 mod read;
 mod refresh_metadata;
-mod unlabel;
 mod unread;
 
 pub use self::delete::*;
 pub use self::delete_all::*;
 pub use self::ham::*;
-pub use self::label::*;
 pub use self::label_as::*;
 pub use self::r#move::*;
 pub use self::phishing::*;
 pub use self::prefetch::*;
 pub use self::read::*;
 pub use self::refresh_metadata::*;
-pub use self::unlabel::*;
 pub use self::unread::*;

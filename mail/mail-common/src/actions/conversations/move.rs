@@ -6,8 +6,14 @@ use crate::models::Conversation;
 use anyhow::Context;
 use itertools::Itertools;
 use proton_action_queue::action::{
+<<<<<<< HEAD
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Metadata, Type,
     WriterGuard,
+||||||| parent of fe11eed69 (refactor*: Cleanup actions)
+    Action, ActionId, DefaultVersionConverter, Handler, Metadata, Type, WriterGuard,
+=======
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+>>>>>>> fe11eed69 (refactor*: Cleanup actions)
 };
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
@@ -90,12 +96,13 @@ impl UndoMoveToConversations {
             remove: vec![],
         };
 
-        let q = enqueue![
-            LabelAs(label_as_data),
-            Unread::new(self.action.0.marked_read),
-        ];
-
-        let id = q(queue).await?;
+        let id = enqueue!(
+            queue,
+            [
+                LabelAs(label_as_data),
+                Unread::new(self.action.0.marked_read),
+            ]
+        )?;
 
         queue
             .queue_actions(move_actions, Some(id))

@@ -4,9 +4,16 @@ use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::{Message, MessageCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
+<<<<<<< HEAD
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, MetadataBuilder,
     Type, WriterGuard,
+||||||| parent of fe11eed69 (refactor*: Cleanup actions)
+    Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
+=======
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+>>>>>>> fe11eed69 (refactor*: Cleanup actions)
 };
+use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::Proton;
 use serde::{Deserialize, Serialize};
@@ -82,7 +89,6 @@ pub struct UndoLabelAsMessages {
 
 impl UndoLabelAsMessages {
     pub async fn undo(self, queue: &Queue, tether: &Tether) -> Result<(), AppError> {
-        let mut action = self.action;
         if queue.cancel(self.id).await.is_ok() {
             // The undoing is done by the revert_local of the action.
             return Ok(());
@@ -90,6 +96,7 @@ impl UndoLabelAsMessages {
 
         // The queue couldn't revert. This means that we're on our own to undo this.
         // Let's create the opposite action: Swap add and remove.
+        let mut action = self.action;
         mem::swap(&mut action.0.add, &mut action.0.remove);
 
         if self.must_archive {
@@ -105,22 +112,9 @@ impl UndoLabelAsMessages {
             if let Some(move_action_data) =
                 ActionMoveData::new(tether, action.0.source_label_id, all).await?
             {
-                let queued_move = queue
-                    .queue_action(action)
-                    .await
-                    .context("Error queuing move to archive")?;
-
-                let meta = MetadataBuilder::new()
-                    .with_dependency(queued_move.id)
-                    .build();
-
-                queue
-                    .queue_action_with_metadata(MoveAction(move_action_data), meta)
-                    .await
-                    .context("Error queuing with move to archive dependency")?;
+                _ = enqueue!(queue, [action, MoveAction(move_action_data)])?;
+                return Ok(());
             }
-
-            return Ok(());
         };
         queue
             .queue_action(action)

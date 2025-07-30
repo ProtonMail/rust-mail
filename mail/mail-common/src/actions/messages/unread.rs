@@ -61,7 +61,7 @@ impl Handler for UnreadHandler {
             .query_values(
                 formatdoc! {
                     "SELECT local_id AS value FROM messages
-                     WHERE local_id in ({}) AND unread = 1",
+                     WHERE local_id in ({}) AND unread = 0",
                     placeholders(&ids),
                 },
                 ids,
@@ -69,6 +69,10 @@ impl Handler for UnreadHandler {
             .await?;
 
         action.0.target_ids = ids;
+        if action.0.target_ids.is_empty() {
+            tracing::warn!("mark unread doesn't do anything.");
+            return Ok(());
+        }
         Message::mark_unread(action.0.target_ids.iter().copied(), tx).await?;
 
         Ok(())
@@ -96,6 +100,10 @@ impl Handler for UnreadHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        if action.0.target_ids.is_empty() {
+            return Ok(());
+        }
+
         let message_ids =
             Message::local_ids_counterpart(action.0.target_ids.clone(), guard.tether()).await?;
 

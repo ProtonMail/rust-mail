@@ -190,77 +190,29 @@ impl ModelIdExtension for Conversation {
     }
 }
 
+type LabelAsResult = Result<QueuedActionOutput<LabelAs>, QueueActionError<LabelAs>>;
+
 impl Conversation {
     pub fn label(&self, local_id: LocalLabelId) -> Option<&ConversationLabel> {
         self.labels
             .iter()
             .find(|&label| label.local_label_id == Some(local_id))
     }
-    /// Label multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
-    ///
-    pub async fn action_apply_label(
-        queue: &Queue,
-        label_id: LocalLabelId,
-        conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
-        let action = ActionLabel::new(label_id, conversation_ids);
-        queue.queue_action(action).await
-    }
 
-    /// Star multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
-    pub async fn action_star(
-        queue: &proton_action_queue::queue::Queue,
-        conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
-        let tether = queue.stash().connection();
-        let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
-            .await
-            .map_err(|e| QueueActionError::Queue(e.into()))?
-            .expect("Star system label not found");
-        let action = ActionLabel::new(label_id, conversation_ids);
-        queue.queue_action(action).await
-    }
-
-    /// Unstar multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
-    pub async fn action_unstar(
-        queue: &Queue,
-        conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
+    pub async fn action_star(queue: &Queue, ids: Vec<LocalConversationId>) -> LabelAsResult {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
             .expect("Star system label not found");
-        let action = Unlabel::new(label_id, conversation_ids.into_iter().map_into());
-        queue.queue_action(action).await
+        Self::action_remove_label(queue, label_id, ids).await
     }
 
-    /// Unlabel multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
-    ///
-    pub async fn action_remove_label(
-        queue: &Queue,
-        label_id: LocalLabelId,
-        conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
-        let action = Unlabel::new(label_id, conversation_ids);
-        queue.queue_action(action).await
+    pub async fn action_unstar(queue: &Queue, ids: Vec<LocalConversationId>) -> LabelAsResult {
+        let tether = queue.stash().connection();
+        let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
+            .await?
+            .expect("Star system label not found");
+        Self::action_apply_label(queue, label_id, ids).await
     }
 
     /// Mark multiple conversations as read.
@@ -350,6 +302,28 @@ impl Conversation {
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
     ) -> Result<QueuedActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
+        queue.queue_action(action).await
+    }
+
+    pub async fn action_remove_label(
+        queue: &Queue,
+        label: LocalLabelId,
+        ids: Vec<LocalConversationId>,
+    ) -> LabelAsResult {
+        let action = LabelAs(LabelAsData::new_remove(
+            ids.into_iter().map(|id| LabelPair { label, id }).collect(),
+        ));
+        queue.queue_action(action).await
+    }
+
+    pub async fn action_apply_label(
+        queue: &Queue,
+        label: LocalLabelId,
+        ids: Vec<LocalConversationId>,
+    ) -> LabelAsResult {
+        let action = LabelAs(LabelAsData::new_add(
+            ids.into_iter().map(|id| LabelPair { label, id }).collect(),
+        ));
         queue.queue_action(action).await
     }
 

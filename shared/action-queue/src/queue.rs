@@ -1349,37 +1349,33 @@ fn decode_action(
 }
 
 #[macro_export]
-// Returns a closure that enqueues actions of potentially different types.
+/// Enqueues actions of potentially different types directly with the queue.
+///
+/// Example usage:
+/// let action_id = enqueue!(my_queue, [foo, bar, baz])?;}
 macro_rules! enqueue {
-    ($($action:expr),+ $(,)?) => {{
-
+    ($queue:expr, [$($action:expr),+ $(,)?]) => {{
         use ::proton_action_queue::queue::Queue;
         use ::proton_action_queue::action::{ActionId, Metadata};
+        use ::anyhow::anyhow;
 
-        async |queue: &Queue| -> ::anyhow::Result<ActionId> {
-
-            queue.tether().tx::<_,_, anyhow::Error>(async |tx| {
-
-                let mut last = None;
-
-                $(
-                    let meta = if let Some(last) = last {
-                        Metadata::with_dependency(last)
-                    } else {
-                        Metadata::default()
-                    };
-
-                    let action = queue
-                        .queue_action_with_metadata_in_tx($action, meta, tx)
-                        .await
-                        .context("Error queueing action")?;
-                    last = Some(action.id);
-                )+
-
-                // This is safe to do because we'd short circuit if this would be None, and this requires
-                // 1+ params.
-                Ok(last.unwrap())
-            }).await
-        }
+        $queue.tether().tx::<_,_, anyhow::Error>(async |tx| {
+            let mut last = None;
+            $(
+                let meta = if let Some(last) = last {
+                    Metadata::with_dependency(last)
+                } else {
+                    Metadata::default()
+                };
+                let action = $queue
+                    .queue_action_with_metadata_in_tx($action, meta, tx)
+                    .await
+                    .map_err(|_| anyhow!("Error queueing action"))?;
+                last = Some(action.id);
+            )+
+            // This is safe to do because we'd short circuit if this would be None, and this requires
+            // 1+ params.
+            Ok(last.unwrap())
+        }).await
     }}
 }
