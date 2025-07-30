@@ -3,11 +3,13 @@ use crate::password::state::complete::Complete;
 use crate::password::state::want_change::WantChange;
 use crate::password::state::want_pass::WantPass;
 use crate::password::state::want_tfa::WantTfa;
+use crate::requests::Fido2AuthData;
 use crate::shared::SecureString;
 use crate::{AccountApi, prelude::*};
 use derive_more::{Debug, Display, From};
 use futures::TryFutureExt;
 use muon::Client;
+use muon::rest::auth::v4::fido2;
 use proton_core_api::services::proton::prelude::*;
 use proton_core_api::{auth::KeySecret, session::SessionParts};
 use proton_core_common::datatypes::{PasswordMode, TfaStatus};
@@ -49,6 +51,7 @@ pub enum State {
 impl State {
     /// Create a new state machine with current password.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: Client,
         parts: SessionParts,
@@ -57,6 +60,7 @@ impl State {
         key_secret: KeySecret,
         tfa_mode: TfaStatus,
         mbp_mode: PasswordMode,
+        fido_details: Option<fido2::Response>,
     ) -> Self {
         let data = StateData {
             client,
@@ -66,6 +70,7 @@ impl State {
             key_secret,
             tfa_mode,
             mbp_mode,
+            fido_details,
         };
 
         WantPass::new(data).into()
@@ -84,6 +89,15 @@ impl State {
     pub async fn submit_totp(self, totp: String) -> Result<Self, PasswordError> {
         if let Self::WantTfa(state) = self {
             state.submit_totp(totp).await
+        } else {
+            Err(PasswordError::InvalidState)
+        }
+    }
+
+    /// Submit FIDO2 data for 2FA authentication.
+    pub async fn submit_fido(self, fido_data: fido2::Request) -> Result<Self, PasswordError> {
+        if let Self::WantTfa(state) = self {
+            state.submit_fido(fido_data).await
         } else {
             Err(PasswordError::InvalidState)
         }
@@ -125,6 +139,16 @@ impl State {
         }
     }
 
+    /// Get whether the account has a mailbox password.
+    pub fn has_mbp(&self) -> Result<bool, PasswordError> {
+        match self {
+            Self::WantPass(state) => Ok(state.mbp_mode.has_mbp()),
+            Self::WantTfa(state) => Ok(state.mbp_mode.has_mbp()),
+            Self::WantChange(state) => Ok(state.mbp_mode.has_mbp()),
+            _ => Err(PasswordError::InvalidState),
+        }
+    }
+
     /// Get whether the account has FIDO2 enabled.
     pub fn has_fido(&self) -> Result<bool, PasswordError> {
         match self {
@@ -135,12 +159,12 @@ impl State {
         }
     }
 
-    /// Get whether the account has a mailbox password.
-    pub fn has_mbp(&self) -> Result<bool, PasswordError> {
+    /// Get the FIDO2 details for authentication.
+    pub fn fido_details(&self) -> Result<Option<&fido2::Response>, PasswordError> {
         match self {
-            Self::WantPass(state) => Ok(state.mbp_mode.has_mbp()),
-            Self::WantTfa(state) => Ok(state.mbp_mode.has_mbp()),
-            Self::WantChange(state) => Ok(state.mbp_mode.has_mbp()),
+            Self::WantPass(state) => Ok(state.fido_details.as_ref()),
+            Self::WantTfa(state) => Ok(state.fido_details.as_ref()),
+            Self::WantChange(state) => Ok(state.fido_details.as_ref()),
             _ => Err(PasswordError::InvalidState),
         }
     }
@@ -194,6 +218,7 @@ pub struct StateData {
     key_secret: KeySecret,
     tfa_mode: TfaStatus,
     mbp_mode: PasswordMode,
+    fido_details: Option<fido2::Response>,
 }
 
 async fn acquire_password_scope(
@@ -202,7 +227,7 @@ async fn acquire_password_scope(
     username: &str,
     password: &SecureString,
     totp: Option<String>,
-    fido: Option<Fido2AuthData>,
+    fido2_data: Option<fido2::Request>,
 ) -> Result<PutUsersPasswordResponse, PasswordError> {
     let request = PostAuthInfoRequest {
         username: username.to_owned(),
@@ -222,12 +247,25 @@ async fn acquire_password_scope(
         &response.server_ephemeral,
     )?;
 
+    let fido2 = fido2_data.map(|data| Fido2AuthData {
+        authentication_options: serde_json::to_value(data.authentication_options)
+            .unwrap_or_default(),
+        client_data: data.client_data,
+        authenticator_data: data.authenticator_data,
+        signature: data.signature,
+        credential_id: data
+            .credential_id
+            .into_iter()
+            .map(|b| serde_json::to_value(b).ok())
+            .collect(),
+    });
+
     let request = PutUsersPasswordRequest {
         client_ephemeral: client_proof.ephemeral,
         client_proof: client_proof.proof,
         srp_session: response.session,
         two_factor_code: totp,
-        fido2: fido,
+        fido2,
         sso_reauth_token: None,
     };
 

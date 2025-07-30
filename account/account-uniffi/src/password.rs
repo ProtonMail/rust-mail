@@ -8,6 +8,7 @@ use tokio::task::JoinError;
 use uniffi_runtime::async_runtime;
 use uniffi_runtime::uniffi_async;
 
+use crate::login::datatypes::{Fido2RequestFfi, Fido2ResponseFfi};
 use crate::password_validator::PasswordValidatorService;
 
 /// Errors that can occur during the password change flow, exposed via `UniFFI`.
@@ -154,6 +155,21 @@ impl PasswordFlow {
         Ok(self.get_state())
     }
 
+    /// Submit FIDO2 authentication data.
+    pub async fn submit_fido(
+        &self,
+        fido_data: Fido2RequestFfi,
+    ) -> Result<SimplePasswordState, PasswordError> {
+        let flow = self.flow.clone();
+
+        uniffi_async::<_, PasswordError, _>(async move {
+            Ok(flow.lock().await.submit_fido(fido_data.into()).await?)
+        })
+        .await?;
+
+        Ok(self.get_state())
+    }
+
     /// Change the account password; leaves the mailbox password (if any) unchanged.
     pub async fn change_pass(
         &self,
@@ -206,6 +222,18 @@ impl PasswordFlow {
     /// Get whether the account has FIDO2 enabled.
     pub fn has_fido(&self) -> Result<bool, PasswordError> {
         async_runtime().block_on(async { Ok(self.flow.lock().await.has_fido()?) })
+    }
+
+    /// Get the FIDO2 details for authentication.
+    pub fn get_fido_details(&self) -> Result<Option<Fido2ResponseFfi>, PasswordError> {
+        async_runtime().block_on(async {
+            Ok(self
+                .flow
+                .lock()
+                .await
+                .get_fido_details()?
+                .map(Fido2ResponseFfi::from))
+        })
     }
 
     /// Get whether the account has a mailbox password.
