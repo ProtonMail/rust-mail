@@ -29,7 +29,7 @@ const SPONGEBOB_NAME: &str = "Sponge Bob";
 const SPONGEBOB_ATTENDEE_ID: &str = "kdLoSTNf";
 const SPONGEBOB_ATTENDEE_TOKEN: &str = "JsgBUhNM";
 
-const TEST_MAIL: &str = "rust_test+lovesinvites@proton.ch";
+const TEST_MAIL: &str = "RUST_TEST+lovesinvites@proton.ch";
 const TEST_ATTENDEE_ID: &str = "Rh4V1hbc";
 const TEST_ATTENDEE_TOKEN: &str = "yAFY4dMB";
 const TEST_ATTACHMENT_ID: &str = "EZAYcqch";
@@ -191,6 +191,10 @@ async fn fetch_and_answer() {
             signature: None,
             size: 0,
         }];
+
+        msg.body
+            .parsed_headers
+            .insert("X-Original-To".into(), TEST_MAIL.into());
 
         msg.body
             .parsed_headers
@@ -382,7 +386,7 @@ async fn fetch_and_answer() {
 
     ctx.mock_send_direct(
         "Re: Invitation for an event",
-        TEST_MAIL,
+        "rusttest+lovesinvites@proton.ch",
         SPONGEBOB_MAIL,
         &["invite.ics"],
         Some(

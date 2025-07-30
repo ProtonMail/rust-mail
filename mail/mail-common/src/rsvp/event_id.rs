@@ -1,5 +1,5 @@
 use crate::datatypes::LocalMessageId;
-use crate::models::Message;
+use crate::models::{Message, MessageBodyMetadata};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext, RsvpEvent};
 use anyhow::Context;
 use proton_calendar_common::{self as cal};
@@ -15,14 +15,21 @@ use tracing::{debug, info, instrument, warn};
 pub struct RsvpEventId {
     id: cal::RsvpEventId,
     msg_id: LocalMessageId,
+    msg_meta: MessageBodyMetadata,
     address_id: AddressId,
 }
 
 impl RsvpEventId {
-    pub(crate) fn new(id: cal::RsvpEventId, msg_id: LocalMessageId, address_id: AddressId) -> Self {
+    pub(crate) fn new(
+        id: cal::RsvpEventId,
+        msg_id: LocalMessageId,
+        msg_meta: MessageBodyMetadata,
+        address_id: AddressId,
+    ) -> Self {
         Self {
             id,
             msg_id,
+            msg_meta,
             address_id,
         }
     }
@@ -77,7 +84,13 @@ impl RsvpEventId {
         {
             Ok(event) => {
                 if let Some(event) = event {
-                    Ok(Some(RsvpEvent::new(event, msg, addr, user)))
+                    Ok(Some(RsvpEvent::new(
+                        event,
+                        msg,
+                        self.msg_meta.clone(),
+                        addr,
+                        user,
+                    )))
                 } else {
                     debug!("False-positive, not a valid invite");
 
