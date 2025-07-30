@@ -1,4 +1,5 @@
 use proton_core_common::datatypes::UnixTimestamp as RealTimestamp;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UnixTimestamp(pub u64);
 

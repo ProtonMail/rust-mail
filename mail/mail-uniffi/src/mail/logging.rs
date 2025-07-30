@@ -57,6 +57,7 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
             muon_impl=info,\
             proton_mail_uniffi=debug,\
             proton_sqlite3=debug,\
+            proton_calendar_common=debug,\
             proton_core_common=debug,\
             proton_mail_common=debug,\
             proton_event_loop=debug,\
@@ -82,6 +83,7 @@ pub fn app_tracing_env_filter_trace() -> EnvFilter {
             muon_impl=trace,\
             proton_mail_uniffi=trace,\
             proton_sqlite3=trace,\
+            proton_calendar_common=trace,\
             proton_core_common=trace,\
             proton_mail_common=trace,\
             proton_event_loop=trace,\

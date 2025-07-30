@@ -5589,6 +5589,7 @@ dependencies = [
  "jiff",
  "pretty_assertions",
  "proton-calendar-api",
+ "proton-canonical-email",
  "proton-core-api",
  "proton-core-common",
  "proton-crypto",
@@ -5607,7 +5608,6 @@ name = "proton-canonical-email"
 version = "0.1.0"
 dependencies = [
  "serde",
- "velcro",
 ]
 
 [[package]]
@@ -6067,10 +6067,13 @@ dependencies = [
  "proton-account-api",
  "proton-account-uniffi",
  "proton-action-queue",
+ "proton-calendar-api",
+ "proton-calendar-common",
  "proton-core-api",
  "proton-core-common",
  "proton-crypto-account",
  "proton-event-loop",
+ "proton-ical",
  "proton-log-service",
  "proton-mail-api",
  "proton-mail-common",

@@ -1,9 +1,9 @@
 use indoc::formatdoc;
 use jiff::Zoned;
 use proton_calendar_api::{self as cal, ProtonCalendarMock};
-use proton_calendar_common::{RsvpAnswer, RsvpEventId};
+use proton_calendar_common::{RsvpAnswer, RsvpEventId, RsvpOrganizer};
 use proton_core_api::services::proton::{GetKeysAllResponse, PrivateString, UserId};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Contact, ContactEmail, ModelExtension};
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, KeyPackets};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
@@ -25,10 +25,11 @@ const EVENT_ID: &str = "PBBbBExE";
 const EVENT_UID: &str = "TqUvdTrE@proton.me";
 
 const SPONGEBOB_MAIL: &str = "spongebob@pm.me";
+const SPONGEBOB_NAME: &str = "Sponge Bob";
 const SPONGEBOB_ATTENDEE_ID: &str = "kdLoSTNf";
 const SPONGEBOB_ATTENDEE_TOKEN: &str = "JsgBUhNM";
 
-const TEST_MAIL: &str = "rust_test@proton.ch";
+const TEST_MAIL: &str = "RUST_TEST+lovesinvites@proton.ch";
 const TEST_ATTENDEE_ID: &str = "Rh4V1hbc";
 const TEST_ATTENDEE_TOKEN: &str = "yAFY4dMB";
 const TEST_ATTACHMENT_ID: &str = "EZAYcqch";
@@ -124,6 +125,25 @@ async fn fetch_and_answer() {
     let calendar_key = UnlockedCalendarKey::generate(&pgp).unwrap();
 
     // ---
+
+    let mut sb = Contact {
+        remote_id: Some("100".into()),
+        contact_emails: vec![ContactEmail {
+            remote_id: Some("1000".into()),
+            canonical_email: SPONGEBOB_MAIL.into(),
+            name: SPONGEBOB_NAME.into(),
+            ..ContactEmail::test_default()
+        }],
+        ..Contact::test_default()
+    };
+
+    db.tx(async |tx| sb.save(tx).await).await.unwrap();
+
+    db.tx(async |tx| sb.contact_emails[0].save(tx).await)
+        .await
+        .unwrap();
+
+    // ---
     // Step 1: Fetch the message.
 
     let ics_fixture = {
@@ -171,6 +191,10 @@ async fn fetch_and_answer() {
             signature: None,
             size: 0,
         }];
+
+        msg.body
+            .parsed_headers
+            .insert("X-Original-To".into(), TEST_MAIL.into());
 
         msg.body
             .parsed_headers
@@ -302,6 +326,14 @@ async fn fetch_and_answer() {
 
     let mut rsvp = rsvp.fetch(&user_ctx, &mut db).await.unwrap().unwrap();
 
+    assert_eq!(
+        RsvpOrganizer {
+            name: Some(SPONGEBOB_NAME.into()),
+            email: SPONGEBOB_MAIL.into(),
+        },
+        rsvp.organizer,
+    );
+
     assert_eq!(Some("face-to-face with rust-test"), rsvp.summary.as_deref());
 
     // ---
@@ -354,7 +386,7 @@ async fn fetch_and_answer() {
 
     ctx.mock_send_direct(
         "Re: Invitation for an event",
-        TEST_MAIL,
+        "rust_test+lovesinvites@proton.ch",
         SPONGEBOB_MAIL,
         &["invite.ics"],
         Some(

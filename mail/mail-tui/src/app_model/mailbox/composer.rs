@@ -235,10 +235,24 @@ impl Composer {
         stash: Stash,
     ) -> Command<Messages> {
         match Self::new_impl(draft, sync_status, stash).await {
-            Ok((composer, background_cmd)) => Command::batch([
-                Command::message(Message::OpenComposer(composer).into()),
-                background_cmd,
-            ]),
+            Ok((mut composer, background_cmd)) => {
+                let error_msg =
+                    composer
+                        .draft
+                        .address_validation_result
+                        .take()
+                        .map_or(Command::none(), |e| {
+                            Command::message(Messages::DisplayError(
+                                Some("Address Validation".into()),
+                                anyhow!("Address {} is not valid: {}", e.email, e.error),
+                            ))
+                        });
+                Command::batch([
+                    Command::message(Message::OpenComposer(composer).into()),
+                    error_msg,
+                    background_cmd,
+                ])
+            }
             Err(e) => Command::message(Messages::DisplayError(
                 Some("Open Composer failed".to_owned()),
                 e.into(),

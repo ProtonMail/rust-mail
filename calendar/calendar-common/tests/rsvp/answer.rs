@@ -26,7 +26,7 @@ struct TestCase {
 const TEST_YES: fn() -> TestCase = || TestCase {
     answer: RsvpAnswer::Yes,
     expected_ics: "ACCEPTED",
-    expected_mail: "bar@localhost accepted your invitation to some title",
+    expected_mail: "bar@pm.me accepted your invitation to some title",
     expected_notifs: CalendarNotificationsUpdate::SetToDefault,
     expected_status: CalendarAttendeeStatus::Yes,
 };
@@ -34,7 +34,7 @@ const TEST_YES: fn() -> TestCase = || TestCase {
 const TEST_MAYBE: fn() -> TestCase = || TestCase {
     answer: RsvpAnswer::Maybe,
     expected_ics: "TENTATIVE",
-    expected_mail: "bar@localhost tentatively accepted your invitation to some title",
+    expected_mail: "bar@pm.me tentatively accepted your invitation to some title",
     expected_notifs: CalendarNotificationsUpdate::SetToDefault,
     expected_status: CalendarAttendeeStatus::Maybe,
 };
@@ -42,7 +42,7 @@ const TEST_MAYBE: fn() -> TestCase = || TestCase {
 const TEST_NO: fn() -> TestCase = || TestCase {
     answer: RsvpAnswer::No,
     expected_ics: "DECLINED",
-    expected_mail: "bar@localhost declined your invitation to some title",
+    expected_mail: "bar@pm.me declined your invitation to some title",
     expected_notifs: CalendarNotificationsUpdate::Skip,
     expected_status: CalendarAttendeeStatus::No,
 };
@@ -75,8 +75,9 @@ async fn basic(case: fn() -> TestCase) {
             &world.pgp,
             &world.address_keys,
             &world.cache,
+            &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -99,7 +100,7 @@ async fn basic(case: fn() -> TestCase) {
         .mock_update_calendar_event_attendee_status(
             CALENDAR_ID,
             EVENT_ID,
-            "gWfsHvDg",
+            BAR_ATTENDEE_ID,
             case.expected_status,
             &world.now,
         )
@@ -133,7 +134,7 @@ async fn basic(case: fn() -> TestCase) {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            to: "foo@localhost".into(),
+            to: "foo@pm.me".into(),
             body: case.expected_mail.into(),
             ics: ics! {"
                 BEGIN:VCALENDAR
@@ -147,11 +148,122 @@ async fn basic(case: fn() -> TestCase) {
                 DTEND:20180101T133000Z
                 SUMMARY:some title
                 LOCATION:some location
-                ATTENDEE;PARTSTAT=%partstat%:mailto:bar@localhost
+                ATTENDEE;PARTSTAT=%partstat%:mailto:bar@pm.me
                 END:VEVENT
                 END:VCALENDAR
             "}
             .replace("%partstat%", case.expected_ics),
+        }),
+        mail
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn alias() {
+    const ATTENDEES_EVENT: &str = indoc! {"
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        ATTENDEE;CN=foo@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@pm.me
+        ATTENDEE;CN=bar+spam@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar+spam@pm.me
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
+    let world = world().await;
+    let event = world.event(|event| event.basic().with_attendees_event(ATTENDEES_EVENT));
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap_ex(CALENDAR_ID, world.bootstrap(), |mock| mock.expect(2))
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
+        .await;
+
+    let mut event = RsvpEventId::invite(INVITE)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "bar@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    // ---
+
+    let mut mail = None;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_update_calendar_event_attendee_status(
+            CALENDAR_ID,
+            EVENT_ID,
+            BAR_ATTENDEE_ID,
+            CalendarAttendeeStatus::Yes,
+            &world.now,
+        )
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_update_calendar_event_personal_part(
+            CALENDAR_ID,
+            EVENT_ID,
+            Some("#aabbcc"),
+            CalendarNotificationsUpdate::SetToDefault,
+        )
+        .await;
+
+    let sender = FakeRsvpMailSender(&mut mail);
+
+    event
+        .answer(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            sender,
+            &world.now,
+            RsvpAnswer::Yes,
+        )
+        .await
+        .unwrap();
+
+    pa::assert_eq!(
+        Some(FakeRsvpMail {
+            to: "foo@pm.me".into(),
+            body: "bar+spam@pm.me accepted your invitation to some title".into(),
+            ics: ics! {"
+                BEGIN:VCALENDAR
+                METHOD:REPLY
+                VERSION:2.0
+                CALSCALE:GREGORIAN
+                BEGIN:VEVENT
+                UID:8maQ3qBa
+                DTSTAMP:20180101T100000Z
+                DTSTART:20180101T120000Z
+                DTEND:20180101T133000Z
+                SUMMARY:some title
+                LOCATION:some location
+                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar+spam@pm.me
+                END:VEVENT
+                END:VCALENDAR
+            "}
         }),
         mail
     );
@@ -210,6 +322,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(PARENT_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -246,6 +359,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(CHILD0_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -282,6 +396,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(CHILD1_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -318,6 +433,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(CHILD2_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -366,6 +482,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(CHILD3_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -415,8 +532,8 @@ async fn recurring_with_single_edits() {
         DTEND:20180101T133000Z
         RRULE:FREQ=DAILY
         SUMMARY:ice bucket challenge
-        ORGANIZER:mailto:foo@localhost
-        ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@localhost
+        ORGANIZER:mailto:foo@pm.me
+        ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@pm.me
         END:VEVENT
         END:VCALENDAR
     "};
@@ -427,8 +544,9 @@ async fn recurring_with_single_edits() {
             &world.pgp,
             &world.address_keys,
             &world.cache,
+            &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -521,8 +639,8 @@ async fn recurring_with_single_edits() {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            to: "foo@localhost".into(),
-            body: "bar@localhost accepted your invitation to ice bucket challenge".into(),
+            to: "foo@pm.me".into(),
+            body: "bar@pm.me accepted your invitation to ice bucket challenge".into(),
             ics: ics! {"
                 BEGIN:VCALENDAR
                 METHOD:REPLY
@@ -534,7 +652,7 @@ async fn recurring_with_single_edits() {
                 DTSTART:20180101T120000Z
                 DTEND:20180101T133000Z
                 SUMMARY:ice bucket challenge
-                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar@localhost
+                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar@pm.me
                 RRULE:FREQ=DAILY
                 END:VEVENT
                 END:VCALENDAR
@@ -636,6 +754,147 @@ async fn recurring_with_single_edits() {
         event.children[3]
             .attendee_status(&FOO_ATTENDEE_TOKEN.into())
             .unwrap()
+    );
+}
+
+/// Make sure we can correctly reply when one UID resolves to events across
+/// different calendars.
+///
+/// This can happen for Proton-to-Proton invites when:
+///
+/// - organizer creates a shared calendar,
+/// - organizer invites an attendee to this shared calendar,
+/// - organizer creates an event in the shared calendar, inviting attendee to
+///   it.
+///
+/// When the invitation is sent, the backend auto-imports it into attendee's
+/// *default* calendar ("My calendar") - this means that there are, in a way,
+/// two events now: one within the shared calendar and another in the attendee's
+/// default calendar.
+///
+/// When replying, we can choose any event as the backend keeps them in sync -
+/// what is important for us is that we don't try to reply to both events at
+/// once.
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn multiple_calendars() {
+    const FIRST_CALENDAR_ID: &str = "xI8emESw";
+    const FIRST_EVENT_ID: &str = "Tnld9DeP";
+
+    const SECOND_CALENDAR_ID: &str = "9NQ8rRCB";
+    const SECOND_EVENT_ID: &str = "DMTwRgJT";
+
+    let world = world().await;
+
+    let first_event = world.event(|event| {
+        event
+            .basic()
+            .with_id(FIRST_EVENT_ID)
+            .with_calendar_id(FIRST_CALENDAR_ID)
+    });
+
+    let second_event = world.event(|event| {
+        event
+            .basic()
+            .with_id(SECOND_EVENT_ID)
+            .with_calendar_id(SECOND_CALENDAR_ID)
+    });
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap_ex(
+            FIRST_CALENDAR_ID,
+            world.bootstrap_ex(FIRST_CALENDAR_ID),
+            |mock| mock.expect(2),
+        )
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_find_calendar_events(EVENT_UID, None, vec![first_event, second_event])
+        .await;
+
+    let mut event = RsvpEventId::invite(INVITE)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "bar@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    // ---
+
+    let mut mail = None;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_update_calendar_event_attendee_status(
+            FIRST_CALENDAR_ID,
+            FIRST_EVENT_ID,
+            BAR_ATTENDEE_ID,
+            CalendarAttendeeStatus::Yes,
+            &world.now,
+        )
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_update_calendar_event_personal_part(
+            FIRST_CALENDAR_ID,
+            FIRST_EVENT_ID,
+            Some("#aabbcc"),
+            CalendarNotificationsUpdate::SetToDefault,
+        )
+        .await;
+
+    let sender = FakeRsvpMailSender(&mut mail);
+
+    event
+        .answer(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            sender,
+            &world.now,
+            RsvpAnswer::Yes,
+        )
+        .await
+        .unwrap();
+
+    pa::assert_eq!(
+        Some(FakeRsvpMail {
+            to: "foo@pm.me".into(),
+            body: "bar@pm.me accepted your invitation to some title".into(),
+            ics: ics! {"
+                BEGIN:VCALENDAR
+                METHOD:REPLY
+                VERSION:2.0
+                CALSCALE:GREGORIAN
+                BEGIN:VEVENT
+                UID:8maQ3qBa
+                DTSTAMP:20180101T100000Z
+                DTSTART:20180101T120000Z
+                DTEND:20180101T133000Z
+                SUMMARY:some title
+                LOCATION:some location
+                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar@pm.me
+                END:VEVENT
+                END:VCALENDAR
+            "}
+        }),
+        mail
     );
 }
 

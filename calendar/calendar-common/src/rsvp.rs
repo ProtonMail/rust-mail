@@ -125,6 +125,7 @@ impl RsvpEventId {
         pgp: &P,
         keys: &UnlockedAddressKeys<P>,
         cache: &impl RsvpCache,
+        contacts: &impl RsvpContacts,
         now: &Zoned,
         email: &str,
         week_start: Weekday,
@@ -132,7 +133,10 @@ impl RsvpEventId {
     where
         P: PGPProviderSync,
     {
-        fetch::run(api, pgp, keys, cache, now, email, week_start, self).await
+        fetch::run(
+            api, pgp, keys, cache, contacts, now, email, week_start, self,
+        )
+        .await
     }
 }
 
@@ -442,6 +446,7 @@ pub enum RsvpOccurrence {
 pub struct RsvpAttendee {
     pub id: Option<CalendarAttendeeId>,
     pub token: Option<CalendarAttendeeToken>,
+    pub name: Option<String>,
     pub email: String,
     pub status: Option<CalendarAttendeeStatus>,
     pub role: ical::Role,
@@ -449,6 +454,7 @@ pub struct RsvpAttendee {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpOrganizer {
+    pub name: Option<String>,
     pub email: String,
 }
 
@@ -531,6 +537,10 @@ impl From<RsvpAnswer> for ical::PartStat {
     }
 }
 
+pub trait RsvpContacts {
+    fn get_display_name(&self, email: &str) -> impl Future<Output = Option<String>> + Send;
+}
+
 pub trait RsvpCache {
     fn get_calendar_bootstrap<E, Fn, Fut>(
         &self,
@@ -583,9 +593,6 @@ pub enum RsvpError {
 
     #[error("*.ics contains an event without dtstart")]
     MissingDtStart,
-
-    #[error("*.ics contains an event without dtend")]
-    MissingDtEnd,
 
     #[error("*.ics contains an event with mixed-type dtstart and dtend")]
     MixedDtStartAndDtEnd,

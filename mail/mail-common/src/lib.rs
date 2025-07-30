@@ -24,7 +24,7 @@ pub mod test_utils;
 
 pub use self::context::{MailContext, MailContextError, MailContextResult};
 pub use self::mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
-pub use self::rsvp::RsvpEvent;
+pub use self::rsvp::{RsvpEvent, RsvpEventId};
 pub use self::sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use self::user_context::MailUserContext;
 use proton_core_common::models::LabelError;
@@ -93,6 +93,8 @@ pub enum AppError {
     MessageHasNoRemoteId(LocalMessageId),
     #[error("Message missing in database for local_id {0}")]
     MessageMissing(LocalMessageId),
+    #[error("Address missing in database for local_id {0}")]
+    AddressMissing(LocalAddressId),
     #[error("Address {0} does not have a remote id")]
     AddressHasNoRemoteId(LocalAddressId),
     #[error("Could not find remote label {0}")]

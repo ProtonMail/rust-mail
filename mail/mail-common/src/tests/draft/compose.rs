@@ -14,6 +14,8 @@ use crate::proton_mail_api::services::proton::prelude::ConversationId;
 use insta::assert_snapshot;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId};
+use proton_core_common::datatypes::{UserMnemonicStatus, UserType};
+use proton_core_common::models::{PaidSubscription, User};
 use std::str::FromStr;
 
 #[test]
@@ -488,6 +490,7 @@ async fn create_reply_with_mime_and_body_and_message(
         source_body,
         true,
         None,
+        None,
     )
     .await;
     (draft, source_message, attachments)
@@ -605,6 +608,160 @@ fn existing_message_body_metadata() -> MessageBodyMetadata {
             is_simple_login: false,
             name: "Send InToVoid".into(),
         }],
+    }
+}
+
+#[test_case::test_case(ValidateAddressParams::disabled();"disable_address")]
+#[test_case::test_case(ValidateAddressParams::deleting();"deleting_address")]
+#[test_case::test_case(ValidateAddressParams::without_send(); "no_send")]
+#[test_case::test_case(ValidateAddressParams::without_receive(); "no_receive")]
+#[test_case::test_case(ValidateAddressParams::without_subscription(); "pm_without_subscription")]
+#[test_case::test_case(ValidateAddressParams::with_subscription(); "pm_with_subscription")]
+#[test_case::test_case(ValidateAddressParams::default(); "default")]
+fn validate_address(params: ValidateAddressParams) {
+    let address = Address {
+        local_id: None,
+        remote_id: None,
+        address_type: AddressType::Original,
+        catch_all: false,
+        display_name: "".to_string(),
+        display_order: 0,
+        domain_id: None,
+        email: params.email,
+        keys: Default::default(),
+        proton_mx: false,
+        receive: params.receive,
+        send: params.send,
+        signature: "".to_string(),
+        signed_key_list: Default::default(),
+        status: params.status,
+    };
+
+    let user = User {
+        remote_id: None,
+        create_time: Default::default(),
+        credit: 0,
+        currency: "".to_string(),
+        delinquent: Default::default(),
+        display_name: None,
+        email: String::new(),
+        keys: Default::default(),
+        flags: Default::default(),
+        max_space: 0,
+        max_upload: 0,
+        mnemonic_status: UserMnemonicStatus::Disabled,
+        private: false,
+        name: None,
+        product_used_space: Default::default(),
+        role: 0,
+        services: 0,
+        subscribed: params.plans,
+        to_migrate: false,
+        used_space: 0,
+        user_type: UserType::Proton,
+    };
+
+    let result = validate_sender_address(&address, &user);
+    assert_eq!(result, params.expected);
+}
+
+struct ValidateAddressParams {
+    email: String,
+    status: AddressStatus,
+    send: bool,
+    receive: bool,
+    plans: PaidSubscription,
+    expected: Option<DraftAddressValidationResult>,
+}
+
+impl ValidateAddressParams {
+    fn disabled() -> Self {
+        Self {
+            email: "foo@proton.ch".into(),
+            status: AddressStatus::Disabled,
+            send: true,
+            receive: true,
+            plans: PaidSubscription::empty(),
+            expected: Some(DraftAddressValidationResult::new(
+                "foo@proton.ch".into(),
+                DraftAddressValidationError::Disabled,
+            )),
+        }
+    }
+    fn deleting() -> Self {
+        Self {
+            email: "foo@proton.ch".into(),
+            status: AddressStatus::Deleting,
+            send: true,
+            receive: true,
+            plans: PaidSubscription::empty(),
+            expected: Some(DraftAddressValidationResult::new(
+                "foo@proton.ch".into(),
+                DraftAddressValidationError::Disabled,
+            )),
+        }
+    }
+
+    fn without_send() -> Self {
+        Self {
+            email: "foo@proton.ch".into(),
+            status: AddressStatus::Enabled,
+            send: false,
+            receive: true,
+            plans: PaidSubscription::empty(),
+            expected: Some(DraftAddressValidationResult::new(
+                "foo@proton.ch".into(),
+                DraftAddressValidationError::CanNotSend,
+            )),
+        }
+    }
+
+    fn without_receive() -> Self {
+        Self {
+            email: "foo@proton.ch".into(),
+            status: AddressStatus::Enabled,
+            send: true,
+            receive: false,
+            plans: PaidSubscription::empty(),
+            expected: Some(DraftAddressValidationResult::new(
+                "foo@proton.ch".into(),
+                DraftAddressValidationError::CanNotReceive,
+            )),
+        }
+    }
+    fn without_subscription() -> Self {
+        Self {
+            email: "foo@pm.me".into(),
+            status: AddressStatus::Enabled,
+            send: true,
+            receive: true,
+            plans: PaidSubscription::empty(),
+            expected: Some(DraftAddressValidationResult::new(
+                "foo@pm.me".into(),
+                DraftAddressValidationError::SubscriptionRequired,
+            )),
+        }
+    }
+    fn with_subscription() -> Self {
+        Self {
+            email: "foo@pm.me".into(),
+            status: AddressStatus::Enabled,
+            send: true,
+            receive: true,
+            plans: PaidSubscription::MAIL,
+            expected: None,
+        }
+    }
+
+    fn default() -> Self {
+        Self {
+            email: "foo@proton.ch".into(),
+            status: AddressStatus::Enabled,
+            send: true,
+            receive: true,
+            plans: PaidSubscription::MAIL,
+            expected: None,
+        }
     }
 }
 

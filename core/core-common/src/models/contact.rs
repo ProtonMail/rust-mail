@@ -212,7 +212,7 @@ impl Contact {
     ///
     /// Returns a [`StashError`] if the emails cannot be retrieved.
     ///
-    pub async fn emails(&mut self, tether: &Tether) -> Result<&Vec<ContactEmail>, StashError> {
+    pub async fn emails(&mut self, tether: &Tether) -> Result<&[ContactEmail], StashError> {
         self.contact_emails = ContactEmail::find(
             "WHERE remote_contact_id = ? ORDER BY display_order ASC",
             params![self.remote_id.clone()],
@@ -666,7 +666,6 @@ pub struct ContactListWatcher {
 }
 
 impl ContactListWatcher {
-    /// Creates a new watcher
     #[must_use]
     pub fn new(sender: flume::Sender<()>) -> Self {
         Self { sender }

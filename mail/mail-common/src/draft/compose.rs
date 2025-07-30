@@ -9,9 +9,11 @@ use crate::models::{
 };
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::DateTime;
+use derive_more::Display;
+use indoc::indoc;
 use proton_core_api::services::proton::AddressId;
 use proton_core_common::datatypes::{AddressStatus, UnixTimestamp};
-use proton_core_common::models::{Address, ModelIdExtension};
+use proton_core_common::models::{Address, ModelIdExtension, PaidSubscription, User};
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
@@ -21,7 +23,8 @@ use proton_mail_html_transformer::transforms::styles::{
 };
 use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use stash::orm::Model as _;
-use stash::stash::Tether;
+use stash::params;
+use stash::stash::{StashError, Tether};
 use std::borrow::Cow;
 use std::fmt::Display;
 use tracing::error;
@@ -610,4 +613,84 @@ pub fn resolve_sender_alias(
                 address_email.to_owned()
             }
         })
+}
+
+#[derive(Debug, Display, Clone, Copy, Eq, PartialEq)]
+pub enum DraftAddressValidationError {
+    #[display("Replying/Sending from @pm.me addresses requires a paid subscription")]
+    SubscriptionRequired,
+    #[display("Address is disabled")]
+    Disabled,
+    #[display("Can not send from address")]
+    CanNotSend,
+    #[display("Can not receive on address")]
+    CanNotReceive,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct DraftAddressValidationResult {
+    pub email: String,
+    pub error: DraftAddressValidationError,
+}
+
+impl DraftAddressValidationResult {
+    pub fn new(email: String, error: DraftAddressValidationError) -> Self {
+        Self { email, error }
+    }
+}
+
+pub fn validate_sender_address(
+    address: &Address,
+    user: &User,
+) -> Option<DraftAddressValidationResult> {
+    if address.status != AddressStatus::Enabled {
+        return Some(DraftAddressValidationResult::new(
+            address.email.clone(),
+            DraftAddressValidationError::Disabled,
+        ));
+    }
+
+    if !address.send {
+        return Some(DraftAddressValidationResult::new(
+            address.email.clone(),
+            DraftAddressValidationError::CanNotSend,
+        ));
+    }
+
+    if !address.receive {
+        return Some(DraftAddressValidationResult::new(
+            address.email.clone(),
+            DraftAddressValidationError::CanNotReceive,
+        ));
+    }
+
+    if address.email.to_lowercase().ends_with("@pm.me")
+        && !user.subscribed.contains(PaidSubscription::MAIL)
+    {
+        return Some(DraftAddressValidationResult::new(
+            address.email.clone(),
+            DraftAddressValidationError::SubscriptionRequired,
+        ));
+    }
+
+    None
+}
+
+//
+pub async fn find_default_sender_address(tether: &Tether) -> Result<Option<Address>, StashError> {
+    Address::find_first(
+        indoc! {"
+            WHERE
+                send=1 AND
+                receive=1 AND
+                status=?
+            ORDER BY display_order
+            "},
+        params![AddressStatus::Enabled],
+        tether,
+    )
+    .await
+    .inspect_err(|e| {
+        error!("Failed to load addresses: {e:?}");
+    })
 }

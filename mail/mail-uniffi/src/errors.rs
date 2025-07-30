@@ -8,8 +8,6 @@ mod scroller_error;
 mod session_error;
 pub(crate) mod unexpected;
 
-use crate::mail::messages::{BodyOutput, EmbeddedAttachmentInfo};
-
 pub use self::action_error::*;
 pub use self::draft_error::*;
 pub use self::error_reason::*;
@@ -18,6 +16,9 @@ pub use self::pin_error::*;
 pub use self::proton_error::*;
 pub use self::scroller_error::*;
 pub use self::session_error::*;
+
+use crate::mail::RsvpEvent;
+use crate::mail::messages::{BodyOutput, EmbeddedAttachmentInfo};
 
 #[macro_export]
 macro_rules! export_void_result {
@@ -96,12 +97,11 @@ export_void_result! {
     VoidSessionResult(UserContextError),
     VoidDraftPasswordResult(DraftPasswordError),
     VoidDraftExpirationResult(DraftExpirationError),
+    VoidAnswerRsvpResult(ProtonError),
 }
 
 export_typed_result! {
-    /// A common type to be shared between:
-    /// - `Draft::get_embedded_attachment`,
-    /// - `DecryptedMessage::get_embedded_attachment`.
     EmbeddedAttachmentInfoResult(EmbeddedAttachmentInfo, ProtonError),
-    BodyOutputResult(BodyOutput, ProtonError)
+    BodyOutputResult(BodyOutput, ProtonError),
+    RsvpEventGetResult(RsvpEvent, ProtonError),
 }

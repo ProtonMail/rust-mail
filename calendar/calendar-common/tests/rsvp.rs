@@ -12,8 +12,8 @@ use proton_calendar_api::{
     CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
 };
 use proton_calendar_common::{
-    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence,
-    RsvpOrganizer, RsvpProgress, RsvpRecency,
+    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpContacts, RsvpEvent, RsvpEventId, RsvpIntent,
+    RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -25,6 +25,8 @@ use proton_crypto_account::keys::{
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_ical as ical;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 const EVENT_ID: &str = "pFmwNlJp";
@@ -43,9 +45,9 @@ const INVITE: &str = indoc! {"
     DESCRIPTION:some description
     SUMMARY:some title
     LOCATION:some location
-    ORGANIZER:mailto:foo@localhost
-    ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@localhost
-    ATTENDEE;ROLE=OPT-PARTICIPANT:mailto:zar@localhost
+    ORGANIZER:mailto:foo@pm.me
+    ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@pm.me
+    ATTENDEE;ROLE=OPT-PARTICIPANT:mailto:zar@pm.me
     END:VEVENT
     END:VCALENDAR
 "};
@@ -70,9 +72,9 @@ const ATTENDEES_EVENT: &str = indoc! {"
     VERSION:2.0
     BEGIN:VEVENT
     UID:8maQ3qBa
-    ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@localhost
-    ATTENDEE;CN=bar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@localhost
-    ATTENDEE;CN=zar@localhost;ROLE=OPT-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=fdec9604:mailto:zar@localhost
+    ATTENDEE;CN=foo@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@pm.me
+    ATTENDEE;CN=bar@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@pm.me
+    ATTENDEE;CN=zar@pm.me;ROLE=OPT-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=fdec9604:mailto:zar@pm.me
     END:VEVENT
     END:VCALENDAR
 "};
@@ -114,8 +116,9 @@ where
     sess: Session,
     pgp: P,
     address_keys: UnlockedAddressKeys<P>,
-    calendar_key: UnlockedCalendarKey<P>,
+    calendar_keys: RefCell<HashMap<CalendarId, UnlockedCalendarKey<P>>>,
     cache: DummyRsvpCache,
+    contacts: DummyRsvpContacts,
     now: Zoned,
 }
 
@@ -146,7 +149,7 @@ async fn world() -> World<impl PGPProviderSync> {
     let address_keys = UnlockedAddressKeys::from(
         LocalAddressKey::generate(
             &pgp,
-            "someone@localhost",
+            "someone@pm.me",
             KeyGeneratorAlgorithm::default(),
             KeyFlag::default(),
             true,
@@ -157,15 +160,14 @@ async fn world() -> World<impl PGPProviderSync> {
         .unwrap(),
     );
 
-    let calendar_key = UnlockedCalendarKey::generate(&pgp).unwrap();
-
     World {
         ctx,
         sess,
         pgp,
         address_keys,
-        calendar_key,
+        calendar_keys: RefCell::default(),
         cache: DummyRsvpCache,
+        contacts: DummyRsvpContacts,
         now: "20180101T100000[UTC]".parse().unwrap(),
     }
 }
@@ -175,26 +177,33 @@ where
     P: PGPProviderSync,
 {
     fn bootstrap(&self) -> CalendarBootstrap {
+        self.bootstrap_ex(CALENDAR_ID)
+    }
+
+    fn bootstrap_ex(&self, id: &str) -> CalendarBootstrap {
         let key = self
-            .calendar_key
+            .calendar_keys
+            .borrow_mut()
+            .entry(CalendarId::from(id))
+            .or_insert_with(|| UnlockedCalendarKey::generate(&self.pgp).unwrap())
             .export(&self.pgp, &self.address_keys[0])
             .unwrap();
 
         CalendarBootstrap {
             keys: vec![CalendarKey {
-                id: "msY6Hh3D".into(),
+                id: id.into(),
                 private_key: key.key().into(),
                 flags: CalendarKeyFlags::ActiveAndPrimary,
             }],
             passphrase: CalendarPassphrase {
                 member_passphrases: vec![CalendarMemberPassphrase {
-                    member_id: "qyomV2nX".into(),
+                    member_id: id.into(),
                     passphrase: key.passphrase().into(),
                     signature: key.signature().into(),
                 }],
             },
             members: [CalendarMember {
-                id: "qyomV2nX".into(),
+                id: id.into(),
                 name: "My calendar".into(),
                 color: "#273EB2".into(),
             }],
@@ -213,6 +222,7 @@ where
     world: &'a World<P>,
     encryption: &'static str,
     id: Option<&'static str>,
+    calendar_id: Option<&'static str>,
     shared_event: Option<&'static str>,
     attendees_event: Option<&'static str>,
     calendar_event: Option<&'static str>,
@@ -227,6 +237,7 @@ where
         Self {
             world,
             id: None,
+            calendar_id: None,
             encryption: "calendar-key",
             shared_event: None,
             attendees_event: None,
@@ -237,6 +248,7 @@ where
 
     fn basic(self) -> Self {
         self.with_id(EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_shared_event(SHARED_EVENT)
             .with_attendees_event(ATTENDEES_EVENT)
             .with_attendees(ATTENDEES())
@@ -244,6 +256,11 @@ where
 
     fn with_id(mut self, id: &'static str) -> Self {
         self.id = Some(id);
+        self
+    }
+
+    fn with_calendar_id(mut self, calendar_id: &'static str) -> Self {
+        self.calendar_id = Some(calendar_id);
         self
     }
 
@@ -283,18 +300,28 @@ where
     }
 
     fn build(self) -> CalendarEvent {
+        let mut calendar_keys = self.world.calendar_keys.borrow_mut();
+
         let encryptor = match self.encryption {
             "address-key" => {
                 CalendarEventEncryptor::for_address(&self.world.pgp, &self.world.address_keys)
                     .unwrap()
             }
 
-            "calendar-key" => CalendarEventEncryptor::for_calendar(
-                &self.world.pgp,
-                &self.world.address_keys,
-                &self.world.calendar_key,
-            )
-            .unwrap(),
+            "calendar-key" => {
+                let calendar_id = CalendarId::from(self.calendar_id.unwrap());
+
+                let calendar_key = calendar_keys
+                    .entry(calendar_id)
+                    .or_insert_with(|| UnlockedCalendarKey::generate(&self.world.pgp).unwrap());
+
+                CalendarEventEncryptor::for_calendar(
+                    &self.world.pgp,
+                    &self.world.address_keys,
+                    calendar_key,
+                )
+                .unwrap()
+            }
 
             _ => unreachable!(),
         };
@@ -321,7 +348,7 @@ where
                 ty: CalendarEventPayloadType::ClearText,
                 data: data.into(),
                 signature: None,
-                author: "foo@localhost".into(),
+                author: "foo@pm.me".into(),
             })
             .collect();
 
@@ -330,18 +357,18 @@ where
                 ty: CalendarEventPayloadType::Encrypted,
                 data: shared_event.into_base64(),
                 signature: None,
-                author: "foo@localhost".into(),
+                author: "foo@pm.me".into(),
             }],
             calendar_events,
             id: self.id.unwrap().into(),
-            calendar_id: CALENDAR_ID.into(),
+            calendar_id: self.calendar_id.unwrap().into(),
             address_key_packet,
             shared_key_packet,
             attendees_events: [CalendarEventPayload {
                 ty: CalendarEventPayloadType::Encrypted,
                 data: attendees_event.into_base64(),
                 signature: None,
-                author: "foo@localhost".into(),
+                author: "foo@pm.me".into(),
             }],
             attendees: self.attendees,
             notifications: None,
@@ -367,6 +394,18 @@ impl RsvpCache for DummyRsvpCache {
     }
 }
 
+struct DummyRsvpContacts;
+
+impl RsvpContacts for DummyRsvpContacts {
+    async fn get_display_name(&self, email: &str) -> Option<String> {
+        match email {
+            "bar@pm.me" => Some("Bar Localhosty".into()),
+            "foo@pm.me" => Some("Foo Localhosty".into()),
+            _ => None,
+        }
+    }
+}
+
 fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
     RsvpEvent {
         intent,
@@ -385,20 +424,23 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
             ),
         },
         organizer: RsvpOrganizer {
-            email: "foo@localhost".into(),
+            name: Some("Foo Localhosty".into()),
+            email: "foo@pm.me".into(),
         },
         attendees: vec![
             RsvpAttendee {
                 id: Some(BAR_ATTENDEE_ID.into()),
                 token: Some(BAR_ATTENDEE_TOKEN.into()),
-                email: "bar@localhost".into(),
+                name: Some("Bar Localhosty".into()),
+                email: "bar@pm.me".into(),
                 status: Some(CalendarAttendeeStatus::Unanswered),
                 role: ical::Role::ReqParticipant,
             },
             RsvpAttendee {
                 id: Some(ZAR_ATTENDEE_ID.into()),
                 token: Some(ZAR_ATTENDEE_TOKEN.into()),
-                email: "zar@localhost".into(),
+                name: None,
+                email: "zar@pm.me".into(),
                 status: Some(CalendarAttendeeStatus::Yes),
                 role: ical::Role::OptParticipant,
             },
@@ -434,20 +476,23 @@ fn expected_offline_event() -> RsvpEvent {
             ),
         },
         organizer: RsvpOrganizer {
-            email: "foo@localhost".into(),
+            name: Some("Foo Localhosty".into()),
+            email: "foo@pm.me".into(),
         },
         attendees: vec![
             RsvpAttendee {
                 id: None,
                 token: None,
-                email: "bar@localhost".into(),
+                name: Some("Bar Localhosty".into()),
+                email: "bar@pm.me".into(),
                 status: None,
                 role: ical::Role::ReqParticipant,
             },
             RsvpAttendee {
                 id: None,
                 token: None,
-                email: "zar@localhost".into(),
+                name: None,
+                email: "zar@pm.me".into(),
                 status: None,
                 role: ical::Role::OptParticipant,
             },

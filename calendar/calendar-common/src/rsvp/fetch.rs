@@ -1,7 +1,7 @@
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCache, RsvpCalendar,
-    RsvpError, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence, RsvpOrganizer, RsvpProgress,
-    RsvpRecency, RsvpRecurrence, RsvpResult,
+    RsvpContacts, RsvpError, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence, RsvpOrganizer,
+    RsvpProgress, RsvpRecency, RsvpRecurrence, RsvpResult,
 };
 use itertools::{Either, Itertools};
 use jiff::{
@@ -11,6 +11,7 @@ use jiff::{
 use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, ProtonCalendar,
 };
+use proton_canonical_email::{self as email, CanonicalEmail};
 use proton_core_api::services::proton::Proton;
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::keys::UnlockedAddressKeys;
@@ -25,6 +26,7 @@ pub(super) async fn run<P>(
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
     cache: &impl RsvpCache,
+    contacts: &impl RsvpContacts,
     now: &Zoned,
     email: &str,
     week_start: Weekday,
@@ -84,10 +86,13 @@ where
         return Ok(None);
     };
 
+    let email = email::canonicalize_auto(email);
+
     extract(
         pgp,
+        contacts,
         now,
-        email,
+        &email,
         week_start,
         id,
         calendar,
@@ -95,6 +100,7 @@ where
         children,
         decryptor.as_ref(),
     )
+    .await
     .map(Some)
 }
 
@@ -233,16 +239,17 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn extract<P>(
+async fn extract<P>(
     pgp: &P,
+    contacts: &impl RsvpContacts,
     now: &Zoned,
-    email: &str,
+    email: &CanonicalEmail,
     week_start: Weekday,
     id: &RsvpEventId,
     calendar: Option<CalendarBootstrap>,
-    source: Source,
+    source: Source<'_>,
     children: Vec<CalendarEvent>,
-    decryptor: Option<&CalendarEventDecryptor<P>>,
+    decryptor: Option<&CalendarEventDecryptor<'_, P>>,
 ) -> RsvpResult<RsvpEvent>
 where
     P: PGPProviderSync,
@@ -250,8 +257,8 @@ where
     let metadata = extract_metadata(source.invite_or_event());
     let recurrence = extract_recurrence(source.invite_or_event(), week_start);
     let occurrence = extract_occurrence(source.invite_or_event())?;
-    let organizer = extract_organizer(&source)?;
-    let attendees = extract_attendees(pgp, &source, decryptor, &organizer)?;
+    let organizer = extract_organizer(contacts, &source).await?;
+    let attendees = extract_attendees(pgp, contacts, &source, decryptor, &organizer).await?;
     let calendar = extract_calendar(calendar, &source);
     let progress = extract_progress(now, &source, &occurrence);
     let recency = extract_recency(source.invite(), source.event());
@@ -259,11 +266,13 @@ where
     let user_attendee_idx = attendees
         .iter()
         .enumerate()
-        .find_map(
-            |(idx, att)| {
-                if att.email == email { Some(idx) } else { None }
-            },
-        )
+        .find_map(|(idx, att)| {
+            if email::canonicalize_auto(&att.email) == *email {
+                Some(idx)
+            } else {
+                None
+            }
+        })
         .ok_or({
             // This can happen whan an attendee forwards their own invite to
             // another user that hasn't been invited by the organizer; this is
@@ -776,17 +785,20 @@ fn extract_recurrence_yearly(recur: &ical::Recur) -> RsvpRecurrence {
 }
 
 fn extract_occurrence(event: &ical::VEvent) -> RsvpResult<RsvpOccurrence> {
-    let dtstart = event.dtstart.as_ref().ok_or(RsvpError::MissingDtStart)?;
-    let dtend = event.dtend.as_ref().ok_or(RsvpError::MissingDtEnd)?;
+    let dtstart = event
+        .dtstart
+        .as_ref()
+        .map(|dtstart| &dtstart.value)
+        .ok_or(RsvpError::MissingDtStart)?;
 
-    let dtstart = &dtstart.value;
-    let dtend = &dtend.value;
+    let dtend = event.dtend.as_ref().map(|dtend| &dtend.value);
 
     match (dtstart, dtend) {
-        (ical::DateOrDt::Date(dtstart), ical::DateOrDt::Date(dtend)) => {
+        (ical::DateOrDt::Date(dtstart), Some(ical::DateOrDt::Date(dtend))) => {
             let starts_at = Date::from(*dtstart);
 
-            // `DTEND` is exclusive, so e.g. for a single-day event we get:
+            // iCal's `DTEND` is exclusive, so e.g. for a single-day event we
+            // get:
             //
             // ```
             // DTSTART;VALUE=DATE:20180101
@@ -801,18 +813,31 @@ fn extract_occurrence(event: &ical::VEvent) -> RsvpResult<RsvpOccurrence> {
             Ok(RsvpOccurrence::Date { starts_at, ends_at })
         }
 
-        (ical::DateOrDt::DateTime(dtstart), ical::DateOrDt::DateTime(dtend)) => {
+        (ical::DateOrDt::Date(date), None) => Ok(RsvpOccurrence::Date {
+            starts_at: (*date).into(),
+            ends_at: (*date).into(),
+        }),
+
+        (ical::DateOrDt::DateTime(dtstart), Some(ical::DateOrDt::DateTime(dtend))) => {
             Ok(RsvpOccurrence::DateTime {
                 starts_at: Zoned::try_from(dtstart.clone())?,
                 ends_at: Zoned::try_from(dtend.clone())?,
             })
         }
 
+        (ical::DateOrDt::DateTime(date), None) => Ok(RsvpOccurrence::DateTime {
+            starts_at: Zoned::try_from(date.clone())?,
+            ends_at: Zoned::try_from(date.clone())?,
+        }),
+
         _ => Err(RsvpError::MixedDtStartAndDtEnd),
     }
 }
 
-fn extract_organizer(source: &Source) -> RsvpResult<RsvpOrganizer> {
+async fn extract_organizer(
+    contacts: &impl RsvpContacts,
+    source: &Source<'_>,
+) -> RsvpResult<RsvpOrganizer> {
     // If we have access to the raw calendar event, pull organizer from there -
     // it's validated by the backend thus guaranteed to be a correct e-mail
     // address.
@@ -828,7 +853,10 @@ fn extract_organizer(source: &Source) -> RsvpResult<RsvpOrganizer> {
             .author
             .clone();
 
-        Ok(RsvpOrganizer { email })
+        Ok(RsvpOrganizer {
+            name: contacts.get_display_name(&email).await,
+            email,
+        })
     } else {
         let organizer = source
             .invite_or_event()
@@ -837,8 +865,11 @@ fn extract_organizer(source: &Source) -> RsvpResult<RsvpOrganizer> {
             .ok_or(RsvpError::UnknownOrganizer)?;
 
         if let ical::CalAddress::Email(email) = &organizer.address {
+            let email = email.value().as_str();
+
             Ok(RsvpOrganizer {
-                email: email.value().as_str().into(),
+                name: contacts.get_display_name(email).await,
+                email: email.into(),
             })
         } else {
             Err(RsvpError::UnknownOrganizer)
@@ -846,10 +877,11 @@ fn extract_organizer(source: &Source) -> RsvpResult<RsvpOrganizer> {
     }
 }
 
-fn extract_attendees<P>(
+async fn extract_attendees<P>(
     pgp: &P,
-    source: &Source,
-    decryptor: Option<&CalendarEventDecryptor<P>>,
+    contacts: &impl RsvpContacts,
+    source: &Source<'_>,
+    decryptor: Option<&CalendarEventDecryptor<'_, P>>,
     organizer: &RsvpOrganizer,
 ) -> RsvpResult<Vec<RsvpAttendee>>
 where
@@ -858,16 +890,17 @@ where
     debug!("Extracting event's attendees");
 
     if let (Some(event), Some(decryptor)) = (source.raw_event(), decryptor) {
-        extract_attendees_from_event(pgp, event, decryptor, organizer)
+        extract_attendees_from_event(pgp, contacts, event, decryptor, organizer).await
     } else {
-        Ok(extract_attendees_from_invite(source.invite_or_event()))
+        Ok(extract_attendees_from_invite(contacts, source.invite_or_event()).await)
     }
 }
 
-fn extract_attendees_from_event<P>(
+async fn extract_attendees_from_event<P>(
     pgp: &P,
+    contacts: &impl RsvpContacts,
     event: &CalendarEvent,
-    decryptor: &CalendarEventDecryptor<P>,
+    decryptor: &CalendarEventDecryptor<'_, P>,
     organizer: &RsvpOrganizer,
 ) -> RsvpResult<Vec<RsvpAttendee>>
 where
@@ -876,27 +909,37 @@ where
     // Attendees are split between `event.attendees` (which contains statuses
     // and ids used by the API) and `event.attendees_event` (which contains
     // just the e-mail addresses and tokens)
-    let attendees: HashMap<_, _> = event
+    let attendees_meta: HashMap<_, _> = event
         .attendees
         .iter()
         .map(|att| (att.token.as_str(), (&att.id, att.status)))
         .collect();
 
-    let event = event.attendees_event().decrypt_and_parse(pgp, decryptor)?;
-
-    event
+    let event_attendees = event
+        .attendees_event()
+        .decrypt_and_parse(pgp, decryptor)?
         .attendees
         .into_iter()
-        .enumerate()
-        .filter_map(|(idx, attendee)| {
-            debug!(?idx, "Processing attendee");
+        .enumerate();
 
-            extract_attendee_from_event(organizer, &attendees, attendee).transpose()
-        })
-        .collect()
+    let mut attendees = Vec::new();
+
+    for (idx, attendee) in event_attendees {
+        debug!(?idx, "Processing attendee");
+
+        let attendee =
+            extract_attendee_from_event(contacts, organizer, &attendees_meta, attendee).await?;
+
+        if let Some(attendee) = attendee {
+            attendees.push(attendee);
+        }
+    }
+
+    Ok(attendees)
 }
 
-fn extract_attendee_from_event(
+async fn extract_attendee_from_event(
+    contacts: &impl RsvpContacts,
     organizer: &RsvpOrganizer,
     attendees: &HashMap<&str, (&CalendarAttendeeId, CalendarAttendeeStatus)>,
     attendee: ical::Attendee,
@@ -928,6 +971,7 @@ fn extract_attendee_from_event(
 
     Ok(Some(RsvpAttendee {
         id: Some((*id).clone()),
+        name: contacts.get_display_name(&email).await,
         email,
         status: Some(*status),
         token: Some(token.into()),
@@ -935,24 +979,28 @@ fn extract_attendee_from_event(
     }))
 }
 
-fn extract_attendees_from_invite(invite: &ical::VEvent) -> Vec<RsvpAttendee> {
-    invite
-        .attendees
-        .iter()
-        .filter_map(|attendee| {
-            if let ical::CalAddress::Email(email) = &attendee.address {
-                Some(RsvpAttendee {
-                    id: None,
-                    token: None,
-                    email: email.value().as_str().into(),
-                    status: None,
-                    role: attendee.role.unwrap_or_default(),
-                })
-            } else {
-                None
-            }
-        })
-        .collect()
+async fn extract_attendees_from_invite(
+    contacts: &impl RsvpContacts,
+    invite: &ical::VEvent,
+) -> Vec<RsvpAttendee> {
+    let mut attendees = Vec::new();
+
+    for attendee in &invite.attendees {
+        if let ical::CalAddress::Email(email) = &attendee.address {
+            let email = email.value().as_str();
+
+            attendees.push(RsvpAttendee {
+                id: None,
+                token: None,
+                name: contacts.get_display_name(email).await,
+                email: email.into(),
+                status: None,
+                role: attendee.role.unwrap_or_default(),
+            });
+        }
+    }
+
+    attendees
 }
 
 fn extract_calendar(calendar: Option<CalendarBootstrap>, source: &Source) -> Option<RsvpCalendar> {
@@ -1646,6 +1694,114 @@ mod tests {
             let actual = extract_recurrence(&event, Weekday::Monday);
 
             assert_eq!(Some((case.expected)()), actual);
+        }
+    }
+
+    mod extract_occurrence {
+        use super::*;
+        use test_case::test_case;
+
+        struct TestCase {
+            given_dtstart: fn() -> Option<ical::DateOrDt>,
+            given_dtend: fn() -> Option<ical::DateOrDt>,
+            expected: fn() -> RsvpResult<RsvpOccurrence>,
+        }
+
+        const TEST_DATE: TestCase = TestCase {
+            given_dtstart: || Some(ical::DateOrDt::Date(ical::utils::d("20180101"))),
+            given_dtend: || Some(ical::DateOrDt::Date(ical::utils::d("20180108"))),
+            expected: || {
+                Ok(RsvpOccurrence::Date {
+                    starts_at: "20180101".parse().unwrap(),
+                    ends_at: "20180107".parse().unwrap(),
+                })
+            },
+        };
+
+        const TEST_DATETIME: TestCase = TestCase {
+            given_dtstart: || {
+                Some(ical::DateOrDt::DateTime(ical::utils::dt(
+                    "20180101T123456Z",
+                )))
+            },
+            given_dtend: || {
+                Some(ical::DateOrDt::DateTime(ical::utils::dt(
+                    "20180108T120000Z",
+                )))
+            },
+            expected: || {
+                Ok(RsvpOccurrence::DateTime {
+                    starts_at: "20180101T123456[UTC]".parse().unwrap(),
+                    ends_at: "20180108T120000Z[UTC]".parse().unwrap(),
+                })
+            },
+        };
+
+        const TEST_MIXED: TestCase = TestCase {
+            given_dtstart: || Some(ical::DateOrDt::Date(ical::utils::d("20180101"))),
+            given_dtend: || {
+                Some(ical::DateOrDt::DateTime(ical::utils::dt(
+                    "20180108T120000Z",
+                )))
+            },
+            expected: || Err(RsvpError::MixedDtStartAndDtEnd),
+        };
+
+        const TEST_MISSING_DTSTART: TestCase = TestCase {
+            given_dtstart: || None,
+            given_dtend: || Some(ical::DateOrDt::Date(ical::utils::d("20180108"))),
+            expected: || Err(RsvpError::MissingDtStart),
+        };
+
+        const TEST_MISSING_DTEND_DATE: TestCase = TestCase {
+            given_dtstart: || Some(ical::DateOrDt::Date(ical::utils::d("20180101"))),
+            given_dtend: || None,
+            expected: || {
+                Ok(RsvpOccurrence::Date {
+                    starts_at: "20180101".parse().unwrap(),
+                    ends_at: "20180101".parse().unwrap(),
+                })
+            },
+        };
+
+        const TEST_MISSING_DTEND_DATETIME: TestCase = TestCase {
+            given_dtstart: || {
+                Some(ical::DateOrDt::DateTime(ical::utils::dt(
+                    "20180101T120000Z",
+                )))
+            },
+            given_dtend: || None,
+            expected: || {
+                Ok(RsvpOccurrence::DateTime {
+                    starts_at: "20180101T120000[UTC]".parse().unwrap(),
+                    ends_at: "20180101T120000[UTC]".parse().unwrap(),
+                })
+            },
+        };
+
+        #[test_case(TEST_DATE)]
+        #[test_case(TEST_DATETIME)]
+        #[test_case(TEST_MIXED)]
+        #[test_case(TEST_MISSING_DTSTART)]
+        #[test_case(TEST_MISSING_DTEND_DATE)]
+        #[test_case(TEST_MISSING_DTEND_DATETIME)]
+        #[allow(clippy::needless_pass_by_value)]
+        fn test(case: TestCase) {
+            let event = {
+                let dtstart = (case.given_dtstart)().map(|value| ical::DtStart { value });
+                let dtend = (case.given_dtend)().map(|value| ical::DtEnd { value });
+
+                ical::VEvent {
+                    dtstart,
+                    dtend,
+                    ..ical::VEvent::default()
+                }
+            };
+
+            let expected = (case.expected)().map_err(|err| err.to_string());
+            let actual = extract_occurrence(&event).map_err(|err| err.to_string());
+
+            assert_eq!(expected, actual);
         }
     }
 

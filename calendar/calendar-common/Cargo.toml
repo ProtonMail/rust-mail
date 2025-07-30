@@ -8,6 +8,7 @@ rust-version.workspace = true
 itertools = { workspace = true }
 jiff = { workspace = true }
 proton-calendar-api = { workspace = true }
+proton-canonical-email = { workspace = true }
 proton-core-api = { workspace = true }
 proton-crypto = { workspace = true }
 proton-crypto-account = { workspace = true }
