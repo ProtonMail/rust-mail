@@ -58,6 +58,7 @@ impl RsvpEventId {
             .context("Couldn't load invite's message's address")?
             .ok_or_else(|| AppError::AddressMissing(msg.local_address_id))?;
 
+        let user = ctx.user().await?;
         let week_start = ctx.user_settings().await?.week_start.into();
 
         match self
@@ -76,7 +77,7 @@ impl RsvpEventId {
         {
             Ok(event) => {
                 if let Some(event) = event {
-                    Ok(Some(RsvpEvent::new(event, msg, addr)))
+                    Ok(Some(RsvpEvent::new(event, msg, addr, user)))
                 } else {
                     debug!("False-positive, not a valid invite");
 
