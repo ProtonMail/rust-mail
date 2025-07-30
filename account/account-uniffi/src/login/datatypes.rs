@@ -12,11 +12,14 @@ use uniffi::Record;
 pub struct MigrationData {
     pub username: String,
     pub display_name: String,
-    pub primary_addr: String,
-    pub key_secret: String, // base64'd
+    pub primary_addr: String, // email address
+    pub key_secret: String,   // base64'd
     pub user_id: String,
     pub session_id: String,
     pub password_mode: PasswordMode,
+
+    /// The refresh token. This token must be refreshed before use;
+    /// once refreshed, it becomes an access token.
     pub refresh_token: String,
 }
 

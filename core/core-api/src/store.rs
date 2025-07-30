@@ -79,7 +79,10 @@ pub trait Store: Send + Sync + 'static {
     async fn get_auth(&self) -> Auth;
     async fn set_auth(&mut self, auth: Auth) -> Result<(), StoreError>;
     async fn set_auth_info(&mut self, info: AuthInfo) -> Result<(), StoreError>;
+
+    /// Note that `pass` is encrypted here
     async fn set_temp_pass(&mut self, pass: &str) -> Result<(), StoreError>;
+
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError>;
     async fn set_key_secret(&mut self, secret: UserKeySecret) -> Result<(), StoreError>;
     async fn expose_key_secret(&self) -> Option<UserKeySecret>;
