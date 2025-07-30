@@ -38,7 +38,7 @@ where
     pub msg_id: &'a MessageId,
     pub msg_meta: &'a MessageBodyMetadata,
     pub msg_subject: &'a str,
-    pub addr_email: PrivateEmailRef<'a>,
+    pub addr_email: &'a str,
     pub addr_display_name: &'a str,
 }
 
@@ -136,7 +136,7 @@ where
         debug!("Building message");
 
         let subject = apply_prefix_to_subject(REPLY_PREFIX, self.msg_subject);
-        let from = resolve_sender_alias(self.addr_email.as_clear_text_str(), self.msg_meta);
+        let from = resolve_sender_alias(self.addr_email, self.msg_meta);
 
         let sender = DraftSender {
             address: from.into(),

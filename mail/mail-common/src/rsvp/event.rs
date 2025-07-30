@@ -86,7 +86,7 @@ impl RsvpEvent {
                 msg_id,
                 msg_meta: &self.msg_meta,
                 msg_subject: &self.msg.subject,
-                addr_email: self.addr.email.as_str().into(),
+                addr_email: &self.addr.email,
                 addr_display_name: &self.addr.display_name,
             }
         };
