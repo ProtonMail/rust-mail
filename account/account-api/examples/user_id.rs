@@ -5,8 +5,8 @@ use std::sync::Arc;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::session::{Config, CoreSession, Session};
-use proton_core_common::datatypes::AppDetails;
+use proton_core_api::session::{CoreSession, Session};
+use proton_core_common::datatypes::{ApiConfig, AppDetails};
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
@@ -145,7 +145,7 @@ async fn create_context() -> Arc<Context> {
         tmp_dir.path(),
         Arc::new(InMemoryKeyChain::default()).clone(),
         vec![],
-        Config::atlas(),
+        ApiConfig::atlas(),
         AppDetails::default(),
         None,
         None,

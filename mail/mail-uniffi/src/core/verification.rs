@@ -188,7 +188,7 @@ pub async fn new_challenge_loader(
         .map_err(|_| UnexpectedError::Config)?;
 
     let inner = uniffi_async(async move {
-        hv::ChallengeLoader::new(cfg)
+        hv::ChallengeLoader::new(cfg.into())
             .inspect_err(|e| error!("{e:?}"))
             .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Config))
             .await

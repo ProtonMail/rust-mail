@@ -58,6 +58,7 @@ use derive_more::Into;
 use derive_more::derive::TryFrom;
 use itertools::Itertools;
 use jiff::civil::Weekday;
+use proton_core_api::services::proton::muon::common::ParseEndpointErr;
 use proton_core_api::services::proton::{
     AddressId, ContactEmailId, ContactId, DeviceEnvironment as ApiDeviceEnvironment, LabelId,
     LabelType as ApiLabelType, LightOrDarkMode as ApiLightOrDarkMode,
@@ -73,6 +74,11 @@ use proton_core_api::services::proton::{
     TwoFa as ApiTwoFa, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
     WeekStart as ApiWeekStart,
 };
+use proton_core_api::session::AppVersion;
+use proton_core_api::session::Env;
+use proton_core_api::session::Server;
+use proton_core_api::session::TlsPinSet;
+use proton_core_api::session::{Config as RealApiConfig, EnvId};
 use proton_core_api::store::{MbpMode, TfaMode};
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
 use proton_sqlite3::rusqlite::Error as SqlError;
@@ -997,18 +1003,114 @@ impl Default for AppDetails {
     }
 }
 
-impl AppDetails {
-    /// Returns a string in a API format of `{platform}-{product}@{version}`.
-    /// Example: "ios-mail@1.0.0"
-    /// Used to populate `x-pm-appversion` header.
+/// Note, this is almost identical to [`proton_core_api::session::Config`], however instead of storing
+/// concatenated `app_version`, it keeps [`AppDetails`] instead.
+#[derive(Clone)]
+pub struct ApiConfig {
+    pub app_details: AppDetails,
+
+    pub user_agent: Option<String>,
+
+    pub env_id: EnvId,
+
+    pub proxy: Option<String>,
+}
+
+impl Default for ApiConfig {
+    fn default() -> Self {
+        Self {
+            app_details: AppDetails::default(),
+            user_agent: None,
+            env_id: EnvId::new_prod(),
+            proxy: None,
+        }
+    }
+}
+
+impl ApiConfig {
+    /// Extracts the client id from the app version, which usually looks like "platform-app@version", eg.: android-mail@10.9
     #[must_use]
-    pub fn format_api_app_version(&self) -> String {
-        let Self {
+    pub fn get_client_id(&self) -> String {
+        format!("{}-{}", self.app_details.platform, self.app_details.product)
+    }
+
+    /// Create a new session config for the given environment.
+    #[must_use]
+    pub fn for_env(env: impl Env) -> Self {
+        Self {
+            env_id: EnvId::new_custom(env),
+            ..Self::default()
+        }
+    }
+
+    /// Create a new session config for the atlas environment.
+    #[must_use]
+    pub fn atlas() -> Self {
+        Self {
+            env_id: EnvId::new_atlas(),
+            ..Self::default()
+        }
+    }
+
+    /// Create a new session config for a named atlas environment.
+    #[must_use]
+    pub fn scientist(name: impl AsRef<str>) -> Self {
+        Self {
+            env_id: EnvId::new_atlas_name(name),
+            ..Self::default()
+        }
+    }
+
+    /// Create a new session config for a custom environment.
+    ///
+    /// This will create a new environment with the given server URL.
+    /// This must be a valid URL, including the scheme, host, and if applicable,
+    /// path and port. For example: `http://127.0.0.1:8888/api`.
+    ///
+    /// # Security
+    ///
+    /// This function is insecure because it allows the user to create a session
+    /// with a custom environment. This can lead to security issues if the
+    /// environment is not trusted. The user must ensure that the environment
+    /// is safe to use and that the server is trusted.
+    pub fn custom(url: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
+        struct CustomEnv(Server);
+
+        impl CustomEnv {
+            fn new(server: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
+                Ok(Self(server.as_ref().parse()?))
+            }
+        }
+
+        impl Env for CustomEnv {
+            fn servers(&self, _: &AppVersion) -> Vec<Server> {
+                vec![self.0.clone()]
+            }
+
+            fn pins(&self, _: &Server) -> Option<TlsPinSet> {
+                None
+            }
+        }
+
+        Ok(Self::for_env(CustomEnv::new(url)?))
+    }
+}
+
+impl From<ApiConfig> for RealApiConfig {
+    fn from(config: ApiConfig) -> Self {
+        let AppDetails {
             platform,
             product,
             version,
-        } = self;
-        proton_core_api::session::format_api_app_version(platform, product, version)
+        } = config.app_details;
+        Self {
+            app_version: proton_core_api::session::format_api_app_version(
+                &platform, &product, &version,
+            ),
+            user_agent: config.user_agent,
+            env_id: config.env_id,
+            proxy: config.proxy,
+        }
     }
 }
 

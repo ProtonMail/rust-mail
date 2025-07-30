@@ -14,11 +14,11 @@ use proton_calendar_common::RsvpError;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::{Config, CoreSession as _};
+use proton_core_api::session::CoreSession as _;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_core_common::auth_store::DecryptExt;
-use proton_core_common::datatypes::AppDetails;
+use proton_core_common::datatypes::{ApiConfig, AppDetails};
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::device::DynDeviceInfoProvider;
 use proton_core_common::event_loop::EventPollMode;
@@ -251,7 +251,7 @@ impl MailContext {
         mail_cache_path: impl Into<PathBuf>,
         cache_size: u64,
         key_chain: Arc<dyn KeyChain>,
-        api_config: Config,
+        api_config: ApiConfig,
         app_details: AppDetails,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,

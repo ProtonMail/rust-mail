@@ -7,8 +7,7 @@ mod widgets;
 
 use crate::app::App;
 use clap::Parser;
-use proton_core_common::datatypes::AppDetails;
-use proton_mail_common::proton_mail_api::proton_core_api::session::Config;
+use proton_core_common::datatypes::{ApiConfig, AppDetails};
 
 use crate::app_model::AppModel;
 use crossterm::ExecutableCommand;
@@ -81,15 +80,15 @@ impl CliArgs {
         if self.api_dev_env { "dev" } else { "" }
     }
 
-    pub fn api_config(&self) -> Config {
+    pub fn api_config(&self) -> ApiConfig {
         let cfg = if self.api_dev_env {
-            Config::atlas()
+            ApiConfig::atlas()
         } else {
-            Config::default()
+            ApiConfig::default()
         };
 
-        Config {
-            app_version: self.app_details().format_api_app_version(),
+        ApiConfig {
+            app_details: self.app_details(),
             ..cfg
         }
     }

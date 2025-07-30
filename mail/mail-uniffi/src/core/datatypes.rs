@@ -67,10 +67,9 @@ use stash::stash::Tether;
 use tracing::error;
 
 use core::fmt;
-use proton_core_api::session::Config as RealApiConfig;
 use proton_core_common::datatypes::{
     AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
-    AddressType as RealAddressType, AppDetails as RealAppDetails,
+    AddressType as RealAddressType, ApiConfig as RealApiConfig, AppDetails as RealAppDetails,
     ContactSendingPreferences as RealContactSendingPreferences, DateFormat as RealDateFormat,
     Density as RealDensity, DeviceEnvironment as RealDeviceEnvironment,
     EarlyAccess as RealEarlyAccess, Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
@@ -862,7 +861,7 @@ impl ApiConfig {
         let details = RealAppDetails::from(details);
 
         Ok(RealApiConfig {
-            app_version: details.format_api_app_version(),
+            app_details: details,
             user_agent: Some(self.user_agent),
             proxy: self.proxy,
 

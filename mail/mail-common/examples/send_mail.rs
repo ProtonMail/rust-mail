@@ -3,9 +3,8 @@ use std::sync::Arc;
 use clap::Parser;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::BroadcastMessage;
-use proton_core_api::session::Config;
 use proton_core_common::Origin;
-use proton_core_common::datatypes::AppDetails;
+use proton_core_common::datatypes::{ApiConfig, AppDetails};
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
@@ -72,8 +71,12 @@ async fn main() {
         .name("log".into())
         .directory(tmp_dir.path().into())
         .build();
-    let api_config = Config {
-        app_version: "ios-mail@7.1.0".to_owned(),
+    let api_config = ApiConfig {
+        app_details: AppDetails {
+            platform: "ios".into(),
+            product: "mail".into(),
+            version: "7.1.0".into(),
+        },
         ..Default::default()
     };
 

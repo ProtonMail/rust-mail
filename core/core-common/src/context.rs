@@ -5,8 +5,8 @@ use crate::app_events::{UserSessionCreatedEvent, UserSessionDeletedEvent};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::core_clock::CoreClock;
 use crate::datatypes::{
-    AppDetails, LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey,
-    TfaStatus,
+    ApiConfig, AppDetails, LocalContactId, PasswordMode, StoredDevicePrivateKey,
+    StoredDevicePublicKey, TfaStatus,
 };
 use crate::db::account::{
     CoreAccount, CoreSession, CoreSessionObserver, CoreSessionObserverNotification,
@@ -35,7 +35,7 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::muon::client::{Fingerprint, InfoProvider};
 use proton_core_api::services::proton::{BuildError, PrivateEmail};
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::Config as ApiConfig;
+use proton_core_api::session::Config as RealApiConfig;
 use proton_core_api::session::Session as ApiSession;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::store::TempStore;
@@ -465,9 +465,10 @@ impl Context {
         Ok(sessions.count() > 0)
     }
 
-    /// Extracts the client id from the app version, which usually looks like "platform-app@version", eg.: android-mail@10.9
+    /// Client ID is a string that uniquely identifies the client application without the version number.
+    /// Example: "ios-mail"
     #[must_use]
-    pub fn get_client_id(&self) -> &str {
+    pub fn get_client_id(&self) -> String {
         self.api_config.get_client_id()
     }
 
@@ -900,10 +901,12 @@ impl Context {
 
         if app_settings.use_alternative_routing {
             info!("Using alternative routing");
-            builder = builder.with_config(&self.api_config);
+            builder = builder.with_config(RealApiConfig::from(self.api_config.clone()));
         } else {
             info!("Alternative routing setting is disabled");
-            builder = builder.with_config(self.api_config.clone().without_alternative_routing()?);
+            builder = builder.with_config(
+                RealApiConfig::from(self.api_config.clone()).without_alternative_routing()?,
+            );
         }
 
         if let Some(status) = status {
@@ -916,7 +919,7 @@ impl Context {
 
         if let Some(provider) = &self.device_info_provider {
             builder = builder.with_info_provider(Arc::new(MuonInfoProvider {
-                app_version: self.api_config.app_version.clone(),
+                app_version: RealApiConfig::from(self.api_config.clone()).app_version,
                 device_info_provider: provider.clone(),
             }));
         }

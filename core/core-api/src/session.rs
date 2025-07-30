@@ -1,7 +1,6 @@
 use derive_more::{Debug, Deref};
 use muon::client::InfoProvider;
 use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
-use muon::common::ParseEndpointErr;
 use muon::env::DynEnv;
 use std::borrow::Borrow;
 use std::sync::Arc;
@@ -79,40 +78,6 @@ impl Config {
             env_id: EnvId::new_atlas_name(name),
             ..Self::default()
         }
-    }
-
-    /// Create a new session config for a custom environment.
-    ///
-    /// This will create a new environment with the given server URL.
-    /// This must be a valid URL, including the scheme, host, and if applicable,
-    /// path and port. For example: `http://127.0.0.1:8888/api`.
-    ///
-    /// # Security
-    ///
-    /// This function is insecure because it allows the user to create a session
-    /// with a custom environment. This can lead to security issues if the
-    /// environment is not trusted. The user must ensure that the environment
-    /// is safe to use and that the server is trusted.
-    pub fn custom(url: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
-        struct CustomEnv(Server);
-
-        impl CustomEnv {
-            fn new(server: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
-                Ok(Self(server.as_ref().parse()?))
-            }
-        }
-
-        impl Env for CustomEnv {
-            fn servers(&self, _: &AppVersion) -> Vec<Server> {
-                vec![self.0.clone()]
-            }
-
-            fn pins(&self, _: &Server) -> Option<TlsPinSet> {
-                None
-            }
-        }
-
-        Ok(Self::for_env(CustomEnv::new(url)?))
     }
 
     pub fn without_alternative_routing(mut self) -> Result<Self, BuildError> {
