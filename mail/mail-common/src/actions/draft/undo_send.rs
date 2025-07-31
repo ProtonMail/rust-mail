@@ -4,7 +4,6 @@ use crate::actions::draft::{
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
-use crate::draft::compose::create_timestamp;
 use crate::models::Message;
 use crate::{AppError, MailContextError};
 use proton_action_queue::action::{
@@ -12,6 +11,7 @@ use proton_action_queue::action::{
 };
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::{LabelId, Proton};
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
@@ -133,7 +133,7 @@ impl Handler for UndoSendHandler {
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_sent_label_id = local_sent_label_id(tx).await?;
         message.flags.set(MessageFlags::SENT, true);
-        message.time = create_timestamp();
+        message.time = UnixTimestamp::now();
         message
             .save(tx)
             .await

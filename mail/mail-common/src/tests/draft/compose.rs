@@ -17,6 +17,7 @@ use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId};
 use proton_core_common::datatypes::{UserMnemonicStatus, UserType};
 use proton_core_common::models::{PaidSubscription, User};
 use std::str::FromStr;
+use test_case::test_case;
 
 #[test]
 fn new_draft_message_creation() {
@@ -35,6 +36,7 @@ fn new_draft_message_creation() {
 #[tokio::test]
 async fn reply_draft_message_creation() {
     let (draft, source_message, attachments) = create_reply(ReplyMode::Sender).await;
+
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
@@ -52,6 +54,7 @@ async fn reply_draft_message_creation() {
 #[tokio::test]
 async fn reply_all_draft_message_creation() {
     let (draft, source_message, attachments) = create_reply(ReplyMode::All).await;
+
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
@@ -180,24 +183,29 @@ async fn reply_to_email_alias() {
 #[tokio::test]
 async fn reply_strips_duplicate_sender_emails_and_aliases() {
     let mut source_body_metadata = existing_message_body_metadata();
+
     source_body_metadata
         .parsed_headers
         .headers
         .insert("X-Original-To".to_owned(), TEST_EMAIL_ALIAS.into());
+
     let source_body = "Hello World".to_owned();
     let mut source_message = existing_message();
+
     source_message.to_list.push(MessageRecipient {
         address: TEST_EMAIL_ALIAS.to_owned().into(),
         is_proton: false,
         name: TEST_EMAIL_DISPLAY_NAME.to_owned().into(),
         group: Default::default(),
     });
+
     source_message.cc_list.push(MessageRecipient {
         address: TEST_EMAIL_ALIAS_ALT.to_owned().into(),
         is_proton: false,
         name: TEST_EMAIL_DISPLAY_NAME.to_owned().into(),
         group: Default::default(),
     });
+
     let (draft, _, _) = create_reply_with_mime_and_body_and_message(
         ReplyMode::All,
         MimeType::TextPlain,
@@ -206,6 +214,7 @@ async fn reply_strips_duplicate_sender_emails_and_aliases() {
         source_message,
     )
     .await;
+
     assert!(!draft.to_list.contains_email(TEST_EMAIL_ALIAS));
     assert!(!draft.to_list.contains_email(TEST_EMAIL_ALIAS_ALT));
     assert!(!draft.cc_list.contains_email(TEST_EMAIL_ALIAS));
@@ -216,6 +225,7 @@ async fn reply_strips_duplicate_sender_emails_and_aliases() {
 #[tokio::test]
 async fn forward_draft_message_creation() {
     let (draft, source_message, attachments) = create_reply(ReplyMode::Forward).await;
+
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(FORWARD_PREFIX, &source_message.subject)
@@ -225,6 +235,7 @@ async fn forward_draft_message_creation() {
     assert!(draft.bcc_list.is_empty());
     assert_eq!(attachments, vec![inline_attachment(), normal_attachment()])
 }
+
 #[test]
 fn message_signature_empty_without_address_or_mail_setting_signature() {
     let address = address_with_signature("");
@@ -300,8 +311,8 @@ async fn sanitize_draft_reply_html() {
     assert_eq!(sanitized, draft.body);
 }
 
-#[test_case::test_case(ReplyMode::Sender; "Sender")]
-#[test_case::test_case(ReplyMode::All; "All")]
+#[test_case(ReplyMode::Sender; "Sender")]
+#[test_case(ReplyMode::All; "All")]
 #[tokio::test]
 async fn reply_to_sent_message_should_use_to_list_rather_than_sender(reply_mode: ReplyMode) {
     let source_body_metadata = existing_message_body_metadata();
@@ -349,10 +360,10 @@ fn resolve_sender_alias_no_alias() {
     assert_eq!(sender_email, "FooBar@proton.me");
 }
 
-#[test_case::test_case("foobar-alias@proton.me";"missing_plus")]
-#[test_case::test_case("foobar+alias-proton.me";"missing_at")]
-#[test_case::test_case("foobarproton.me";"missing_both")]
-#[test_case::test_case("foobar@alias+proton.me";"swapped indices")]
+#[test_case("foobar-alias@proton.me";"missing_plus")]
+#[test_case("foobar+alias-proton.me";"missing_at")]
+#[test_case("foobarproton.me";"missing_both")]
+#[test_case("foobar@alias+proton.me";"swapped indices")]
 fn resolve_sender_alias_invalid_value(alias: &str) {
     // if no alias exist, the value should be ignored
     let email = "FooBar@proton.me";
@@ -467,10 +478,12 @@ async fn create_reply_with_mime_and_body_and_message(
     source_message: Message,
 ) -> (Draft, Message, Vec<Attachment>) {
     let address = address_with_signature("");
+
     let mail_settings = MailSettings {
         draft_mime_type: mime_type,
         ..MailSettings::default()
     };
+
     let source_body = DecryptedMessageBody {
         body: source_body,
         metadata: source_body_metadata,
@@ -480,6 +493,7 @@ async fn create_reply_with_mime_and_body_and_message(
     };
 
     let resolver = NullContactGroupResolver {};
+
     let (draft, attachments) = Draft::new_draft_reply(
         &resolver,
         MetadataId(0),
@@ -493,6 +507,7 @@ async fn create_reply_with_mime_and_body_and_message(
         None,
     )
     .await;
+
     (draft, source_message, attachments)
 }
 fn address_with_signature(signature: impl Into<String>) -> Address {
@@ -516,9 +531,7 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
 }
 
 const TEST_EMAIL: &str = "address_email@proton.me";
-
 const TEST_EMAIL_DISPLAY_NAME: &str = "Addr Display Name";
-
 const TEST_EMAIL_ALIAS: &str = "address_email+alias@proton.me";
 const TEST_EMAIL_ALIAS_ALT: &str = "address_email+alias_alt@proton.me";
 
@@ -611,13 +624,13 @@ fn existing_message_body_metadata() -> MessageBodyMetadata {
     }
 }
 
-#[test_case::test_case(ValidateAddressParams::disabled();"disable_address")]
-#[test_case::test_case(ValidateAddressParams::deleting();"deleting_address")]
-#[test_case::test_case(ValidateAddressParams::without_send(); "no_send")]
-#[test_case::test_case(ValidateAddressParams::without_receive(); "no_receive")]
-#[test_case::test_case(ValidateAddressParams::without_subscription(); "pm_without_subscription")]
-#[test_case::test_case(ValidateAddressParams::with_subscription(); "pm_with_subscription")]
-#[test_case::test_case(ValidateAddressParams::default(); "default")]
+#[test_case(ValidateAddressParams::disabled();"disable_address")]
+#[test_case(ValidateAddressParams::deleting();"deleting_address")]
+#[test_case(ValidateAddressParams::without_send(); "no_send")]
+#[test_case(ValidateAddressParams::without_receive(); "no_receive")]
+#[test_case(ValidateAddressParams::without_subscription(); "pm_without_subscription")]
+#[test_case(ValidateAddressParams::with_subscription(); "pm_with_subscription")]
+#[test_case(ValidateAddressParams::default(); "default")]
 fn validate_address(params: ValidateAddressParams) {
     let address = Address {
         local_id: None,

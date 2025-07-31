@@ -3,7 +3,6 @@ use crate::actions::draft::{
     local_draft_label_id, local_outbox_label_id, local_sent_label_id,
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
-use crate::draft::compose::create_timestamp;
 use crate::draft::send::{EoData, MailType, build_packages, load_prefs};
 use crate::draft::{Draft, ReplyMode, SendError, draft_attachment_staging_path};
 use crate::models::{
@@ -254,7 +253,7 @@ impl Handler for SendHandler {
         };
 
         action.update_sent_flag(&mut message, false);
-        message.time = create_timestamp();
+        message.time = UnixTimestamp::now();
         message.save(tx).await.inspect_err(|e| {
             error!("Failed to update message sent flag (revert): {e:?}");
         })?;

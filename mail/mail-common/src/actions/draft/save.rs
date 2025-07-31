@@ -256,7 +256,7 @@ impl Handler for SaveHandler {
             conversation.id()
         };
 
-        let time = draft::compose::create_timestamp();
+        let time = UnixTimestamp::now();
 
         let message = if let Some(message_id) = metadata.local_message_id {
             info!("Local message id is set, update");

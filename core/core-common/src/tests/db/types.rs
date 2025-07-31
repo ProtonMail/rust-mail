@@ -5,18 +5,7 @@ use std::default::Default;
 
 impl Default for CoreAccount {
     fn default() -> Self {
-        CoreAccount {
-            remote_id: UserId::new("__NOT_USED__".to_string()),
-            name_or_addr: String::default(),
-            display_name: Option::default(),
-            username: Option::default(),
-            password: Option::default(),
-            primary_addr: Option::default(),
-            second_factor_mode: None,
-            password_mode: None,
-            primary_seq: 0,
-            is_ready: false,
-        }
+        Self::new(UserId::new("__NOT_USED__".to_string()), String::new())
     }
 }
 
