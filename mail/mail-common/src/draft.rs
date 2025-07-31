@@ -68,7 +68,6 @@ pub use send::ScheduleSendOptions;
 
 pub const MIN_PASSWORD_LEN: usize = 8;
 
-/// Potential draft specific errors.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
@@ -95,7 +94,6 @@ pub enum Error {
     Expiration(ExpirationError),
 }
 
-/// Errors that occur during draft creation or opening an existing draft.
 #[derive(Debug, thiserror::Error)]
 pub enum OpenError {
     #[error("No addresses found for current user")]
@@ -116,7 +114,6 @@ impl From<OpenError> for MailContextError {
     }
 }
 
-/// Errors that occur when sending a draft.
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
     #[error("Message {0} is not a draft")]
@@ -180,7 +177,6 @@ impl From<SaveError> for MailContextError {
     }
 }
 
-/// Errors that occur while attempting to upload an attachment
 #[derive(Debug, thiserror::Error)]
 pub enum AttachmentUploadError {
     #[error("Metadata with Id {0} does not exist")]
@@ -233,7 +229,6 @@ impl From<AttachmentRemoveError> for MailContextError {
     }
 }
 
-/// Errors that occur while attempting to undo a sent message.
 #[derive(Debug, thiserror::Error)]
 pub enum UndoError {
     #[error("Message {0} is not a draft")]
@@ -254,7 +249,6 @@ impl From<UndoError> for MailContextError {
     }
 }
 
-/// Errors that occur while discarding a draft.
 #[derive(Debug, thiserror::Error)]
 pub enum DiscardError {
     #[error("Metadata with Id {0} does not exist")]
@@ -271,7 +265,6 @@ impl From<DiscardError> for MailContextError {
     }
 }
 
-/// Errors that occur while discarding a draft.
 #[derive(Debug, thiserror::Error)]
 pub enum CancelScheduleSendError {
     #[error("Metadata with Id {0} does not exist")]
@@ -292,7 +285,6 @@ impl From<CancelScheduleSendError> for MailContextError {
     }
 }
 
-/// Potential draft specific errors.
 #[derive(Debug, thiserror::Error)]
 pub enum PackageError {
     #[error("Failed to encrypt package: {0}")]
@@ -395,16 +387,12 @@ impl From<ExpirationError> for MailContextError {
     }
 }
 
-/// Draft reply mode.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum ReplyMode {
-    /// Reply only to the sender.
     Sender = 0,
-    /// Reply to the sender and all recipients.
     All = 1,
-    /// Forward the message.
     Forward = 2,
 }
 
@@ -445,26 +433,16 @@ impl From<ReplyMode> for DraftAction {
 /// or the draft is discarded/deleted.
 #[derive(derive_more::Debug)]
 pub struct Draft {
-    /// Id of the associated metadata.
     pub metadata_id: MetadataId,
-    /// Sender email address
-    pub sender: String,
-    /// To Recipients addresses
+    pub sender: String, // email address
     pub to_list: RecipientList,
-    /// CC Recipients addresses
     pub cc_list: RecipientList,
-    /// BCC recipients addresses
     pub bcc_list: RecipientList,
-    /// Address used to send the message
     pub address_id: AddressId,
-    /// Draft subject
     pub subject: String,
-    /// `None` if there is no associated send result.
     pub send_result: Option<DraftSendResult>,
     #[debug(skip)]
-    /// The decrypted message body.
     body: String,
-    /// Message mime type
     mime_type: MimeType,
     /// This is only present when we detect the choice of address in the draft
     /// does not satisfy some requirements that would prevent the message from being sent.
@@ -495,12 +473,7 @@ impl Draft {
             .context("Failed to get schedule send options")
             .map_err(MailContextError::Other)
     }
-    /// Open an existing draft with `message_id` and load all the relevant information.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the draft failed to load, the message can't be found
-    /// or the message is not a draft.
+
     #[tracing::instrument(skip(context))]
     pub async fn open(
         context: &MailUserContext,
@@ -514,7 +487,6 @@ impl Draft {
             return Err(AppError::MessageMissing(message_id).into());
         };
 
-        // Ignore deleted messages.
         if message.deleted {
             return Err(AppError::MessageMissing(message_id).into());
         }
@@ -585,7 +557,6 @@ impl Draft {
                                 tx,
                             )
                             .await?;
-                            // Reset expiration and password metadata;
                             metadata.expiration_time = None;
                             metadata.password = None;
                             metadata.password_hint = None;
@@ -595,7 +566,6 @@ impl Draft {
 
                     (Some(decrypted), DraftSyncStatus::Synced)
                 }
-                // Handle network failure
                 Err(MailContextError::Api(api_err)) if api_err.is_network_failure() => {
                     debug!("Failed to sync draft due to network error.");
                     (None, DraftSyncStatus::Cached)
@@ -691,17 +661,10 @@ impl Draft {
         Ok((draft, sync_status))
     }
 
-    /// Create a new empty draft.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we can not load or modify the required data or write the
-    /// body into the cache.
     #[tracing::instrument(skip_all)]
     pub async fn empty(context: &MailUserContext) -> Result<Self, MailContextError> {
         info!("Creating new empty draft");
         let mut tether = context.user_stash().connection();
-        // Default address should have display_order 0
         let address = find_default_sender_address(&tether)
             .await?
             .ok_or(OpenError::UserHasNoAddresses)
@@ -742,9 +705,6 @@ impl Draft {
         ))
     }
 
-    /// Create new empty draft from `address`.
-    ///
-    /// Note: This is split up from [`Self::empty()`] for testing.
     fn new_empty_draft(
         metadata_id: MetadataId,
         address: &Address,
@@ -772,11 +732,6 @@ impl Draft {
     /// `use_utc` controls whether we should generate the sender reply using
     /// the `Utc` or `Local` timezone. For production, we should use the `Local`
     /// but for testing in CI `Utc` is more deterministic.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we can not load or modify the required data or write the
-    /// body into the cache.
     #[tracing::instrument(skip(context, use_utc, mime_type_override))]
     pub async fn reply(
         context: &MailUserContext,
@@ -787,24 +742,20 @@ impl Draft {
     ) -> Result<Self, MailContextError> {
         info!("Creating new draft reply ");
         let mut tether = context.user_stash().connection();
-        // Load the message we reply to.
         let Some(source_message) = Message::find_by_id(message_id, &tether).await? else {
             return Err(AppError::MessageMissing(message_id).into());
         };
 
-        // Source message can not be a draft.
         if source_message.flags.is_draft() {
             return Err(OpenError::ReplyOrForwardToDraft(message_id).into());
         }
 
-        // Source message much have a remote id.
         if source_message.remote_id.is_none() {
             return Err(AppError::MessageHasNoRemoteId(message_id).into());
         }
 
         let user = context.user().await?;
 
-        // Find out which address this message has and use that to craft te reply.
         let address = Address::find_by_remote_id(source_message.remote_address_id.clone(), &tether)
             .await?
             .ok_or(OpenError::AddressNotFound(
@@ -827,7 +778,6 @@ impl Draft {
                 (address, None)
             };
 
-        // Message body must be present to create a reply.
         let Some(source_message_body) = Message::load_decrypted_message_from_cache(
             message_id,
             &source_message.remote_address_id,
@@ -937,19 +887,6 @@ impl Draft {
         Ok(draft)
     }
 
-    /// Create a draft reply.
-    ///
-    /// # Params
-    ///
-    /// `metadata_id`          - Metadata id for this draft.
-    /// `reply_mode`           - Draft reply mode.
-    /// `address`              - Sender address.
-    /// `source_message`       - Metadata of the message we are replying to.
-    /// `source_message_body`  - Body of the message we are replying to.
-    /// `use_utc`              - Whether to use utc over local timezone.
-    /// `session_id`           - Id of the current network session.
-    ///
-    /// Note: This function is separate so it is easier to test.
     #[allow(clippy::too_many_arguments)]
     async fn new_draft_reply(
         contact_group_resolver: &impl ContactGroupResolver,
@@ -1036,21 +973,6 @@ impl Draft {
         (draft, attachments)
     }
 
-    /// Create new draft on the server
-    ///
-    /// # Params
-    ///
-    /// * `context`                : Mail user context to access the cache and crypto keys.
-    /// * `session`                : Networks session
-    /// * `address_id`             : Address id to with witch to encrypt the message.
-    /// * `message`                : Message metadata form which to create a draft.
-    /// * `message_body_metadata`  : Message body metadata from which to create a draft.
-    /// * `message_body`           : Body of the draft
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the request failed or if the body could not be
-    /// encrypted.
     #[allow(clippy::too_many_arguments)]
     pub async fn remote_create(
         context: &MailUserContext,
@@ -1079,21 +1001,6 @@ impl Draft {
         Ok(response.message)
     }
 
-    /// Update an existing draft on the server
-    ///
-    /// # Params
-    ///
-    /// * `context`                : Mail user context to access the cache and crypto keys.
-    /// * `session`                : Networks session
-    /// * `address_id`             : Address id to with witch to encrypt the message.
-    /// * `message`                : Message metadata form which to create a draft.
-    /// * `message_body_metadata`  : Message body metadata from which to create a draft.
-    /// * `message_body`           : Body of the draft
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the request failed or if the body could not be
-    /// encrypted.
     #[allow(clippy::too_many_arguments)]
     pub async fn remote_update(
         context: &MailUserContext,
@@ -1133,11 +1040,6 @@ impl Draft {
         }
     }
 
-    /// Apply an action which will create a new draft.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to execute.
     pub async fn save(
         &mut self,
         queue: &Queue,
@@ -1147,11 +1049,6 @@ impl Draft {
         Ok(queued_output)
     }
 
-    /// Apply an action which will send this draft.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to execute.
     pub async fn send(
         &mut self,
         queue: &Queue,
@@ -1164,10 +1061,6 @@ impl Draft {
     ///
     /// Note that due to offline mode we will only send this message if at the time we are
     /// executing the request, there is still enough time left to schedule the send.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to execute.
     pub async fn schedule_send(
         &mut self,
         delivery_time: DateTime<Local>,
@@ -1179,11 +1072,6 @@ impl Draft {
             .await
     }
 
-    /// Discard the current draft.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to execute.
     pub async fn discard(
         &self,
         queue: &Queue,
@@ -1195,15 +1083,6 @@ impl Draft {
     ///
     /// This is functionally equivalent to [`Draft::discard()`] but does not
     /// require an instance of the [`Draft`] type.
-    ///
-    /// # Remarks
-    ///
-    /// This still requires that this message has been opened with `Draft::open` at least
-    /// once.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the message is not a draft or the action failed to execute.
     pub async fn action_discard(
         message_id: LocalMessageId,
         tether: &Tether,
@@ -1220,14 +1099,6 @@ impl Draft {
         )
     }
 
-    /// Create a save action for the current state of the draft.
-    ///
-    /// This method is here to provide greater flexibility of integration
-    /// when used in multithreaded contexts.
-    ///
-    /// While we have our own instance variable for the `last_save_action_id`, it may
-    /// be beneficial for users of this method to pass in an alternate source.
-    ///
     pub fn to_save_action(&self) -> DraftSaveActionQueuer {
         DraftSaveActionQueuer::new(
             self.metadata_id,
@@ -1236,30 +1107,10 @@ impl Draft {
         )
     }
 
-    /// Create a save action for the current state of the draft.
-    ///
-    /// This method is here to provide greater flexibility of integration
-    /// when used in multithreaded contexts.
-    /// While we have our own instance variable for the `last_save_action_id`, it may
-    /// be beneficial for users of this method to pass in an alternate source.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to execute.
     pub fn to_send_action(&self) -> Result<DraftSendActionQueuer, Error> {
         self.to_send_action_impl(None)
     }
 
-    /// Create a save action for the current state of the draft.
-    ///
-    /// This method is here to provide greater flexibility of integration
-    /// when used in multithreaded contexts.
-    /// While we have our own instance variable for the `last_save_action_id`, it may
-    /// be beneficial for users of this method to pass in an alternate source.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to execute.
     pub fn to_schedule_send_action(
         &self,
         delivery_time: DateTime<Local>,
@@ -1292,34 +1143,21 @@ impl Draft {
         ))
     }
 
-    /// Create a discard action for the draft.
-    ///
-    /// This method is here to provide greater flexibility of integration
-    /// when used in multithreaded contexts.
     pub fn to_discard_action(&self) -> DraftDiscardActionQueuer {
         DraftDiscardActionQueuer::new(self.metadata_id, Discard::new(self.metadata_id))
     }
 
     /// Get the message id associated with this draft.
     ///
-    /// This method can return `None` if the message has not been
-    /// created yet.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
+    /// This function can return `None` if the message has not been created yet.
     pub async fn message_id(&self, tether: &Tether) -> Result<Option<LocalMessageId>, StashError> {
         DraftMetadata::message_id(self.metadata_id, tether).await
     }
 
     /// Get the conversation id associated with this draft.
     ///
-    /// This method can return `None` if the draft is a new empty reply
-    /// and the conversation has not yet been created.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
+    /// This function can return `None` if the draft is a new empty reply and
+    /// the conversation has not yet been created.
     pub async fn conversation_id(
         &self,
         tether: &Tether,
@@ -1331,11 +1169,6 @@ impl Draft {
         Ok(metadata.local_conversation_id)
     }
 
-    /// Enqueue a new cancel send action for the message with `message_id`
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the message can't be undo sent or local operations failed.
     pub async fn action_undo_send(
         queue: &Queue,
         message_id: LocalMessageId,
@@ -1343,13 +1176,6 @@ impl Draft {
         queue.queue_action(UndoSend::new(message_id)).await
     }
 
-    /// Load an embedded attachment in this draft message.
-    ///
-    /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
-    ///
-    /// # Errors
-    ///
-    /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
     pub async fn get_embedded_attachment(
         &self,
         ctx: &MailUserContext,
@@ -1377,10 +1203,6 @@ impl Draft {
     /// Delete an attachment file, but only if it is part of the draft staging area.
     ///
     /// If the removal fails, due to file locks, it will be GCed later by a background task.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the remove failed.
     pub async fn delete_attachment_if_in_staging_area(&self, ctx: &MailUserContext, path: &Path) {
         let staging_path = self.attachment_staging_path(ctx);
         if path.starts_with(&staging_path) {
@@ -1398,10 +1220,6 @@ impl Draft {
     /// Add a new `attachment` to this draft.
     ///
     /// Use [`Attachment::create_local`] to create a new attachment first.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query or queuing the action failed.
     pub async fn add_attachment(
         &self,
         ctx: &MailUserContext,
@@ -1416,10 +1234,6 @@ impl Draft {
         Ok(result.id)
     }
 
-    /// Add a new `attachment` to this draft.
-    ///
-    /// Similar to [`add_attachment`] but return an action queuer instead.
-    ///
     pub fn to_add_attachment_action(&self, attachment: Attachment) -> DraftAttachmentUploadQueuer {
         // create save action before the attachment is registered as we need a message to upload.
         let save_action = self.to_save_action();
@@ -1434,13 +1248,6 @@ impl Draft {
         )
     }
 
-    /// Remove the attachment with `attachment_id` from  this draft.
-    ///
-    /// Use [`Attachment::create_local`] to create a new attachment first.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query or queuing the action failed.
     pub async fn remove_attachment(
         &self,
         ctx: &MailUserContext,
@@ -1455,10 +1262,6 @@ impl Draft {
         Ok(result.id)
     }
 
-    /// Remove the attachment with `attachment_id` from  this draft.
-    ///
-    /// Similar to [`remove_attachment`] but return an action queuer instead.
-    ///
     pub fn to_remove_attachment_action(
         &self,
         attachment_id: LocalAttachmentId,
@@ -1469,13 +1272,6 @@ impl Draft {
         )
     }
 
-    /// Remove the attachment with `content_id` from  this draft.
-    ///
-    /// Use [`Attachment::create_local`] to create a new attachment first.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query or queuing the action failed.
     pub async fn remove_attachment_with_cid(
         &self,
         ctx: &MailUserContext,
@@ -1490,10 +1286,6 @@ impl Draft {
         Ok(result.id)
     }
 
-    /// Remove the attachment with `content_id` from  this draft.
-    ///
-    /// Similar to [`remove_attachment_with_cid`] but return an action queuer instead.
-    ///
     pub fn to_remove_attachment_action_with_cid(
         &self,
         content_id: ContentId,
@@ -1501,12 +1293,6 @@ impl Draft {
         DraftAttachmentRemovalQueuer::new(self.metadata_id, AttachmentRemovalId::Cid(content_id))
     }
 
-    /// Retry the upload of a failed attachment.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the attachment is not in the error state or the action could not
-    /// be queued.
     pub async fn retry_attachment_upload(
         &self,
         ctx: &MailUserContext,
@@ -1537,12 +1323,10 @@ impl Draft {
         )
     }
 
-    /// Get the path where attachments should be staged.
     pub fn attachment_staging_path(&self, context: &MailUserContext) -> PathBuf {
         draft_attachment_staging_path(context, self.metadata_id)
     }
 
-    /// Get the list of attachments and their upload status.
     pub async fn attachments(&self, tether: &Tether) -> Result<Vec<DraftAttachment>, StashError> {
         DraftAttachment::build_list(self.metadata_id, tether).await
     }
@@ -1659,8 +1443,6 @@ impl Draft {
     pub fn finalize_sender_address_change_request(&mut self, output: DraftAddressChangeOutput) {
         self.address_id = output.address_id;
         self.sender = output.sender;
-        // we can only replace the signature if it wasn't empty and the original signature
-        // remains intact.
         if self.mime_type == MimeType::TextHtml {
             let transformer = Transformer::new(self.body());
             if let Err(e) =
@@ -2185,7 +1967,6 @@ impl DraftAttachmentRemovalQueuer {
     }
 }
 
-/// Get the attachment staging path for a given draft with `metadata_id`.
 pub fn draft_attachment_staging_path(
     context: &MailUserContext,
     metadata_id: MetadataId,

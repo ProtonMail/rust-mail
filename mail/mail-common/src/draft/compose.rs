@@ -190,7 +190,6 @@ impl EncryptableDraft for DraftBody<'_> {
     }
 }
 
-/// Encrypt the `body` with the key for `address_id`.
 pub(super) async fn encrypt_draft_body(
     ctx: &MailUserContext,
     address_id: &AddressId,
@@ -219,7 +218,6 @@ pub(super) async fn encrypt_draft_body(
         })
 }
 
-/// Generate HTML reply body for a message.
 pub(super) fn prepare_html_reply(
     output: &mut String,
     message: &Message,
@@ -245,7 +243,6 @@ pub(super) fn prepare_html_reply(
     output.push_str(CLOSE_QUOTE);
 }
 
-/// Generate a plain text reply body for a message.
 pub(super) fn prepare_plain_text_reply(
     output: &mut String,
     message: &Message,
