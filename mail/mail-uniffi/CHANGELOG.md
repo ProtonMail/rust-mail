@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Mail-uniffi: expose rsvps
+
+### Fixes
+
+- [ET-3324] Do not allow replies with invalid addresses
+
+
+## [mail-uniffi-v0.109.0] - 2025-07-28
+
 ### Changed
 
 - Contactemailitem::id -> contactemailitem::contact_id
