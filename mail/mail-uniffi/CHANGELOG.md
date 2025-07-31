@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- [ET-3484] Remember alias address when changing addresses
+
+### Features
+
+- Support share extension
+- Introduce appdetails structure
+- Guard against invalid mailsession usage
+- [ET-3864] Add unsnooze action
+- Breaking change - rename `*context` -> `*session` in `mailsession`
+- Rsvp: support organizer pov
+
+### Fixes
+
+- [ET-1802] Do not retry 2fa in case of receiving auth error.
+- User settings migration
+
+
+## [mail-uniffi-v0.113.0] - 2025-07-31
+
 ### Features
 
 - [ET-3971] Expose watcher functionalities for user tables for uniffi clients
