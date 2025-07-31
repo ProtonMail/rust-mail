@@ -92,7 +92,7 @@ Note that for building mail<->ios specific stuff you'll also need to provide a
 custom ENV variables - create a file called `devenv.local.nix` with:
 
 ```nix
-{ pkgs: ...}:
+{ ... }:
 
 {
   env.IOS_REPO_ROOT="<path to your ET apple inbox repository>";
