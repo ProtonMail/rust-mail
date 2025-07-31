@@ -352,7 +352,7 @@ mod tests {
     }
 
     #[test]
-    fn test_username_availability_serialization_deserialization_for_all_variants() {
+    fn test_account_creation_result_serialization_deserialization_for_all_variants() {
         let statuses = vec![
             (ApiServiceObservabilityResponse::Success, "success"),
             (ApiServiceObservabilityResponse::Http4xx, "http4xx"),
