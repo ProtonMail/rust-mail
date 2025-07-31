@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-3971] Expose watcher functionalities for user tables for uniffi clients
 
+### Fix
+
+- Standardize FIDO2 observability events
 
 ## [mail-uniffi-v0.112.0] - 2025-07-30
 
