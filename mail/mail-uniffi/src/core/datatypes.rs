@@ -61,6 +61,8 @@ pub use self::issue_report::*;
 pub use self::timestamp::*;
 use itertools::Itertools;
 use muon::common::ParseEndpointErr;
+use muon::env::EnvId;
+use proton_core_api::session::EnvIdExt;
 use proton_mail_api::services::proton::common::MessageId;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -851,11 +853,11 @@ impl ApiConfig {
         self,
         details: AppDetails,
     ) -> Result<RealApiConfig, ParseEndpointErr> {
-        let base = match self.env_id {
-            ApiEnvId::Prod => RealApiConfig::default(),
-            ApiEnvId::Atlas => RealApiConfig::atlas(),
-            ApiEnvId::Scientist(name) => RealApiConfig::scientist(name),
-            ApiEnvId::Custom(server) => RealApiConfig::custom(server)?,
+        let env_id = match self.env_id {
+            ApiEnvId::Prod => EnvId::new_prod(),
+            ApiEnvId::Atlas => EnvId::new_atlas(),
+            ApiEnvId::Scientist(name) => EnvId::new_atlas_name(name),
+            ApiEnvId::Custom(server) => EnvId::new_custom_url(server)?,
         };
 
         let details = RealAppDetails::from(details);
@@ -864,8 +866,7 @@ impl ApiConfig {
             app_details: details,
             user_agent: Some(self.user_agent),
             proxy: self.proxy,
-
-            ..base
+            env_id,
         })
     }
 }

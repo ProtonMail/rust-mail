@@ -1,6 +1,7 @@
 // cargo run --example context_reuse -- --username free --password free
 
 use clap::Parser;
+use proton_core_api::session::EnvId;
 use proton_core_common::Origin;
 use proton_core_common::datatypes::{ApiConfig, AppDetails};
 use proton_core_common::db::account::SessionEncryptionKey;
@@ -58,7 +59,7 @@ async fn main() {
             tmp_dir.path().join("mail_cache"),
             50 * 1204 * 1024,
             Arc::new(keychain),
-            ApiConfig::atlas(),
+            ApiConfig::default_with_env(EnvId::new_atlas()),
             AppDetails::default(),
             None,
             None,

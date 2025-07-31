@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use muon::env::EnvId;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_core_api::services::proton::ProtonCore;
@@ -145,7 +146,7 @@ async fn create_context() -> Arc<Context> {
         tmp_dir.path(),
         Arc::new(InMemoryKeyChain::default()).clone(),
         vec![],
-        ApiConfig::atlas(),
+        ApiConfig::default_with_env(EnvId::new_atlas()),
         AppDetails::default(),
         None,
         None,
