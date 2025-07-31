@@ -1,12 +1,16 @@
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::{LocalConversationId, RollbackItemType};
-use crate::models::{Conversation, RollbackItem};
+use crate::models::{Conversation, ConversationLabel, RollbackItem};
+use itertools::Itertools;
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_core_api::services::proton::Proton;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LocalLabelId, SystemLabel, UnixTimestamp};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{self, Deserialize, Serialize};
+use stash::exports::ToSql;
+use stash::orm::Model;
 use stash::stash::Bond;
+use stash::utils::placeholders;
 use tracing::error;
 
 /// Unsnooze conversations action.
@@ -15,12 +19,14 @@ use tracing::error;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Unsnooze {
     action_data: GenericLabelRelatedActionData<Conversation>,
+    conv_snooze_time: Vec<(LocalConversationId, UnixTimestamp)>,
 }
 
 impl Unsnooze {
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
         Self {
             action_data: GenericLabelRelatedActionData::new(label_id, ids),
+            conv_snooze_time: vec![],
         }
     }
 }
@@ -53,6 +59,32 @@ impl proton_action_queue::action::Handler for UnsnoozeHandler {
             return Err(MailActionError::NoInput);
         }
 
+        let mut parameters = action
+            .action_data
+            .data
+            .target_ids
+            .iter()
+            .copied()
+            .map(|i| Box::new(i) as Box<dyn ToSql + Send>)
+            .collect_vec();
+        let placeholders = placeholders(&parameters);
+        parameters.push(Box::new(SystemLabel::Snoozed.remote_id()));
+        let conv_labels = ConversationLabel::find(
+            format!("WHERE local_conversation_id IN ({placeholders}) AND remote_label_id=?"),
+            parameters,
+            tx,
+        )
+        .await?;
+
+        for conv_label in conv_labels {
+            action.conv_snooze_time.push((
+                conv_label
+                    .local_conversation_id
+                    .expect("Conversation label must have a conversation id"),
+                conv_label.context_snooze_time,
+            ));
+        }
+
         Conversation::unsnooze(
             action.action_data.label_id,
             action.action_data.data.target_ids.clone(),
@@ -69,10 +101,15 @@ impl proton_action_queue::action::Handler for UnsnoozeHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        action
-            .action_data
-            .mark_rollback(RollbackItemType::Conversation, tx)
+        for (conv_id, snoozed_until) in action.conv_snooze_time.iter() {
+            Conversation::snooze(
+                action.action_data.label_id,
+                vec![*conv_id],
+                *snoozed_until,
+                tx,
+            )
             .await?;
+        }
         Ok(())
     }
 

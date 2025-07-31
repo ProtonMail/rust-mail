@@ -871,8 +871,11 @@ pub struct Conversation {
     /// List of custom labels.
     pub custom_labels: Vec<InlineCustomLabel>,
 
-    /// TODO: Document this field.
+    /// Whether to display the snooze reminder.
     pub display_snooze_reminder: bool,
+
+    /// When this conversation is snoozed until.
+    pub snoozed_until: Option<UnixTimestamp>,
 
     /// Exclusive location of the [`Conversation`] (e.g. Inbox, Archive, Outbox
     /// etc.).
@@ -957,6 +960,7 @@ impl From<ContextualConversation> for Conversation {
             is_starred: value.is_starred,
             subject: value.subject,
             time: value.time.into(),
+            snoozed_until: value.snoozed_until.map(Into::into),
             avatar: avatar.into(),
         }
     }

@@ -24,6 +24,7 @@ use crate::mail::{MailUserSession, Mailbox};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use itertools::Itertools;
 use proton_core_api::session::Session;
+use proton_core_common::datatypes::WeekStart as RealWeekStart;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::datatypes::{
@@ -224,39 +225,81 @@ pub async fn available_move_to_actions_for_conversations(
 #[allow(unused_variables)]
 #[allow(clippy::needless_pass_by_value)]
 #[uniffi_export]
-pub fn available_snooze_actions_for_conversation(
+pub async fn available_snooze_actions_for_conversation(
     session: Arc<MailUserSession>,
     week_start: NonDefaultWeekStart,
-    id: Id,
+    ids: Vec<Id>,
 ) -> Result<SnoozeActions, SnoozeError> {
-    // TODO: Implement this
-    Ok(SnoozeActions {
-        options: vec![],
-        show_unsnooze: false,
+    let ctx = session.ctx()?;
+    let stash = session.user_stash()?;
+    uniffi_async(async move {
+        let tether = stash.connection();
+        let user = ctx.user().await?;
+        let settings = ctx.user_settings().await?;
+        let week_start = match settings.week_start {
+            RealWeekStart::Default => week_start.into(),
+            non_default => non_default,
+        };
+        let snooze_options = RealConversation::available_snooze_actions(
+            ids.map_vec(),
+            &user,
+            week_start.into(),
+            &tether,
+        )
+        .await?;
+
+        Result::<_, RealProtonMailError>::Ok(SnoozeActions::from(snooze_options))
     })
+    .await
+    .map_err(SnoozeError::from)
 }
 
 #[allow(unused_variables)]
 #[allow(clippy::needless_pass_by_value)]
 #[uniffi_export]
-pub fn snooze_conversations(
+pub async fn snooze_conversations(
     session: Arc<MailUserSession>,
+    label_id: Id,
     ids: Vec<Id>,
     snooze_time: UnixTimestamp,
-) -> Result<Option<Arc<Undo>>, SnoozeError> {
-    // TODO: Implement this
-    Ok(None)
+) -> Result<(), SnoozeError> {
+    let user_context = session.ctx()?;
+    uniffi_async(async move {
+        RealConversation::action_snooze(
+            user_context.action_queue(),
+            label_id.into(),
+            ids.map_vec(),
+            snooze_time.into(),
+        )
+        .await?;
+
+        Result::<_, RealProtonMailError>::Ok(())
+    })
+    .await
+    .map_err(SnoozeError::from)
 }
 
 #[allow(unused_variables)]
 #[allow(clippy::needless_pass_by_value)]
 #[uniffi_export]
-pub fn unsnooze_conversations(
+pub async fn unsnooze_conversations(
     session: Arc<MailUserSession>,
+    label_id: Id,
     ids: Vec<Id>,
-) -> Result<Option<Arc<Undo>>, SnoozeError> {
-    // TODO: Implement this
-    Ok(None)
+) -> Result<(), SnoozeError> {
+    let user_context = session.ctx()?;
+    uniffi_async(async move {
+        RealConversation::action_unsnooze(
+            user_context.action_queue(),
+            label_id.into(),
+            ids.map_vec(),
+        )
+        .await?;
+
+        Result::<_, RealProtonMailError>::Ok(())
+    })
+    .await
+    .map_err(SnoozeError::from)
 }
 
 /// Returns available actions for conversation bottom bar.

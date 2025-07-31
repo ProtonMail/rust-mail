@@ -196,6 +196,7 @@ impl From<AppError> for ProtonMailError {
             AppError::InvalidMobileActions(_) => Self::reason(OtherErrorReason::InvalidParameter),
             AppError::InvalidSnoozeLocation(_) => Self::reason(OtherErrorReason::InvalidParameter),
             AppError::SnoozeTimeInThePast => Self::reason(OtherErrorReason::InvalidParameter),
+            AppError::CouldNotCalculateSnoozeOptions => Self::Unexpected(Unexpected::Internal),
             AppError::AddressMissing(_) => Self::Unexpected(Unexpected::Database),
             AppError::MessageHasNoRemoteId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::MessageMissing(_) => Self::Unexpected(Unexpected::Database),

@@ -64,6 +64,8 @@ pub enum AppError {
     SnoozeTimeInThePast,
     #[error("Invalid snooze location: {0}")]
     InvalidSnoozeLocation(String),
+    #[error("Could not calculate snooze options")]
+    CouldNotCalculateSnoozeOptions,
     #[error("Attachment missing in database for local_id {0}")]
     AttachmentMissing(LocalAttachmentId),
     #[error("Attachment decryption failed: {0}")]

@@ -910,6 +910,7 @@ impl Save {
             is_known: false,
             custom_labels: vec![],
             has_messages: true,
+            snoozed_until: None,
         }
     }
 
