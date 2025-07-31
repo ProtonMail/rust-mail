@@ -68,6 +68,10 @@ impl WantTfa {
                     .await
             }
 
+            Err(err @ ApiServiceError::Unauthorized(_, _)) => {
+                Err((State::TfaError, LoginError::FlowTotp(err)))
+            }
+
             Err(err) => Err((
                 State::TfaRetry(data.user_id, data.session_id, pass, mode, fido_details),
                 LoginError::FlowTotp(err),
