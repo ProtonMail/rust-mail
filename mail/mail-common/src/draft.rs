@@ -2,10 +2,9 @@ use crate::actions::draft;
 use crate::actions::draft::{
     AttachmentRemove, AttachmentUpload, AttachmentUploadMode, Discard, Save, UndoSend,
 };
+use crate::datatypes::LocalConversationId;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
-
-use crate::datatypes::LocalConversationId;
 use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
 use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
@@ -49,7 +48,8 @@ use stash::orm::Model as _;
 use stash::stash::{StashError, Tether};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tracing::{debug, error, info};
+use tokio::fs;
+use tracing::{debug, error, info, warn};
 
 pub mod attachments;
 pub mod compose;
@@ -444,6 +444,7 @@ pub struct Draft {
     #[debug(skip)]
     body: String,
     mime_type: MimeType,
+
     /// This is only present when we detect the choice of address in the draft
     /// does not satisfy some requirements that would prevent the message from being sent.
     pub address_validation_result: Option<DraftAddressValidationResult>,
@@ -465,10 +466,12 @@ impl Draft {
     pub async fn sender_addresses(tether: &Tether) -> Result<Vec<Address>, StashError> {
         Address::all_send_enabled(tether).await
     }
+
     pub async fn schedule_send_options(
         ctx: &MailUserContext,
     ) -> MailContextResult<ScheduleSendOptions<Local>> {
         let user = ctx.user().await?;
+
         ScheduleSendOptions::new(user.subscribed)
             .context("Failed to get schedule send options")
             .map_err(MailContextError::Other)
@@ -480,6 +483,7 @@ impl Draft {
         message_id: LocalMessageId,
     ) -> Result<(Self, DraftSyncStatus), MailContextError> {
         info!("Opening draft");
+
         let tether = &mut context.user_stash().connection();
 
         let Some(mut message) = Message::find_by_id(message_id, tether).await? else {
@@ -493,6 +497,7 @@ impl Draft {
 
         if !message.is_draft() {
             error!("Opened a non-draft message as a draft");
+
             return Err(OpenError::MessageNotADraft(message_id).into());
         }
 
@@ -505,6 +510,7 @@ impl Draft {
             metadata
         } else {
             debug!("No metadata found, creating new entry");
+
             let mut metadata = DraftMetadata {
                 id: None,
                 local_message_id: Some(message.local_id.unwrap()),
@@ -517,21 +523,25 @@ impl Draft {
                 password: None,
                 password_hint: None,
             };
+
             tether
                 .tx::<_, _, MailContextError>(async |tx| {
                     metadata
                         .save(tx)
                         .await
                         .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
-                    tokio::fs::create_dir_all(draft_attachment_staging_path(
+
+                    fs::create_dir_all(draft_attachment_staging_path(
                         context,
                         metadata.id.unwrap(),
                     ))
                     .await
                     .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
+
                     Ok(())
                 })
                 .await?;
+
             metadata
         };
 
@@ -544,11 +554,13 @@ impl Draft {
             (None, DraftSyncStatus::Synced)
         } else if let Some(remote_id) = message.remote_id.clone() {
             info!("Draft metadata has no pending changes, syncing.");
+
             match Message::force_sync_message_and_body(context, remote_id, true, tether).await {
                 Ok((message_new, decrypted)) => {
                     message = message_new;
 
                     debug!("Message synced, updating attachment metadata.");
+
                     tether
                         .tx(async |tx| {
                             DraftAttachmentMetadata::reset_draft_attachments_after_sync(
@@ -557,23 +569,28 @@ impl Draft {
                                 tx,
                             )
                             .await?;
+
                             metadata.expiration_time = None;
                             metadata.password = None;
                             metadata.password_hint = None;
+
                             metadata.save(tx).await
                         })
                         .await?;
 
                     (Some(decrypted), DraftSyncStatus::Synced)
                 }
+
                 Err(MailContextError::Api(api_err)) if api_err.is_network_failure() => {
                     debug!("Failed to sync draft due to network error.");
                     (None, DraftSyncStatus::Cached)
                 }
+
                 Err(e) => return Err(e),
             }
         } else {
             debug!("Message does not have a remote id.");
+
             // If we have no remote id do not return cached status. As this implies the
             // draft was created locally and the save action has not yet executed.
             // We only trigger this code path if the save action failed to execute.
@@ -582,8 +599,10 @@ impl Draft {
 
         let decrypted = match decrypted {
             Some(d) => d,
+
             None => {
                 debug!("Failed to sync draft from server, attempting to load from cache.");
+
                 let Some(d) = Message::load_decrypted_message_from_cache(
                     message.id(),
                     &message.remote_address_id,
@@ -594,6 +613,7 @@ impl Draft {
                 else {
                     return Err(OpenError::MessageBodyMissing(message.local_id.unwrap()).into());
                 };
+
                 d
             }
         };
@@ -603,12 +623,14 @@ impl Draft {
             .inspect_err(|e| error!("Failed to load send result: {e:?}"))?;
 
         let contact_group_resolver = ProtonContactGroupResolver::new(tether);
+
         let (to_list, cc_list, bcc_list) = join3(
             RecipientList::from_message_recipients(&contact_group_resolver, message.to_list.value),
             RecipientList::from_message_recipients(&contact_group_resolver, message.cc_list.value),
             RecipientList::from_message_recipients(&contact_group_resolver, message.bcc_list.value),
         )
         .await;
+
         let mut draft = Self {
             metadata_id: metadata.id.unwrap(),
             sender: message.sender.address.into_clear_text_string(),
@@ -631,18 +653,21 @@ impl Draft {
             let address = Address::find_by_remote_id(draft.address_id.clone(), tether)
                 .await?
                 .ok_or(OpenError::AddressNotFound(draft.address_id.clone()))?;
+
             let user = context.user().await?;
+
             if let Some(result) = validate_sender_address(&address, &user) {
-                tracing::warn!(
+                warn!(
                     "Address {} is no longer valid: {}",
-                    result.email,
-                    result.error
+                    result.email, result.error
                 );
 
                 let new_address = find_default_sender_address(tether)
                     .await?
                     .ok_or(OpenError::UserHasNoAddresses)?;
-                tracing::info!("Draft address changed to {}", new_address.email);
+
+                info!("Draft address changed to {}", new_address.email);
+
                 draft.address_id = new_address.remote_id.unwrap();
                 draft.address_validation_result = Some(result);
 
@@ -652,23 +677,27 @@ impl Draft {
                     .change_sender_address_by_id(context, draft.address_id.clone())
                     .await
                 {
-                    tracing::error!("Failed to change sender address: {e}")
+                    error!("Failed to change sender address: {e}")
                 }
             }
         }
 
         info!("Draft loaded with id = {}", draft.metadata_id);
+
         Ok((draft, sync_status))
     }
 
     #[tracing::instrument(skip_all)]
     pub async fn empty(context: &MailUserContext) -> Result<Self, MailContextError> {
         info!("Creating new empty draft");
+
         let mut tether = context.user_stash().connection();
+
         let address = find_default_sender_address(&tether)
             .await?
             .ok_or(OpenError::UserHasNoAddresses)
             .inspect_err(|_| error!("No suitable address found"))?;
+
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
 
         let metadata = tether
@@ -676,6 +705,7 @@ impl Draft {
                 let metadata = DraftMetadata::empty(tx)
                     .await
                     .inspect_err(|e| error!("Failed to create new empty draft metadata: {e:?}"))?;
+
                 if mail_settings.attach_public_key {
                     let public_key_attachment =
                         Attachment::create_public_key(context, &address, tx)
@@ -698,6 +728,7 @@ impl Draft {
             .await?;
 
         info!("New draft created with id = {}", metadata.id.unwrap());
+
         Ok(Self::new_empty_draft(
             metadata.id.unwrap(),
             &address,
@@ -741,7 +772,9 @@ impl Draft {
         mime_type_override: Option<MimeType>,
     ) -> Result<Self, MailContextError> {
         info!("Creating new draft reply ");
+
         let mut tether = context.user_stash().connection();
+
         let Some(source_message) = Message::find_by_id(message_id, &tether).await? else {
             return Err(AppError::MessageMissing(message_id).into());
         };
@@ -764,14 +797,14 @@ impl Draft {
 
         let (address, address_validation_error) =
             if let Some(e) = validate_sender_address(&address, &user) {
-                tracing::warn!("Sender address ({}) is not valid: {}", e.email, e.error);
+                warn!("Sender address ({}) is not valid: {}", e.email, e.error);
 
                 let addr = find_default_sender_address(&tether)
                     .await?
                     .ok_or(OpenError::UserHasNoAddresses)
                     .inspect_err(|_| error!("Failed to locate default sender address"))?;
 
-                tracing::info!("Sender address changed to: {}", addr.email);
+                info!("Sender address changed to: {}", addr.email);
 
                 (addr, Some(e))
             } else {
@@ -790,6 +823,7 @@ impl Draft {
         };
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
+
         let draft = tether
             .tx::<_, _, MailContextError>(async |tx| {
                 let metadata = DraftMetadata::reply(
@@ -801,12 +835,9 @@ impl Draft {
                 .await
                 .inspect_err(|e| error!("Failed to create new reply draft metadata: {e:?}"))?;
 
-                tokio::fs::create_dir_all(draft_attachment_staging_path(
-                    context,
-                    metadata.id.unwrap(),
-                ))
-                .await
-                .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
+                fs::create_dir_all(draft_attachment_staging_path(context, metadata.id.unwrap()))
+                    .await
+                    .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
 
                 let contact_group_resolver = ProtonContactGroupResolver::new(tx);
 
@@ -833,6 +864,7 @@ impl Draft {
                         attachment.filename == public_key_attachment.attachment.filename
                     }) {
                         let attachment = public_key_attachment.store(context, tx).await?;
+
                         DraftAttachmentMetadata::pending(
                             metadata.id.unwrap(),
                             attachment.local_id.unwrap(),
@@ -849,6 +881,7 @@ impl Draft {
                         if matches!(attachment.attachment_type, AttachmentType::Pgp) {
                             // PGP attachments need to be cloned and uploaded to the server so it can be sent.
                             debug!("Cloning PGP attachment {} ", attachment.local_id.unwrap());
+
                             let new_attachment = Attachment::clone_attachment(
                                 context,
                                 address.remote_id.clone().unwrap(),
@@ -857,10 +890,12 @@ impl Draft {
                             )
                             .await
                             .inspect_err(|e| error!("Failed to clone pgp attachment: {e:?}",))?;
+
                             debug!(
                                 "PGP attachment cloned as {} ",
                                 new_attachment.local_id.unwrap()
                             );
+
                             DraftAttachmentMetadata::pending(
                                 metadata.id.unwrap(),
                                 new_attachment.local_id.unwrap(),
@@ -883,7 +918,9 @@ impl Draft {
                 Ok(draft)
             })
             .await?;
+
         info!("New draft created with id = {}", draft.metadata_id);
+
         Ok(draft)
     }
 
@@ -998,6 +1035,7 @@ impl Draft {
                 draft_reply_or_forward_params,
             )
             .await?;
+
         Ok(response.message)
     }
 
@@ -1034,8 +1072,10 @@ impl Draft {
                         return Err(SaveError::DraftDoesNotExistOnServer.into());
                     }
                 }
+
                 Err(e.into())
             }
+
             Ok(response) => Ok(response.message),
         }
     }
@@ -1045,8 +1085,7 @@ impl Draft {
         queue: &Queue,
         tether: &Tether,
     ) -> Result<QueuedActionOutput<Save>, MailContextError> {
-        let queued_output = self.to_save_action().queue(queue, tether).await?;
-        Ok(queued_output)
+        self.to_save_action().queue(queue, tether).await
     }
 
     pub async fn send(
@@ -1125,19 +1164,21 @@ impl Draft {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
             return Err(SendError::NoRecipients.into());
         }
+
         let save_action = DraftSaveActionQueuer::new(
             self.metadata_id,
             self.address_id.clone(),
             Save::new(self, DraftSendResultOrigin::SaveBeforeSend),
         );
+
         let send_action = if let Some(delivery_time) = delivery_time {
             draft::Send::scheduled(self, delivery_time)
         } else {
             draft::Send::new(self)
         };
-        let metadata_id = self.metadata_id;
+
         Ok(DraftSendActionQueuer::new(
-            metadata_id,
+            self.metadata_id,
             save_action,
             send_action,
         ))
@@ -1182,13 +1223,16 @@ impl Draft {
         cid: &ContentId,
     ) -> MailContextResult<EmbeddedAttachmentInfo> {
         let mut tether = ctx.user_stash().connection();
+
         let attachments =
             DraftAttachmentMetadata::attachment_for_draft(self.metadata_id, &tether).await?;
+
         if let Some(attachment) = attachments
             .iter()
             .find(|a| a.content_id.as_ref() == Some(cid))
         {
             let data = attachment.content_data(ctx, &mut tether).await?;
+
             Ok(EmbeddedAttachmentInfo {
                 data,
                 mime: attachment.mime_type.to_string(),
@@ -1205,13 +1249,12 @@ impl Draft {
     /// If the removal fails, due to file locks, it will be GCed later by a background task.
     pub async fn delete_attachment_if_in_staging_area(&self, ctx: &MailUserContext, path: &Path) {
         let staging_path = self.attachment_staging_path(ctx);
+
         if path.starts_with(&staging_path) {
-            if let Err(e) = tokio::fs::remove_file(&staging_path).await {
+            if let Err(e) = fs::remove_file(&staging_path).await {
                 if e.kind() != std::io::ErrorKind::NotFound {
                     // This is a warning as the background process will try again.
-                    tracing::warn!(
-                        "Failed to delete attachment from staging area at {path:?}: {e:?}"
-                    );
+                    warn!("Failed to delete attachment from staging area at {path:?}: {e:?}");
                 }
             }
         }
@@ -1303,6 +1346,7 @@ impl Draft {
         let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
         let result = upload_action.queue(queue, &tether).await?;
+
         Ok(result.id)
     }
 
@@ -1314,6 +1358,7 @@ impl Draft {
         attachment_id: LocalAttachmentId,
     ) -> DraftAttachmentUploadQueuer {
         let save_action = self.to_save_action();
+
         DraftAttachmentUploadQueuer::new(
             self.metadata_id,
             self.address_id.clone(),
@@ -1395,6 +1440,7 @@ impl Draft {
     pub fn body(&self) -> &str {
         &self.body
     }
+
     pub fn body_mut(&mut self) -> &mut String {
         &mut self.body
     }
@@ -1443,13 +1489,16 @@ impl Draft {
     pub fn finalize_sender_address_change_request(&mut self, output: DraftAddressChangeOutput) {
         self.address_id = output.address_id;
         self.sender = output.sender;
+
         if self.mime_type == MimeType::TextHtml {
             let transformer = Transformer::new(self.body());
+
             if let Err(e) =
                 transformer.replace_inner_div(PM_SIGNATURE_DIV_CLASS, &output.new_signature)
             {
                 error!("Error when swapping address signatures: {e}");
             }
+
             self.body = transformer.to_string();
         } else if !output.old_signature.is_empty() {
             self.body = self
@@ -1464,15 +1513,18 @@ impl Draft {
         email: &str,
     ) -> Result<(), MailContextError> {
         let mut tether = ctx.user_stash().connection();
+
         let address = Address::by_email(email, &tether)
             .await?
             .ok_or(SenderAddressChangeError::AddressEmailNotFound(email.into()))?;
+
         let address_id =
             address
                 .remote_id
                 .ok_or(SenderAddressChangeError::AddressHasNoRemoteId(
                     address.local_id.unwrap(),
                 ))?;
+
         self.change_sender_address_impl(ctx, address_id, &mut tether)
             .await
     }
@@ -1483,6 +1535,7 @@ impl Draft {
         address_id: AddressId,
     ) -> Result<(), MailContextError> {
         let mut tether = ctx.user_stash().connection();
+
         self.change_sender_address_impl(ctx, address_id, &mut tether)
             .await
     }
@@ -1500,6 +1553,7 @@ impl Draft {
         {
             self.finalize_sender_address_change_request(output)
         }
+
         Ok(())
     }
 
@@ -1516,9 +1570,11 @@ impl Draft {
     ) -> Result<Option<EoData>, MailContextError> {
         let encryption_key = ctx.core_context().get_encryption_key()?;
         let tether = ctx.user_stash().connection();
+
         let metadata = DraftMetadata::find_by_id(self.metadata_id, &tether)
             .await?
             .ok_or(PasswordError::MetadataNotFound(self.metadata_id))?;
+
         metadata.to_eo_data(&encryption_key)
     }
 
@@ -1540,18 +1596,24 @@ impl Draft {
         if password.chars().count() < MIN_PASSWORD_LEN {
             return Err(PasswordError::PasswordTooShort.into());
         }
+
         let mut tether = ctx.user_stash().connection();
+
         let mut metadata = DraftMetadata::find_by_id(metadata_id, &tether)
             .await?
             .ok_or(PasswordError::MetadataNotFound(metadata_id))?;
 
         let session_encryption_key = ctx.core_context().get_encryption_key()?;
+
         let encrypted_password = EncryptedPassword::new(password, &session_encryption_key)
             .map_err(|_| PasswordError::Encryption)?;
+
         metadata.password = Some(encrypted_password);
         metadata.password_hint = hint;
         tether.tx(async |tx| metadata.save(tx).await).await?;
+
         info!("Password protection applied to draft {metadata_id}");
+
         Ok(())
     }
 
@@ -1571,8 +1633,10 @@ impl Draft {
             metadata.password = None;
             metadata.password_hint = None;
             tether.tx(async |tx| metadata.save(tx).await).await?;
+
             info!("Password protection removed from draft {metadata_id}");
         }
+
         Ok(())
     }
 
@@ -1590,13 +1654,14 @@ impl Draft {
         expiration_time: DateTime<Local>,
     ) -> Result<(), MailContextError> {
         let now = UnixTimestamp::now();
+
         if now > expiration_time.into() {
             return Err(ExpirationError::ExpirationTimeInThePast.into());
         }
 
         let in_30_days =
             ScheduleSendOptions::calculate_next(expiration_time, 30).map_err(|_| {
-                tracing::error!("Failed to calculate 30 days into the future");
+                error!("Failed to calculate 30 days into the future");
                 ExpirationError::ExpirationTimeExceeds30Days
             })?;
 
@@ -1607,9 +1672,12 @@ impl Draft {
         let mut metadata = DraftMetadata::find_by_id(metadata_id, tether)
             .await?
             .ok_or(ExpirationError::MetadataNotFound(metadata_id))?;
+
         metadata.expiration_time = Some(expiration_time.into());
         tether.tx(async |tx| metadata.save(tx).await).await?;
+
         info!("Expiration applied to draft {metadata_id}");
+
         Ok(())
     }
 
@@ -1627,9 +1695,12 @@ impl Draft {
         let mut metadata = DraftMetadata::find_by_id(metadata_id, tether)
             .await?
             .ok_or(ExpirationError::MetadataNotFound(metadata_id))?;
+
         metadata.expiration_time = None;
         tether.tx(async |tx| metadata.save(tx).await).await?;
+
         info!("Expiration removed from draft {metadata_id}");
+
         Ok(())
     }
 
@@ -1640,6 +1711,7 @@ impl Draft {
         let metadata = DraftMetadata::find_by_id(self.metadata_id, tether)
             .await?
             .ok_or(PasswordError::MetadataNotFound(self.metadata_id))?;
+
         Ok(metadata.expiration_time)
     }
 }
@@ -1692,12 +1764,14 @@ impl DraftSaveActionQueuer {
         // upload the message.
         if !pending_attachment_ids.is_empty() {
             for attachment_id in pending_attachment_ids {
-                tracing::info!("Queuing attachment upload for pending attachment {attachment_id}");
+                info!("Queuing attachment upload for pending attachment {attachment_id}");
+
                 let metadata = MetadataBuilder::new()
                     .with_resource(&self.id)
                     .expect("This should never fail")
                     .with_dependency(output.id)
                     .build();
+
                 let output = queue
                     .queue_action_with_metadata(
                         AttachmentUpload::new(
@@ -1709,6 +1783,7 @@ impl DraftSaveActionQueuer {
                         metadata,
                     )
                     .await?;
+
                 uploading_attachment_ids.push(output.id);
             }
 
@@ -1825,6 +1900,7 @@ impl DraftAttachmentUploadQueuer {
         tether: &Tether,
     ) -> Result<QueuedActionOutput<AttachmentUpload>, MailContextError> {
         let mut last_draft_save_action_id = None;
+
         // We only need this when creating, if we are retrying this must have already
         // happened.
         if self.mode == AttachmentUploadMode::Create {
@@ -1887,11 +1963,10 @@ impl DraftAttachmentUploadQueuer {
             }
         }
 
-        let metadata = metadata.build();
         Ok(queue
             .queue_action_with_metadata(
                 AttachmentUpload::new(self.id, self.address_id, self.attachment_id, self.mode),
-                metadata,
+                metadata.build(),
             )
             .await?)
     }
@@ -1996,6 +2071,7 @@ async fn queue_or_replace_draft_save(
         .with_dependencies(other_direct_dependencies)
         .with_sequential_dependencies(other_sequential_dependencies)
         .build();
+
     if let Some(previous_action_id) = last_draft_save_action_id {
         match queue
             .replace_or_queue_action_with_metadata(

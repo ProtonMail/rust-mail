@@ -229,6 +229,7 @@ pub(super) fn prepare_html_reply(
         format_date_from_timestamp(message.time, use_utc),
         false,
     );
+
     output.reserve((ORIGINAL_MESSAGE_BLOCK.len() * 2) + original_body.len());
     output.push_str(BEGIN_QUOTE);
     output.push_str(HTML_LINE_BREAK);
@@ -251,6 +252,7 @@ pub(super) fn prepare_plain_text_reply(
     use_utc: bool,
 ) {
     let mut original_body = Cow::Borrowed(original_body);
+
     // Convert body to text if source is html
     if original_body_mime_type == MimeType::TextHtml {
         original_body = Cow::Owned(html_to_text(original_body.as_ref()));
@@ -421,7 +423,6 @@ pub const CLOSE_BLOCKQUOTE: &str = "</blockquote>";
 pub const HTML_LINE_BREAK: &str = "<br>";
 
 const PM_SIGNATURE_HTML: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
-
 const PM_SIGNATURE_PLAIN_TEXT: &str = "Sent with Proton Mail secure email.";
 
 // this is the value the web client is using.
