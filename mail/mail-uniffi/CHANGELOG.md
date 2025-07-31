@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- [ET-3914] Add observability for /domains/available endpoint
+- [ET-3914] Delete dead code
+- [ET-3914] Fix wrong test name
+- [ET-3914] Add observability for unlocking user keys
+- [ET-3914] Add observability for post login user checks
+- [ET-3864] Connect actuall snooze implementation with uniffi layer
+
+### Fixes
+
+- Standardize fido2 observability events
+- [ET-3503] Allow email address with long local parts
+
+
+## [mail-uniffi-v0.114.0] - 2025-07-31
+
 ### Changed
 
 - [ET-3484] Remember alias address when changing addresses
@@ -32,38 +49,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-3971] Expose watcher functionalities for user tables for uniffi clients
 
-### Fix
 
-- Standardize FIDO2 observability events
-
-## [mail-uniffi-v0.112.0] - 2025-07-30
+## [mail-uniffi-v0.111.0] - 2025-07-30
 
 ### Features
 
-- [ET-3865] Calculate snooze options
-- Mail-uniffi: expose rsvps
-
-### Fixes
-
-- [ET-3630] Add missing get_password method to `draft`
+- [ET-3943] Add fido2 support to the password change flow
 
 
-## [mail-uniffi-v0.111.0] - 2025-07-30
+## [mail-uniffi-v0.112.0] - 2025-07-30
 
 ### Features
 
 - [ET-3094] Post login check for free account count
 - [ET-3956] Add uniffi bindings for snooze actions
 - [ET-3538] Check for user delinquent flag during post login verifications
-- Add observability api for fido screen views needed for clients.
 - [ET-3956] Adjust bindings to discussion
+- Add observability api for fido screen views needed for clients.
 - [ET-3864] Add snooze action
-- [ET-3943] Add fido2 support to the password change flow
+- [ET-3865] Calculate snooze options
+- Mail-uniffi: expose rsvps
 
 ### Fixes
 
-- Clippy.
 - [ET-3787] Vanishing pgp attachments
+- Clippy.
+- [ET-3630] Add missing get_password method to `draft`
 
 
 ## [mail-uniffi-v0.110.0] - 2025-07-29
