@@ -1096,11 +1096,7 @@ impl DecryptedMessage {
                 let recurrence = usize::from(rsvp.recurrence.is_some());
 
                 let answer = if rsvp.can_be_answered() {
-                    if rsvp.user_attendee().status.unwrap().is_unanswered() {
-                        2
-                    } else {
-                        3
-                    }
+                    if rsvp.is_unanswered() { 2 } else { 3 }
                 } else {
                     0
                 };
@@ -1259,12 +1255,16 @@ impl DecryptedMessage {
         });
 
         let rsvp_answer = if rsvp.can_be_answered() {
-            let status = rsvp.user_attendee().status.and_then(|status| match status {
-                CalendarAttendeeStatus::Unanswered => None,
-                CalendarAttendeeStatus::Maybe => Some("Maybe"),
-                CalendarAttendeeStatus::No => Some("No"),
-                CalendarAttendeeStatus::Yes => Some("Yes"),
-            });
+            let status = rsvp
+                .user_attendee()
+                .unwrap()
+                .status
+                .and_then(|status| match status {
+                    CalendarAttendeeStatus::Unanswered => None,
+                    CalendarAttendeeStatus::Maybe => Some("Maybe"),
+                    CalendarAttendeeStatus::No => Some("No"),
+                    CalendarAttendeeStatus::Yes => Some("Yes"),
+                });
 
             if let Some(status) = status {
                 vec![

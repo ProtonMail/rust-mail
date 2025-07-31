@@ -127,7 +127,7 @@ pub struct RsvpEvent {
     pub occurrence: RsvpOccurrence,
     pub organizer: RsvpOrganizer,
     pub attendees: Vec<RsvpAttendee>,
-    pub user_attendee_idx: u32,
+    pub user_attendee_idx: Option<u32>,
     pub calendar: Option<RsvpCalendar>,
     pub state: RsvpState,
 }
@@ -136,9 +136,11 @@ impl TryFrom<&mail::RsvpEvent> for RsvpEvent {
     type Error = RealProtonMailError;
 
     fn try_from(event: &mail::RsvpEvent) -> Result<Self, RealProtonMailError> {
-        // Unwrap-safety: 4 million attendees would make for quite a big party.
-        // (uniffi doesn't support `usize`)
-        let user_attendee_idx = u32::try_from(event.user_attendee_idx).unwrap();
+        let user_attendee_idx = event.user_attendee_idx.map(|idx| {
+            // Unwrap-safety: 4 million attendees would make for quite a big
+            // party (uniffi doesn't support `usize`).
+            u32::try_from(idx).unwrap()
+        });
 
         let (starts_at, ends_at, occurrence) = match &event.occurrence {
             cal::RsvpOccurrence::Date { starts_at, ends_at } => {
@@ -307,8 +309,8 @@ pub enum RsvpState {
 
 impl From<&mail::RsvpEvent> for RsvpState {
     fn from(event: &mail::RsvpEvent) -> Self {
-        let attendance = match event.user_attendee().role {
-            ical::Role::ReqParticipant => RsvpAttendance::Required,
+        let attendance = match event.user_attendee().map(|att| att.role) {
+            Some(ical::Role::ReqParticipant) => RsvpAttendance::Required,
             _ => RsvpAttendance::Optional,
         };
 
@@ -322,6 +324,12 @@ impl From<&mail::RsvpEvent> for RsvpState {
         if !event.is_address_correct() {
             return RsvpState::UnanswerableInvite {
                 reason: RsvpUnanswerableReason::AddressIsIncorrect,
+            };
+        }
+
+        if event.user_attendee_idx.is_none() {
+            return RsvpState::UnanswerableInvite {
+                reason: RsvpUnanswerableReason::UserIsOrganizer,
             };
         }
 
@@ -378,6 +386,9 @@ pub enum RsvpAttendance {
 
 #[derive(Clone, Copy, Debug, Enum)]
 pub enum RsvpUnanswerableReason {
+    /// User is the organizer of this event.
+    UserIsOrganizer,
+
     /// User is looking at a stale `invite.ics`.
     InviteIsOutdated,
 

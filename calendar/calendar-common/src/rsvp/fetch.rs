@@ -263,22 +263,20 @@ where
     let progress = extract_progress(now, &source, &occurrence);
     let recency = extract_recency(source.invite(), source.event());
 
-    let user_attendee_idx = attendees
-        .iter()
-        .enumerate()
-        .find_map(|(idx, att)| {
-            if email::canonicalize_auto(&att.email) == *email {
-                Some(idx)
-            } else {
-                None
-            }
-        })
-        .ok_or({
-            // This can happen whan an attendee forwards their own invite to
-            // another user that hasn't been invited by the organizer; this is
-            // known as "party crasher" and it's not yet supported.
-            RsvpError::NotInvited
-        })?;
+    let user_attendee_idx = attendees.iter().enumerate().find_map(|(idx, att)| {
+        if email::canonicalize_auto(&att.email) == *email {
+            Some(idx)
+        } else {
+            None
+        }
+    });
+
+    if user_attendee_idx.is_none() && email::canonicalize_auto(&organizer.email) != *email {
+        // This can happen whan an attendee forwards their own invite to another
+        // user that hasn't been invited by the organizer; this is known as
+        // "party crasher" and it's not yet supported.
+        return Err(RsvpError::NotInvited);
+    }
 
     let intent = match id {
         RsvpEventId::Invite { .. } => RsvpIntent::Invite,

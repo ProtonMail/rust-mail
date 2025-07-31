@@ -164,7 +164,7 @@ pub struct RsvpEvent {
     pub occurrence: RsvpOccurrence,
     pub organizer: RsvpOrganizer,
     pub attendees: Vec<RsvpAttendee>,
-    pub user_attendee_idx: usize,
+    pub user_attendee_idx: Option<usize>,
     pub calendar: Option<RsvpCalendar>,
     pub progress: RsvpProgress,
     pub recency: RsvpRecency,
@@ -202,15 +202,14 @@ impl RsvpEvent {
     }
 
     #[must_use]
-    pub fn user_attendee(&self) -> &RsvpAttendee {
-        &self.attendees[self.user_attendee_idx]
+    pub fn user_attendee(&self) -> Option<&RsvpAttendee> {
+        self.user_attendee_idx.map(|idx| &self.attendees[idx])
     }
 
     #[must_use]
     pub fn is_unanswered(&self) -> bool {
         self.user_attendee()
-            .status
-            .is_some_and(|stat| stat.is_unanswered())
+            .is_some_and(|att| att.status.is_some_and(|stat| stat.is_unanswered()))
     }
 
     #[must_use]
@@ -218,6 +217,7 @@ impl RsvpEvent {
         self.intent == RsvpIntent::Invite
             && self.recency == RsvpRecency::Fresh
             && self.progress != RsvpProgress::Cancelled
+            && self.user_attendee_idx.is_some()
             && self.raw.is_some() // [1]
 
         // [1] `raw` can be missing only if there's no internet connection - but

@@ -1,6 +1,6 @@
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAnswer, RsvpAnswerError, RsvpAnswerResult,
-    RsvpCache, RsvpError, RsvpEvent, RsvpMailSender, RsvpResult,
+    RsvpAttendee, RsvpCache, RsvpError, RsvpEvent, RsvpMailSender, RsvpResult,
 };
 use itertools::Itertools;
 use jiff::Zoned;
@@ -807,15 +807,21 @@ impl<'a> AnswerableRsvpEvent<'a> {
     }
 
     #[must_use]
+    fn user_attendee(&self) -> &RsvpAttendee {
+        // Unwrap-safety: Guarded by constructor
+        self.0.user_attendee().unwrap()
+    }
+
+    #[must_use]
     fn raw(&self) -> &CalendarEvent {
         // Unwrap-safety: Guarded by constructor
-        self.raw.as_ref().unwrap()
+        self.0.raw.as_ref().unwrap()
     }
 
     #[must_use]
     fn raw_mut(&mut self) -> &mut CalendarEvent {
         // Unwrap-safety: Guarded by constructor
-        self.raw.as_mut().unwrap()
+        self.0.raw.as_mut().unwrap()
     }
 }
 
