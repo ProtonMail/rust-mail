@@ -3,7 +3,7 @@ use anyhow::Result;
 use proton_account_api::login::LoginFlow;
 use proton_core_api::services::proton::muon::util::DurationExt;
 use proton_core_api::verification::ChallengeNotifier;
-use proton_core_common::datatypes::{ApiConfig, AppDetails};
+use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::CoreAccount;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::KeyChain;
@@ -17,7 +17,6 @@ use std::sync::Arc;
 pub async fn new_mail_ctx<K, N>(
     dir: &Path,
     cfg: ApiConfig,
-    app: AppDetails,
     kch: Arc<K>,
     hvn: Arc<N>,
 ) -> Result<Arc<MailContext>>
@@ -41,7 +40,6 @@ where
         CACHE_SIZE,
         kch,
         cfg,
-        app,
         Some(hvn),
         None,
         LogService::new(config),

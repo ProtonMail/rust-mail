@@ -5,7 +5,7 @@ use proton_core_api::services::proton::muon::client::flow::LoginFlowData;
 use proton_core_api::session::{CoreSession as _, EnvId};
 use proton_core_api::store::UserData;
 use proton_core_common::Origin;
-use proton_core_common::datatypes::{ApiConfig, AppDetails};
+use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::Label;
@@ -53,7 +53,6 @@ async fn prepare_context(tmp_dir: &TempDir) -> (Arc<MailContext>, Arc<dyn KeyCha
         50 * 1204 * 1024,
         Arc::clone(&keychain),
         ApiConfig::default_with_env(EnvId::new_atlas()),
-        AppDetails::default(),
         None,
         None,
         LogService::new(config),

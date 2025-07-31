@@ -205,7 +205,6 @@ async fn create_mail_session_inner(
         params.mail_cache_size,
         Arc::new(key_chain),
         api_env_config,
-        params.app_details.clone().into(),
         hv_notifier,
         device_info_provider,
         log_service,

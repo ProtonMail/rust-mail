@@ -58,8 +58,8 @@ impl Cli {
         let kch = Arc::new(OnDiskKeyChain::new(&dir)?);
         let hvn = Arc::new(HvNotifier::new(proxy));
         let app = new_app_details(self.app_platform, self.app_product, self.app_version);
-        let cfg = new_api_config(&app, self.env)?;
-        let ctx = new_mail_ctx(&dir, cfg, app, kch, hvn).await?;
+        let cfg = new_api_config(app, self.env)?;
+        let ctx = new_mail_ctx(&dir, cfg, kch, hvn).await?;
 
         self.cmd.run(ctx).await
     }

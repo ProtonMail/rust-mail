@@ -1,5 +1,5 @@
 use crate::Origin;
-use crate::datatypes::{ApiConfig, AppDetails};
+use crate::datatypes::ApiConfig;
 use crate::db::account::{CoreAccount, CoreSession};
 use crate::event_loop::EventPollMode;
 use crate::events::CoreEvent;
@@ -166,7 +166,6 @@ impl TestContext {
         info!("CORE TMP DIR = {:?}", tmp_dir.path());
         let keychain = Self::keychain();
         let api_config = Self::api_config(&mock_web_server);
-        let app_details = AppDetails::default();
         let key = Self::encryption_key();
 
         keychain
@@ -198,7 +197,6 @@ impl TestContext {
             keychain.clone(),
             all_initializers,
             api_config.clone(),
-            app_details.clone(),
             None,
             None,
             tmp_dir.path().join("core-cache"),

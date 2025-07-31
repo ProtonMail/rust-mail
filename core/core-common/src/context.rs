@@ -5,8 +5,8 @@ use crate::app_events::{UserSessionCreatedEvent, UserSessionDeletedEvent};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::core_clock::CoreClock;
 use crate::datatypes::{
-    ApiConfig, AppDetails, LocalContactId, PasswordMode, StoredDevicePrivateKey,
-    StoredDevicePublicKey, TfaStatus,
+    ApiConfig, LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey,
+    TfaStatus,
 };
 use crate::db::account::{
     CoreAccount, CoreSession, CoreSessionObserver, CoreSessionObserverNotification,
@@ -256,7 +256,6 @@ pub struct Context {
     active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
     cache_path: PathBuf,
     api_config: ApiConfig,
-    app_details: AppDetails,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
     cancellation_token: CancellationToken,
@@ -278,7 +277,6 @@ impl Context {
         key_chain: Arc<dyn KeyChain>,
         initializers: Vec<Box<dyn UserDatabaseInitializer>>,
         api_config: ApiConfig,
-        app_details: AppDetails,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
         cache_path: impl Into<PathBuf>,
@@ -344,7 +342,6 @@ impl Context {
             active_user_contexts: Mutex::new(HashMap::new()),
             cache_path: cache_path.into(),
             api_config,
-            app_details,
             hv_notifier,
             device_info_provider,
             cancellation_token: CancellationToken::new(),
@@ -976,7 +973,10 @@ impl Context {
         let primary_session = session.build().await?;
 
         let forked_session = primary_session
-            .downgrade_to_fork(&self.app_details.platform, &self.app_details.product)
+            .downgrade_to_fork(
+                &self.api_config.app_details.platform,
+                &self.api_config.app_details.product,
+            )
             .await?;
 
         Ok(forked_session)

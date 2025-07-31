@@ -89,7 +89,6 @@ async fn main() {
         50 * 1204 * 1024,
         Arc::new(keychain),
         api_config,
-        AppDetails::default(),
         None,
         None,
         LogService::new(config),

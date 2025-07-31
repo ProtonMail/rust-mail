@@ -1,9 +1,9 @@
 use anyhow::Result;
 use proton_core_common::datatypes::{ApiConfig, AppDetails};
 
-pub fn new_api_config(app: &AppDetails, env: Option<String>) -> Result<ApiConfig> {
+pub fn new_api_config(app_details: AppDetails, env: Option<String>) -> Result<ApiConfig> {
     let mut cfg = ApiConfig {
-        app_details: app.clone(),
+        app_details,
         ..ApiConfig::default()
     };
 
