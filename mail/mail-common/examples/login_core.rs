@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use proton_core_api::session::Config;
+use proton_core_api::session::EnvId;
+use proton_core_common::Origin;
+use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
@@ -41,14 +43,14 @@ async fn main() {
             .build();
 
         MailContext::new(
+            Origin::App,
             tmp_dir.path().join("session"),
             tmp_dir.path().join("user"),
             tmp_dir.path().join("core_cache"),
             tmp_dir.path().join("mail_cache"),
             50 * 1204 * 1024,
-            None,
             Arc::new(keychain),
-            Config::atlas(),
+            ApiConfig::default_with_env(EnvId::new_atlas()),
             None,
             None,
             LogService::new(config),

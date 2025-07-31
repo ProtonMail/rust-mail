@@ -61,24 +61,26 @@ pub use self::issue_report::*;
 pub use self::timestamp::*;
 use itertools::Itertools;
 use muon::common::ParseEndpointErr;
+use muon::env::EnvId;
+use proton_core_api::session::EnvIdExt;
 use proton_mail_api::services::proton::common::MessageId;
 use stash::orm::Model;
 use stash::stash::Tether;
 use tracing::error;
 
 use core::fmt;
-use proton_core_api::session::Config as RealApiConfig;
 use proton_core_common::datatypes::{
     AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
-    AddressType as RealAddressType, ContactSendingPreferences as RealContactSendingPreferences,
-    DateFormat as RealDateFormat, Density as RealDensity,
-    DeviceEnvironment as RealDeviceEnvironment, EarlyAccess as RealEarlyAccess, Email as RealEmail,
-    FidoKey as RealFidoKey, Flags as RealFlags, HighSecurity as RealHighSecurity, LocalAddressId,
-    LocalContactEmailId, LocalContactId, LocalLabelId, LogAuth as RealLogAuth,
-    Password as RealPassword, Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace,
-    Referral as RealReferral, SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus,
-    TimeFormat as RealTimeFormat, TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus,
-    UserType as RealUserType, WeekStart as RealWeekStart,
+    AddressType as RealAddressType, ApiConfig as RealApiConfig, AppDetails as RealAppDetails,
+    ContactSendingPreferences as RealContactSendingPreferences, DateFormat as RealDateFormat,
+    Density as RealDensity, DeviceEnvironment as RealDeviceEnvironment,
+    EarlyAccess as RealEarlyAccess, Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
+    HighSecurity as RealHighSecurity, LocalAddressId, LocalContactEmailId, LocalContactId,
+    LocalLabelId, LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
+    ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral,
+    SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
+    TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
+    WeekStart as RealWeekStart,
 };
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::models::{
@@ -827,9 +829,6 @@ pub enum ApiEnvId {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct ApiConfig {
     /// TODO: Document this field.
-    pub app_version: String,
-
-    /// TODO: Document this field.
     pub user_agent: String,
 
     /// Env to connect to.
@@ -842,7 +841,6 @@ pub struct ApiConfig {
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
-            app_version: String::from("Other"),
             user_agent: String::from("NoClient/0.1.0"),
             env_id: ApiEnvId::Prod,
             proxy: None,
@@ -850,24 +848,46 @@ impl Default for ApiConfig {
     }
 }
 
-impl TryFrom<ApiConfig> for RealApiConfig {
-    type Error = ParseEndpointErr;
-
-    fn try_from(config: ApiConfig) -> Result<Self, Self::Error> {
-        let base = match config.env_id {
-            ApiEnvId::Prod => Self::default(),
-            ApiEnvId::Atlas => Self::atlas(),
-            ApiEnvId::Scientist(name) => Self::scientist(name),
-            ApiEnvId::Custom(server) => Self::custom(server)?,
+impl ApiConfig {
+    pub fn into_real_api_config(
+        self,
+        details: AppDetails,
+    ) -> Result<RealApiConfig, ParseEndpointErr> {
+        let env_id = match self.env_id {
+            ApiEnvId::Prod => EnvId::new_prod(),
+            ApiEnvId::Atlas => EnvId::new_atlas(),
+            ApiEnvId::Scientist(name) => EnvId::new_atlas_name(name),
+            ApiEnvId::Custom(server) => EnvId::new_custom_url(server)?,
         };
 
-        Ok(Self {
-            app_version: config.app_version,
-            user_agent: Some(config.user_agent),
-            proxy: config.proxy,
+        let details = RealAppDetails::from(details);
 
-            ..base
+        Ok(RealApiConfig {
+            app_details: details,
+            user_agent: Some(self.user_agent),
+            proxy: self.proxy,
+            env_id,
         })
+    }
+}
+
+#[derive(Clone, UniffiRecord)]
+pub struct AppDetails {
+    /// Example: "ios"
+    pub platform: String,
+    /// Example: "mail"
+    pub product: String,
+    /// Example: "1.0.0"
+    pub version: String,
+}
+
+impl From<AppDetails> for RealAppDetails {
+    fn from(details: AppDetails) -> Self {
+        Self {
+            platform: details.platform,
+            product: details.product,
+            version: details.version,
+        }
     }
 }
 

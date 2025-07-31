@@ -20,6 +20,7 @@ use proton_core_common::models::{Label, ModelIdExtension};
 use stash::stash::Tether;
 
 pub const SEND_ACTION_GROUP: ActionGroup = ActionGroup::new("MAIL_SEND");
+pub const SHARE_EXT_ACTION_GROUP: ActionGroup = ActionGroup::new("SHARE_EXT");
 
 async fn local_draft_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
     let Some(local_draft_label_id) =

@@ -3,7 +3,8 @@ use std::sync::Arc;
 use clap::Parser;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::BroadcastMessage;
-use proton_core_api::session::Config;
+use proton_core_common::Origin;
+use proton_core_common::datatypes::{ApiConfig, AppDetails};
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
@@ -70,18 +71,22 @@ async fn main() {
         .name("log".into())
         .directory(tmp_dir.path().into())
         .build();
-    let api_config = Config {
-        app_version: "ios-mail@7.1.0".to_owned(),
+    let api_config = ApiConfig {
+        app_details: AppDetails {
+            platform: "ios".into(),
+            product: "mail".into(),
+            version: "7.1.0".into(),
+        },
         ..Default::default()
     };
 
     let ctx = MailContext::new(
+        Origin::App,
         tmp_dir.path().join("session"),
         tmp_dir.path().join("user"),
         tmp_dir.path().join("core_cache"),
         tmp_dir.path().join("mail_cache"),
         50 * 1204 * 1024,
-        None,
         Arc::new(keychain),
         api_config,
         None,
@@ -126,7 +131,7 @@ async fn main() {
         .unwrap();
 
     let id = draft
-        .save(user_ctx.action_queue(), &tether)
+        .save(user_ctx.action_queue(), &tether, user_ctx.origin())
         .await
         .unwrap()
         .id;
@@ -151,7 +156,11 @@ async fn main() {
     draft.add_attachment(&user_ctx, attachment).await.unwrap();
 
     let id = draft
-        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap()
         .id;

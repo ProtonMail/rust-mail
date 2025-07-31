@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::errors::UserContextError;
+use crate::errors::UserSessionError;
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -11,7 +11,7 @@ use super::{MailUserSession, datatypes::MailSettings};
 
 /// Gets the latest settings or a default if it can't find it.
 #[uniffi_export]
-pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserContextError> {
+pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserSessionError> {
     let stash = ctx.user_stash()?;
     Ok(uniffi_async::<_, JoinError, _>(async move {
         let tether = stash.connection();
@@ -32,7 +32,7 @@ pub struct SettingsWatcher {
 pub async fn watch_mail_settings(
     ctx: &MailUserSession,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<SettingsWatcher, UserContextError> {
+) -> Result<SettingsWatcher, UserSessionError> {
     let ctx = ctx.ctx()?;
     uniffi_async(async move {
         let stash = ctx.user_stash();
@@ -52,5 +52,5 @@ pub async fn watch_mail_settings(
         })
     })
     .await
-    .map_err(UserContextError::from)
+    .map_err(UserSessionError::from)
 }

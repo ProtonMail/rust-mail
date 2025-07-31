@@ -73,6 +73,7 @@ use proton_core_api::services::proton::{
     TwoFa as ApiTwoFa, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
     WeekStart as ApiWeekStart,
 };
+use proton_core_api::session::{Config as RealApiConfig, EnvId};
 use proton_core_api::store::{MbpMode, TfaMode};
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
 use proton_sqlite3::rusqlite::Error as SqlError;
@@ -977,6 +978,55 @@ impl From<ApiAddressSignedKeyList> for AddressSignedKeyList {
 
 sql_using_serde!(AddressSignedKeyList);
 
+#[derive(Clone)]
+pub struct AppDetails {
+    /// Example: "ios"
+    pub platform: String,
+    /// Example: "mail"
+    pub product: String,
+    /// Example: "1.0.0"
+    pub version: String,
+}
+
+/// Note, this is almost identical to [`proton_core_api::session::Config`], however instead of storing
+/// concatenated `app_version`, it keeps [`AppDetails`] instead.
+#[derive(Clone)]
+pub struct ApiConfig {
+    pub app_details: AppDetails,
+
+    pub user_agent: Option<String>,
+
+    pub env_id: EnvId,
+
+    pub proxy: Option<String>,
+}
+
+impl ApiConfig {
+    /// Extracts the client id from the app version, which usually looks like "platform-app@version", eg.: android-mail@10.9
+    #[must_use]
+    pub fn get_client_id(&self) -> String {
+        format!("{}-{}", self.app_details.platform, self.app_details.product)
+    }
+}
+
+impl From<ApiConfig> for RealApiConfig {
+    fn from(config: ApiConfig) -> Self {
+        let AppDetails {
+            platform,
+            product,
+            version,
+        } = config.app_details;
+        Self {
+            app_version: proton_core_api::session::format_api_app_version(
+                &platform, &product, &version,
+            ),
+            user_agent: config.user_agent,
+            env_id: config.env_id,
+            proxy: config.proxy,
+        }
+    }
+}
+
 /// Wrapper type around `Vec<String>` to implement [`FromSql`] and [`ToSql`].
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ContactTypes(Vec<String>);
@@ -1643,4 +1693,40 @@ pub struct RegisteredDevice {
 
     /// TODO: Document this field
     pub push_notification_status: Option<i32>,
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+mod tests {
+    use super::{ApiConfig, AppDetails, EnvId};
+
+    impl Default for AppDetails {
+        fn default() -> Self {
+            Self {
+                platform: "ios".to_string(),
+                product: "mail".to_string(),
+                version: "0.0.1".to_string(),
+            }
+        }
+    }
+
+    impl Default for ApiConfig {
+        fn default() -> Self {
+            Self {
+                app_details: AppDetails::default(),
+                user_agent: None,
+                env_id: EnvId::new_prod(),
+                proxy: None,
+            }
+        }
+    }
+
+    impl ApiConfig {
+        #[must_use]
+        pub fn default_with_env(env_id: EnvId) -> Self {
+            Self {
+                env_id,
+                ..Default::default()
+            }
+        }
+    }
 }

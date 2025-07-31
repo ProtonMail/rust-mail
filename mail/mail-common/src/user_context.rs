@@ -3,8 +3,8 @@ mod events;
 mod images;
 mod initialization;
 
-use crate::actions::draft::SEND_ACTION_GROUP;
-use crate::actions::register_mail_actions;
+use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
+use crate::actions::register_actions;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
@@ -15,9 +15,7 @@ use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_account_api::password::PasswordFlow;
-use proton_action_queue::queue::{
-    Queue, QueueAutoExecutor, QueueAutoExecutorPool, TaskSpawner as QueueTaskSpawner,
-};
+use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
 use proton_core_api::services::proton::muon::rest::auth::v4::fido2;
@@ -30,7 +28,7 @@ use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::{
-    ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, UserContext,
+    ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
 };
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
@@ -47,112 +45,87 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
-use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tracing::error;
+use tracing::{error, instrument};
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
+const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
 const DEFAULT_PREFETCH_BOUND: usize = 4;
 
 pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
-    default_queue_executor: QueueAutoExecutor,
-    send_queue_executors: QueueAutoExecutorPool,
+    queues: MailUserQueues,
     prefetch: PrefetchNotify,
-    initialization_mediator: InitializationMediator,
+    init: Option<InitializationMediator>,
     rsvp_cache: RsvpCache,
     rsvp_contacts: RsvpContacts,
     pub is_cleanup_cache_running: Arc<AtomicBool>,
 }
 
 impl MailUserContext {
-    #[tracing::instrument(name = "NewMailUserContext", skip_all, fields(user_id=%user_context.user_id()))]
+    #[instrument(name = "NewMailUserContext", skip_all, fields(mode, user_id=%user_context.user_id()))]
     pub(crate) async fn new(
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
-        let online = user_context
-            .session()
-            .status_watcher()
-            .subscribe_to_online();
+        let origin = mail_context.core_context().origin();
+        let queues = MailUserQueues::new(&mail_context, &user_context);
 
-        let task_service = mail_context.core_context().task_service().task_service();
+        let init = match origin {
+            Origin::App => Some(InitializationMediator::new(
+                mail_context.core_context().task_service().task_service(),
+            )),
 
-        let default_queue_executor = Self::new_default_queue_executor(
-            user_context.queue(),
-            online.clone(),
-            user_context.as_ref(),
-        );
+            Origin::ShareExt => None,
+        };
 
-        let send_queue_executors = Self::new_send_queue_executor(
-            user_context.queue(),
-            online,
-            NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
-            user_context.as_ref(),
-        );
-
-        let initialization_mediator = InitializationMediator::new(task_service);
         let rsvp_contacts = RsvpContacts::new(user_context.stash());
 
         let this = Arc::new_cyclic(|this| {
-            register_mail_actions(user_context.queue(), this, user_context.session().api());
+            register_actions(
+                user_context.queue(),
+                origin,
+                this,
+                user_context.session().api(),
+            );
 
             Self {
                 this: Weak::clone(this),
                 mail_context,
                 user_context,
                 prefetch: OnceLock::new(),
-                default_queue_executor,
-                send_queue_executors,
-                initialization_mediator,
+                queues,
+                init,
                 rsvp_cache: Default::default(),
                 rsvp_contacts,
                 is_cleanup_cache_running: Default::default(),
             }
         });
 
-        DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;
-        this.init_expiration_loop();
-        this.register_subscribers().await?;
+        match origin {
+            Origin::App => {
+                DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;
+                this.init_expiration_loop();
+                this.register_subscribers().await?;
 
-        if let EventPollMode::Automatic(interval) = this.user_context().event_poll_mode() {
-            this.init_event_loop_poll(interval);
+                if let EventPollMode::Automatic(interval) = this.user_context().event_poll_mode() {
+                    this.init_event_loop_poll(interval);
+                }
+            }
+
+            Origin::ShareExt => {
+                //
+            }
         }
 
         // There's a race condition between initializing queues and `self` - to
         // avoid it, we start our queues as paused and resume once everything
         // has been initialized, i.e. here:
-        this.resume_queue_executors();
+        this.queues.resume();
 
         Ok(this)
-    }
-
-    fn new_default_queue_executor(
-        queue: &Queue,
-        online: watch::Receiver<bool>,
-        task_spawner: &impl QueueTaskSpawner,
-    ) -> QueueAutoExecutor {
-        queue
-            .new_executor()
-            .into_auto_executor(online, true, task_spawner)
-    }
-
-    fn new_send_queue_executor(
-        queue: &Queue,
-        online: watch::Receiver<bool>,
-        pool_size: NonZeroUsize,
-        task_spawner: &impl QueueTaskSpawner,
-    ) -> QueueAutoExecutorPool {
-        QueueAutoExecutorPool::new(
-            queue,
-            &SEND_ACTION_GROUP,
-            pool_size,
-            online,
-            true,
-            task_spawner,
-        )
     }
 
     #[must_use]
@@ -163,6 +136,11 @@ impl MailUserContext {
     #[must_use]
     pub fn as_weak(&self) -> Weak<Self> {
         Weak::clone(&self.this)
+    }
+
+    #[must_use]
+    pub fn origin(&self) -> Origin {
+        self.core_context().origin()
     }
 
     /// Sets a background job where every 60 seconds it deletes all of the messages and conversations
@@ -200,19 +178,8 @@ impl MailUserContext {
         self.user_context.queue()
     }
 
-    pub fn pause_queue_executors(&self) {
-        self.default_queue_executor.pause();
-        self.send_queue_executors.pause();
-    }
-
-    pub fn resume_queue_executors(&self) {
-        self.default_queue_executor.resume();
-        self.send_queue_executors.resume();
-    }
-
-    pub fn terminate_queue_executors(&self) {
-        self.default_queue_executor.terminate();
-        self.send_queue_executors.terminate();
+    pub fn queues(&self) -> &MailUserQueues {
+        &self.queues
     }
 
     pub fn api(&self) -> &Proton {
@@ -606,5 +573,94 @@ impl MailUserContext {
             .typed_actions_count::<crate::actions::draft::Send>()
             .await?
             != 0)
+    }
+}
+
+pub enum MailUserQueues {
+    App {
+        default: QueueAutoExecutor,
+        send: QueueAutoExecutorPool,
+    },
+    ShareExt {
+        queue: QueueAutoExecutorPool,
+    },
+}
+
+impl MailUserQueues {
+    fn new(mail_context: &MailContext, user_context: &UserContext) -> Self {
+        let online = user_context
+            .session()
+            .status_watcher()
+            .subscribe_to_online();
+
+        match mail_context.core_context().origin() {
+            Origin::App => {
+                let default = user_context.queue().new_executor().into_auto_executor(
+                    online.clone(),
+                    true,
+                    user_context,
+                );
+
+                let send = QueueAutoExecutorPool::new(
+                    user_context.queue(),
+                    &SEND_ACTION_GROUP,
+                    NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
+                    online,
+                    true,
+                    user_context,
+                );
+
+                MailUserQueues::App { default, send }
+            }
+
+            Origin::ShareExt => {
+                let queue = QueueAutoExecutorPool::new(
+                    user_context.queue(),
+                    &SHARE_EXT_ACTION_GROUP,
+                    NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
+                    online,
+                    true,
+                    user_context,
+                );
+
+                MailUserQueues::ShareExt { queue }
+            }
+        }
+    }
+
+    pub fn pause(&self) {
+        match self {
+            MailUserQueues::App { default, send } => {
+                default.pause();
+                send.pause();
+            }
+            MailUserQueues::ShareExt { queue } => {
+                queue.pause();
+            }
+        }
+    }
+
+    pub fn resume(&self) {
+        match self {
+            MailUserQueues::App { default, send } => {
+                default.resume();
+                send.resume();
+            }
+            MailUserQueues::ShareExt { queue } => {
+                queue.resume();
+            }
+        }
+    }
+
+    pub fn terminate(&self) {
+        match self {
+            MailUserQueues::App { default, send } => {
+                default.terminate();
+                send.terminate();
+            }
+            MailUserQueues::ShareExt { queue } => {
+                queue.terminate();
+            }
+        }
     }
 }

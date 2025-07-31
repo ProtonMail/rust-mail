@@ -3,13 +3,14 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::{core::datatypes::ApiConfig, uniffi_async};
 use futures::{FutureExt, TryFutureExt};
 use itertools::Itertools;
-use proton_core_api::session::Config as CoreApiConfig;
 use proton_core_api::verification as hv;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::api_service_error::UserApiServiceError as RealUserApiServiceError;
 use proton_mail_common::errors::unexpected::Unexpected;
 use std::{ops::Deref, sync::Arc};
 use tracing::error;
+
+use super::datatypes::AppDetails;
 
 pub type DynChallengeNotifier = Arc<dyn ChallengeNotifier>;
 
@@ -177,13 +178,17 @@ pub struct ChallengeLoader {
 
 /// Create a new `ChallengeLoader`.
 #[uniffi_export]
-pub async fn new_challenge_loader(cfg: ApiConfig) -> Result<Arc<ChallengeLoader>, ProtonError> {
-    let cfg = CoreApiConfig::try_from(cfg)
+pub async fn new_challenge_loader(
+    cfg: ApiConfig,
+    app: AppDetails,
+) -> Result<Arc<ChallengeLoader>, ProtonError> {
+    let cfg = cfg
+        .into_real_api_config(app)
         .inspect_err(|e| error!("{e:?}"))
         .map_err(|_| UnexpectedError::Config)?;
 
     let inner = uniffi_async(async move {
-        hv::ChallengeLoader::new(cfg)
+        hv::ChallengeLoader::new(cfg.into())
             .inspect_err(|e| error!("{e:?}"))
             .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Config))
             .await

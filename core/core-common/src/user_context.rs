@@ -1,11 +1,13 @@
 pub use self::keys::*;
-use crate::actions::register_core_actions;
+use crate::actions::register_actions;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
-use crate::db::migrations::{migrate_account_db, migrate_core_db};
+use crate::db::migrations::{
+    migrate_account_db, migrate_core_db, verify_account_db, verify_core_db,
+};
 use crate::event_loop::{EventLoopActionIds, EventPollMode};
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
-use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
+use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::subscriber::CoreEventLoopContext;
 use proton_action_queue::queue::Queue;
 use proton_core_api::connection_status::ConnectionStatus;
@@ -89,13 +91,13 @@ impl UserContext {
     ) -> CoreContextResult<Arc<Self>> {
         info!("Creating new user context");
 
-        let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
+        let user_stash = Self::open_db(user_stash_path, db_initializers, context.origin()).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;
 
         let this = Arc::new_cyclic(|this| {
-            register_core_actions(&queue, this, session.api());
+            register_actions(context.origin(), &queue, this, session.api());
 
             let event_ctx = CoreEventLoopContext::from(Weak::clone(this));
 
@@ -229,22 +231,34 @@ impl UserContext {
         self.session.status().await
     }
 
-    async fn new_user_db(
+    async fn open_db(
         path: &Path,
-        db_initializers: &[Box<dyn UserDatabaseInitializer>],
+        inits: &[Box<dyn UserDatabaseInitializer>],
+        origin: Origin,
     ) -> Result<Stash, MigratorError> {
         let stash = Stash::new(StashConfiguration {
             path: Some(path),
             ..Default::default()
         })?;
-        debug!("initializing core database");
-        // initialize core db
-        migrate_account_db(&stash).await?;
-        migrate_core_db(&stash).await?;
-        debug!("initializing user ");
-        // initialize user db
-        for initializer in db_initializers {
-            initializer.initialize(&stash)?;
+
+        match origin {
+            Origin::App => {
+                debug!("initializing database");
+
+                migrate_account_db(&stash).await?;
+                migrate_core_db(&stash).await?;
+
+                for init in inits {
+                    init.initialize(&stash)?;
+                }
+            }
+
+            Origin::ShareExt => {
+                debug!("verifying database");
+
+                verify_account_db(&stash).await?;
+                verify_core_db(&stash).await?;
+            }
         }
 
         Ok(stash)

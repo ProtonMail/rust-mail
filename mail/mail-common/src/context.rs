@@ -14,10 +14,11 @@ use proton_calendar_common::RsvpError;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::{Config, CoreSession as _};
+use proton_core_api::session::CoreSession as _;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_core_common::auth_store::DecryptExt;
+use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::device::DynDeviceInfoProvider;
 use proton_core_common::event_loop::EventPollMode;
@@ -27,7 +28,7 @@ use proton_core_common::pin_code::{PinCode, PinError};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreContextResult, CoreSessionState,
-    KeyHandlingError, UserContext,
+    KeyHandlingError, Origin, UserContext,
 };
 use proton_core_common::{OnSessionDeletedResponse, UserDatabaseInitializer};
 use proton_crypto_inbox::attachment::AttachmentEncryptionError;
@@ -243,14 +244,14 @@ impl MailContext {
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument("MailContextNew", skip_all)]
     pub async fn new(
+        origin: Origin,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         core_cache_path: impl Into<PathBuf>,
         mail_cache_path: impl Into<PathBuf>,
         cache_size: u64,
-        connection_pool_size: Option<u32>,
         key_chain: Arc<dyn KeyChain>,
-        api_config: Config,
+        api_config: ApiConfig,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
         log_service: LogService,
@@ -260,6 +261,7 @@ impl MailContext {
             vec![Box::new(MailUserDatabaseInitializer {})];
 
         let core_context = Context::new(
+            origin,
             session_db_path,
             user_db_path,
             key_chain,
@@ -268,7 +270,6 @@ impl MailContext {
             hv_notifier,
             device_info_provider,
             core_cache_path,
-            connection_pool_size,
             log_service,
             event_poll_mode,
         )

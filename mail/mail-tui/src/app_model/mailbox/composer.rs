@@ -159,7 +159,11 @@ impl Composer {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
                     match save_action
-                        .queue(context.action_queue(), &context.user_stash().connection())
+                        .queue(
+                            context.action_queue(),
+                            &context.user_stash().connection(),
+                            context.origin(),
+                        )
                         .await
                     {
                         Ok(_) => Command::none(),
@@ -214,7 +218,11 @@ impl Composer {
                     Command::batch([
                         Command::message(Messages::DismissBackgroundProgress),
                         match send_action
-                            .queue(context.action_queue(), &context.user_stash().connection())
+                            .queue(
+                                context.action_queue(),
+                                &context.user_stash().connection(),
+                                context.origin(),
+                            )
                             .await
                         {
                             Ok(_) => Command::message(Message::CloseComposer.into()),
@@ -355,7 +363,10 @@ impl Composer {
                 "Discarding Draft".to_owned(),
             )),
             Command::task(async move {
-                let cmd = match discard_action.queue(context.action_queue()).await {
+                let cmd = match discard_action
+                    .queue(context.action_queue(), context.origin())
+                    .await
+                {
                     Ok(_) => Command::none(),
                     Err(e) => Command::message(Messages::DisplayError(None, anyhow::Error::new(e))),
                 };
@@ -415,7 +426,11 @@ impl Composer {
             )),
             Command::task(async move {
                 let tether = context.user_stash().connection();
-                let cmd = if let Err(e) = action.queue(context.action_queue(), &tether).await {
+
+                let cmd = if let Err(e) = action
+                    .queue(context.action_queue(), &tether, context.origin())
+                    .await
+                {
                     Command::message(anyhow::Error::new(e).into())
                 } else {
                     Command::message(ComposerMessage::RefreshAttachmentList.into())
@@ -439,7 +454,11 @@ impl Composer {
             )),
             Command::task(async move {
                 let tether = context.user_stash().connection();
-                let cmd = if let Err(e) = action.queue(context.action_queue(), &tether).await {
+
+                let cmd = if let Err(e) = action
+                    .queue(context.action_queue(), &tether, context.origin())
+                    .await
+                {
                     Command::message(anyhow::Error::new(e).into())
                 } else {
                     Command::message(ComposerMessage::RefreshAttachmentList.into())

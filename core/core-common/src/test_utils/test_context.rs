@@ -1,3 +1,5 @@
+use crate::Origin;
+use crate::datatypes::ApiConfig;
 use crate::db::account::{CoreAccount, CoreSession};
 use crate::event_loop::EventPollMode;
 use crate::events::CoreEvent;
@@ -11,7 +13,7 @@ use crate::{
 };
 use proton_core_api::auth::{Tokens, UserKeySecret};
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::{Config, Endpoint, EnvId};
+use proton_core_api::session::{Endpoint, EnvId};
 use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_event_loop::subscriber::SubscriberError;
@@ -86,10 +88,10 @@ pub trait BaseTestContext {
     }
 
     #[must_use]
-    fn api_config(mock_web_server: &MockServer) -> Config {
-        Config {
+    fn api_config(mock_web_server: &MockServer) -> ApiConfig {
+        ApiConfig {
             env_id: EnvId::new_custom(MockApiEnv::new(mock_web_server.uri()).with_path("/api")),
-            ..Config::default()
+            ..ApiConfig::default()
         }
     }
 }
@@ -189,6 +191,7 @@ impl TestContext {
 
         // Create core test context
         let context = Context::new(
+            Origin::App,
             tmp_dir.path(),
             tmp_dir.path(),
             keychain.clone(),
@@ -197,7 +200,6 @@ impl TestContext {
             None,
             None,
             tmp_dir.path().join("core-cache"),
-            None,
             LogService::new(log_config),
             EventPollMode::Manual,
         )

@@ -2,12 +2,12 @@ use crate::cli::APP_NAME;
 use anyhow::Result;
 use proton_account_api::login::LoginFlow;
 use proton_core_api::services::proton::muon::util::DurationExt;
-use proton_core_api::session::Config;
 use proton_core_api::verification::ChallengeNotifier;
-use proton_core_common::CoreAccountState;
+use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::CoreAccount;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::KeyChain;
+use proton_core_common::{CoreAccountState, Origin};
 use proton_log_service::{Config as LogConfig, LogService};
 use proton_mail_common::context::ShouldInitializeMailUserContext as Init;
 use proton_mail_common::{MailContext, MailUserContext};
@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 pub async fn new_mail_ctx<K, N>(
     dir: &Path,
-    cfg: Config,
+    cfg: ApiConfig,
     kch: Arc<K>,
     hvn: Arc<N>,
 ) -> Result<Arc<MailContext>>
@@ -32,12 +32,12 @@ where
         .build();
 
     Ok(MailContext::new(
+        Origin::App,
         dir.join("session"),
         dir.join("user"),
         dir.join("cache").join("core"),
         dir.join("cache").join("mail"),
         CACHE_SIZE,
-        None,
         kch,
         cfg,
         Some(hvn),

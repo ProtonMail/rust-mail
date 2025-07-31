@@ -2,15 +2,17 @@
 
 use std::sync::Arc;
 
+use muon::env::EnvId;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::session::{Config, CoreSession, Session};
-use proton_core_common::Context;
+use proton_core_api::session::{CoreSession, Session};
+use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
+use proton_core_common::{Context, Origin};
 use proton_log_service::LogService;
 use tempdir::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
@@ -35,10 +37,12 @@ async fn main() {
     tracing_subscriber::registry().with(file_subscriber).init();
     let user_email = std::env::var("PAPI_USER_EMAIL").unwrap();
     let user_password = std::env::var("PAPI_USER_PASSWORD").unwrap();
+    let app_platform = std::env::var("PAPI_APP_PLATFORM").unwrap();
+    let app_product = std::env::var("PAPI_APP_PRODUCT").unwrap();
     let app_version = std::env::var("PAPI_APP_VERSION").unwrap();
 
     let session = Session::builder()
-        .with_app_version(app_version)
+        .with_app_version(app_platform, app_product, app_version)
         .build()
         .await
         .unwrap();
@@ -137,15 +141,15 @@ async fn create_context() -> Arc<Context> {
         .store(key.clone())
         .expect("failed to store in keychain");
     Context::new(
+        Origin::App,
         tmp_dir.path(),
         tmp_dir.path(),
         Arc::new(InMemoryKeyChain::default()).clone(),
         vec![],
-        Config::atlas(),
+        ApiConfig::default_with_env(EnvId::new_atlas()),
         None,
         None,
         tmp_dir.path().join("core-cache"),
-        None,
         LogService::new(log_config),
         EventPollMode::Manual,
     )

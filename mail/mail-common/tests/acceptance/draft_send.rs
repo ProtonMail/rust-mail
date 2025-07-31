@@ -162,7 +162,11 @@ async fn basic_send_check() {
         .unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -173,7 +177,11 @@ async fn basic_send_check() {
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     draft
-        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -355,7 +363,11 @@ async fn basic_schedule_send_check() {
         .unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -370,6 +382,7 @@ async fn basic_schedule_send_check() {
             delivery_time,
             user_ctx.action_queue(),
             &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
         )
         .await
         .unwrap();
@@ -499,6 +512,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
             delivery_time,
             user_ctx.action_queue(),
             &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
         )
         .await
         .unwrap();
@@ -667,7 +681,11 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
         .unwrap();
 
     draft
-        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -722,18 +740,30 @@ async fn save_after_send_is_an_error() {
         .unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
     // Save at least once so we can retrieve the message id.
     draft
-        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
     let result = draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await;
 
     let Err(e) = result else {
@@ -822,7 +852,11 @@ async fn already_sent_error_does_not_produce_error() {
         .unwrap();
 
     draft
-        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -944,6 +978,7 @@ async fn cancel_schedule_send_on_queued_send() {
             delivery_time,
             user_ctx.action_queue(),
             &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
         )
         .await
         .unwrap();
@@ -1170,6 +1205,7 @@ async fn schedule_send_message_limit() {
             delivery_time,
             user_ctx.action_queue(),
             &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
         )
         .await;
 
@@ -1214,7 +1250,11 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1318,7 +1358,11 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
     draft.set_mime_type(MimeType::TextPlain);
     *draft.body_mut() = String::from("Nobody expects");
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1442,7 +1486,11 @@ async fn already_sent_from_even_update() {
         .unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1450,7 +1498,11 @@ async fn already_sent_from_even_update() {
     user_ctx.execute_all_send_actions().await.unwrap();
 
     draft
-        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1608,7 +1660,11 @@ async fn send_external_with_password() {
     assert_eq!(eo_data.password_hint.as_deref(), Some("hint"));
 
     draft
-        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1739,7 +1795,11 @@ async fn send_with_expiration() {
         .unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1758,7 +1818,11 @@ async fn send_with_expiration() {
     assert_eq!(draft_message.expiration_time, expiration_timestamp);
 
     draft
-        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1840,7 +1904,11 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         .unwrap();
 
     draft
-        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 

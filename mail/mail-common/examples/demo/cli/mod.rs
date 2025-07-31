@@ -4,12 +4,14 @@ use crate::cli::ctx::new_mail_ctx;
 use crate::keychain::OnDiskKeyChain;
 use crate::notifier::HvNotifier;
 use anyhow::Result;
+use app::new_app_details;
 use clap::Parser;
 use proton_mail_common::MailContext;
 use std::io::{Result as IoResult, Write, stdin, stdout};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+mod app;
 mod cfg;
 mod ctx;
 mod payments;
@@ -19,9 +21,17 @@ const APP_NAME: &str = "proton-mail-common-demo";
 
 #[derive(Debug, Parser)]
 pub struct Cli {
-    /// The app version to use.
-    #[arg(long)]
-    app: Option<String>,
+    /// The app platform to use. Used to identify the app in API.
+    #[arg(long, default_value = "ios")]
+    app_platform: String,
+
+    /// The app product to use. Used to identify the app in API.
+    #[arg(long, default_value = "mail")]
+    app_product: String,
+
+    /// The app version to use. Used to identify the app in API.
+    #[arg(long, default_value = "7.0.0")]
+    app_version: String,
 
     /// The environment to connect to.
     #[arg(long)]
@@ -47,7 +57,8 @@ impl Cli {
         let dir = tempdir(self.device).inspect(|dir| info!("{}", dir.display()))?;
         let kch = Arc::new(OnDiskKeyChain::new(&dir)?);
         let hvn = Arc::new(HvNotifier::new(proxy));
-        let cfg = new_api_config(self.app, self.env)?;
+        let app = new_app_details(self.app_platform, self.app_product, self.app_version);
+        let cfg = new_api_config(app, self.env)?;
         let ctx = new_mail_ctx(&dir, cfg, kch, hvn).await?;
 
         self.cmd.run(ctx).await

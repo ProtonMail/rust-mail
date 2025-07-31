@@ -1,4 +1,4 @@
-use crate::errors::UserContextError;
+use crate::errors::UserSessionError;
 use crate::mail::MailUserSession;
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
@@ -19,7 +19,7 @@ impl MailUserSession {
     ///
     /// # Errors
     /// Returns an error if the list can not be retrieved.
-    pub async fn movable_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserContextError> {
+    pub async fn movable_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             // TODO: Unclear how exactly the system folders fit into this.
@@ -30,7 +30,7 @@ impl MailUserSession {
             Ok::<_, RealProtonMailError>(labels.map_vec())
         })
         .await
-        .map_err(UserContextError::from)
+        .map_err(UserSessionError::from)
     }
 
     /// Return the list of labels of type Label that can be applied to conversations or
@@ -38,7 +38,7 @@ impl MailUserSession {
     ///
     /// # Errors
     /// Returns an error if the list can not be retrieved.
-    pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, UserContextError> {
+    pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             let tether = ctx.user_stash().connection();
@@ -47,6 +47,6 @@ impl MailUserSession {
             Ok::<_, RealProtonMailError>(labels.map_vec())
         })
         .await
-        .map_err(UserContextError::from)
+        .map_err(UserSessionError::from)
     }
 }

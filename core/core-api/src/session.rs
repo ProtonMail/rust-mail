@@ -1,6 +1,6 @@
 use derive_more::{Debug, Deref};
 use muon::client::InfoProvider;
-use muon::client::flow::ForkFlowResult;
+use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
 use muon::common::ParseEndpointErr;
 use muon::env::DynEnv;
 use std::borrow::Borrow;
@@ -24,6 +24,46 @@ pub use muon::env::{Env, EnvId};
 pub use muon::tls::TlsPinSet;
 
 const OBSERVABILITY_BATCH_SIZE: usize = 500;
+
+pub trait EnvIdExt: Sized {
+    /// Create a new environment ID for a custom environment.
+    ///
+    /// This will create a new environment with the given server URL.
+    /// This must be a valid URL, including the scheme, host, and if applicable,
+    /// path and port. For example: `http://127.0.0.1:8888/api`.
+    ///
+    /// # Security
+    ///
+    /// This function is insecure because it allows the user to create a session
+    /// with a custom environment. This can lead to security issues if the
+    /// environment is not trusted. The user must ensure that the environment
+    /// is safe to use and that the server is trusted.
+    fn new_custom_url(url: impl AsRef<str>) -> Result<Self, ParseEndpointErr>;
+}
+
+impl EnvIdExt for EnvId {
+    fn new_custom_url(url: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
+        struct CustomEnv(Server);
+
+        impl CustomEnv {
+            fn new(server: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
+                Ok(Self(server.as_ref().parse()?))
+            }
+        }
+
+        impl Env for CustomEnv {
+            fn servers(&self, _: &AppVersion) -> Vec<Server> {
+                vec![self.0.clone()]
+            }
+
+            fn pins(&self, _: &Server) -> Option<TlsPinSet> {
+                None
+            }
+        }
+
+        Ok(Self::new_custom(CustomEnv::new(url)?))
+    }
+}
 
 /// Core session trait which provides access to the API.
 pub trait CoreSession {
@@ -79,40 +119,6 @@ impl Config {
             env_id: EnvId::new_atlas_name(name),
             ..Self::default()
         }
-    }
-
-    /// Create a new session config for a custom environment.
-    ///
-    /// This will create a new environment with the given server URL.
-    /// This must be a valid URL, including the scheme, host, and if applicable,
-    /// path and port. For example: `http://127.0.0.1:8888/api`.
-    ///
-    /// # Security
-    ///
-    /// This function is insecure because it allows the user to create a session
-    /// with a custom environment. This can lead to security issues if the
-    /// environment is not trusted. The user must ensure that the environment
-    /// is safe to use and that the server is trusted.
-    pub fn custom(url: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
-        struct CustomEnv(Server);
-
-        impl CustomEnv {
-            fn new(server: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
-                Ok(Self(server.as_ref().parse()?))
-            }
-        }
-
-        impl Env for CustomEnv {
-            fn servers(&self, _: &AppVersion) -> Vec<Server> {
-                vec![self.0.clone()]
-            }
-
-            fn pins(&self, _: &Server) -> Option<TlsPinSet> {
-                None
-            }
-        }
-
-        Ok(Self::for_env(CustomEnv::new(url)?))
     }
 
     pub fn without_alternative_routing(mut self) -> Result<Self, BuildError> {
@@ -190,9 +196,15 @@ impl Builder {
         self
     }
 
-    /// Set the app version (`x-pm-appversion`).
-    pub fn with_app_version(mut self, app_version: impl AsRef<str>) -> Self {
-        self.config.app_version = String::from(app_version.as_ref());
+    /// Set the app version (`x-pm-appversion`) based on platform, product, and version.
+    pub fn with_app_version(
+        mut self,
+        platform: impl AsRef<str>,
+        product: impl AsRef<str>,
+        version: impl AsRef<str>,
+    ) -> Self {
+        self.config.app_version =
+            format_api_app_version(platform.as_ref(), product.as_ref(), version.as_ref());
         self
     }
 
@@ -327,6 +339,36 @@ impl Session {
         match self.client.clone().fork(version).send().await {
             ForkFlowResult::Success(_, selector) => Ok(selector),
             ForkFlowResult::Failure { reason, .. } => Err(muon::Error::from(reason))?,
+        }
+    }
+
+    /// It takes exsiting session and downgrades it to a child session.
+    ///
+    /// Note: Should be used only in a case where `store` is set to `TempStore`.
+    /// Otherwise it may cause uniqueness error in the database (only one core session per user) when
+    /// storing the session to DB.
+    pub async fn downgrade_to_fork(
+        self,
+        platform: impl AsRef<str>,
+        product: impl AsRef<str>,
+    ) -> ApiServiceResult<Self> {
+        let selector = self.fork(platform, product).await?;
+        let flow = self
+            .client
+            .clone()
+            .auth()
+            .from_fork()
+            .with_selector(selector)
+            .await;
+
+        match flow {
+            WithSelectorFlow::Ok(client, _payload) => Ok(Self {
+                client,
+                config: self.config.clone(),
+                store: self.store.clone(),
+                status: self.status.clone(),
+            }),
+            WithSelectorFlow::Failed { reason, .. } => Err(muon::Error::from(reason).into()),
         }
     }
 
@@ -477,4 +519,9 @@ impl Session {
             status: parts.status,
         }
     }
+}
+
+#[must_use]
+pub fn format_api_app_version(platform: &str, product: &str, version: &str) -> String {
+    format!("{platform}-{product}@{version}")
 }

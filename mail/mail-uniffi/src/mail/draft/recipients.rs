@@ -215,12 +215,9 @@ impl ComposerRecipientList {
     }
 
     async fn save_draft(&self, ctx: &MailUserContext) -> Result<(), MailContextError> {
-        let upgrade = self
-            .draft
-            .upgrade()
-            .ok_or(MailContextError::Other(anyhow::anyhow!(
-                "Draft reference no longer valid"
-            )))?;
+        let upgrade = self.draft.upgrade().ok_or_else(|| {
+            MailContextError::Other(anyhow::anyhow!("Draft reference no longer valid"))
+        })?;
 
         let list = self.list.list();
         let mut draft = upgrade.instance.write().await;
@@ -230,7 +227,11 @@ impl ComposerRecipientList {
             ComposerListType::Bcc => draft.bcc_list = list,
         }
         draft
-            .save(ctx.action_queue(), &ctx.user_stash().connection())
+            .save(
+                ctx.action_queue(),
+                &ctx.user_stash().connection(),
+                ctx.origin(),
+            )
             .await?;
         Ok(())
     }

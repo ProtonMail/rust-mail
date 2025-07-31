@@ -1,4 +1,4 @@
-use crate::actions::draft;
+use crate::actions::draft::{self, SHARE_EXT_ACTION_GROUP};
 use crate::actions::draft::{
     AttachmentRemove, AttachmentUpload, AttachmentUploadMode, Discard, Save, UndoSend,
 };
@@ -26,6 +26,7 @@ use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_core_api::session::{CoreSession, Session};
+use proton_core_common::Origin;
 use proton_core_common::datatypes::{LocalAddressId, UnixTimestamp};
 use proton_core_common::db::account::EncryptedPassword;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
@@ -1084,16 +1085,18 @@ impl Draft {
         &mut self,
         queue: &Queue,
         tether: &Tether,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<Save>, MailContextError> {
-        self.to_save_action().queue(queue, tether).await
+        self.to_save_action().queue(queue, tether, origin).await
     }
 
     pub async fn send(
         &mut self,
         queue: &Queue,
         tether: &Tether,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
-        self.to_send_action()?.queue(queue, tether).await
+        self.to_send_action()?.queue(queue, tether, origin).await
     }
 
     /// Apply an action which will schedule a send this draft at the given `delivery_time`.
@@ -1105,17 +1108,19 @@ impl Draft {
         delivery_time: DateTime<Local>,
         queue: &Queue,
         tether: &Tether,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
         self.to_schedule_send_action(delivery_time)?
-            .queue(queue, tether)
+            .queue(queue, tether, origin)
             .await
     }
 
     pub async fn discard(
         &self,
         queue: &Queue,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<Discard>, MailContextError> {
-        Ok(self.to_discard_action().queue(queue).await?)
+        Ok(self.to_discard_action().queue(queue, origin).await?)
     }
 
     /// Discard a draft with the given `message_id`.
@@ -1126,6 +1131,7 @@ impl Draft {
         message_id: LocalMessageId,
         tether: &Tether,
         queue: &Queue,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<Discard>, MailContextError> {
         let Some(metadata) = DraftMetadata::find_by_message_id(message_id, tether).await? else {
             return Err(Error::Open(OpenError::MessageNotADraft(message_id)).into());
@@ -1133,7 +1139,7 @@ impl Draft {
 
         Ok(
             DraftDiscardActionQueuer::new(metadata.id.unwrap(), Discard::new(metadata.id.unwrap()))
-                .queue(queue)
+                .queue(queue, origin)
                 .await?,
         )
     }
@@ -1272,7 +1278,7 @@ impl Draft {
 
         let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
-        let result = upload_action.queue(queue, &tether).await?;
+        let result = upload_action.queue(queue, &tether, ctx.origin()).await?;
 
         Ok(result.id)
     }
@@ -1300,7 +1306,7 @@ impl Draft {
 
         let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
-        let result = remove_action.queue(queue, &tether).await?;
+        let result = remove_action.queue(queue, &tether, ctx.origin()).await?;
 
         Ok(result.id)
     }
@@ -1324,7 +1330,7 @@ impl Draft {
 
         let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
-        let result = remove_action.queue(queue, &tether).await?;
+        let result = remove_action.queue(queue, &tether, ctx.origin()).await?;
 
         Ok(result.id)
     }
@@ -1345,7 +1351,7 @@ impl Draft {
 
         let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
-        let result = upload_action.queue(queue, &tether).await?;
+        let result = upload_action.queue(queue, &tether, ctx.origin()).await?;
 
         Ok(result.id)
     }
@@ -1736,6 +1742,7 @@ impl DraftSaveActionQueuer {
         self,
         queue: &Queue,
         tether: &Tether,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<Save>, MailContextError> {
         // find all attachments that need to be manually queued.
         let pending_attachment_ids =
@@ -1752,6 +1759,7 @@ impl DraftSaveActionQueuer {
 
         let output = queue_or_replace_draft_save(
             queue,
+            origin,
             self.action.clone(),
             self.id,
             last_draft_save_action_id,
@@ -1764,13 +1772,14 @@ impl DraftSaveActionQueuer {
         // upload the message.
         if !pending_attachment_ids.is_empty() {
             for attachment_id in pending_attachment_ids {
-                info!("Queuing attachment upload for pending attachment {attachment_id}");
-
-                let metadata = MetadataBuilder::new()
+                let mut metadata = MetadataBuilder::new()
                     .with_resource(&self.id)
                     .expect("This should never fail")
-                    .with_dependency(output.id)
-                    .build();
+                    .with_dependency(output.id);
+
+                if let Origin::ShareExt = origin {
+                    metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
+                }
 
                 let output = queue
                     .queue_action_with_metadata(
@@ -1780,7 +1789,7 @@ impl DraftSaveActionQueuer {
                             attachment_id,
                             AttachmentUploadMode::Create,
                         ),
-                        metadata,
+                        metadata.build(),
                     )
                     .await?;
 
@@ -1790,6 +1799,7 @@ impl DraftSaveActionQueuer {
             // Schedule another save to include the newly scheduled attachments.
             Ok(queue_or_replace_draft_save(
                 queue,
+                origin,
                 self.action,
                 self.id,
                 Some(output.id),
@@ -1823,13 +1833,18 @@ impl DraftSendActionQueuer {
         self,
         queue: &Queue,
         tether: &Tether,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
-        let save_output = self.save_action.queue(queue, tether).await?;
+        let save_output = self.save_action.queue(queue, tether, origin).await?;
 
-        let metadata = MetadataBuilder::new()
+        let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail")
             .with_dependency(save_output.id);
+
+        if let Origin::ShareExt = origin {
+            metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
+        }
 
         Ok(queue
             .queue_action_with_metadata(self.send_action, metadata.build())
@@ -1851,15 +1866,18 @@ impl DraftDiscardActionQueuer {
     pub async fn queue(
         self,
         queue: &Queue,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<Discard>, ActionError<Discard>> {
+        let mut metadata = MetadataBuilder::new()
+            .with_resource(&self.id)
+            .expect("This should never fail");
+
+        if let Origin::ShareExt = origin {
+            metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
+        }
+
         queue
-            .queue_action_with_metadata(
-                self.action,
-                MetadataBuilder::new()
-                    .with_resource(&self.id)
-                    .expect("This should never fail")
-                    .build(),
-            )
+            .queue_action_with_metadata(self.action, metadata.build())
             .await
     }
 }
@@ -1898,6 +1916,7 @@ impl DraftAttachmentUploadQueuer {
         self,
         queue: &Queue,
         tether: &Tether,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<AttachmentUpload>, MailContextError> {
         let mut last_draft_save_action_id = None;
 
@@ -1923,7 +1942,7 @@ impl DraftAttachmentUploadQueuer {
 
                 if last_draft_save_action_id.is_none() {
                     last_draft_save_action_id =
-                        Some(self.save_action.queue(queue, tether).await?.id)
+                        Some(self.save_action.queue(queue, tether, origin).await?.id)
                 };
             };
         }
@@ -1931,6 +1950,10 @@ impl DraftAttachmentUploadQueuer {
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail");
+
+        if let Origin::ShareExt = origin {
+            metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
+        }
 
         if let Some(last_draft_save_action_id) = last_draft_save_action_id {
             metadata = metadata.with_dependency(last_draft_save_action_id)
@@ -1992,6 +2015,7 @@ impl DraftAttachmentRemovalQueuer {
         self,
         queue: &Queue,
         tether: &Tether,
+        origin: Origin,
     ) -> Result<QueuedActionOutput<AttachmentRemove>, MailContextError> {
         // Find existing attachment metadata.
         let attachment_metadata = match self.attachment_id {
@@ -2019,6 +2043,10 @@ impl DraftAttachmentRemovalQueuer {
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail");
+
+        if let Origin::ShareExt = origin {
+            metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
+        }
 
         // The removal action can only run when the current action completes.
         if let Some(action_id) = attachment_metadata.action_id {
@@ -2053,6 +2081,7 @@ pub fn draft_attachment_staging_path(
 
 async fn queue_or_replace_draft_save(
     queue: &Queue,
+    origin: Origin,
     save_action: Save,
     metadata_id: MetadataId,
     last_draft_save_action_id: Option<ActionId>,
@@ -2062,6 +2091,10 @@ async fn queue_or_replace_draft_save(
     let mut metadata = MetadataBuilder::new()
         .with_resource(&metadata_id)
         .expect("This should never fail");
+
+    if let Origin::ShareExt = origin {
+        metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
+    }
 
     if let Some(action_id) = last_draft_save_action_id {
         metadata = metadata.with_dependency(action_id);

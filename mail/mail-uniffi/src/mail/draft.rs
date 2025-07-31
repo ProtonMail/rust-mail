@@ -485,7 +485,11 @@ impl Draft {
                 .change_sender_address_by_email(&ctx, &email)
                 .await?;
             instance
-                .save(ctx.action_queue(), &ctx.user_stash().connection())
+                .save(
+                    ctx.action_queue(),
+                    &ctx.user_stash().connection(),
+                    ctx.origin(),
+                )
                 .await
                 .map_err(RealProtonMailError::from)?;
             Ok(())
@@ -537,7 +541,11 @@ impl Draft {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
-                .save(ctx.action_queue(), &ctx.user_stash().connection())
+                .save(
+                    ctx.action_queue(),
+                    &ctx.user_stash().connection(),
+                    ctx.origin(),
+                )
                 .await
                 .map_err(RealProtonMailError::from)?;
             Result::<_, RealProtonMailError>::Ok(())
@@ -564,7 +572,11 @@ impl Draft {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
-                .send(ctx.action_queue(), &ctx.user_stash().connection())
+                .send(
+                    ctx.action_queue(),
+                    &ctx.user_stash().connection(),
+                    ctx.origin(),
+                )
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -595,6 +607,7 @@ impl Draft {
                     timestamp,
                     ctx.action_queue(),
                     &ctx.user_stash().connection(),
+                    ctx.origin(),
                 )
                 .await
                 .map_err(RealProtonMailError::from)?;
@@ -637,8 +650,9 @@ impl Draft {
         };
         uniffi_async(async move {
             let instance = self.instance.read().await;
+
             instance
-                .discard(ctx.action_queue())
+                .discard(ctx.action_queue(), ctx.origin())
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -858,7 +872,8 @@ pub async fn draft_discard(
     let ctx = session.ctx()?;
     uniffi_async(async move {
         let tether = ctx.user_stash().connection();
-        RealDraft::action_discard(message_id.into(), &tether, ctx.action_queue()).await?;
+        RealDraft::action_discard(message_id.into(), &tether, ctx.action_queue(), ctx.origin())
+            .await?;
         Ok::<_, RealProtonMailError>(())
     })
     .await
@@ -894,7 +909,11 @@ pub async fn draft_cancel_schedule_send(
 
 async fn save_draft(ctx: &MailUserContext, draft: &mut RealDraft) -> Result<(), MailContextError> {
     draft
-        .save(ctx.action_queue(), &ctx.user_stash().connection())
+        .save(
+            ctx.action_queue(),
+            &ctx.user_stash().connection(),
+            ctx.origin(),
+        )
         .await?;
     Ok(())
 }

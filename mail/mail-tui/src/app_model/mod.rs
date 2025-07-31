@@ -24,8 +24,8 @@ use crate::widgets::ScrollableListState;
 use anyhow::anyhow;
 use chrono::Local;
 use futures::FutureExt;
-use proton_core_common::OnSessionDeletedResponse;
 use proton_core_common::event_loop::EventPollMode;
+use proton_core_common::{OnSessionDeletedResponse, Origin};
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
@@ -159,12 +159,12 @@ impl AppModel {
         let mut keychain = AppKeyChain::new()?;
         keychain.init()?;
         let context = MailContext::new(
+            Origin::App,
             data_dir,
             user_db_path,
             core_cache_dir,
             mail_cache_dir,
             1 << 25, // 32MiB
-            None,
             Arc::new(keychain),
             app_config.api_config(),
             None, // TODO(jhoulahan): Support HV challenge (at least sms/email)
