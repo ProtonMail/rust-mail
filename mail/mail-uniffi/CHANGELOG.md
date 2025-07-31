@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- [ET-3971] Expose watcher functionalities for user tables for uniffi clients
+
+
+## [mail-uniffi-v0.112.0] - 2025-07-30
+
+### Features
+
 - [ET-3865] Calculate snooze options
 - Mail-uniffi: expose rsvps
 
