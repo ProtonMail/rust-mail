@@ -7,6 +7,7 @@ use proton_core_api::services::proton::{AddressStatus, LabelId, UserId};
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::KeyPackets;
+use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::prelude::{AttachmentId, MessageAttachmentHeaders};
 use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftRecipient,
@@ -15,18 +16,21 @@ use proton_mail_api::services::proton::response_data::MessageFlags;
 use proton_mail_api::services::proton::response_data::{Disposition, MessageAttachment};
 use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::attachment::ContentId;
-use proton_mail_common::datatypes::{MimeType, RollbackItemType, SystemLabelId};
+use proton_mail_common::datatypes::{
+    MessageSender, MimeType, ParsedHeaders, RollbackItemType, SystemLabelId,
+};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::compose::DraftAddressValidationError;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode, SaveError};
 use proton_mail_common::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
-    DraftSendResult, DraftSendResultOrigin, Message, RollbackItem,
+    DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata, RollbackItem,
 };
 use proton_mail_common::test_utils::message_body::*;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -1575,6 +1579,109 @@ async fn open_draft_catches_invalid_address() {
         validation_result.error,
         DraftAddressValidationError::Disabled
     );
+}
+
+#[tokio::test]
+async fn open_draft_detects_sender_alias() {
+    // Check that open draft successfully reports synced status when synced from server.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let alias_address = "rust_test_to+alias@proton.ch";
+    let params = draft_test_params();
+    let mut message = draft_message();
+    message.metadata.sender.address = alias_address.to_owned().into();
+
+    ctx.setup_user(params.clone()).await;
+
+    // Draft open always loads message from remote.
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut tether = user_ctx.user_stash().connection();
+    let local_address_id = Address::remote_id_counterpart(params.addresses[0].id.clone(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut message = Message {
+        local_id: None,
+        remote_id: Some(message.metadata.id.clone()),
+        local_conversation_id: None,
+        remote_conversation_id: Some(ConversationId::from("CONV")),
+        local_address_id,
+        remote_address_id: params.addresses[0].id.clone(),
+        attachments_metadata: vec![],
+        cc_list: Default::default(),
+        bcc_list: Default::default(),
+        deleted: false,
+        exclusive_location: None,
+        expiration_time: Default::default(),
+        external_id: None,
+        flags: Default::default(),
+        is_forwarded: false,
+        is_replied: false,
+        is_replied_all: false,
+        label_ids: vec![LabelId::drafts()],
+        num_attachments: 0,
+        display_order: 0,
+        sender: MessageSender {
+            address: alias_address.to_owned().into(),
+            bimi_selector: None,
+            display_sender_image: false,
+            is_proton: false,
+            is_simple_login: false,
+            name: Default::default(),
+        },
+        size: 0,
+        snooze_time: Default::default(),
+        subject: "".to_string(),
+        time: Default::default(),
+        to_list: Default::default(),
+        unread: false,
+        custom_labels: vec![],
+    };
+    let mut message_body_metadata = MessageBodyMetadata {
+        local_message_id: None,
+        remote_message_id: message.remote_id.clone(),
+        header: "".to_string(),
+        mime_type: Default::default(),
+        parsed_headers: ParsedHeaders {
+            headers: HashMap::from([(
+                "X-Original-To".to_owned(),
+                serde_json::Value::String(alias_address.to_owned()),
+            )]),
+        },
+        attachments: vec![],
+        reply_to: Default::default(),
+        reply_tos: vec![],
+    };
+
+    tether
+        .tx(async |tx| {
+            message.save(tx).await.unwrap();
+            message_body_metadata.save(tx).await.unwrap();
+            Message::store_decrypted_message_body(message.id(), "Hello world".into(), tx).await
+        })
+        .await
+        .unwrap();
+
+    let (draft, sync_status) = Draft::open(&user_ctx, message.id()).await.unwrap();
+
+    assert_eq!(sync_status, DraftSyncStatus::Synced);
+    assert_eq!(draft.sender, alias_address);
+    let addresses = draft.sender_addresses(&tether).await.unwrap();
+    // Alias address should be at the top.
+    assert_eq!(addresses[0].email, alias_address);
 }
 
 async fn prepare_draft_reply_attach_public_key(

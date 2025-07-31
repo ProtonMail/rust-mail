@@ -140,14 +140,6 @@ impl Address {
         Ok(SyncedAddresses { addresses })
     }
 
-    /// Loads the address for the given e-mail from the database if any.
-    ///
-    /// Returns [`None`] if no address with the given email is found.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`StashError`] if the database access fails.
-    ///
     pub async fn by_email(email: &str, tether: &Tether) -> Result<Option<Address>, StashError> {
         Self::find_first("WHERE email = ?", params![email.to_owned()], tether).await
     }

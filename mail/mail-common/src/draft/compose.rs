@@ -438,6 +438,7 @@ pub fn apply_prefix_to_subject(prefix: &str, subject: &str) -> String {
 }
 
 pub struct DraftAddressChangeRequest {
+    current_sender_email: String,
     current_address_id: AddressId,
     metadata_id: MetadataId,
     mime_type: MimeType,
@@ -446,20 +447,26 @@ pub struct DraftAddressChangeRequest {
 // Note: this type is currently separate from the draft implementation so that it can be executed
 // in locations where the draft type is not safely shared (e.g.: TUI). A refactor is planned
 // to make this work seamlessly.
-pub struct DraftAddressChangeOutput {
-    pub(super) old_signature: String,
-    pub(super) new_signature: String,
-    pub(super) address_id: AddressId,
-    pub(super) sender: String,
+pub enum DraftAddressChangeOutput {
+    SenderOnly(String),
+    Full(DraftAddressChangeFullAddressParams),
 }
 
+pub struct DraftAddressChangeFullAddressParams {
+    pub old_signature: String,
+    pub new_signature: String,
+    pub address_id: AddressId,
+    pub sender: String,
+}
 impl DraftAddressChangeRequest {
     pub(super) fn new(
         metadata_id: MetadataId,
+        sender_email: String,
         current_address_id: AddressId,
         mime_type: MimeType,
     ) -> Self {
         Self {
+            current_sender_email: sender_email,
             current_address_id,
             metadata_id,
             mime_type,
@@ -470,12 +477,17 @@ impl DraftAddressChangeRequest {
     pub async fn apply(
         self,
         context: &MailUserContext,
+        sender_email: String,
         address_id: AddressId,
         tether: &mut Tether,
     ) -> MailContextResult<Option<DraftAddressChangeOutput>> {
         tracing::info!("Updating sender address");
 
         if address_id == self.current_address_id {
+            if self.current_sender_email != sender_email {
+                return Ok(Some(DraftAddressChangeOutput::SenderOnly(sender_email)));
+            }
+
             return Ok(None);
         }
 
@@ -567,12 +579,14 @@ impl DraftAddressChangeRequest {
         let new_signature = get_address_signature(&address, self.mime_type);
         let old_signature = get_address_signature(&old_address, self.mime_type);
 
-        Ok(Some(DraftAddressChangeOutput {
-            old_signature,
-            new_signature,
-            address_id: address.remote_id.expect("Should be valid"),
-            sender: address.email,
-        }))
+        Ok(Some(DraftAddressChangeOutput::Full(
+            DraftAddressChangeFullAddressParams {
+                old_signature,
+                new_signature,
+                address_id: address.remote_id.expect("Should be valid"),
+                sender: sender_email,
+            },
+        )))
     }
 }
 
@@ -599,22 +613,59 @@ pub fn resolve_sender_alias(
             // the backend does not resolve the emails in the sender correctly unless they
             // have the same capitalization. We have to extract the alias and apply it to
             // our identity.
-            if let (Some(plus_index), Some(at_index)) =
-                (original_to.find("+"), original_to.as_str().find("@"))
-                && at_index > plus_index
-                && original_to.is_char_boundary(plus_index)
-                && original_to.is_char_boundary(at_index)
-            {
-                let alias = &original_to[plus_index + 1..at_index];
+            get_alias_component(&original_to).map_or(address_email.to_owned(), |alias| {
                 address_email
                     .split_once('@')
                     .map_or(address_email.to_owned(), |(local, domain)| {
                         format!("{local}+{alias}@{domain}")
                     })
-            } else {
-                address_email.to_owned()
-            }
+            })
         })
+}
+
+pub fn get_alias_component(email: &str) -> Option<&str> {
+    if let (Some(plus_index), Some(at_index)) = (email.find("+"), email.find("@"))
+        && at_index > plus_index
+        && email.is_char_boundary(plus_index)
+        && email.is_char_boundary(at_index)
+    {
+        Some(&email[plus_index + 1..at_index])
+    } else {
+        None
+    }
+}
+
+pub(super) async fn draft_sender_addresses(
+    sender_alias: Option<&String>,
+    address_id: &AddressId,
+    tether: &Tether,
+) -> Result<Vec<Address>, StashError> {
+    let addresses = Address::all_send_enabled(tether).await?;
+    Ok(draft_sender_addresses_impl(
+        sender_alias,
+        address_id,
+        addresses,
+    ))
+}
+
+fn draft_sender_addresses_impl(
+    sender_alias: Option<&String>,
+    address_id: &AddressId,
+    mut addresses: Vec<Address>,
+) -> Vec<Address> {
+    if let Some(sender_alias) = sender_alias {
+        // Only add the alias to the list if the address id is still in the correct location
+        if let Some(mut a) = addresses
+            .iter()
+            .find(|a| a.remote_id.as_ref() == Some(address_id))
+            .cloned()
+        {
+            a.email = sender_alias.clone();
+            // Alias always appear at the top.
+            addresses.insert(0, a);
+        }
+    }
+    addresses
 }
 
 #[derive(Debug, Display, Clone, Copy, Eq, PartialEq)]
