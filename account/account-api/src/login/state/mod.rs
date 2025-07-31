@@ -20,6 +20,7 @@ use proton_core_api::services::proton::{Address, AddressId, ProtonCore, SessionI
 use proton_core_api::session::{Session, SessionParts};
 use proton_core_api::store::{MbpMode, UserData};
 use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use proton_core_common::post_login_check::{UserCheckResult, UserCheckStatus};
 use proton_crypto_account::keys::{LockedKey, UnlockedUserKey, UserKeys};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
@@ -403,8 +404,18 @@ impl State {
             .map_err(LoginError::UserFetch)
             .await?;
 
+        let recorder: ObservabilityRecorder = ObservabilityRecorder::default();
+
         // Run Post Login checks
-        post_login_validator.validate(&user).await?;
+        match post_login_validator.validate(&user).await {
+            Ok(()) => {
+                recorder.record(UserCheckResult::new(UserCheckStatus::Success));
+            }
+            Err(err) => {
+                recorder.record(UserCheckResult::new(UserCheckStatus::Failure));
+                return Err(err.into());
+            }
+        }
 
         // Fetch user addresses.
         let mut addr = ProtonCore::get_addresses(&client)
@@ -433,8 +444,6 @@ impl State {
             id: salt.id.into_inner().into(),
             key_salt: salt.key_salt.map(Into::into),
         }));
-
-        let recorder: ObservabilityRecorder = ObservabilityRecorder::default();
 
         // Derive the key secret to unlock the user keys.
         let user_key_pass = if let Some(key) = user.keys.primary() {

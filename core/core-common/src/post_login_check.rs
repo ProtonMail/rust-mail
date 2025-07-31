@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use crate::Context;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_core_api::services::proton::{DelinquentState, User, UserType};
+use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::error;
-
-use crate::Context;
 
 /// This enum defines possible error conditions encountered after a successful login,
 /// focusing on constraints and limits that might prevent further actions.
@@ -82,5 +83,73 @@ impl PostLoginValidator for DefaultPostLoginValidator {
             return Err(PostLoginValidationError::FreeAccountLimitExceeded);
         }
         Ok(())
+    }
+}
+
+metric! {
+    #[name = "core_signup_user_check_total"]
+    #[version = 1]
+    #[doc = "Records the outcomes of the post login user checks."]
+    pub struct UserCheckResult {
+        pub status: UserCheckStatus,
+    }
+}
+
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UserCheckStatus {
+    Success,
+    Failure,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proton_core_api::services::{
+        observability::ObservabilityRecorder,
+        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    };
+    use serde_json::{self, json};
+
+    fn assert_serialization_deserialization(status: UserCheckStatus, expected_status: &str) {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            UserCheckResult { status },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+
+        let expected_json = format!(
+            r#"{{"Name":"core_signup_user_check_total","Version":1,"Timestamp":1741021308,"Data":{{"Labels":{{"status":"{expected_status}"}},"Value":1}}}}"#
+        );
+
+        assert_eq!(serialized, expected_json);
+
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: "core_signup_user_check_total".into(),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({"status": expected_status}),
+                    value: 1,
+                }
+            },
+            serde_json::from_str(&serialized).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_user_check_serialization_deserialization_for_all_variants() {
+        let statuses = vec![
+            (UserCheckStatus::Success, "success"),
+            (UserCheckStatus::Failure, "failure"),
+        ];
+
+        for (status, expected_status) in statuses {
+            assert_serialization_deserialization(status, expected_status);
+        }
     }
 }
