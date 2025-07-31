@@ -22,6 +22,7 @@ use futures::future::join3;
 use proton_account_api::ApiError;
 use proton_action_queue::action::{ActionId, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput, QueuedError};
+use proton_canonical_email::canonicalize_auto;
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, PrivateEmail};
@@ -60,8 +61,9 @@ pub(crate) mod send;
 
 use crate::draft::compose::{
     DraftAddressChangeOutput, DraftAddressChangeRequest, DraftAddressValidationResult,
-    PM_SIGNATURE_DIV_CLASS, encrypt_draft_body, find_default_sender_address, get_full_signature,
-    inject_dark_mode, patch_draft_with_reply_mode, prepare_html_reply, prepare_plain_text_reply,
+    PM_SIGNATURE_DIV_CLASS, draft_sender_addresses, encrypt_draft_body,
+    find_default_sender_address, get_alias_component, get_full_signature, inject_dark_mode,
+    patch_draft_with_reply_mode, prepare_html_reply, prepare_plain_text_reply,
     resolve_sender_alias, validate_sender_address,
 };
 pub use crate::draft::send::EoData;
@@ -449,6 +451,10 @@ pub struct Draft {
     /// This is only present when we detect the choice of address in the draft
     /// does not satisfy some requirements that would prevent the message from being sent.
     pub address_validation_result: Option<DraftAddressValidationResult>,
+
+    /// This is only set when creating a reply and is only valid while the instance
+    /// of the draft is open after it has been opened or a rew reply has been created.
+    sender_alias: Option<String>,
 }
 
 /// Indicates the status of syncing a draft.
@@ -464,8 +470,16 @@ pub enum DraftSyncStatus {
 }
 
 impl Draft {
-    pub async fn sender_addresses(tether: &Tether) -> Result<Vec<Address>, StashError> {
-        Address::all_send_enabled(tether).await
+    pub async fn sender_addresses(&self, tether: &Tether) -> Result<Vec<Address>, StashError> {
+        draft_sender_addresses(self.sender_alias.as_ref(), &self.address_id, tether).await
+    }
+
+    // Note: this only exists for the TUI. Will be removed in the draft refactor.
+    pub fn sender_addresses_deferred(&self) -> DraftSenderAddressesDeferred {
+        DraftSenderAddressesDeferred {
+            sender_alias: self.sender_alias.clone(),
+            address_id: self.address_id.clone(),
+        }
     }
 
     pub async fn schedule_send_options(
@@ -632,6 +646,9 @@ impl Draft {
         )
         .await;
 
+        let sender_alias = get_alias_component(message.sender.address.as_clear_text_str())
+            .map(|_| message.sender.address.as_clear_text_str().to_owned());
+
         let mut draft = Self {
             metadata_id: metadata.id.unwrap(),
             sender: message.sender.address.into_clear_text_string(),
@@ -643,8 +660,8 @@ impl Draft {
             send_result,
             body: decrypted.body,
             mime_type: decrypted.metadata.mime_type,
-            //TODO(ET-3932): handle verification open,
             address_validation_result: None,
+            sender_alias,
         };
         draft.sanitize_body();
 
@@ -671,11 +688,16 @@ impl Draft {
 
                 draft.address_id = new_address.remote_id.unwrap();
                 draft.address_validation_result = Some(result);
+                draft.sender_alias = None;
 
                 // If this operation fails we should not prevent the draft from being opened, some things
                 // may not be correct (signature, public key attachments) but the draft will still be usable.
                 if let Err(e) = draft
-                    .change_sender_address_by_id(context, draft.address_id.clone())
+                    .change_sender_address_by_id(
+                        context,
+                        new_address.email,
+                        draft.address_id.clone(),
+                    )
                     .await
                 {
                     error!("Failed to change sender address: {e}")
@@ -756,6 +778,7 @@ impl Draft {
             mime_type: mail_settings.draft_mime_type,
             body,
             address_validation_result: None,
+            sender_alias: None,
         }
     }
 
@@ -977,10 +1000,16 @@ impl Draft {
 
         // Only resolve alias if we passed the validation. If we didn't we are not on the same
         // address.
-        let sender_email = if address_validation_result.is_none() {
-            resolve_sender_alias(&address.email, &source_message_body.metadata)
+        let (sender_email, sender_alias) = if address_validation_result.is_none() {
+            let new_sender = resolve_sender_alias(&address.email, &source_message_body.metadata);
+            let alias = if new_sender != address.email {
+                Some(new_sender.clone())
+            } else {
+                None
+            };
+            (new_sender, alias)
         } else {
-            address.email.clone()
+            (address.email.clone(), None)
         };
 
         let mut draft = Self {
@@ -995,6 +1024,7 @@ impl Draft {
             body,
             mime_type,
             address_validation_result,
+            sender_alias,
         };
 
         patch_draft_with_reply_mode(
@@ -1486,75 +1516,92 @@ impl Draft {
     // in locations where the draft type is not safely shared (e.g.: TUI). A refactor is planned
     // to make this work seamlessly.
     pub fn new_change_sender_address_request(&self) -> DraftAddressChangeRequest {
-        DraftAddressChangeRequest::new(self.metadata_id, self.address_id.clone(), self.mime_type)
+        DraftAddressChangeRequest::new(
+            self.metadata_id,
+            self.sender.clone(),
+            self.address_id.clone(),
+            self.mime_type,
+        )
     }
 
     // Note: this type is currently separate from the draft implementation so that it can be executed
     // in locations where the draft type is not safely shared (e.g.: TUI). A refactor is planned
     // to make this work seamlessly.
     pub fn finalize_sender_address_change_request(&mut self, output: DraftAddressChangeOutput) {
-        self.address_id = output.address_id;
-        self.sender = output.sender;
-
-        if self.mime_type == MimeType::TextHtml {
-            let transformer = Transformer::new(self.body());
-
-            if let Err(e) =
-                transformer.replace_inner_div(PM_SIGNATURE_DIV_CLASS, &output.new_signature)
-            {
-                error!("Error when swapping address signatures: {e}");
+        match output {
+            DraftAddressChangeOutput::SenderOnly(sender) => {
+                self.sender = sender;
             }
-
-            self.body = transformer.to_string();
-        } else if !output.old_signature.is_empty() {
-            self.body = self
-                .body
-                .replace(&output.old_signature, &output.new_signature)
+            DraftAddressChangeOutput::Full(output) => {
+                self.address_id = output.address_id;
+                self.sender = output.sender;
+                // we can only replace the signature if it wasn't empty and the original signature
+                // remains intact.
+                if self.mime_type == MimeType::TextHtml {
+                    let transformer = Transformer::new(self.body());
+                    if let Err(e) =
+                        transformer.replace_inner_div(PM_SIGNATURE_DIV_CLASS, &output.new_signature)
+                    {
+                        error!("Error when swapping address signatures: {e}");
+                    }
+                    self.body = transformer.to_string();
+                } else if !output.old_signature.is_empty() {
+                    self.body = self
+                        .body
+                        .replace(&output.old_signature, &output.new_signature)
+                }
+            }
         }
     }
 
-    pub async fn change_sender_address_by_email(
+    pub async fn change_sender_address(
         &mut self,
         ctx: &MailUserContext,
-        email: &str,
+        email: String,
     ) -> Result<(), MailContextError> {
         let mut tether = ctx.user_stash().connection();
-
-        let address = Address::by_email(email, &tether)
-            .await?
-            .ok_or(SenderAddressChangeError::AddressEmailNotFound(email.into()))?;
-
+        let canonical_email = canonicalize_auto(email.as_str());
+        let addresses = Address::all_send_enabled(&tether).await?;
+        let address = addresses
+            .into_iter()
+            .find(|v| {
+                let this_canonical_email = canonicalize_auto(v.email.as_str());
+                this_canonical_email == canonical_email
+            })
+            .ok_or(SenderAddressChangeError::AddressEmailNotFound(
+                email.clone(),
+            ))?;
         let address_id =
             address
                 .remote_id
                 .ok_or(SenderAddressChangeError::AddressHasNoRemoteId(
                     address.local_id.unwrap(),
                 ))?;
-
-        self.change_sender_address_impl(ctx, address_id, &mut tether)
+        self.change_sender_address_impl(ctx, email, address_id, &mut tether)
             .await
     }
 
-    pub async fn change_sender_address_by_id(
+    async fn change_sender_address_by_id(
         &mut self,
         ctx: &MailUserContext,
+        sender_email: String,
         address_id: AddressId,
     ) -> Result<(), MailContextError> {
         let mut tether = ctx.user_stash().connection();
-
-        self.change_sender_address_impl(ctx, address_id, &mut tether)
+        self.change_sender_address_impl(ctx, sender_email, address_id, &mut tether)
             .await
     }
 
     async fn change_sender_address_impl(
         &mut self,
         ctx: &MailUserContext,
+        sender_email: String,
         address_id: AddressId,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         if let Some(output) = self
             .new_change_sender_address_request()
-            .apply(ctx, address_id, tether)
+            .apply(ctx, sender_email, address_id, tether)
             .await?
         {
             self.finalize_sender_address_change_request(output)
@@ -2134,5 +2181,17 @@ async fn queue_or_replace_draft_save(
         queue
             .queue_action_with_metadata(save_action, metadata)
             .await
+    }
+}
+
+// Note: this only exists for the TUI. Will be remove in the draft refactor.
+pub struct DraftSenderAddressesDeferred {
+    sender_alias: Option<String>,
+    address_id: AddressId,
+}
+
+impl DraftSenderAddressesDeferred {
+    pub async fn run(self, tether: &Tether) -> Result<Vec<Address>, StashError> {
+        draft_sender_addresses(self.sender_alias.as_ref(), &self.address_id, tether).await
     }
 }

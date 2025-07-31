@@ -481,9 +481,7 @@ impl Draft {
         };
         uniffi_async::<_, RealProtonMailError, _>(async move {
             let mut instance = self.instance.write().await;
-            instance
-                .change_sender_address_by_email(&ctx, &email)
-                .await?;
+            instance.change_sender_address(&ctx, email).await?;
             instance
                 .save(
                     ctx.action_queue(),
@@ -507,12 +505,14 @@ impl Draft {
 
         Ok(uniffi_async::<_, RealProtonMailError, _>(async move {
             let tether = ctx.user_stash().connection();
-            let addresses = RealDraft::sender_addresses(&tether)
+            let instance = self.instance.read().await;
+            let addresses = instance
+                .sender_addresses(&tether)
                 .await?
                 .into_iter()
                 .map(|v| v.email)
                 .collect::<Vec<_>>();
-            let current = self.instance.read().await.sender.clone();
+            let current = instance.sender.clone();
             Ok(DraftSenderAddressList {
                 available: addresses,
                 active: current,

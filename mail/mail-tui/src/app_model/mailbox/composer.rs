@@ -484,13 +484,18 @@ impl Composer {
     fn start_sender_address_change(
         &mut self,
         context: Arc<MailUserContext>,
-        address_id: AddressId,
+        email_address_id: (String, AddressId),
     ) -> Command<Messages> {
         let address_change_request = self.draft.new_change_sender_address_request();
         let task = Command::task(async move {
             let mut tether = context.user_stash().connection();
             let cmd = match address_change_request
-                .apply(&context, address_id, &mut tether)
+                .apply(
+                    &context,
+                    email_address_id.0,
+                    email_address_id.1,
+                    &mut tether,
+                )
                 .await
             {
                 Ok(output) => output.map_or(Command::none(), |output| {
@@ -863,7 +868,7 @@ impl Composer {
                 KeyCode::Char('k') => {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
                         let ctx = ctx.clone();
-                        return AddressListPopup::open(ctx);
+                        return AddressListPopup::open(ctx, &self.draft);
                     }
                 }
                 KeyCode::Char('p') => {
@@ -945,8 +950,8 @@ impl Composer {
             ComposerMessage::RemoveAttachment(id) => {
                 self.remove_attachment(user_ctx.to_owned(), id)
             }
-            ComposerMessage::StartChangeAddress(address_id) => {
-                self.start_sender_address_change(user_ctx.to_owned(), address_id)
+            ComposerMessage::StartChangeAddress(email_address_id) => {
+                self.start_sender_address_change(user_ctx.to_owned(), email_address_id)
             }
             ComposerMessage::FinishChangeAddress(output) => {
                 self.finish_sender_address_change(user_ctx.to_owned(), output)

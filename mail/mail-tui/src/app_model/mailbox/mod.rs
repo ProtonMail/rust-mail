@@ -140,7 +140,7 @@ pub enum ComposerMessage {
     RefreshAttachmentList,
     AttachmentListRefreshed(Vec<DraftAttachment>),
     ScheduleSend(DateTime<Local>),
-    StartChangeAddress(AddressId),
+    StartChangeAddress((String, AddressId)),
     FinishChangeAddress(DraftAddressChangeOutput),
     SetPasswordProtection(SecretString, Option<String>),
     SetExpirationTime(DateTime<Local>),

@@ -26,9 +26,10 @@ impl AddressListPopup {
         }
     }
 
-    pub fn open(ctx: Arc<MailUserContext>) -> Command<Messages> {
+    pub fn open(ctx: Arc<MailUserContext>, draft: &Draft) -> Command<Messages> {
+        let sender_addresses = draft.sender_addresses_deferred();
         Command::task(async move {
-            match Draft::sender_addresses(&ctx.user_stash().connection()).await {
+            match sender_addresses.run(&ctx.user_stash().connection()).await {
                 Ok(address) => Command::message(Messages::RaisePopup(Box::new(Self::new(address)))),
                 Err(e) => Command::message(Messages::DisplayError(
                     None,
@@ -63,12 +64,13 @@ impl Popup for AddressListPopup {
                         Command::batch([
                             Command::message(Messages::DismissPopup),
                             Command::message(
-                                ComposerMessage::StartChangeAddress(
+                                ComposerMessage::StartChangeAddress((
+                                    self.addresses[0].email.clone(),
                                     self.addresses[index]
                                         .remote_id
                                         .clone()
                                         .expect("should be set"),
-                                )
+                                ))
                                 .into(),
                             ),
                         ])
