@@ -219,11 +219,6 @@ pub(super) async fn encrypt_draft_body(
         })
 }
 
-/// Create a new timestamp.
-pub(crate) fn create_timestamp() -> UnixTimestamp {
-    UnixTimestamp::now()
-}
-
 /// Generate HTML reply body for a message.
 pub(super) fn prepare_html_reply(
     output: &mut String,
