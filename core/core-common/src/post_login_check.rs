@@ -13,9 +13,9 @@ use tracing::error;
 /// focusing on constraints and limits that might prevent further actions.
 #[derive(Debug, Error)]
 pub enum PostLoginValidationError {
-    /// Indicates that the maximum number of free accounts has been exceeded.
+    /// Indicates that the maximum number of free accounts has been exceeded. Contains the max number of free accounts allowed.
     #[error("The maximum number of free accounts has been exceeded.")]
-    FreeAccountLimitExceeded,
+    FreeAccountLimitExceeded(u64),
 
     #[error("The account is currently on hold due to an overdue invoice.")]
     DelinquentUser,
@@ -80,7 +80,9 @@ impl PostLoginValidator for DefaultPostLoginValidator {
         if let Some(allowed_free_account_count) = self.allowed_free_account_count
             && allowed_free_account_count < account_count
         {
-            return Err(PostLoginValidationError::FreeAccountLimitExceeded);
+            return Err(PostLoginValidationError::FreeAccountLimitExceeded(
+                allowed_free_account_count,
+            ));
         }
         Ok(())
     }
