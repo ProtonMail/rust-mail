@@ -19,12 +19,15 @@ use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::{Address, AddressId, ProtonCore, SessionId, User, UserId};
 use proton_core_api::session::{Session, SessionParts};
 use proton_core_api::store::{MbpMode, UserData};
+use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use proton_core_common::post_login_check::{UserCheckResult, UserCheckStatus};
 use proton_crypto_account::keys::{LockedKey, UnlockedUserKey, UserKeys};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::{Salt, Salts};
 use secrecy::SecretString;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use want_qr_confirmation::WantQrConfirmation;
 
@@ -401,8 +404,18 @@ impl State {
             .map_err(LoginError::UserFetch)
             .await?;
 
+        let recorder: ObservabilityRecorder = ObservabilityRecorder::default();
+
         // Run Post Login checks
-        post_login_validator.validate(&user).await?;
+        match post_login_validator.validate(&user).await {
+            Ok(()) => {
+                recorder.record(UserCheckResult::new(UserCheckStatus::Success));
+            }
+            Err(err) => {
+                recorder.record(UserCheckResult::new(UserCheckStatus::Failure));
+                return Err(err.into());
+            }
+        }
 
         // Fetch user addresses.
         let mut addr = ProtonCore::get_addresses(&client)
@@ -434,21 +447,36 @@ impl State {
 
         // Derive the key secret to unlock the user keys.
         let user_key_pass = if let Some(key) = user.keys.primary() {
-            salts.salt_for_key(&srp, &key.id, pass.as_bytes())?
+            salts
+                .salt_for_key(&srp, &key.id, pass.as_bytes())
+                .inspect_err(|_| {
+                    recorder.record(UnlockUserKeyResult::new(
+                        UnlockUserKeyStatus::NoKeySaltsForPrimaryKey,
+                    ));
+                })?
         } else {
+            recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey));
             return Err(LoginError::MissingPrimaryKey);
         };
 
         // Unlock the user keys.
         let user_keys = match user.keys.unlock(&pgp, &user_key_pass) {
-            res if res.unlocked_keys.is_empty() => Err(LoginError::KeySecretDecryption)?,
+            res if res.unlocked_keys.is_empty() => {
+                recorder.record(UnlockUserKeyResult::new(
+                    UnlockUserKeyStatus::PrimaryKeyInvalidPassphrase,
+                ));
+                Err(LoginError::KeySecretDecryption)?
+            }
             res => res.unlocked_keys,
         };
 
         // Get the primary user key.
         let user_key = (user.keys.primary())
             .and_then(|key| user_keys.iter().find(|k| k.id == key.id))
-            .ok_or(LoginError::MissingPrimaryKey)?;
+            .ok_or_else(|| {
+                recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey));
+                LoginError::MissingPrimaryKey
+            })?;
 
         // Do all the user's addresses have keys?
         if addr.iter().any(|addr| addr.keys.as_ref().is_empty()) {
@@ -469,6 +497,7 @@ impl State {
             })
             .await?;
 
+        recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::Success));
         Ok(Complete::new(client, data, Some(user)).into())
     }
 
@@ -690,4 +719,82 @@ fn want_key_setup(user: &User) -> bool {
 
     // Allow key setup for users with temporary passwords
     true
+}
+
+metric! {
+    #[name = "core_signup_unlock_user_total"]
+    #[version = 1]
+    #[doc = "Records the outcomes of the user key unlocking process."]
+    pub struct UnlockUserKeyResult {
+        pub status: UnlockUserKeyStatus,
+    }
+}
+
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum UnlockUserKeyStatus {
+    Success,
+    NoPrimaryKey,
+    NoKeySaltsForPrimaryKey,
+    PrimaryKeyInvalidPassphrase,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proton_core_api::services::{
+        observability::ObservabilityRecorder,
+        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    };
+    use serde_json::{self, json};
+
+    fn assert_serialization_deserialization(status: UnlockUserKeyStatus, expected_status: &str) {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            UnlockUserKeyResult { status },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+
+        let expected_json = format!(
+            r#"{{"Name":"core_signup_unlock_user_total","Version":1,"Timestamp":1741021308,"Data":{{"Labels":{{"status":"{expected_status}"}},"Value":1}}}}"#
+        );
+
+        assert_eq!(serialized, expected_json);
+
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: "core_signup_unlock_user_total".into(),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({"status": expected_status}),
+                    value: 1,
+                }
+            },
+            serde_json::from_str(&serialized).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_user_key_unlock_serialization_deserialization_for_all_variants() {
+        let statuses = vec![
+            (UnlockUserKeyStatus::Success, "success"),
+            (UnlockUserKeyStatus::NoPrimaryKey, "no_primary_key"),
+            (
+                UnlockUserKeyStatus::NoKeySaltsForPrimaryKey,
+                "no_key_salts_for_primary_key",
+            ),
+            (
+                UnlockUserKeyStatus::PrimaryKeyInvalidPassphrase,
+                "primary_key_invalid_passphrase",
+            ),
+        ];
+
+        for (status, expected_status) in statuses {
+            assert_serialization_deserialization(status, expected_status);
+        }
+    }
 }
