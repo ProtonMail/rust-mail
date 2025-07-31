@@ -63,7 +63,6 @@ criterion = "0.5.1"
 derivative = "2.2.0"
 non-empty-string = { version = "0.2.5", features = ["serde"] }
 derive_more = { version = "2.0", features = ["full"] }
-email_address = { version = "0.2.9", features = ["serde"] }
 ext-php-rs = "0.13.1"
 fancy-regex = "0.14.0"
 flume = "0.11"
@@ -132,6 +131,12 @@ wiremock = "0.6.2"
 wiremock-multipart = "1.0.1"
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 libfuzzer-sys = "0.4"
+
+[workspace.dependencies.email_address]
+version = "0.2.9"
+features = ["serde"]
+git = "https://github.com/LBeernaertProton/rust-email_address.git"
+branch = "feat/allow-long-local-parts"
 
 [workspace.dependencies.proton-account-api]
 version = "0.1"
