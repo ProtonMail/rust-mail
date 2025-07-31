@@ -445,7 +445,7 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
                 role: ical::Role::OptParticipant,
             },
         ],
-        user_attendee_idx: 0,
+        user_attendee_idx: Some(0),
         calendar: Some(RsvpCalendar {
             id: "HzNtbT1J".into(),
             name: "My calendar".into(),
@@ -497,7 +497,7 @@ fn expected_offline_event() -> RsvpEvent {
                 role: ical::Role::OptParticipant,
             },
         ],
-        user_attendee_idx: 0,
+        user_attendee_idx: Some(0),
         calendar: None,
         progress: RsvpProgress::Pending,
         recency: RsvpRecency::Unknown,

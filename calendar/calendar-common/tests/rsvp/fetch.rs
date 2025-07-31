@@ -405,6 +405,43 @@ async fn offline() {
 
 #[tokio::test]
 #[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
+async fn organizer() {
+    let world = world().await;
+    let event = world.event(|event| event.basic());
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
+        .await;
+
+    let actual = RsvpEventId::invite(INVITE)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "foo@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(!actual.can_be_answered());
+    assert_eq!(None, actual.user_attendee());
+}
+
+#[tokio::test]
+#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
 async fn party_crasher() {
     let world = world().await;
     let event = world.event(|event| event.basic());
