@@ -22,7 +22,7 @@ use crate::nuke_utils::{
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::pin_code::PinCode;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
-use anyhow::{Error as AnyhowError, anyhow};
+use anyhow::{Context as _, Error as AnyhowError, anyhow};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use itertools::Itertools;
@@ -38,7 +38,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Config as RealApiConfig;
 use proton_core_api::session::Session as ApiSession;
 use proton_core_api::status_watcher::StatusWatcher;
-use proton_core_api::store::TempStore;
+use proton_core_api::store::{Store, TempStore, UserData};
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
@@ -929,14 +929,14 @@ impl Context {
         session: Option<&CoreSession>,
         status: Option<StatusWatcher>,
     ) -> CoreContextResult<ApiSession> {
-        let session = session.ok_or_else(|| anyhow!("Missing core session"))?;
+        let session = session.context("Missing core session")?;
         let user_id = session.account_id.clone();
         let session_id = session.remote_id.clone();
 
         let key = self
             .key_chain
             .load::<SessionEncryptionKey>()?
-            .ok_or_else(|| anyhow!("Missing session encryption key"))?;
+            .context("Missing session encryption key")?;
 
         let tokens = {
             let acc_tok = session.access_token.decrypt_to_string(&key)?;
@@ -955,11 +955,41 @@ impl Context {
             Tokens::access(acc_tok.expose_secret(), ref_tok, scopes)
         };
 
-        let auth = Auth::internal(user_id.into_inner(), session_id.into_inner(), tokens);
+        let auth = Auth::internal(
+            user_id.clone().into_inner(),
+            session_id.clone().into_inner(),
+            tokens,
+        );
 
+        let account_stash = self.account_stash().to_owned();
+        let keychain = Arc::clone(&self.key_chain);
+        // WARNING: make sure you are not actually using the store in any muon client here.
+        // We use it only to get key secret in convenient way.
+        let db_store = AuthStore::new(
+            account_stash,
+            keychain,
+            Some(user_id.clone()),
+            Some(session_id),
+        );
+        let key_secret = db_store
+            .expose_key_secret()
+            .await
+            .context("Missing key secret")?;
         let store = {
             let mut store = TempStore::boxed();
+            let account = self
+                .get_account(user_id)
+                .await?
+                .context("Missing account")?;
 
+            store
+                .set_user_data(UserData {
+                    username: account.username.context("Missing username")?,
+                    display_name: account.display_name.context("Missing display name")?,
+                    primary_addr: account.primary_addr.context("Missing primary address")?,
+                    key_secret,
+                })
+                .await?;
             store.set_auth(auth).await?;
             store
         };
