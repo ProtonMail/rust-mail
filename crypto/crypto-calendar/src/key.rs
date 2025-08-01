@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use crate::{Error, Result, UnlockedKeys};
 use base64::{Engine, prelude::BASE64_STANDARD};
 use proton_calendar_api::CalendarBootstrap;
 use proton_crypto::crypto::{
@@ -6,7 +6,6 @@ use proton_crypto::crypto::{
     EncryptorSync, KeyGenerator, KeyGeneratorSync, PGPMessage, PGPProviderSync, Signer, SignerSync,
     VerifiedData,
 };
-use proton_crypto_account::keys::{UnlockedAddressKey, UnlockedAddressKeys};
 use std::borrow::Cow;
 use zeroize::Zeroizing;
 
@@ -86,18 +85,16 @@ impl<'a> LockedCalendarKey<'a> {
         &self.signature
     }
 
-    pub fn import<P>(
-        self,
-        pgp: &P,
-        address_keys: &UnlockedAddressKeys<P>,
-    ) -> Result<UnlockedCalendarKey<P>>
+    pub fn import<P>(self, pgp: &P, keys: &UnlockedKeys<P>) -> Result<UnlockedCalendarKey<P>>
     where
         P: PGPProviderSync,
     {
         let passphrase = pgp
             .new_decryptor()
-            .with_decryption_key_refs(address_keys)
-            .with_verification_key_refs(address_keys)
+            .with_decryption_key_refs(&keys.user_keys)
+            .with_decryption_key_refs(&keys.address_keys)
+            .with_verification_key_refs(&keys.user_keys)
+            .with_verification_key_refs(&keys.address_keys)
             .with_detached_signature_ref(
                 self.signature().as_bytes(),
                 DetachedSignatureVariant::Plaintext,
@@ -155,11 +152,10 @@ where
         Self::wrap(pgp, private_key)
     }
 
-    pub fn export(
-        &self,
-        pgp: &P,
-        address_key: &UnlockedAddressKey<P>,
-    ) -> Result<LockedCalendarKey<'static>> {
+    pub fn export<K>(&self, pgp: &P, exp_key: &K) -> Result<LockedCalendarKey<'static>>
+    where
+        K: AsPublicKeyRef<P::PublicKey> + AsRef<P::PrivateKey>,
+    {
         let passphrase = Zeroizing::new(proton_crypto::generate_secure_random_bytes::<32>());
         let passphrase = Zeroizing::new(BASE64_STANDARD.encode(&passphrase));
 
@@ -172,7 +168,7 @@ where
 
         let signature = String::from_utf8(
             pgp.new_signer()
-                .with_signing_key(address_key.as_ref())
+                .with_signing_key(exp_key.as_ref())
                 .with_utf8()
                 .sign_detached(&passphrase, DataEncoding::Armor)
                 .map_err(Error::CouldntSignCalendarPassphrase)?,
@@ -180,7 +176,7 @@ where
 
         let passphrase = String::from_utf8(
             pgp.new_encryptor()
-                .with_encryption_key(address_key.as_public_key())
+                .with_encryption_key(exp_key.as_public_key())
                 .with_utf8()
                 .encrypt(&passphrase)
                 .map_err(Error::CouldntEncryptCalendarPassphrase)?

@@ -5,6 +5,7 @@ use crate::{AppError, MailContextResult};
 use crate::{MailUserContext, models::Message};
 use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError, RsvpError};
 use proton_core_common::models::{Address, User};
+use proton_crypto_calendar::UnlockedKeys;
 use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -66,10 +67,22 @@ impl RsvpEvent {
 
         let pgp = proton_crypto::new_pgp_provider();
 
-        let keys = ctx
-            .unlocked_address_keys(&pgp, tether, &self.msg.remote_address_id)
-            .await
-            .inspect_err(|err| warn!(?err, "Couldn't unlock address keys"))?;
+        let keys = {
+            let user_keys = ctx
+                .unlocked_user_keys(&pgp, tether)
+                .await
+                .inspect_err(|err| warn!(?err, "Couldn't unlock user keys"))?;
+
+            let address_keys = ctx
+                .unlocked_address_keys(&pgp, tether, &self.msg.remote_address_id)
+                .await
+                .inspect_err(|err| warn!(?err, "Couldn't unlock address keys"))?;
+
+            UnlockedKeys {
+                user_keys,
+                address_keys,
+            }
+        };
 
         let sender = {
             let msg_id = self
