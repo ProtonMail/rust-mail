@@ -161,7 +161,7 @@ impl User {
     where
         API: ProtonCore,
     {
-        InitializedComponent::initialize::<CoreContextError, SyncedUserSettings>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[],

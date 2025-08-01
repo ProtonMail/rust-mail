@@ -153,7 +153,7 @@ async fn initialize_event_loop(
     ctx_clone: &MailUserContext,
 ) -> Result<(), InitializationError<EventLoopError>> {
     let stash = ctx_clone.user_stash();
-    InitializedComponent::initialize::<EventLoopError, ()>(
+    InitializedComponent::initialize(
         watcher,
         EVENT_INIT_KEY,
         &[],

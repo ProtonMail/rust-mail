@@ -106,7 +106,7 @@ impl Address {
     where
         API: ProtonCore,
     {
-        InitializedComponent::initialize::<CoreContextError, SyncedAddresses>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[],

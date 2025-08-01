@@ -338,7 +338,7 @@ impl Contact {
         api: &Proton,
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>> {
-        InitializedComponent::initialize::<CoreContextError, SyncedContacts>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[Label::INIT_KEY],

@@ -3558,7 +3558,7 @@ impl StoreLabelCounters {
         api: &impl ProtonMail,
         stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {
-        InitializedComponent::initialize::<AppError, Self>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[Label::INIT_KEY],

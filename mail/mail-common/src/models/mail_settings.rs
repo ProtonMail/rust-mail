@@ -187,7 +187,7 @@ impl MailSettings {
         api: &PM,
         stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {
-        InitializedComponent::initialize::<AppError, SyncedMailSettings>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[],
