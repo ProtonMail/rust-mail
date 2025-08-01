@@ -352,6 +352,9 @@ impl Session {
         platform: impl AsRef<str>,
         product: impl AsRef<str>,
     ) -> ApiServiceResult<Self> {
+        let platform = platform.as_ref();
+        let product = product.as_ref();
+        tracing::info!(%platform, %product, "Downgrading session to fork");
         let selector = self.fork(platform, product).await?;
         let flow = self
             .client

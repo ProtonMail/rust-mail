@@ -964,13 +964,24 @@ impl Context {
             store
         };
 
-        let mut session = ApiSession::builder().with_store(store);
+        let mut builder = ApiSession::builder().with_store(store);
 
-        if let Some(status) = status {
-            session = session.with_status(status);
+        let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
+        if app_settings.use_alternative_routing {
+            info!("Using alternative routing");
+            builder = builder.with_config(RealApiConfig::from(self.api_config.clone()));
+        } else {
+            info!("Alternative routing setting is disabled");
+            builder = builder.with_config(
+                RealApiConfig::from(self.api_config.clone()).without_alternative_routing()?,
+            );
         }
 
-        let primary_session = session.build().await?;
+        if let Some(status) = status {
+            builder = builder.with_status(status);
+        }
+
+        let primary_session = builder.build().await?;
 
         let forked_session = primary_session
             .downgrade_to_fork(
