@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Share extension is loading user key secret
+- [ET-4103] Always encrypt outside regardless of encryption settings
+- Rsvp: support user keys
+
+
+## [mail-uniffi-v0.115.1] - 2025-08-01
+
+### Fixes
+
 - Remove account tables from user db
 - Share extension uses correct client id to authenticate
 
