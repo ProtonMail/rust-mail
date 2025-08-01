@@ -1,40 +1,12 @@
-use crate::Context;
 use anyhow::Error;
 use async_trait::async_trait;
 use proton_core_api::services::proton::UserId;
-use stash::{
-    macros::Model,
-    orm::Model,
-    stash::{Bond, StashError, Tether},
-};
+use proton_core_common::{Context, migration_snooper::MigrationSnooper};
+use stash::macros::Model;
+use stash::orm::Model;
+use stash::stash::{Bond, StashError, Tether};
 use std::sync::Arc;
 use tracing::instrument;
-
-#[async_trait]
-pub trait MigrationSnooper: Send + Sync {
-    async fn run(
-        &self,
-        user_id: &str,
-        address_signature_enabled: Option<bool>,
-        mobile_signature: Option<String>,
-        mobile_signature_enabled: Option<bool>,
-    ) -> Result<(), Error>;
-}
-
-pub struct NoopMigrationSnooper;
-
-#[async_trait]
-impl MigrationSnooper for NoopMigrationSnooper {
-    async fn run(
-        &self,
-        _: &str,
-        _: Option<bool>,
-        _: Option<String>,
-        _: Option<bool>,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
-}
 
 pub struct MailMigrationSnooper {
     ctx: Arc<Context>,
@@ -127,7 +99,7 @@ impl PostLoginMobileMigrationPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CoreContextError, test_utils::test_context::TestContext};
+    use proton_core_common::{CoreContextError, test_utils::test_context::TestContext};
 
     #[tokio::test]
     async fn test() {

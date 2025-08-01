@@ -1,5 +1,6 @@
 use crate::actions::MailActionError;
 use crate::mail_scroller::MailScrollerError;
+use crate::migration_snooper::MailMigrationSnooper;
 use crate::{AppError, MailUserContext, draft};
 use anyhow::anyhow;
 use futures::executor::block_on;
@@ -22,7 +23,6 @@ use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::device::DynDeviceInfoProvider;
 use proton_core_common::event_loop::EventPollMode;
-use proton_core_common::login_migration::MailMigrationSnooper;
 use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::pin_code::{PinCode, PinError};

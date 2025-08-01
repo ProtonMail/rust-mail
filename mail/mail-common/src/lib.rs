@@ -7,6 +7,7 @@ pub mod db;
 pub mod errors;
 mod events;
 mod mailbox;
+pub mod migration_snooper;
 pub mod models;
 pub mod prefetch;
 pub mod sidebar;

@@ -10,7 +10,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_api::store::MbpMode;
 use proton_core_api::store::{StoreError, UserData};
-use proton_core_common::login_migration::MigrationSnooper;
+use proton_core_common::migration_snooper::MigrationSnooper;
 use proton_core_common::post_login_check::PostLoginValidationError;
 use proton_core_common::post_login_check::PostLoginValidator;
 use secrecy::SecretString;

@@ -7,7 +7,7 @@ pub mod datatypes;
 pub mod db;
 pub mod device_registration;
 pub mod events;
-pub mod login_migration;
+pub mod migration_snooper;
 pub mod models;
 pub mod os;
 pub mod pin_code;

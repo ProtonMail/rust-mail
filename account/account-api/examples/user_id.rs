@@ -10,7 +10,7 @@ use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
-use proton_core_common::login_migration::NoopMigrationSnooper;
+use proton_core_common::migration_snooper::NoopMigrationSnooper;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
 use proton_core_common::{Context, Origin};
