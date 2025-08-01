@@ -28,9 +28,6 @@ pub struct UserData {
     pub username: String,
     pub display_name: String,
     pub primary_addr: String,
-    pub address_signature_enabled: Option<bool>,
-    pub mobile_signature: Option<String>,
-    pub mobile_signature_enabled: Option<bool>,
     pub key_secret: UserKeySecret,
 }
 

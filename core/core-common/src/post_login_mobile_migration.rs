@@ -1,4 +1,4 @@
-use proton_core_api::{services::proton::UserId, store::UserData};
+use proton_core_api::services::proton::UserId;
 use stash::{
     macros::Model,
     orm::Model,
@@ -23,15 +23,6 @@ pub struct PostLoginMobileMigrationPayload {
 }
 
 impl PostLoginMobileMigrationPayload {
-    pub(crate) fn new(user_id: &UserId, data: &UserData) -> Self {
-        Self {
-            user_id: user_id.clone(),
-            address_signature_enabled: data.address_signature_enabled,
-            mobile_signature: data.mobile_signature.clone(),
-            mobile_signature_enabled: data.mobile_signature_enabled,
-        }
-    }
-
     #[instrument(skip_all)]
     pub async fn load(id: &UserId, tether: &Tether) -> Result<Option<Self>, StashError> {
         let exists: Option<i32> = tether
@@ -69,19 +60,6 @@ impl PostLoginMobileMigrationPayload {
 mod tests {
     use super::*;
     use crate::{CoreContextError, test_utils::test_context::TestContext};
-    use proton_core_api::auth::UserKeySecret;
-
-    fn user_data() -> UserData {
-        UserData {
-            username: String::new(),
-            display_name: String::new(),
-            primary_addr: String::new(),
-            address_signature_enabled: Some(true),
-            mobile_signature: Some("mobile signature".into()),
-            mobile_signature_enabled: Some(false),
-            key_secret: UserKeySecret::from(Vec::new()),
-        }
-    }
 
     #[tokio::test]
     async fn test() {
@@ -98,10 +76,12 @@ mod tests {
         tether
             .tx::<_, _, CoreContextError>(async |tx| {
                 for id in 0..5 {
-                    PostLoginMobileMigrationPayload::new(
-                        &format!("==abcd{id}").into(),
-                        &user_data(),
-                    )
+                    PostLoginMobileMigrationPayload {
+                        user_id: format!("==abcd{id}").into(),
+                        address_signature_enabled: Some(true),
+                        mobile_signature: Some("mobile signature".into()),
+                        mobile_signature_enabled: Some(false),
+                    }
                     .save(tx)
                     .await?;
                 }

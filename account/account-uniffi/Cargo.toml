@@ -13,11 +13,13 @@ crate-type = ["lib", "cdylib", "staticlib"]
 proton-account-api.workspace = true
 proton-account-common.workspace = true
 proton-core-api.workspace = true
+proton-core-common.workspace = true
 muon.workspace = true
 uniffi.workspace = true
 uniffi-common.workspace = true
 uniffi-macros.workspace = true
 uniffi-runtime.workspace = true
+stash.workspace = true
 
 # crates.io dependencies
 futures.workspace = true

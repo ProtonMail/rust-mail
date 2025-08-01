@@ -51,6 +51,7 @@ async fn main() {
 
     let mut login_flow = LoginFlow::new(
         session.clone(),
+        context.account_stash().clone(),
         ChallengeInfo::default(),
         Box::new(DefaultPostLoginValidator::new(Some(2), context)),
     );

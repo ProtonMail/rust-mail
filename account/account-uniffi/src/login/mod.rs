@@ -101,7 +101,7 @@ impl LoginFlow {
 
         uniffi_async::<_, LoginError, _>(async move {
             let mut guard = flow.lock().await;
-            let (user, data, refresh_token) = data.into_parts();
+            let (user, data, refresh_token) = data.into_parts(guard.stash()).await?;
             guard
                 .migrate(user, data, refresh_token)
                 .await

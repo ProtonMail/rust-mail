@@ -13,6 +13,7 @@ use proton_core_api::store::{StoreError, UserData};
 use proton_core_common::post_login_check::PostLoginValidationError;
 use proton_core_common::post_login_check::PostLoginValidator;
 use secrecy::SecretString;
+use stash::stash::Stash;
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -147,6 +148,7 @@ impl ServiceError for LoginError {}
 /// ensuring that all necessary steps are completed in the correct order.
 pub struct LoginFlow {
     session: Session,
+    stash: Stash,
     state: State,
     post_login_validator: Box<dyn PostLoginValidator>,
 }
@@ -156,15 +158,16 @@ impl LoginFlow {
     #[must_use]
     pub fn new(
         session: Session,
+        stash: Stash,
         challenge_info: ChallengeInfo,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Self {
         let (client, parts) = session.to_parts();
-
         let state = State::new(client, parts, Some(challenge_info));
 
         Self {
             session,
+            stash,
             state,
             post_login_validator,
         }
@@ -175,6 +178,7 @@ impl LoginFlow {
     #[must_use]
     pub fn new_from_tfa(
         session: Session,
+        stash: Stash,
         user_id: UserId,
         session_id: SessionId,
         pass: impl Into<SecureString>,
@@ -195,6 +199,7 @@ impl LoginFlow {
 
         Self {
             session,
+            stash,
             state,
             post_login_validator,
         }
@@ -204,6 +209,7 @@ impl LoginFlow {
     #[must_use]
     pub fn new_from_mbp(
         session: Session,
+        stash: Stash,
         user_id: UserId,
         session_id: SessionId,
         post_login_validator: Box<dyn PostLoginValidator>,
@@ -213,6 +219,7 @@ impl LoginFlow {
 
         Self {
             session,
+            stash,
             state,
             post_login_validator,
         }
@@ -427,6 +434,11 @@ impl LoginFlow {
     /// Returns an error if the session ID is not yet known.
     pub fn session_id(&self) -> Result<&SessionId, LoginError> {
         self.state.session_id()
+    }
+
+    #[must_use]
+    pub fn stash(&self) -> &Stash {
+        &self.stash
     }
 
     /// Try to transition the flow to the next state.

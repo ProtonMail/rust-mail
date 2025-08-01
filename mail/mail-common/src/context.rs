@@ -345,6 +345,7 @@ impl MailContext {
         ));
         Ok(LoginFlow::new(
             session,
+            self.core_context.account_stash().clone(),
             challenge_info,
             post_login_validator,
         ))
@@ -377,6 +378,8 @@ impl MailContext {
             .await?
             .ok_or(MailContextError::Other(anyhow!("session not found")))?;
 
+        let stash = self.core_context.account_stash().clone();
+
         let api_session = self
             .core_context
             .new_api_session(Some(&session), None)
@@ -386,6 +389,7 @@ impl MailContext {
             Some(1),
             Arc::clone(&self.core_context),
         ));
+
         match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => {
                 let password = (account.password)
@@ -402,6 +406,7 @@ impl MailContext {
 
                 Ok(LoginFlow::new_from_tfa(
                     api_session,
+                    stash,
                     user_id,
                     session_id,
                     password,
@@ -413,6 +418,7 @@ impl MailContext {
 
             CoreSessionState::NeedKey => Ok(LoginFlow::new_from_mbp(
                 api_session,
+                stash,
                 user_id,
                 session_id,
                 post_login_validator,

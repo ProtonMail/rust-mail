@@ -3,7 +3,6 @@
 use crate::db::account::{CoreAccount, CoreSession, EncryptedData, SessionEncryptionKey};
 use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainExt};
-use crate::post_login_mobile_migration::PostLoginMobileMigrationPayload;
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -309,10 +308,6 @@ impl Store for AuthStore {
                         .save(tx)
                         .await?;
                 }
-
-                PostLoginMobileMigrationPayload::new(&user_id, &data)
-                    .save(tx)
-                    .await?;
 
                 account
                     .with_username(data.username.clone())
