@@ -10,6 +10,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_api::store::MbpMode;
 use proton_core_api::store::{StoreError, UserData};
+use proton_core_common::migration_snooper::MigrationSnooper;
 use proton_core_common::post_login_check::PostLoginValidationError;
 use proton_core_common::post_login_check::PostLoginValidator;
 use secrecy::SecretString;
@@ -148,6 +149,7 @@ impl ServiceError for LoginError {}
 pub struct LoginFlow {
     session: Session,
     state: State,
+    migration_snooper: Box<dyn MigrationSnooper>,
     post_login_validator: Box<dyn PostLoginValidator>,
 }
 
@@ -157,15 +159,16 @@ impl LoginFlow {
     pub fn new(
         session: Session,
         challenge_info: ChallengeInfo,
+        migration_snooper: Box<dyn MigrationSnooper>,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Self {
         let (client, parts) = session.to_parts();
-
         let state = State::new(client, parts, Some(challenge_info));
 
         Self {
             session,
             state,
+            migration_snooper,
             post_login_validator,
         }
     }
@@ -180,6 +183,7 @@ impl LoginFlow {
         pass: impl Into<SecureString>,
         mode: MbpMode,
         fido_details: Option<fido2::Response>,
+        migration_snooper: Box<dyn MigrationSnooper>,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Self {
         let (client, parts) = session.to_parts();
@@ -196,6 +200,7 @@ impl LoginFlow {
         Self {
             session,
             state,
+            migration_snooper,
             post_login_validator,
         }
     }
@@ -206,6 +211,7 @@ impl LoginFlow {
         session: Session,
         user_id: UserId,
         session_id: SessionId,
+        migration_snooper: Box<dyn MigrationSnooper>,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Self {
         let (client, parts) = session.to_parts();
@@ -214,8 +220,14 @@ impl LoginFlow {
         Self {
             session,
             state,
+            migration_snooper,
             post_login_validator,
         }
+    }
+
+    #[must_use]
+    pub fn migration_snooper(&self) -> &dyn MigrationSnooper {
+        &*self.migration_snooper
     }
 
     /// # WARNING

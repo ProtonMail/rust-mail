@@ -326,10 +326,8 @@ impl Contact {
         Ok(SyncedContacts { contacts, emails })
     }
 
-    /// Key used to distinguish between components in the initialization.
-    /// It is a string, not an enum for making it open for additional changes from different BU.
-    ///
     pub const INIT_KEY: InitializationKey = InitializationKey::new("contacts");
+
     /// It initializes contats by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
@@ -340,7 +338,7 @@ impl Contact {
         api: &Proton,
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>> {
-        InitializedComponent::initialize::<CoreContextError, SyncedContacts>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[Label::INIT_KEY],
@@ -690,9 +688,6 @@ impl TableObserver for ContactListWatcher {
     }
 }
 
-/// This is a manual implementation of `Contact::sync` async closure.
-///
-/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
 #[must_use]
 #[derive(Debug)]
 pub struct SyncedContacts {
@@ -701,9 +696,6 @@ pub struct SyncedContacts {
 }
 
 impl SyncedContacts {
-    /// Consume this manual closure by storing data in the Database.
-    /// Attention: This function should be executed only after Labels are synchronized
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn store(self, tx: &Bond<'_>) -> Result<(), StashError> {
         let Self {

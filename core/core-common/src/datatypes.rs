@@ -845,8 +845,8 @@ impl From<DeviceEnvironment> for ApiDeviceEnvironment {
 ///
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct InitializationKey(&'static str);
+
 impl InitializationKey {
-    /// Creates a new key.
     #[must_use]
     pub const fn new(s: &'static str) -> Self {
         Self(s)

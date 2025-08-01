@@ -13,7 +13,10 @@ pub struct MigrationData {
     pub username: String,
     pub display_name: String,
     pub primary_addr: String, // email address
-    pub key_secret: String,   // base64'd
+    pub address_signature_enabled: Option<bool>,
+    pub mobile_signature: Option<String>,
+    pub mobile_signature_enabled: Option<bool>,
+    pub key_secret: String, // base64'd
     pub user_id: String,
     pub session_id: String,
     pub password_mode: PasswordMode,
@@ -35,9 +38,11 @@ impl MigrationData {
             session_id,
             password_mode,
             refresh_token,
+            ..
         } = self;
 
         let key_secret = key_secret.as_bytes();
+
         (
             UserData {
                 username,

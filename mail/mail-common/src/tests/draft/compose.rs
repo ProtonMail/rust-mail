@@ -5,7 +5,7 @@ use crate::datatypes::MessageFlags;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
-use crate::datatypes::{LocalAttachmentId, ParsedHeaders, PmSignature};
+use crate::datatypes::{LocalAttachmentId, ParsedHeaders};
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
@@ -21,9 +21,10 @@ use test_case::test_case;
 
 #[test]
 fn new_draft_message_creation() {
-    let address = address_with_signature("");
-    let mail_settings = MailSettings::default();
-    let draft = Draft::new_empty_draft(MetadataId(0), &address, &mail_settings);
+    let address = address();
+    let mail_settings = mail_settings();
+    let custom_settings = custom_settings();
+    let draft = Draft::new_empty_draft(MetadataId(0), &address, &mail_settings, &custom_settings);
 
     assert!(draft.subject.is_empty());
     assert_eq!(draft.address_id, address.remote_id.unwrap());
@@ -236,57 +237,175 @@ async fn forward_draft_message_creation() {
     assert_eq!(attachments, vec![inline_attachment(), normal_attachment()])
 }
 
-#[test]
-fn message_signature_empty_without_address_or_mail_setting_signature() {
-    let address = address_with_signature("");
-    let mail_settings = MailSettings::default();
-    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
-    insta::assert_snapshot!(signature);
-}
+mod signatures {
+    use super::*;
+    use crate::datatypes::PmSignature;
+    use test_case::test_case;
 
-#[test]
-fn message_signature_with_signature_only() {
-    let address = address_with_signature(ADDRESS_SIGNATURE);
-    let mail_settings = MailSettings::default();
-    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
-    insta::assert_snapshot!(signature);
-}
+    struct TestCase {
+        given_address: fn() -> Address,
+        given_mail_settings: fn() -> MailSettings,
+        given_custom_settings: fn() -> CustomSettings,
+        given_mime_type: MimeType,
+        expected_desktop: &'static str,
+        expected_mobile: &'static str,
+    }
 
-#[test]
-fn message_signature_with_mail_settings_signature_only() {
-    // mail settings signature should not be rendered as it is deprecated.
-    let address = address_with_signature("");
-    let mail_settings = mail_settings_with_signature();
-    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
-    insta::assert_snapshot!(signature);
-}
+    const TEST_NO_SIGNATURE: TestCase = TestCase {
+        given_address: address,
+        given_mail_settings: mail_settings,
+        given_custom_settings: custom_settings,
+        given_mime_type: MimeType::TextPlain,
+        expected_desktop: "",
+        expected_mobile: "",
+    };
 
-#[test]
-fn message_signature_with_address_and_mail_settings_signature() {
-    // mail settings signature should not be rendered as it is deprecated.
-    let address = address_with_signature(ADDRESS_SIGNATURE);
-    let mail_settings = mail_settings_with_signature();
-    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
-    insta::assert_snapshot!(signature);
-}
+    const TEST_ADDRESS_SIGNATURE: TestCase = TestCase {
+        given_address: || address().with_signature("cheers, jerry"),
+        given_mail_settings: mail_settings,
+        given_custom_settings: || custom_settings().with_address_signature_enabled(true),
+        given_mime_type: MimeType::TextPlain,
+        expected_desktop: "\n\ncheers, jerry\n",
+        expected_mobile: "\n\ncheers, jerry\n",
+    };
 
-#[test]
-fn message_signature_with_all_signatures() {
-    // mail settings signature should not be rendered as it is deprecated.
-    let address = address_with_signature(ADDRESS_SIGNATURE);
-    let mail_settings = mail_settings_with_signature_and_pm_signautre();
-    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
-    insta::assert_snapshot!(signature);
+    const TEST_DISABLED_ADDRESS_SIGNATURE: TestCase = TestCase {
+        given_custom_settings: || custom_settings().with_address_signature_enabled(false),
+        expected_desktop: "\n\ncheers, jerry\n",
+        expected_mobile: "",
+        ..TEST_ADDRESS_SIGNATURE
+    };
+
+    const TEST_MOBILE_SIGNATURE: TestCase = TestCase {
+        given_address: address,
+        given_mail_settings: mail_settings,
+        given_custom_settings: || {
+            custom_settings()
+                .with_mobile_signature("sent from my iandroid")
+                .with_mobile_signature_enabled(true)
+        },
+        given_mime_type: MimeType::TextPlain,
+        expected_desktop: "",
+        expected_mobile: "\n\nsent from my iandroid\n",
+    };
+
+    const TEST_DISABLED_MOBILE_SIGNATURE: TestCase = TestCase {
+        given_custom_settings: || {
+            custom_settings()
+                .with_mobile_signature("sent from my iandroid")
+                .with_mobile_signature_enabled(false)
+        },
+        expected_desktop: "",
+        expected_mobile: "",
+        ..TEST_MOBILE_SIGNATURE
+    };
+
+    const TEST_ADDRESS_AND_MOBILE_SIGNATURE: TestCase = TestCase {
+        given_address: || address().with_signature("cheers, jerry"),
+        given_mail_settings: mail_settings,
+        given_custom_settings: || {
+            custom_settings()
+                .with_address_signature_enabled(true)
+                .with_mobile_signature("sent from my iandroid")
+                .with_mobile_signature_enabled(true)
+        },
+        given_mime_type: MimeType::TextPlain,
+        expected_desktop: "\n\ncheers, jerry\n",
+        expected_mobile: "\n\ncheers, jerry\n\n\nsent from my iandroid\n",
+    };
+
+    const TEST_ADDRESS_AND_MOBILE_SIGNATURE_FREE: TestCase = TestCase {
+        given_mail_settings: || mail_settings().with_pm_signature(PmSignature::LOCKED),
+        expected_desktop: "\n\ncheers, jerry\n\n\nSent with Proton Mail secure email.",
+        expected_mobile: "\n\ncheers, jerry\n\n\nSent with Proton Mail secure email.",
+        ..TEST_ADDRESS_AND_MOBILE_SIGNATURE
+    };
+
+    const TEST_HTML_SIGNATURES: TestCase = TestCase {
+        given_address: || address().with_signature("cheers, <b>jerry</b>"),
+        given_mail_settings: mail_settings,
+        given_custom_settings: || {
+            custom_settings()
+                .with_address_signature_enabled(true)
+                .with_mobile_signature("sent from <i>my</i> iandroid")
+                .with_mobile_signature_enabled(true)
+        },
+        given_mime_type: MimeType::TextHtml,
+        expected_desktop: "<br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div>",
+        expected_mobile: "<br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div><br><br>sent from <i>my</i> iandroid",
+    };
+
+    const TEST_HTML_SIGNATURES_TO_TEXT: TestCase = TestCase {
+        given_address: || address().with_signature("cheers, <b>jerry</b>"),
+        given_mail_settings: mail_settings,
+        given_custom_settings: || {
+            custom_settings()
+                .with_address_signature_enabled(true)
+                .with_mobile_signature("sent from <i>my</i> iandroid")
+                .with_mobile_signature_enabled(true)
+        },
+        given_mime_type: MimeType::TextPlain,
+        expected_desktop: "\n\ncheers, jerry\n",
+        expected_mobile: "\n\ncheers, jerry\n\n\nsent from my iandroid\n",
+    };
+
+    // `MailSettings.signature` is deprecated and should not be accessed
+    const TEST_MAIL_SETTINGS_SIGNATURE: TestCase = TestCase {
+        given_address: address,
+        given_mail_settings: || mail_settings().with_signature("med vänliga hälsningar"),
+        given_custom_settings: custom_settings,
+        given_mime_type: MimeType::TextPlain,
+        expected_desktop: "",
+        expected_mobile: "",
+    };
+
+    #[test_case(TEST_NO_SIGNATURE)]
+    #[test_case(TEST_ADDRESS_SIGNATURE)]
+    #[test_case(TEST_DISABLED_ADDRESS_SIGNATURE)]
+    #[test_case(TEST_MOBILE_SIGNATURE)]
+    #[test_case(TEST_DISABLED_MOBILE_SIGNATURE)]
+    #[test_case(TEST_ADDRESS_AND_MOBILE_SIGNATURE)]
+    #[test_case(TEST_ADDRESS_AND_MOBILE_SIGNATURE_FREE)]
+    #[test_case(TEST_HTML_SIGNATURES)]
+    #[test_case(TEST_HTML_SIGNATURES_TO_TEXT)]
+    #[test_case(TEST_MAIL_SETTINGS_SIGNATURE)]
+    fn test(case: TestCase) {
+        for platform in [Platform::Desktop, Platform::Mobile] {
+            let actual = get_full_signature(
+                &(case.given_address)(),
+                &(case.given_mail_settings)(),
+                &(case.given_custom_settings)(),
+                case.given_mime_type,
+                platform,
+            );
+
+            match platform {
+                Platform::Desktop => {
+                    assert_eq!(case.expected_desktop, actual);
+                }
+                Platform::Mobile => {
+                    assert_eq!(case.expected_mobile, actual);
+                }
+            }
+        }
+    }
 }
 
 #[test]
 fn html_signature_converted_to_plain_text() {
-    // mail settings signature should not be rendered as it is deprecated.
     let signature = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">My Default Signature<br></div>"#;
-    let address = address_with_signature(signature);
-    let mail_settings = mail_settings_with_signature();
-    let signature = get_full_signature(&address, &mail_settings, MimeType::TextPlain);
-    insta::assert_snapshot!(signature);
+    let address = address().with_signature(signature);
+    let mail_settings = mail_settings();
+    let custom_settings = custom_settings();
+    let signature = get_full_signature(
+        &address,
+        &mail_settings,
+        &custom_settings,
+        MimeType::TextPlain,
+        Platform::Desktop,
+    );
+
+    assert_snapshot!(signature);
 }
 
 #[tokio::test]
@@ -450,6 +569,7 @@ async fn create_reply_with(
 ) -> (Draft, Message, Vec<Attachment>) {
     let source_body_metadata = existing_message_body_metadata();
     let source_body = "Hello World".to_owned();
+
     create_reply_with_mime_and_body(reply_mode, mime_type, source_body_metadata, source_body).await
 }
 
@@ -460,6 +580,7 @@ async fn create_reply_with_mime_and_body(
     source_body: String,
 ) -> (Draft, Message, Vec<Attachment>) {
     let source_message = existing_message();
+
     create_reply_with_mime_and_body_and_message(
         reply_mode,
         mime_type,
@@ -477,12 +598,14 @@ async fn create_reply_with_mime_and_body_and_message(
     source_body: String,
     source_message: Message,
 ) -> (Draft, Message, Vec<Attachment>) {
-    let address = address_with_signature("");
+    let address = address();
 
     let mail_settings = MailSettings {
         draft_mime_type: mime_type,
         ..MailSettings::default()
     };
+
+    let custom_settings = custom_settings();
 
     let source_body = DecryptedMessageBody {
         body: source_body,
@@ -500,6 +623,7 @@ async fn create_reply_with_mime_and_body_and_message(
         reply_mode,
         &address,
         &mail_settings,
+        &custom_settings,
         &source_message,
         source_body,
         true,
@@ -510,7 +634,8 @@ async fn create_reply_with_mime_and_body_and_message(
 
     (draft, source_message, attachments)
 }
-fn address_with_signature(signature: impl Into<String>) -> Address {
+
+fn address() -> Address {
     Address {
         local_id: Some(local_address_id()),
         remote_id: Some(remote_address_id()),
@@ -524,7 +649,7 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
         proton_mx: false,
         receive: false,
         send: false,
-        signature: signature.into(),
+        signature: String::new(),
         signed_key_list: Default::default(),
         status: AddressStatus::Disabled,
     }
@@ -535,19 +660,12 @@ const TEST_EMAIL_DISPLAY_NAME: &str = "Addr Display Name";
 const TEST_EMAIL_ALIAS: &str = "address_email+alias@proton.me";
 const TEST_EMAIL_ALIAS_ALT: &str = "address_email+alias_alt@proton.me";
 
-fn mail_settings_with_signature() -> MailSettings {
-    MailSettings {
-        signature: MAIL_SETTINGS_SIGNATURE.to_owned(),
-        ..Default::default()
-    }
+fn mail_settings() -> MailSettings {
+    MailSettings::default()
 }
 
-fn mail_settings_with_signature_and_pm_signautre() -> MailSettings {
-    MailSettings {
-        signature: MAIL_SETTINGS_SIGNATURE.to_owned(),
-        pm_signature: PmSignature::ENABLED,
-        ..Default::default()
-    }
+fn custom_settings() -> CustomSettings {
+    CustomSettings::default()
 }
 
 fn existing_message() -> Message {
@@ -797,8 +915,6 @@ fn local_address_id() -> LocalAddressId {
 fn remote_address_id() -> AddressId {
     AddressId::new("My remote addr id".to_owned())
 }
-const ADDRESS_SIGNATURE: &str = "My Address Signature";
-const MAIL_SETTINGS_SIGNATURE: &str = "Mail settings signature";
 
 fn inline_attachment_id() -> LocalAttachmentId {
     1245555.into()
@@ -817,6 +933,7 @@ fn inline_attachment() -> Attachment {
         ..Default::default()
     }
 }
+
 fn normal_attachment() -> Attachment {
     Attachment {
         local_id: Some(normal_attachment_id()),

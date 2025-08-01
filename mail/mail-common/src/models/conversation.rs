@@ -3544,10 +3544,8 @@ impl ConversationCounters {
 
 /// Used to initialize counters by syncing it with the Backend
 pub struct StoreLabelCounters(Vec<ConversationLabelsCount>, Vec<MessageLabelsCount>);
+
 impl StoreLabelCounters {
-    /// Key used to distinguish between components in the initialization.
-    /// It is a string, not an enum for making it open for additional changes from different BU.
-    ///
     pub const INIT_KEY: InitializationKey = InitializationKey::new("label_counters");
 
     /// It initializes counters by syncing with the Backend.
@@ -3560,7 +3558,7 @@ impl StoreLabelCounters {
         api: &impl ProtonMail,
         stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {
-        InitializedComponent::initialize::<AppError, Self>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[Label::INIT_KEY],

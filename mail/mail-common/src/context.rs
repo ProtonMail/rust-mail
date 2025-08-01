@@ -1,5 +1,6 @@
 use crate::actions::MailActionError;
 use crate::mail_scroller::MailScrollerError;
+use crate::migration_snooper::MailMigrationSnooper;
 use crate::{AppError, MailUserContext, draft};
 use anyhow::anyhow;
 use futures::executor::block_on;
@@ -324,13 +325,10 @@ impl MailContext {
     ///
     /// See [`Context::new_login_flow`].
     pub async fn new_login_flow(&self) -> CoreContextResult<LoginFlow> {
-        // Ensure we have an encryption key
         let _ = self.core_context.get_encryption_key()?;
-        // Create a new API session
         let session = self.core_context.new_api_session(None, None).await?;
-        // Obtain device info (if possible)
         let device_info = self.core_context.get_device_info().await;
-        // Build challenge info
+
         let challenge_info = ChallengeInfo {
             product_name: self.core_context.get_client_id().to_owned(),
             device_info,
@@ -338,14 +336,18 @@ impl MailContext {
             recovery_behavior: None,
             username_behavior: None,
         };
-        // Create a new login flow
+
+        let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
+
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
             Some(1),
             Arc::clone(&self.core_context),
         ));
+
         Ok(LoginFlow::new(
             session,
             challenge_info,
+            migration_snooper,
             post_login_validator,
         ))
     }
@@ -382,10 +384,13 @@ impl MailContext {
             .new_api_session(Some(&session), None)
             .await?;
 
+        let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
+
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
             Some(1),
             Arc::clone(&self.core_context),
         ));
+
         match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => {
                 let password = (account.password)
@@ -407,6 +412,7 @@ impl MailContext {
                     password,
                     mbp_mode,
                     session.fido_details.map(|it| it.into_inner()),
+                    migration_snooper,
                     post_login_validator,
                 ))
             }
@@ -415,6 +421,7 @@ impl MailContext {
                 api_session,
                 user_id,
                 session_id,
+                migration_snooper,
                 post_login_validator,
             )),
 

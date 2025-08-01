@@ -289,11 +289,8 @@ impl Store for AuthStore {
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError> {
         info!("setting user data in store");
 
-        // Get the encryption key and its secret.
         let key = self.encryption_key()?;
-        let sec = data.key_secret;
 
-        // We write twice, so do it in a transaction.
         self.stash
             .connection()
             .tx(async |tx| {
@@ -305,8 +302,11 @@ impl Store for AuthStore {
                     bail!("failed to set user data: missing {user_id}");
                 };
 
-                for session in CoreSession::find_by_user_id(user_id, tx).await? {
-                    session.with_key_secret(&sec, &key)?.save(tx).await?;
+                for session in CoreSession::find_by_user_id(user_id.clone(), tx).await? {
+                    session
+                        .with_key_secret(&data.key_secret, &key)?
+                        .save(tx)
+                        .await?;
                 }
 
                 account

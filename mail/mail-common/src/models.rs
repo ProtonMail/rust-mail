@@ -29,6 +29,7 @@
 mod attachment;
 pub mod attachment_cache;
 mod conversation;
+mod custom_settings;
 pub mod default_location;
 mod draft;
 mod labels_with_counters;
@@ -41,6 +42,7 @@ mod rollback_item;
 
 pub use self::attachment::*;
 pub use self::conversation::*;
+pub use self::custom_settings::*;
 pub use self::draft::*;
 pub use self::labels_with_counters::*;
 pub use self::mail_scroller::*;

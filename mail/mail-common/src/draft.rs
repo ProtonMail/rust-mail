@@ -9,9 +9,9 @@ use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
 use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
-    Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
-    DraftSendResult, DraftSendResultOrigin, EmbeddedAttachmentInfo, MailSettings, Message,
-    MetadataId,
+    Attachment, AttachmentType, CustomSettings, DraftAttachmentMetadata,
+    DraftAttachmentUploadState, DraftMetadata, DraftSendResult, DraftSendResultOrigin,
+    EmbeddedAttachmentInfo, MailSettings, Message, MetadataId,
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::Context;
@@ -27,10 +27,10 @@ use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_core_api::session::{CoreSession, Session};
-use proton_core_common::Origin;
 use proton_core_common::datatypes::{LocalAddressId, UnixTimestamp};
 use proton_core_common::db::account::EncryptedPassword;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
+use proton_core_common::{Origin, Platform};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
 use proton_crypto_inbox::eo::EoError;
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
@@ -724,6 +724,7 @@ impl Draft {
             .inspect_err(|_| error!("No suitable address found"))?;
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
+        let custom_settings = CustomSettings::get_or_default(&tether).await?;
 
         let metadata = tether
             .tx::<_, _, MailContextError>(async |tx| {
@@ -758,6 +759,7 @@ impl Draft {
             metadata.id.unwrap(),
             &address,
             &mail_settings,
+            &custom_settings,
         ))
     }
 
@@ -765,9 +767,16 @@ impl Draft {
         metadata_id: MetadataId,
         address: &Address,
         mail_settings: &MailSettings,
+        custom_settings: &CustomSettings,
     ) -> Self {
-        let body =
-            compose::get_full_signature(address, mail_settings, mail_settings.draft_mime_type);
+        let body = compose::get_full_signature(
+            address,
+            mail_settings,
+            custom_settings,
+            mail_settings.draft_mime_type,
+            Platform::current(),
+        );
+
         Self {
             metadata_id,
             sender: address.email.clone(),
@@ -849,6 +858,7 @@ impl Draft {
         };
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
+        let custom_settings = CustomSettings::get_or_default(&tether).await?;
 
         let draft = tether
             .tx::<_, _, MailContextError>(async |tx| {
@@ -873,6 +883,7 @@ impl Draft {
                     reply_mode,
                     &address,
                     &mail_settings,
+                    &custom_settings,
                     &source_message,
                     source_message_body,
                     use_utc,
@@ -957,6 +968,7 @@ impl Draft {
         reply_mode: ReplyMode,
         address: &Address,
         mail_settings: &MailSettings,
+        custom_settings: &CustomSettings,
         source_message: &Message,
         mut source_message_body: DecryptedMessageBody,
         use_utc: bool,
@@ -973,7 +985,13 @@ impl Draft {
             MimeType::TextPlain
         };
 
-        let mut body = get_full_signature(address, mail_settings, mime_type);
+        let mut body = get_full_signature(
+            address,
+            mail_settings,
+            custom_settings,
+            mime_type,
+            Platform::current(),
+        );
 
         // If the message we are replying to is HTML we should also generate an HTML body for
         // replying even if the user has selected plain text as the default editing mode.

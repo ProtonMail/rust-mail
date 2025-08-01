@@ -123,7 +123,7 @@ impl LabelWithCounters {
     where
         API: ProtonCore,
     {
-        InitializedComponent::initialize::<LabelError, Vec<Label>>(
+        InitializedComponent::initialize(
             watcher,
             Label::INIT_KEY,
             &[],

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- Remove account tables from user db
+- Share extension uses correct client id to authenticate
+
+
+## [mail-uniffi-v0.115.0] - 2025-07-31
+
 ### Features
 
 - [ET-3914] Add observability for /domains/available endpoint
