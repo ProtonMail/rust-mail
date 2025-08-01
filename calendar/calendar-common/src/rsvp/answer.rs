@@ -10,8 +10,9 @@ use proton_calendar_api::{
 };
 use proton_core_api::services::proton::Proton;
 use proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_account::keys::UnlockedAddressKeys;
-use proton_crypto_calendar::{CalendarKeyPacketUpgrader, KeyPacketRef, LockedCalendarKey};
+use proton_crypto_calendar::{
+    CalendarKeyPacketUpgrader, KeyPacketRef, LockedCalendarKey, UnlockedKeys,
+};
 use proton_ical as ical;
 use std::{iter, ops};
 use tracing::{debug, error, info, instrument, warn};
@@ -20,7 +21,7 @@ use tracing::{debug, error, info, instrument, warn};
 pub(super) async fn run<P, M>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedAddressKeys<P>,
+    keys: &UnlockedKeys<P>,
     cache: &impl RsvpCache,
     sender: M,
     event: &mut RsvpEvent,
@@ -97,7 +98,7 @@ async fn init<'a>(
 #[instrument(skip_all)]
 fn plan<P>(
     pgp: &P,
-    keys: &UnlockedAddressKeys<P>,
+    keys: &UnlockedKeys<P>,
     calendar: &CalendarBootstrap,
     event: &AnswerableRsvpEvent,
     answer: RsvpAnswer,
@@ -157,7 +158,7 @@ where
 #[instrument(skip_all, fields(id = event.id.as_str()))]
 fn plan_event<P>(
     pgp: &P,
-    keys: &UnlockedAddressKeys<P>,
+    keys: &UnlockedKeys<P>,
     calendar: &CalendarBootstrap,
     event: &CalendarEvent,
     event_ty: EventType,
@@ -356,7 +357,7 @@ fn plan_event_notifications(
 async fn exec<P, M>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedAddressKeys<P>,
+    keys: &UnlockedKeys<P>,
     sender: M,
     calendar: CalendarBootstrap,
     mut event: AnswerableRsvpEvent<'_>,
@@ -482,7 +483,7 @@ where
 async fn exec_upgrade_event<P>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedAddressKeys<P>,
+    keys: &UnlockedKeys<P>,
     event: &mut AnswerableRsvpEvent<'_>,
     calendar: &CalendarBootstrap,
     key_packet: String,
@@ -496,7 +497,7 @@ where
         let calendar_key = LockedCalendarKey::from_bootstrap(calendar)?.import(pgp, keys)?;
         let key_packet = KeyPacketRef::from_base64(&key_packet);
 
-        CalendarKeyPacketUpgrader::upgrade(pgp, keys, &calendar_key, key_packet)?
+        CalendarKeyPacketUpgrader::upgrade(pgp, &keys.address_keys, &calendar_key, key_packet)?
     };
 
     api.upgrade_calendar_event_invite(
@@ -584,7 +585,7 @@ async fn exec_update_event(
 async fn exec_notify_organizer<P, M>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedAddressKeys<P>,
+    keys: &UnlockedKeys<P>,
     sender: M,
     calendar: &CalendarBootstrap,
     event: &AnswerableRsvpEvent<'_>,
@@ -625,7 +626,7 @@ where
 async fn build_ics<P>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedAddressKeys<P>,
+    keys: &UnlockedKeys<P>,
     calendar: &CalendarBootstrap,
     event: &AnswerableRsvpEvent<'_>,
     now: &Zoned,
@@ -667,7 +668,7 @@ where
 
 fn build_ics_event<P>(
     pgp: &P,
-    keys: &UnlockedAddressKeys<P>,
+    keys: &UnlockedKeys<P>,
     calendar: &CalendarBootstrap,
     event: &AnswerableRsvpEvent<'_>,
     now: &Zoned,

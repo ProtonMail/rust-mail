@@ -73,7 +73,7 @@ async fn basic(case: fn() -> TestCase) {
         .fetch(
             &world.sess,
             &world.pgp,
-            &world.address_keys,
+            &world.keys,
             &world.cache,
             &world.contacts,
             &world.now,
@@ -123,7 +123,7 @@ async fn basic(case: fn() -> TestCase) {
         .answer(
             &world.sess,
             &world.pgp,
-            &world.address_keys,
+            &world.keys,
             &world.cache,
             sender,
             &world.now,
@@ -191,7 +191,7 @@ async fn alias() {
         .fetch(
             &world.sess,
             &world.pgp,
-            &world.address_keys,
+            &world.keys,
             &world.cache,
             &world.contacts,
             &world.now,
@@ -235,7 +235,7 @@ async fn alias() {
         .answer(
             &world.sess,
             &world.pgp,
-            &world.address_keys,
+            &world.keys,
             &world.cache,
             sender,
             &world.now,
@@ -542,7 +542,7 @@ async fn recurring_with_single_edits() {
         .fetch(
             &world.sess,
             &world.pgp,
-            &world.address_keys,
+            &world.keys,
             &world.cache,
             &world.contacts,
             &world.now,
@@ -628,7 +628,7 @@ async fn recurring_with_single_edits() {
         .answer(
             &world.sess,
             &world.pgp,
-            &world.address_keys,
+            &world.keys,
             &world.cache,
             sender,
             &world.now,
@@ -820,7 +820,7 @@ async fn multiple_calendars() {
         .fetch(
             &world.sess,
             &world.pgp,
-            &world.address_keys,
+            &world.keys,
             &world.cache,
             &world.contacts,
             &world.now,
@@ -864,7 +864,7 @@ async fn multiple_calendars() {
         .answer(
             &world.sess,
             &world.pgp,
-            &world.address_keys,
+            &world.keys,
             &world.cache,
             sender,
             &world.now,

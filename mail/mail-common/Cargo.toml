@@ -55,6 +55,7 @@ proton-mail-api = { workspace = true, features = ["sql"] }
 proton-canonical-email = { workspace = true }
 proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
+proton-crypto-calendar = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-mail-html-transformer = { workspace = true }
