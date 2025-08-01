@@ -480,7 +480,6 @@ pub struct PmSignature(u8);
 bitflags::bitflags! {
     impl PmSignature:u8 {
         const ENABLED = 1 << 0;
-
         const LOCKED = 1 << 1;
 
         // Safeguard against unknown values
@@ -492,6 +491,16 @@ impl PmSignature {
     #[must_use]
     pub fn is_enabled(self) -> bool {
         self.intersects(PmSignature::ENABLED | PmSignature::LOCKED)
+    }
+
+    #[must_use]
+    pub fn is_locked(self) -> bool {
+        self.contains(Self::LOCKED)
+    }
+
+    #[must_use]
+    pub fn is_unlocked(self) -> bool {
+        !self.is_locked()
     }
 }
 
@@ -1887,9 +1896,9 @@ sql_using_serde!(ParsedHeaders);
 /// It means we expected [`MAGIC_ID`] but got {0}
 #[derive(Debug, thiserror::Error)]
 #[error("Expected constant {expected} local id but got {got}")]
-struct NotAMagicLocalIdError {
-    expected: u32,
-    got: u32,
+pub struct NotAMagicLocalIdError {
+    pub expected: u32,
+    pub got: u32,
 }
 
 /// Mail settings local id. This is a special value that ALWAYS must be equal the constant

@@ -107,6 +107,9 @@ impl WantQrConfirmation {
             username: user.name.clone().unwrap_or_default(),
             display_name: user.display_name.clone().unwrap_or_default(),
             primary_addr: user.email.clone(),
+            address_signature_enabled: None,
+            mobile_signature: None,
+            mobile_signature_enabled: None,
             key_secret,
         };
         self.parts

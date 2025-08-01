@@ -1193,6 +1193,25 @@ pub enum Origin {
     ShareExt,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Platform {
+    Desktop,
+    Mobile,
+}
+
+impl Platform {
+    #[must_use]
+    pub fn current() -> Self {
+        #[cfg(target_os = "android")]
+        return Self::Mobile;
+
+        #[cfg(target_os = "ios")]
+        return Self::Mobile;
+
+        Self::Desktop
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum PassphraseAcquireError {
     #[error("Error: {0}")]

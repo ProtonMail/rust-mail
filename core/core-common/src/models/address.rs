@@ -78,6 +78,7 @@ impl ModelHooks for Address {
                 self.local_id = existing.local_id;
             }
         }
+
         Ok(())
     }
 }
@@ -149,6 +150,12 @@ impl Address {
             tether,
         )
         .await
+    }
+
+    #[must_use]
+    pub fn with_signature(mut self, signature: impl Into<String>) -> Self {
+        self.signature = signature.into();
+        self
     }
 }
 

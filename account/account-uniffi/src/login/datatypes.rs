@@ -13,7 +13,10 @@ pub struct MigrationData {
     pub username: String,
     pub display_name: String,
     pub primary_addr: String, // email address
-    pub key_secret: String,   // base64'd
+    pub address_signature_enabled: Option<bool>,
+    pub mobile_signature: Option<String>,
+    pub mobile_signature_enabled: Option<bool>,
+    pub key_secret: String, // base64'd
     pub user_id: String,
     pub session_id: String,
     pub password_mode: PasswordMode,
@@ -30,6 +33,9 @@ impl MigrationData {
             username,
             display_name,
             primary_addr,
+            address_signature_enabled,
+            mobile_signature,
+            mobile_signature_enabled,
             key_secret,
             user_id,
             session_id,
@@ -43,6 +49,9 @@ impl MigrationData {
                 username,
                 display_name,
                 primary_addr,
+                address_signature_enabled,
+                mobile_signature,
+                mobile_signature_enabled,
                 key_secret: UserKeySecret(KeySecret::new(key_secret.into())),
             },
             LoginFlowData {

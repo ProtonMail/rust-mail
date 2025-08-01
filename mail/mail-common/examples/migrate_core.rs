@@ -141,10 +141,14 @@ async fn main() {
         session_id: ctx.session_id().to_string(),
         password_mode,
     };
+
     let user_data = UserData {
         username: account.username.unwrap(),
         display_name: account.display_name.unwrap(),
         primary_addr: account.primary_addr.unwrap(),
+        address_signature_enabled: None,
+        mobile_signature: None,
+        mobile_signature_enabled: None,
         key_secret: UserKeySecret::from(decrypted_key_secret),
     };
 

@@ -11,6 +11,7 @@ pub mod models;
 pub mod os;
 pub mod pin_code;
 pub mod post_login_check;
+pub mod post_login_mobile_migration;
 mod user_context;
 pub mod utils;
 pub mod watch_handle;

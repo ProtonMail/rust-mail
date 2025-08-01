@@ -231,6 +231,18 @@ impl MailSettings {
     pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash.subscribe_to(|sender| Box::new(MailSettingsWatcher { sender }))
     }
+
+    #[must_use]
+    pub fn with_pm_signature(mut self, pm_signature: PmSignature) -> Self {
+        self.pm_signature = pm_signature;
+        self
+    }
+
+    #[must_use]
+    pub fn with_signature(mut self, signature: impl Into<String>) -> Self {
+        self.signature = signature.into();
+        self
+    }
 }
 
 pub struct MailSettingsWatcher {
@@ -314,6 +326,7 @@ impl SyncedMailSettings {
     #[tracing::instrument(skip_all)]
     pub async fn store(mut self, tx: &Bond<'_>) -> Result<(), StashError> {
         self.settings.save(tx).await?;
+
         Ok(())
     }
 }
