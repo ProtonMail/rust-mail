@@ -91,10 +91,8 @@ impl ModelIdExtension for Address {
 }
 
 impl Address {
-    /// Key used to distinguish between components in the initialization.
-    /// It is a string, not an enum for making it open for additional changes from different BU.
-    ///
     pub const INIT_KEY: InitializationKey = InitializationKey::new("addresses");
+
     /// It initializes addresses by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
@@ -176,9 +174,6 @@ impl From<ApiAddress> for Address {
     }
 }
 
-/// This is a manual implementation of `Address::sync` async closure.
-///
-/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
 #[must_use]
 #[derive(Debug)]
 pub struct SyncedAddresses {
@@ -186,8 +181,6 @@ pub struct SyncedAddresses {
 }
 
 impl SyncedAddresses {
-    /// Consume this manual closure by storing data in the Database.
-    ///
     #[tracing::instrument(skip(tx))]
     pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
         for mut address in self.addresses {

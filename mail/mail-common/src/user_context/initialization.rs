@@ -146,9 +146,6 @@ impl MailUserContext {
     }
 }
 
-/// Key used to distinguish between components in the initialization.
-/// It is a string, not an enum for making it open for additional changes from different BU.
-///
 const EVENT_INIT_KEY: InitializationKey = InitializationKey::new("events");
 
 async fn initialize_event_loop(
