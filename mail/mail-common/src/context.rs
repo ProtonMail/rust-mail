@@ -22,6 +22,7 @@ use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::device::DynDeviceInfoProvider;
 use proton_core_common::event_loop::EventPollMode;
+use proton_core_common::login_migration::MailMigrationSnooper;
 use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::pin_code::{PinCode, PinError};
@@ -324,13 +325,10 @@ impl MailContext {
     ///
     /// See [`Context::new_login_flow`].
     pub async fn new_login_flow(&self) -> CoreContextResult<LoginFlow> {
-        // Ensure we have an encryption key
         let _ = self.core_context.get_encryption_key()?;
-        // Create a new API session
         let session = self.core_context.new_api_session(None, None).await?;
-        // Obtain device info (if possible)
         let device_info = self.core_context.get_device_info().await;
-        // Build challenge info
+
         let challenge_info = ChallengeInfo {
             product_name: self.core_context.get_client_id().to_owned(),
             device_info,
@@ -338,15 +336,18 @@ impl MailContext {
             recovery_behavior: None,
             username_behavior: None,
         };
-        // Create a new login flow
+
+        let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
+
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
             Some(1),
             Arc::clone(&self.core_context),
         ));
+
         Ok(LoginFlow::new(
             session,
-            self.core_context.account_stash().clone(),
             challenge_info,
+            migration_snooper,
             post_login_validator,
         ))
     }
@@ -378,12 +379,12 @@ impl MailContext {
             .await?
             .ok_or(MailContextError::Other(anyhow!("session not found")))?;
 
-        let stash = self.core_context.account_stash().clone();
-
         let api_session = self
             .core_context
             .new_api_session(Some(&session), None)
             .await?;
+
+        let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
 
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
             Some(1),
@@ -406,21 +407,21 @@ impl MailContext {
 
                 Ok(LoginFlow::new_from_tfa(
                     api_session,
-                    stash,
                     user_id,
                     session_id,
                     password,
                     mbp_mode,
                     session.fido_details.map(|it| it.into_inner()),
+                    migration_snooper,
                     post_login_validator,
                 ))
             }
 
             CoreSessionState::NeedKey => Ok(LoginFlow::new_from_mbp(
                 api_session,
-                stash,
                 user_id,
                 session_id,
+                migration_snooper,
                 post_login_validator,
             )),
 

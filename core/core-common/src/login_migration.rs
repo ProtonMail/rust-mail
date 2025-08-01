@@ -1,10 +1,78 @@
+use crate::Context;
+use anyhow::Error;
+use async_trait::async_trait;
 use proton_core_api::services::proton::UserId;
 use stash::{
     macros::Model,
     orm::Model,
     stash::{Bond, StashError, Tether},
 };
+use std::sync::Arc;
 use tracing::instrument;
+
+#[async_trait]
+pub trait MigrationSnooper: Send + Sync {
+    async fn run(
+        &self,
+        user_id: &str,
+        address_signature_enabled: Option<bool>,
+        mobile_signature: Option<String>,
+        mobile_signature_enabled: Option<bool>,
+    ) -> Result<(), Error>;
+}
+
+pub struct NoopMigrationSnooper;
+
+#[async_trait]
+impl MigrationSnooper for NoopMigrationSnooper {
+    async fn run(
+        &self,
+        _: &str,
+        _: Option<bool>,
+        _: Option<String>,
+        _: Option<bool>,
+    ) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+pub struct MailMigrationSnooper {
+    ctx: Arc<Context>,
+}
+
+impl MailMigrationSnooper {
+    pub fn new(ctx: Arc<Context>) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl MigrationSnooper for MailMigrationSnooper {
+    async fn run(
+        &self,
+        user_id: &str,
+        address_signature_enabled: Option<bool>,
+        mobile_signature: Option<String>,
+        mobile_signature_enabled: Option<bool>,
+    ) -> Result<(), Error> {
+        self.ctx
+            .account_stash()
+            .connection()
+            .tx(async |tx| {
+                PostLoginMobileMigrationPayload {
+                    user_id: user_id.into(),
+                    address_signature_enabled,
+                    mobile_signature,
+                    mobile_signature_enabled,
+                }
+                .save(tx)
+                .await
+            })
+            .await?;
+
+        Ok(())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Model)]
 #[TableName("post_login_mobile_migration")]

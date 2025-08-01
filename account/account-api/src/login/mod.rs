@@ -10,10 +10,10 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_api::store::MbpMode;
 use proton_core_api::store::{StoreError, UserData};
+use proton_core_common::login_migration::MigrationSnooper;
 use proton_core_common::post_login_check::PostLoginValidationError;
 use proton_core_common::post_login_check::PostLoginValidator;
 use secrecy::SecretString;
-use stash::stash::Stash;
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -148,8 +148,8 @@ impl ServiceError for LoginError {}
 /// ensuring that all necessary steps are completed in the correct order.
 pub struct LoginFlow {
     session: Session,
-    stash: Stash,
     state: State,
+    migration_snooper: Box<dyn MigrationSnooper>,
     post_login_validator: Box<dyn PostLoginValidator>,
 }
 
@@ -158,8 +158,8 @@ impl LoginFlow {
     #[must_use]
     pub fn new(
         session: Session,
-        stash: Stash,
         challenge_info: ChallengeInfo,
+        migration_snooper: Box<dyn MigrationSnooper>,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Self {
         let (client, parts) = session.to_parts();
@@ -167,8 +167,8 @@ impl LoginFlow {
 
         Self {
             session,
-            stash,
             state,
+            migration_snooper,
             post_login_validator,
         }
     }
@@ -178,12 +178,12 @@ impl LoginFlow {
     #[must_use]
     pub fn new_from_tfa(
         session: Session,
-        stash: Stash,
         user_id: UserId,
         session_id: SessionId,
         pass: impl Into<SecureString>,
         mode: MbpMode,
         fido_details: Option<fido2::Response>,
+        migration_snooper: Box<dyn MigrationSnooper>,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Self {
         let (client, parts) = session.to_parts();
@@ -199,8 +199,8 @@ impl LoginFlow {
 
         Self {
             session,
-            stash,
             state,
+            migration_snooper,
             post_login_validator,
         }
     }
@@ -209,9 +209,9 @@ impl LoginFlow {
     #[must_use]
     pub fn new_from_mbp(
         session: Session,
-        stash: Stash,
         user_id: UserId,
         session_id: SessionId,
+        migration_snooper: Box<dyn MigrationSnooper>,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Self {
         let (client, parts) = session.to_parts();
@@ -219,10 +219,15 @@ impl LoginFlow {
 
         Self {
             session,
-            stash,
             state,
+            migration_snooper,
             post_login_validator,
         }
+    }
+
+    #[must_use]
+    pub fn migration_snooper(&self) -> &dyn MigrationSnooper {
+        &*self.migration_snooper
     }
 
     /// # WARNING
@@ -434,11 +439,6 @@ impl LoginFlow {
     /// Returns an error if the session ID is not yet known.
     pub fn session_id(&self) -> Result<&SessionId, LoginError> {
         self.state.session_id()
-    }
-
-    #[must_use]
-    pub fn stash(&self) -> &Stash {
-        &self.stash
     }
 
     /// Try to transition the flow to the next state.

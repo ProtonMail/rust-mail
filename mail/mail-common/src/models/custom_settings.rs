@@ -1,8 +1,8 @@
 use crate::AppError;
 use crate::datatypes::NotAMagicLocalIdError;
 use proton_core_api::services::proton::UserId;
+use proton_core_common::login_migration::PostLoginMobileMigrationPayload;
 use proton_core_common::models::{InitializationError, InitializationWatcher};
-use proton_core_common::post_login_mobile_migration::PostLoginMobileMigrationPayload;
 use proton_core_common::{datatypes::InitializationKey, models::InitializedComponent};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,

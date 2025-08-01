@@ -1,13 +1,9 @@
-use super::LoginError;
 use muon::{client::flow::LoginFlowData, rest::auth::v4::fido2, util::ByteSliceExt};
 use proton_core_api::{
     auth::{KeySecret, UserKeySecret},
     store::UserData,
 };
-use proton_core_common::post_login_mobile_migration::PostLoginMobileMigrationPayload;
 use secrecy::SecretString;
-use stash::stash::Stash;
-use tracing::error;
 use uniffi::Record;
 
 /// All necessary **unencrypted** data for the migration from legacy version
@@ -31,43 +27,23 @@ pub struct MigrationData {
 }
 
 impl MigrationData {
-    pub async fn into_parts(
-        self,
-        stash: &Stash,
-    ) -> Result<(UserData, LoginFlowData, SecretString), LoginError> {
+    #[must_use]
+    pub fn into_parts(self) -> (UserData, LoginFlowData, SecretString) {
         let Self {
             username,
             display_name,
             primary_addr,
-            address_signature_enabled,
-            mobile_signature,
-            mobile_signature_enabled,
             key_secret,
             user_id,
             session_id,
             password_mode,
             refresh_token,
+            ..
         } = self;
-
-        stash
-            .connection()
-            .tx(async |tx| {
-                PostLoginMobileMigrationPayload {
-                    user_id: user_id.clone().into(),
-                    address_signature_enabled,
-                    mobile_signature,
-                    mobile_signature_enabled,
-                }
-                .save(tx)
-                .await
-            })
-            .await
-            .inspect_err(|err| error!("{err:?}"))
-            .map_err(|_| LoginError::Other("Couldn't save state to database".into()))?;
 
         let key_secret = key_secret.as_bytes();
 
-        Ok((
+        (
             UserData {
                 username,
                 display_name,
@@ -83,7 +59,7 @@ impl MigrationData {
                 },
             },
             SecretString::new(refresh_token),
-        ))
+        )
     }
 }
 
