@@ -160,6 +160,12 @@ pub(super) fn get_full_signature(
             "{}",
             prepare_signature(&address.signature, mime_type)
         );
+
+        if mime_type == MimeType::TextHtml {
+            // Wrap signature in a special `div` block so that we can replace
+            // the signature if user changes the `from` address
+            signature = format!("<div class=\"{PM_SIGNATURE_DIV_CLASS}\">{signature}</div>");
+        }
     }
 
     if show_pm_signature {
@@ -182,11 +188,6 @@ pub(super) fn get_full_signature(
             "{}",
             prepare_signature(custom_settings.mobile_signature(), mime_type)
         );
-    }
-
-    if mime_type == MimeType::TextHtml {
-        // wrap the signature in a div block so we can replace it later
-        signature = format!("<div class=\"{PM_SIGNATURE_DIV_CLASS}\">{signature}</div>");
     }
 
     if signature.is_empty() {

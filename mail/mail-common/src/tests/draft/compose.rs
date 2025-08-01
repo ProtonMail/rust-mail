@@ -332,7 +332,7 @@ mod signatures {
         },
         given_mime_type: MimeType::TextHtml,
         expected_desktop: "<br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div>",
-        expected_mobile: "<br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b><br><br>sent from <i>my</i> iandroid</div>",
+        expected_mobile: "<br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div><br><br>sent from <i>my</i> iandroid",
     };
 
     const TEST_HTML_SIGNATURES_TO_TEXT: TestCase = TestCase {
