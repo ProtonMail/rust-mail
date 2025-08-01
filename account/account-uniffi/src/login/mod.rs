@@ -4,6 +4,7 @@ use proton_account_api::login as login_api;
 use proton_account_api::login::state::want_qr_confirmation::ProcessTargetDeviceQrError as RealProcessTargetDeviceQrError;
 use proton_account_api::responses as responses_api;
 use proton_core_api::{consts::CoreBundle, service::ApiServiceError};
+use proton_core_common::post_login_check::PostLoginValidationError;
 use std::sync::Arc;
 use tokio::{sync::Mutex, task::JoinError};
 use uniffi::Enum as UniffiEnum;
@@ -382,8 +383,11 @@ pub enum LoginError {
     // Failed to encode QR login payload
     QRLoginEncoding,
 
-    // Post-login check failed.
-    PostLoginCheckFailed(String),
+    /// Returned when login is aborted due to a delinquent user
+    DelinquentUser,
+
+    /// Returned when login is aborted when the limit of free accounts is exceeded. Contains the max number of free accounts allowed.
+    FreeAccountLimitExceeded(u64),
 
     Other(String),
 }
@@ -444,8 +448,14 @@ impl From<login_api::LoginError> for LoginError {
             }
 
             login_api::LoginError::QRLoginEncoding => Self::QRLoginEncoding,
-            login_api::LoginError::PostLoginCheckFailed(e) => {
-                Self::PostLoginCheckFailed(e.to_string())
+            login_api::LoginError::PostLoginCheckFailed(
+                PostLoginValidationError::DelinquentUser,
+            ) => Self::DelinquentUser,
+            login_api::LoginError::PostLoginCheckFailed(
+                PostLoginValidationError::FreeAccountLimitExceeded(limit),
+            ) => Self::FreeAccountLimitExceeded(limit),
+            login_api::LoginError::PostLoginCheckFailed(PostLoginValidationError::Other(error)) => {
+                Self::Other(error.to_string())
             }
         }
     }

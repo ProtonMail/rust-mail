@@ -5523,6 +5523,7 @@ dependencies = [
  "proton-account-api",
  "proton-account-common",
  "proton-core-api",
+ "proton-core-common",
  "secrecy",
  "serde",
  "serde_json",
