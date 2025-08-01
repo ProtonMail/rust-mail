@@ -2,7 +2,7 @@ use crate::AppError;
 use crate::datatypes::NotAMagicLocalIdError;
 use proton_core_api::services::proton::UserId;
 use proton_core_common::models::{InitializationError, InitializationWatcher};
-use proton_core_common::post_login_mobile_migration;
+use proton_core_common::post_login_mobile_migration::PostLoginMobileMigrationPayload;
 use proton_core_common::{datatypes::InitializationKey, models::InitializedComponent};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
@@ -41,7 +41,7 @@ impl CustomSettings {
 
         let payload = account_stash
             .connection()
-            .tx(async |tx| post_login_mobile_migration::Payload::load(user_id, tx).await)
+            .tx(async |tx| PostLoginMobileMigrationPayload::load(user_id, tx).await)
             .await?;
 
         if let Some(payload) = payload {

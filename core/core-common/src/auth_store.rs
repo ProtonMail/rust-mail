@@ -3,7 +3,7 @@
 use crate::db::account::{CoreAccount, CoreSession, EncryptedData, SessionEncryptionKey};
 use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainExt};
-use crate::post_login_mobile_migration;
+use crate::post_login_mobile_migration::PostLoginMobileMigrationPayload;
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -310,7 +310,7 @@ impl Store for AuthStore {
                         .await?;
                 }
 
-                post_login_mobile_migration::Payload::new(&user_id, &data)
+                PostLoginMobileMigrationPayload::new(&user_id, &data)
                     .save(tx)
                     .await?;
 

@@ -8,7 +8,7 @@ use tracing::instrument;
 
 #[derive(Clone, Debug, PartialEq, Model)]
 #[TableName("post_login_mobile_migration")]
-pub struct Payload {
+pub struct PostLoginMobileMigrationPayload {
     #[IdField]
     pub user_id: UserId,
 
@@ -22,7 +22,7 @@ pub struct Payload {
     pub mobile_signature_enabled: Option<bool>,
 }
 
-impl Payload {
+impl PostLoginMobileMigrationPayload {
     pub(crate) fn new(user_id: &UserId, data: &UserData) -> Self {
         Self {
             user_id: user_id.clone(),
@@ -90,15 +90,20 @@ mod tests {
 
         assert_eq!(
             None,
-            Payload::load(&"==abcd2".into(), &tether).await.unwrap()
+            PostLoginMobileMigrationPayload::load(&"==abcd2".into(), &tether)
+                .await
+                .unwrap()
         );
 
         tether
             .tx::<_, _, CoreContextError>(async |tx| {
                 for id in 0..5 {
-                    Payload::new(&format!("==abcd{id}").into(), &user_data())
-                        .save(tx)
-                        .await?;
+                    PostLoginMobileMigrationPayload::new(
+                        &format!("==abcd{id}").into(),
+                        &user_data(),
+                    )
+                    .save(tx)
+                    .await?;
                 }
 
                 Ok(())
@@ -107,13 +112,15 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            Some(Payload {
+            Some(PostLoginMobileMigrationPayload {
                 user_id: "==abcd2".into(),
                 address_signature_enabled: Some(true),
                 mobile_signature: Some("mobile signature".into()),
                 mobile_signature_enabled: Some(false),
             }),
-            Payload::load(&"==abcd2".into(), &tether).await.unwrap()
+            PostLoginMobileMigrationPayload::load(&"==abcd2".into(), &tether)
+                .await
+                .unwrap()
         );
     }
 }
