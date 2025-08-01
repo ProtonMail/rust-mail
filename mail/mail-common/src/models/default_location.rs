@@ -67,7 +67,7 @@ impl IncomingDefaultLocation {
         api: &Proton,
         stash: &Stash,
     ) -> Result<(), InitializationError<MailContextError>> {
-        InitializedComponent::initialize::<MailContextError, Vec<IncomingDefault>>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[Address::INIT_KEY],

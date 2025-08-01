@@ -118,18 +118,6 @@ impl From<ApiUser> for User {
 }
 
 impl User {
-    // /// Get the user's display name.
-    // #[must_use]
-    // pub fn user_name(&self) -> &str {
-    //     if let Some(display_name) = self.display_name.as_deref() {
-    //         display_name
-    //     } else if let Some(name) = self.name.as_deref() {
-    //         name
-    //     } else {
-    //         &self.email
-    //     }
-    // }
-
     /// Download and store user info and settings into the database
     ///
     /// # Errors
@@ -146,9 +134,6 @@ impl User {
         Ok(SyncedUserSettings { user, settings })
     }
 
-    /// Key used to distinguish between components in the initialization.
-    /// It is a string, not an enum for making it open for additional changes from different BU.
-    ///
     pub const INIT_KEY: InitializationKey = InitializationKey::new("user_settings");
 
     /// It initializes user and settings by syncing with the Backend.
@@ -164,7 +149,7 @@ impl User {
     where
         API: ProtonCore,
     {
-        InitializedComponent::initialize::<CoreContextError, SyncedUserSettings>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[],
@@ -184,9 +169,6 @@ impl User {
     }
 }
 
-/// This is a manual implementation of `User::sync_user_and_settings` async closure.
-///
-/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
 #[must_use]
 #[derive(Debug)]
 pub struct SyncedUserSettings {
@@ -195,8 +177,6 @@ pub struct SyncedUserSettings {
 }
 
 impl SyncedUserSettings {
-    /// Consume this manual closure by storing data in the Database.
-    ///
     #[tracing::instrument(skip(tx))]
     pub async fn store(self, tx: &Bond<'_>) -> Result<(), StashError> {
         let Self {

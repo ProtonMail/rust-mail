@@ -167,7 +167,6 @@ impl CoreAccount {
     pub fn with_primary_seq(self, primary_seq: i64) -> Self {
         Self {
             primary_seq,
-
             ..self
         }
     }
@@ -193,10 +192,12 @@ impl CoreAccount {
             .or(self.username.clone())
             .filter(|username| !username.is_empty())
             .unwrap_or_else(|| self.name_or_addr.clone());
+
         let email = self
             .primary_addr
             .clone()
             .unwrap_or_else(|| self.name_or_addr.clone());
+
         let avatar_information = AvatarInformation::from(name.clone());
 
         AccountDetails {
@@ -215,6 +216,7 @@ impl TableObserver for CoreAccountWatcher {
     fn tables(&self) -> Vec<String> {
         vec![CoreAccount::table_name().to_string()]
     }
+
     fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
         self.sender
             .send(())

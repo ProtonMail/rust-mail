@@ -6,6 +6,7 @@ use proton_account_api::responses as responses_api;
 use proton_core_api::{consts::CoreBundle, service::ApiServiceError};
 use std::sync::Arc;
 use tokio::{sync::Mutex, task::JoinError};
+use tracing::warn;
 use uniffi::Enum as UniffiEnum;
 use uniffi_common::errors::UserApiServiceError;
 use uniffi_runtime::{async_runtime, uniffi_async};
@@ -97,11 +98,26 @@ impl LoginFlow {
     /// of the app. Used to prevent users from being logged-out after the update
     ///
     pub async fn migrate(&self, data: MigrationData) -> Result<(), LoginError> {
+        let mut data = data;
         let flow = self.flow.clone();
 
         uniffi_async::<_, LoginError, _>(async move {
             let mut guard = flow.lock().await;
+
+            guard
+                .migration_snooper()
+                .run(
+                    &data.user_id,
+                    data.address_signature_enabled,
+                    data.mobile_signature.take(),
+                    data.mobile_signature_enabled,
+                )
+                .await
+                .inspect_err(|err| warn!("{err:?}"))
+                .map_err(|_| LoginError::Other("Couldn't process migration data".into()))?;
+
             let (user, data, refresh_token) = data.into_parts();
+
             guard
                 .migrate(user, data, refresh_token)
                 .await

@@ -1,5 +1,5 @@
 use crate::models::default_location::IncomingDefaultLocation;
-use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
+use crate::models::{CustomSettings, LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use anyhow::anyhow;
 use futures::try_join;
@@ -19,6 +19,7 @@ use tracing::{debug, error, warn};
 enum MailUserContextLoadingStage {
     UserSettings,
     MailSettings,
+    CustomSettings,
     Addresses,
     Events,
     Labels,
@@ -146,9 +147,6 @@ impl MailUserContext {
     }
 }
 
-/// Key used to distinguish between components in the initialization.
-/// It is a string, not an enum for making it open for additional changes from different BU.
-///
 const EVENT_INIT_KEY: InitializationKey = InitializationKey::new("events");
 
 async fn initialize_event_loop(
@@ -156,7 +154,7 @@ async fn initialize_event_loop(
     ctx_clone: &MailUserContext,
 ) -> Result<(), InitializationError<EventLoopError>> {
     let stash = ctx_clone.user_stash();
-    InitializedComponent::initialize::<EventLoopError, ()>(
+    InitializedComponent::initialize(
         watcher,
         EVENT_INIT_KEY,
         &[],
@@ -232,6 +230,7 @@ impl InitializationMediator {
         let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
 
         let t0 = Instant::now();
+
         let labels = ctx.spawn_init(&watcher, |ctx, watcher| async move {
             LabelWithCounters::initialize(watcher, ctx.api(), ctx.user_stash()).await
         });
@@ -241,7 +240,6 @@ impl InitializationMediator {
         let contacts = ctx.spawn_init(&watcher, |ctx, watcher| async move {
             Contact::initialize(watcher, ctx.api(), ctx.user_stash()).await
         });
-
         let event_loop = ctx.spawn_init(&watcher, |ctx, watcher| async move {
             initialize_event_loop(watcher, ctx.as_ref()).await
         });
@@ -251,6 +249,15 @@ impl InitializationMediator {
         let mail_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
             MailSettings::initialize(watcher, ctx.api(), ctx.user_stash()).await
         });
+        let custom_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            CustomSettings::initialize(
+                watcher,
+                ctx.user_id(),
+                ctx.user_stash(),
+                ctx.core_context().account_stash(),
+            )
+            .await
+        });
         let addresses = ctx.spawn_init(&watcher, |ctx, watcher| async move {
             Address::initialize(watcher, ctx.api(), ctx.user_stash()).await
         });
@@ -258,7 +265,7 @@ impl InitializationMediator {
             IncomingDefaultLocation::initialize(watcher, ctx.api(), ctx.user_stash()).await
         });
 
-        let abort_handles = [
+        let abort_handles = vec![
             watcher_task_handle.abort_handle(),
             labels.abort_handle(),
             contacts.abort_handle(),
@@ -266,11 +273,10 @@ impl InitializationMediator {
             event_loop.abort_handle(),
             user_settings.abort_handle(),
             mail_settings.abort_handle(),
+            custom_settings.abort_handle(),
             addresses.abort_handle(),
             inc_defs.abort_handle(),
-        ]
-        .into_iter()
-        .collect::<Vec<_>>();
+        ];
 
         let res = try_join!(
             MailUserContext::initial_sync_for(MailUserContextLoadingStage::Labels, labels),
@@ -284,6 +290,10 @@ impl InitializationMediator {
             MailUserContext::initial_sync_for(
                 MailUserContextLoadingStage::MailSettings,
                 mail_settings
+            ),
+            MailUserContext::initial_sync_for(
+                MailUserContextLoadingStage::CustomSettings,
+                custom_settings
             ),
             MailUserContext::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses),
             MailUserContext::initial_sync_for(

@@ -5,13 +5,15 @@ use crate::draft::{
     SenderAddressChangeError,
 };
 use crate::models::{
-    Attachment, DraftAttachmentMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
+    Attachment, CustomSettings, DraftAttachmentMetadata, MailSettings, Message,
+    MessageBodyMetadata, MetadataId,
 };
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::DateTime;
 use derive_more::Display;
 use indoc::indoc;
 use proton_core_api::services::proton::AddressId;
+use proton_core_common::Platform;
 use proton_core_common::datatypes::{AddressStatus, UnixTimestamp};
 use proton_core_common::models::{Address, ModelIdExtension, PaidSubscription, User};
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
@@ -27,6 +29,7 @@ use stash::params;
 use stash::stash::{StashError, Tether};
 use std::borrow::Cow;
 use std::fmt::Display;
+use std::fmt::Write as _;
 use tracing::error;
 
 #[cfg(test)]
@@ -122,48 +125,88 @@ pub(super) async fn patch_draft_with_reply_mode(
 pub(super) fn get_full_signature(
     address: &Address,
     mail_settings: &MailSettings,
+    custom_settings: &CustomSettings,
     mime_type: MimeType,
+    platform: Platform,
 ) -> String {
     let line_break = if mime_type == MimeType::TextHtml {
         HTML_LINE_BREAK
     } else {
         "\n"
     };
-    let mut signature = get_address_signature(address, mime_type);
-    if mime_type == MimeType::TextHtml {
-        // wrap the signature in a div block so we can replace it later
-        signature = format!("<div class=\"{PM_SIGNATURE_DIV_CLASS}\">{signature}</div>");
-    }
 
-    if mail_settings.pm_signature.is_enabled() {
-        signature.push_str(line_break);
-        signature.push_str(line_break);
+    let mut signature = String::new();
+
+    let show_address_signature = match platform {
+        Platform::Desktop => true,
+        Platform::Mobile => custom_settings.address_signature_enabled(),
+    };
+
+    let show_pm_signature = match platform {
+        Platform::Desktop => mail_settings.pm_signature.is_enabled(),
+        Platform::Mobile => mail_settings.pm_signature.is_locked(),
+    };
+
+    let show_mobile_signature = match platform {
+        Platform::Desktop => false,
+        Platform::Mobile => {
+            mail_settings.pm_signature.is_unlocked() && custom_settings.mobile_signature_enabled()
+        }
+    };
+
+    if show_address_signature {
+        _ = write!(
+            signature,
+            "{}",
+            prepare_signature(&address.signature, mime_type)
+        );
+
         if mime_type == MimeType::TextHtml {
-            signature.push_str(PM_SIGNATURE_HTML);
-        } else {
-            signature.push_str(PM_SIGNATURE_PLAIN_TEXT);
+            // Wrap signature in a special `div` block so that we can replace
+            // the signature if user changes the `from` address
+            signature = format!("<div class=\"{PM_SIGNATURE_DIV_CLASS}\">{signature}</div>");
         }
     }
 
-    if !signature.is_empty() {
-        signature.insert_str(0, &format!("{line_break}{line_break}"));
+    if show_pm_signature {
+        if !signature.is_empty() {
+            _ = write!(signature, "{line_break}{line_break}");
+        }
+
+        if mime_type == MimeType::TextHtml {
+            _ = write!(signature, "{PM_SIGNATURE_HTML}");
+        } else {
+            _ = write!(signature, "{PM_SIGNATURE_TEXT}");
+        }
+    } else if show_mobile_signature {
+        if !signature.is_empty() {
+            _ = write!(signature, "{line_break}{line_break}");
+        }
+
+        _ = write!(
+            signature,
+            "{}",
+            prepare_signature(custom_settings.mobile_signature(), mime_type)
+        );
     }
 
-    signature
+    if signature.is_empty() {
+        String::new()
+    } else {
+        format!("{line_break}{line_break}{signature}")
+    }
 }
 
-pub(super) fn get_address_signature(address: &Address, mime_type: MimeType) -> String {
+fn prepare_signature(signature: &str, mime_type: MimeType) -> String {
     if mime_type == MimeType::TextPlain {
-        // convert signature from html to text. All our signatures are generated
-        // on and are stored as web snippets.
-        Transformer::new(&address.signature)
+        Transformer::new(signature)
             .to_plain_text(Html2TextOptions {
                 link_foot_notes: false,
                 ..Default::default()
             })
-            .unwrap_or(address.signature.clone())
+            .unwrap_or_else(|_| signature.to_owned())
     } else {
-        address.signature.clone()
+        signature.to_owned()
     }
 }
 
@@ -423,7 +466,7 @@ pub const CLOSE_BLOCKQUOTE: &str = "</blockquote>";
 pub const HTML_LINE_BREAK: &str = "<br>";
 
 const PM_SIGNATURE_HTML: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
-const PM_SIGNATURE_PLAIN_TEXT: &str = "Sent with Proton Mail secure email.";
+const PM_SIGNATURE_TEXT: &str = "Sent with Proton Mail secure email.";
 
 // this is the value the web client is using.
 pub(super) const PM_SIGNATURE_DIV_CLASS: &str = "protonmail_signature_block-user";
@@ -576,8 +619,8 @@ impl DraftAddressChangeRequest {
         // We only want to replace the address signature, not the whole setup with spacing
         // and the extra spacing and optional "Sent from ProtonMail".
         // This also more resilient to body changes after editing.
-        let new_signature = get_address_signature(&address, self.mime_type);
-        let old_signature = get_address_signature(&old_address, self.mime_type);
+        let new_signature = prepare_signature(&address.signature, self.mime_type);
+        let old_signature = prepare_signature(&old_address.signature, self.mime_type);
 
         Ok(Some(DraftAddressChangeOutput::Full(
             DraftAddressChangeFullAddressParams {

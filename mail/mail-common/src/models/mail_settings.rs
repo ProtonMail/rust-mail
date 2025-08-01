@@ -175,9 +175,6 @@ pub struct MailSettings {
 }
 
 impl MailSettings {
-    /// Key used to distinguish between components in the initialization.
-    /// It is a string, not an enum for making it open for additional changes from different BU.
-    ///
     pub const INIT_KEY: InitializationKey = InitializationKey::new("mail_settings");
 
     /// It initializes mail settings by syncing with the Backend.
@@ -190,7 +187,7 @@ impl MailSettings {
         api: &PM,
         stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {
-        InitializedComponent::initialize::<AppError, SyncedMailSettings>(
+        InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[],
@@ -204,13 +201,6 @@ impl MailSettings {
         .await
     }
 
-    /// TODO: Document this function.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
-    ///
     pub async fn sync_mail_settings<PM: ProtonMail>(
         api: &PM,
     ) -> Result<SyncedMailSettings, AppError> {
@@ -219,12 +209,10 @@ impl MailSettings {
         Ok(SyncedMailSettings { settings })
     }
 
-    /// Get the mail settings from database
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
         Self::load(MailSettingsId, tether).await
     }
 
-    /// Get the mail settings from database, fallback on default
     pub async fn get_or_default(tether: &Tether) -> Self {
         Self::get(tether)
             .await
@@ -232,7 +220,6 @@ impl MailSettings {
             .unwrap_or_default()
     }
 
-    /// Retrieves the portion of the mail settings that is relevant for email encryption.
     pub fn crypto_mail_settings(&self) -> CryptoMailSettings {
         CryptoMailSettings {
             pgp_scheme: self.pgp_scheme.into(),
@@ -243,6 +230,18 @@ impl MailSettings {
 
     pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash.subscribe_to(|sender| Box::new(MailSettingsWatcher { sender }))
+    }
+
+    #[must_use]
+    pub fn with_pm_signature(mut self, pm_signature: PmSignature) -> Self {
+        self.pm_signature = pm_signature;
+        self
+    }
+
+    #[must_use]
+    pub fn with_signature(mut self, signature: impl Into<String>) -> Self {
+        self.signature = signature.into();
+        self
     }
 }
 
@@ -317,9 +316,6 @@ impl From<ApiMailSettings> for MailSettings {
     }
 }
 
-/// This is a manual implementation of `MailSettings::sync_mail_settings` async closure.
-///
-/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
 #[must_use]
 #[derive(Debug)]
 pub struct SyncedMailSettings {
@@ -327,11 +323,10 @@ pub struct SyncedMailSettings {
 }
 
 impl SyncedMailSettings {
-    /// Consume this manual closure by storing data in the Database.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn store(mut self, tx: &Bond<'_>) -> Result<(), StashError> {
         self.settings.save(tx).await?;
+
         Ok(())
     }
 }

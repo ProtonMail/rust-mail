@@ -141,6 +141,7 @@ async fn main() {
         session_id: ctx.session_id().to_string(),
         password_mode,
     };
+
     let user_data = UserData {
         username: account.username.unwrap(),
         display_name: account.display_name.unwrap(),
