@@ -2,9 +2,7 @@ pub use self::keys::*;
 use crate::actions::register_actions;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
-use crate::db::migrations::{
-    migrate_account_db, migrate_core_db, verify_account_db, verify_core_db,
-};
+use crate::db::migrations::{migrate_core_db, verify_core_db};
 use crate::event_loop::{EventLoopActionIds, EventPollMode};
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
@@ -245,7 +243,6 @@ impl UserContext {
             Origin::App => {
                 debug!("initializing database");
 
-                migrate_account_db(&stash).await?;
                 migrate_core_db(&stash).await?;
 
                 for init in inits {
@@ -256,7 +253,6 @@ impl UserContext {
             Origin::ShareExt => {
                 debug!("verifying database");
 
-                verify_account_db(&stash).await?;
                 verify_core_db(&stash).await?;
             }
         }
