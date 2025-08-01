@@ -204,8 +204,10 @@ pub enum DraftAttachmentUploadErrorReason {
     TooManyAttachments,
     /// Message was already sent.
     MessageAlreadySent,
-    /// the attachment size exceeds the upper limit
+    /// The attachment size exceeds the upper limit
     AttachmentTooLarge,
+    /// The combined attachment size exceeds the upper limit
+    TotalAttachmentSizeTooLarge,
     /// Upload Retry in invalid state
     RetryInvalidState,
 }

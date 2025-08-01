@@ -23,7 +23,7 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Tether};
 use std::sync::Weak;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// Action to upload attachments for a given draft.
 ///
@@ -238,6 +238,7 @@ impl AttachmentUpload {
 
         encrypt_and_upload_attachment(
             ctx,
+            self.metadata_id,
             &self.address_id,
             local_message_id,
             &remote_message_id,
@@ -290,6 +291,7 @@ impl AttachmentUpload {
 #[tracing::instrument(skip_all, fields(attachment_id = %attachment.id()))]
 async fn encrypt_and_upload_attachment(
     ctx: &MailUserContext,
+    metadata_id: MetadataId,
     address_id: &AddressId,
     local_message_id: LocalMessageId,
     message_id: &MessageId,
@@ -333,24 +335,51 @@ async fn encrypt_and_upload_attachment(
         data_packet: encrypted_attachment.data,
     };
 
-    let response = ctx
-        .api()
-        .post_attachment(new_attachment_params)
-        .await
-        .map_err(|e| {
+    let response = match ctx.api().post_attachment(new_attachment_params).await {
+        Ok(response) => response,
+        Err(e) => {
             error!("Failed to upload attachment: {:?}", e);
             let Some(proton_error) = e.to_proton_error() else {
-                return MailContextError::from(e);
+                return Err(MailContextError::from(e));
             };
 
-            if proton_error.code == Mail::AttachmentMessageAlreadySent as u32 {
-                AttachmentUploadError::MessageAlreadySent.into()
-            } else if proton_error.code == Mail::TooManyAttachments as u32 {
-                AttachmentUploadError::TooManyAttachments.into()
-            } else {
-                e.into()
-            }
-        })?;
+            return Err(
+                if proton_error.code == Mail::AttachmentMessageAlreadySent as u32 {
+                    AttachmentUploadError::MessageAlreadySent.into()
+                } else if proton_error.code == Mail::TooManyAttachments as u32 {
+                    // backend returns this error for these cases:
+                    // * Attachment size > 25 mb
+                    // * Total Attachment Size > 25 mb
+                    // * Attachment count >= 100
+                    // Lets try to guess what it was
+                    if attachment.size > Attachment::MAX_ATTACHMENT_SIZE {
+                        AttachmentUploadError::AttachmentTooLarge.into()
+                    } else if let Ok(counts) =
+                        DraftAttachmentMetadata::total_attachments_size_and_count(
+                            metadata_id,
+                            writer_guard.tether(),
+                        )
+                        .await
+                        .inspect_err(|e| warn!("Failed to load message attachment stats: {e}"))
+                    {
+                        if counts.total > Attachment::MAX_ATTACHMENTS_PER_MESSAGE {
+                            AttachmentUploadError::TooManyAttachments.into()
+                        } else if counts.total_size > Attachment::MAX_ATTACHMENT_SIZE {
+                            AttachmentUploadError::TotalAttachmentSizeTooLarge.into()
+                        } else {
+                            // Something else went wrong, lets return default error.
+                            AttachmentUploadError::TooManyAttachments.into()
+                        }
+                    } else {
+                        // Default fallback
+                        AttachmentUploadError::TooManyAttachments.into()
+                    }
+                } else {
+                    e.into()
+                },
+            );
+        }
+    };
 
     info!("Attachment created with id = {}", response.attachment.id);
 
