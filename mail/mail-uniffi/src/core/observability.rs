@@ -93,6 +93,27 @@ pub fn record_human_verification_screen_view(screen_id: HumanVerificationScreenI
     ObservabilityRecorder::default().record(HumanVerificationScreenViewTotal::new(screen_id));
 }
 
+#[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "camelCase")]
+pub enum HumanVerificationStatus {
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+metric! {
+    #[name = "core_human_verification_result_total"]
+    #[version = 1]
+    pub struct HumanVerificationResultTotal {
+        pub status: HumanVerificationStatus
+    }
+}
+
+#[uniffi_export]
+pub fn record_human_verification_result(status: HumanVerificationStatus) {
+    ObservabilityRecorder::default().record(HumanVerificationResultTotal::new(status));
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -219,6 +240,52 @@ mod tests {
             },
             serde_json::de::from_str(&serialized).unwrap()
         );
+    }
+
+    fn assert_serialization_deserialization(
+        status: HumanVerificationStatus,
+        expected_status: &str,
+    ) {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            HumanVerificationResultTotal { status },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+
+        let expected_json = format!(
+            r#"{{"Name":"core_human_verification_result_total","Version":1,"Timestamp":1741021308,"Data":{{"Labels":{{"status":"{expected_status}"}},"Value":1}}}}"#
+        );
+
+        assert_eq!(serialized, expected_json);
+
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: "core_human_verification_result_total".into(),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({"status": expected_status}),
+                    value: 1,
+                }
+            },
+            serde_json::from_str(&serialized).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_human_verification_result() {
+        let statuses = vec![
+            (HumanVerificationStatus::Succeeded, "succeeded"),
+            (HumanVerificationStatus::Failed, "failed"),
+            (HumanVerificationStatus::Cancelled, "cancelled"),
+        ];
+
+        for (status, expected_status) in statuses {
+            assert_serialization_deserialization(status, expected_status);
+        }
     }
 }
 
