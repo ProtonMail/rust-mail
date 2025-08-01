@@ -74,6 +74,46 @@ pub fn record_signup_screen_view(screen_id: SignupScreenId) {
     ObservabilityRecorder::default().record(SignupScreenViewTotal::new(screen_id));
 }
 
+#[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "camelCase")]
+pub enum HumanVerificationScreenId {
+    V3,
+}
+
+metric! {
+    #[name = "core_human_verification_screen_view_total"]
+    #[version = 1]
+    pub struct HumanVerificationScreenViewTotal {
+        pub screen_id: HumanVerificationScreenId
+    }
+}
+
+#[uniffi_export]
+pub fn record_human_verification_screen_view(screen_id: HumanVerificationScreenId) {
+    ObservabilityRecorder::default().record(HumanVerificationScreenViewTotal::new(screen_id));
+}
+
+#[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "camelCase")]
+pub enum HumanVerificationStatus {
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+metric! {
+    #[name = "core_human_verification_result_total"]
+    #[version = 1]
+    pub struct HumanVerificationResultTotal {
+        pub status: HumanVerificationStatus
+    }
+}
+
+#[uniffi_export]
+pub fn record_human_verification_result(status: HumanVerificationStatus) {
+    ObservabilityRecorder::default().record(HumanVerificationResultTotal::new(status));
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -170,6 +210,82 @@ mod tests {
             },
             serde_json::de::from_str(&serialized).unwrap()
         );
+    }
+
+    #[test]
+    fn test_human_verification_screen() {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            HumanVerificationScreenViewTotal {
+                screen_id: HumanVerificationScreenId::V3,
+            },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+        assert_eq!(
+            serialized,
+            r#"{"Name":"core_human_verification_screen_view_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"screen_id":"v3"},"Value":1}}"#
+        );
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: String::from("core_human_verification_screen_view_total"),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({"screen_id": "v3"}),
+                    value: 1,
+                }
+            },
+            serde_json::de::from_str(&serialized).unwrap()
+        );
+    }
+
+    fn assert_serialization_deserialization(
+        status: HumanVerificationStatus,
+        expected_status: &str,
+    ) {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            HumanVerificationResultTotal { status },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+
+        let expected_json = format!(
+            r#"{{"Name":"core_human_verification_result_total","Version":1,"Timestamp":1741021308,"Data":{{"Labels":{{"status":"{expected_status}"}},"Value":1}}}}"#
+        );
+
+        assert_eq!(serialized, expected_json);
+
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: "core_human_verification_result_total".into(),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({"status": expected_status}),
+                    value: 1,
+                }
+            },
+            serde_json::from_str(&serialized).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_human_verification_result() {
+        let statuses = vec![
+            (HumanVerificationStatus::Succeeded, "succeeded"),
+            (HumanVerificationStatus::Failed, "failed"),
+            (HumanVerificationStatus::Cancelled, "cancelled"),
+        ];
+
+        for (status, expected_status) in statuses {
+            assert_serialization_deserialization(status, expected_status);
+        }
     }
 }
 
