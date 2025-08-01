@@ -118,18 +118,6 @@ impl From<ApiUser> for User {
 }
 
 impl User {
-    // /// Get the user's display name.
-    // #[must_use]
-    // pub fn user_name(&self) -> &str {
-    //     if let Some(display_name) = self.display_name.as_deref() {
-    //         display_name
-    //     } else if let Some(name) = self.name.as_deref() {
-    //         name
-    //     } else {
-    //         &self.email
-    //     }
-    // }
-
     /// Download and store user info and settings into the database
     ///
     /// # Errors
