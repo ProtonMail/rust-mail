@@ -9,7 +9,9 @@ use uniffi_runtime::async_runtime;
 use uniffi_runtime::uniffi_async;
 
 use crate::login::datatypes::{Fido2RequestFfi, Fido2ResponseFfi};
+use crate::password_validator::PasswordType;
 use crate::password_validator::PasswordValidatorService;
+use crate::password_validator::PasswordValidatorServiceToken;
 
 /// Errors that can occur during the password change flow, exposed via `UniFFI`.
 #[derive(Debug, Error, uniffi::Error)]
@@ -34,6 +36,18 @@ pub enum PasswordError {
 
     #[error("Internal error")]
     Internal,
+
+    #[error("Password empty")]
+    PasswordEmpty,
+
+    #[error("Passwords do not match")]
+    PasswordsNotMatching,
+
+    #[error("Password not validated")]
+    PasswordNotValidated,
+
+    #[error("Password validation mismatch")]
+    PasswordValidationMismatch,
 }
 
 impl From<RealPasswordError> for PasswordError {
@@ -174,7 +188,11 @@ impl PasswordFlow {
     pub async fn change_pass(
         &self,
         new_pass: String,
+        confirm_password: String,
+        token: Option<Arc<PasswordValidatorServiceToken>>,
     ) -> Result<SimplePasswordState, PasswordError> {
+        check_password(PasswordType::Main, &new_pass, &confirm_password, token)?;
+
         let flow = self.flow.clone();
 
         uniffi_async::<_, PasswordError, _>(async move {
@@ -189,7 +207,16 @@ impl PasswordFlow {
     pub async fn change_mbox_pass(
         &self,
         new_mbox_pass: String,
+        confirm_password: String,
+        token: Option<Arc<PasswordValidatorServiceToken>>,
     ) -> Result<SimplePasswordState, PasswordError> {
+        check_password(
+            PasswordType::Secondary,
+            &new_mbox_pass,
+            &confirm_password,
+            token,
+        )?;
+
         let flow = self.flow.clone();
 
         uniffi_async::<_, PasswordError, _>(async move {
@@ -249,4 +276,25 @@ impl PasswordFlow {
 
         Ok(self.get_state())
     }
+}
+
+fn check_password(
+    password_type: PasswordType,
+    password: &String,
+    confirm_password: &String,
+    token: Option<Arc<PasswordValidatorServiceToken>>,
+) -> Result<(), PasswordError> {
+    if password.trim().is_empty() {
+        return Err(PasswordError::PasswordEmpty);
+    }
+
+    if password != confirm_password {
+        return Err(PasswordError::PasswordsNotMatching);
+    }
+
+    token
+        .ok_or(PasswordError::PasswordNotValidated)?
+        .matches(password_type, password)
+        .then_some(())
+        .ok_or(PasswordError::PasswordValidationMismatch)
 }

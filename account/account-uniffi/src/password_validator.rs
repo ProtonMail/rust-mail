@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use proton_account_common::password_validator::PasswordType as RealPasswordType;
 use proton_account_common::password_validator::PasswordValidatorResult;
 use proton_account_common::password_validator::PasswordValidatorService as RealPasswordValidatorService;
 use secrecy::ExposeSecret;
@@ -21,10 +22,7 @@ impl PasswordValidatorService {
     /// This method returns immediately, without waiting for the spawned task.
     #[must_use]
     pub fn setup(client: muon::Client) -> PasswordValidatorService {
-        let real_service = Arc::new(Mutex::new(RealPasswordValidatorService {
-            client,
-            policies: Vec::new(),
-        }));
+        let real_service = Arc::new(Mutex::new(RealPasswordValidatorService::new(client)));
         let real_service_clone = real_service.clone();
         async_runtime().spawn(async move {
             let mut guard = real_service_clone.lock().await;
@@ -44,6 +42,7 @@ impl PasswordValidatorService {
     #[must_use]
     pub fn validate(
         &self,
+        password_type: PasswordType,
         plain_password: String,
         callback: Box<dyn PasswordValidatorServiceCallback>,
     ) -> PasswordValidatorServiceHandle {
@@ -51,11 +50,14 @@ impl PasswordValidatorService {
             let password = SecretString::from(plain_password);
             let service = self.service.clone();
             let guard = service.lock().await;
-            let results = guard.validate(&password);
+            let results = guard.validate(password_type.into(), &password);
             let token = results
                 .iter()
                 .all(PasswordValidatorResult::is_success)
-                .then(|| Arc::new(PasswordValidatorServiceToken::new(password)));
+                .then_some(Arc::new(PasswordValidatorServiceToken::new(
+                    password_type,
+                    password,
+                )));
             let handle = async_runtime().spawn(async move {
                 callback.on_results(results.into_iter().map(to_service_result).collect(), token);
             });
@@ -63,6 +65,23 @@ impl PasswordValidatorService {
                 handle: handle.abort_handle(),
             }
         })
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, uniffi::Enum)]
+pub enum PasswordType {
+    /// Main login password.
+    Main,
+    /// Secondary (mailbox) password.
+    Secondary,
+}
+
+impl From<PasswordType> for RealPasswordType {
+    fn from(value: PasswordType) -> Self {
+        match value {
+            PasswordType::Main => RealPasswordType::Main,
+            PasswordType::Secondary => RealPasswordType::Secondary,
+        }
     }
 }
 
@@ -93,18 +112,23 @@ pub trait PasswordValidatorServiceCallback: Send + Sync {
 /// Represents a confirmation that a given password was validated.
 #[derive(uniffi::Object)]
 pub struct PasswordValidatorServiceToken {
+    /// The type of the validated password.
+    password_type: PasswordType,
     /// The password that has been validated.
     validated_password: SecretString,
 }
 
 impl PasswordValidatorServiceToken {
-    fn new(validated_password: SecretString) -> Self {
-        Self { validated_password }
+    fn new(password_type: PasswordType, validated_password: SecretString) -> Self {
+        Self {
+            password_type,
+            validated_password,
+        }
     }
 
     #[must_use]
-    pub fn matches(&self, password: &String) -> bool {
-        self.validated_password.expose_secret() == password
+    pub fn matches(&self, password_type: PasswordType, password: &String) -> bool {
+        self.validated_password.expose_secret() == password && self.password_type == password_type
     }
 }
 
@@ -153,9 +177,13 @@ mod tests {
 
     #[test]
     fn token_matching() {
-        let t = PasswordValidatorServiceToken::new(SecretString::from("password".to_string()));
-        assert!(!t.matches(&"pass".to_string()));
-        assert!(!t.matches(&"password1".to_string()));
-        assert!(t.matches(&"password".to_string()));
+        let t = PasswordValidatorServiceToken::new(
+            PasswordType::Main,
+            SecretString::from("password".to_string()),
+        );
+        assert!(!t.matches(PasswordType::Main, &"pass".to_string()));
+        assert!(!t.matches(PasswordType::Main, &"password1".to_string()));
+        assert!(t.matches(PasswordType::Main, &"password".to_string()));
+        assert!(!t.matches(PasswordType::Secondary, &"password".to_string()));
     }
 }

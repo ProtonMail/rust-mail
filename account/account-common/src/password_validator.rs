@@ -29,12 +29,30 @@ impl PasswordValidatorResult {
     }
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum PasswordType {
+    /// Main login password.
+    Main,
+    /// Secondary (mailbox) password.
+    Secondary,
+}
+
 pub struct PasswordValidatorService {
-    pub client: muon::Client,
-    pub policies: Vec<BackendPasswordValidator>,
+    client: muon::Client,
+    default_validator: Box<dyn PasswordValidator>,
+    policies: Vec<BackendPasswordValidator>,
 }
 
 impl PasswordValidatorService {
+    #[must_use]
+    pub fn new(client: muon::Client) -> Self {
+        Self {
+            client,
+            default_validator: Box::new(MinLengthPasswordValidator::default()),
+            policies: Vec::new(),
+        }
+    }
+
     pub async fn fetch_validators(&mut self) -> Result<(), FetchValidatorsError> {
         info!("Fetching password policies");
         let result = self
@@ -60,14 +78,23 @@ impl PasswordValidatorService {
         Ok(())
     }
     #[must_use]
-    pub fn validate(&self, password: &SecretString) -> Vec<PasswordValidatorResult> {
-        if self.policies.is_empty() {
-            // There are no policies fetched from the backend yet, use the default validator
-            vec![MinLengthPasswordValidator::default().validate(password)]
+    pub fn validate(
+        &self,
+        password_type: PasswordType,
+        password: &SecretString,
+    ) -> Vec<PasswordValidatorResult> {
+        if self.policies.is_empty() || password_type == PasswordType::Secondary {
+            // There are no policies fetched from the backend yet, or it's a secondary password,
+            // use the default validator
+            vec![self.default_validator.validate(password)]
         } else {
             self.policies.iter().map(|v| v.validate(password)).collect()
         }
     }
+}
+
+pub trait PasswordValidator: Send + Sync {
+    fn validate(&self, password: &SecretString) -> PasswordValidatorResult;
 }
 
 pub struct BackendPasswordValidator {
@@ -76,7 +103,7 @@ pub struct BackendPasswordValidator {
     pub regex: Regex,
 }
 
-impl BackendPasswordValidator {
+impl PasswordValidator for BackendPasswordValidator {
     fn validate(&self, password: &SecretString) -> PasswordValidatorResult {
         PasswordValidatorResult {
             error_message: self.policy.error_message.clone(),
@@ -116,7 +143,7 @@ impl Default for MinLengthPasswordValidator {
     }
 }
 
-impl MinLengthPasswordValidator {
+impl PasswordValidator for MinLengthPasswordValidator {
     fn validate(&self, password: &SecretString) -> PasswordValidatorResult {
         PasswordValidatorResult {
             error_message: format!("MIN_LENGTH_{}", self.min_length),
