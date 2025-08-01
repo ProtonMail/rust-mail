@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use stash::exports::*;
-use stash::macros::Model;
+use stash::macros::{DbRecord, Model};
 use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use stash::{params, sql_using_serde};
@@ -1164,6 +1164,32 @@ impl DraftAttachmentMetadata {
     ) -> Result<Vec<LocalAttachmentId>, StashError> {
         tether.query_values(formatdoc! {"SELECT local_attachment_id AS value FROM {} WHERE metadata_id = ? AND state =? AND deleted = 0", Self::table_name()}, params![metadata_id, DraftAttachmentUploadState::Pending]).await
     }
+
+    pub async fn total_attachments_size_and_count(
+        metadata_id: MetadataId,
+        tether: &Tether,
+    ) -> Result<DraftAttachmentsTotalCountAndSize, StashError> {
+        Ok(tether.query::<_, DraftAttachmentsTotalCountAndSize>(
+            formatdoc! {"
+                SELECT COUNT(attachments.local_id) AS total, SUM(attachments.size) AS total_size
+                FROM attachments
+                JOIN  {table} ON {table}.local_attachment_id= attachments.local_id AND {table}.metadata_id = ?
+                WHERE {table}.deleted = 0
+            ",
+                table = Self::table_name()
+            }, params![metadata_id],
+        ).await?.into_iter().next().unwrap_or(DraftAttachmentsTotalCountAndSize {
+            total: 0,
+            total_size: 0,
+        }))
+    }
+}
+#[derive(DbRecord, Debug, Eq, PartialEq, Copy, Clone)]
+pub struct DraftAttachmentsTotalCountAndSize {
+    #[DbField]
+    pub total: usize,
+    #[DbField]
+    pub total_size: u64,
 }
 
 /// Contains the state of the attachment.

@@ -186,6 +186,9 @@ impl Default for AttachmentType {
 sql_using_serde!(AttachmentType);
 
 impl Attachment {
+    pub const MAX_ATTACHMENTS_PER_MESSAGE: usize = 100;
+    pub const MAX_ATTACHMENT_SIZE: u64 = 25 * 1025 * 1024;
+
     pub fn remote_id(&self) -> Option<AttachmentId> {
         match &self.attachment_type {
             AttachmentType::Remote(id) => id.clone(),
@@ -644,7 +647,7 @@ impl Attachment {
         };
 
         // Attachment should be <= 25 MB
-        if file_metadata.size() > 25 * 1024 * 1024 {
+        if file_metadata.size() > Attachment::MAX_ATTACHMENT_SIZE {
             return Err(MailContextError::Draft(
                 crate::draft::Error::AttachmentUpload(
                     crate::draft::AttachmentUploadError::AttachmentTooLarge,

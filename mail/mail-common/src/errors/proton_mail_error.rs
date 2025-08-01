@@ -484,6 +484,11 @@ impl From<AttachmentUploadError> for ProtonMailError {
                     DraftAttachmentUploadErrorReason::RetryInvalidState,
                 ))
             }
+            AttachmentUploadError::TotalAttachmentSizeTooLarge => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::TotalAttachmentSizeTooLarge,
+                ))
+            }
         }
     }
 }

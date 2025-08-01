@@ -2,6 +2,7 @@ use super::drafts_common::{
     draft_message, draft_test_params, draft_test_params_with_mime_type,
     expected_create_draft_params, expected_create_reply_draft_params,
 };
+use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::UserId;
 use proton_core_api::services::proton::common::ApiErrorInfo;
@@ -29,7 +30,7 @@ use proton_mail_common::test_utils::message_body::{
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{MailContextError, MailUserContext, draft};
 use stash::orm::Model;
-use stash::stash::Tether;
+use stash::stash::{StashError, Tether};
 use std::path::Path;
 
 #[tokio::test]
@@ -803,6 +804,253 @@ async fn override_attachment_name() {
     .unwrap();
 
     assert_eq!(local_attachment.filename, filename_override);
+}
+
+#[tokio::test]
+async fn total_attachment_size_more_than_limit() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let params = draft_test_params();
+    let attachment_file = tempfile::NamedTempFile::new().unwrap();
+    let message = draft_message();
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    ctx.mock_create_attachment(
+        new_attachment_params(attachment_file.path(), message.metadata.id.clone()),
+        Err((
+            422,
+            ApiErrorInfo {
+                code: Mail::TooManyAttachments as u32,
+                error: None,
+                details: None,
+            },
+        )),
+    )
+    .await;
+
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
+    draft
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
+        .await
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Create on very large attachment
+    let mut tether = user_ctx.user_stash().connection();
+    {
+        let mut attachment = Attachment {
+            local_id: None,
+            attachment_type: Default::default(),
+            local_address_id: None,
+            remote_address_id: None,
+            local_conversation_id: None,
+            remote_conversation_id: None,
+            local_message_id: None,
+            remote_message_id: None,
+            disposition: Default::default(),
+            enc_signature: None,
+            is_auto_forwardee: false,
+            key_packets: None,
+            mime_type: Default::default(),
+            filename: "".to_string(),
+            sender: None,
+            signature: None,
+            size: Attachment::MAX_ATTACHMENT_SIZE,
+            content_id: None,
+            transfer_encoding: None,
+            image_width: None,
+            image_height: None,
+        };
+        tether
+            .tx(async |tx| {
+                attachment.save(tx).await?;
+                let mut attachment_metadata =
+                    DraftAttachmentMetadata::new(draft.metadata_id, attachment.id(), 1, false);
+                attachment_metadata.save(tx).await
+            })
+            .await
+            .unwrap();
+    }
+
+    // Create attachment
+    let _ = create_and_add_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Attachment,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+
+    // Execute action.
+    let QueuedError::Action(err, _) = user_ctx.execute_all_send_actions().await.unwrap_err() else {
+        unreachable!();
+    };
+
+    let err = err
+        .as_action_error::<proton_mail_common::actions::draft::AttachmentUpload>()
+        .unwrap();
+
+    assert!(matches!(
+        err,
+        ActionError::Action(MailContextError::Draft(draft::Error::AttachmentUpload(
+            draft::AttachmentUploadError::TotalAttachmentSizeTooLarge
+        )))
+    ));
+}
+
+#[tokio::test]
+async fn total_attachment_count_exceeds_limit() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let params = draft_test_params();
+    let attachment_file = tempfile::NamedTempFile::new().unwrap();
+    let message = draft_message();
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    ctx.mock_create_attachment(
+        new_attachment_params(attachment_file.path(), message.metadata.id.clone()),
+        Err((
+            422,
+            ApiErrorInfo {
+                code: Mail::TooManyAttachments as u32,
+                error: None,
+                details: None,
+            },
+        )),
+    )
+    .await;
+
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
+    draft
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
+        .await
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Create 100 small attachments
+    let mut tether = user_ctx.user_stash().connection();
+    {
+        tether
+            .tx::<_, _, StashError>(async |tx| {
+                for _ in 0..100 {
+                    let mut attachment = Attachment {
+                        local_id: None,
+                        attachment_type: Default::default(),
+                        local_address_id: None,
+                        remote_address_id: None,
+                        local_conversation_id: None,
+                        remote_conversation_id: None,
+                        local_message_id: None,
+                        remote_message_id: None,
+                        disposition: Default::default(),
+                        enc_signature: None,
+                        is_auto_forwardee: false,
+                        key_packets: None,
+                        mime_type: Default::default(),
+                        filename: "".to_string(),
+                        sender: None,
+                        signature: None,
+                        size: 10,
+                        content_id: None,
+                        transfer_encoding: None,
+                        image_width: None,
+                        image_height: None,
+                    };
+                    attachment.save(tx).await?;
+                    let mut attachment_metadata =
+                        DraftAttachmentMetadata::new(draft.metadata_id, attachment.id(), 1, false);
+                    attachment_metadata.save(tx).await?;
+                }
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
+
+    // Create attachment
+    let _ = create_and_add_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Attachment,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+
+    // Execute action.
+    let QueuedError::Action(err, _) = user_ctx.execute_all_send_actions().await.unwrap_err() else {
+        unreachable!();
+    };
+
+    let err = err
+        .as_action_error::<proton_mail_common::actions::draft::AttachmentUpload>()
+        .unwrap();
+
+    assert!(matches!(
+        err,
+        ActionError::Action(MailContextError::Draft(draft::Error::AttachmentUpload(
+            draft::AttachmentUploadError::TooManyAttachments
+        )))
+    ));
 }
 
 async fn create_and_add_attachment(

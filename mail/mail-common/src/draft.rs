@@ -210,6 +210,8 @@ pub enum AttachmentUploadError {
     AttachmentTooLarge,
     #[error("Retry attempted for Attachment {0} when not in error state")]
     RetryInvalidState(LocalAttachmentId),
+    #[error("Combined attachment size is greater than maximum limit")]
+    TotalAttachmentSizeTooLarge,
 }
 
 impl From<AttachmentUploadError> for MailContextError {
