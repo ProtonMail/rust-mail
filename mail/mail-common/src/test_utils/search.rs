@@ -353,7 +353,7 @@ pub fn test_conversation(
         expiration_time: 1024,
         size: 4909,
         labels: Vec::from_iter(labels),
-        display_snooze_reminder: false,
+        display_snoozed_reminder: false,
         attachments_metadata: Vec::from_iter(attachments),
         attachment_info: BTreeMap::default(),
         context_time: None,

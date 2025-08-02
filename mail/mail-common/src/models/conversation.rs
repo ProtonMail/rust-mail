@@ -87,7 +87,7 @@ pub struct Conversation {
     pub deleted: bool,
 
     #[DbField]
-    pub display_snooze_reminder: bool,
+    pub display_snoozed_reminder: bool,
 
     /// This field is only present for currently snoozed conversations.
     /// It is determined by the `ConversationLabel` pointing to Snoozed label of the conversation.
@@ -161,7 +161,7 @@ impl Conversation {
             attachment_info: Default::default(),
             attachments_metadata: vec![],
             deleted: false,
-            display_snooze_reminder: false,
+            display_snoozed_reminder: false,
             snoozed_until: None,
             exclusive_location: None,
             expiration_time: UnixTimestamp::new(0),
@@ -479,7 +479,7 @@ impl Conversation {
             attachment_info: Default::default(),
             attachments_metadata: vec![],
             deleted: false,
-            display_snooze_reminder: false,
+            display_snoozed_reminder: false,
             snoozed_until: None,
             exclusive_location: None,
             expiration_time: 0.into(),
@@ -1727,13 +1727,16 @@ impl Conversation {
         Self::validate_snooze_location(local_label_id, bond).await?;
 
         let now = UnixTimestamp::now();
+
         if snooze_until <= now {
             return Err(AppError::SnoozeTimeInThePast);
         }
+
         let local_inbox_id = SystemLabel::Inbox
             .local_id(bond)
             .await?
             .expect("Inbox should be set");
+
         let local_snoozed_id = SystemLabel::Snoozed
             .local_id(bond)
             .await?
@@ -1741,6 +1744,7 @@ impl Conversation {
 
         Self::remove_label(local_inbox_id, ids.clone(), bond).await?;
         Self::apply_label(local_snoozed_id, ids.clone(), bond).await?;
+
         Self::modify_labels(
             |label| {
                 let modified = label.context_snooze_time != snooze_until;
@@ -1766,6 +1770,7 @@ impl Conversation {
             .local_id(bond)
             .await?
             .expect("Inbox should be set");
+
         let local_snoozed_id = SystemLabel::Snoozed
             .local_id(bond)
             .await?
@@ -1773,6 +1778,7 @@ impl Conversation {
 
         Self::remove_label(local_snoozed_id, ids.clone(), bond).await?;
         Self::apply_label(local_inbox_id, ids.clone(), bond).await?;
+
         Self::modify_labels(
             |label| {
                 let modified = label.context_snooze_time != label.context_time;
@@ -1809,10 +1815,12 @@ impl Conversation {
     ) -> Result<(), AppError> {
         for id in ids {
             let conversation = Conversation::find_by_id(id, bond).await?;
+
             let Some(mut conversation) = conversation else {
                 warn!("Conversation with id {id} does not exist!");
                 continue;
             };
+
             let mut modified = false;
 
             for label in conversation.labels.iter_mut() {
@@ -2979,7 +2987,7 @@ impl From<ApiConversation> for Conversation {
                 .map(AttachmentMetadata::from)
                 .collect(),
             deleted: false,
-            display_snooze_reminder: value.display_snooze_reminder,
+            display_snoozed_reminder: value.display_snoozed_reminder,
             snoozed_until: None,
             expiration_time: value.expiration_time.into(),
             exclusive_location: None,

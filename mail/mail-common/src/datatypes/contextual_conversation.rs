@@ -50,7 +50,7 @@ pub struct ContextualConversation {
     pub custom_labels: Vec<CustomLabel>,
 
     /// Whether a snooze reminder should be displayed.
-    pub display_snooze_reminder: bool,
+    pub display_snoozed_reminder: bool,
 
     /// Order in the list this conversation should be displayed.
     pub display_order: u64,
@@ -114,7 +114,7 @@ impl ScrollerEq for ContextualConversation {
     fn s_eq(&self, other: &Self) -> bool {
         self.local_id == other.local_id
             && self.remote_id == other.remote_id
-            && self.display_snooze_reminder == other.display_snooze_reminder
+            && self.display_snoozed_reminder == other.display_snoozed_reminder
             && self.is_starred == other.is_starred
             && self.num_attachments == other.num_attachments
             && self.expiration_time == other.expiration_time
@@ -148,7 +148,7 @@ impl ContextualConversation {
             attachments_metadata,
             custom_labels: conversation.custom_labels,
             display_order: conversation.display_order,
-            display_snooze_reminder: conversation.display_snooze_reminder,
+            display_snoozed_reminder: conversation.display_snoozed_reminder,
             exclusive_location: conversation.exclusive_location,
             expiration_time: label.context_expiration_time,
             is_starred,

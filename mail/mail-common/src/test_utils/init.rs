@@ -159,7 +159,7 @@ impl Params {
                     context_expiration_time: 0,
                     context_snooze_time: 0,
                 }],
-                display_snooze_reminder: false,
+                display_snoozed_reminder: false,
                 attachments_metadata: vec![testdata_attachment_metadata()],
                 attachment_info: BTreeMap::default(),
                 context_time: None,

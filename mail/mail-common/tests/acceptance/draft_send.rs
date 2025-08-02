@@ -83,7 +83,7 @@ async fn basic_send_check() {
         id: message.metadata.conversation_id.clone(),
         attachment_info: Default::default(),
         attachments_metadata: vec![],
-        display_snooze_reminder: false,
+        display_snoozed_reminder: false,
         expiration_time: 0,
         labels: vec![ConversationLabel {
             id: LabelId::sent(),
@@ -283,7 +283,7 @@ async fn basic_schedule_send_check() {
         id: message.metadata.conversation_id.clone(),
         attachment_info: Default::default(),
         attachments_metadata: vec![],
-        display_snooze_reminder: false,
+        display_snoozed_reminder: false,
         expiration_time: 0,
         labels: vec![ConversationLabel {
             id: LabelId::sent(),
@@ -1577,7 +1577,7 @@ async fn send_external_with_password() {
         id: message.metadata.conversation_id.clone(),
         attachment_info: Default::default(),
         attachments_metadata: vec![],
-        display_snooze_reminder: false,
+        display_snoozed_reminder: false,
         expiration_time: 0,
         labels: vec![ConversationLabel {
             id: LabelId::sent(),
@@ -1709,7 +1709,7 @@ async fn send_with_expiration() {
         id: message.metadata.conversation_id.clone(),
         attachment_info: Default::default(),
         attachments_metadata: vec![],
-        display_snooze_reminder: false,
+        display_snoozed_reminder: false,
         expiration_time: expiration_timestamp.as_u64(),
         labels: vec![ConversationLabel {
             id: LabelId::sent(),
