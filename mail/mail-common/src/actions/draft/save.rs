@@ -886,7 +886,7 @@ impl Save {
             attachment_info: Default::default(),
             attachments_metadata: attachments,
             deleted: false,
-            display_snoozed_reminder: false,
+            display_snooze_reminder: false,
             exclusive_location: None,
             expiration_time,
             labels: vec![],

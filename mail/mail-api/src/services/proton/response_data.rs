@@ -409,8 +409,8 @@ pub struct Conversation {
     #[serde(default)]
     pub attachments_metadata: Vec<AttachmentMetadata>,
 
-    /// TODO: Document this field.
-    #[serde(default)]
+    /// Whether a snooze reminder should be displayed.
+    /// It is set to true when the conversation is to be reminded.
     pub display_snoozed_reminder: bool,
 
     /// TODO: Document this field.

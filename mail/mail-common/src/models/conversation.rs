@@ -87,7 +87,7 @@ pub struct Conversation {
     pub deleted: bool,
 
     #[DbField]
-    pub display_snoozed_reminder: bool,
+    pub display_snooze_reminder: bool,
 
     /// This field is only present for currently snoozed conversations.
     /// It is determined by the `ConversationLabel` pointing to Snoozed label of the conversation.
@@ -161,7 +161,7 @@ impl Conversation {
             attachment_info: Default::default(),
             attachments_metadata: vec![],
             deleted: false,
-            display_snoozed_reminder: false,
+            display_snooze_reminder: false,
             snoozed_until: None,
             exclusive_location: None,
             expiration_time: UnixTimestamp::new(0),
@@ -479,7 +479,7 @@ impl Conversation {
             attachment_info: Default::default(),
             attachments_metadata: vec![],
             deleted: false,
-            display_snoozed_reminder: false,
+            display_snooze_reminder: false,
             snoozed_until: None,
             exclusive_location: None,
             expiration_time: 0.into(),
@@ -1372,6 +1372,7 @@ impl Conversation {
 
             // Update conversation unread count.
             conversation.num_unread = 0;
+            conversation.display_snooze_reminder = false;
             conversation.save(bond).await?;
 
             // Update conversation labels unread stats.
@@ -1720,15 +1721,13 @@ impl Conversation {
 
     pub async fn snooze(
         local_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = LocalConversationId> + Clone,
+        ids: &[LocalConversationId],
         snooze_until: UnixTimestamp,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         Self::validate_snooze_location(local_label_id, bond).await?;
 
-        let now = UnixTimestamp::now();
-
-        if snooze_until <= now {
+        if snooze_until <= UnixTimestamp::now() {
             return Err(AppError::SnoozeTimeInThePast);
         }
 
@@ -1742,8 +1741,8 @@ impl Conversation {
             .await?
             .expect("Snoozed should be set");
 
-        Self::remove_label(local_inbox_id, ids.clone(), bond).await?;
-        Self::apply_label(local_snoozed_id, ids.clone(), bond).await?;
+        Self::remove_label(local_inbox_id, ids.to_vec(), bond).await?;
+        Self::apply_label(local_snoozed_id, ids.to_vec(), bond).await?;
 
         Self::modify_labels(
             |label| {
@@ -1751,7 +1750,7 @@ impl Conversation {
                 label.context_snooze_time = snooze_until;
                 modified
             },
-            ids,
+            ids.to_vec(),
             bond,
         )
         .await?;
@@ -1761,7 +1760,7 @@ impl Conversation {
 
     pub async fn unsnooze(
         local_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = LocalConversationId> + Clone,
+        ids: &[LocalConversationId],
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         Self::validate_snooze_location(local_label_id, bond).await?;
@@ -1776,8 +1775,8 @@ impl Conversation {
             .await?
             .expect("Snoozed should be set");
 
-        Self::remove_label(local_snoozed_id, ids.clone(), bond).await?;
-        Self::apply_label(local_inbox_id, ids.clone(), bond).await?;
+        Self::remove_label(local_snoozed_id, ids.to_vec(), bond).await?;
+        Self::apply_label(local_inbox_id, ids.to_vec(), bond).await?;
 
         Self::modify_labels(
             |label| {
@@ -1785,7 +1784,7 @@ impl Conversation {
                 label.context_snooze_time = label.context_time;
                 modified
             },
-            ids,
+            ids.to_vec(),
             bond,
         )
         .await?;
@@ -2987,7 +2986,7 @@ impl From<ApiConversation> for Conversation {
                 .map(AttachmentMetadata::from)
                 .collect(),
             deleted: false,
-            display_snoozed_reminder: value.display_snoozed_reminder,
+            display_snooze_reminder: value.display_snoozed_reminder,
             snoozed_until: None,
             expiration_time: value.expiration_time.into(),
             exclusive_location: None,

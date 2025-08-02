@@ -14,7 +14,7 @@ impl AsIntoTable for Vec<ContextualConversation> {
             let date = if let Some(time) = conv.snoozed_until {
                 let date = date_from_timestamp(time);
 
-                if conv.display_snoozed_reminder {
+                if conv.display_snooze_reminder {
                     date.fg(Color::Yellow)
                 } else {
                     Span::raw(date)

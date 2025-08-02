@@ -872,7 +872,7 @@ pub struct Conversation {
     pub custom_labels: Vec<InlineCustomLabel>,
 
     /// Whether to display the snooze reminder.
-    pub display_snoozed_reminder: bool,
+    pub display_snooze_reminder: bool,
 
     /// When this conversation is snoozed until.
     pub snoozed_until: Option<UnixTimestamp>,
@@ -936,7 +936,7 @@ impl From<ContextualConversation> for Conversation {
                 .collect(),
             custom_labels: value.custom_labels.map_vec(),
             display_order: value.display_order,
-            display_snoozed_reminder: value.display_snoozed_reminder,
+            display_snooze_reminder: value.display_snooze_reminder,
             exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time.into(),
             num_attachments: value.num_attachments,
