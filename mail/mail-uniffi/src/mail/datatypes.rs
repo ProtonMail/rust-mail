@@ -388,16 +388,10 @@ impl From<RealMessageButtons> for MessageButtons {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 pub enum MessageMetadataSortMode {
-    /// TODO: Document this variant.
     Time,
-
-    /// TODO: Document this variant.
     Size,
-
-    /// TODO: Document this variant.
     ID,
 }
 

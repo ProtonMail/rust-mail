@@ -19,19 +19,10 @@ use std::future::Future;
 use std::ops::Deref;
 use typed_builder::TypedBuilder;
 
-/// Trait defining the scroll data.
-///
-/// Extends Model and requires conversion to ScrollCursor.
 pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
-    /// Model of the Data
     type Model: ModelExtension;
-    /// Item type returned by the Data
     type Item: Send + Sync + ScrollerEq + Clone + Debug;
 
-    /// Find the first record with matching:
-    /// * label_id,
-    /// * read_filter
-    ///
     fn find_with_key(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -48,25 +39,12 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         }
     }
 
-    /// Total number of items to load from the database.
-    /// Implementator should use underlying counters structure to deterimn
-    /// How many items in total are there to paginate over.
     fn total(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         tether: &Tether,
     ) -> impl Future<Output = Result<u64, AppError>> + Send;
 
-    /// Query to get the data of associated type Model from the database.
-    ///
-    /// # Arguments
-    /// * filter - determin the read/unread/all status of items to paginate over
-    /// * limit - limit the number of items to load
-    /// * require_remote_id - if the remote_id is required for the item
-    ///   this parameter ensures that remote_id is defined in database
-    ///   so the item can be used to request more pages
-    /// * offset - offset of the items to load, it is used for loading cached partial pages
-    ///
     fn query(
         filter: ReadFilter,
         limit: Option<usize>,
@@ -75,16 +53,12 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         order: LabelScrollOrder,
     ) -> String;
 
-    /// Conversion between associated types of Model and Item.
     fn convert(local_id: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item>;
 
-    /// Get the time of the item.
     fn time(item: &Self::Item) -> UnixTimestamp;
 
-    /// Get the display order of the item.
     fn display_order(item: &Self::Item) -> u64;
 
-    /// Transform model into ScrollData
     fn into_scroll_data(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -92,7 +66,6 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         scroll_order: LabelScrollOrder,
     ) -> Option<Self>;
 
-    /// List of tables that are watched by the scroll data.
     fn watched_tables() -> Vec<String>;
 }
 
@@ -478,18 +451,10 @@ impl ScrollData for ConversationScrollData {
 
 #[derive(Debug, Eq, PartialEq, Clone, TypedBuilder)]
 pub struct ScrollCursor<T: ScrollData> {
-    /// Label id used in the sync.
     pub local_label_id: LocalLabelId,
-
-    /// Read filter used in the sync.
     pub unread: ReadFilter,
-
-    /// Last synced item time.
     pub time: UnixTimestamp,
-
-    /// Last synced display order.
     pub display_order: u64,
-
     pub scroll_order: LabelScrollOrder,
 
     #[builder(default)]
@@ -497,7 +462,6 @@ pub struct ScrollCursor<T: ScrollData> {
 }
 
 impl<T: ScrollData> ScrollCursor<T> {
-    /// Create a new ScrollCursor set to the very begining of the data.
     pub fn absolute_beginning(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -510,7 +474,6 @@ impl<T: ScrollData> ScrollCursor<T> {
         }
     }
 
-    /// Create a new ScrollCursor set to the very end of the data.
     pub fn absolute_end(
         local_label_id: LocalLabelId,
         unread: ReadFilter,

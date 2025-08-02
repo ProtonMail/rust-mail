@@ -36,16 +36,10 @@ use std::collections::HashMap;
 //  ENUMS
 //==============================================================================
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Serialize, Eq, Hash, PartialEq)]
 pub enum MessageMetadataSortMode {
-    /// TODO: Document this variant.
     Time,
-
-    /// TODO: Document this variant.
     Size,
-
-    /// TODO: Document this variant.
     ID,
 }
 
