@@ -471,7 +471,7 @@ pub fn transform_html_with_banners(
     html: &str,
     opts: TransformOptsResolved,
     mime_type: MimeType,
-    mut prev_banners: Vec<MessageBanner>,
+    mut banners: Vec<MessageBanner>,
 ) -> BodyOutput {
     trace!(
         "\
@@ -479,15 +479,16 @@ Beginning html transform:
 opts: {opts:#?}
 mime_type: {mime_type:?}"
     );
+
     // The order at which we run the transforms is not random, it's been chosen for maximum
     // efficiency.
-
     let TransformOptsResolved {
         show_block_quote,
         hide_remote_images,
         hide_embedded_images,
         theme,
     } = opts;
+
     // If the message is text/plain we need to apply some extra transforms to it like
     // preserving whitespaces and adding links.
     let mut transformer = if mime_type == MimeType::TextPlain {
@@ -500,6 +501,7 @@ mime_type: {mime_type:?}"
         transformer.add_noreferrer();
         transformer
     };
+
     let tags_stripped = transformer.strip_whitelist();
     let utm_stripped = transformer.strip_utm();
 
@@ -527,18 +529,20 @@ mime_type: {mime_type:?}"
     );
 
     if opts.hide_remote_images && remote_images_count > 0 {
-        prev_banners.push(MessageBanner::RemoteContent);
+        banners.push(MessageBanner::RemoteContent);
+
         // So that they don't show up in the stats later on
         remote_images_count = 0;
     }
 
     if opts.hide_embedded_images && embedded_images_count > 0 {
-        prev_banners.push(MessageBanner::EmbeddedImages);
+        banners.push(MessageBanner::EmbeddedImages);
+
         // So that they don't show up in the stats later on
         embedded_images_count = 0;
     }
 
-    prev_banners.sort_unstable();
+    banners.sort_unstable();
 
     let output = BodyOutput {
         body: transformer.to_string(),
@@ -548,8 +552,10 @@ mime_type: {mime_type:?}"
         remote_images_disabled: remote_images_count,
         embedded_images_disabled: embedded_images_count,
         transform_opts: opts.into(),
-        body_banners: prev_banners,
+        body_banners: banners,
     };
+
     trace!("HTML Transform done");
+
     output
 }
