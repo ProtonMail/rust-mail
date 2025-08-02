@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate as proton_mail_common;
 use crate::datatypes::LocalConversationId;
-use crate::datatypes::labels::LabelScrollOrder;
+use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{CachedScrollData, ConversationScrollData, ScrollData};
 use crate::models::{Conversation, ScrollCursor};
@@ -111,7 +111,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -135,7 +135,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     let new_scroller: ScrollCursor<_> = ConversationScrollData::find_with_key(
         local_label_id,
         unread,
-        LabelScrollOrder::Descending,
+        ScrollOrderDir::Desc,
         &tether,
     )
     .await
@@ -236,7 +236,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -472,7 +472,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -515,7 +515,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_read = ConversationScrollData::builder()
@@ -524,7 +524,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_unread = ConversationScrollData::builder()
@@ -533,7 +533,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
     let count = ConversationScrollData::all_count(&tether).await.unwrap();
 
@@ -585,7 +585,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_read = ConversationScrollData::builder()
@@ -594,7 +594,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_unread = ConversationScrollData::builder()
@@ -603,7 +603,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -629,7 +629,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(1.into())
         .display_order(2)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_read = ConversationScrollData::builder()
@@ -638,7 +638,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(1.into())
         .display_order(2)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_unread = ConversationScrollData::builder()
@@ -647,7 +647,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(1.into())
         .display_order(2)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -689,7 +689,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_read = ConversationScrollData::builder()
@@ -698,7 +698,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_unread = ConversationScrollData::builder()
@@ -707,7 +707,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_conversation_id(ConversationId::from("150"))
         .conversation_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -765,7 +765,7 @@ async fn test_cashed_scroller_correctly_reads_empty_conversations_from_the_trash
         .remote_conversation_id("conv_1".into())
         .conversation_time(1.into())
         .display_order(1)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -828,7 +828,7 @@ async fn test_create_or_get_local_fix_preserves_api_conversations_with_labels() 
         inbox_local_id,
         ReadFilter::All,
         10,
-        LabelScrollOrder::Descending,
+        ScrollOrderDir::Desc,
     );
     let items = cached_scroller.fetch_more(&tether).await.unwrap();
     assert_eq!(items.len(), 0);

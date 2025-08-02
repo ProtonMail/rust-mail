@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate as proton_mail_common;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::ReadFilter;
-use crate::datatypes::labels::LabelScrollOrder;
+use crate::datatypes::labels::ScrollOrderDir;
 use crate::models::{CachedScrollData, MessageScrollData, ScrollCursor};
 use crate::models::{Message, ScrollData};
 use proton_core_api::services::proton::LabelId;
@@ -94,7 +94,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
         .remote_message_id(last_message.remote_id.clone().unwrap())
         .message_time(last_message.time)
         .display_order(last_message.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -118,16 +118,12 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     assert_eq!(actual, expected);
 
     // Test if new scroller read from database returns exactly the same data.
-    let new_scroller: ScrollCursor<MessageScrollData> = MessageScrollData::find_with_key(
-        local_label_id,
-        unread,
-        LabelScrollOrder::Descending,
-        &tether,
-    )
-    .await
-    .unwrap()
-    .unwrap()
-    .into();
+    let new_scroller: ScrollCursor<MessageScrollData> =
+        MessageScrollData::find_with_key(local_label_id, unread, ScrollOrderDir::Desc, &tether)
+            .await
+            .unwrap()
+            .unwrap()
+            .into();
 
     let count = new_scroller.seen_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64);
@@ -227,7 +223,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .remote_message_id(last_message.remote_id.clone().unwrap())
         .message_time(last_message.time)
         .display_order(last_message.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -457,7 +453,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
         .remote_message_id(last_message.remote_id.clone().unwrap())
         .message_time(last_message.time)
         .display_order(last_message.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -500,7 +496,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .unread(ReadFilter::All)
         .remote_message_id(MessageId::from("150"))
         .message_time(0.into())
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .display_order(0)
         .build();
 
@@ -510,7 +506,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_unread = MessageScrollData::builder()
@@ -519,7 +515,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
     let count = MessageScrollData::all_count(&tether).await.unwrap();
 
@@ -571,7 +567,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_read = MessageScrollData::builder()
@@ -580,7 +576,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_unread = MessageScrollData::builder()
@@ -589,7 +585,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -615,7 +611,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(1.into())
         .display_order(2)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_read = MessageScrollData::builder()
@@ -624,7 +620,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(1.into())
         .display_order(2)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_unread = MessageScrollData::builder()
@@ -633,7 +629,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(1.into())
         .display_order(2)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether
@@ -675,7 +671,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_read = MessageScrollData::builder()
@@ -684,7 +680,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     let mut scroller_unread = MessageScrollData::builder()
@@ -693,7 +689,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .remote_message_id(MessageId::from("150"))
         .message_time(0.into())
         .display_order(0)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether

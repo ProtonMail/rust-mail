@@ -12,7 +12,7 @@ use super::{
     MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
     remote_source::RemoteSource,
 };
-use crate::datatypes::labels::LabelScrollOrder;
+use crate::datatypes::labels::ScrollOrderDir;
 use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 
 #[derive(Debug)]
@@ -22,7 +22,7 @@ pub struct DataScrollerSource<T: RemoteSource> {
     page_size: usize,
     invalidate: Option<flume::Sender<()>>,
     new_data_callback: (flume::Sender<()>, flume::Receiver<()>),
-    scroll_order: LabelScrollOrder,
+    order_dir: ScrollOrderDir,
     state: MailScrollerState<T>,
 }
 
@@ -31,7 +31,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
     ) -> Self {
         Self {
             local_label_id,
@@ -39,13 +39,8 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             page_size,
             invalidate: None,
             new_data_callback: flume::bounded(0),
-            state: MailScrollerState::new_not_synced(
-                local_label_id,
-                unread,
-                page_size,
-                scroll_order,
-            ),
-            scroll_order,
+            state: MailScrollerState::new_not_synced(local_label_id, unread, page_size, order_dir),
+            order_dir,
         }
     }
 
@@ -102,7 +97,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         T::sync_first_page(
             ctx,
@@ -110,7 +105,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             remote_label_id,
             unread,
             page_size,
-            scroll_order,
+            order_dir,
         )
         .await
     }
@@ -132,7 +127,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             remote_label_id,
             unread,
             page_size,
-            self.scroll_order,
+            self.order_dir,
         )
         .await
     }
@@ -153,7 +148,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             remote_label_id,
             unread,
             page_size,
-            self.scroll_order,
+            self.order_dir,
             self.new_data_callback.0.clone(),
         )
         .await?;
@@ -245,7 +240,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                     remote_label_id,
                     unread,
                     self.page_size,
-                    self.scroll_order,
+                    self.order_dir,
                 )
                 .await?
             }
@@ -445,7 +440,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             self.local_label_id,
             self.unread,
             self.page_size,
-            self.scroll_order,
+            self.order_dir,
         );
         self.initialize(ctx).await?;
 

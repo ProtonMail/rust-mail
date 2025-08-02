@@ -2,7 +2,7 @@ use derive_more::Display;
 use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{StashError, Tether};
 
-use crate::datatypes::labels::LabelScrollOrder;
+use crate::datatypes::labels::ScrollOrderDir;
 use crate::{
     datatypes::ReadFilter,
     models::{CachedScrollData, ScrollData},
@@ -46,13 +46,13 @@ impl<T: ScrollData> MailScrollerState<T> {
         match ordered {
             Some(ordered) => Ok(MailScrollerState::Online(ordered)),
             None => {
-                let scroll_order =
-                    LabelScrollOrder::for_local_label_id(local_label_id, tether).await?;
+                let order_dir = ScrollOrderDir::for_local_label(local_label_id, tether).await?;
+
                 Ok(MailScrollerState::new_not_synced(
                     local_label_id,
                     unread,
                     page_size,
-                    scroll_order,
+                    order_dir,
                 ))
             }
         }
@@ -63,9 +63,9 @@ impl<T: ScrollData> MailScrollerState<T> {
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
     ) -> Self {
-        let unordered = CachedScrollData::all(local_label_id, unread, page_size, scroll_order);
+        let unordered = CachedScrollData::all(local_label_id, unread, page_size, order_dir);
 
         MailScrollerState::NotSynced(unordered)
     }

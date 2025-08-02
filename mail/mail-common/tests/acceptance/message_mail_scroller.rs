@@ -20,7 +20,7 @@ use proton_mail_common::{
 use proton_mail_common::{message, msg_id};
 use velcro::hash_map;
 
-use proton_mail_common::datatypes::labels::LabelScrollOrder;
+use proton_mail_common::datatypes::labels::ScrollOrderDir;
 use stash::orm::Model;
 use stash::stash::StashError;
 use std::{collections::HashMap, vec};
@@ -69,7 +69,7 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
         .remote_message_id(last_message.remote_id.clone().unwrap())
         .message_time(last_message.time)
         .display_order(last_message.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
         .build();
 
     tether

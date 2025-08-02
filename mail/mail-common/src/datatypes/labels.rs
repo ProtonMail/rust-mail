@@ -64,41 +64,45 @@ pub async fn color_to_display(
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(u8)]
-pub enum LabelScrollOrder {
-    Ascending = 0,
+pub enum ScrollOrderDir {
+    Asc = 0,
     #[default]
-    Descending = 1,
+    Desc = 1,
 }
 
-impl LabelScrollOrder {
-    pub fn for_label_id(id: &LabelId) -> Self {
+impl ScrollOrderDir {
+    pub fn for_label(id: &LabelId) -> Self {
         if *id == LabelId::all_scheduled() {
-            Self::Ascending
+            Self::Asc
         } else {
-            Self::Descending
+            Self::Desc
         }
     }
 
-    pub async fn for_local_label_id(id: LocalLabelId, tether: &Tether) -> Result<Self, StashError> {
+    pub async fn for_local_label(id: LocalLabelId, tether: &Tether) -> Result<Self, StashError> {
         if let Some(remote_id) = Label::local_id_counterpart(id, tether).await? {
-            Ok(Self::for_label_id(&remote_id))
+            Ok(Self::for_label(&remote_id))
         } else {
             Ok(Self::default())
         }
     }
+
+    pub fn as_api_desc(&self) -> Option<bool> {
+        Some(*self == Self::Desc)
+    }
 }
 
-impl ToSql for LabelScrollOrder {
+impl ToSql for ScrollOrderDir {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
 }
 
-impl FromSql for LabelScrollOrder {
+impl FromSql for ScrollOrderDir {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match i64::column_result(value)? {
-            0 => Ok(Self::Ascending),
-            1 => Ok(Self::Descending),
+            0 => Ok(Self::Asc),
+            1 => Ok(Self::Desc),
             v => Err(FromSqlError::OutOfRange(v)),
         }
     }

@@ -17,7 +17,7 @@ use uuid::Uuid;
 mod mail_scroller_source;
 mod mail_scroller_watcher;
 
-use crate::datatypes::labels::LabelScrollOrder;
+use crate::datatypes::labels::ScrollOrderDir;
 pub use mail_scroller_source::*;
 pub use mail_scroller_watcher::*;
 
@@ -156,15 +156,17 @@ impl MailScroller {
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<ContextualConversation>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let scroll_order =
-            LabelScrollOrder::for_local_label_id(local_label_id, &ctx.user_stash().connection())
-                .await?;
+
+        let order_dir =
+            ScrollOrderDir::for_local_label(local_label_id, &ctx.user_stash().connection()).await?;
+
         let source = DataScrollerSource::<ConversationScrollData>::new(
             local_label_id,
             unread,
             page_size,
-            scroll_order,
+            order_dir,
         );
+
         MailScroller::new(ctx, source, page_size).await
     }
 
@@ -175,15 +177,17 @@ impl MailScroller {
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let scroll_order =
-            LabelScrollOrder::for_local_label_id(local_label_id, &ctx.user_stash().connection())
-                .await?;
+
+        let order_dir =
+            ScrollOrderDir::for_local_label(local_label_id, &ctx.user_stash().connection()).await?;
+
         let source = DataScrollerSource::<MessageScrollData>::new(
             local_label_id,
             unread,
             page_size,
-            scroll_order,
+            order_dir,
         );
+
         MailScroller::new(ctx, source, page_size).await
     }
 
@@ -194,6 +198,7 @@ impl MailScroller {
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let source = SearchScrollerSource::new(search, page_size);
+
         MailScroller::new(ctx, source, page_size).await
     }
 
@@ -203,6 +208,7 @@ impl MailScroller {
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<T::Item>), MailContextError> {
         let ctx = Arc::downgrade(&ctx);
+
         let ScrollerWorkerHandle {
             command,
             ordered_command,

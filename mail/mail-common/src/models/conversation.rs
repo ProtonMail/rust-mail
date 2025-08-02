@@ -1938,10 +1938,10 @@ impl Conversation {
     ) -> Result<(), AppError> {
         let response = api
             .get_conversations(GetConversationsOptions {
-                desc: Some(true),
                 label_id: Some(label_id),
                 page: 0,
                 page_size: count.min(MAX_PAGE_ELEMENT_COUNT) as u64,
+                desc: Some(true),
                 ..Default::default()
             })
             .await?;

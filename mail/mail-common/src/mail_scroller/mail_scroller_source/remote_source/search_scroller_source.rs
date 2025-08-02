@@ -137,13 +137,14 @@ impl SearchScrollerSource {
         let response = session
             .api()
             .get_messages(GetMessagesOptions {
-                desc: Some(true),
                 label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64,
                 keyword: search.keywords,
+                desc: Some(true),
                 ..Default::default()
             })
             .await?;
+
         let mut total = total.lock().await;
         *total = response.total;
         drop(total);
