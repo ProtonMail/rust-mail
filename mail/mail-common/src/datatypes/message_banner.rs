@@ -130,6 +130,12 @@ impl Message {
             });
         }
 
+        if self.snooze_time.as_u64() > 0 {
+            banners.push(MessageBanner::Snoozed {
+                timestamp: self.snooze_time,
+            });
+        }
+
         banners.sort_unstable();
         banners
     }

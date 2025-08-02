@@ -145,6 +145,13 @@ async fn banners() {
         ..Message::test_default()
     };
 
+    let snooze_time = 123456_u64.into();
+
+    let msg_snoozed = Message {
+        snooze_time,
+        ..Message::test_default()
+    };
+
     assert_eq!(
         Vec::<MessageBanner>::new(),
         msg_normal.get_banners(tether).await
@@ -182,6 +189,13 @@ async fn banners() {
     assert_eq!(
         vec![MessageBanner::PhishingAttempt { auto: true }],
         msg_sus.get_banners(tether).await,
+    );
+
+    assert_eq!(
+        vec![MessageBanner::Snoozed {
+            timestamp: snooze_time
+        }],
+        msg_snoozed.get_banners(tether).await,
     );
 
     tether
