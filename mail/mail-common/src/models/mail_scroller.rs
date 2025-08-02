@@ -1,7 +1,7 @@
 use super::{ConversationCounters, MessageCounters};
 use crate::AppError;
 use crate::datatypes::LocalMessageId;
-use crate::datatypes::labels::LabelScrollOrder;
+use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::mail_scroller::ScrollerEq;
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
@@ -16,6 +16,7 @@ use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 use std::fmt::Debug;
 use std::future::Future;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use typed_builder::TypedBuilder;
 
@@ -51,6 +52,7 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         require_remote_id: bool,
         offset: Option<u64>,
         order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> String;
 
     fn convert(local_id: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item>;
@@ -148,6 +150,7 @@ impl ScrollData for MessageScrollData {
         require_remote_id: bool,
         offset: Option<u64>,
         order_dir: ScrollOrderDir,
+        _: ScrollOrderField,
     ) -> String {
         //NOTE: we only check the display order for elements with matching time
         // or we will get incorrect query results.
@@ -340,13 +343,19 @@ impl ScrollData for ConversationScrollData {
         require_remote_id: bool,
         offset: Option<u64>,
         order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> String {
-        let (time_compare_op, display_order_compare_op) =
-            if scroll_order == LabelScrollOrder::Descending {
-                ('>', ">=")
-            } else {
-                ('<', "<=")
-            };
+        let (time_op, display_order_op, sort_op) = if order_dir == ScrollOrderDir::Desc {
+            ('>', ">=", "DESC")
+        } else {
+            ('<', "<=", "ASC")
+        };
+
+        let time_column = match order_field {
+            ScrollOrderField::Time => "conversation_labels.context_time",
+            ScrollOrderField::SnoozeTime => "conversation_labels.context_snooze_time",
+        };
+
         let mut query = formatdoc!(
             "
             JOIN conversation_labels
@@ -358,12 +367,13 @@ impl ScrollData for ConversationScrollData {
             AND
                 conversation_labels.deleted = 0
             AND (
-                    conversation_labels.context_time {time_compare_op} ?2
+                    {time_column} {time_op} ?2
                 OR
-                    (conversation_labels.context_time = ?2 AND conversations.display_order {display_order_compare_op} ?3)
+                    ({time_column} = ?2 AND conversations.display_order {display_order_op} ?3)
                 )
             "
         );
+
         if require_remote_id {
             query += " AND conversations.remote_id IS NOT NULL"
         }
@@ -378,17 +388,12 @@ impl ScrollData for ConversationScrollData {
             }
         }
 
-        if scroll_order == LabelScrollOrder::Ascending {
-            query += " ORDER BY
-            conversation_labels.context_time ASC,
-            conversations.display_order ASC
-        ";
-        } else {
-            query += " ORDER BY
-            conversation_labels.context_time DESC,
-            conversations.display_order DESC
-        ";
-        }
+        query += &format!(
+            " ORDER BY
+            {time_column} {sort_op},
+            conversations.display_order {sort_op}
+        "
+        );
 
         if let Some(limit) = limit {
             query += &format!(" LIMIT {limit} ");
@@ -520,7 +525,9 @@ impl<T: ScrollData> ScrollCursor<T> {
     /// Return error if the query failed.
     ///
     pub async fn seen_count(&self, tether: &Tether) -> Result<u64, StashError> {
-        let query = T::query(self.unread, None, false, None, self.scroll_order);
+        let order_field = ScrollOrderField::for_local_label(self.local_label_id, tether).await?;
+        let query = T::query(self.unread, None, false, None, self.order_dir, order_field);
+
         T::Model::count(
             query,
             params![self.local_label_id, self.time, self.display_order],
@@ -556,13 +563,17 @@ impl<T: ScrollData> ScrollCursor<T> {
         require_remote_id: bool,
         tether: &Tether,
     ) -> Result<Vec<T::Item>, StashError> {
+        let order_field = ScrollOrderField::for_local_label(self.local_label_id, tether).await?;
+
         let query = T::query(
             self.unread,
             limit,
             require_remote_id,
             offset,
-            self.scroll_order,
+            self.order_dir,
+            order_field,
         );
+
         Ok(T::convert(
             self.local_label_id,
             T::Model::find(

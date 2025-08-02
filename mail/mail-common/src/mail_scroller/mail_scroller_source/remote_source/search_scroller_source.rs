@@ -2,6 +2,7 @@ use std::{cmp, sync::Arc};
 
 use super::MailPaginatorJoinHandle;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::labels::ScrollOrderField;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, SearchOptions},
@@ -134,6 +135,9 @@ impl SearchScrollerSource {
         page_size: usize,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
+
+        let order_field = ScrollOrderField::for_label(&remote_label_id);
+
         let response = session
             .api()
             .get_messages(GetMessagesOptions {
@@ -141,6 +145,7 @@ impl SearchScrollerSource {
                 page_size: page_size as u64,
                 keyword: search.keywords,
                 desc: Some(true),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;

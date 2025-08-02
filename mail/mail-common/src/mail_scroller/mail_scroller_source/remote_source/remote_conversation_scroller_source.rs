@@ -1,5 +1,6 @@
 use super::{MailPaginatorJoinHandle, RemoteSource};
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::labels::ScrollOrderField;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ContextualConversation, ReadFilter},
@@ -178,6 +179,9 @@ impl RemoteConversationScrollerSource {
         order_dir: ScrollOrderDir,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
+
+        let order_field = ScrollOrderField::for_label(&remote_label_id);
+
         let response = session
             .api()
             .get_conversations(GetConversationsOptions {
@@ -185,6 +189,7 @@ impl RemoteConversationScrollerSource {
                 page_size: page_size as u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;
@@ -216,6 +221,7 @@ impl RemoteConversationScrollerSource {
             context_time,
             true,
             order_dir,
+            order_field,
             session.api(),
             &mut tether,
         )
@@ -243,6 +249,9 @@ impl RemoteConversationScrollerSource {
         tracing::info!(
             "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
         );
+
+        let order_field = ScrollOrderField::for_label(&remote_label_id);
+
         let response = session
             .api()
             .get_conversations(GetConversationsOptions {
@@ -253,6 +262,7 @@ impl RemoteConversationScrollerSource {
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;
@@ -284,6 +294,7 @@ impl RemoteConversationScrollerSource {
             context_time,
             false,
             order_dir,
+            order_field,
             session.api(),
             &mut tether,
         )
@@ -311,6 +322,9 @@ impl RemoteConversationScrollerSource {
         tracing::info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
         );
+
+        let order_field = ScrollOrderField::for_label(&remote_label_id);
+
         let mut response = session
             .api()
             .get_conversations(GetConversationsOptions {
@@ -321,6 +335,7 @@ impl RemoteConversationScrollerSource {
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;
@@ -363,6 +378,7 @@ impl RemoteConversationScrollerSource {
             context_time,
             true,
             order_dir,
+            order_field,
             session.api(),
             &mut tether,
         )
@@ -409,6 +425,7 @@ impl RemoteConversationScrollerSource {
         context_time: Option<UnixTimestamp>,
         update_scroller: bool,
         order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
         api: &Proton,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
@@ -444,7 +461,16 @@ impl RemoteConversationScrollerSource {
                     )));
                 };
 
-                let context_time = context_time.unwrap_or(label.context_time);
+                let context_time = context_time.unwrap_or_else(|| {
+                    if matches!(order_field, ScrollOrderField::SnoozeTime)
+                        && label.context_snooze_time.as_u64() > 0
+                    {
+                        label.context_snooze_time
+                    } else {
+                        label.context_time
+                    }
+                });
+
                 // Unwrap safety: RemoteId is present as this method is called on conversation
                 // downloaded from API
                 let remote_id = last.remote_id.clone().unwrap();

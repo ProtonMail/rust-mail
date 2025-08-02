@@ -1,5 +1,6 @@
 use super::{MailPaginatorJoinHandle, RemoteSource};
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::labels::ScrollOrderField;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::ReadFilter,
@@ -175,6 +176,9 @@ impl RemoteMessageScrollerSource {
         order_dir: ScrollOrderDir,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
+
+        let order_field = ScrollOrderField::for_label(&remote_label_id);
+
         let response = session
             .api()
             .get_messages(GetMessagesOptions {
@@ -182,6 +186,7 @@ impl RemoteMessageScrollerSource {
                 page_size: page_size as u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;
@@ -233,6 +238,9 @@ impl RemoteMessageScrollerSource {
         tracing::info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
         );
+
+        let order_field = ScrollOrderField::for_label(&remote_label_id);
+
         let mut response = session
             .api()
             .get_messages(GetMessagesOptions {
@@ -243,6 +251,7 @@ impl RemoteMessageScrollerSource {
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;
@@ -305,6 +314,9 @@ impl RemoteMessageScrollerSource {
         tracing::info!(
             "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
         );
+
+        let order_field = ScrollOrderField::for_label(&remote_label_id);
+
         let response = session
             .api()
             .get_messages(GetMessagesOptions {
@@ -315,6 +327,7 @@ impl RemoteMessageScrollerSource {
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;

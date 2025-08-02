@@ -2,8 +2,9 @@ use crate::AppError;
 use crate::datatypes::{LabelColor, SystemLabelId, ViewMode};
 use crate::models::{ConversationCounters, MailLabel, MailSettings, MessageCounters};
 use proton_core_api::services::proton::LabelId;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::prelude::MessageMetadataSortMode;
 use proton_sqlite3::rusqlite::types::{
     FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef,
 };
@@ -72,7 +73,7 @@ pub enum ScrollOrderDir {
 
 impl ScrollOrderDir {
     pub fn for_label(id: &LabelId) -> Self {
-        if *id == LabelId::all_scheduled() {
+        if *id == LabelId::all_scheduled() || *id == LabelId::snoozed() {
             Self::Asc
         } else {
             Self::Desc
@@ -104,6 +105,38 @@ impl FromSql for ScrollOrderDir {
             0 => Ok(Self::Asc),
             1 => Ok(Self::Desc),
             v => Err(FromSqlError::OutOfRange(v)),
+        }
+    }
+}
+
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[repr(u8)]
+pub enum ScrollOrderField {
+    #[default]
+    Time = 0,
+    SnoozeTime = 1,
+}
+
+impl ScrollOrderField {
+    pub fn for_label(id: &LabelId) -> Self {
+        match SystemLabel::from_rid(id) {
+            Some(SystemLabel::Snoozed) => Self::SnoozeTime,
+            _ => Self::Time,
+        }
+    }
+
+    pub async fn for_local_label(id: LocalLabelId, tether: &Tether) -> Result<Self, StashError> {
+        if let Some(remote_id) = Label::local_id_counterpart(id, tether).await? {
+            Ok(Self::for_label(&remote_id))
+        } else {
+            Ok(Self::default())
+        }
+    }
+
+    pub fn as_api_sort(&self) -> Option<MessageMetadataSortMode> {
+        match self {
+            Self::Time => Some(MessageMetadataSortMode::Time),
+            Self::SnoozeTime => Some(MessageMetadataSortMode::SnoozeTime),
         }
     }
 }

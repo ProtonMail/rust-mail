@@ -848,7 +848,8 @@ async fn test_create_or_get_local_fix_preserves_api_conversations_with_labels() 
         local_conversation_id: None, // Will be set after save
         remote_label_id: Some(inbox_remote_id.clone()),
         local_label_id: Some(inbox_local_id),
-        context_time: 100.into()
+        context_time: 100.into(),
+        context_snooze_time: 100.into()
     );
     api_conversation.labels = vec![conv_label];
 

@@ -39,6 +39,7 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, Debug, Serialize, Eq, Hash, PartialEq)]
 pub enum MessageMetadataSortMode {
     Time,
+    SnoozeTime,
     Size,
     ID,
 }

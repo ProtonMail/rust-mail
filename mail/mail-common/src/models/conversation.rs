@@ -15,6 +15,7 @@ use crate::actions::{
     MoveItemAction, Undo, filter_responses,
 };
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::labels::ScrollOrderField;
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
     LocalMessageId, MessageAttachmentInfos, MessageLabelsCount, MessageRecipients, MessageSenders,
@@ -1936,12 +1937,15 @@ impl Conversation {
         api: &PM,
         tether: &mut Tether,
     ) -> Result<(), AppError> {
+        let order_field = ScrollOrderField::for_label(&label_id);
+
         let response = api
             .get_conversations(GetConversationsOptions {
                 label_id: Some(label_id),
                 page: 0,
                 page_size: count.min(MAX_PAGE_ELEMENT_COUNT) as u64,
                 desc: Some(true),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;
