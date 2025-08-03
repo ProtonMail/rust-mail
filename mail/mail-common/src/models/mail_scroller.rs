@@ -58,7 +58,7 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
 
     fn convert(local_id: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item>;
 
-    fn time(item: &Self::Item) -> UnixTimestamp;
+    fn time(item: &Self::Item, order_field: ScrollOrderField) -> UnixTimestamp;
 
     fn display_order(item: &Self::Item) -> u64;
 
@@ -229,7 +229,7 @@ impl ScrollData for MessageScrollData {
         items
     }
 
-    fn time(item: &Self::Item) -> UnixTimestamp {
+    fn time(item: &Self::Item, _: ScrollOrderField) -> UnixTimestamp {
         item.time
     }
 
@@ -244,7 +244,7 @@ impl ScrollData for MessageScrollData {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Option<Self> {
-        let time = Self::time(&item);
+        let time = Self::time(&item, order_field);
         let display_order = Self::display_order(&item);
 
         if let Some(remote_id) = item.remote_id.clone() {
@@ -437,8 +437,11 @@ impl ScrollData for ConversationScrollData {
             .collect()
     }
 
-    fn time(item: &Self::Item) -> UnixTimestamp {
-        item.time
+    fn time(item: &Self::Item, order_field: ScrollOrderField) -> UnixTimestamp {
+        match order_field {
+            ScrollOrderField::Time => item.time,
+            ScrollOrderField::SnoozeTime => item.snooze_time,
+        }
     }
 
     fn display_order(item: &Self::Item) -> u64 {
@@ -452,7 +455,7 @@ impl ScrollData for ConversationScrollData {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Option<Self> {
-        let time = Self::time(&item);
+        let time = Self::time(&item, order_field);
         let display_order = Self::display_order(&item);
 
         if let Some(remote_id) = item.remote_id.clone() {
@@ -819,7 +822,7 @@ impl<T: ScrollData> CachedScrollData<T> {
             Some(last) => ScrollCursor::builder()
                 .local_label_id(self.local_label_id)
                 .unread(self.unread)
-                .time(T::time(last))
+                .time(T::time(last, self.end.order_field))
                 .display_order(T::display_order(last))
                 .order_dir(self.end.order_dir)
                 .order_field(self.end.order_field)

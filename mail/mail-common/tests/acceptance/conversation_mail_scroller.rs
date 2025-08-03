@@ -1075,18 +1075,22 @@ async fn snoozed_conversations() {
 
     // ---
 
-    let mut scroller = TestScroller::conversations(&user_ctx, label.id(), ReadFilter::All, 10)
+    let mut scroller = TestScroller::conversations(&user_ctx, label.id(), ReadFilter::All, 2)
         .await
         .unwrap();
 
     let convs = scroller.fetch_more_and_wait().await.unwrap();
 
-    assert_eq!(5, convs.len());
+    assert_eq!(2, convs.len());
     assert_eq!("myconv_3", convs[0].remote_id.as_ref().unwrap().to_string());
     assert_eq!("myconv_1", convs[1].remote_id.as_ref().unwrap().to_string());
-    assert_eq!("myconv_0", convs[2].remote_id.as_ref().unwrap().to_string());
-    assert_eq!("myconv_2", convs[3].remote_id.as_ref().unwrap().to_string());
-    assert_eq!("myconv_4", convs[4].remote_id.as_ref().unwrap().to_string());
+
+    let convs = scroller.fetch_more_and_wait().await.unwrap();
+
+    assert_eq!(3, convs.len());
+    assert_eq!("myconv_0", convs[0].remote_id.as_ref().unwrap().to_string());
+    assert_eq!("myconv_2", convs[1].remote_id.as_ref().unwrap().to_string());
+    assert_eq!("myconv_4", convs[2].remote_id.as_ref().unwrap().to_string());
 }
 
 async fn assert_scroller_content(
