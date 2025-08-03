@@ -115,7 +115,7 @@ impl SystemLabel {
 
     #[must_use]
     pub fn is_snooze_location(&self) -> bool {
-        matches!(self, Self::Snoozed | Self::AllMail | Self::Inbox)
+        matches!(self, Self::Snoozed | Self::Inbox)
     }
 
     #[must_use]
