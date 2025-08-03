@@ -1015,53 +1015,68 @@ impl DecryptedMessage {
     }
 
     fn lay_banners(&self) -> u16 {
-        self.banners.len().try_into().unwrap()
+        if self.banners.is_empty() {
+            0
+        } else {
+            (self.banners.len() + 1).try_into().unwrap()
+        }
     }
 
     fn draw_banners(&self, frame: &mut Frame, area: Rect) {
-        let rows = self.banners.iter().map(|banner| match banner {
-            // TODO: add mark ham to tui and hints here
-            MessageBanner::BlockedSender => ListItem::from("You blocked this sender."),
-            MessageBanner::PhishingAttempt { auto: true } => {
-                ListItem::from("The system thinks that this is a phishing attempt")
-            }
-            MessageBanner::PhishingAttempt { auto: false } => {
-                ListItem::from("You marked this as a phishing attempt")
-            }
-            MessageBanner::Spam { auto: true } => {
-                ListItem::from("This message was automatically marked as spam")
-            }
-            MessageBanner::Spam { auto: false } => {
-                ListItem::from("You marked this message as spam")
-            }
-            MessageBanner::Expiry { timestamp } => ListItem::from(format!(
-                "This message will expire at {}",
-                date_from_timestamp(*timestamp)
-            )),
+        let body: Vec<_> = self
+            .banners
+            .iter()
+            .map(|banner| match banner {
+                MessageBanner::BlockedSender => ListItem::from("> You have blocked this sender."),
+                MessageBanner::PhishingAttempt { auto: true } => {
+                    ListItem::from("> System has flagged this message as a phishing attempt.")
+                }
+                MessageBanner::PhishingAttempt { auto: false } => {
+                    ListItem::from("> You have flagged this message as a phishing attempt.")
+                }
+                MessageBanner::Spam { auto: true } => {
+                    ListItem::from("> System has flagged this message as spam.")
+                }
+                MessageBanner::Spam { auto: false } => {
+                    ListItem::from("> You have flagged this message as spam.")
+                }
+                MessageBanner::Expiry { timestamp } => ListItem::from(format!(
+                    "> This message will expire at {}.",
+                    date_from_timestamp(*timestamp)
+                )),
+                MessageBanner::AutoDelete { timestamp } => ListItem::from(format!(
+                    "> This message will auto-delete at {}.",
+                    date_from_timestamp(*timestamp)
+                )),
+                MessageBanner::RemoteContent => ListItem::from(
+                    "> This message contains remote content, use the --browser flag to see them.",
+                ),
+                MessageBanner::EmbeddedImages => ListItem::from(
+                    "> This message contains embedded images, those canont be shown in the TUI.",
+                ),
+                MessageBanner::ScheduledSend { timestamp } => ListItem::from(format!(
+                    "> This message is scheduled to be sent at {}.",
+                    date_from_timestamp(*timestamp)
+                )),
+                MessageBanner::UnsubscribeNewsletter => {
+                    ListItem::from("> This message is a newsletter.")
+                }
+                MessageBanner::Snoozed { timestamp } => ListItem::from(format!(
+                    "> This message has been snoozed until {}",
+                    date_from_timestamp(*timestamp)
+                )),
+            })
+            .collect();
 
-            #[allow(clippy::cast_possible_wrap)]
-            MessageBanner::AutoDelete { timestamp } => ListItem::from(format!(
-                "This message will auto-delete at {}",
-                date_from_timestamp(*timestamp)
-            )),
+        if body.is_empty() {
+            return;
+        }
 
-            MessageBanner::RemoteContent => ListItem::from(
-                "This message contains remote images. Use the --browser flag to see them.",
-            ),
+        let [sep_area, body_area] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(area);
 
-            MessageBanner::EmbeddedImages => ListItem::from(
-                "This message contains embedded images, which can't be shown in the TUI.",
-            ),
-
-            MessageBanner::ScheduledSend { timestamp } => ListItem::from(format!(
-                "This message will be sent at {}",
-                date_from_timestamp(*timestamp)
-            )),
-
-            _ => ListItem::from("unimplemented"),
-        });
-
-        frame.render_widget(List::new(rows), area);
+        frame.render_widget(Block::new().borders(Borders::TOP), sep_area);
+        frame.render_widget(List::new(body), body_area);
     }
 
     fn lay_rsvp(&self) -> u16 {
