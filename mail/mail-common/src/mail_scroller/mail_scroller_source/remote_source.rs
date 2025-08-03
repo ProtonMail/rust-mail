@@ -3,7 +3,11 @@ use std::future::Future;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 
-use crate::{MailContextError, MailUserContext, datatypes::ReadFilter, models::ScrollData};
+use crate::{
+    MailContextError, MailUserContext,
+    datatypes::{ReadFilter, labels::ScrollOrderField},
+    models::ScrollData,
+};
 
 use super::MailPaginatorJoinHandle;
 
@@ -11,7 +15,7 @@ mod remote_conversation_scroller_source;
 mod remote_messace_scroller_source;
 mod search_scroller_source;
 
-use crate::datatypes::labels::LabelScrollOrder;
+use crate::datatypes::labels::ScrollOrderDir;
 pub use search_scroller_source::SearchScrollerSource;
 
 pub trait RemoteSource: ScrollData + Send + Sync {
@@ -21,9 +25,11 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-        label_scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
+    #[allow(clippy::too_many_arguments)]
     fn sync_next_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
@@ -31,7 +37,8 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-        label_scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     #[allow(clippy::too_many_arguments)]
@@ -42,7 +49,8 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-        label_scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
         callback: flume::Sender<()>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 }

@@ -2,7 +2,7 @@ use derive_more::Display;
 use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{StashError, Tether};
 
-use crate::datatypes::labels::LabelScrollOrder;
+use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::{
     datatypes::ReadFilter,
     models::{CachedScrollData, ScrollData},
@@ -34,7 +34,6 @@ pub enum MailScrollerState<T: ScrollData> {
 }
 
 impl<T: ScrollData> MailScrollerState<T> {
-    /// Try create new online state.
     pub async fn new_online(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -46,31 +45,33 @@ impl<T: ScrollData> MailScrollerState<T> {
         match ordered {
             Some(ordered) => Ok(MailScrollerState::Online(ordered)),
             None => {
-                let scroll_order =
-                    LabelScrollOrder::for_local_label_id(local_label_id, tether).await?;
+                let order_dir = ScrollOrderDir::for_local_label(local_label_id, tether).await?;
+                let order_field = ScrollOrderField::for_local_label(local_label_id, tether).await?;
+
                 Ok(MailScrollerState::new_not_synced(
                     local_label_id,
                     unread,
                     page_size,
-                    scroll_order,
+                    order_dir,
+                    order_field,
                 ))
             }
         }
     }
 
-    /// Create new not synced state.
     pub fn new_not_synced(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> Self {
-        let unordered = CachedScrollData::all(local_label_id, unread, page_size, scroll_order);
+        let unordered =
+            CachedScrollData::all(local_label_id, unread, page_size, order_dir, order_field);
 
         MailScrollerState::NotSynced(unordered)
     }
 
-    /// If state is online, return the ordered data.
     pub fn online(&self) -> Option<&CachedScrollData<T>> {
         match self {
             MailScrollerState::Online(ordered) => Some(ordered),
@@ -78,14 +79,12 @@ impl<T: ScrollData> MailScrollerState<T> {
         }
     }
 
-    /// Try to switch from offline to online state.
     pub fn to_online(&mut self) {
         if let MailScrollerState::Offline { ordered, .. } = self {
             *self = MailScrollerState::Online(ordered.clone());
         }
     }
 
-    /// If state is offline, return the unordered data.
     pub fn offline(&self) -> Option<&CachedScrollData<T>> {
         match self {
             MailScrollerState::Offline { unordered, .. } => Some(unordered),
@@ -94,7 +93,6 @@ impl<T: ScrollData> MailScrollerState<T> {
         }
     }
 
-    /// Try to switch from online to offline state.
     pub fn to_offline(&mut self) {
         if let MailScrollerState::Online(ordered) = self {
             let ordered = ordered.clone();
@@ -103,12 +101,10 @@ impl<T: ScrollData> MailScrollerState<T> {
         }
     }
 
-    /// Check if the state is online
     pub fn is_online(&self) -> bool {
         matches!(self, MailScrollerState::Online { .. })
     }
 
-    /// Check if the state is offline
     pub fn is_offline(&self) -> bool {
         matches!(self, MailScrollerState::Offline { .. })
             || matches!(self, MailScrollerState::NotSynced { .. })
@@ -118,7 +114,6 @@ impl<T: ScrollData> MailScrollerState<T> {
         matches!(self, MailScrollerState::NotSynced { .. })
     }
 
-    /// Try to sync ordered data end cursor.
     pub async fn sync(
         &mut self,
         local_label_id: LocalLabelId,
@@ -152,7 +147,6 @@ impl<T: ScrollData> MailScrollerState<T> {
         Ok(())
     }
 
-    /// Check if there is more data available in order.
     pub async fn has_more_in_order(&self, tether: &Tether) -> Result<bool, StashError> {
         match self {
             MailScrollerState::Online(ordered) => ordered.has_more(tether).await,

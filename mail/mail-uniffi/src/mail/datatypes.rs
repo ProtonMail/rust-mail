@@ -388,16 +388,11 @@ impl From<RealMessageButtons> for MessageButtons {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 pub enum MessageMetadataSortMode {
-    /// TODO: Document this variant.
     Time,
-
-    /// TODO: Document this variant.
+    SnoozeTime,
     Size,
-
-    /// TODO: Document this variant.
     ID,
 }
 
@@ -405,6 +400,7 @@ impl From<MessageMetadataSortMode> for RealMessageMetadataSortMode {
     fn from(value: MessageMetadataSortMode) -> Self {
         match value {
             MessageMetadataSortMode::Time => RealMessageMetadataSortMode::Time,
+            MessageMetadataSortMode::SnoozeTime => RealMessageMetadataSortMode::SnoozeTime,
             MessageMetadataSortMode::Size => RealMessageMetadataSortMode::Size,
             MessageMetadataSortMode::ID => RealMessageMetadataSortMode::ID,
         }
@@ -415,6 +411,7 @@ impl From<RealMessageMetadataSortMode> for MessageMetadataSortMode {
     fn from(value: RealMessageMetadataSortMode) -> Self {
         match value {
             RealMessageMetadataSortMode::Time => MessageMetadataSortMode::Time,
+            RealMessageMetadataSortMode::SnoozeTime => MessageMetadataSortMode::SnoozeTime,
             RealMessageMetadataSortMode::Size => MessageMetadataSortMode::Size,
             RealMessageMetadataSortMode::ID => MessageMetadataSortMode::ID,
         }
