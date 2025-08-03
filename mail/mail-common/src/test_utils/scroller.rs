@@ -106,10 +106,6 @@ pub async fn save_single_conversation(
     }
 
     conversation.reload(bond).await.unwrap();
-    for label in conversation.labels.iter_mut() {
-        label.context_snooze_time = label.context_time;
-    }
-    conversation.save(bond).await.unwrap();
 }
 
 pub trait StoreLabeledModelMap<D: Display, T: Model> {

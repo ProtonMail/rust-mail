@@ -1043,6 +1043,52 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_lar
     assert!(!test_scroller.has_more().await.unwrap());
 }
 
+#[tokio::test]
+async fn snoozed_conversations() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    let label = Label::find_by_remote_id(LabelId::snoozed(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut data = {
+        let label = label.remote_id.clone().unwrap().to_string();
+
+        hash_map! {
+            vec![label]: test_conversations(5, 0),
+        }
+    };
+
+    data.save_to_database(&mut tether).await;
+
+    // ---
+
+    let snooze_times = [300, 200, 400, 100, 500];
+
+    for (conv, conv_snooze_time) in data.values_mut().flatten().zip(snooze_times) {
+        conv.labels[0].context_snooze_time = conv_snooze_time.into();
+        tether.tx(async |tx| conv.save(tx).await).await.unwrap();
+    }
+
+    // ---
+
+    let mut scroller = TestScroller::conversations(&user_ctx, label.id(), ReadFilter::All, 10)
+        .await
+        .unwrap();
+
+    let convs = scroller.fetch_more_and_wait().await.unwrap();
+
+    assert_eq!(5, convs.len());
+    assert_eq!("myconv_3", convs[0].remote_id.as_ref().unwrap().to_string());
+    assert_eq!("myconv_1", convs[1].remote_id.as_ref().unwrap().to_string());
+    assert_eq!("myconv_0", convs[2].remote_id.as_ref().unwrap().to_string());
+    assert_eq!("myconv_2", convs[3].remote_id.as_ref().unwrap().to_string());
+    assert_eq!("myconv_4", convs[4].remote_id.as_ref().unwrap().to_string());
+}
+
 async fn assert_scroller_content(
     test_scroller: &mut TestScroller<ContextualConversation>,
     len: usize,
