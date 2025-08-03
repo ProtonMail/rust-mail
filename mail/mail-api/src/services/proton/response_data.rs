@@ -409,10 +409,9 @@ pub struct Conversation {
     #[serde(default)]
     pub attachments_metadata: Vec<AttachmentMetadata>,
 
-    /// TODO: Document this field.
-    #[serde(default)]
-    #[serde_as(as = "BoolFromInt")]
-    pub display_snooze_reminder: bool,
+    /// Whether a snooze reminder should be displayed.
+    /// It is set to true when the conversation is to be reminded.
+    pub display_snoozed_reminder: bool,
 
     /// TODO: Document this field.
     pub expiration_time: u64,
@@ -467,7 +466,7 @@ impl Conversation {
             id: ConversationId::from(""),
             attachment_info: BTreeMap::default(),
             attachments_metadata: Vec::default(),
-            display_snooze_reminder: false,
+            display_snoozed_reminder: false,
             expiration_time: 0,
             labels: Vec::default(),
             num_attachments: 0,

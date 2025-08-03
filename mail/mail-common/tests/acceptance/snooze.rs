@@ -55,10 +55,7 @@ async fn action_snooze_conversation_from_inbox_to_snoozed() {
     inbox_conv_counter.total = 1;
 
     tether
-        .tx::<_, _, StashError>(async |tx| {
-            inbox_conv_counter.save(tx).await.unwrap();
-            Ok(())
-        })
+        .tx::<_, _, StashError>(async |tx| inbox_conv_counter.save(tx).await)
         .await
         .unwrap();
 
@@ -124,7 +121,7 @@ async fn unsnooze_conversation_from_snoozed_to_inbox() {
     };
     conv_data.save_to_database(&mut tether).await;
 
-    let conv = &conv_data.get(&vec![LabelId::snoozed()]).unwrap()[0];
+    let conv = conv_data.get(&vec![LabelId::snoozed()]).unwrap()[0].clone();
 
     // Set up the conversation with snooze time manually
     tether
@@ -133,6 +130,7 @@ async fn unsnooze_conversation_from_snoozed_to_inbox() {
                 .await
                 .unwrap()
                 .unwrap();
+
             conversation.save(tx).await.unwrap();
 
             // Set up counters
@@ -147,17 +145,7 @@ async fn unsnooze_conversation_from_snoozed_to_inbox() {
 
     // Apply snooze manually to set the snooze time
     tether
-        .tx::<_, _, StashError>(async |tx| {
-            Conversation::snooze(
-                inbox.id(),
-                vec![conv.local_id.unwrap()],
-                snooze_timestamp,
-                tx,
-            )
-            .await
-            .unwrap();
-            Ok(())
-        })
+        .tx(async |tx| Conversation::snooze(inbox.id(), &[conv.id()], snooze_timestamp, tx).await)
         .await
         .unwrap();
 
@@ -167,12 +155,7 @@ async fn unsnooze_conversation_from_snoozed_to_inbox() {
 
     // Action: Unsnooze the conversation
     tether
-        .tx::<_, _, StashError>(async |tx| {
-            Conversation::unsnooze(snoozed.id(), vec![conv.local_id.unwrap()], tx)
-                .await
-                .unwrap();
-            Ok(())
-        })
+        .tx(async |tx| Conversation::unsnooze(snoozed.id(), &[conv.id()], tx).await)
         .await
         .unwrap();
 
@@ -180,6 +163,7 @@ async fn unsnooze_conversation_from_snoozed_to_inbox() {
     // * conversation is no longer in snoozed
     let conversations_in_snoozed_after =
         Conversation::in_label(snoozed.id(), &tether).await.unwrap();
+
     assert_eq!(conversations_in_snoozed_after.len(), 0);
 
     // * conversation is back in inbox
@@ -238,14 +222,9 @@ async fn action_unsnooze_conversation_from_snoozed_to_inbox() {
     tether
         .tx::<_, _, StashError>(async |tx| {
             // Apply snooze to set the snooze time
-            Conversation::snooze(
-                inbox.id(),
-                vec![conv.local_id.unwrap()],
-                snooze_timestamp,
-                tx,
-            )
-            .await
-            .unwrap();
+            Conversation::snooze(inbox.id(), &[conv.id()], snooze_timestamp, tx)
+                .await
+                .unwrap();
 
             // Set up counters for snoozed and inbox
             let mut snoozed_conv_counter = ConversationCounters::new(snoozed.id());

@@ -2,7 +2,9 @@ use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_resp
 use crate::datatypes::{LocalConversationId, RollbackItemType};
 use crate::models::{Conversation, ConversationLabel, RollbackItem};
 use itertools::Itertools;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel, UnixTimestamp};
 use proton_mail_api::services::proton::ProtonMail;
@@ -13,9 +15,6 @@ use stash::stash::Bond;
 use stash::utils::placeholders;
 use tracing::error;
 
-/// Unsnooze conversations action.
-///
-/// This action unsnoozes the given conversations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Unsnooze {
     action_data: GenericLabelRelatedActionData<Conversation>,
@@ -34,10 +33,10 @@ impl Unsnooze {
 impl Action for Unsnooze {
     const TYPE: Type = Type("unsnooze_conversations");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = UnsnoozeHandler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
 }
@@ -46,7 +45,7 @@ pub struct UnsnoozeHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for UnsnoozeHandler {
+impl Handler for UnsnoozeHandler {
     type Action = Unsnooze;
 
     async fn apply_local(
@@ -87,7 +86,7 @@ impl proton_action_queue::action::Handler for UnsnoozeHandler {
 
         Conversation::unsnooze(
             action.action_data.label_id,
-            action.action_data.data.target_ids.clone(),
+            &action.action_data.data.target_ids,
             tx,
         )
         .await?;
@@ -102,14 +101,10 @@ impl proton_action_queue::action::Handler for UnsnoozeHandler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         for (conv_id, snoozed_until) in action.conv_snooze_time.iter() {
-            Conversation::snooze(
-                action.action_data.label_id,
-                vec![*conv_id],
-                *snoozed_until,
-                tx,
-            )
-            .await?;
+            Conversation::snooze(action.action_data.label_id, &[*conv_id], *snoozed_until, tx)
+                .await?;
         }
+
         Ok(())
     }
 

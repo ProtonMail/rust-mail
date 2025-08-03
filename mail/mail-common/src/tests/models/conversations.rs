@@ -3121,7 +3121,7 @@ async fn conversation_save_updates_local_ids_for_attachment_metadata() {
             name: "file.pdf".to_string(),
             size: 1024,
         }],
-        display_snooze_reminder: false,
+        display_snoozed_reminder: false,
         expiration_time: 0,
         labels: vec![],
         num_attachments: 0,
