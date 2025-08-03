@@ -64,16 +64,10 @@ pub enum MessageBanner {
 }
 
 impl Message {
-    /// Get message banners.
-    ///
-    /// Fails if time went backwards
     pub async fn get_banners(&self, tether: &Tether) -> Vec<MessageBanner> {
         let mut banners = vec![];
-
         let flags = self.flags;
-
         let settings = &MailSettings::get_or_default(tether).await;
-
         let mut autodelete = false;
 
         // Banners that can only be displayed if the message is in the trash or spam folder:
@@ -94,6 +88,7 @@ impl Message {
                 }
             }
         }
+
         if self.label_ids.contains(&LabelId::spam()) {
             if flags.intersects(
                 MessageFlags::PHISHING_AUTO
@@ -132,7 +127,13 @@ impl Message {
         if self.label_ids.contains(&LabelId::all_scheduled()) {
             banners.push(MessageBanner::ScheduledSend {
                 timestamp: self.time,
-            })
+            });
+        }
+
+        if self.snooze_time.as_u64() > 0 {
+            banners.push(MessageBanner::Snoozed {
+                timestamp: self.snooze_time,
+            });
         }
 
         banners.sort_unstable();

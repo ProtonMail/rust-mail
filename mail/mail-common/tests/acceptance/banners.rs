@@ -47,14 +47,17 @@ async fn banners() {
     test_ctx
         .mock_label_messages(&LabelId::spam(), vec!["normal".into()])
         .await;
+
     test_ctx.mock_report_phishing().await;
     test_ctx.mock_delete_incoming_default().await;
+
     test_ctx
         .mock_post_incoming_default(IncomingDefault {
             email: Some("normal@email".into()),
             ..Default::default()
         })
         .await;
+
     test_ctx.mock_put_message_ham(&"spam".into()).await;
     test_ctx.mock_put_message_ham(&"phishing".into()).await;
     test_ctx.mock_put_message_ham(&"normal".into()).await;
@@ -104,6 +107,7 @@ async fn banners() {
         remote_id: Some("phishing".into()),
         ..msg_normal.clone()
     };
+
     let mut msg_spam = Message {
         flags: MessageFlags::SPAM_MANUAL,
         label_ids: vec![LabelId::spam()],
@@ -123,6 +127,7 @@ async fn banners() {
         remote_id: Some("expiry".into()),
         ..msg_normal.clone()
     };
+
     let msg_blocked = Message {
         remote_id: Some("blocked".into()),
         sender: proton_mail_common::datatypes::MessageSender {
@@ -133,9 +138,17 @@ async fn banners() {
     };
 
     let scheduled_time = 123456_u64.into();
+
     let msg_schedule_send = Message {
         label_ids: vec![LabelId::all_scheduled()],
         time: scheduled_time,
+        ..Message::test_default()
+    };
+
+    let snooze_time = 123456_u64.into();
+
+    let msg_snoozed = Message {
+        snooze_time,
         ..Message::test_default()
     };
 
@@ -143,16 +156,19 @@ async fn banners() {
         Vec::<MessageBanner>::new(),
         msg_normal.get_banners(tether).await
     );
+
     assert_eq!(
         vec![MessageBanner::Expiry {
             timestamp: 42.into()
         }],
         msg_expiry.get_banners(tether).await
     );
+
     assert_eq!(
         vec![MessageBanner::BlockedSender],
         msg_blocked.get_banners(tether).await
     );
+
     assert_eq!(
         vec![MessageBanner::ScheduledSend {
             timestamp: scheduled_time
@@ -164,14 +180,22 @@ async fn banners() {
         vec![MessageBanner::PhishingAttempt { auto: true }],
         msg_phishing.get_banners(tether).await
     );
+
     assert_eq!(
         vec![MessageBanner::Spam { auto: false }],
         msg_spam.get_banners(tether).await
     );
+
     assert_eq!(
         vec![MessageBanner::PhishingAttempt { auto: true }],
         msg_sus.get_banners(tether).await,
-        "sus messages too warrant a banner"
+    );
+
+    assert_eq!(
+        vec![MessageBanner::Snoozed {
+            timestamp: snooze_time
+        }],
+        msg_snoozed.get_banners(tether).await,
     );
 
     tether
@@ -191,6 +215,7 @@ async fn banners() {
             .save(tx)
             .await
             .unwrap();
+
             Message::store_decrypted_message_body(
                 msg_normal.id(),
                 "im a nigerian prince, click this link".into(),
@@ -209,6 +234,7 @@ async fn banners() {
     IncomingDefaultLocation::action_unblock(ctx.action_queue(), "blocked@email".into())
         .await
         .unwrap();
+
     Message::action_ham(ctx.action_queue(), vec![msg_spam.id(), msg_phishing.id()])
         .await
         .unwrap();
@@ -254,6 +280,7 @@ async fn banners() {
         .unwrap();
 
     msg_normal.reload(tether).await.unwrap();
+
     assert_eq!(
         vec![MessageBanner::BlockedSender],
         msg_normal.get_banners(tether).await
