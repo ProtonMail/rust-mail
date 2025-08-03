@@ -9,7 +9,10 @@ use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
 };
-use proton_mail_common::datatypes::labels::ScrollOrderDir;
+use proton_mail_common::datatypes::{
+    SystemLabelId,
+    labels::{ScrollOrderDir, ScrollOrderField},
+};
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
     scroller::{StoreLabeledModelMap, TestScroller, save_single_conversation, test_conversations},
@@ -91,6 +94,7 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
         .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::Time)
         .build();
 
     tether
@@ -647,6 +651,7 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
         .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::Time)
         .build();
 
     tether
@@ -731,6 +736,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
         .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::Time)
         .build();
 
     tether

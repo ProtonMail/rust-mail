@@ -3,7 +3,11 @@ use std::future::Future;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 
-use crate::{MailContextError, MailUserContext, datatypes::ReadFilter, models::ScrollData};
+use crate::{
+    MailContextError, MailUserContext,
+    datatypes::{ReadFilter, labels::ScrollOrderField},
+    models::ScrollData,
+};
 
 use super::MailPaginatorJoinHandle;
 
@@ -22,8 +26,10 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         unread: ReadFilter,
         page_size: usize,
         order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
+    #[allow(clippy::too_many_arguments)]
     fn sync_next_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
@@ -32,6 +38,7 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         unread: ReadFilter,
         page_size: usize,
         order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     #[allow(clippy::too_many_arguments)]
@@ -43,6 +50,7 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         unread: ReadFilter,
         page_size: usize,
         order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
         callback: flume::Sender<()>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 }

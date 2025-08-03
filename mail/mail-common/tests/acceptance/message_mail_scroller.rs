@@ -8,11 +8,11 @@ use proton_mail_api::services::proton::{
     common::MessageId, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,
 };
-use proton_mail_common::api_message_meta;
 use proton_mail_common::test_utils::scroller::{
     StoreLabeledModelMap, TestScroller, save_single_message, test_messages,
 };
 use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
+use proton_mail_common::{api_message_meta, datatypes::labels::ScrollOrderField};
 use proton_mail_common::{
     datatypes::ReadFilter,
     models::{Conversation, Message, MessageCounters, MessageScrollData},
@@ -70,6 +70,7 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
         .message_time(last_message.time)
         .display_order(last_message.display_order)
         .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::Time)
         .build();
 
     tether

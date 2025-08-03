@@ -140,3 +140,19 @@ impl ScrollOrderField {
         }
     }
 }
+
+impl ToSql for ScrollOrderField {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+impl FromSql for ScrollOrderField {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match i64::column_result(value)? {
+            0 => Ok(Self::Time),
+            1 => Ok(Self::SnoozeTime),
+            v => Err(FromSqlError::OutOfRange(v)),
+        }
+    }
+}

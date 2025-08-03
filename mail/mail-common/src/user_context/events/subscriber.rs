@@ -27,7 +27,7 @@ use tracing::{debug, error, info, warn};
 
 // Import common macros from core
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
-use crate::datatypes::labels::ScrollOrderDir;
+use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use proton_core_common::event_loop::{join_task, try_refresh};
 use stash::stash::Tether;
 
@@ -289,6 +289,7 @@ async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
                 ReadFilter::All,
                 page_size,
                 ScrollOrderDir::default(),
+                ScrollOrderField::default(),
             );
 
             info!(
@@ -311,6 +312,7 @@ async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
                 ReadFilter::All,
                 page_size,
                 ScrollOrderDir::default(),
+                ScrollOrderField::default(),
             );
 
             info!(
