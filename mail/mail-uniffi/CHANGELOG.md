@@ -5,7 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.115.3] - 2025-08-03
+
+### Features
+
+- Support sorting by snooze times
+- Mail-common: generate snooze banner
+- On unset display_snooze_reminder on mark_read for conversations and messages
+
+### Fixes
+
+- Mail: fix the "is conversation snoozed?" flag (aka `display_snoozed_reminder`)
+- Snooze: bubble errors up
+- Core-common: fix-fix the edm migration
+
+
+## [mail-uniffi-v0.115.2] - 2025-08-01
 
 ### Fixes
 
