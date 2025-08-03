@@ -385,6 +385,7 @@ mod available_actions {
             .conversation_actions(vec![
                 ConversationAction::MarkRead,
                 ConversationAction::Unstar,
+                ConversationAction::Snooze,
                 ConversationAction::LabelAs,
             ])
             .general_actions(vec![])
@@ -419,6 +420,7 @@ mod available_actions {
             .conversation_actions(vec![
                 ConversationAction::MarkRead,
                 ConversationAction::Unstar,
+                ConversationAction::Snooze,
                 ConversationAction::LabelAs,
             ])
             .general_actions(vec![])
@@ -524,6 +526,7 @@ mod available_actions {
                 ConversationAction::MarkUnread,
                 ConversationAction::Unstar,
                 ConversationAction::Star,
+                ConversationAction::Snooze,
                 ConversationAction::LabelAs,
             ])
             .general_actions(vec![])
