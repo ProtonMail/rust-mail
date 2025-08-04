@@ -330,8 +330,14 @@ impl From<&mail::RsvpEvent> for RsvpState {
         }
 
         if event.user_attendee_idx.is_none() {
-            return RsvpState::UnanswerableInvite {
-                reason: RsvpUnanswerableReason::UserIsOrganizer,
+            return match event.intent {
+                cal::RsvpIntent::Invite => RsvpState::UnanswerableInvite {
+                    reason: RsvpUnanswerableReason::UserIsOrganizer,
+                },
+                cal::RsvpIntent::Reminder => progress
+                    .map_or(RsvpState::CancelledReminder, |progress| {
+                        RsvpState::Reminder { progress }
+                    }),
             };
         }
 
