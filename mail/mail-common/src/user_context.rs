@@ -34,6 +34,7 @@ use proton_core_common::db::account::CoreSession;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::models::{Address, User, UserSettings};
+use proton_core_common::services::EventPollConfigService;
 use proton_core_common::{
     ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
 };
@@ -239,7 +240,10 @@ impl MailUserContext {
                 this.init_expiration_loop();
                 this.register_subscribers().await?;
 
-                if let EventPollMode::Automatic(interval) = this.user_context().event_poll_mode() {
+                let config = this
+                    .user_context()
+                    .get_service::<EventPollConfigService>()?;
+                if let EventPollMode::Automatic(interval) = config.mode() {
                     this.init_event_loop_poll(interval)?;
                 }
             }

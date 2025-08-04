@@ -1,5 +1,6 @@
 use crate::UserContext;
 use crate::actions::event_poll::{self, ActionEventLoopError};
+use crate::services::EventPollConfigService;
 use proton_action_queue::action::{Metadata, Priority};
 use proton_action_queue::queue::Error;
 use proton_action_queue::{action::ActionId, queue::ActionError};
@@ -10,6 +11,8 @@ pub mod subscriber;
 
 // Re-export common macros for easier access
 pub use subscriber::macros::*;
+
+use super::services::EventLoopService;
 
 /// Defines how the event loop should be polled
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -37,11 +40,20 @@ impl UserContext {
     /// Returns error if the action failed to be queued.
     ///
     pub async fn poll_event_loop(&self) -> Result<(), ActionError<event_poll::EventPoll>> {
-        if self.event_poll_mode() != EventPollMode::Manual {
+        let config_service = self
+            .context
+            .get_service::<EventPollConfigService>()
+            .map_err(|_| ActionError::Action(ActionEventLoopError::ServiceNotInitialized))?;
+
+        let event_loop_service = self
+            .event_loop_service()
+            .map_err(|_| ActionError::Action(ActionEventLoopError::ServiceNotInitialized))?;
+
+        if !config_service.is_manual() {
             warn!("Event poll mode is not configured as manual");
             return Ok(());
         }
-        self.queue_poll_event_loop().await
+        self.queue_poll_event_loop(event_loop_service).await
     }
 
     /// Queue an action to execute the event loop as soon as possible regardless of
@@ -62,11 +74,10 @@ impl UserContext {
         Ok(())
     }
 
-    async fn queue_poll_event_loop(&self) -> Result<(), ActionError<event_poll::EventPoll>> {
-        let event_loop_service = self
-            .event_loop_service()
-            .map_err(|_| ActionError::Action(ActionEventLoopError::ServiceNotInitialized))?;
-
+    async fn queue_poll_event_loop(
+        &self,
+        event_loop_service: &EventLoopService,
+    ) -> Result<(), ActionError<event_poll::EventPoll>> {
         let mut last_action_ids = event_loop_service.last_event_loop_action_ids().lock().await;
         let event_poll_action = event_poll::EventPoll {};
         {

@@ -1,6 +1,7 @@
 pub use self::keys::*;
 use self::services::{EventLoopService, InitializationService};
 
+use crate::context::services::SessionObserverService;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_core_db, verify_core_db};
@@ -104,7 +105,6 @@ impl UserContext {
         let this = {
             let mut builder = builder::UserContextBuilder::new();
 
-            // Add App-only services
             if matches!(origin, Origin::App) {
                 builder = builder
                     .with_cyclic_service(|weak_ref: Weak<UserContext>| {
@@ -144,24 +144,24 @@ impl UserContext {
             }
         }
 
-        // Register task cancellation when session is deleted.
         let this_user_id = this.user_id.clone();
         let this_weak = Arc::downgrade(&this);
-        this.context.on_session_deleted(move |_, user_id| {
-            let this_user_id = this_user_id.clone();
-            let this_weak = this_weak.clone();
-            async move {
-                if user_id == this_user_id {
-                    if let Some(ctx) = this_weak.upgrade() {
-                        ctx.cancel_all_tasks();
+        if let Ok(session_service) = this.context.get_service::<SessionObserverService>() {
+            session_service.on_session_deleted(move |_, user_id| {
+                let this_user_id = this_user_id.clone();
+                let this_weak = this_weak.clone();
+                async move {
+                    if user_id == this_user_id {
+                        if let Some(ctx) = this_weak.upgrade() {
+                            ctx.cancel_all_tasks();
+                        }
+                        return OnSessionDeletedResponse::Terminate;
                     }
-                    return OnSessionDeletedResponse::Terminate;
+                    OnSessionDeletedResponse::Continue
                 }
-                OnSessionDeletedResponse::Continue
-            }
-        });
+            });
+        }
 
-        // Only register subscribers for App origin (ShareExt doesn't have EventLoopService)
         if matches!(origin, Origin::App) {
             this.register_subscribers().await?;
         }
@@ -217,11 +217,6 @@ impl UserContext {
     #[allow(clippy::result_large_err)]
     pub fn event_loop_service(&self) -> Result<&EventLoopService, CoreContextError> {
         self.get_service::<EventLoopService>()
-    }
-
-    #[must_use]
-    pub fn event_poll_mode(&self) -> EventPollMode {
-        self.context.event_poll_mode
     }
 
     #[must_use]

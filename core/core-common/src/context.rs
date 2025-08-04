@@ -1,19 +1,18 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
+mod builder;
+pub mod services;
+
 use crate::action_queue::CoreActionError;
-use crate::app_events::{UserSessionCreatedEvent, UserSessionDeletedEvent};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::core_clock::CoreClock;
 use crate::datatypes::{
     ApiConfig, LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey,
     TfaStatus,
 };
-use crate::db::account::{
-    CoreAccount, CoreSession, CoreSessionObserver, CoreSessionObserverNotification,
-    SessionEncryptionKey,
-};
+use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::{migrate_account_db, verify_account_db};
-use crate::device::{DeviceInfo, DynDeviceInfoProvider};
+use crate::device::DynDeviceInfoProvider;
 use crate::event_loop::EventPollMode;
 use crate::models::{AppSettings, ModelExtension};
 use crate::nuke_utils::{
@@ -24,6 +23,7 @@ use crate::pin_code::PinCode;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Context as _, Error as AnyhowError, anyhow};
 use async_trait::async_trait;
+use builder::ContextBuilder;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::{self, Action, WriterGuardError};
@@ -51,8 +51,12 @@ use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretVec};
 use serde_json::json;
+use services::{
+    DeviceInfoService, EventPollConfigService, HvNotifierService, SessionObserverService,
+};
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fs;
 use std::future::Future;
@@ -247,23 +251,24 @@ pub type CoreContextResult<T> = Result<T, CoreContextError>;
 #[allow(dead_code)]
 pub struct Context {
     this: Weak<Self>,
+    active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
+    // Data
     origin: Origin,
     user_db_path: PathBuf,
     account_db_path: PathBuf,
+    cache_path: PathBuf,
+    // Configuration
+    api_config: ApiConfig,
+    // Essential services
     account_stash: Stash,
     key_chain: Arc<dyn KeyChain>,
-    user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
-    active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
-    cache_path: PathBuf,
-    api_config: ApiConfig,
-    hv_notifier: Option<DynChallengeNotifier>,
-    device_info_provider: Option<DynDeviceInfoProvider>,
     cancellation_token: CancellationToken,
+    user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     task_service: BackgroundAwareTaskService,
-    event_service: EventService,
-    pub event_poll_mode: EventPollMode,
     clock: CoreClock,
     log_service: LogService,
+    // Service registry
+    services: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
 const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
@@ -328,42 +333,51 @@ impl Context {
         }
 
         let task_service = TaskService::new()?;
-        let event_service = EventService::new();
+        let background_task_service = BackgroundAwareTaskService::new(task_service);
 
-        let ctx = Arc::new_cyclic(|this| Self {
-            this: Weak::clone(this),
+        let mut builder = ContextBuilder::new();
+
+        if matches!(origin, Origin::App) {
+            builder = builder
+                .with_cyclic_service(|weak_ctx| {
+                    SessionObserverService::new(EventService::new(), weak_ctx)
+                })
+                .with_service(HvNotifierService::new(hv_notifier))
+                .with_service(DeviceInfoService::new(device_info_provider))
+                .with_service(EventPollConfigService::new(event_poll_mode));
+        }
+
+        let ctx = builder.build(
             origin,
             user_db_path,
             account_db_path,
-            log_service,
-            key_chain,
-            account_stash,
-            user_db_initializers: initializers,
-            active_user_contexts: Mutex::new(HashMap::new()),
-            cache_path: cache_path.into(),
+            cache_path.into(),
             api_config,
-            hv_notifier,
-            device_info_provider,
-            cancellation_token: CancellationToken::new(),
-            task_service: BackgroundAwareTaskService::new(task_service),
-            event_poll_mode,
-            clock: CoreClock::default(),
-            event_service,
-        });
-
-        ctx.start_session_observer().await?;
+            account_stash,
+            key_chain,
+            initializers,
+            background_task_service,
+            CoreClock::default(),
+            log_service,
+        );
 
         let ctx_weak = ctx.this.clone();
-        ctx.on_session_deleted(move |_, user_id| {
-            let ctx_weak = ctx_weak.clone();
-            async move {
-                let Some(ctx) = ctx_weak.upgrade() else {
-                    return OnSessionDeletedResponse::Terminate;
-                };
-                ctx.active_user_contexts.lock().await.remove(&user_id);
-                OnSessionDeletedResponse::Continue
-            }
-        });
+        if let Ok(session_service) = ctx.get_service::<SessionObserverService>() {
+            session_service
+                .start(SESSION_OBSERVER_BROADCAST_CAPACITY)
+                .await?;
+
+            session_service.on_session_deleted(move |_, user_id| {
+                let ctx_weak = ctx_weak.clone();
+                async move {
+                    let Some(ctx) = ctx_weak.upgrade() else {
+                        return OnSessionDeletedResponse::Terminate;
+                    };
+                    ctx.active_user_contexts.lock().await.remove(&user_id);
+                    OnSessionDeletedResponse::Continue
+                }
+            });
+        }
 
         Ok(ctx)
     }
@@ -381,6 +395,14 @@ impl Context {
     #[must_use]
     pub fn origin(&self) -> Origin {
         self.origin
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn get_service<T: 'static>(&self) -> Result<&T, CoreContextError> {
+        self.services
+            .get(&TypeId::of::<T>())
+            .and_then(|service| service.downcast_ref::<T>())
+            .ok_or_else(|| CoreContextError::Other(anyhow!("Service not found")))
     }
 
     /// Get all available accounts.
@@ -910,14 +932,18 @@ impl Context {
             builder = builder.with_status(status);
         }
 
-        if let Some(notifier) = &self.hv_notifier {
-            builder = builder.with_notifier(Arc::clone(notifier));
+        if let Ok(hv_service) = self.get_service::<HvNotifierService>()
+            && let Some(notifier) = hv_service.notifier_arc()
+        {
+            builder = builder.with_notifier(notifier);
         }
 
-        if let Some(provider) = &self.device_info_provider {
+        if let Ok(device_service) = self.get_service::<DeviceInfoService>()
+            && let Some(provider) = device_service.provider()
+        {
             builder = builder.with_info_provider(Arc::new(MuonInfoProvider {
                 app_version: RealApiConfig::from(self.api_config.clone()).app_version,
-                device_info_provider: provider.clone(),
+                device_info_provider: Arc::clone(provider),
             }));
         }
 
@@ -1143,37 +1169,17 @@ impl Context {
         &self.task_service
     }
 
+    pub fn cancellation_token(&self) -> &CancellationToken {
+        &self.cancellation_token
+    }
+
     pub fn clock(&self) -> &CoreClock {
         &self.clock
     }
 
-    /// Subscribes for the event of closing the session. Use it to cleanup any remaining tasks
-    /// or memory footprints.
-    ///
-    pub fn on_session_deleted(&self, hook: impl OnSessionDeleted) {
-        let Some(mut receiver) = self.event_service.subscribe::<UserSessionDeletedEvent>() else {
-            error!("User session deleted event not registered");
-            return;
-        };
-        self.task_service.spawn(async move {
-            while let Ok(event) = receiver.next().await {
-                if hook
-                    .on_session_deleted(event.session_id, event.user_id)
-                    .await
-                    == OnSessionDeletedResponse::Terminate
-                {
-                    return;
-                }
-            }
-        });
-    }
-
-    /// Obtains the device info from the client (if possible)
-    ///
-    #[must_use]
-    pub async fn get_device_info(&self) -> Option<DeviceInfo> {
-        let provider = self.device_info_provider.as_ref()?;
-        Some(provider.get_device_info().await)
+    #[allow(clippy::result_large_err)]
+    pub fn session_observer_service(&self) -> Result<&SessionObserverService, CoreContextError> {
+        self.get_service::<SessionObserverService>()
     }
 
     /// Retrieves the passphrase for the current session by decrypting the session's key secret.
@@ -1206,22 +1212,6 @@ impl Context {
             .remote_id
             .clone();
         Ok(session_id)
-    }
-
-    async fn start_session_observer(&self) -> Result<(), CoreContextError> {
-        let session_observer = CoreSessionObserver::new(self.account_stash.clone())
-            .await
-            .inspect_err(|e| tracing::error!("Failed to create session observer: {e:?}"))?;
-        self.event_service
-            .register_with_capacity::<UserSessionDeletedEvent>(SESSION_OBSERVER_BROADCAST_CAPACITY);
-        self.event_service
-            .register_with_capacity::<UserSessionCreatedEvent>(SESSION_OBSERVER_BROADCAST_CAPACITY);
-
-        let ctx_weak = self.this.clone();
-        self.task_service.spawn(async move {
-            on_session_notification(session_observer, ctx_weak).await;
-        });
-        Ok(())
     }
 }
 
@@ -1312,35 +1302,6 @@ where
     ) -> impl Future<Output = OnSessionDeletedResponse> + Send {
         self(session_id, user_id)
     }
-}
-#[tracing::instrument(skip_all)]
-async fn on_session_notification(mut observer: CoreSessionObserver, ctx: Weak<Context>) {
-    tracing::debug!("Starting task");
-    while let Ok(notifications) = observer.next().await {
-        let Some(ctx) = ctx.upgrade() else {
-            tracing::debug!("Context no longer alive, terminating");
-            return;
-        };
-        tracing::debug!("Task received: {:?}", notifications);
-        for notification in notifications {
-            match notification {
-                CoreSessionObserverNotification::Created(session_id, user_id) => {
-                    ctx.event_service.publish(UserSessionCreatedEvent {
-                        session_id,
-                        user_id,
-                    });
-                }
-                CoreSessionObserverNotification::Deleted(session_id, user_id) => {
-                    tracing::info!("User {user_id}'s session {session_id} has been deleted");
-                    ctx.event_service.publish(UserSessionDeletedEvent {
-                        session_id,
-                        user_id,
-                    });
-                }
-            }
-        }
-    }
-    tracing::debug!("Stopping task");
 }
 
 /// Implements the `InfoProvider` protocol from Muon. Used to pass the fingerprint to the Muon Client.

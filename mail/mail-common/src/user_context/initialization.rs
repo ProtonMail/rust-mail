@@ -7,6 +7,7 @@ use proton_core_common::models::{
     Address, Contact, DependencyInitializationError, InitializationError, InitializationWatcher,
     InitializedComponent, User,
 };
+
 use proton_core_common::services::InitializationService;
 use proton_event_loop::EventLoopError;
 use proton_task_service::{AsyncTaskResult, TaskService};

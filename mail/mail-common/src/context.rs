@@ -26,6 +26,7 @@ use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::pin_code::{PinCode, PinError};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
+use proton_core_common::services::{DeviceInfoService, SessionObserverService};
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreContextResult, CoreSessionState,
     KeyHandlingError, Origin, UserContext,
@@ -284,19 +285,21 @@ impl MailContext {
 
         let ctx_weak = Arc::downgrade(&ctx);
 
-        ctx.core_context.on_session_deleted(move |_, user_id| {
-            let ctx_weak = ctx_weak.clone();
-            async move {
-                let Some(ctx) = ctx_weak.upgrade() else {
-                    return OnSessionDeletedResponse::Terminate;
-                };
+        if let Ok(session_service) = ctx.core_context.get_service::<SessionObserverService>() {
+            session_service.on_session_deleted(move |_, user_id| {
+                let ctx_weak = ctx_weak.clone();
+                async move {
+                    let Some(ctx) = ctx_weak.upgrade() else {
+                        return OnSessionDeletedResponse::Terminate;
+                    };
 
-                tracing::info!("Removing `{user_id}`, from active contexts");
-                ctx.active_user_contexts.lock().await.remove(&user_id);
+                    tracing::info!("Removing `{user_id}`, from active contexts");
+                    ctx.active_user_contexts.lock().await.remove(&user_id);
 
-                OnSessionDeletedResponse::Continue
-            }
-        });
+                    OnSessionDeletedResponse::Continue
+                }
+            });
+        }
 
         Ok(ctx)
     }
@@ -326,7 +329,11 @@ impl MailContext {
     pub async fn new_login_flow(&self) -> CoreContextResult<LoginFlow> {
         let _ = self.core_context.get_encryption_key()?;
         let session = self.core_context.new_api_session(None, None).await?;
-        let device_info = self.core_context.get_device_info().await;
+        let device_info = self
+            .core_context
+            .get_service::<DeviceInfoService>()?
+            .get_device_info()
+            .await;
 
         let challenge_info = ChallengeInfo {
             product_name: self.core_context.get_client_id().to_owned(),
@@ -445,7 +452,11 @@ impl MailContext {
         let store = session.store().to_owned();
 
         // Obtain device info (if possible)
-        let device_info = self.core_context.get_device_info().await;
+        let device_info = self
+            .core_context
+            .get_service::<DeviceInfoService>()?
+            .get_device_info()
+            .await;
 
         // Build challenge info
         let challenge_info = ChallengeInfo {
