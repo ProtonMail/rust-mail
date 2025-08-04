@@ -1,19 +1,25 @@
+#![allow(clippy::result_large_err)]
+
 mod action_queue;
+mod attachment_cache;
+mod builder;
 mod events;
 mod images;
 mod initialization;
 
+use crate::actions::PREFETCH_ROLLBACK_ACTION_GROUP;
 use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
-use crate::actions::{PREFETCH_ROLLBACK_ACTION_GROUP, register_actions};
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
-use crate::rsvp::{RsvpCache, RsvpContacts};
-use crate::user_context::events::subscriber::MailEventSubscriber;
-use crate::user_context::initialization::InitializationMediator;
+use crate::rsvp::RsvpService;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
+use attachment_cache::AttachmentCacheState;
+use builder::MailUserContextBuilder;
+use events::subscriber::MailEventSubscriber;
+use initialization::InitializationMediator;
 use proton_account_api::password::PasswordFlow;
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
@@ -39,10 +45,12 @@ use proton_event_loop::{EventPoll, Subscriber};
 use proton_task_service::{AsyncTaskResult, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
@@ -54,18 +62,110 @@ const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 2;
 
 const DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE: usize = 2;
 const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
-const DEFAULT_PREFETCH_BOUND: usize = 4;
+const DEFAULT_PREFETCH_BOUND: usize = 10;
+
+/// App origin only
+pub struct DefaultQueueExecutor {
+    pub default: QueueAutoExecutorPool,
+    pub prefetch_rollback: QueueAutoExecutorPool,
+}
+
+impl DefaultQueueExecutor {
+    pub fn pause(&self) {
+        self.default.pause();
+        self.prefetch_rollback.pause();
+    }
+
+    pub fn resume(&self) {
+        self.default.resume();
+        self.prefetch_rollback.resume();
+    }
+
+    pub fn terminate(&self) {
+        self.default.terminate();
+        self.prefetch_rollback.terminate();
+    }
+}
+
+/// Used by both App and ShareExt origins
+pub struct SendQueueExecutorPool {
+    pub pool: QueueAutoExecutorPool,
+}
+
+impl SendQueueExecutorPool {
+    pub fn pause(&self) {
+        self.pool.pause();
+    }
+
+    pub fn resume(&self) {
+        self.pool.resume();
+    }
+
+    pub fn terminate(&self) {
+        self.pool.terminate();
+    }
+}
+
+pub struct QueuesService {
+    weak: Weak<MailUserContext>,
+}
+
+impl QueuesService {
+    pub fn pause(&self) {
+        let Some(ctx) = self.weak.upgrade() else {
+            tracing::error!("Could not upgrade weak ctx reference");
+            return;
+        };
+        if let Some(service) = ctx.get_opt_service::<DefaultQueueExecutor>() {
+            service.pause();
+        };
+        ctx.get_service::<SendQueueExecutorPool>().unwrap().pause();
+    }
+
+    pub fn resume(&self) {
+        let Some(ctx) = self.weak.upgrade() else {
+            tracing::error!("Could not upgrade weak ctx reference");
+            return;
+        };
+        if let Some(service) = ctx.get_opt_service::<DefaultQueueExecutor>() {
+            service.resume();
+        };
+        ctx.get_service::<SendQueueExecutorPool>().unwrap().resume();
+    }
+
+    pub fn terminate(&self) {
+        let Some(ctx) = self.weak.upgrade() else {
+            tracing::error!("Could not upgrade weak ctx reference");
+            return;
+        };
+        if let Some(service) = ctx.get_opt_service::<DefaultQueueExecutor>() {
+            service.terminate();
+        };
+        ctx.get_service::<SendQueueExecutorPool>()
+            .unwrap()
+            .terminate();
+    }
+}
+
+/// App origin only
+pub struct PrefetchService {
+    pub notify: PrefetchNotify,
+}
+
+impl PrefetchService {
+    pub fn new() -> Self {
+        Self {
+            notify: OnceLock::new(),
+        }
+    }
+}
 
 pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
-    queues: MailUserQueues,
-    prefetch: PrefetchNotify,
-    init: Option<InitializationMediator>,
-    rsvp_cache: RsvpCache,
-    rsvp_contacts: RsvpContacts,
-    pub is_cleanup_cache_running: Arc<AtomicBool>,
+
+    services: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
 impl MailUserContext {
@@ -75,38 +175,63 @@ impl MailUserContext {
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
         let origin = mail_context.core_context().origin();
-        let queues = MailUserQueues::new(&mail_context, &user_context);
+        let mut builder = MailUserContextBuilder::new().with_service(AttachmentCacheState::new());
 
-        let init = match origin {
-            Origin::App => Some(InitializationMediator::new(
-                mail_context.core_context().task_service().task_service(),
-            )),
+        let online = user_context
+            .session()
+            .status_watcher()
+            .subscribe_to_online();
 
-            Origin::ShareExt => None,
+        builder = match origin {
+            Origin::App => builder
+                .with_service(SendQueueExecutorPool {
+                    pool: QueueAutoExecutorPool::new(
+                        user_context.queue(),
+                        &SEND_ACTION_GROUP,
+                        NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
+                        online.clone(),
+                        true,
+                        user_context.as_ref(),
+                    ),
+                })
+                .with_service(DefaultQueueExecutor {
+                    default: QueueAutoExecutorPool::new(
+                        user_context.queue(),
+                        &ActionGroup::default(),
+                        NonZeroUsize::new(DEFAULT_DEFAULT_QUEUE_POOL_SIZE).unwrap(),
+                        online.clone(),
+                        true,
+                        user_context.as_ref(),
+                    ),
+                    prefetch_rollback: QueueAutoExecutorPool::new(
+                        user_context.queue(),
+                        &PREFETCH_ROLLBACK_ACTION_GROUP,
+                        NonZeroUsize::new(DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE).unwrap(),
+                        online.clone(),
+                        true,
+                        user_context.as_ref(),
+                    ),
+                })
+                // wpolak: Add QueuesService
+                .with_service(InitializationMediator::new(
+                    mail_context.core_context().task_service().task_service(),
+                ))
+                .with_service(PrefetchService::new())
+                .with_service(RsvpService::new(user_context.stash())),
+
+            Origin::ShareExt => builder.with_service(SendQueueExecutorPool {
+                pool: QueueAutoExecutorPool::new(
+                    user_context.queue(),
+                    &SHARE_EXT_ACTION_GROUP,
+                    NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
+                    online,
+                    true,
+                    user_context.as_ref(),
+                ),
+            }),
         };
 
-        let rsvp_contacts = RsvpContacts::new(user_context.stash());
-
-        let this = Arc::new_cyclic(|this| {
-            register_actions(
-                user_context.queue(),
-                origin,
-                this,
-                user_context.session().api(),
-            );
-
-            Self {
-                this: Weak::clone(this),
-                mail_context,
-                user_context,
-                prefetch: OnceLock::new(),
-                queues,
-                init,
-                rsvp_cache: Default::default(),
-                rsvp_contacts,
-                is_cleanup_cache_running: Default::default(),
-            }
-        });
+        let this = builder.build(mail_context, user_context).await?;
 
         match origin {
             Origin::App => {
@@ -127,9 +252,37 @@ impl MailUserContext {
         // There's a race condition between initializing queues and `self` - to
         // avoid it, we start our queues as paused and resume once everything
         // has been initialized, i.e. here:
-        this.queues.resume();
+        this.queues().resume();
 
         Ok(this)
+    }
+
+    /// Get a mandatory service - returns error if service is not registered
+    pub fn get_service<T: Any + Send + Sync + 'static>(&self) -> Result<&T, anyhow::Error> {
+        self.services
+            .get(&TypeId::of::<T>())
+            .and_then(|service| service.downcast_ref::<T>())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Required service {} not found in context",
+                    std::any::type_name::<T>()
+                )
+            })
+    }
+
+    /// Get an optional service - returns None if service is not registered
+    pub fn get_opt_service<T: Any + Send + Sync + 'static>(&self) -> Option<&T> {
+        self.services
+            .get(&TypeId::of::<T>())
+            .and_then(|service| service.downcast_ref::<T>())
+    }
+
+    pub fn has_service<T: Any + Send + Sync + 'static>(&self) -> bool {
+        self.services.contains_key(&TypeId::of::<T>())
+    }
+
+    pub fn queues(&self) -> &QueuesService {
+        self.get_service::<QueuesService>().expect("wpolak: todo")
     }
 
     #[must_use]
@@ -180,10 +333,6 @@ impl MailUserContext {
 
     pub fn action_queue(&self) -> &Queue {
         self.user_context.queue()
-    }
-
-    pub fn queues(&self) -> &MailUserQueues {
-        &self.queues
     }
 
     pub fn api(&self) -> &Proton {
@@ -238,12 +387,12 @@ impl MailUserContext {
         self.user_context.session_id()
     }
 
-    pub(crate) fn rsvp_cache(&self) -> &RsvpCache {
-        &self.rsvp_cache
+    pub(crate) fn rsvp_service(&self) -> Result<&RsvpService, anyhow::Error> {
+        self.get_service::<RsvpService>()
     }
 
-    pub(crate) fn rsvp_contacts(&self) -> &RsvpContacts {
-        &self.rsvp_contacts
+    pub fn attachment_cache_state(&self) -> Result<&AttachmentCacheState, anyhow::Error> {
+        self.get_service::<AttachmentCacheState>()
     }
 
     pub async fn user(&self) -> MailContextResult<User> {
@@ -517,7 +666,9 @@ impl MailUserContext {
             return Ok(());
         }
 
-        if let Some(sender) = self.prefetch.get() {
+        let prefetch_service = self.get_service::<PrefetchService>()?;
+
+        if let Some(sender) = prefetch_service.notify.get() {
             sender.send_async(jobs).await.map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
             })?;
@@ -526,12 +677,13 @@ impl MailUserContext {
         } else {
             let (sender, receiver) = flume::bounded(DEFAULT_PREFETCH_BOUND);
 
-            self.prefetch.set(sender).map_err(|e| {
+            prefetch_service.notify.set(sender).map_err(|e| {
                 MailContextError::Other(anyhow!("Failed to set prefetch sender: {e:?}"))
             })?;
             Prefetch::initialize(self.clone(), receiver).await;
-            // unwrap safety: `self.prefetch` is set just above, it cannot be `None`.
-            self.prefetch
+            // unwrap safety: `prefetch_service.notify` is set just above, it cannot be `None`.
+            prefetch_service
+                .notify
                 .get()
                 .unwrap()
                 .send_async(jobs)
@@ -577,126 +729,5 @@ impl MailUserContext {
             .typed_actions_count::<crate::actions::draft::Send>()
             .await?
             != 0)
-    }
-}
-
-pub enum MailUserQueues {
-    App {
-        default: QueueAutoExecutorPool,
-        prefetch_rollback: QueueAutoExecutorPool,
-        send: QueueAutoExecutorPool,
-    },
-    ShareExt {
-        queue: QueueAutoExecutorPool,
-    },
-}
-
-impl MailUserQueues {
-    fn new(mail_context: &MailContext, user_context: &UserContext) -> Self {
-        let online = user_context
-            .session()
-            .status_watcher()
-            .subscribe_to_online();
-
-        match mail_context.core_context().origin() {
-            Origin::App => {
-                let default = QueueAutoExecutorPool::new(
-                    user_context.queue(),
-                    &ActionGroup::default(),
-                    NonZeroUsize::new(DEFAULT_DEFAULT_QUEUE_POOL_SIZE).unwrap(),
-                    online.clone(),
-                    true,
-                    user_context,
-                );
-
-                let send = QueueAutoExecutorPool::new(
-                    user_context.queue(),
-                    &SEND_ACTION_GROUP,
-                    NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
-                    online.clone(),
-                    true,
-                    user_context,
-                );
-
-                let prefetch_rollback = QueueAutoExecutorPool::new(
-                    user_context.queue(),
-                    &PREFETCH_ROLLBACK_ACTION_GROUP,
-                    NonZeroUsize::new(DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE).unwrap(),
-                    online,
-                    true,
-                    user_context,
-                );
-
-                MailUserQueues::App {
-                    default,
-                    send,
-                    prefetch_rollback,
-                }
-            }
-
-            Origin::ShareExt => {
-                let queue = QueueAutoExecutorPool::new(
-                    user_context.queue(),
-                    &SHARE_EXT_ACTION_GROUP,
-                    NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
-                    online,
-                    true,
-                    user_context,
-                );
-
-                MailUserQueues::ShareExt { queue }
-            }
-        }
-    }
-
-    pub fn pause(&self) {
-        match self {
-            MailUserQueues::App {
-                default,
-                send,
-                prefetch_rollback,
-            } => {
-                default.pause();
-                send.pause();
-                prefetch_rollback.pause();
-            }
-            MailUserQueues::ShareExt { queue } => {
-                queue.pause();
-            }
-        }
-    }
-
-    pub fn resume(&self) {
-        match self {
-            MailUserQueues::App {
-                default,
-                send,
-                prefetch_rollback,
-            } => {
-                default.resume();
-                send.resume();
-                prefetch_rollback.resume();
-            }
-            MailUserQueues::ShareExt { queue } => {
-                queue.resume();
-            }
-        }
-    }
-
-    pub fn terminate(&self) {
-        match self {
-            MailUserQueues::App {
-                default,
-                send,
-                prefetch_rollback,
-            } => {
-                default.terminate();
-                send.terminate();
-                prefetch_rollback.terminate();
-            }
-            MailUserQueues::ShareExt { queue } => {
-                queue.terminate();
-            }
-        }
     }
 }

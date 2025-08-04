@@ -1,7 +1,6 @@
 use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{CustomSettings, LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailContextResult, MailUserContext};
-use anyhow::anyhow;
 use futures::try_join;
 use proton_core_common::datatypes::{InitializationKey, InitializedComponentState};
 use proton_core_common::models::{
@@ -45,19 +44,12 @@ impl MailUserContext {
     ///
     /// # Returns
     ///
-    /// An error if the initialization failed for any reason
+    /// An error if the initialization mediator was not registered.
     ///
     pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
         let ctx_cloned = Arc::clone(&ctx);
 
-        ctx.init
-            .as_ref()
-            .ok_or_else(|| {
-                // This can happen if someone tries to initialize the context
-                // from within the share extension - that's illegal, because
-                // share extension assumes the context is already initialized
-                anyhow!("Initialization mediator is missing")
-            })?
+        ctx.get_service::<InitializationMediator>()?
             .initialize(ctx_cloned)
             .await
     }

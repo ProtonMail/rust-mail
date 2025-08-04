@@ -6,10 +6,10 @@ use crate::{AppError, DecryptedAttachment, MailContextError, MailContextResult, 
 use anyhow::Context as _;
 use indoc::indoc;
 use proton_core_api::services::proton::LabelId;
+use proton_core_common::DeleteFilesSafeError;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::ModelExtension as _;
 use proton_core_common::os::{safe_write_async, sanitize_filename};
-use proton_core_common::{DeleteFilesSafeError, Origin};
 use proton_crypto_inbox::attachment::DecryptableAttachment as _;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
@@ -247,7 +247,7 @@ impl Attachment {
                 tx.execute(
                     indoc! { "
                        UPDATE attachment_cache
-                       SET 
+                       SET
                            atime = unixepoch('now'),
                            hit_count = hit_count + 1
                        WHERE attachment_id = ?1;
@@ -285,7 +285,7 @@ impl Attachment {
         )
         .await?;
         // Execute the cleanup routine in the background.
-        Self::cleanup_cache(ctx).await;
+        Self::cleanup_cache(ctx).await?;
         Ok(path)
     }
 
@@ -567,10 +567,8 @@ impl Attachment {
 
     /// This function ensures that this is called at most once concurrently, and spawns the
     /// cleanup routine in the background if it's not being currently executed.
-    pub async fn cleanup_cache(ctx: &MailUserContext) {
-        if ctx.origin() != Origin::App {
-            return;
-        }
+    pub async fn cleanup_cache(ctx: &MailUserContext) -> anyhow::Result<()> {
+        let state = ctx.attachment_cache_state()?;
 
         // TODO: Possibly run this in a background task instead of once-per.
         pub struct G(Arc<AtomicBool>);
@@ -580,10 +578,10 @@ impl Attachment {
             }
         }
 
-        let is_executing = ctx.is_cleanup_cache_running.clone();
+        let is_executing = state.is_cleanup_running().clone();
         if is_executing.swap(true, Ordering::Acquire) {
             debug!("Cleanup routine already running");
-            return;
+            return Ok(());
         }
         let ctx_2 = ctx.as_arc();
         ctx.spawn(async move {
@@ -592,6 +590,8 @@ impl Attachment {
                 error!("Error cleaning up attachments: {e}");
             }
         });
+
+        Ok(())
     }
 
     pub fn is_pgp_attachment(&self) -> bool {
