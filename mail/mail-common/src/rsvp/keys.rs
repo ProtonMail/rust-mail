@@ -45,6 +45,16 @@ impl cal::RsvpKeys for RsvpKeys<'_> {
             .await
             .inspect_err(|err| error!("Couldn't unlock address keys: {err:?}"))?;
 
+        // HACK while the calendar key passphrase is going to be encrypted
+        //      towards `id`'s address keys, Proton-to-Proton invites are still
+        //      encrypted towards the recipient's public key.
+        //
+        // i.e. if you have a calendar encrypted for foo@protonmail.com, but you
+        // receive an invite on foo@protom.me, the calendar will be encrypted
+        // towards foo@protonmail.com, while the invite will be encrypted
+        // towards foo@proton.me.
+        //
+        // "Merging" both keys here is the easiest way of handling this.
         Ok(UnlockedAddressKeys(
             keys1.0.into_iter().chain(keys2.0).collect(),
         ))
