@@ -404,7 +404,7 @@ async fn action_replace_or_queue() {
     assert_ne!(stored.id, updated.id);
 }
 #[tokio::test]
-async fn action_store_creates_and_updates_direct_dependency_keys() {
+async fn action_store_records_all_dependencies() {
     let direct_dep_key = ActionDependencyKey::from("direct");
     let sequential_dep_key = ActionDependencyKey::from("sequential");
 
@@ -479,7 +479,7 @@ async fn action_store_creates_and_updates_direct_dependency_keys() {
         ActionDependencyKeysTable::resolve_dependency_keys(vec![direct_dep_key.clone()], &conn)
             .await
             .unwrap();
-    assert_eq!(&action_ids, &[second_action_id]);
+    assert_eq!(&action_ids, &[first_action_id, second_action_id]);
 
     // Store third action which depends sequentially on second action, does not override
     // any keys.
@@ -492,14 +492,20 @@ async fn action_store_creates_and_updates_direct_dependency_keys() {
     let deps = StoredAction::all_dependencies(&conn, third_action_id)
         .await
         .unwrap();
-    assert_eq!(deps, vec![ActionDependency::optional(second_action_id)]);
+    assert_eq!(
+        deps,
+        vec![
+            ActionDependency::optional(first_action_id),
+            ActionDependency::optional(second_action_id)
+        ]
+    );
 
     // Key should not have been updated.
     let action_ids =
         ActionDependencyKeysTable::resolve_dependency_keys(vec![direct_dep_key.clone()], &conn)
             .await
             .unwrap();
-    assert_eq!(&action_ids, &[second_action_id]);
+    assert_eq!(&action_ids, &[first_action_id, second_action_id]);
 
     // New key should have been recorded
     let action_ids =
