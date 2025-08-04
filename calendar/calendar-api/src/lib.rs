@@ -356,7 +356,7 @@ mod tests {
                 calendar_id: "HzNtbT1J...".into(),
                 address_key_packet: Some("wV4DkxOc...".into()),
                 shared_key_packet: None,
-                attendees_events: [CalendarEventPayload {
+                attendees_events: vec![CalendarEventPayload {
                     ty: CalendarEventPayloadType::EncryptedAndSigned,
                     data: "0sLJAdwR...".into(),
                     signature: Some("-----BEGIN PGP SIGNATURE-----...".into()),

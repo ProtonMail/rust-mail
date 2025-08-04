@@ -113,8 +113,7 @@ pub struct CalendarEvent {
     pub calendar_id: CalendarId,
     pub address_key_packet: Option<String>,
     pub shared_key_packet: Option<String>,
-    // Same story as with calendar members - there's always one item here
-    pub attendees_events: [CalendarEventPayload; 1],
+    pub attendees_events: Vec<CalendarEventPayload>,
     pub attendees: Vec<CalendarAttendee>,
     pub notifications: Option<Vec<CalendarNotification>>,
     pub color: Option<CalendarColor>,
@@ -123,11 +122,6 @@ pub struct CalendarEvent {
 }
 
 impl CalendarEvent {
-    #[must_use]
-    pub fn attendees_event(&self) -> &CalendarEventPayload {
-        &self.attendees_events[0]
-    }
-
     #[must_use]
     pub fn attendee_status(&self, token: &CalendarAttendeeToken) -> Option<CalendarAttendeeStatus> {
         self.attendees.iter().find_map(|att| {
