@@ -7,6 +7,7 @@ use proton_core_common::models::{
     Address, Contact, DependencyInitializationError, InitializationError, InitializationWatcher,
     InitializedComponent, User,
 };
+use proton_core_common::services::InitializationService;
 use proton_event_loop::EventLoopError;
 use proton_task_service::{AsyncTaskResult, TaskService};
 use std::sync::Arc;
@@ -157,7 +158,11 @@ async fn initialize_event_loop(
             // there is no way of initializing it with already having transaction.
             // We want to avoid the deadlock, and we do not depend on any dependencies.
             // So initializing it here is not really harmful, just weird.
-            ctx_clone.event_loop().initialize().await?;
+            ctx_clone
+                .event_loop()
+                .map_err(|_| EventLoopError::EventLoopNotInitialized)?
+                .initialize()
+                .await?;
             Ok(())
         },
         async |_tx, ()| Ok(()),
@@ -217,7 +222,11 @@ impl InitializationMediator {
             warn!("Context already initialized");
             return Ok(());
         }
-        let watcher = ctx.user_context.initialization_watcher.clone();
+        let watcher = ctx
+            .user_context
+            .get_service::<InitializationService>()?
+            .initialization_watcher()
+            .clone();
         let watcher_clone = watcher.clone();
         let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
 

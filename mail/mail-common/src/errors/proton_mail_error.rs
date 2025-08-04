@@ -596,6 +596,7 @@ impl From<EventLoopError> for ProtonMailError {
             }
             EventLoopError::Register(_) => Self::Unexpected(Unexpected::Internal),
             EventLoopError::Deserialize(anyhow) => Self::from(anyhow),
+            EventLoopError::EventLoopNotInitialized => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

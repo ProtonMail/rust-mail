@@ -2,13 +2,14 @@ use crate::MailUserContext;
 use crate::actions::rollback::RollbackAction;
 use proton_action_queue::queue::ActionError;
 use proton_core_common::actions::event_poll::EventPoll;
+use proton_core_common::{CoreContextError, services::InitializationService};
 use proton_event_loop::EventLoopError;
 use std::time::Duration;
 use tokio::time;
 use tracing::{Instrument, error};
 
 impl MailUserContext {
-    pub(crate) fn init_event_loop_poll(&self, duration: Duration) {
+    pub(crate) fn init_event_loop_poll(&self, duration: Duration) -> Result<(), CoreContextError> {
         tracing::info!(
             "Initializing event loop poll with {} second interval",
             duration.as_secs()
@@ -23,7 +24,11 @@ impl MailUserContext {
             interval
         };
 
-        let watcher = self.user_context.initialization_watcher.clone();
+        let watcher = self
+            .user_context
+            .get_service::<InitializationService>()?
+            .initialization_watcher()
+            .clone();
         self.spawn(async move {
             async {
                 // Wait until `MailUserContext` is initialized.
@@ -61,6 +66,8 @@ impl MailUserContext {
             .instrument(tracing::debug_span!("event_loop"))
             .await;
         });
+
+        Ok(())
     }
 
     /// Queue an action to execute the event loop.
@@ -91,6 +98,8 @@ impl MailUserContext {
     async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction>> {
         let mut last_action_ids = self
             .user_context()
+            .event_loop_service()
+            .map_err(|e| ActionError::Action(e.into()))?
             .last_event_loop_action_ids()
             .lock()
             .await;
@@ -119,6 +128,7 @@ impl MailUserContext {
         let mail_subscriber = self.event_subscriber();
 
         self.event_loop()
+            .map_err(|_| EventLoopError::EventLoopNotInitialized)?
             .register(Box::new(mail_subscriber))
             .await?;
 

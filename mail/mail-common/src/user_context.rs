@@ -240,7 +240,7 @@ impl MailUserContext {
                 this.register_subscribers().await?;
 
                 if let EventPollMode::Automatic(interval) = this.user_context().event_poll_mode() {
-                    this.init_event_loop_poll(interval);
+                    this.init_event_loop_poll(interval)?;
                 }
             }
 
@@ -344,9 +344,8 @@ impl MailUserContext {
         self.user_context.stash()
     }
 
-    #[must_use]
-    pub fn event_loop(&self) -> &EventPoll {
-        self.user_context.event_loop()
+    pub fn event_loop(&self) -> Result<&EventPoll, CoreContextError> {
+        Ok(self.user_context.event_loop_service()?.event_loop())
     }
 
     pub fn mail_context(&self) -> &MailContext {

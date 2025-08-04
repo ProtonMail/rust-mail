@@ -1,5 +1,5 @@
 use crate::UserContext;
-use crate::actions::event_poll;
+use crate::actions::event_poll::{self, ActionEventLoopError};
 use proton_action_queue::action::{Metadata, Priority};
 use proton_action_queue::queue::Error;
 use proton_action_queue::{action::ActionId, queue::ActionError};
@@ -63,7 +63,11 @@ impl UserContext {
     }
 
     async fn queue_poll_event_loop(&self) -> Result<(), ActionError<event_poll::EventPoll>> {
-        let mut last_action_ids = self.last_event_loop_action_ids().lock().await;
+        let event_loop_service = self
+            .event_loop_service()
+            .map_err(|_| ActionError::Action(ActionEventLoopError::ServiceNotInitialized))?;
+
+        let mut last_action_ids = event_loop_service.last_event_loop_action_ids().lock().await;
         let event_poll_action = event_poll::EventPoll {};
         {
             let output = if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {

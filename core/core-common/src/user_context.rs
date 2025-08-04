@@ -1,16 +1,17 @@
 pub use self::keys::*;
-use crate::actions::register_actions;
+use self::services::{EventLoopService, InitializationService};
+
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_core_db, verify_core_db};
-use crate::event_loop::{EventLoopActionIds, EventPollMode};
+use crate::event_loop::EventPollMode;
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::subscriber::CoreEventLoopContext;
 use proton_action_queue::queue::Queue;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
@@ -18,22 +19,26 @@ use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use stash::watcher::TableWatcher;
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::fs::{self};
 use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
-use tokio::sync::Mutex;
+
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 pub mod action_queue;
+pub mod builder;
 pub mod event_loop;
 pub mod images_logo;
 mod keys;
 pub mod nuke_utils;
+pub mod services;
 
 /// Extra initializer for the user database.
 #[async_trait::async_trait]
@@ -56,18 +61,18 @@ pub trait UserDatabaseInitializer: Send + Sync {
 /// Contains all the relevant information to an initialize user session.
 pub struct UserContext {
     this: Weak<Self>,
-    session: Session,
     context: Arc<Context>,
-    user_stash: Stash,
-    queue: Queue,
+    // Context data
     user_id: UserId,
     session_id: SessionId,
-    pub(self) key_manager: Arc<CryptoKeyManager>,
+    cache_path: PathBuf,
+    // Essential services
+    session: Session,
+    user_stash: Stash,
+    queue: Queue,
+    key_manager: Arc<CryptoKeyManager>,
     cancellation_token: CancellationToken,
-    pub cache_path: PathBuf,
-    pub initialization_watcher: Arc<InitializationWatcher>,
-    event_loop: EventPoll,
-    last_event_loop_action_ids: Arc<Mutex<EventLoopActionIds>>,
+    services: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
 impl Debug for UserContext {
@@ -93,40 +98,51 @@ impl UserContext {
         let user_stash = Self::open_db(user_stash_path, db_initializers, context.origin()).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
-        let initialization_watcher = InitializationWatcher::new(&user_stash)?;
 
-        let this = Arc::new_cyclic(|this| {
-            register_actions(context.origin(), &queue, this, session.api());
+        let origin = context.origin();
 
-            let event_ctx = CoreEventLoopContext::from(Weak::clone(this));
+        let this = {
+            let mut builder = builder::UserContextBuilder::new();
 
-            Self {
-                this: Weak::clone(this),
+            // Add App-only services
+            if matches!(origin, Origin::App) {
+                builder = builder
+                    .with_cyclic_service(|weak_ref: Weak<UserContext>| {
+                        let event_ctx = CoreEventLoopContext::from(weak_ref);
+                        let event_loop = EventPoll::new(event_ctx.boxed(), event_ctx.boxed());
+                        EventLoopService::new(event_loop)
+                    })
+                    .with_service(InitializationService::new(InitializationWatcher::new(
+                        &user_stash,
+                    )?));
+            }
+
+            builder.build(
                 session,
                 context,
                 user_stash,
                 queue,
                 user_id,
                 session_id,
-                key_manager: Arc::new(CryptoKeyManager::new()),
-                cache_path,
+                Arc::new(CryptoKeyManager::new()),
                 cancellation_token,
-                initialization_watcher,
-                event_loop: EventPoll::new(event_ctx.boxed(), event_ctx.boxed()),
-                last_event_loop_action_ids: Arc::new(Mutex::new(EventLoopActionIds::default())),
-            }
-        });
+                cache_path,
+            )
+        };
 
         fs::create_dir_all(this.sender_images_cache_path())?;
         fs::create_dir_all(this.trash_path())?;
 
-        let init_watcher = this.initialization_watcher.clone();
-
-        this.spawn(async move {
-            if let Err(e) = init_watcher.task().await {
-                error!("Initialization watcher finished with error: {e:?}");
+        if matches!(origin, Origin::App) {
+            if let Ok(init_service) = this.get_service::<InitializationService>() {
+                let init_watcher = init_service.initialization_watcher().clone();
+                this.spawn(async move {
+                    if let Err(e) = init_watcher.task().await {
+                        error!("Initialization watcher finished with error: {e:?}");
+                    }
+                });
             }
-        });
+        }
 
         // Register task cancellation when session is deleted.
         let this_user_id = this.user_id.clone();
@@ -145,13 +161,37 @@ impl UserContext {
             }
         });
 
-        this.register_subscribers().await?;
+        // Only register subscribers for App origin (ShareExt doesn't have EventLoopService)
+        if matches!(origin, Origin::App) {
+            this.register_subscribers().await?;
+        }
 
         Ok(this)
     }
 
+    #[must_use]
     pub fn as_arc(&self) -> Arc<Self> {
         self.this.upgrade().expect("Should never fail")
+    }
+
+    #[must_use]
+    pub fn get_opt_service<T: Any + 'static>(&self) -> Option<&T> {
+        self.services
+            .get(&TypeId::of::<T>())
+            .and_then(|service| service.downcast_ref::<T>())
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn get_service<T: Any + 'static>(&self) -> Result<&T, CoreContextError> {
+        self.services
+            .get(&TypeId::of::<T>())
+            .and_then(|service| service.downcast_ref::<T>())
+            .ok_or_else(|| {
+                CoreContextError::Other(anyhow::anyhow!(
+                    "Service {} not found",
+                    std::any::type_name::<T>()
+                ))
+            })
     }
 
     #[must_use]
@@ -174,18 +214,14 @@ impl UserContext {
         &self.user_id
     }
 
-    #[must_use]
-    pub fn event_loop(&self) -> &EventPoll {
-        &self.event_loop
+    #[allow(clippy::result_large_err)]
+    pub fn event_loop_service(&self) -> Result<&EventLoopService, CoreContextError> {
+        self.get_service::<EventLoopService>()
     }
 
+    #[must_use]
     pub fn event_poll_mode(&self) -> EventPollMode {
         self.context.event_poll_mode
-    }
-
-    #[must_use]
-    pub fn last_event_loop_action_ids(&self) -> &Arc<Mutex<EventLoopActionIds>> {
-        &self.last_event_loop_action_ids
     }
 
     #[must_use]
@@ -292,6 +328,11 @@ impl UserContext {
 
     pub fn cancel_all_tasks(&self) {
         self.cancellation_token.cancel();
+    }
+
+    #[must_use]
+    pub fn cache_path(&self) -> &PathBuf {
+        &self.cache_path
     }
 
     #[must_use]

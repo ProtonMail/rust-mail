@@ -56,6 +56,8 @@ pub enum ActionEventLoopError {
     WriterGuard(#[from] WriterGuardError),
     #[error("Lost context")]
     LostContext,
+    #[error("Service not initialized")]
+    ServiceNotInitialized,
 }
 
 impl action::Error for ActionEventLoopError {
