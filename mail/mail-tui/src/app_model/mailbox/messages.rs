@@ -594,9 +594,10 @@ impl MessagesState {
                         )),
                         Command::task(async move {
                             let mut tether = ctx.user_stash().connection();
+                            let tether2 = ctx.user_stash().connection();
 
                             let result = rsvp
-                                .answer(&ctx, &mut tether, answer)
+                                .answer(&ctx, &mut tether, &tether2, answer)
                                 .await
                                 .context("Couldn't answer the invitation");
 

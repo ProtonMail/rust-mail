@@ -56,12 +56,18 @@ impl BottomBarActions {
             MobileActions::ToggleRead => Some(Self::toggle_read(any_unread)),
             MobileActions::ToggleStar => Some(Self::toggle_star(all_starred)),
             MobileActions::Trash => Some(Self::toggle_trash(current_label, trash)),
-            MobileActions::Snooze => Some(Self::Snooze),
+            MobileActions::Snooze => Self::toggle_snooze(current_label),
             _ => {
                 warn!("Invalid mobile action type: {mobile_actions:?}");
                 None
             }
         }
+    }
+
+    pub(crate) fn toggle_snooze(current_label: &LabelId) -> Option<Self> {
+        SystemLabel::from_rid(current_label)
+            .filter(|label| label.is_snooze_location())
+            .map(|_| Self::Snooze)
     }
 
     pub(crate) fn toggle_read(any_unread: bool) -> Self {
@@ -154,12 +160,10 @@ impl BottomBarActions {
             result.push(BottomBarActions::LabelAs);
         }
         // Snooze
-        let is_snooze_location = SystemLabel::from_rid(&current_label)
-            .filter(|label| label.is_snooze_location())
-            .is_some();
         if is_conversation
-            && is_snooze_location
-            && !visible_actions.contains(&BottomBarActions::Snooze)
+            && Self::toggle_snooze(&current_label)
+                .filter(|_| !visible_actions.contains(&BottomBarActions::Snooze))
+                .is_some()
         {
             result.push(BottomBarActions::Snooze);
         }

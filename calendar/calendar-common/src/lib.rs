@@ -1,5 +1,7 @@
+#![allow(clippy::wildcard_imports)]
+
 mod ext;
 mod rsvp;
 
-pub use self::ext::*;
+pub(crate) use self::ext::*;
 pub use self::rsvp::*;

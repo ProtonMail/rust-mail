@@ -1,15 +1,15 @@
-use crate::{RsvpError, RsvpResult};
+use crate::{RsvpError, RsvpKeys, RsvpResult};
 use proton_calendar_api::{CalendarBootstrap, CalendarEvent, CalendarEventPayload};
 use proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_calendar::{
     CalendarEventDecryptor, EncryptedIcsRef, KeyPackets, LockedCalendarKey, Result as CryptoResult,
-    UnlockedKeys,
 };
 use proton_ical as ical;
 use std::borrow::Cow;
 use tracing::debug;
 
-pub trait CalendarEventPayloadExt {
+pub(crate) trait CalendarEventPayloadExt {
     /// Decrypts this event, returning the *.ics.
     ///
     /// If this event was actually encrypted, returns `Cow::Owned` with the
@@ -94,11 +94,11 @@ impl CalendarEventPayloadExt for CalendarEventPayload {
     }
 }
 
-pub trait CalendarBootstrapExt {
+pub(crate) trait CalendarBootstrapExt {
     fn create_decryptor<'a, P>(
         &self,
         pgp: &'a P,
-        keys: &'a UnlockedKeys<P>,
+        keys: &'a CalendarDecryptorKeys<P>,
         event: &CalendarEvent,
     ) -> RsvpResult<CalendarEventDecryptor<'a, P>>
     where
@@ -109,16 +109,62 @@ impl CalendarBootstrapExt for CalendarBootstrap {
     fn create_decryptor<'a, P>(
         &self,
         pgp: &'a P,
-        keys: &'a UnlockedKeys<P>,
+        keys: &'a CalendarDecryptorKeys<P>,
         event: &CalendarEvent,
     ) -> RsvpResult<CalendarEventDecryptor<'a, P>>
     where
         P: PGPProviderSync,
     {
-        let calendar_key = LockedCalendarKey::from_bootstrap(self)?.import(pgp, keys)?;
+        let address_keys = keys.event_addr_keys.as_ref().unwrap_or(&keys.cal_addr_keys);
+
+        let calendar_key =
+            LockedCalendarKey::from_bootstrap(self)?.import(pgp, &keys.cal_addr_keys)?;
+
         let key_packets = KeyPackets::from_event(event);
 
-        CalendarEventDecryptor::new(pgp, &keys.address_keys, &calendar_key, key_packets)
+        CalendarEventDecryptor::new(pgp, address_keys, &calendar_key, key_packets)
             .map_err(Into::into)
+    }
+}
+
+pub(crate) struct CalendarDecryptorKeys<P>
+where
+    P: PGPProviderSync,
+{
+    /// Address keys used to encrypt the calendar key's passphrase.
+    pub cal_addr_keys: UnlockedAddressKeys<P>,
+
+    /// Address keys used to encrypt the RSVP message, in case we've got
+    /// `AddressKeyPacket`.
+    pub event_addr_keys: Option<UnlockedAddressKeys<P>>,
+}
+
+impl<P> CalendarDecryptorKeys<P>
+where
+    P: PGPProviderSync,
+{
+    pub(crate) async fn rsvp<K>(
+        pgp: &P,
+        keys: &K,
+        calendar: &CalendarBootstrap,
+        event: &CalendarEvent,
+    ) -> Result<Self, K::Error>
+    where
+        K: RsvpKeys,
+    {
+        let cal_addr_keys = keys
+            .get_address_keys(pgp, &calendar.member().address_id)
+            .await?;
+
+        let event_addr_keys = if let Some(id) = &event.address_id {
+            Some(keys.get_address_keys(pgp, id).await?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            cal_addr_keys,
+            event_addr_keys,
+        })
     }
 }

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- [ET-4056] Snooze as an action is only available in inbox label
+- [ET-4054] Include snooze on conversation action sheet
+- Rsvp: use `calendarevent.addressid`
+
+
+## [mail-uniffi-v0.115.4] - 2025-08-04
+
+### Fixes
+
+- [ET-4052] Snooze is not available as an action in allmail label
+- Rsvp: fetch address keys of the address that has created the calendar
+- Disable free account count post login check
+
+
 ## [mail-uniffi-v0.115.3] - 2025-08-03
 
 ### Features

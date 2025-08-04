@@ -227,7 +227,8 @@ mod tests {
                     {
                         "ID": "qyomV2nX",
                         "Name": "My calendar",
-                        "Color": "#273EB2"
+                        "Color": "#273EB2",
+                        "AddressID": "pTF47iZy"
                     }
                 ]
             }
@@ -252,6 +253,7 @@ mod tests {
                 id: "qyomV2nX".into(),
                 name: "My calendar".into(),
                 color: "#273EB2".into(),
+                address_id: "pTF47iZy".into(),
             }],
         };
 
@@ -289,6 +291,7 @@ mod tests {
                             }
                         ],
                         "ID": "6GAnNerJ...",
+                        "AddressID": "ofMToh8I...",
                         "CalendarID": "HzNtbT1J...",
                         "StartTime": 1744790400,
                         "EndTime": 1744792200,
@@ -329,6 +332,7 @@ mod tests {
         let expected = FoundCalendarEvents {
             events: vec![CalendarEvent {
                 id: "6GAnNerJ...".into(),
+                address_id: Some("ofMToh8I...".into()),
                 shared_events: vec![
                     CalendarEventPayload {
                         ty: CalendarEventPayloadType::Signed,

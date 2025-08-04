@@ -3,7 +3,7 @@ use proton_crypto::crypto::{
     DataEncoding, Encryptor, EncryptorSync, PGPMessage, PGPProviderSync, SessionKeyAlgorithm,
     Signer, SignerSync,
 };
-use proton_crypto_account::keys::UnlockedAddressKeys;
+use proton_crypto_account::keys::{UnlockedAddressKey, UnlockedAddressKeys};
 
 pub struct CalendarEventEncryptor<'a, P>
 where
@@ -19,11 +19,31 @@ impl<'a, P> CalendarEventEncryptor<'a, P>
 where
     P: PGPProviderSync,
 {
+    /// Creates an encryptor that encrypts events towards given address key.
+    ///
+    /// This allows to create events with `AddressKeyPacket`, which is the case
+    /// for Proton-to-Proton invites.
+    ///
+    /// See also: [`Self::for_calendar()`].
     pub fn for_address(pgp: &P, address_keys: &'a UnlockedAddressKeys<P>) -> Result<Self> {
         let address_key = address_keys
             .primary_default()
             .ok_or(Error::CouldntFindPrimaryAddressKey)?;
 
+        Self::for_address_ex(pgp, address_key)
+    }
+
+    /// Creates an encryptor that encrypts events towards given address key.
+    ///
+    /// Note that what you'd usually want to use is [`Self::for_address()`],
+    /// since that function automatically picks up the primary address key,
+    /// which is the correct logic for creating new events in general.
+    ///
+    /// [`Self::for_address_ex()`] exists only to facilitate testing where you'd
+    /// like to pretend you've got an event encrypted towards a specific,
+    /// "pretend-old" address key.
+    #[doc(hidden)]
+    pub fn for_address_ex(pgp: &P, address_key: &'a UnlockedAddressKey<P>) -> Result<Self> {
         Self::new(
             pgp,
             Mode::ForAddress,
@@ -32,6 +52,12 @@ where
         )
     }
 
+    /// Creates an encryptor that encrypts events towards given calendar key.
+    ///
+    /// This allows to create events with `SharedKeyPacket`, which is the case
+    /// for most events with the exception of Proton-to-Proton invites.
+    ///
+    /// See also: [`Self::for_address()`].
     pub fn for_calendar(
         pgp: &P,
         address_keys: &'a UnlockedAddressKeys<P>,
@@ -41,6 +67,24 @@ where
             .primary_default()
             .ok_or(Error::CouldntFindPrimaryAddressKey)?;
 
+        Self::for_calendar_ex(pgp, address_key, calendar_key)
+    }
+
+    /// Creates an encryptor that encrypts events towards given address key.
+    ///
+    /// Note that what you'd usually want to use is [`Self::for_calendar()`],
+    /// since that function automatically picks up the primary address key,
+    /// which is the correct logic for creating new events in general.
+    ///
+    /// [`Self::for_calendar_ex()`] exists only to facilitate testing where
+    /// you'd like to pretend you've got an event encrypted towards a specific,
+    /// "pretend-old" address key.
+    #[doc(hidden)]
+    pub fn for_calendar_ex(
+        pgp: &P,
+        address_key: &'a UnlockedAddressKey<P>,
+        calendar_key: &'a UnlockedCalendarKey<P>,
+    ) -> Result<Self> {
         Self::new(
             pgp,
             Mode::ForCalendar,

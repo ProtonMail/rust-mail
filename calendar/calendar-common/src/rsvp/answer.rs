@@ -1,6 +1,7 @@
 use crate::{
-    CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAnswer, RsvpAnswerError, RsvpAnswerResult,
-    RsvpAttendee, RsvpCache, RsvpError, RsvpEvent, RsvpMailSender, RsvpResult,
+    CalendarBootstrapExt, CalendarDecryptorKeys, CalendarEventPayloadExt, RsvpAnswer,
+    RsvpAnswerError, RsvpAnswerResult, RsvpAttendee, RsvpCache, RsvpError, RsvpEvent, RsvpKeys,
+    RsvpMail, RsvpResult,
 };
 use itertools::Itertools;
 use jiff::Zoned;
@@ -10,34 +11,38 @@ use proton_calendar_api::{
 };
 use proton_core_api::services::proton::Proton;
 use proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_calendar::{
-    CalendarKeyPacketUpgrader, KeyPacketRef, LockedCalendarKey, UnlockedKeys,
-};
+use proton_crypto_calendar::{CalendarKeyPacketUpgrader, KeyPacketRef, LockedCalendarKey};
 use proton_ical as ical;
 use std::{iter, ops};
 use tracing::{debug, error, info, instrument, warn};
 
 #[allow(clippy::too_many_arguments)]
-pub(super) async fn run<P, M>(
+pub(super) async fn run<P, K, M>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &K,
     cache: &impl RsvpCache,
     sender: M,
     event: &mut RsvpEvent,
     now: &Zoned,
     answer: RsvpAnswer,
-) -> RsvpAnswerResult<(), M>
+) -> RsvpAnswerResult<(), K, M>
 where
     P: PGPProviderSync,
-    M: RsvpMailSender,
+    K: RsvpKeys,
+    M: RsvpMail,
 {
     info!(?now, ?answer, "Answering");
 
-    let (event, calendar) = init(api, cache, event).await?;
-    let steps = plan(pgp, keys, &calendar, &event, answer)?;
+    let Init {
+        event,
+        calendar,
+        keys,
+    } = init::<P, K, M>(api, pgp, keys, cache, event).await?;
 
-    exec(api, pgp, keys, sender, calendar, event, now, answer, steps).await?;
+    let steps = plan(pgp, &keys, &calendar, &event, answer)?;
+
+    exec::<P, K, M>(api, pgp, &keys, sender, calendar, event, now, answer, steps).await?;
 
     Ok(())
 }
@@ -73,11 +78,18 @@ enum EventType {
 }
 
 #[instrument(skip_all)]
-async fn init<'a>(
+async fn init<'a, P, K, M>(
     api: &Proton,
+    pgp: &P,
+    keys: &K,
     cache: &impl RsvpCache,
     event: &'a mut RsvpEvent,
-) -> RsvpResult<(AnswerableRsvpEvent<'a>, CalendarBootstrap)> {
+) -> RsvpAnswerResult<Init<'a, P>, K, M>
+where
+    P: PGPProviderSync,
+    K: RsvpKeys,
+    M: RsvpMail,
+{
     let event = AnswerableRsvpEvent::new(event).ok_or(RsvpError::NonAnswerable)?;
 
     let calendar = cache
@@ -92,13 +104,21 @@ async fn init<'a>(
         .await
         .map_err(RsvpError::from)?;
 
-    Ok((event, calendar))
+    let keys = CalendarDecryptorKeys::rsvp(pgp, keys, &calendar, event.raw())
+        .await
+        .map_err(RsvpAnswerError::Keys)?;
+
+    Ok(Init {
+        event,
+        calendar,
+        keys,
+    })
 }
 
 #[instrument(skip_all)]
 fn plan<P>(
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &CalendarDecryptorKeys<P>,
     calendar: &CalendarBootstrap,
     event: &AnswerableRsvpEvent,
     answer: RsvpAnswer,
@@ -158,7 +178,7 @@ where
 #[instrument(skip_all, fields(id = event.id.as_str()))]
 fn plan_event<P>(
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &CalendarDecryptorKeys<P>,
     calendar: &CalendarBootstrap,
     event: &CalendarEvent,
     event_ty: EventType,
@@ -354,20 +374,21 @@ fn plan_event_notifications(
 
 #[instrument(skip_all)]
 #[allow(clippy::too_many_arguments)]
-async fn exec<P, M>(
+async fn exec<P, K, M>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &CalendarDecryptorKeys<P>,
     sender: M,
     calendar: CalendarBootstrap,
     mut event: AnswerableRsvpEvent<'_>,
     now: &Zoned,
     answer: RsvpAnswer,
     steps: Vec<Step>,
-) -> RsvpAnswerResult<(), M>
+) -> RsvpAnswerResult<(), K, M>
 where
     P: PGPProviderSync,
-    M: RsvpMailSender,
+    K: RsvpKeys,
+    M: RsvpMail,
 {
     fn get_event<'a>(
         event: &'a mut AnswerableRsvpEvent,
@@ -442,8 +463,10 @@ where
                     .take()
                     .expect("tried to notify the organizer multiple times");
 
-                exec_notify_organizer(api, pgp, keys, sender, &calendar, &event, now, answer)
-                    .await?;
+                exec_notify_organizer::<P, K, M>(
+                    api, pgp, keys, sender, &calendar, &event, now, answer,
+                )
+                .await?;
             }
         }
     }
@@ -483,7 +506,7 @@ where
 async fn exec_upgrade_event<P>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &CalendarDecryptorKeys<P>,
     event: &mut AnswerableRsvpEvent<'_>,
     calendar: &CalendarBootstrap,
     key_packet: String,
@@ -494,10 +517,14 @@ where
     debug!("Upgrading event's encryption");
 
     let key_packet = {
-        let calendar_key = LockedCalendarKey::from_bootstrap(calendar)?.import(pgp, keys)?;
+        let address_keys = keys.event_addr_keys.as_ref().unwrap_or(&keys.cal_addr_keys);
+
+        let calendar_key =
+            LockedCalendarKey::from_bootstrap(calendar)?.import(pgp, &keys.cal_addr_keys)?;
+
         let key_packet = KeyPacketRef::from_base64(&key_packet);
 
-        CalendarKeyPacketUpgrader::upgrade(pgp, &keys.address_keys, &calendar_key, key_packet)?
+        CalendarKeyPacketUpgrader::upgrade(pgp, address_keys, &calendar_key, key_packet)?
     };
 
     api.upgrade_calendar_event_invite(
@@ -582,19 +609,20 @@ async fn exec_update_event(
 #[instrument(skip_all)]
 #[allow(clippy::needless_lifetimes, reason = "false-positive")]
 #[allow(clippy::too_many_arguments)]
-async fn exec_notify_organizer<P, M>(
+async fn exec_notify_organizer<P, K, M>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &CalendarDecryptorKeys<P>,
     sender: M,
     calendar: &CalendarBootstrap,
     event: &AnswerableRsvpEvent<'_>,
     now: &Zoned,
     answer: RsvpAnswer,
-) -> RsvpAnswerResult<(), M>
+) -> RsvpAnswerResult<(), K, M>
 where
     P: PGPProviderSync,
-    M: RsvpMailSender,
+    K: RsvpKeys,
+    M: RsvpMail,
 {
     debug!("Notifying organizer");
 
@@ -626,7 +654,7 @@ where
 async fn build_ics<P>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &CalendarDecryptorKeys<P>,
     calendar: &CalendarBootstrap,
     event: &AnswerableRsvpEvent<'_>,
     now: &Zoned,
@@ -668,7 +696,7 @@ where
 
 fn build_ics_event<P>(
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &CalendarDecryptorKeys<P>,
     calendar: &CalendarBootstrap,
     event: &AnswerableRsvpEvent<'_>,
     now: &Zoned,
@@ -838,6 +866,15 @@ impl ops::DerefMut for AnswerableRsvpEvent<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }
+}
+
+struct Init<'a, P>
+where
+    P: PGPProviderSync,
+{
+    event: AnswerableRsvpEvent<'a>,
+    calendar: CalendarBootstrap,
+    keys: CalendarDecryptorKeys<P>,
 }
 
 #[cfg(test)]

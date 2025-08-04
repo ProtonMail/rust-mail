@@ -1,11 +1,10 @@
 use crate::datatypes::LocalMessageId;
 use crate::models::{Message, MessageBodyMetadata};
+use crate::rsvp::RsvpKeys;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext, RsvpEvent};
 use anyhow::Context;
-use proton_calendar_common::{self as cal};
-use proton_core_api::services::proton::AddressId;
+use proton_calendar_common::{self as cal, RsvpFetchError};
 use proton_core_common::models::Address;
-use proton_crypto_calendar::UnlockedKeys;
 use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -17,7 +16,6 @@ pub struct RsvpEventId {
     id: cal::RsvpEventId,
     msg_id: LocalMessageId,
     msg_meta: MessageBodyMetadata,
-    address_id: AddressId,
 }
 
 impl RsvpEventId {
@@ -25,13 +23,11 @@ impl RsvpEventId {
         id: cal::RsvpEventId,
         msg_id: LocalMessageId,
         msg_meta: MessageBodyMetadata,
-        address_id: AddressId,
     ) -> Self {
         Self {
             id,
             msg_id,
             msg_meta,
-            address_id,
         }
     }
 
@@ -45,24 +41,7 @@ impl RsvpEventId {
         info!("Fetching RSVP");
 
         let pgp = proton_crypto::new_pgp_provider();
-
-        let keys = {
-            let user_keys = ctx
-                .unlocked_user_keys(&pgp, tether)
-                .await
-                .inspect_err(|err| warn!(?err, "Couldn't unlock user keys"))?;
-
-            let address_keys = ctx
-                .unlocked_address_keys(&pgp, tether, &self.address_id)
-                .await
-                .inspect_err(|err| warn!(?err, "Couldn't unlock address keys"))?;
-
-            UnlockedKeys {
-                user_keys,
-                address_keys,
-            }
-        };
-
+        let keys = RsvpKeys::new(ctx, tether);
         let cache = ctx.rsvp_cache();
         let contacts = ctx.rsvp_contacts();
         let now = ctx.mail_context().core_context().clock().now();
@@ -114,7 +93,10 @@ impl RsvpEventId {
             Err(err) => {
                 warn!(?err, "Couldn't fetch event from the calendar");
 
-                Err(err.into())
+                Err(match err {
+                    RsvpFetchError::Keys(err) => err,
+                    RsvpFetchError::Rsvp(err) => err.into(),
+                })
             }
         }
     }

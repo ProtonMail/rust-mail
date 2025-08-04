@@ -110,6 +110,7 @@ async fn fetch_and_answer() {
     ctx.core_context().clock().pretend(now.clone());
 
     let mut db = user_ctx.user_stash().connection();
+    let db2 = user_ctx.user_stash().connection();
 
     // ---
 
@@ -264,6 +265,7 @@ async fn fetch_and_answer() {
                 id: CALENDAR_MEMBER_ID.into(),
                 name: "My calendar".into(),
                 color: "#273EB2".into(),
+                address_id: msg_fixture.metadata.address_id.clone(),
             }],
         }
     };
@@ -289,6 +291,7 @@ async fn fetch_and_answer() {
             }],
             calendar_events: vec![],
             id: EVENT_ID.into(),
+            address_id: None,
             calendar_id: CALENDAR_ID.into(),
             address_key_packet,
             shared_key_packet,
@@ -433,7 +436,7 @@ async fn fetch_and_answer() {
             .all(|att| att.status == Some(cal::CalendarAttendeeStatus::Yes))
     );
 
-    rsvp.answer(&user_ctx, &mut db, RsvpAnswer::Yes)
+    rsvp.answer(&user_ctx, &mut db, &db2, RsvpAnswer::Yes)
         .await
         .unwrap();
 

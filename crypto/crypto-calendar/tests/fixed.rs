@@ -20,12 +20,10 @@ use proton_crypto::{
     crypto::{DataEncoding, PGPProviderSync},
     new_pgp_provider,
 };
-use proton_crypto_account::keys::{
-    DecryptedAddressKey, KeyFlag, KeyId, UnlockedAddressKeys, UnlockedUserKeys,
-};
+use proton_crypto_account::keys::{DecryptedAddressKey, KeyFlag, KeyId, UnlockedAddressKeys};
 use proton_crypto_calendar::{
     CalendarEventDecryptor, EncryptedIcsRef, KeyPacketRef, KeyPackets, LockedCalendarKey,
-    SignatureRef, UnlockedKeys,
+    SignatureRef,
 };
 
 const ADDRESS_KEY: &str = indoc! {"
@@ -136,8 +134,6 @@ const SHARED_EVENT_SIG: &str = indoc! {"
 fn smoke() {
     let pgp = new_pgp_provider();
 
-    let user_keys = UnlockedUserKeys::from(Vec::new());
-
     let address_keys = {
         let private_key = pgp
             .private_key_import(ADDRESS_KEY, ADDRESS_KEY_PASS, DataEncoding::Armor)
@@ -153,11 +149,6 @@ fn smoke() {
             private_key,
             public_key,
         })
-    };
-
-    let keys = UnlockedKeys {
-        user_keys,
-        address_keys,
     };
 
     let calendar_key = LockedCalendarKey::from_bootstrap(&CalendarBootstrap {
@@ -177,10 +168,11 @@ fn smoke() {
             id: "MlGaYvPr".into(),
             name: "My calendar".into(),
             color: "#936D58".into(),
+            address_id: "tGEBZWwt".into(),
         }],
     })
     .unwrap()
-    .import(&pgp, &keys)
+    .import(&pgp, &address_keys)
     .unwrap();
 
     let shared_key_packet = SHARED_KEY_PACKET.replace('\n', "");
@@ -193,7 +185,7 @@ fn smoke() {
         shared_key_packet: Some(KeyPacketRef::from_base64(&shared_key_packet)),
     };
 
-    let event = CalendarEventDecryptor::new(&pgp, &keys.address_keys, &calendar_key, key_packets)
+    let event = CalendarEventDecryptor::new(&pgp, &address_keys, &calendar_key, key_packets)
         .unwrap()
         .decrypt(&pgp, shared_event_data, Some(shared_event_sig))
         .unwrap();

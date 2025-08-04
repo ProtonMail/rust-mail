@@ -2,6 +2,7 @@ use crate::{
     CalendarAttendeeId, CalendarAttendeeToken, CalendarColor, CalendarEventId, CalendarId,
     CalendarKeyId, CalendarMemberId, CalendarNotification,
 };
+use proton_core_api::services::proton::AddressId;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::{BoolFromInt, serde_as};
@@ -41,6 +42,8 @@ pub struct CalendarMember {
     pub id: CalendarMemberId,
     pub name: String,
     pub color: CalendarColor,
+    #[serde(rename = "AddressID")]
+    pub address_id: AddressId,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -102,6 +105,8 @@ pub struct FoundCalendarEvents {
 pub struct CalendarEvent {
     #[serde(rename = "ID")]
     pub id: CalendarEventId,
+    #[serde(rename = "AddressID")]
+    pub address_id: Option<AddressId>,
     pub shared_events: Vec<CalendarEventPayload>,
     pub calendar_events: Vec<CalendarEventPayload>,
     #[serde(rename = "CalendarID")]
