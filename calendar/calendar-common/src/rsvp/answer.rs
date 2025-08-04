@@ -1,6 +1,6 @@
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAnswer, RsvpAnswerError, RsvpAnswerResult,
-    RsvpAttendee, RsvpCache, RsvpError, RsvpEvent, RsvpMailSender, RsvpResult,
+    RsvpAttendee, RsvpCache, RsvpError, RsvpEvent, RsvpKeys, RsvpMail, RsvpResult,
 };
 use itertools::Itertools;
 use jiff::Zoned;
@@ -17,26 +17,32 @@ use std::{iter, ops};
 use tracing::{debug, error, info, instrument, warn};
 
 #[allow(clippy::too_many_arguments)]
-pub(super) async fn run<P, M>(
+pub(super) async fn run<P, K, M>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedAddressKeys<P>,
+    keys: &K,
     cache: &impl RsvpCache,
     sender: M,
     event: &mut RsvpEvent,
     now: &Zoned,
     answer: RsvpAnswer,
-) -> RsvpAnswerResult<(), M>
+) -> RsvpAnswerResult<(), K, M>
 where
     P: PGPProviderSync,
-    M: RsvpMailSender,
+    K: RsvpKeys,
+    M: RsvpMail,
 {
     info!(?now, ?answer, "Answering");
 
-    let (event, calendar) = init(api, cache, event).await?;
-    let steps = plan(pgp, keys, &calendar, &event, answer)?;
+    let Init {
+        event,
+        calendar,
+        keys,
+    } = init::<P, K, M>(api, pgp, keys, cache, event).await?;
 
-    exec(api, pgp, keys, sender, calendar, event, now, answer, steps).await?;
+    let steps = plan(pgp, &keys, &calendar, &event, answer)?;
+
+    exec::<P, K, M>(api, pgp, &keys, sender, calendar, event, now, answer, steps).await?;
 
     Ok(())
 }
@@ -72,11 +78,18 @@ enum EventType {
 }
 
 #[instrument(skip_all)]
-async fn init<'a>(
+async fn init<'a, P, K, M>(
     api: &Proton,
+    pgp: &P,
+    keys: &K,
     cache: &impl RsvpCache,
     event: &'a mut RsvpEvent,
-) -> RsvpResult<(AnswerableRsvpEvent<'a>, CalendarBootstrap)> {
+) -> RsvpAnswerResult<Init<'a, P>, K, M>
+where
+    P: PGPProviderSync,
+    K: RsvpKeys,
+    M: RsvpMail,
+{
     let event = AnswerableRsvpEvent::new(event).ok_or(RsvpError::NonAnswerable)?;
 
     let calendar = cache
@@ -91,7 +104,16 @@ async fn init<'a>(
         .await
         .map_err(RsvpError::from)?;
 
-    Ok((event, calendar))
+    let keys = keys
+        .get_address_keys(pgp, &calendar.member().address_id)
+        .await
+        .map_err(RsvpAnswerError::Keys)?;
+
+    Ok(Init {
+        event,
+        calendar,
+        keys,
+    })
 }
 
 #[instrument(skip_all)]
@@ -353,7 +375,7 @@ fn plan_event_notifications(
 
 #[instrument(skip_all)]
 #[allow(clippy::too_many_arguments)]
-async fn exec<P, M>(
+async fn exec<P, K, M>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
@@ -363,10 +385,11 @@ async fn exec<P, M>(
     now: &Zoned,
     answer: RsvpAnswer,
     steps: Vec<Step>,
-) -> RsvpAnswerResult<(), M>
+) -> RsvpAnswerResult<(), K, M>
 where
     P: PGPProviderSync,
-    M: RsvpMailSender,
+    K: RsvpKeys,
+    M: RsvpMail,
 {
     fn get_event<'a>(
         event: &'a mut AnswerableRsvpEvent,
@@ -441,8 +464,10 @@ where
                     .take()
                     .expect("tried to notify the organizer multiple times");
 
-                exec_notify_organizer(api, pgp, keys, sender, &calendar, &event, now, answer)
-                    .await?;
+                exec_notify_organizer::<P, K, M>(
+                    api, pgp, keys, sender, &calendar, &event, now, answer,
+                )
+                .await?;
             }
         }
     }
@@ -581,7 +606,7 @@ async fn exec_update_event(
 #[instrument(skip_all)]
 #[allow(clippy::needless_lifetimes, reason = "false-positive")]
 #[allow(clippy::too_many_arguments)]
-async fn exec_notify_organizer<P, M>(
+async fn exec_notify_organizer<P, K, M>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
@@ -590,10 +615,11 @@ async fn exec_notify_organizer<P, M>(
     event: &AnswerableRsvpEvent<'_>,
     now: &Zoned,
     answer: RsvpAnswer,
-) -> RsvpAnswerResult<(), M>
+) -> RsvpAnswerResult<(), K, M>
 where
     P: PGPProviderSync,
-    M: RsvpMailSender,
+    K: RsvpKeys,
+    M: RsvpMail,
 {
     debug!("Notifying organizer");
 
@@ -837,6 +863,15 @@ impl ops::DerefMut for AnswerableRsvpEvent<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }
+}
+
+struct Init<'a, P>
+where
+    P: PGPProviderSync,
+{
+    event: AnswerableRsvpEvent<'a>,
+    calendar: CalendarBootstrap,
+    keys: UnlockedAddressKeys<P>,
 }
 
 #[cfg(test)]

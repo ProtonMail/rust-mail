@@ -11,7 +11,10 @@ use proton_calendar_api::{
     CalendarColor, CalendarEvent, CalendarEventId, CalendarEventRecurrenceId, CalendarEventUid,
     CalendarId,
 };
-use proton_core_api::{service::ApiServiceError, services::proton::Proton};
+use proton_core_api::{
+    service::ApiServiceError,
+    services::proton::{AddressId, Proton},
+};
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_calendar::Error as CryptoError;
@@ -119,19 +122,20 @@ impl RsvpEventId {
     /// logged-in user (i.e. the one who got the invite).
     #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments)]
-    pub async fn fetch<P>(
+    pub async fn fetch<P, K>(
         &self,
         api: &Proton,
         pgp: &P,
-        keys: &UnlockedAddressKeys<P>,
+        keys: &K,
         cache: &impl RsvpCache,
         contacts: &impl RsvpContacts,
         now: &Zoned,
         email: &str,
         week_start: Weekday,
-    ) -> RsvpResult<Option<RsvpEvent>>
+    ) -> RsvpFetchResult<Option<RsvpEvent>, K>
     where
         P: PGPProviderSync,
+        K: RsvpKeys,
     {
         fetch::run(
             api, pgp, keys, cache, contacts, now, email, week_start, self,
@@ -184,19 +188,20 @@ impl RsvpEvent {
     /// logged-in user (i.e. the one who got the invite).
     #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments)]
-    pub async fn answer<P, M>(
+    pub async fn answer<P, K, M>(
         &mut self,
         api: &Proton,
         pgp: &P,
-        keys: &UnlockedAddressKeys<P>,
+        keys: &K,
         cache: &impl RsvpCache,
         sender: M,
         now: &Zoned,
         answer: RsvpAnswer,
-    ) -> RsvpAnswerResult<(), M>
+    ) -> RsvpAnswerResult<(), K, M>
     where
         P: PGPProviderSync,
-        M: RsvpMailSender,
+        K: RsvpKeys,
+        M: RsvpMail,
     {
         answer::run(api, pgp, keys, cache, sender, self, now, answer).await
     }
@@ -537,10 +542,6 @@ impl From<RsvpAnswer> for ical::PartStat {
     }
 }
 
-pub trait RsvpContacts {
-    fn get_display_name(&self, email: &str) -> impl Future<Output = Option<String>> + Send;
-}
-
 pub trait RsvpCache {
     fn get_calendar_bootstrap<E, Fn, Fut>(
         &self,
@@ -552,7 +553,23 @@ pub trait RsvpCache {
         Fut: Future<Output = Result<CalendarBootstrap, E>> + Send;
 }
 
-pub trait RsvpMailSender {
+pub trait RsvpContacts {
+    fn get_display_name(&self, email: &str) -> impl Future<Output = Option<String>> + Send;
+}
+
+pub trait RsvpKeys {
+    type Error: Error;
+
+    fn get_address_keys<P>(
+        &self,
+        pgp: &P,
+        id: &AddressId,
+    ) -> impl Future<Output = Result<UnlockedAddressKeys<P>, Self::Error>>
+    where
+        P: PGPProviderSync;
+}
+
+pub trait RsvpMail {
     type Error: Error;
 
     /// Sends an email response to the organizer.
@@ -641,12 +658,22 @@ impl RsvpError {
     }
 }
 
-pub type RsvpAnswerResult<T, M> = RsvpResult<T, RsvpAnswerError<<M as RsvpMailSender>::Error>>;
+pub type RsvpFetchResult<T, K> = RsvpResult<T, RsvpFetchError<<K as RsvpKeys>::Error>>;
 
 #[derive(Debug, Error)]
-pub enum RsvpAnswerError<E> {
+pub enum RsvpFetchError<K> {
+    Keys(K),
     Rsvp(#[from] RsvpError),
-    Mail(E),
+}
+
+pub type RsvpAnswerResult<T, K, M> =
+    RsvpResult<T, RsvpAnswerError<<K as RsvpKeys>::Error, <M as RsvpMail>::Error>>;
+
+#[derive(Debug, Error)]
+pub enum RsvpAnswerError<K, M> {
+    Keys(K),
+    Mail(M),
+    Rsvp(#[from] RsvpError),
 }
 
 #[cfg(test)]

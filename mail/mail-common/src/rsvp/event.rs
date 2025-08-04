@@ -1,6 +1,6 @@
 use crate::draft::compose::validate_sender_address;
 use crate::models::MessageBodyMetadata;
-use crate::rsvp::RsvpMailSender;
+use crate::rsvp::{RsvpKeys, RsvpMail};
 use crate::{AppError, MailContextResult};
 use crate::{MailUserContext, models::Message};
 use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError, RsvpError};
@@ -9,7 +9,7 @@ use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::ops;
-use tracing::{info, instrument, warn};
+use tracing::{error, info, instrument};
 
 #[derive(Clone, Debug)]
 pub struct RsvpEvent {
@@ -56,6 +56,7 @@ impl RsvpEvent {
         &mut self,
         ctx: &MailUserContext,
         tether: &mut Tether,
+        tether_keys: &Tether,
         answer: RsvpAnswer,
     ) -> MailContextResult<()> {
         info!("Answering RSVP");
@@ -65,11 +66,12 @@ impl RsvpEvent {
         }
 
         let pgp = proton_crypto::new_pgp_provider();
+        let keys = RsvpKeys::new(ctx, tether_keys, &self.msg.remote_address_id);
 
-        let keys = ctx
+        let addr_keys = ctx
             .unlocked_address_keys(&pgp, tether, &self.msg.remote_address_id)
             .await
-            .inspect_err(|err| warn!(?err, "Couldn't unlock address keys"))?;
+            .inspect_err(|err| error!(?err, "Couldn't unlock address keys"))?;
 
         let sender = {
             let msg_id = self
@@ -78,14 +80,14 @@ impl RsvpEvent {
                 .as_ref()
                 .ok_or_else(|| AppError::MessageHasNoRemoteId(self.msg.id()))?;
 
-            RsvpMailSender {
+            RsvpMail {
                 ctx,
                 pgp: &pgp,
-                keys: &keys,
                 tether,
                 msg_id,
                 msg_meta: &self.msg_meta,
                 msg_subject: &self.msg.subject,
+                addr_keys: &addr_keys,
                 addr_email: &self.addr.email,
                 addr_display_name: &self.addr.display_name,
             }
@@ -105,8 +107,9 @@ impl RsvpEvent {
             )
             .await
             .map_err(|err| match err {
-                RsvpAnswerError::Rsvp(err) => err.into(),
+                RsvpAnswerError::Keys(err) => err,
                 RsvpAnswerError::Mail(err) => err,
+                RsvpAnswerError::Rsvp(err) => err.into(),
             })
     }
 }

@@ -13,20 +13,22 @@ use proton_calendar_api::{
 };
 use proton_calendar_common::{
     RsvpAttendee, RsvpCache, RsvpCalendar, RsvpContacts, RsvpEvent, RsvpEventId, RsvpIntent,
-    RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency,
+    RsvpKeys, RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency,
 };
+use proton_core_api::services::proton::AddressId;
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
-use proton_crypto::crypto::{KeyGeneratorAlgorithm, PGPProviderSync};
+use proton_crypto::crypto::{DataEncoding, KeyGeneratorAlgorithm, PGPProviderSync};
 use proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_account::keys::{
-    KeyFlag, KeyId, LocalAddressKey, LocalUserKey, UnlockedAddressKeys,
+    KeyFlag, KeyId, LocalAddressKey, LocalUserKey, UnlockedAddressKey, UnlockedAddressKeys,
 };
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_ical as ical;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io;
 use std::sync::Arc;
 
 const EVENT_ID: &str = "pFmwNlJp";
@@ -115,6 +117,7 @@ where
     ctx: Arc<TestContext>,
     sess: Session,
     pgp: P,
+    keys: DummyRsvpKeys,
     address_keys: UnlockedAddressKeys<P>,
     calendar_keys: RefCell<HashMap<CalendarId, UnlockedCalendarKey<P>>>,
     cache: DummyRsvpCache,
@@ -160,10 +163,17 @@ async fn world() -> World<impl PGPProviderSync> {
         .unwrap(),
     );
 
+    let private_key = pgp
+        .private_key_export(&address_keys[0].private_key, "test", DataEncoding::Armor)
+        .unwrap()
+        .as_ref()
+        .to_vec();
+
     World {
         ctx,
         sess,
         pgp,
+        keys: DummyRsvpKeys { private_key },
         address_keys,
         calendar_keys: RefCell::default(),
         cache: DummyRsvpCache,
@@ -206,6 +216,7 @@ where
                 id: id.into(),
                 name: "My calendar".into(),
                 color: "#273EB2".into(),
+                address_id: "ZNBEMFOD".into(),
             }],
         }
     }
@@ -403,6 +414,38 @@ impl RsvpContacts for DummyRsvpContacts {
             "foo@pm.me" => Some("Foo Localhosty".into()),
             _ => None,
         }
+    }
+}
+
+struct DummyRsvpKeys {
+    private_key: Vec<u8>,
+}
+
+impl RsvpKeys for DummyRsvpKeys {
+    type Error = io::Error;
+
+    async fn get_address_keys<P>(
+        &self,
+        pgp: &P,
+        _: &AddressId,
+    ) -> Result<UnlockedAddressKeys<P>, Self::Error>
+    where
+        P: PGPProviderSync,
+    {
+        let private_key = pgp
+            .private_key_import(&self.private_key, "test", DataEncoding::Armor)
+            .unwrap();
+
+        let public_key = pgp.private_key_to_public_key(&private_key).unwrap();
+
+        Ok(UnlockedAddressKeys(vec![UnlockedAddressKey::<P> {
+            id: "1234".into(),
+            flags: 0_u32.into(),
+            primary: true,
+            is_v6: false,
+            private_key,
+            public_key,
+        }]))
     }
 }
 

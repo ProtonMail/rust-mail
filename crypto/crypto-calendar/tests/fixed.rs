@@ -168,6 +168,7 @@ fn smoke() {
             id: "MlGaYvPr".into(),
             name: "My calendar".into(),
             color: "#936D58".into(),
+            address_id: "tGEBZWwt".into(),
         }],
     })
     .unwrap()
