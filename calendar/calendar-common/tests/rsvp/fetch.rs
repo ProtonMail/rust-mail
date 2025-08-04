@@ -9,7 +9,11 @@ use proton_calendar_api::ProtonCalendarMock;
 use proton_calendar_common::{
     RsvpError, RsvpEventId, RsvpFetchError, RsvpIntent, RsvpProgress, RsvpRecency,
 };
-use proton_core_api::session::{Config, Session};
+use proton_core_api::{
+    session::{Config, Session},
+    status_observer::StatusObserver,
+    status_watcher::StatusWatcher,
+};
 use proton_core_common::test_utils::test_context::MockApiEnv;
 use std::str::FromStr;
 
@@ -381,7 +385,12 @@ async fn offline() {
         let env = MockApiEnv::new("http://localhost:1");
         let cfg = Config::for_env(env);
 
-        Session::builder().with_config(&cfg).build().await.unwrap()
+        Session::builder()
+            .with_config(&cfg)
+            .with_status(StatusWatcher::with_observer(StatusObserver::test()))
+            .build()
+            .await
+            .unwrap()
     };
 
     let actual = RsvpEventId::invite(INVITE)

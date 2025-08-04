@@ -17,6 +17,8 @@ use proton_calendar_common::{
 };
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::session::{Config, Session};
+use proton_core_api::status_observer::StatusObserver;
+use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
 use proton_crypto::crypto::{DataEncoding, KeyGeneratorAlgorithm, PGPProviderSync};
 use proton_crypto::{new_pgp_provider, new_srp_provider};
@@ -132,7 +134,12 @@ async fn world() -> World<impl PGPProviderSync> {
         let env = MockApiEnv::new(ctx.mock_server().uri()).with_path("/api");
         let cfg = Config::for_env(env);
 
-        Session::builder().with_config(&cfg).build().await.unwrap()
+        Session::builder()
+            .with_config(&cfg)
+            .with_status(StatusWatcher::with_observer(StatusObserver::test()))
+            .build()
+            .await
+            .unwrap()
     };
 
     let pgp = new_pgp_provider();
