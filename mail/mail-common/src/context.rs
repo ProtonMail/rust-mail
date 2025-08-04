@@ -340,7 +340,7 @@ impl MailContext {
         let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
 
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
-            Some(1),
+            None,
             Arc::clone(&self.core_context),
         ));
 
@@ -387,7 +387,7 @@ impl MailContext {
         let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
 
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
-            Some(1),
+            None,
             Arc::clone(&self.core_context),
         ));
 
