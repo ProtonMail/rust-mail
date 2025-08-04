@@ -278,7 +278,11 @@ where
         }
     });
 
-    if user_attendee_idx.is_none() && email::canonicalize_auto(&organizer.email) != *email {
+    if user_attendee_idx.is_none()
+        && email::canonicalize_auto(&organizer.email) != *email
+        && matches!(id, RsvpEventId::Invite { .. })
+    //     ^ you cannot be not-invited to a reminder
+    {
         // This can happen whan an attendee forwards their own invite to another
         // user that hasn't been invited by the organizer; this is known as
         // "party crasher" and it's not yet supported.
@@ -920,12 +924,13 @@ where
         .map(|att| (att.token.as_str(), (&att.id, att.status)))
         .collect();
 
-    let event_attendees = event
-        .attendees_event()
-        .decrypt_and_parse(pgp, decryptor)?
-        .attendees
-        .into_iter()
-        .enumerate();
+    let event_attendees: Vec<_> = event
+        .attendees_events
+        .iter()
+        .map(|event| event.decrypt_and_parse(pgp, decryptor))
+        .map_ok(|event| event.attendees.into_iter().enumerate())
+        .flatten_ok()
+        .collect::<Result<_, _>>()?;
 
     let mut attendees = Vec::new();
 

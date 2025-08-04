@@ -1,5 +1,5 @@
 use crate::{
-    CALENDAR_ID, EVENT_ID, EVENT_UID, INVITE, RsvpEventIdExt, expected_event,
+    CALENDAR_ID, EVENT_ID, EVENT_UID, INVITE, RsvpEventIdExt, SHARED_EVENT, expected_event,
     expected_offline_event, world,
 };
 use indoc::indoc;
@@ -159,6 +159,47 @@ async fn recurring() {
 async fn reminder() {
     let world = world().await;
     let event = world.event(|event| event.basic());
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_event(EVENT_UID, EVENT_ID, event.clone())
+        .await;
+
+    let actual = RsvpEventId::reminder(EVENT_UID, EVENT_ID)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "bar@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(RsvpIntent::Reminder, actual.intent);
+}
+
+#[tokio::test]
+async fn reminder_without_attendees() {
+    let world = world().await;
+
+    let event = world.event(|event| {
+        event
+            .with_id(EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
+            .with_shared_event(SHARED_EVENT)
+    });
 
     world
         .ctx

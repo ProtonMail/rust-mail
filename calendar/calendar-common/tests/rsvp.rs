@@ -370,15 +370,17 @@ where
         };
 
         let shared_event = self.shared_event.unwrap();
-        let attendees_event = self.attendees_event.unwrap();
 
         let (shared_event, _) = encryptor
             .encrypt(&self.world.pgp, shared_event.as_bytes())
             .unwrap();
 
-        let (attendees_event, _) = encryptor
-            .encrypt(&self.world.pgp, attendees_event.as_bytes())
-            .unwrap();
+        let attendees_event = self.attendees_event.map(|event| {
+            encryptor
+                .encrypt(&self.world.pgp, event.as_bytes())
+                .unwrap()
+                .0
+        });
 
         let key_packets = encryptor.finish(&self.world.pgp).unwrap();
         let address_key_packet = key_packets.address_key_packet.map(KeyPacket::into_base64);
@@ -395,6 +397,17 @@ where
             })
             .collect();
 
+        let attendees_events = attendees_event
+            .map(|event| {
+                vec![CalendarEventPayload {
+                    ty: CalendarEventPayloadType::Encrypted,
+                    data: event.into_base64(),
+                    signature: None,
+                    author: "foo@pm.me".into(),
+                }]
+            })
+            .unwrap_or_default();
+
         CalendarEvent {
             shared_events: vec![CalendarEventPayload {
                 ty: CalendarEventPayloadType::Encrypted,
@@ -408,12 +421,7 @@ where
             calendar_id: self.calendar_id.unwrap().into(),
             address_key_packet,
             shared_key_packet,
-            attendees_events: [CalendarEventPayload {
-                ty: CalendarEventPayloadType::Encrypted,
-                data: attendees_event.into_base64(),
-                signature: None,
-                author: "foo@pm.me".into(),
-            }],
+            attendees_events,
             attendees: self.attendees,
             notifications: None,
             color: Some("#aabbcc".into()),
