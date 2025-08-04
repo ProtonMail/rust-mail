@@ -412,8 +412,8 @@ async fn action_store_creates_and_updates_direct_dependency_keys() {
         foo: "foo".to_string(),
         bar: 2048,
         dependency_keys: ActionDependencyKeys {
-            direct: vec![direct_dep_key.clone()],
-            sequential: vec![],
+            required: vec![direct_dep_key.clone()],
+            optional: vec![],
             record: vec![],
         },
     };
@@ -422,8 +422,8 @@ async fn action_store_creates_and_updates_direct_dependency_keys() {
         foo: "foo".to_string(),
         bar: 3000,
         dependency_keys: ActionDependencyKeys {
-            direct: vec![direct_dep_key.clone()],
-            sequential: vec![sequential_dep_key.clone()],
+            required: vec![direct_dep_key.clone()],
+            optional: vec![sequential_dep_key.clone()],
             record: vec![],
         },
     };
@@ -432,8 +432,8 @@ async fn action_store_creates_and_updates_direct_dependency_keys() {
         foo: "foo".to_string(),
         bar: 5000,
         dependency_keys: ActionDependencyKeys {
-            direct: vec![],
-            sequential: vec![direct_dep_key.clone()],
+            required: vec![],
+            optional: vec![direct_dep_key.clone()],
             record: vec![sequential_dep_key.clone()],
         },
     };
@@ -472,7 +472,7 @@ async fn action_store_creates_and_updates_direct_dependency_keys() {
     let deps = StoredAction::all_dependencies(&conn, second_action_id)
         .await
         .unwrap();
-    assert_eq!(deps, vec![ActionDependency::direct(first_action_id)]);
+    assert_eq!(deps, vec![ActionDependency::required(first_action_id)]);
 
     // Key should have been updated.
     let action_ids =
@@ -492,7 +492,7 @@ async fn action_store_creates_and_updates_direct_dependency_keys() {
     let deps = StoredAction::all_dependencies(&conn, third_action_id)
         .await
         .unwrap();
-    assert_eq!(deps, vec![ActionDependency::sequential(second_action_id)]);
+    assert_eq!(deps, vec![ActionDependency::optional(second_action_id)]);
 
     // Key should not have been updated.
     let action_ids =

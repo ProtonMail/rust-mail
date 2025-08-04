@@ -31,10 +31,10 @@ pub(crate) const DEFAULT_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[repr(u8)]
 pub enum DependencyType {
-    /// Direct dependencies result in the dependee being cancelled
-    Direct = 0,
-    /// Sequential dependencies do not result in the dependee being cancelled
-    Sequential = 1,
+    /// Required dependencies result in the dependee being cancelled
+    Required = 0,
+    /// Optional dependencies do not result in the dependee being cancelled
+    Optional = 1,
 }
 
 impl ToSql for DependencyType {
@@ -46,8 +46,8 @@ impl ToSql for DependencyType {
 impl FromSql for DependencyType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match u8::column_result(value)? {
-            0 => Ok(Self::Direct),
-            1 => Ok(Self::Sequential),
+            0 => Ok(Self::Required),
+            1 => Ok(Self::Optional),
             v => Err(FromSqlError::OutOfRange(v.into())),
         }
     }
@@ -63,18 +63,18 @@ pub struct ActionDependency {
 
 impl ActionDependency {
     #[must_use]
-    pub fn direct(action_id: ActionId) -> Self {
+    pub fn required(action_id: ActionId) -> Self {
         Self {
             dependency_id: action_id,
-            dependency_type: DependencyType::Direct,
+            dependency_type: DependencyType::Required,
         }
     }
 
     #[must_use]
-    pub fn sequential(action_id: ActionId) -> Self {
+    pub fn optional(action_id: ActionId) -> Self {
         Self {
             dependency_id: action_id,
-            dependency_type: DependencyType::Sequential,
+            dependency_type: DependencyType::Optional,
         }
     }
 }
@@ -463,20 +463,20 @@ impl ModelHooks for StoredAction {
     async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         // Resolve dependencies from keys
         let direct_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
-            self.dependency_keys.direct.clone(),
+            self.dependency_keys.required.clone(),
             bond,
         )
         .await?
         .into_iter()
-        .map(ActionDependency::direct)
+        .map(ActionDependency::required)
         .collect::<Vec<_>>();
         let sequential_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
-            self.dependency_keys.sequential.clone(),
+            self.dependency_keys.optional.clone(),
             bond,
         )
         .await?
         .into_iter()
-        .map(ActionDependency::sequential)
+        .map(ActionDependency::optional)
         .collect::<Vec<_>>();
 
         let dependency_set: HashSet<ActionDependency> = self
@@ -529,7 +529,7 @@ impl ModelHooks for StoredAction {
         // Update direct dependency keys
         ActionDependencyKeysTable::store_dependency_keys(
             self.dependency_keys
-                .direct
+                .required
                 .iter()
                 .chain(self.dependency_keys.record.iter())
                 .cloned()

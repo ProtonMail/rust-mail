@@ -1289,7 +1289,7 @@ async fn cancel_action_with_dependees(
     let mut cancelled_actions = Vec::new();
 
     while let Some(action_id) = remaining_actions.pop() {
-        let dependees = StoredAction::dependees_of_type(bond, action_id, DependencyType::Direct)
+        let dependees = StoredAction::dependees_of_type(bond, action_id, DependencyType::Required)
             .await
             .map_err(|e| {
                 error!("Failed to load action dependees: {e:?}");

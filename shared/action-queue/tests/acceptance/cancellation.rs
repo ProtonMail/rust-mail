@@ -254,7 +254,7 @@ async fn cancel_causes_revert_to_only_direct_dependees() {
                 old_value: 0,
             },
             MetadataBuilder::new()
-                .with_sequential_dependencies([action_id2])
+                .with_optional_dependencies([action_id2])
                 .build(),
         )
         .await
