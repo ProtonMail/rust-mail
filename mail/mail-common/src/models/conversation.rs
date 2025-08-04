@@ -2095,6 +2095,12 @@ impl Conversation {
         if conversations.iter().any(|c| !c.is_starred()) {
             conversation_actions.push(ConversationAction::Star);
         }
+        if SystemLabel::from_opt_rid(view.remote_id.as_ref())
+            .filter(|label| label.is_snooze_location())
+            .is_some()
+        {
+            conversation_actions.push(ConversationAction::Snooze);
+        }
         conversation_actions.push(ConversationAction::LabelAs);
 
         let move_actions = MoveItemAction::from_view(view, tether).await?;
