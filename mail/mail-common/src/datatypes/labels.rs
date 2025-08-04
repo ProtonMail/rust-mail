@@ -120,7 +120,7 @@ pub enum ScrollOrderField {
 impl ScrollOrderField {
     pub fn for_label(id: &LabelId) -> Self {
         match SystemLabel::from_rid(id) {
-            Some(SystemLabel::Snoozed) => Self::SnoozeTime,
+            Some(label) if label.is_snooze_location() => Self::SnoozeTime,
             _ => Self::Time,
         }
     }
