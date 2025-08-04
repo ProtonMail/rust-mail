@@ -229,12 +229,12 @@ impl FromSql for ActionDependencyKey {
 
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct ActionDependencyKeys {
-    /// Direct dependency keys that this action would like to depended on. Direct dependencies
+    /// Required dependency keys that this action would like to depended on. Required dependencies
     /// will cause revert on failure.
-    pub direct: Vec<ActionDependencyKey>,
-    /// Sequential keys that this action would like to depend on. Does not cause revert if the
+    pub required: Vec<ActionDependencyKey>,
+    /// Optional keys that this action would like to depend on. Does not cause revert if the
     /// dependency fails to execute.
-    pub sequential: Vec<ActionDependencyKey>,
+    pub optional: Vec<ActionDependencyKey>,
     /// Record extra dependency keys for this action. Keys specified here do not introduce
     /// any dependencies, but can be used by other actions.
     pub record: Vec<ActionDependencyKey>,
@@ -607,10 +607,10 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_sequential_dependency(mut self, action_id: ActionId) -> Self {
+    pub fn with_required_dependency(mut self, action_id: ActionId) -> Self {
         self.metadata
             .dependencies
-            .push(ActionDependency::sequential(action_id));
+            .push(ActionDependency::optional(action_id));
         self
     }
 
@@ -624,13 +624,13 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_sequential_dependencies(
+    pub fn with_optional_dependencies(
         mut self,
         action_ids: impl IntoIterator<Item = ActionId>,
     ) -> Self {
         self.metadata
             .dependencies
-            .extend(action_ids.into_iter().map(ActionDependency::sequential));
+            .extend(action_ids.into_iter().map(ActionDependency::optional));
         self
     }
 
@@ -648,7 +648,7 @@ impl MetadataBuilder {
     pub fn with_dependency(mut self, action_id: ActionId) -> Self {
         self.metadata
             .dependencies
-            .push(ActionDependency::direct(action_id));
+            .push(ActionDependency::required(action_id));
         self
     }
 
@@ -666,7 +666,7 @@ impl MetadataBuilder {
     pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = ActionId>) -> Self {
         self.metadata
             .dependencies
-            .extend(action_ids.into_iter().map(ActionDependency::direct));
+            .extend(action_ids.into_iter().map(ActionDependency::required));
         self
     }
 

@@ -2125,7 +2125,7 @@ impl DraftAttachmentRemovalQueuer {
                     e => return Err(e.into()),
                 }
             }
-            metadata = metadata.with_sequential_dependency(action_id);
+            metadata = metadata.with_required_dependency(action_id);
         };
 
         Ok(queue
@@ -2169,7 +2169,7 @@ async fn queue_or_replace_draft_save(
 
     let metadata = metadata
         .with_dependencies(other_direct_dependencies)
-        .with_sequential_dependencies(other_sequential_dependencies)
+        .with_optional_dependencies(other_sequential_dependencies)
         .build();
 
     if let Some(previous_action_id) = last_draft_save_action_id {
