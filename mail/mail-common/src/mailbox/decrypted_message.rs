@@ -358,12 +358,7 @@ impl DecryptedMessageBody {
         if let Some(id) = cal::RsvpEventId::from_headers(&self.metadata.parsed_headers.headers) {
             debug!("Identified RSVP via headers");
 
-            return Ok(Some(RsvpEventId::new(
-                id,
-                msg_id,
-                self.metadata.clone(),
-                self.address_id.clone(),
-            )));
+            return Ok(Some(RsvpEventId::new(id, msg_id, self.metadata.clone())));
         }
 
         let invite = self.metadata.attachments.iter().find_map(|att| {
@@ -393,12 +388,7 @@ impl DecryptedMessageBody {
                 Ok(id) => {
                     debug!("Identified RSVP via attachment");
 
-                    return Ok(Some(RsvpEventId::new(
-                        id,
-                        msg_id,
-                        self.metadata.clone(),
-                        self.address_id.clone(),
-                    )));
+                    return Ok(Some(RsvpEventId::new(id, msg_id, self.metadata.clone())));
                 }
 
                 Err(RsvpError::IcsIsNotRsvp) => {

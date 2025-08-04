@@ -291,6 +291,7 @@ async fn fetch_and_answer() {
             }],
             calendar_events: vec![],
             id: EVENT_ID.into(),
+            address_id: None,
             calendar_id: CALENDAR_ID.into(),
             address_key_packet,
             shared_key_packet,

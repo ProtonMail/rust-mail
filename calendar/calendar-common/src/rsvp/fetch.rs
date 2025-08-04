@@ -1,7 +1,8 @@
 use crate::{
-    CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCache, RsvpCalendar,
-    RsvpContacts, RsvpError, RsvpEvent, RsvpEventId, RsvpFetchError, RsvpFetchResult, RsvpIntent,
-    RsvpKeys, RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency, RsvpRecurrence, RsvpResult,
+    CalendarBootstrapExt, CalendarDecryptorKeys, CalendarEventPayloadExt, RsvpAttendee, RsvpCache,
+    RsvpCalendar, RsvpContacts, RsvpError, RsvpEvent, RsvpEventId, RsvpFetchError, RsvpFetchResult,
+    RsvpIntent, RsvpKeys, RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency, RsvpRecurrence,
+    RsvpResult,
 };
 use itertools::{Either, Itertools};
 use jiff::{
@@ -48,23 +49,22 @@ where
         }
     };
 
-    let addr_keys;
     let decryptor;
+    let decryptor_keys;
     let calendar;
     let event;
     let children;
 
     if let Some(fetched) = fetched {
-        addr_keys = keys
-            .get_address_keys(pgp, &fetched.calendar.member().address_id)
+        decryptor_keys = CalendarDecryptorKeys::rsvp(pgp, keys, &fetched.calendar, &fetched.event)
             .await
             .map_err(RsvpFetchError::Keys)?;
 
-        decryptor = Some(
-            fetched
-                .calendar
-                .create_decryptor(pgp, &addr_keys, &fetched.event)?,
-        );
+        decryptor = Some(fetched.calendar.create_decryptor(
+            pgp,
+            &decryptor_keys,
+            &fetched.event,
+        )?);
 
         calendar = Some(fetched.calendar);
         event = Some(fetched.event);

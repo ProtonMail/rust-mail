@@ -4,7 +4,6 @@ use crate::rsvp::RsvpKeys;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext, RsvpEvent};
 use anyhow::Context;
 use proton_calendar_common::{self as cal, RsvpFetchError};
-use proton_core_api::services::proton::AddressId;
 use proton_core_common::models::Address;
 use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
@@ -17,7 +16,6 @@ pub struct RsvpEventId {
     id: cal::RsvpEventId,
     msg_id: LocalMessageId,
     msg_meta: MessageBodyMetadata,
-    address_id: AddressId,
 }
 
 impl RsvpEventId {
@@ -25,13 +23,11 @@ impl RsvpEventId {
         id: cal::RsvpEventId,
         msg_id: LocalMessageId,
         msg_meta: MessageBodyMetadata,
-        address_id: AddressId,
     ) -> Self {
         Self {
             id,
             msg_id,
             msg_meta,
-            address_id,
         }
     }
 
@@ -45,7 +41,7 @@ impl RsvpEventId {
         info!("Fetching RSVP");
 
         let pgp = proton_crypto::new_pgp_provider();
-        let keys = RsvpKeys::new(ctx, tether, &self.address_id);
+        let keys = RsvpKeys::new(ctx, tether);
         let cache = ctx.rsvp_cache();
         let contacts = ctx.rsvp_contacts();
         let now = ctx.mail_context().core_context().clock().now();

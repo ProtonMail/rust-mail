@@ -105,6 +105,8 @@ pub struct FoundCalendarEvents {
 pub struct CalendarEvent {
     #[serde(rename = "ID")]
     pub id: CalendarEventId,
+    #[serde(rename = "AddressID")]
+    pub address_id: Option<AddressId>,
     pub shared_events: Vec<CalendarEventPayload>,
     pub calendar_events: Vec<CalendarEventPayload>,
     #[serde(rename = "CalendarID")]
