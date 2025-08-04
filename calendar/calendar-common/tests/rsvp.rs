@@ -156,10 +156,25 @@ async fn world() -> World<impl PGPProviderSync> {
             .unwrap()
     };
 
-    let address_keys = UnlockedAddressKeys::from(
-        LocalAddressKey::generate(
+    let address_keys = UnlockedAddressKeys::from({
+        // Generate address used to encrypt the calendar
+        let key0 = LocalAddressKey::generate(
             &pgp,
-            "someone@pm.me",
+            "bar@protonmail.com",
+            KeyGeneratorAlgorithm::default(),
+            KeyFlag::default(),
+            false,
+            &user_key,
+        )
+        .unwrap()
+        .unlock_and_assign_key_id(&pgp, KeyId(String::new()), &user_key)
+        .unwrap();
+
+        // Generate address used to encrypt the invite (for testing
+        // Proton-to-Proton invites, used in just a couple of tests)
+        let key1 = LocalAddressKey::generate(
+            &pgp,
+            "bar@pm.me",
             KeyGeneratorAlgorithm::default(),
             KeyFlag::default(),
             true,
@@ -167,20 +182,30 @@ async fn world() -> World<impl PGPProviderSync> {
         )
         .unwrap()
         .unlock_and_assign_key_id(&pgp, KeyId(String::new()), &user_key)
-        .unwrap(),
-    );
+        .unwrap();
 
-    let private_key = pgp
-        .private_key_export(&address_keys[0].private_key, "test", DataEncoding::Armor)
-        .unwrap()
-        .as_ref()
-        .to_vec();
+        vec![key0, key1]
+    });
+
+    let keys = {
+        let keys = address_keys
+            .iter()
+            .map(|key| {
+                pgp.private_key_export(&key.private_key, "test", DataEncoding::Armor)
+                    .unwrap()
+                    .as_ref()
+                    .to_vec()
+            })
+            .collect();
+
+        DummyRsvpKeys { keys }
+    };
 
     World {
         ctx,
         sess,
         pgp,
-        keys: DummyRsvpKeys { private_key },
+        keys,
         address_keys,
         calendar_keys: RefCell::default(),
         cache: DummyRsvpCache,
@@ -223,7 +248,7 @@ where
                 id: id.into(),
                 name: "My calendar".into(),
                 color: "#273EB2".into(),
-                address_id: "ZNBEMFOD".into(),
+                address_id: "addr0".into(),
             }],
         }
     }
@@ -322,7 +347,7 @@ where
 
         let encryptor = match self.encryption {
             "address-key" => {
-                CalendarEventEncryptor::for_address(&self.world.pgp, &self.world.address_keys)
+                CalendarEventEncryptor::for_address_ex(&self.world.pgp, &self.world.address_keys[1])
                     .unwrap()
             }
 
@@ -333,9 +358,9 @@ where
                     .entry(calendar_id)
                     .or_insert_with(|| UnlockedCalendarKey::generate(&self.world.pgp).unwrap());
 
-                CalendarEventEncryptor::for_calendar(
+                CalendarEventEncryptor::for_calendar_ex(
                     &self.world.pgp,
-                    &self.world.address_keys,
+                    &self.world.address_keys[0],
                     calendar_key,
                 )
                 .unwrap()
@@ -379,6 +404,7 @@ where
             }],
             calendar_events,
             id: self.id.unwrap().into(),
+            address_id: Some("addr1".into()),
             calendar_id: self.calendar_id.unwrap().into(),
             address_key_packet,
             shared_key_packet,
@@ -425,7 +451,29 @@ impl RsvpContacts for DummyRsvpContacts {
 }
 
 struct DummyRsvpKeys {
-    private_key: Vec<u8>,
+    keys: Vec<Vec<u8>>,
+}
+
+impl DummyRsvpKeys {
+    fn import_key<P>(pgp: &P, key: &[u8]) -> UnlockedAddressKeys<P>
+    where
+        P: PGPProviderSync,
+    {
+        let private_key = pgp
+            .private_key_import(key, "test", DataEncoding::Armor)
+            .unwrap();
+
+        let public_key = pgp.private_key_to_public_key(&private_key).unwrap();
+
+        UnlockedAddressKeys(vec![UnlockedAddressKey::<P> {
+            id: "1234".into(),
+            flags: 0_u32.into(),
+            primary: true,
+            is_v6: false,
+            private_key,
+            public_key,
+        }])
+    }
 }
 
 impl RsvpKeys for DummyRsvpKeys {
@@ -434,25 +482,16 @@ impl RsvpKeys for DummyRsvpKeys {
     async fn get_address_keys<P>(
         &self,
         pgp: &P,
-        _: &AddressId,
+        id: &AddressId,
     ) -> Result<UnlockedAddressKeys<P>, Self::Error>
     where
         P: PGPProviderSync,
     {
-        let private_key = pgp
-            .private_key_import(&self.private_key, "test", DataEncoding::Armor)
-            .unwrap();
-
-        let public_key = pgp.private_key_to_public_key(&private_key).unwrap();
-
-        Ok(UnlockedAddressKeys(vec![UnlockedAddressKey::<P> {
-            id: "1234".into(),
-            flags: 0_u32.into(),
-            primary: true,
-            is_v6: false,
-            private_key,
-            public_key,
-        }]))
+        match id.as_str() {
+            "addr0" => Ok(Self::import_key(pgp, &self.keys[0])),
+            "addr1" => Ok(Self::import_key(pgp, &self.keys[1])),
+            id => panic!("unexpected address: {id}"),
+        }
     }
 }
 

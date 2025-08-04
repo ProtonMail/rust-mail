@@ -66,7 +66,7 @@ impl RsvpEvent {
         }
 
         let pgp = proton_crypto::new_pgp_provider();
-        let keys = RsvpKeys::new(ctx, tether_keys, &self.msg.remote_address_id);
+        let keys = RsvpKeys::new(ctx, tether_keys);
 
         let addr_keys = ctx
             .unlocked_address_keys(&pgp, tether, &self.msg.remote_address_id)
