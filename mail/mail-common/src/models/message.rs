@@ -1475,6 +1475,7 @@ impl Message {
             if let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await? {
                 if mark_read {
                     conversation.num_unread = conversation.num_unread.saturating_sub(count);
+                    conversation.display_snooze_reminder = false;
                 } else {
                     conversation.num_unread += count;
                 }

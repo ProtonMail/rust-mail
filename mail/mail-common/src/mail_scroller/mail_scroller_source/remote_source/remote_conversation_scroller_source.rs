@@ -1,11 +1,12 @@
 use super::{MailPaginatorJoinHandle, RemoteSource};
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::labels::ScrollOrderField;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ContextualConversation, ReadFilter},
     models::{Conversation, ConversationScrollData},
 };
-use crate::{datatypes::labels::LabelScrollOrder, prefetch::PrefetchJob};
+use crate::{datatypes::labels::ScrollOrderDir, prefetch::PrefetchJob};
 use anyhow::anyhow;
 use proton_core_api::services::proton::Proton;
 use proton_core_api::{
@@ -36,7 +37,8 @@ impl RemoteSource for ConversationScrollData {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let stash = ctx.user_stash().clone();
@@ -49,7 +51,8 @@ impl RemoteSource for ConversationScrollData {
                 remote_label_id,
                 unread,
                 page_size,
-                scroll_order,
+                order_dir,
+                order_field,
             )
             .await?;
 
@@ -74,7 +77,8 @@ impl RemoteSource for ConversationScrollData {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         RemoteConversationScrollerSource::spawn_background_sync(
             ctx,
@@ -83,7 +87,8 @@ impl RemoteSource for ConversationScrollData {
             remote_label_id,
             unread,
             page_size,
-            scroll_order,
+            order_dir,
+            order_field,
         )
         .await
     }
@@ -95,7 +100,8 @@ impl RemoteSource for ConversationScrollData {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
         sender: flume::Sender<()>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let stash = ctx.user_stash().clone();
@@ -113,7 +119,8 @@ impl RemoteSource for ConversationScrollData {
                 conversation_time,
                 unread,
                 page_size,
-                scroll_order,
+                order_dir,
+                order_field,
             )
             .await?;
 
@@ -133,6 +140,7 @@ impl RemoteSource for ConversationScrollData {
 }
 
 impl RemoteConversationScrollerSource {
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn spawn_background_sync(
         ctx: &MailUserContext,
         scroller: &ConversationScrollData,
@@ -140,7 +148,8 @@ impl RemoteConversationScrollerSource {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let stash = ctx.user_stash().clone();
         let remote_id = scroller.remote_conversation_id.clone();
@@ -157,7 +166,8 @@ impl RemoteConversationScrollerSource {
                 conversation_time,
                 unread,
                 page_size,
-                scroll_order,
+                order_dir,
+                order_field,
             )
             .await?;
 
@@ -168,6 +178,7 @@ impl RemoteConversationScrollerSource {
     }
 
     #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_first_page(
         session: &Session,
         stash: Stash,
@@ -175,16 +186,19 @@ impl RemoteConversationScrollerSource {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
+
         let response = session
             .api()
             .get_conversations(GetConversationsOptions {
                 label_id: Some(remote_label_id),
                 page_size: page_size as u64,
                 unread: unread.into(),
-                desc: Some(scroll_order == LabelScrollOrder::Descending),
+                desc: order_dir.as_api_desc(),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;
@@ -200,19 +214,23 @@ impl RemoteConversationScrollerSource {
         }
 
         let context_time = Self::context_time(&response, unread);
+
         let mut conversations: Vec<Conversation> = response
             .conversations
             .into_iter()
             .map(|c| c.into())
             .collect();
+
         let mut tether = stash.connection();
+
         Self::save_conversations(
             local_label_id,
             &mut conversations,
             unread,
             context_time,
             true,
-            scroll_order,
+            order_dir,
+            order_field,
             session.api(),
             &mut tether,
         )
@@ -235,21 +253,24 @@ impl RemoteConversationScrollerSource {
         first_element_time: UnixTimestamp,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!(
             "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
         );
+
         let response = session
             .api()
             .get_conversations(GetConversationsOptions {
-                desc: Some(scroll_order == LabelScrollOrder::Descending),
                 // time == 0 breaks the api query.
                 begin: Some(first_element_time.as_u64()),
                 begin_id: Some(first_element_id.clone()),
                 label_id: Some(remote_label_id),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
+                desc: order_dir.as_api_desc(),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;
@@ -273,13 +294,15 @@ impl RemoteConversationScrollerSource {
             .collect();
 
         let mut tether = stash.connection();
+
         Self::save_conversations(
             local_label_id,
             &mut conversations,
             unread,
             context_time,
             false,
-            scroll_order,
+            order_dir,
+            order_field,
             session.api(),
             &mut tether,
         )
@@ -302,21 +325,24 @@ impl RemoteConversationScrollerSource {
         last_element_time: UnixTimestamp,
         unread: ReadFilter,
         page_size: usize,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
         );
+
         let mut response = session
             .api()
             .get_conversations(GetConversationsOptions {
-                desc: Some(scroll_order == LabelScrollOrder::Descending),
                 // time == 0 breaks the api query.
                 end: Some(last_element_time.as_u64()),
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(remote_label_id),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
+                desc: order_dir.as_api_desc(),
+                sort: order_field.as_api_sort(),
                 ..Default::default()
             })
             .await?;
@@ -351,13 +377,15 @@ impl RemoteConversationScrollerSource {
             .collect();
 
         let mut tether = stash.connection();
+
         Self::save_conversations(
             local_label_id,
             &mut conversations,
             unread,
             context_time,
             true,
-            scroll_order,
+            order_dir,
+            order_field,
             session.api(),
             &mut tether,
         )
@@ -403,7 +431,8 @@ impl RemoteConversationScrollerSource {
         unread: ReadFilter,
         context_time: Option<UnixTimestamp>,
         update_scroller: bool,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
         api: &Proton,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
@@ -422,7 +451,7 @@ impl RemoteConversationScrollerSource {
             .quiet_tx(async |tx| {
                 // Save all conversations.
                 for conversation in conversations.iter_mut() {
-                    conversation.create_or_get_local(tx).await?
+                    conversation.create_or_get_local(tx).await?;
                 }
 
                 let Some((last, label)) = conversations
@@ -439,7 +468,16 @@ impl RemoteConversationScrollerSource {
                     )));
                 };
 
-                let context_time = context_time.unwrap_or(label.context_time);
+                let context_time = context_time.unwrap_or_else(|| {
+                    if matches!(order_field, ScrollOrderField::SnoozeTime)
+                        && label.context_snooze_time.as_u64() > 0
+                    {
+                        label.context_snooze_time
+                    } else {
+                        label.context_time
+                    }
+                });
+
                 // Unwrap safety: RemoteId is present as this method is called on conversation
                 // downloaded from API
                 let remote_id = last.remote_id.clone().unwrap();
@@ -452,7 +490,8 @@ impl RemoteConversationScrollerSource {
                         unread,
                         context_time,
                         display_order,
-                        scroll_order,
+                        order_dir,
+                        order_field,
                         tx,
                     )
                     .await?;
@@ -468,13 +507,15 @@ impl RemoteConversationScrollerSource {
             .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn update_scroller_data(
         local_label_id: LocalLabelId,
         remote_conv_id: ConversationId,
         unread: ReadFilter,
         context_time: UnixTimestamp,
         display_order: u64,
-        scroll_order: LabelScrollOrder,
+        order_dir: ScrollOrderDir,
+        order_field: ScrollOrderField,
         bond: &Bond<'_>,
     ) -> Result<ConversationScrollData, MailContextError> {
         tracing::debug!(
@@ -486,7 +527,8 @@ impl RemoteConversationScrollerSource {
             .remote_conversation_id(remote_conv_id)
             .conversation_time(context_time)
             .display_order(display_order)
-            .scroll_order(scroll_order)
+            .order_dir(order_dir)
+            .order_field(order_field)
             .build();
 
         conv_paginator.save(bond).await?;

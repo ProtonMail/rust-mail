@@ -2,7 +2,9 @@ use crate::AppError;
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::LocalConversationId;
 use crate::models::Conversation;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelIdExtension;
@@ -11,9 +13,6 @@ use serde::{self, Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::error;
 
-/// Snooze conversations action.
-///
-/// This action snoozes the given conversations until the given time.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Snooze {
     action_data: GenericLabelRelatedActionData<Conversation>,
@@ -36,10 +35,10 @@ impl Snooze {
 impl Action for Snooze {
     const TYPE: Type = Type("snooze_conversations");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = SnoozeHandler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
 }
@@ -48,7 +47,7 @@ pub struct SnoozeHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for SnoozeHandler {
+impl Handler for SnoozeHandler {
     type Action = Snooze;
 
     async fn apply_local(
@@ -63,7 +62,7 @@ impl proton_action_queue::action::Handler for SnoozeHandler {
 
         Conversation::snooze(
             action.action_data.label_id,
-            action.action_data.data.target_ids.clone(),
+            &action.action_data.data.target_ids,
             action.snooze_until,
             tx,
         )
@@ -80,7 +79,7 @@ impl proton_action_queue::action::Handler for SnoozeHandler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         Conversation::unsnooze(
             action.action_data.label_id,
-            action.action_data.data.target_ids.clone(),
+            &action.action_data.data.target_ids,
             tx,
         )
         .await?;
@@ -123,15 +122,17 @@ impl proton_action_queue::action::Handler for SnoozeHandler {
             guard
                 .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
                     error!("Snooze operation failed for: {:?}", responses);
+
                     let local_ids =
                         Conversation::remote_ids_counterpart(responses.clone(), tx).await?;
 
-                    Conversation::unsnooze(action.action_data.label_id, local_ids, tx)
+                    Conversation::unsnooze(action.action_data.label_id, &local_ids, tx)
                         .await
                         .map_err(|e| {
                             error!("Failed to rollback failed conversations: {e:?}");
                             e
                         })?;
+
                     Ok(())
                 })
                 .await?;

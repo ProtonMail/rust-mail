@@ -475,8 +475,8 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
                     encryption_preferences.pgp_scheme,
                     encrypt,
                     sign,
-                    // Only use EO if it is external without encryption
-                    !encryption_preferences.encrypt && composer_preferences.encrypt_to_outside,
+                    // Always use EO, even if it is external with encryption
+                    composer_preferences.encrypt_to_outside,
                 );
                 // Force PGP mime as inline pgp is not supported currently
                 if scheme == PackageCryptoType::PgpInline {

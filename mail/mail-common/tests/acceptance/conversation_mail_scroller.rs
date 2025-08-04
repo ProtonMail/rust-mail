@@ -9,7 +9,10 @@ use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
 };
-use proton_mail_common::datatypes::labels::LabelScrollOrder;
+use proton_mail_common::datatypes::{
+    SystemLabelId,
+    labels::{ScrollOrderDir, ScrollOrderField},
+};
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
     scroller::{StoreLabeledModelMap, TestScroller, save_single_conversation, test_conversations},
@@ -90,7 +93,8 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::Time)
         .build();
 
     tether
@@ -646,7 +650,8 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::Time)
         .build();
 
     tether
@@ -730,7 +735,8 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
-        .scroll_order(LabelScrollOrder::Descending)
+        .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::Time)
         .build();
 
     tether
@@ -1035,6 +1041,56 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_lar
     assert!(!actual.is_empty());
     assert_eq!(test_scroller.items().len(), 16); // 15 + 1 new
     assert!(!test_scroller.has_more().await.unwrap());
+}
+
+#[tokio::test]
+async fn snoozed_conversations() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    let label = Label::find_by_remote_id(LabelId::snoozed(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut data = {
+        let label = label.remote_id.clone().unwrap().to_string();
+
+        hash_map! {
+            vec![label]: test_conversations(5, 0),
+        }
+    };
+
+    data.save_to_database(&mut tether).await;
+
+    // ---
+
+    let snooze_times = [300, 200, 400, 100, 500];
+
+    for (conv, conv_snooze_time) in data.values_mut().flatten().zip(snooze_times) {
+        conv.labels[0].context_snooze_time = conv_snooze_time.into();
+        tether.tx(async |tx| conv.save(tx).await).await.unwrap();
+    }
+
+    // ---
+
+    let mut scroller = TestScroller::conversations(&user_ctx, label.id(), ReadFilter::All, 2)
+        .await
+        .unwrap();
+
+    let convs = scroller.fetch_more_and_wait().await.unwrap();
+
+    assert_eq!(2, convs.len());
+    assert_eq!("myconv_3", convs[0].remote_id.as_ref().unwrap().to_string());
+    assert_eq!("myconv_1", convs[1].remote_id.as_ref().unwrap().to_string());
+
+    let convs = scroller.fetch_more_and_wait().await.unwrap();
+
+    assert_eq!(3, convs.len());
+    assert_eq!("myconv_0", convs[0].remote_id.as_ref().unwrap().to_string());
+    assert_eq!("myconv_2", convs[1].remote_id.as_ref().unwrap().to_string());
+    assert_eq!("myconv_4", convs[2].remote_id.as_ref().unwrap().to_string());
 }
 
 async fn assert_scroller_content(

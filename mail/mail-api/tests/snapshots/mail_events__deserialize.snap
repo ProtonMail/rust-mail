@@ -1,7 +1,6 @@
 ---
 source: mail/mail-api/tests/mail_events.rs
 expression: mail_event
-snapshot_kind: text
 ---
 MailEvent {
     event_id: EventId(
@@ -84,7 +83,7 @@ MailEvent {
                                 size: 0,
                             },
                         ],
-                        display_snooze_reminder: false,
+                        display_snoozed_reminder: true,
                         expiration_time: 0,
                         labels: [
                             ConversationLabel {

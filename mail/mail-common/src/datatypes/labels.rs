@@ -2,8 +2,9 @@ use crate::AppError;
 use crate::datatypes::{LabelColor, SystemLabelId, ViewMode};
 use crate::models::{ConversationCounters, MailLabel, MailSettings, MessageCounters};
 use proton_core_api::services::proton::LabelId;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::prelude::MessageMetadataSortMode;
 use proton_sqlite3::rusqlite::types::{
     FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef,
 };
@@ -64,41 +65,93 @@ pub async fn color_to_display(
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(u8)]
-pub enum LabelScrollOrder {
-    Ascending = 0,
+pub enum ScrollOrderDir {
+    Asc = 0,
     #[default]
-    Descending = 1,
+    Desc = 1,
 }
 
-impl LabelScrollOrder {
-    pub fn for_label_id(id: &LabelId) -> Self {
-        if *id == LabelId::all_scheduled() {
-            Self::Ascending
+impl ScrollOrderDir {
+    pub fn for_label(id: &LabelId) -> Self {
+        if *id == LabelId::all_scheduled() || *id == LabelId::snoozed() {
+            Self::Asc
         } else {
-            Self::Descending
+            Self::Desc
         }
     }
 
-    pub async fn for_local_label_id(id: LocalLabelId, tether: &Tether) -> Result<Self, StashError> {
+    pub async fn for_local_label(id: LocalLabelId, tether: &Tether) -> Result<Self, StashError> {
         if let Some(remote_id) = Label::local_id_counterpart(id, tether).await? {
-            Ok(Self::for_label_id(&remote_id))
+            Ok(Self::for_label(&remote_id))
         } else {
             Ok(Self::default())
         }
     }
+
+    pub fn as_api_desc(&self) -> Option<bool> {
+        Some(*self == Self::Desc)
+    }
 }
 
-impl ToSql for LabelScrollOrder {
+impl ToSql for ScrollOrderDir {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
 }
 
-impl FromSql for LabelScrollOrder {
+impl FromSql for ScrollOrderDir {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match i64::column_result(value)? {
-            0 => Ok(Self::Ascending),
-            1 => Ok(Self::Descending),
+            0 => Ok(Self::Asc),
+            1 => Ok(Self::Desc),
+            v => Err(FromSqlError::OutOfRange(v)),
+        }
+    }
+}
+
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[repr(u8)]
+pub enum ScrollOrderField {
+    #[default]
+    Time = 0,
+    SnoozeTime = 1,
+}
+
+impl ScrollOrderField {
+    pub fn for_label(id: &LabelId) -> Self {
+        match SystemLabel::from_rid(id) {
+            Some(SystemLabel::Snoozed) => Self::SnoozeTime,
+            _ => Self::Time,
+        }
+    }
+
+    pub async fn for_local_label(id: LocalLabelId, tether: &Tether) -> Result<Self, StashError> {
+        if let Some(remote_id) = Label::local_id_counterpart(id, tether).await? {
+            Ok(Self::for_label(&remote_id))
+        } else {
+            Ok(Self::default())
+        }
+    }
+
+    pub fn as_api_sort(&self) -> Option<MessageMetadataSortMode> {
+        match self {
+            Self::Time => Some(MessageMetadataSortMode::Time),
+            Self::SnoozeTime => Some(MessageMetadataSortMode::SnoozeTime),
+        }
+    }
+}
+
+impl ToSql for ScrollOrderField {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+impl FromSql for ScrollOrderField {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match i64::column_result(value)? {
+            0 => Ok(Self::Time),
+            1 => Ok(Self::SnoozeTime),
             v => Err(FromSqlError::OutOfRange(v)),
         }
     }

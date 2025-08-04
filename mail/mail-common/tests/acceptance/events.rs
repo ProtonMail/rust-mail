@@ -68,7 +68,7 @@ async fn event_fetches_missing_dependencies() {
         id: ConversationId::from("MyMissingConvId"),
         attachment_info: Default::default(),
         attachments_metadata: vec![],
-        display_snooze_reminder: false,
+        display_snoozed_reminder: false,
         expiration_time: 0,
         labels: vec![ApiConversationLabel {
             id: missing_label_1.id.clone(),

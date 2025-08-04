@@ -254,8 +254,6 @@ pub async fn available_snooze_actions_for_conversation(
     .map_err(SnoozeError::from)
 }
 
-#[allow(unused_variables)]
-#[allow(clippy::needless_pass_by_value)]
 #[uniffi_export]
 pub async fn snooze_conversations(
     session: Arc<MailUserSession>,
@@ -279,8 +277,6 @@ pub async fn snooze_conversations(
     .map_err(SnoozeError::from)
 }
 
-#[allow(unused_variables)]
-#[allow(clippy::needless_pass_by_value)]
 #[uniffi_export]
 pub async fn unsnooze_conversations(
     session: Arc<MailUserSession>,
