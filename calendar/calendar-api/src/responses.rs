@@ -113,7 +113,12 @@ pub struct CalendarEvent {
     pub calendar_id: CalendarId,
     pub address_key_packet: Option<String>,
     pub shared_key_packet: Option<String>,
+
+    // There's always either zero or one attendee events, so technically this
+    // could probably be `Option<[CalendarEventPayload; 1]>` paired with
+    // `#[serde(default)]`, but using `Vec` is an easier way out
     pub attendees_events: Vec<CalendarEventPayload>,
+
     pub attendees: Vec<CalendarAttendee>,
     pub notifications: Option<Vec<CalendarNotification>>,
     pub color: Option<CalendarColor>,

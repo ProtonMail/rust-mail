@@ -281,6 +281,7 @@ where
     if user_attendee_idx.is_none()
         && email::canonicalize_auto(&organizer.email) != *email
         && matches!(id, RsvpEventId::Invite { .. })
+    //     ^ you cannot be not-invited to a reminder
     {
         // This can happen whan an attendee forwards their own invite to another
         // user that hasn't been invited by the organizer; this is known as
