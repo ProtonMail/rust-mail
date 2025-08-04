@@ -14,7 +14,8 @@ use proton_calendar_api::{
 use proton_canonical_email::{self as email, CanonicalEmail};
 use proton_core_api::services::proton::Proton;
 use proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_calendar::{CalendarEventDecryptor, UnlockedKeys};
+use proton_crypto_account::keys::UnlockedAddressKeys;
+use proton_crypto_calendar::CalendarEventDecryptor;
 use proton_ical as ical;
 use std::{collections::HashMap, num::NonZeroU32};
 use tracing::{debug, info, instrument, warn};
@@ -23,7 +24,7 @@ use tracing::{debug, info, instrument, warn};
 pub(super) async fn run<P>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &UnlockedAddressKeys<P>,
     cache: &impl RsvpCache,
     contacts: &impl RsvpContacts,
     now: &Zoned,

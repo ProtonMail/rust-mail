@@ -1,9 +1,9 @@
 use crate::{RsvpError, RsvpResult};
 use proton_calendar_api::{CalendarBootstrap, CalendarEvent, CalendarEventPayload};
 use proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_calendar::{
     CalendarEventDecryptor, EncryptedIcsRef, KeyPackets, LockedCalendarKey, Result as CryptoResult,
-    UnlockedKeys,
 };
 use proton_ical as ical;
 use std::borrow::Cow;
@@ -98,7 +98,7 @@ pub trait CalendarBootstrapExt {
     fn create_decryptor<'a, P>(
         &self,
         pgp: &'a P,
-        keys: &'a UnlockedKeys<P>,
+        keys: &'a UnlockedAddressKeys<P>,
         event: &CalendarEvent,
     ) -> RsvpResult<CalendarEventDecryptor<'a, P>>
     where
@@ -109,7 +109,7 @@ impl CalendarBootstrapExt for CalendarBootstrap {
     fn create_decryptor<'a, P>(
         &self,
         pgp: &'a P,
-        keys: &'a UnlockedKeys<P>,
+        keys: &'a UnlockedAddressKeys<P>,
         event: &CalendarEvent,
     ) -> RsvpResult<CalendarEventDecryptor<'a, P>>
     where
@@ -118,7 +118,6 @@ impl CalendarBootstrapExt for CalendarBootstrap {
         let calendar_key = LockedCalendarKey::from_bootstrap(self)?.import(pgp, keys)?;
         let key_packets = KeyPackets::from_event(event);
 
-        CalendarEventDecryptor::new(pgp, &keys.address_keys, &calendar_key, key_packets)
-            .map_err(Into::into)
+        CalendarEventDecryptor::new(pgp, keys, &calendar_key, key_packets).map_err(Into::into)
     }
 }

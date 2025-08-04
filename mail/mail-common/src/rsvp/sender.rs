@@ -11,8 +11,7 @@ use crate::models::{Attachment, MailSettings};
 use anyhow::Context;
 use proton_calendar_common as cal;
 use proton_core_api::services::proton::{PrivateEmailRef, PrivateString};
-use proton_crypto_account::keys::PrimaryUnlockedAddressKey;
-use proton_crypto_calendar::UnlockedKeys;
+use proton_crypto_account::keys::{PrimaryUnlockedAddressKey, UnlockedAddressKeys};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, EncryptedAttachment};
 use proton_crypto_inbox::message::EncryptableDraft;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -34,7 +33,7 @@ where
 {
     pub ctx: &'a MailUserContext,
     pub pgp: &'a P,
-    pub keys: &'a UnlockedKeys<P>,
+    pub keys: &'a UnlockedAddressKeys<P>,
     pub tether: &'a mut Tether,
     pub msg_id: &'a MessageId,
     pub msg_meta: &'a MessageBodyMetadata,
@@ -54,7 +53,6 @@ where
             debug!("Getting mail key");
 
             self.keys
-                .address_keys
                 .primary_for_mail()
                 .context("Couldn't get primary key")
                 .map_err(MailContextError::Other)?
@@ -212,7 +210,7 @@ where
             self.ctx,
             MailType::Direct,
             self.pgp,
-            &self.keys.address_keys,
+            self.keys,
             prefs,
             MimeType::TextPlain,
             body,

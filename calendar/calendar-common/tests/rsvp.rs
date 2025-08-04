@@ -20,12 +20,10 @@ use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
 use proton_crypto::crypto::{KeyGeneratorAlgorithm, PGPProviderSync};
 use proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_account::keys::{
-    KeyFlag, KeyId, LocalAddressKey, LocalUserKey, UnlockedAddressKeys, UnlockedUserKeys,
+    KeyFlag, KeyId, LocalAddressKey, LocalUserKey, UnlockedAddressKeys,
 };
 use proton_crypto_account::salts::KeySalt;
-use proton_crypto_calendar::{
-    CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey, UnlockedKeys,
-};
+use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_ical as ical;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -117,7 +115,7 @@ where
     ctx: Arc<TestContext>,
     sess: Session,
     pgp: P,
-    keys: UnlockedKeys<P>,
+    address_keys: UnlockedAddressKeys<P>,
     calendar_keys: RefCell<HashMap<CalendarId, UnlockedCalendarKey<P>>>,
     cache: DummyRsvpCache,
     contacts: DummyRsvpContacts,
@@ -137,18 +135,16 @@ async fn world() -> World<impl PGPProviderSync> {
     let pgp = new_pgp_provider();
     let srp = new_srp_provider();
 
-    let user_keys = UnlockedUserKeys::from({
+    let user_key = {
         let key_secret = KeySalt::generate()
             .salted_key_passphrase(&srp, "password".as_bytes())
             .unwrap();
 
-        let key = LocalUserKey::generate(&pgp, KeyGeneratorAlgorithm::default(), &key_secret)
+        LocalUserKey::generate(&pgp, KeyGeneratorAlgorithm::default(), &key_secret)
             .unwrap()
             .unlock_and_assign_key_id(&pgp, KeyId(String::default()), &key_secret)
-            .unwrap();
-
-        vec![key]
-    });
+            .unwrap()
+    };
 
     let address_keys = UnlockedAddressKeys::from(
         LocalAddressKey::generate(
@@ -157,10 +153,10 @@ async fn world() -> World<impl PGPProviderSync> {
             KeyGeneratorAlgorithm::default(),
             KeyFlag::default(),
             true,
-            &user_keys[0],
+            &user_key,
         )
         .unwrap()
-        .unlock_and_assign_key_id(&pgp, KeyId(String::new()), &user_keys[0])
+        .unlock_and_assign_key_id(&pgp, KeyId(String::new()), &user_key)
         .unwrap(),
     );
 
@@ -168,10 +164,7 @@ async fn world() -> World<impl PGPProviderSync> {
         ctx,
         sess,
         pgp,
-        keys: UnlockedKeys {
-            user_keys,
-            address_keys,
-        },
+        address_keys,
         calendar_keys: RefCell::default(),
         cache: DummyRsvpCache,
         contacts: DummyRsvpContacts,
@@ -193,7 +186,7 @@ where
             .borrow_mut()
             .entry(CalendarId::from(id))
             .or_insert_with(|| UnlockedCalendarKey::generate(&self.pgp).unwrap())
-            .export(&self.pgp, &self.keys.address_keys[0])
+            .export(&self.pgp, &self.address_keys[0])
             .unwrap();
 
         CalendarBootstrap {
@@ -311,7 +304,7 @@ where
 
         let encryptor = match self.encryption {
             "address-key" => {
-                CalendarEventEncryptor::for_address(&self.world.pgp, &self.world.keys.address_keys)
+                CalendarEventEncryptor::for_address(&self.world.pgp, &self.world.address_keys)
                     .unwrap()
             }
 
@@ -324,7 +317,7 @@ where
 
                 CalendarEventEncryptor::for_calendar(
                     &self.world.pgp,
-                    &self.world.keys.address_keys,
+                    &self.world.address_keys,
                     calendar_key,
                 )
                 .unwrap()

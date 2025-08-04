@@ -13,7 +13,8 @@ use proton_calendar_api::{
 };
 use proton_core_api::{service::ApiServiceError, services::proton::Proton};
 use proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_calendar::{Error as CryptoError, UnlockedKeys};
+use proton_crypto_account::keys::UnlockedAddressKeys;
+use proton_crypto_calendar::Error as CryptoError;
 use proton_ical::{self as ical};
 use serde_json::Value as JsonValue;
 use std::{collections::HashMap, error::Error, fmt, num::NonZeroU32};
@@ -122,7 +123,7 @@ impl RsvpEventId {
         &self,
         api: &Proton,
         pgp: &P,
-        keys: &UnlockedKeys<P>,
+        keys: &UnlockedAddressKeys<P>,
         cache: &impl RsvpCache,
         contacts: &impl RsvpContacts,
         now: &Zoned,
@@ -187,7 +188,7 @@ impl RsvpEvent {
         &mut self,
         api: &Proton,
         pgp: &P,
-        keys: &UnlockedKeys<P>,
+        keys: &UnlockedAddressKeys<P>,
         cache: &impl RsvpCache,
         sender: M,
         now: &Zoned,

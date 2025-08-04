@@ -5,7 +5,6 @@ use anyhow::Context;
 use proton_calendar_common::{self as cal};
 use proton_core_api::services::proton::AddressId;
 use proton_core_common::models::Address;
-use proton_crypto_calendar::UnlockedKeys;
 use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -46,22 +45,10 @@ impl RsvpEventId {
 
         let pgp = proton_crypto::new_pgp_provider();
 
-        let keys = {
-            let user_keys = ctx
-                .unlocked_user_keys(&pgp, tether)
-                .await
-                .inspect_err(|err| warn!(?err, "Couldn't unlock user keys"))?;
-
-            let address_keys = ctx
-                .unlocked_address_keys(&pgp, tether, &self.address_id)
-                .await
-                .inspect_err(|err| warn!(?err, "Couldn't unlock address keys"))?;
-
-            UnlockedKeys {
-                user_keys,
-                address_keys,
-            }
-        };
+        let keys = ctx
+            .unlocked_address_keys(&pgp, tether, &self.address_id)
+            .await
+            .inspect_err(|err| warn!(?err, "Couldn't unlock address keys"))?;
 
         let cache = ctx.rsvp_cache();
         let contacts = ctx.rsvp_contacts();
