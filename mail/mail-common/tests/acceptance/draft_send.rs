@@ -3,16 +3,23 @@ use chrono::{Days, Local, Months, NaiveDate, NaiveDateTime, NaiveTime, TimeZone,
 use indoc::formatdoc;
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};
+use proton_core_api::services::proton::ContactFull;
 use proton_core_api::services::proton::common::ApiErrorInfo;
-use proton_core_api::services::proton::{Action, EventId, GetKeysAllResponse};
+use proton_core_api::services::proton::{
+    Action, ContactCard as ApiContactCard, ContactEmail as ApiContactEmail, ContactEmailId,
+    ContactId, ContactSendingPreferences as ApiContactSendingPreferences, ContactUID, EventId,
+    GetKeysAllResponse,
+};
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId, UserId};
 use proton_core_common::datatypes::UnixTimestamp;
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Contact, ModelExtension};
+use proton_crypto_account::contacts::{ContactCardType, EncryptableAndSignableCard};
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
+use proton_crypto_account::proton_crypto::new_pgp_provider;
 use proton_crypto_inbox::keys::PackageCryptoType;
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
@@ -44,7 +51,7 @@ use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserCont
 use proton_mail_common::{MailContextError, MailUserContext, draft};
 use secrecy::ExposeSecret;
 use stash::orm::Model;
-use stash::stash::Bond;
+use stash::stash::{Bond, StashError};
 use std::sync::Arc;
 use std::time::Duration;
 use velcro::hash_map;
@@ -1835,6 +1842,211 @@ async fn send_with_expiration() {
         .expect("failed to load message");
 
     assert_eq!(draft_message.expiration_time, expiration_timestamp);
+}
+
+#[tokio::test]
+async fn send_external_with_password_even_if_contact_has_pgp_mime_encryption() {
+    // We should always use password encryption even if the contact has
+    // a pgp mim encryption key.
+    let modulus = "-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\nK1PSamH/akNYFuWcErjkcbASp3Cot0Y6HfefGGbuHNKNlBTcv+SaLxZOSj8cV0A2N/NsNit7DUBiBGcKVNvk/0zSDWWFWKYcE9EPs4vSTbf/dqW5GYyIo1l8wBzIItivnTD5xQC4smJSYBIFJpVGuvtbDrDZI0xb0P+FVB5iFDTyPRE1J+ugZK+4QZczLJcv2/UG50gu9pi7R+rhYE/Q/4xCNpBZLp8mpFHpIVgj95auS2mILKkQS6xN7DyNLDuJjZF6++Qg1hxi38/d6NiFbMFgKlVHhKAFj5TPfKtVnqmlJmzeVgOCPc52cRfLRTDjEnDsoaa4MmsKC5gT9kNanQ==\n-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\nComment: https://protonmail.com\n\nwl4EARYIABAFAlwB1j4JEDUFhcTpUY8mAACghgEAotYZ/7iVaLKe52tP4CGF\nmdAAq2Dc6a7YLOnr4QLxC/8A/1UdoQQ/8PCueC41KEsrVktWSp1rB4lF4IvT\ntPvUc50G\n=+Zbf\n-----END PGP SIGNATURE-----\n";
+
+    let modulus_id =
+        "3ZJQXMBeonVrGHGEnuWG5zs0NHn8UNH8UH0TNswNWQYZJ10Fwp8vQVBGMHnmpWKmHKF6VlyMXCiMagSh8CGhkg==";
+
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let params = draft_test_params();
+    let mut message = message_body_test_message_simple();
+
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".into(),
+        is_proton: false,
+        name: "".into(),
+        group: None,
+    });
+
+    let mut sent_message = message.clone();
+
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message.metadata.label_ids.push(LabelId::sent());
+    sent_message.metadata.flags.set(MessageFlags::SENT, true);
+    sent_message.body.header = "Fancy new header".to_owned();
+
+    let mut send_params = default_mock_send_params();
+
+    send_params.packages.push(TestDraftSendPackage {
+        addresses: hash_map! {"foo@bar.com".to_string(): TestDraftSendAddressSubPackage{
+                address_type: PackageCryptoType::EncryptedOutside,
+                auth: Some(TestDraftAuthInput{modulus_id: modulus_id.to_string()}),
+        }},
+    });
+
+    let sent_conversation = ApiConversation {
+        id: message.metadata.conversation_id.clone(),
+        attachment_info: Default::default(),
+        attachments_metadata: vec![],
+        display_snoozed_reminder: false,
+        expiration_time: 0,
+        labels: vec![ConversationLabel {
+            id: LabelId::sent(),
+            context_expiration_time: 0,
+            context_num_attachments: 0,
+            context_num_messages: 1,
+            context_num_unread: 0,
+            context_size: 0,
+            context_snooze_time: 0,
+            context_time: 0,
+        }],
+        num_attachments: 0,
+        num_messages: 1,
+        subject: sent_message.metadata.subject.clone(),
+        ..ApiConversation::test_default()
+    };
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    ctx.mock_send_draft(
+        message.metadata.id.clone(),
+        send_params,
+        sent_message.clone(),
+        sent_conversation,
+        (Utc::now().timestamp() + SEND_DELAY_SECONDS as i64).unsigned_abs(),
+    )
+    .await;
+
+    ctx.core_test_context()
+        .mock_get_auth(modulus_id.to_owned(), modulus.to_owned())
+        .await;
+
+    ctx.core_test_context()
+        .mock_get_keys_all(
+            "foo@bar.com",
+            GetKeysAllResponse {
+                address_keys: Default::default(),
+                catch_all_keys: None,
+                is_proton: false,
+                proton_mx: false,
+                unverified_keys: None,
+                warnings: vec![],
+            },
+        )
+        .await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    let vcard_data = "BEGIN:VCARD\r\nVERSION:4.0\r\nITEM1.EMAIL;PREF=1:foo@bar.com\r\nFN;PREF=1:Mime \r\nUID:proton-web-9c3fda06-3426-fdef-ea4a-aa1b336b085d\r\nPRODID;VALUE=TEXT:-//ProtonMail//ProtonMail vCard 1.0.0//EN\r\nITEM1.KEY;PREF=1:data:application/pgp-keys;base64,xsFNBFzRQp0BEACqHCI6gicK4\r\n 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\r\nITEM1.X-PM-ENCRYPT:true\r\nITEM1.X-PM-SIGN:true\r\nITEM1.X-PM-SCHEME:pgp-mime\r\nEND:VCARD";
+    let encrypted_vcard = EncryptableVcardStr(vcard_data);
+
+    let mut tether = user_ctx.user_stash().connection();
+
+    let provider = new_pgp_provider();
+    let user_keys = user_ctx
+        .unlocked_user_keys(&provider, &tether)
+        .await
+        .unwrap();
+    let signature = encrypted_vcard
+        .sign_sync(&provider, user_keys.primary().unwrap())
+        .unwrap();
+
+    let api_contact = ContactFull {
+        id: ContactId::from("CONTACT"),
+        cards: vec![ApiContactCard {
+            card_type: ContactCardType::Signed,
+            data: vcard_data.into(),
+            signature: Some(signature.0),
+        }],
+        contact_emails: vec![ApiContactEmail {
+            id: ContactEmailId::from("EMAIL"),
+            contact_id: ContactId::from("CONTACT"),
+            canonical_email: "foo@bar.com".into(),
+            contact_type: Default::default(),
+            defaults: ApiContactSendingPreferences::Custom,
+            email: "foo@bar.com".into(),
+            is_proton: false,
+            label_ids: Default::default(),
+            last_used_time: Default::default(),
+            name: "".to_string(),
+            order: 0,
+        }],
+        create_time: 0,
+        label_ids: Default::default(),
+        modify_time: 0,
+        name: "".to_string(),
+        size: 0,
+        uid: ContactUID::from("UID"),
+    };
+
+    ctx.core_test_context
+        .mock_get_full_contact(api_contact.clone())
+        .await;
+
+    ctx.catch_all().await;
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut contact = Contact::from(api_contact.clone());
+            contact.save(tx).await?;
+            for email in &mut contact.contact_emails {
+                email.save(tx).await?;
+            }
+            Ok(contact)
+        })
+        .await
+        .unwrap();
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: None,
+        })
+        .unwrap();
+
+    draft
+        .set_password(&user_ctx, "password", Some("hint".into()))
+        .await
+        .unwrap();
+
+    let eo_data = draft.get_password(&user_ctx).await.unwrap().unwrap();
+    assert_eq!(eo_data.password.expose_secret(), "password");
+    assert_eq!(eo_data.password_hint.as_deref(), Some("hint"));
+
+    draft
+        .send(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
+        .await
+        .unwrap();
+
+    user_ctx.execute_all_send_actions().await.unwrap();
+}
+
+struct EncryptableVcardStr<'a>(&'a str);
+
+impl EncryptableAndSignableCard for EncryptableVcardStr<'_> {
+    fn plaintext_card_data(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
 }
 
 async fn send_fails_if_recipient_is_not_valid_impl(
