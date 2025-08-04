@@ -20,13 +20,19 @@ use addresses::{block, unblock, update_incoming_defaults};
 use anyhow::Context;
 use futures::future::{join, join_all};
 use indoc::formatdoc;
-use proton_action_queue::action::{self, FactoryError, Handler, WriterGuard, WriterGuardError};
+use proton_action_queue::action::{
+    self, ActionDependencyKey, ActionDependencyKeys, FactoryError, Handler, WriterGuard,
+    WriterGuardError,
+};
 use proton_action_queue::queue::{ActionRequeueReason, Queue};
 use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{LabelId, Proton, ProtonIdMarker};
 use proton_core_common::Origin;
 use proton_core_common::action_queue::CoreActionError;
+use proton_core_common::actions::dependency_builder::{
+    ActionDependencyKeysBuilder, LocalIdActionDepExt,
+};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
@@ -284,6 +290,19 @@ where
     }
 }
 
+impl<T> GenericActionData<T>
+where
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + LocalIdActionDepExt>,
+{
+    fn read_unread_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
+        ActionDependencyKeysBuilder::new()
+            .with_optional_many_ext(self.target_ids.iter().copied())
+            .with_required_many(mark_read_unread_action_dependency_key(
+                self.target_ids.iter().copied(),
+            ))
+    }
+}
+
 /// Convenience type which contains data common to many actions.
 /// It
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -348,6 +367,43 @@ where
         self.data.mark_rollback(item_type, tx).await?;
 
         Ok(())
+    }
+}
+
+impl<T> GenericLabelRelatedActionData<T>
+where
+    T: ModelIdExtension<IdType: LocalIdActionDepExt + Serialize + DeserializeOwned>,
+{
+    fn action_dependency_keys_builder_optional(&self) -> ActionDependencyKeysBuilder {
+        ActionDependencyKeysBuilder::new()
+            .with_optional_many_ext(self.data.target_ids.iter().copied())
+            .with_required_related(self.label_id)
+    }
+
+    fn label_unlabel_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
+        self.action_dependency_keys_builder_optional()
+            .with_required_many(label_unlabel_action_dependency_key(
+                self.data.target_ids.iter().copied(),
+            ))
+            // if there is a label as, we should execute after that
+            .with_optional_many(label_as_action_dependency_key(
+                self.data.target_ids.iter().copied(),
+            ))
+    }
+
+    fn snooze_unsnooze_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
+        self.action_dependency_keys_builder_optional()
+            .with_required_many(snooze_unsnooze_action_dependency_key(
+                self.data.target_ids.iter().copied(),
+            ))
+    }
+
+    fn read_unread_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
+        self.action_dependency_keys_builder_optional()
+            // undo if a mark-read-unread dependency chain fails
+            .with_required_many(mark_read_unread_action_dependency_key(
+                self.data.target_ids.iter().copied(),
+            ))
     }
 }
 
@@ -428,8 +484,8 @@ where
 
         for (&source_id, ids) in &self.sources {
             let source_label = Label::load(source_id, bond).await?.context(
-            "Failed to load source label. This should never happen because we have the local id.",
-        )?;
+                "Failed to load source label. This should never happen because we have the local id.",
+            )?;
 
             if [trash, spam].contains(&self.destination) {
                 // When moving to trash or spam we delete all labels except all mail.
@@ -447,10 +503,10 @@ where
                     Label::resolve_local_label_id(LabelId::almost_all_mail(), bond).await?;
                 // When moving out of Trash or Spam, add AlmostAllMail label
                 T::apply_label(almost_all_mail, ids.iter().cloned(), bond)
-                .await
-                .context(
-                    "Failed to add conversations to almost_all_mail when moving out of spam/trash",
-                )?;
+                    .await
+                    .context(
+                        "Failed to add conversations to almost_all_mail when moving out of spam/trash",
+                    )?;
             }
 
             T::apply_label(self.destination, ids.clone(), bond)
@@ -519,11 +575,30 @@ where
         RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
         Ok(())
     }
+    pub fn action_dependency_keys(&self) -> ActionDependencyKeys {
+        let mut keys =
+            ActionDependencyKeysBuilder::default().with_required_related(self.destination);
+        for (source, ids) in &self.sources {
+            // We could also potentially have several moves interlinked
+            // as a dependency where a move chain gets undoed, but it should
+            // be okay to have the conversation move to the last operation that succeeded.
+            keys = keys
+                .with_required_related(*source)
+                .with_optional_related_many(ids.iter().copied())
+                // if there is a label as, we should execute after that
+                .with_optional_many(label_as_action_dependency_key(ids.iter().copied()));
+        }
+
+        keys.build()
+    }
 }
 
 #[allow(async_fn_in_trait, reason = "not used across threads")]
 pub trait ConversationOrMessage:
-    ModelIdExtension<IdType: Copy + Hash + Eq + DeserializeOwned + Serialize, RemoteId: Display>
+    ModelIdExtension<
+        IdType: Copy + Hash + Eq + DeserializeOwned + Serialize + LocalIdActionDepExt,
+        RemoteId: Display,
+    >
 {
     const ROLLBACK_ITEM_TYPE: RollbackItemType;
 
@@ -728,6 +803,20 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
 
         (add, remove)
     }
+
+    fn action_dependency_keys(&self) -> ActionDependencyKeys {
+        let mut builder = ActionDependencyKeysBuilder::new();
+        let (add, remove) = self.segregate_label();
+
+        for (label, ids) in add.iter().chain(remove.iter()) {
+            builder = builder
+                .with_required_related(*label)
+                .with_optional_many_ext(ids.iter().copied())
+                .with_required_many(label_as_action_dependency_key(ids.iter().copied()))
+        }
+
+        builder.build()
+    }
 }
 
 pub enum Undo {
@@ -752,4 +841,32 @@ impl Undo {
 pub struct LabelAsOutput {
     pub input_label_is_empty: bool,
     pub undo: Undo,
+}
+
+fn mark_read_unread_action_dependency_key<T: LocalIdActionDepExt>(
+    ids: impl IntoIterator<Item = T>,
+) -> impl IntoIterator<Item = ActionDependencyKey> {
+    ids.into_iter()
+        .map(|id| id.to_custom_dependency_key("mail-mark-read-unread"))
+}
+
+fn label_unlabel_action_dependency_key<T: LocalIdActionDepExt>(
+    ids: impl IntoIterator<Item = T>,
+) -> impl IntoIterator<Item = ActionDependencyKey> {
+    ids.into_iter()
+        .map(|id| id.to_custom_dependency_key("mail-label-unlabel"))
+}
+
+fn snooze_unsnooze_action_dependency_key<T: LocalIdActionDepExt>(
+    ids: impl IntoIterator<Item = T>,
+) -> impl IntoIterator<Item = ActionDependencyKey> {
+    ids.into_iter()
+        .map(|id| id.to_custom_dependency_key("mail-snooze-unsnooze"))
+}
+
+fn label_as_action_dependency_key<T: LocalIdActionDepExt>(
+    ids: impl IntoIterator<Item = T>,
+) -> impl IntoIterator<Item = ActionDependencyKey> {
+    ids.into_iter()
+        .map(|id| id.to_custom_dependency_key("mail-label-as"))
 }

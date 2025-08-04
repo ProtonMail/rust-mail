@@ -1268,10 +1268,14 @@ pub async fn delete_all_messages_in_label(
 ) -> Result<(), ActionError> {
     let user_context = session.ctx()?;
     uniffi_async(async move {
-        RealMessage::action_delete_all_in_label(user_context.action_queue(), label_id.into())
-            .await
-            .map(|_| ())
-            .map_err(RealProtonMailError::from)
+        RealMessage::action_delete_all_in_label(
+            user_context.action_queue(),
+            label_id.into(),
+            &user_context.user_stash().connection(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)

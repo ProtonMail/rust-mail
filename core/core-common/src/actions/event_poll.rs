@@ -1,4 +1,6 @@
 use crate::UserContext;
+use crate::actions::dependency_builder::ActionDependencyKeysBuilder;
+use proton_action_queue::action::{ActionDependencyKey, ActionDependencyKeys};
 use proton_action_queue::{
     action::{
         self, Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
@@ -19,6 +21,13 @@ use std::sync::Weak;
 #[derive(Serialize, Deserialize)]
 pub struct EventPoll {}
 
+impl EventPoll {
+    #[must_use]
+    pub fn dependency_key() -> ActionDependencyKey {
+        ActionDependencyKey::from("event-poll")
+    }
+}
+
 impl Action for EventPoll {
     const TYPE: Type = Type("event_poll");
     const VERSION: u32 = 1;
@@ -29,6 +38,12 @@ impl Action for EventPoll {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = ActionEventLoopError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new()
+            .record(Self::dependency_key())
+            .build()
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

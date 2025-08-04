@@ -3,8 +3,11 @@ use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::models::Message;
 use crate::{AppError, MailUserContext};
 use anyhow::Context as _;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
+};
 use proton_action_queue::action::{ActionId, Handler};
+use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -37,6 +40,12 @@ impl Action for ReportPhishing {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new()
+            .with_optional_ext(self.message_id)
+            .build()
+    }
 }
 
 pub struct ReportPhishingHandler {

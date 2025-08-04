@@ -3,7 +3,9 @@ use crate::actions::{
 };
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
+};
 use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::consts::General;
 use proton_core_api::services::proton::Proton;
@@ -31,6 +33,10 @@ impl Action for Read {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        self.0.read_unread_action_dependency_keys().build()
+    }
 }
 
 pub struct ReadHandler {

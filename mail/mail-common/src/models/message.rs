@@ -2387,11 +2387,12 @@ impl Message {
     pub async fn action_delete_all_in_label(
         queue: &Queue,
         label_id: LocalLabelId,
+        tether: &Tether,
     ) -> Result<
         QueuedActionOutput<DeleteAllMessagesInLabel>,
         QueueActionError<DeleteAllMessagesInLabel>,
     > {
-        let action = DeleteAllMessagesInLabel::new(label_id);
+        let action = DeleteAllMessagesInLabel::new(label_id, tether).await?;
         queue.queue_action(action).await
     }
 

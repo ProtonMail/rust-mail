@@ -5,7 +5,7 @@ use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use itertools::Itertools;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::consts::General;
 use proton_core_api::services::proton::Proton;
@@ -33,6 +33,10 @@ impl Action for Unread {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        self.0.read_unread_action_dependency_keys().build()
+    }
 }
 
 pub struct UnreadHandler {

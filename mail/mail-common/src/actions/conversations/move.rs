@@ -3,7 +3,7 @@ use crate::actions::{ActionMoveData, MailActionError};
 use crate::models::Conversation;
 use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::Proton;
@@ -21,6 +21,10 @@ impl Action for Move {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        self.0.action_dependency_keys()
+    }
 }
 
 pub struct MoveHandler {

@@ -1,8 +1,12 @@
 use crate::actions::MailActionError;
+use crate::actions::addresses::incoming_defaults_dependency_key;
 use crate::models::default_location::IncomingDefaultLocation;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
+};
 use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::{PrivateEmail, Proton};
+use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use serde::{Deserialize, Serialize};
@@ -23,6 +27,12 @@ impl Action for Block {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new()
+            .with_required(incoming_defaults_dependency_key(&self.email))
+            .build()
+    }
 }
 
 pub struct BlockHandler {

@@ -350,7 +350,7 @@ async fn message_action_ham() {
         assert!(messages[0].flags.contains(MessageFlags::HAM_MANUAL));
     }
 
-    Message::action_delete_all_in_label(user_context.action_queue(), local_inbox)
+    Message::action_delete_all_in_label(user_context.action_queue(), local_inbox, &tether)
         .await
         .unwrap();
 
