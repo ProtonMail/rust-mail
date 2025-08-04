@@ -227,7 +227,8 @@ mod tests {
                     {
                         "ID": "qyomV2nX",
                         "Name": "My calendar",
-                        "Color": "#273EB2"
+                        "Color": "#273EB2",
+                        "AddressID": "pTF47iZy"
                     }
                 ]
             }
@@ -252,6 +253,7 @@ mod tests {
                 id: "qyomV2nX".into(),
                 name: "My calendar".into(),
                 color: "#273EB2".into(),
+                address_id: "pTF47iZy".into(),
             }],
         };
 

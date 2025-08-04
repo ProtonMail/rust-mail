@@ -6,7 +6,9 @@ use indoc::indoc;
 use jiff::{Zoned, civil::Weekday};
 use pretty_assertions as pa;
 use proton_calendar_api::ProtonCalendarMock;
-use proton_calendar_common::{RsvpError, RsvpEventId, RsvpIntent, RsvpProgress, RsvpRecency};
+use proton_calendar_common::{
+    RsvpError, RsvpEventId, RsvpFetchError, RsvpIntent, RsvpProgress, RsvpRecency,
+};
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::MockApiEnv;
 use std::str::FromStr;
@@ -472,7 +474,10 @@ async fn party_crasher() {
         .await
         .unwrap_err();
 
-    assert!(matches!(actual, RsvpError::NotInvited));
+    assert!(matches!(
+        actual,
+        RsvpFetchError::Rsvp(RsvpError::NotInvited)
+    ));
 }
 
 #[tokio::test]
@@ -519,7 +524,10 @@ async fn err_unknown_attendee() {
         .unwrap_err();
 
     // Attendee `zar@pm.me` is not present in the `CalendarEvent`
-    assert_eq!(RsvpError::UnknownAttendee.to_string(), actual.to_string());
+    assert!(matches!(
+        actual,
+        RsvpFetchError::Rsvp(RsvpError::UnknownAttendee),
+    ));
 }
 
 #[tokio::test]
@@ -563,10 +571,10 @@ async fn err_missing_x_pm_token() {
         .await
         .unwrap_err();
 
-    assert_eq!(
-        RsvpError::AttendeeHasNoXPmToken.to_string(),
-        actual.to_string()
-    );
+    assert!(matches!(
+        actual,
+        RsvpFetchError::Rsvp(RsvpError::AttendeeHasNoXPmToken),
+    ));
 }
 
 #[tokio::test]
@@ -612,8 +620,8 @@ async fn err_many_events_in_ics() {
         .await
         .unwrap_err();
 
-    assert_eq!(
-        RsvpError::IcsContainsMoreThanOneEvent.to_string(),
-        actual.to_string()
-    );
+    assert!(matches!(
+        actual,
+        RsvpFetchError::Rsvp(RsvpError::IcsContainsMoreThanOneEvent),
+    ));
 }

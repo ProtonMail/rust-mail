@@ -1,7 +1,7 @@
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCache, RsvpCalendar,
-    RsvpContacts, RsvpError, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence, RsvpOrganizer,
-    RsvpProgress, RsvpRecency, RsvpRecurrence, RsvpResult,
+    RsvpContacts, RsvpError, RsvpEvent, RsvpEventId, RsvpFetchError, RsvpFetchResult, RsvpIntent,
+    RsvpKeys, RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency, RsvpRecurrence, RsvpResult,
 };
 use itertools::{Either, Itertools};
 use jiff::{
@@ -14,25 +14,26 @@ use proton_calendar_api::{
 use proton_canonical_email::{self as email, CanonicalEmail};
 use proton_core_api::services::proton::Proton;
 use proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_calendar::{CalendarEventDecryptor, UnlockedKeys};
+use proton_crypto_calendar::CalendarEventDecryptor;
 use proton_ical as ical;
 use std::{collections::HashMap, num::NonZeroU32};
 use tracing::{debug, info, instrument, warn};
 
 #[allow(clippy::too_many_arguments)]
-pub(super) async fn run<P>(
+pub(super) async fn run<P, K>(
     api: &Proton,
     pgp: &P,
-    keys: &UnlockedKeys<P>,
+    keys: &K,
     cache: &impl RsvpCache,
     contacts: &impl RsvpContacts,
     now: &Zoned,
     email: &str,
     week_start: Weekday,
     id: &RsvpEventId,
-) -> RsvpResult<Option<RsvpEvent>>
+) -> RsvpFetchResult<Option<RsvpEvent>, K>
 where
     P: PGPProviderSync,
+    K: RsvpKeys,
 {
     let fetched = match fetch(api, cache, id).await {
         Ok(fetched) => fetched,
@@ -43,20 +44,26 @@ where
         }
 
         Err(err) => {
-            return Err(err);
+            return Err(RsvpFetchError::Rsvp(err));
         }
     };
 
+    let addr_keys;
     let decryptor;
     let calendar;
     let event;
     let children;
 
     if let Some(fetched) = fetched {
+        addr_keys = keys
+            .get_address_keys(pgp, &fetched.calendar.member().address_id)
+            .await
+            .map_err(RsvpFetchError::Keys)?;
+
         decryptor = Some(
             fetched
                 .calendar
-                .create_decryptor(pgp, keys, &fetched.event)?,
+                .create_decryptor(pgp, &addr_keys, &fetched.event)?,
         );
 
         calendar = Some(fetched.calendar);
@@ -101,6 +108,7 @@ where
     )
     .await
     .map(Some)
+    .map_err(RsvpFetchError::from)
 }
 
 #[instrument(skip_all)]

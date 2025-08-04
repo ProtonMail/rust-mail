@@ -12,7 +12,7 @@ use anyhow::Context;
 use proton_calendar_common as cal;
 use proton_core_api::services::proton::{PrivateEmailRef, PrivateString};
 use proton_crypto_account::keys::PrimaryUnlockedAddressKey;
-use proton_crypto_calendar::UnlockedKeys;
+use proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_inbox::attachment::{EncryptableAttachment, EncryptedAttachment};
 use proton_crypto_inbox::message::EncryptableDraft;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -28,22 +28,22 @@ use tracing::debug;
 use tracing::error;
 use tracing::warn;
 
-pub(crate) struct RsvpMailSender<'a, P>
+pub(crate) struct RsvpMail<'a, P>
 where
     P: PGPProviderSync,
 {
     pub ctx: &'a MailUserContext,
     pub pgp: &'a P,
-    pub keys: &'a UnlockedKeys<P>,
     pub tether: &'a mut Tether,
     pub msg_id: &'a MessageId,
     pub msg_meta: &'a MessageBodyMetadata,
     pub msg_subject: &'a str,
+    pub addr_keys: &'a UnlockedAddressKeys<P>,
     pub addr_email: &'a str,
     pub addr_display_name: &'a str,
 }
 
-impl<P> cal::RsvpMailSender for RsvpMailSender<'_, P>
+impl<P> cal::RsvpMail for RsvpMail<'_, P>
 where
     P: PGPProviderSync,
 {
@@ -53,8 +53,7 @@ where
         let key = {
             debug!("Getting mail key");
 
-            self.keys
-                .address_keys
+            self.addr_keys
                 .primary_for_mail()
                 .context("Couldn't get primary key")
                 .map_err(MailContextError::Other)?
@@ -123,7 +122,7 @@ where
     }
 }
 
-impl<P> RsvpMailSender<'_, P>
+impl<P> RsvpMail<'_, P>
 where
     P: PGPProviderSync,
 {
@@ -212,7 +211,7 @@ where
             self.ctx,
             MailType::Direct,
             self.pgp,
-            &self.keys.address_keys,
+            self.addr_keys,
             prefs,
             MimeType::TextPlain,
             body,

@@ -96,9 +96,11 @@ impl RsvpEventService {
         uniffi_async(async move {
             let ctx = self.ctx()?;
             let mut tether = ctx.user_stash().connection();
+            let tether2 = ctx.user_stash().connection();
             let mut rsvp = self.rsvp.lock().clone();
 
-            rsvp.answer(&ctx, &mut tether, answer.into()).await?;
+            rsvp.answer(&ctx, &mut tether, &tether2, answer.into())
+                .await?;
 
             *self.rsvp.lock() = rsvp;
 
