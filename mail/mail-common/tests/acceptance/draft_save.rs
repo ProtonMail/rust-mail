@@ -21,7 +21,9 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::compose::DraftAddressValidationError;
-use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode, SaveError};
+use proton_mail_common::draft::{
+    Draft, DraftExpirationTime, DraftSyncStatus, Error, OpenError, ReplyMode, SaveError,
+};
 use proton_mail_common::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
     DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata, RollbackItem,
@@ -1429,7 +1431,7 @@ async fn open_draft_resets_password() {
 
     assert!(metadata.password_hint.is_none());
     assert!(metadata.password.is_none());
-    assert!(metadata.expiration_time.is_none());
+    assert_eq!(metadata.expiration_time(), DraftExpirationTime::Never);
 }
 
 #[tokio::test]

@@ -1,3 +1,4 @@
+use chrono::{DateTime, TimeZone};
 use proton_core_common::datatypes::UnixTimestamp as RealTimestamp;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -14,5 +15,10 @@ impl From<RealTimestamp> for UnixTimestamp {
 impl From<UnixTimestamp> for RealTimestamp {
     fn from(t: UnixTimestamp) -> Self {
         Self::new(t.0)
+    }
+}
+impl<Tz: TimeZone> From<DateTime<Tz>> for UnixTimestamp {
+    fn from(value: DateTime<Tz>) -> Self {
+        RealTimestamp::from(value).into()
     }
 }

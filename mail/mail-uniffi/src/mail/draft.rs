@@ -21,8 +21,9 @@ use crate::{async_runtime, uniffi_async};
 use chrono::Local;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::draft::{
-    Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, EoData, ReplyMode,
-    ScheduleSendOptions, compose::DraftAddressValidationError as RealDraftAddressValidationError,
+    Draft as RealDraft, DraftExpirationTime as RealDraftExpirationTime,
+    DraftSyncStatus as RealDraftSyncStatus, EoData, ReplyMode, ScheduleSendOptions,
+    compose::DraftAddressValidationError as RealDraftAddressValidationError,
     compose::DraftAddressValidationResult as RealDraftAddressValidationResult,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -741,13 +742,9 @@ impl Draft {
     #[returns(VoidDraftExpirationResult)]
     pub async fn set_expiration_time(
         self: Arc<Self>,
-        expiration_time: UnixTimestamp,
+        expiration_time: DraftExpirationTime,
     ) -> Result<(), DraftExpirationError> {
-        let expiration_time = proton_core_common::datatypes::UnixTimestamp::from(expiration_time)
-            .to_date_time()
-            .ok_or(DraftExpirationError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )))?;
+        let expiration_time = RealDraftExpirationTime::try_from(expiration_time)?;
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(DraftExpirationError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
@@ -757,7 +754,7 @@ impl Draft {
             let instance = self.instance.read().await;
             let mut tether = ctx.user_stash().connection();
             instance
-                .set_expiration_time(&mut tether, expiration_time)
+                .set_expiration_time(&mut tether, expiration_time.into())
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -768,29 +765,7 @@ impl Draft {
         .into()
     }
 
-    #[returns(VoidDraftExpirationResult)]
-    pub async fn remove_expiration_time(self: Arc<Self>) -> Result<(), DraftExpirationError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftExpirationError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
-        uniffi_async(async move {
-            let instance = self.instance.read().await;
-            let mut tether = ctx.user_stash().connection();
-            instance
-                .remove_expiration_time(&mut tether)
-                .await
-                .map_err(RealProtonMailError::from)?;
-
-            Result::<_, RealProtonMailError>::Ok(())
-        })
-        .await
-        .map_err(DraftExpirationError::from)
-        .into()
-    }
-
-    pub fn expiration_time(&self) -> Result<Option<UnixTimestamp>, ProtonError> {
+    pub fn expiration_time(&self) -> Result<DraftExpirationTime, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
@@ -800,7 +775,7 @@ impl Draft {
             instance
                 .expiration_time(&tether)
                 .await
-                .map(|v| v.map(Into::into))
+                .map(Into::into)
                 .map_err(RealProtonMailError::from)
         })?)
     }
@@ -916,4 +891,46 @@ async fn save_draft(ctx: &MailUserContext, draft: &mut RealDraft) -> Result<(), 
         )
         .await?;
     Ok(())
+}
+
+#[derive(Debug, uniffi::Enum)]
+pub enum DraftExpirationTime {
+    Never,
+    OneHour,
+    OneDay,
+    ThreeDays,
+    Custom(UnixTimestamp),
+}
+
+impl From<RealDraftExpirationTime> for DraftExpirationTime {
+    fn from(value: RealDraftExpirationTime) -> Self {
+        match value {
+            RealDraftExpirationTime::Never => DraftExpirationTime::Never,
+            RealDraftExpirationTime::OneHour => DraftExpirationTime::OneHour,
+            RealDraftExpirationTime::OneDay => DraftExpirationTime::OneDay,
+            RealDraftExpirationTime::ThreeDays => DraftExpirationTime::ThreeDays,
+            RealDraftExpirationTime::Custom(dt) => DraftExpirationTime::Custom(dt.into()),
+        }
+    }
+}
+
+impl TryFrom<DraftExpirationTime> for RealDraftExpirationTime {
+    type Error = DraftExpirationError;
+
+    fn try_from(value: DraftExpirationTime) -> Result<Self, Self::Error> {
+        match value {
+            DraftExpirationTime::Never => Ok(RealDraftExpirationTime::Never),
+            DraftExpirationTime::OneHour => Ok(RealDraftExpirationTime::OneHour),
+            DraftExpirationTime::OneDay => Ok(RealDraftExpirationTime::OneDay),
+            DraftExpirationTime::ThreeDays => Ok(RealDraftExpirationTime::ThreeDays),
+            DraftExpirationTime::Custom(timestamp) => {
+                let expiration_time = proton_core_common::datatypes::UnixTimestamp::from(timestamp)
+                    .to_date_time()
+                    .ok_or(DraftExpirationError::Other(ProtonError::Unexpected(
+                        UnexpectedError::Internal,
+                    )))?;
+                Ok(RealDraftExpirationTime::Custom(expiration_time))
+            }
+        }
+    }
 }

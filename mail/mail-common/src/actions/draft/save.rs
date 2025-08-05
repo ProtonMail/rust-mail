@@ -244,7 +244,7 @@ impl Handler for SaveHandler {
                 attachment_metadata.clone(),
                 attachments.len() as u64,
                 action.subject.clone(),
-                metadata.expiration_time(),
+                metadata.expiration_time().to_timestamp(),
             );
 
             conversation
@@ -284,7 +284,7 @@ impl Handler for SaveHandler {
                 attachment_metadata,
                 body_len,
                 time,
-                metadata.expiration_time(),
+                metadata.expiration_time().to_timestamp(),
             );
 
             message.save(bond).await.inspect_err(|e| {
@@ -321,7 +321,7 @@ impl Handler for SaveHandler {
                 body_len,
                 time,
                 display_order,
-                metadata.expiration_time(),
+                metadata.expiration_time().to_timestamp(),
             );
 
             message.local_conversation_id = Some(conversation_id);

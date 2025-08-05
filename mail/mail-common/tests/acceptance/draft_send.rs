@@ -34,10 +34,10 @@ use proton_mail_api::services::proton::response_data::{
 };
 use proton_mail_common::datatypes::LocalMessageId;
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
-use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
 use proton_mail_common::draft::observers::{DraftSendResultWatcher, DraftSendResultWatcherMode};
 use proton_mail_common::draft::recipients::RecipientEntry;
+use proton_mail_common::draft::{Draft, DraftExpirationTime};
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendFailureSend, DraftSendResult, DraftSendResultOrigin, MailSettings,
     Message, MessageBodyMetadata,
@@ -1797,7 +1797,7 @@ async fn send_with_expiration() {
         .unwrap();
 
     draft
-        .set_expiration_time(&mut tether, expiration_time)
+        .set_expiration_time(&mut tether, DraftExpirationTime::Custom(expiration_time))
         .await
         .unwrap();
 

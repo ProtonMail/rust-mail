@@ -8,7 +8,8 @@ use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{LocalAttachmentId, LocalConversationId};
 use crate::draft::send::EoData;
 use crate::draft::{
-    AttachmentUploadError, Error, PackageError, PasswordError, ReplyMode, SaveError, SendError,
+    AttachmentUploadError, DraftExpirationTime, Error, PackageError, PasswordError, ReplyMode,
+    SaveError, SendError,
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
@@ -103,7 +104,7 @@ pub struct DraftMetadata {
 
     #[builder(default, setter(strip_option))]
     #[DbField]
-    pub expiration_time: Option<UnixTimestamp>,
+    expiration_time: Option<UnixTimestamp>,
 
     #[builder(default, setter(strip_option))]
     #[DbField]
@@ -112,6 +113,10 @@ pub struct DraftMetadata {
     #[builder(default, setter(strip_option))]
     #[DbField]
     pub password_hint: Option<String>,
+
+    #[DbField]
+    #[builder(default)]
+    expiration_option: DraftExpirationOption,
 }
 
 impl DraftMetadata {
@@ -132,6 +137,7 @@ impl DraftMetadata {
             expiration_time: None,
             password: None,
             password_hint: None,
+            expiration_option: DraftExpirationOption::Never,
         };
 
         metadata.save(bond).await?;
@@ -161,11 +167,27 @@ impl DraftMetadata {
             expiration_time: None,
             password: None,
             password_hint: None,
+            expiration_option: DraftExpirationOption::Never,
         };
 
         metadata.save(bond).await?;
 
         Ok(metadata)
+    }
+    pub fn with_ids(message_id: LocalMessageId, conversation_id: LocalConversationId) -> Self {
+        Self {
+            id: None,
+            local_message_id: Some(message_id),
+            local_conversation_id: Some(conversation_id),
+            local_parent_id: None,
+            reply_mode: None,
+            send_action_id: None,
+            save_action_id: None,
+            expiration_time: None,
+            password: None,
+            password_hint: None,
+            expiration_option: DraftExpirationOption::Never,
+        }
     }
 
     /// Find metadata with `id`.
@@ -343,8 +365,46 @@ impl DraftMetadata {
         }))
     }
 
-    pub fn expiration_time(&self) -> UnixTimestamp {
-        self.expiration_time.unwrap_or(UnixTimestamp::new(0))
+    pub fn expiration_time(&self) -> DraftExpirationTime {
+        match self.expiration_option {
+            DraftExpirationOption::Never => DraftExpirationTime::Never,
+            DraftExpirationOption::OneHour => DraftExpirationTime::OneHour,
+            DraftExpirationOption::OneDay => DraftExpirationTime::OneDay,
+            DraftExpirationOption::ThreeDays => DraftExpirationTime::ThreeDays,
+            DraftExpirationOption::Custom => self
+                .expiration_time
+                .map(|v| {
+                    v.to_date_time()
+                        .map(DraftExpirationTime::Custom)
+                        .unwrap_or(DraftExpirationTime::Never)
+                })
+                .unwrap_or(DraftExpirationTime::Never),
+        }
+    }
+
+    pub fn set_expiration_time(&mut self, expiration: DraftExpirationTime) {
+        match expiration {
+            DraftExpirationTime::Never => {
+                self.expiration_time = None;
+                self.expiration_option = DraftExpirationOption::Never;
+            }
+            DraftExpirationTime::OneHour => {
+                self.expiration_time = None;
+                self.expiration_option = DraftExpirationOption::OneHour;
+            }
+            DraftExpirationTime::OneDay => {
+                self.expiration_time = None;
+                self.expiration_option = DraftExpirationOption::OneDay;
+            }
+            DraftExpirationTime::ThreeDays => {
+                self.expiration_time = None;
+                self.expiration_option = DraftExpirationOption::ThreeDays;
+            }
+            DraftExpirationTime::Custom(v) => {
+                self.expiration_time = Some(v.into());
+                self.expiration_option = DraftExpirationOption::Custom;
+            }
+        }
     }
 }
 
@@ -1313,5 +1373,30 @@ impl TableObserver for DraftAttachmentMetadataTableObserver {
                 )
             })
             .ok();
+    }
+}
+
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, TryFrom)]
+#[try_from(repr)]
+#[repr(u8)]
+pub enum DraftExpirationOption {
+    #[default]
+    Never = 0,
+    OneHour = 1,
+    OneDay = 2,
+    ThreeDays = 3,
+    Custom = 4,
+}
+
+impl ToSql for DraftExpirationOption {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::from(*self as u8)))
+    }
+}
+
+impl FromSql for DraftExpirationOption {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
