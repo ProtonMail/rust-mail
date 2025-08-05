@@ -1256,6 +1256,20 @@ macro_rules! declare_local_id {
         impl $crate::datatypes::LocalIdMarker for $name {
             type Counterpart = $remote_id;
         }
+
+        impl $crate::actions::dependency_builder::LocalIdActionDepExt for $name {
+            fn to_dependency_key(&self) -> ::proton_action_queue::action::ActionDependencyKey {
+                ::proton_action_queue::action::ActionDependencyKey::from(format!("dep-{}-{}",stringify!($name), self.0))
+            }
+
+            fn to_create_dependency_key(&self) -> ::proton_action_queue::action::ActionDependencyKey {
+                ::proton_action_queue::action::ActionDependencyKey::from(format!("create-{}-{}",stringify!($name), self.0))
+            }
+
+            fn to_custom_dependency_key(&self, prefix:&str) -> ::proton_action_queue::action::ActionDependencyKey {
+                ::proton_action_queue::action::ActionDependencyKey::from(format!("{prefix}-{}-{}",stringify!($name), self.0))
+            }
+        }
     };
 }
 

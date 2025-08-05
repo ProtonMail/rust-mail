@@ -3,7 +3,7 @@ use crate::datatypes::{LocalConversationId, RollbackItemType};
 use crate::models::{Conversation, ConversationLabel, RollbackItem};
 use itertools::Itertools;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel, UnixTimestamp};
@@ -39,6 +39,12 @@ impl Action for Unsnooze {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        self.action_data
+            .snooze_unsnooze_action_dependency_keys()
+            .build()
+    }
 }
 
 pub struct UnsnoozeHandler {

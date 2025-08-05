@@ -1,8 +1,11 @@
 use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
+};
 use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::Proton;
+use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -18,6 +21,10 @@ impl Action for SyncIncomingDefaults {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new().build()
+    }
 }
 
 pub struct SyncIncomingDefaultsHandler {

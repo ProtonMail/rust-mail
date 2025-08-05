@@ -2,9 +2,12 @@ use crate::datatypes::RollbackItemType;
 use crate::models::RollbackItem;
 use crate::{AppError, actions::MailActionError};
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::services::proton::{LabelId, Proton};
+use proton_core_common::actions::dependency_builder::{
+    ActionDependencyKeysBuilder, LocalIdActionDepExt,
+};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
@@ -49,6 +52,13 @@ impl Action for Expand {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new()
+            .with_required_related(self.local_id)
+            .with_required(self.local_id.to_custom_dependency_key("mail-label-expand"))
+            .build()
+    }
 }
 
 pub struct ExpandHandler {

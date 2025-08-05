@@ -2,9 +2,12 @@ use crate::actions::MailActionError;
 use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType, SystemLabelId};
 use crate::models::{Message, RollbackItem};
 use futures::future::try_join_all;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
+};
 use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::{LabelId, Proton};
+use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -36,6 +39,12 @@ impl Action for Ham {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new()
+            .with_optional_many_ext(self.0.iter().copied())
+            .build()
+    }
 }
 
 pub struct HamHandler {

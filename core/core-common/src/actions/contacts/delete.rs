@@ -1,8 +1,9 @@
 use crate::CoreContextError;
+use crate::actions::dependency_builder::ActionDependencyKeysBuilder;
 use crate::datatypes::LocalContactId;
 use crate::models::{Contact, ModelExtension, ModelIdExtension};
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::services::proton::{ContactId, Proton};
 use serde::{Deserialize, Serialize};
@@ -33,6 +34,12 @@ impl Action for Delete {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = CoreContextError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new()
+            .with_optional_many_ext(self.local_ids.iter().copied())
+            .build()
+    }
 }
 
 pub struct DeleteHandler {

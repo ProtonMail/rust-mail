@@ -599,7 +599,13 @@ fn delete_all(ctx: Arc<MailUserContext>, id: LocalLabelId) -> Command<Messages> 
             "Are you sure you wish to permanently delete all messages of this folder?",
         )
         .on_accept(Command::task(async move {
-            match MailMessage::action_delete_all_in_label(ctx.action_queue(), id).await {
+            match MailMessage::action_delete_all_in_label(
+                ctx.action_queue(),
+                id,
+                &ctx.user_stash().connection(),
+            )
+            .await
+            {
                 Ok(_) => Command::None,
                 Err(e) => {
                     let e = anyhow!("Failed to delete all in label: {e}");

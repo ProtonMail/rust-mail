@@ -1,7 +1,9 @@
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
+};
 use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
@@ -32,6 +34,10 @@ impl Action for Label {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        self.0.label_unlabel_action_dependency_keys().build()
+    }
 }
 
 pub struct LabelHandler {

@@ -2,14 +2,15 @@ use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
 use crate::models::Message;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::services::proton::Proton;
+use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension as _};
 use proton_mail_api::services::proton::ProtonMail as _;
 use serde::{Deserialize, Serialize};
-use stash::stash::Bond;
+use stash::stash::{Bond, StashError, Tether};
 use std::mem;
 use tracing::{error, info};
 
@@ -20,11 +21,12 @@ pub struct DeleteAllMessagesInLabel {
 }
 
 impl DeleteAllMessagesInLabel {
-    pub fn new(local_id: LocalLabelId) -> Self {
-        Self {
+    pub async fn new(local_id: LocalLabelId, tether: &Tether) -> Result<Self, StashError> {
+        let ids = Message::ids_in_label(local_id, tether).await?;
+        Ok(Self {
             local_id,
-            ids_for_rollback: vec![],
-        }
+            ids_for_rollback: ids,
+        })
     }
 }
 
@@ -37,6 +39,13 @@ impl Action for DeleteAllMessagesInLabel {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new()
+            .with_required_related(self.local_id)
+            .with_required_many_ext(self.ids_for_rollback.iter().copied())
+            .build()
+    }
 }
 
 pub struct DeleteAllMessagesInLabelHandler {
@@ -52,10 +61,7 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let ids = Message::ids_in_label(action.local_id, tx).await?;
-
-        Message::mark_deleted(ids.clone(), tx).await?;
-        action.ids_for_rollback = ids;
+        Message::mark_deleted(action.ids_for_rollback.clone(), tx).await?;
 
         Ok(())
     }

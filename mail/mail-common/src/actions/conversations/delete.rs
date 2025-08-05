@@ -4,7 +4,7 @@ use crate::datatypes::LocalConversationId;
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
@@ -34,6 +34,10 @@ impl Action for Delete {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        self.0.action_dependency_keys_builder_optional().build()
+    }
 }
 
 pub struct DeleteHandler {

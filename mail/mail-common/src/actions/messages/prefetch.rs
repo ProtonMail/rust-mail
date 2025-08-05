@@ -3,8 +3,10 @@ use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
 use crate::models::Message;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Priority, Type,
+    WriterGuard,
 };
+use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
@@ -32,6 +34,10 @@ impl Action for Prefetch {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new().build()
+    }
 }
 
 pub struct PrefetchHandler {
