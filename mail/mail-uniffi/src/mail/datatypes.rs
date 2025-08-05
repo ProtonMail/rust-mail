@@ -956,7 +956,11 @@ impl From<ContextualConversation> for Conversation {
             size: value.size,
             is_starred: value.is_starred,
             subject: value.subject,
-            time: value.time.into(),
+            time: if value.display_snooze_reminder {
+                value.snooze_time.into()
+            } else {
+                value.time.into()
+            },
             snoozed_until: value.snoozed_until.map(Into::into),
             avatar: avatar.into(),
         }
