@@ -54,7 +54,7 @@ async fn main() {
         session.clone(),
         ChallengeInfo::default(),
         Box::new(NoopMigrationSnooper),
-        Box::new(DefaultPostLoginValidator::new(None, context)),
+        Box::new(DefaultPostLoginValidator::new(Some(2), context)),
     );
     login_flow
         .login_with_credentials(user_email, user_password, None)

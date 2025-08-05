@@ -42,7 +42,10 @@ async fn main() {
 
     let migration_snooper = Box::new(NoopMigrationSnooper);
 
-    let post_login_validator = Box::new(DefaultPostLoginValidator::new(None, Arc::clone(&context)));
+    let post_login_validator = Box::new(DefaultPostLoginValidator::new(
+        Some(2),
+        Arc::clone(&context),
+    ));
 
     let mut login_flow = LoginFlow::new(
         session.clone(),
