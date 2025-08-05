@@ -44,7 +44,6 @@ use proton_mail_api::services::proton::response_data::OperationResult;
 use proton_sqlite3::rusqlite::ToSql;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use stash::exports::FromSql;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
 use stash::utils::MapToSql;
@@ -651,7 +650,7 @@ pub trait ConversationOrMessage:
 
         let mut labels_and_messages: Vec<(LocalLabelId, Vec<Self::IdType>)> = bond
             .do_query(
-                Self::remove_all_labels_except_all_mail_query(ids.len()),
+                Self::grouped_labels_and_messages_query(ids.len()),
                 ids.to_sql(),
                 |rows| {
                     rows.map(|x| {
@@ -718,7 +717,7 @@ pub trait ConversationOrMessage:
         Ok(res)
     }
 
-    fn remove_all_labels_except_all_mail_query(placeholders: usize) -> String;
+    fn grouped_labels_and_messages_query(placeholders: usize) -> String;
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]

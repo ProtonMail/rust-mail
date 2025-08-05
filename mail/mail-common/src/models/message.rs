@@ -2418,7 +2418,7 @@ impl ConversationOrMessage for Message {
         Self::mark_read_or_unread(true, ids, bond).await
     }
 
-    fn remove_all_labels_except_all_mail_query(placeholders: usize) -> String {
+    fn grouped_labels_and_messages_query(placeholders: usize) -> String {
         formatdoc! {"
             SELECT 
                 local_label_id,

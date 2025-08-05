@@ -5,10 +5,8 @@ mod conversations;
 use super::network::split_request;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::r#move::UndoMoveToConversations;
-use crate::actions::conversations::{
-    Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel, Unsnooze,
-};
 use crate::actions::conversations::{LabelAs, Snooze};
+use crate::actions::conversations::{MarkRead, MarkUnread, Move, Unsnooze};
 use crate::actions::{
     ActionMoveData, ConversationAction, ConversationAvailableActions, ConversationOrMessage,
     LabelAsAction, LabelAsData, LabelAsOutput, LabelPair, MailActionError, MoveAction,
@@ -2760,7 +2758,7 @@ impl ConversationOrMessage for Conversation {
         Self::mark_read(ids, bond).await
     }
 
-    fn remove_all_labels_except_all_mail_query(placeholders: usize) -> String {
+    fn grouped_labels_and_messages_query(placeholders: usize) -> String {
         formatdoc! {"
             SELECT 
                 local_label_id,
