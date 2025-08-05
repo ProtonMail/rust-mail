@@ -17,11 +17,11 @@ use crate::actions::{
 use crate::mail_scroller::ScrollerEq;
 use crate::models::*;
 use crate::{MailContextError, find_in_query};
-use anyhow::bail;
 use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::enqueue;
+use proton_action_queue::queue::MultiActionError;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_api::services::proton::prelude::DirectAttachment;
@@ -345,17 +345,20 @@ impl Message {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn action_ham(queue: &Queue, message_ids: Vec<LocalMessageId>) -> anyhow::Result<()> {
+    pub async fn action_ham(
+        queue: &Queue,
+        message_ids: Vec<LocalMessageId>,
+    ) -> Result<(), MultiActionError> {
         let tether = &queue.stash().connection();
-        let inbox = Label::resolve_local_label_id(LabelId::inbox(), tether).await?;
+        let inbox = Label::resolve_local_label_id(LabelId::inbox(), tether)
+            .await
+            .context("inbox doesn't exist?")?;
 
-        let Some(move_action) =
-            ActionMoveData::new(tether, inbox, message_ids.iter().copied()).await?
-        else {
-            bail!("No input")
-        };
+        let move_action = ActionMoveData::new(tether, inbox, message_ids.iter().copied())
+            .await?
+            .context("No input")?;
 
-        _ = enqueue!(queue, [Move(move_action), Ham::new(message_ids)]);
+        let _id = enqueue!(queue, [Move(move_action), Ham::new(message_ids)])?;
 
         Ok(())
     }
@@ -373,10 +376,10 @@ impl Message {
     ) -> anyhow::Result<()> {
         let spam = Label::resolve_local_label_id(LabelId::spam(), tether).await?;
 
-        let Some(move_action) = ActionMoveData::new(tether, spam, [message_id]).await? else {
-            bail!("No input")
-        };
-        _ = enqueue!(queue, [Move(move_action), ReportPhishing::new(message_id)]);
+        let move_action = ActionMoveData::new(tether, spam, [message_id])
+            .await?
+            .context("No input")?;
+        let _id = enqueue!(queue, [Move(move_action), ReportPhishing::new(message_id)])?;
 
         Ok(())
     }

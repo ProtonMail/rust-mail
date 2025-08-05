@@ -7,14 +7,7 @@ use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::{Conversation, ConversationCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
-<<<<<<< HEAD
-    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, MetadataBuilder,
-    Type, WriterGuard,
-||||||| parent of fe11eed69 (refactor*: Cleanup actions)
-    Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
-=======
-    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
->>>>>>> fe11eed69 (refactor*: Cleanup actions)
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
@@ -111,7 +104,7 @@ impl UndoLabelAsConversations {
             if let Some(move_action_data) =
                 ActionMoveData::new(tether, action.0.source_label_id, all).await?
             {
-                _ = enqueue!(queue, [action, MoveAction(move_action_data)])?;
+                let _id = enqueue!(queue, [action, MoveAction(move_action_data)])?;
                 return Ok(());
             }
         };

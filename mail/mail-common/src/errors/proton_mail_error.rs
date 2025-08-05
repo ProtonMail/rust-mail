@@ -15,7 +15,7 @@ use crate::{
     draft::UndoError as DraftUndoError,
 };
 use proton_action_queue::action::Action;
-use proton_action_queue::queue::ActionError as InternalActionError;
+use proton_action_queue::queue::{ActionError as InternalActionError, MultiActionError};
 use proton_core_api::service::ApiServiceError;
 use proton_core_common::ContactError;
 use proton_core_common::device_registration::RegisteredDeviceTaskError;
@@ -211,6 +211,7 @@ impl From<AppError> for ProtonMailError {
             AppError::AttachmentDecryption(_) => Self::Unexpected(Unexpected::Crypto),
             AppError::AttachmentDecryptionIO(_) => Self::Unexpected(Unexpected::Os),
             AppError::AttachmentHasNoRemoteId(_) => Self::Unexpected(Unexpected::Internal),
+            AppError::ActionError(_) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }
@@ -654,9 +655,20 @@ where
     fn from(error: InternalActionError<T>) -> Self {
         let _guard = log_error(&error);
         match error {
-            #[allow(clippy::useless_conversion)] // It is not useless clippy
+            #[allow(clippy::useless_conversion, reason = "It is not useless, clippy")]
             InternalActionError::Action(error) => Self::from(error.into()),
             InternalActionError::Queue(error) => Self::from(error),
+        }
+    }
+}
+
+impl From<MultiActionError> for ProtonMailError {
+    fn from(error: MultiActionError) -> Self {
+        let _guard = log_error(&error);
+        match error {
+            #[allow(clippy::useless_conversion, reason = "It is not useless, clippy")]
+            MultiActionError::Action(error) => Self::from(error),
+            MultiActionError::Queue(error) => Self::from(error),
         }
     }
 }

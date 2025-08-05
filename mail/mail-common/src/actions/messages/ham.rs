@@ -6,9 +6,9 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
-use proton_core_api::services::proton::{LabelId, Proton};
+use proton_core_api::services::proton::Proton;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
-use proton_core_common::models::{Label, LabelError, ModelIdExtension};
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;

@@ -29,6 +29,8 @@ pub use self::mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
 pub use self::rsvp::{RsvpEvent, RsvpEventId};
 pub use self::sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use self::user_context::MailUserContext;
+use proton_action_queue::action::Action;
+use proton_action_queue::queue::{ActionError, MultiActionError};
 use proton_core_common::models::LabelError;
 
 // re-exports
@@ -125,6 +127,14 @@ pub enum AppError {
     AttachmentMissingKeyPackets(LocalAttachmentId),
     #[error("Attachment {0} is not in the cache")]
     AttachmentIsNotInCache(LocalAttachmentId),
+    #[error("{0}")]
+    ActionError(#[from] MultiActionError),
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
+}
+
+impl<T: Action> From<ActionError<T>> for AppError {
+    fn from(value: ActionError<T>) -> Self {
+        Self::ActionError(value.into())
+    }
 }

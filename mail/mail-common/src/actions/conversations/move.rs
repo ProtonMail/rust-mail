@@ -6,14 +6,7 @@ use crate::models::Conversation;
 use anyhow::Context;
 use itertools::Itertools;
 use proton_action_queue::action::{
-<<<<<<< HEAD
-    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Metadata, Type,
-    WriterGuard,
-||||||| parent of fe11eed69 (refactor*: Cleanup actions)
-    Action, ActionId, DefaultVersionConverter, Handler, Metadata, Type, WriterGuard,
-=======
-    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
->>>>>>> fe11eed69 (refactor*: Cleanup actions)
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
