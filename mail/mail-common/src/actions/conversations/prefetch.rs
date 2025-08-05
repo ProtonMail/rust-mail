@@ -1,10 +1,10 @@
 use crate::MailUserContext;
-use crate::actions::MailActionError;
+use crate::actions::{MailActionError, PREFETCH_ROLLBACK_ACTION_GROUP};
 use crate::datatypes::LocalConversationId;
 use crate::models::{Conversation, Message};
 use proton_action_queue::action::{
-    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Priority, Type,
-    WriterGuard,
+    Action, ActionDependencyKeys, ActionGroup, ActionId, DefaultVersionConverter, Handler,
+    Priority, Type, WriterGuard,
 };
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::datatypes::LocalLabelId;
@@ -34,6 +34,8 @@ impl Action for Prefetch {
     const TYPE: Type = Type("prefetch_conversation");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Lowest;
+
+    const GROUP: ActionGroup = PREFETCH_ROLLBACK_ACTION_GROUP;
 
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = PrefetchHandler;

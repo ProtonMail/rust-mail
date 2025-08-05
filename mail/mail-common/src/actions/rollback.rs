@@ -1,9 +1,12 @@
 use crate::MailContextError;
+use crate::actions::PREFETCH_ROLLBACK_ACTION_GROUP;
 use crate::models::RollbackItem;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionGroup, ActionId, DefaultVersionConverter, Handler,
+    Priority, Type, WriterGuard,
 };
 use proton_core_api::services::proton::Proton;
+use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -21,11 +24,17 @@ impl Action for RollbackAction {
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Low;
 
+    const GROUP: ActionGroup = PREFETCH_ROLLBACK_ACTION_GROUP;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = RollbackActionHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailContextError;
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeysBuilder::new().build()
+    }
 }
 
 pub struct RollbackActionHandler {
