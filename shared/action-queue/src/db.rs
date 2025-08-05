@@ -741,7 +741,7 @@ pub async fn migrate(conn: &mut Tether) -> Result<(), MigratorError> {
 
 pub struct ActionDependencyKeysTable {}
 
-const KEY_DEPENDENCIES_TABLE_NAME: &str = "action_queue_key_deps";
+const KEY_DEPENDENCIES_TABLE_NAME: &str = "action_queue_key_deps_v2";
 impl ActionDependencyKeysTable {
     pub async fn resolve_dependency_keys(
         keys: Vec<ActionDependencyKey>,
@@ -771,7 +771,7 @@ impl ActionDependencyKeysTable {
         for key in keys {
             bond.execute(
                 format!(
-                    "INSERT OR REPLACE INTO {KEY_DEPENDENCIES_TABLE_NAME} (key_id, action_id) VALUES (?,?)",
+                    "INSERT INTO {KEY_DEPENDENCIES_TABLE_NAME} (key_id, action_id) VALUES (?,?)",
                 ),
                 params![key, action_id],
             )
