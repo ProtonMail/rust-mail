@@ -11,7 +11,7 @@ check_migration_filenames() {
     fi
 
     # Regex pattern for the required format (any extension)
-    local pattern='^v[0-9]{3}_[a-zA-Z]+(_[a-zA-Z]+)*\.[a-zA-Z0-9]+$'
+    local pattern='^v[0-9]{3}_[a-zA-Z0-9]+(_[a-zA-Z0-9]+)*\.[a-zA-Z0-9]+$'
 
     # Get all files (not directories) in the directory
     local files=()
