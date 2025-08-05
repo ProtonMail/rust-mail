@@ -5,7 +5,6 @@ use crate::context::services::SessionObserverService;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_core_db, verify_core_db};
-use crate::event_loop::EventPollMode;
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::subscriber::CoreEventLoopContext;
@@ -134,7 +133,7 @@ impl UserContext {
         fs::create_dir_all(this.trash_path())?;
 
         if matches!(origin, Origin::App) {
-            if let Ok(init_service) = this.get_service::<InitializationService>() {
+            if let Some(init_service) = this.get_opt_service::<InitializationService>() {
                 let init_watcher = init_service.initialization_watcher().clone();
                 this.spawn(async move {
                     if let Err(e) = init_watcher.task().await {
@@ -146,7 +145,7 @@ impl UserContext {
 
         let this_user_id = this.user_id.clone();
         let this_weak = Arc::downgrade(&this);
-        if let Ok(session_service) = this.context.get_service::<SessionObserverService>() {
+        if let Some(session_service) = this.context.get_opt_service::<SessionObserverService>() {
             session_service.on_session_deleted(move |_, user_id| {
                 let this_user_id = this_user_id.clone();
                 let this_weak = this_weak.clone();
@@ -182,16 +181,15 @@ impl UserContext {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn get_service<T: Any + 'static>(&self) -> Result<&T, CoreContextError> {
+    /// # Panics
+    /// This function panics if the service is not found.
+    /// If there is a need for a service that may not exist, use `get_opt_service`.
+    #[must_use]
+    pub fn get_service<T: Any + 'static>(&self) -> &T {
         self.services
             .get(&TypeId::of::<T>())
             .and_then(|service| service.downcast_ref::<T>())
-            .ok_or_else(|| {
-                CoreContextError::Other(anyhow::anyhow!(
-                    "Service {} not found",
-                    std::any::type_name::<T>()
-                ))
-            })
+            .unwrap_or_else(|| panic!("Service {} not found", std::any::type_name::<T>()))
     }
 
     #[must_use]
@@ -215,7 +213,8 @@ impl UserContext {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn event_loop_service(&self) -> Result<&EventLoopService, CoreContextError> {
+    #[must_use]
+    pub fn event_loop_service(&self) -> &EventLoopService {
         self.get_service::<EventLoopService>()
     }
 

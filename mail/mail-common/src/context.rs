@@ -285,7 +285,8 @@ impl MailContext {
 
         let ctx_weak = Arc::downgrade(&ctx);
 
-        if let Ok(session_service) = ctx.core_context.get_service::<SessionObserverService>() {
+        if let Some(session_service) = ctx.core_context.get_opt_service::<SessionObserverService>()
+        {
             session_service.on_session_deleted(move |_, user_id| {
                 let ctx_weak = ctx_weak.clone();
                 async move {
@@ -331,7 +332,7 @@ impl MailContext {
         let session = self.core_context.new_api_session(None, None).await?;
         let device_info = self
             .core_context
-            .get_service::<DeviceInfoService>()?
+            .get_service::<DeviceInfoService>()
             .get_device_info()
             .await;
 
@@ -454,7 +455,7 @@ impl MailContext {
         // Obtain device info (if possible)
         let device_info = self
             .core_context
-            .get_service::<DeviceInfoService>()?
+            .get_service::<DeviceInfoService>()
             .get_device_info()
             .await;
 

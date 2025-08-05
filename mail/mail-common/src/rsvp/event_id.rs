@@ -42,7 +42,7 @@ impl RsvpEventId {
 
         let pgp = proton_crypto::new_pgp_provider();
         let keys = RsvpKeys::new(ctx, tether);
-        let rsvp_service = ctx.rsvp_service()?;
+        let rsvp_service = ctx.rsvp_service();
         let cache = rsvp_service.cache();
         let contacts = rsvp_service.contacts();
 

@@ -2,6 +2,7 @@ use crate::MailUserContext;
 use crate::actions::rollback::RollbackAction;
 use proton_action_queue::queue::ActionError;
 use proton_core_common::actions::event_poll::EventPoll;
+use proton_core_common::services::EventLoopService;
 use proton_core_common::{CoreContextError, services::InitializationService};
 use proton_event_loop::EventLoopError;
 use std::time::Duration;
@@ -26,7 +27,7 @@ impl MailUserContext {
 
         let watcher = self
             .user_context
-            .get_service::<InitializationService>()?
+            .get_service::<InitializationService>()
             .initialization_watcher()
             .clone();
         self.spawn(async move {
@@ -99,7 +100,6 @@ impl MailUserContext {
         let mut last_action_ids = self
             .user_context()
             .event_loop_service()
-            .map_err(|e| ActionError::Action(e.into()))?
             .last_event_loop_action_ids()
             .lock()
             .await;
@@ -127,8 +127,8 @@ impl MailUserContext {
     pub(crate) async fn register_subscribers(&self) -> Result<(), EventLoopError> {
         let mail_subscriber = self.event_subscriber();
 
-        self.event_loop()
-            .map_err(|_| EventLoopError::EventLoopNotInitialized)?
+        self.get_service::<EventLoopService>()
+            .event_loop()
             .register(Box::new(mail_subscriber))
             .await?;
 

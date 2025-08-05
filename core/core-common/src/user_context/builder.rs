@@ -17,7 +17,7 @@ use super::keys::CryptoKeyManager;
 
 enum ServiceUnderConstruction {
     Simple(Box<dyn Any + Send + Sync>),
-    Cyclic(Box<dyn FnOnce(Weak<UserContext>) -> Box<dyn Any + Send + Sync>>),
+    Cyclic(Box<dyn FnOnce(Weak<UserContext>) -> Box<dyn Any + Send + Sync> + Send + Sync>),
 }
 
 #[derive(Default)]
@@ -48,7 +48,7 @@ impl UserContextBuilder {
     pub fn with_cyclic_service<T, F>(mut self, service: F) -> Self
     where
         T: Any + Send + Sync + 'static,
-        F: FnOnce(Weak<UserContext>) -> T + 'static,
+        F: FnOnce(Weak<UserContext>) -> T + Send + Sync + 'static,
     {
         self.services.insert(
             TypeId::of::<T>(),

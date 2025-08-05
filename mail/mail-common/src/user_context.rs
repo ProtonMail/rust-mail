@@ -42,7 +42,7 @@ use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPref
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
-use proton_event_loop::{EventPoll, Subscriber};
+use proton_event_loop::Subscriber;
 use proton_task_service::{AsyncTaskResult, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
@@ -112,6 +112,10 @@ pub struct QueuesService {
 }
 
 impl QueuesService {
+    pub fn new(weak: Weak<MailUserContext>) -> Self {
+        Self { weak }
+    }
+
     pub fn pause(&self) {
         let Some(ctx) = self.weak.upgrade() else {
             tracing::error!("Could not upgrade weak ctx reference");
@@ -120,7 +124,7 @@ impl QueuesService {
         if let Some(service) = ctx.get_opt_service::<DefaultQueueExecutor>() {
             service.pause();
         };
-        ctx.get_service::<SendQueueExecutorPool>().unwrap().pause();
+        ctx.get_service::<SendQueueExecutorPool>().pause();
     }
 
     pub fn resume(&self) {
@@ -131,7 +135,7 @@ impl QueuesService {
         if let Some(service) = ctx.get_opt_service::<DefaultQueueExecutor>() {
             service.resume();
         };
-        ctx.get_service::<SendQueueExecutorPool>().unwrap().resume();
+        ctx.get_service::<SendQueueExecutorPool>().resume();
     }
 
     pub fn terminate(&self) {
@@ -142,9 +146,7 @@ impl QueuesService {
         if let Some(service) = ctx.get_opt_service::<DefaultQueueExecutor>() {
             service.terminate();
         };
-        ctx.get_service::<SendQueueExecutorPool>()
-            .unwrap()
-            .terminate();
+        ctx.get_service::<SendQueueExecutorPool>().terminate();
     }
 }
 
@@ -213,23 +215,25 @@ impl MailUserContext {
                         user_context.as_ref(),
                     ),
                 })
-                // wpolak: Add QueuesService
+                .with_cyclic_service(QueuesService::new)
                 .with_service(InitializationMediator::new(
                     mail_context.core_context().task_service().task_service(),
                 ))
                 .with_service(PrefetchService::new())
                 .with_service(RsvpService::new(user_context.stash())),
 
-            Origin::ShareExt => builder.with_service(SendQueueExecutorPool {
-                pool: QueueAutoExecutorPool::new(
-                    user_context.queue(),
-                    &SHARE_EXT_ACTION_GROUP,
-                    NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
-                    online,
-                    true,
-                    user_context.as_ref(),
-                ),
-            }),
+            Origin::ShareExt => builder
+                .with_service(SendQueueExecutorPool {
+                    pool: QueueAutoExecutorPool::new(
+                        user_context.queue(),
+                        &SHARE_EXT_ACTION_GROUP,
+                        NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
+                        online,
+                        true,
+                        user_context.as_ref(),
+                    ),
+                })
+                .with_cyclic_service(QueuesService::new),
         };
 
         let this = builder.build(mail_context, user_context).await?;
@@ -240,9 +244,7 @@ impl MailUserContext {
                 this.init_expiration_loop();
                 this.register_subscribers().await?;
 
-                let config = this
-                    .user_context()
-                    .get_service::<EventPollConfigService>()?;
+                let config = this.user_context().get_service::<EventPollConfigService>();
                 if let EventPollMode::Automatic(interval) = config.mode() {
                     this.init_event_loop_poll(interval)?;
                 }
@@ -262,12 +264,17 @@ impl MailUserContext {
     }
 
     /// Get a mandatory service - returns error if service is not registered
-    pub fn get_service<T: Any + Send + Sync + 'static>(&self) -> Result<&T, anyhow::Error> {
+    ///
+    /// # Panics
+    /// Panics if the service is not found in the context.
+    /// If there is a need for a service that may not be registered, use `get_opt_service` instead.
+    #[must_use]
+    pub fn get_service<T: Any + Send + Sync + 'static>(&self) -> &T {
         self.services
             .get(&TypeId::of::<T>())
             .and_then(|service| service.downcast_ref::<T>())
-            .ok_or_else(|| {
-                anyhow::anyhow!(
+            .unwrap_or_else(|| {
+                panic!(
                     "Required service {} not found in context",
                     std::any::type_name::<T>()
                 )
@@ -286,7 +293,7 @@ impl MailUserContext {
     }
 
     pub fn queues(&self) -> &QueuesService {
-        self.get_service::<QueuesService>().expect("wpolak: todo")
+        self.get_service::<QueuesService>()
     }
 
     #[must_use]
@@ -348,10 +355,6 @@ impl MailUserContext {
         self.user_context.stash()
     }
 
-    pub fn event_loop(&self) -> Result<&EventPoll, CoreContextError> {
-        Ok(self.user_context.event_loop_service()?.event_loop())
-    }
-
     pub fn mail_context(&self) -> &MailContext {
         &self.mail_context
     }
@@ -390,11 +393,11 @@ impl MailUserContext {
         self.user_context.session_id()
     }
 
-    pub(crate) fn rsvp_service(&self) -> Result<&RsvpService, anyhow::Error> {
+    pub(crate) fn rsvp_service(&self) -> &RsvpService {
         self.get_service::<RsvpService>()
     }
 
-    pub fn attachment_cache_state(&self) -> Result<&AttachmentCacheState, anyhow::Error> {
+    pub fn attachment_cache_state(&self) -> &AttachmentCacheState {
         self.get_service::<AttachmentCacheState>()
     }
 
@@ -669,7 +672,7 @@ impl MailUserContext {
             return Ok(());
         }
 
-        let prefetch_service = self.get_service::<PrefetchService>()?;
+        let prefetch_service = self.get_service::<PrefetchService>();
 
         if let Some(sender) = prefetch_service.notify.get() {
             sender.send_async(jobs).await.map_err(|_| {

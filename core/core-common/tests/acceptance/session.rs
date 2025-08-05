@@ -34,7 +34,6 @@ async fn test_session_delete_subscriber() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<()>(1);
     ctx.context
         .get_service::<SessionObserverService>()
-        .unwrap()
         .on_session_deleted(
             move |deleted_session_id: SessionId, deleted_user_id: UserId| {
                 let deleted_session_id = deleted_session_id.clone();

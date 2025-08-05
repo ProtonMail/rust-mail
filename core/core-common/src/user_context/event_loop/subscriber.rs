@@ -329,9 +329,7 @@ impl UserContext {
     /// Returns error if the event loop failed to register the subscriber.
     ///
     pub(crate) async fn register_subscribers(self: &Arc<Self>) -> Result<(), EventLoopError> {
-        let event_loop_service = self
-            .event_loop_service()
-            .map_err(|e| EventLoopError::StoreRead(anyhow::anyhow!(e.to_string())))?;
+        let event_loop_service = self.event_loop_service();
 
         event_loop_service
             .event_loop()
@@ -352,9 +350,7 @@ impl UserContext {
     /// Returns error if the event loop failed to poll.
     ///
     pub async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
-        let event_loop_service = self
-            .event_loop_service()
-            .map_err(|e| EventLoopError::StoreRead(anyhow::anyhow!(e.to_string())))?;
+        let event_loop_service = self.event_loop_service();
 
         event_loop_service.event_loop().poll().await
     }

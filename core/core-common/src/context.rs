@@ -362,7 +362,7 @@ impl Context {
         );
 
         let ctx_weak = ctx.this.clone();
-        if let Ok(session_service) = ctx.get_service::<SessionObserverService>() {
+        if let Some(session_service) = ctx.get_opt_service::<SessionObserverService>() {
             session_service
                 .start(SESSION_OBSERVER_BROADCAST_CAPACITY)
                 .await?;
@@ -398,11 +398,21 @@ impl Context {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn get_service<T: 'static>(&self) -> Result<&T, CoreContextError> {
+    /// # Panics
+    /// This function panics if the service is not found.
+    /// If there is a need for a service that may not exist, use `get_opt_service`.
+    pub fn get_service<T: 'static>(&self) -> &T {
         self.services
             .get(&TypeId::of::<T>())
             .and_then(|service| service.downcast_ref::<T>())
-            .ok_or_else(|| CoreContextError::Other(anyhow!("Service not found")))
+            .unwrap_or_else(|| panic!("Service not found"))
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn get_opt_service<T: 'static>(&self) -> Option<&T> {
+        self.services
+            .get(&TypeId::of::<T>())
+            .and_then(|service| service.downcast_ref::<T>())
     }
 
     /// Get all available accounts.
@@ -932,13 +942,13 @@ impl Context {
             builder = builder.with_status(status);
         }
 
-        if let Ok(hv_service) = self.get_service::<HvNotifierService>()
+        if let Some(hv_service) = self.get_opt_service::<HvNotifierService>()
             && let Some(notifier) = hv_service.notifier_arc()
         {
             builder = builder.with_notifier(notifier);
         }
 
-        if let Ok(device_service) = self.get_service::<DeviceInfoService>()
+        if let Some(device_service) = self.get_opt_service::<DeviceInfoService>()
             && let Some(provider) = device_service.provider()
         {
             builder = builder.with_info_provider(Arc::new(MuonInfoProvider {
@@ -1178,7 +1188,7 @@ impl Context {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn session_observer_service(&self) -> Result<&SessionObserverService, CoreContextError> {
+    pub fn session_observer_service(&self) -> &SessionObserverService {
         self.get_service::<SessionObserverService>()
     }
 

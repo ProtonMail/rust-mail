@@ -49,10 +49,7 @@ impl SessionObserverService {
                 return;
             };
             tracing::debug!("Task received: {:?}", notifications);
-            let Ok(event_service) = ctx.session_observer_service() else {
-                tracing::error!("Session observer service disappeared in the middle of processing");
-                return;
-            };
+            let event_service = ctx.session_observer_service();
             for notification in notifications {
                 match notification {
                     CoreSessionObserverNotification::Created(session_id, user_id) => {

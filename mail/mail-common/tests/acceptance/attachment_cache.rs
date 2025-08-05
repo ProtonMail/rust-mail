@@ -290,7 +290,7 @@ async fn integration() -> anyhow::Result<()> {
 
     // Evil hack to stop cleanup
     user_ctx
-        .attachment_cache_state()?
+        .attachment_cache_state()
         .is_cleanup_running()
         .store(true, Ordering::SeqCst);
 
@@ -339,7 +339,7 @@ async fn integration() -> anyhow::Result<()> {
 
     // Let's allow it to cleanup
     user_ctx
-        .attachment_cache_state()?
+        .attachment_cache_state()
         .is_cleanup_running()
         .store(false, Ordering::SeqCst);
 

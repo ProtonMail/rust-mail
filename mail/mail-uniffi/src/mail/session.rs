@@ -216,9 +216,9 @@ async fn create_mail_session_inner(
     let user_ctx_map = MailUserContextMap::new();
     let weak_user_ctx_map = Arc::downgrade(&user_ctx_map);
 
-    if let Ok(session_service) = mail_ctx
+    if let Some(session_service) = mail_ctx
         .core_context()
-        .get_service::<SessionObserverService>()
+        .get_opt_service::<SessionObserverService>()
     {
         session_service.on_session_deleted(move |_session_id, user_id| {
             let weak_user_ctx_map = weak_user_ctx_map.clone();

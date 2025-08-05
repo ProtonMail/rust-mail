@@ -96,9 +96,6 @@ pub enum EventLoopError {
     Register(&'static str),
     #[error("Failed to deserialize event: {0}")]
     Deserialize(AnyhowError),
-
-    #[error("Event loop is not initialized")]
-    EventLoopNotInitialized,
 }
 
 /// This represents an event returned by the API.

@@ -568,7 +568,7 @@ impl Attachment {
     /// This function ensures that this is called at most once concurrently, and spawns the
     /// cleanup routine in the background if it's not being currently executed.
     pub async fn cleanup_cache(ctx: &MailUserContext) -> anyhow::Result<()> {
-        let state = ctx.attachment_cache_state()?;
+        let state = ctx.attachment_cache_state();
 
         // TODO: Possibly run this in a background task instead of once-per.
         pub struct G(Arc<AtomicBool>);
