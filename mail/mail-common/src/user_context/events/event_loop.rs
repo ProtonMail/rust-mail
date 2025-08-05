@@ -127,7 +127,8 @@ impl MailUserContext {
     pub(crate) async fn register_subscribers(&self) -> Result<(), EventLoopError> {
         let mail_subscriber = self.event_subscriber();
 
-        self.get_service::<EventLoopService>()
+        self.user_context()
+            .get_service::<EventLoopService>()
             .event_loop()
             .register(Box::new(mail_subscriber))
             .await?;

@@ -160,6 +160,7 @@ async fn initialize_event_loop(
             // We want to avoid the deadlock, and we do not depend on any dependencies.
             // So initializing it here is not really harmful, just weird.
             ctx_clone
+                .user_context()
                 .get_service::<EventLoopService>()
                 .event_loop()
                 .initialize()

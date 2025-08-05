@@ -244,7 +244,10 @@ impl MailUserContext {
                 this.init_expiration_loop();
                 this.register_subscribers().await?;
 
-                let config = this.user_context().get_service::<EventPollConfigService>();
+                let config = this
+                    .mail_context()
+                    .core_context()
+                    .get_service::<EventPollConfigService>();
                 if let EventPollMode::Automatic(interval) = config.mode() {
                     this.init_event_loop_poll(interval)?;
                 }
