@@ -116,6 +116,32 @@ pub fn record_human_verification_result(status: HumanVerificationStatus) {
     ObservabilityRecorder::default().record(HumanVerificationResultTotal::new(status));
 }
 
+#[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "camelCase")]
+pub enum HumanVerificationViewLoadingStatus {
+    Http2xx,
+    Http4xx,
+    Http400,
+    Http404,
+    Http422,
+    Http5xx,
+    ConnectionError,
+    SslError,
+}
+
+metric! {
+    #[name = "core_human_verification_view_loading_result_total"]
+    #[version = 1]
+    pub struct HumanVerificationViewLoadingResultTotal {
+        pub status: HumanVerificationViewLoadingStatus,
+    }
+}
+
+#[uniffi_export]
+pub fn record_human_verification_view_loading_result(status: HumanVerificationViewLoadingStatus) {
+    ObservabilityRecorder::default().record(HumanVerificationViewLoadingResultTotal::new(status));
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -244,7 +270,7 @@ mod tests {
         );
     }
 
-    fn assert_serialization_deserialization(
+    fn assert_human_verification_result_serialization_deserialization(
         status: HumanVerificationStatus,
         expected_status: &str,
     ) {
@@ -286,7 +312,64 @@ mod tests {
         ];
 
         for (status, expected_status) in statuses {
-            assert_serialization_deserialization(status, expected_status);
+            assert_human_verification_result_serialization_deserialization(status, expected_status);
+        }
+    }
+
+    fn assert_human_verification_view_loading_result_serialization_deserialization(
+        status: HumanVerificationViewLoadingStatus,
+        expected_status: &str,
+    ) {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            HumanVerificationViewLoadingResultTotal { status },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+
+        let expected_json = format!(
+            r#"{{"Name":"core_human_verification_view_loading_result_total","Version":1,"Timestamp":1741021308,"Data":{{"Labels":{{"status":"{expected_status}"}},"Value":1}}}}"#
+        );
+
+        assert_eq!(serialized, expected_json);
+
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: "core_human_verification_view_loading_result_total".into(),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({"status": expected_status}),
+                    value: 1,
+                }
+            },
+            serde_json::from_str(&serialized).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_human_verification_view_loading_result() {
+        let statuses = vec![
+            (HumanVerificationViewLoadingStatus::Http2xx, "http2xx"),
+            (HumanVerificationViewLoadingStatus::Http4xx, "http4xx"),
+            (HumanVerificationViewLoadingStatus::Http400, "http400"),
+            (HumanVerificationViewLoadingStatus::Http404, "http404"),
+            (HumanVerificationViewLoadingStatus::Http422, "http422"),
+            (HumanVerificationViewLoadingStatus::Http5xx, "http5xx"),
+            (
+                HumanVerificationViewLoadingStatus::ConnectionError,
+                "connectionError",
+            ),
+            (HumanVerificationViewLoadingStatus::SslError, "sslError"),
+        ];
+
+        for (status, expected_status) in statuses {
+            assert_human_verification_view_loading_result_serialization_deserialization(
+                status,
+                expected_status,
+            );
         }
     }
 }
