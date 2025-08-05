@@ -21,7 +21,7 @@ use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentSta
 use proton_mail_common::draft::compose::DraftAddressChangeOutput;
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::draft::{
-    Draft, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode, recipients,
+    Draft, DraftExpirationTime, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode, recipients,
 };
 use proton_mail_common::models::{Attachment, MetadataId};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
@@ -575,8 +575,12 @@ impl Composer {
             )),
             Command::task(async move {
                 let mut tether = context.user_stash().connection();
-                let cmd = match Draft::set_expiration_time_by_id(&mut tether, id, expiration_time)
-                    .await
+                let cmd = match Draft::set_expiration_time_by_id(
+                    &mut tether,
+                    id,
+                    DraftExpirationTime::Custom(expiration_time),
+                )
+                .await
                 {
                     Ok(()) => Command::message(Messages::DisplayInfo(
                         None,

@@ -424,6 +424,34 @@ impl From<ReplyMode> for DraftAction {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum DraftExpirationTime {
+    Never,
+    OneHour,
+    OneDay,
+    ThreeDays,
+    Custom(DateTime<Local>),
+}
+
+impl DraftExpirationTime {
+    pub fn to_timestamp(self) -> UnixTimestamp {
+        match self {
+            DraftExpirationTime::Never => UnixTimestamp::new(0),
+            DraftExpirationTime::OneHour => UnixTimestamp::now().saturating_add(3600),
+            DraftExpirationTime::OneDay => UnixTimestamp::now().saturating_add(86400), // 1 day
+            DraftExpirationTime::ThreeDays => UnixTimestamp::now().saturating_add(86400 * 3),
+            DraftExpirationTime::Custom(v) => v.into(),
+        }
+    }
+
+    pub fn to_optional_timestamp(self) -> Option<UnixTimestamp> {
+        match self {
+            DraftExpirationTime::Never => None,
+            _ => Some(self.to_timestamp()),
+        }
+    }
+}
+
 /// Represent a new message that is being drafted.
 ///
 /// When creating a new draft, empty or reply, we calculate what the
@@ -528,18 +556,8 @@ impl Draft {
         } else {
             debug!("No metadata found, creating new entry");
 
-            let mut metadata = DraftMetadata {
-                id: None,
-                local_message_id: Some(message.local_id.unwrap()),
-                local_conversation_id: Some(message.local_conversation_id.unwrap()),
-                local_parent_id: None,
-                reply_mode: None,
-                send_action_id: None,
-                save_action_id: None,
-                expiration_time: None,
-                password: None,
-                password_hint: None,
-            };
+            let mut metadata =
+                DraftMetadata::with_ids(message.id(), message.local_conversation_id.unwrap());
 
             tether
                 .tx::<_, _, MailContextError>(async |tx| {
@@ -587,7 +605,7 @@ impl Draft {
                             )
                             .await?;
 
-                            metadata.expiration_time = None;
+                            metadata.set_expiration_time(DraftExpirationTime::Never);
                             metadata.password = None;
                             metadata.password_hint = None;
 
@@ -1716,7 +1734,7 @@ impl Draft {
     pub async fn set_expiration_time(
         &self,
         tether: &mut Tether,
-        expiration_time: DateTime<Local>,
+        expiration_time: DraftExpirationTime,
     ) -> Result<(), MailContextError> {
         Self::set_expiration_time_by_id(tether, self.metadata_id, expiration_time).await
     }
@@ -1724,55 +1742,38 @@ impl Draft {
     pub async fn set_expiration_time_by_id(
         tether: &mut Tether,
         metadata_id: MetadataId,
-        expiration_time: DateTime<Local>,
+        expiration_time: DraftExpirationTime,
     ) -> Result<(), MailContextError> {
-        let now = UnixTimestamp::now();
+        if let DraftExpirationTime::Custom(expiration_time) = expiration_time {
+            let now = UnixTimestamp::now();
 
-        if now > expiration_time.into() {
-            return Err(ExpirationError::ExpirationTimeInThePast.into());
-        }
+            if now > expiration_time.into() {
+                return Err(ExpirationError::ExpirationTimeInThePast.into());
+            }
 
-        let in_30_days =
-            ScheduleSendOptions::calculate_next(expiration_time, 30).map_err(|_| {
-                error!("Failed to calculate 30 days into the future");
-                ExpirationError::ExpirationTimeExceeds30Days
-            })?;
+            let in_30_days =
+                ScheduleSendOptions::calculate_next(expiration_time, 30).map_err(|_| {
+                    error!("Failed to calculate 30 days into the future");
+                    ExpirationError::ExpirationTimeExceeds30Days
+                })?;
 
-        if expiration_time > in_30_days {
-            return Err(ExpirationError::ExpirationTimeExceeds30Days.into());
+            if expiration_time > in_30_days {
+                return Err(ExpirationError::ExpirationTimeExceeds30Days.into());
+            }
         }
 
         let mut metadata = DraftMetadata::find_by_id(metadata_id, tether)
             .await?
             .ok_or(ExpirationError::MetadataNotFound(metadata_id))?;
 
-        metadata.expiration_time = Some(expiration_time.into());
+        metadata.set_expiration_time(expiration_time);
         tether.tx(async |tx| metadata.save(tx).await).await?;
 
-        info!("Expiration applied to draft {metadata_id}");
-
-        Ok(())
-    }
-
-    pub async fn remove_expiration_time(
-        &self,
-        tether: &mut Tether,
-    ) -> Result<(), MailContextError> {
-        Self::remove_expiration_time_by_id(tether, self.metadata_id).await
-    }
-
-    pub async fn remove_expiration_time_by_id(
-        tether: &mut Tether,
-        metadata_id: MetadataId,
-    ) -> Result<(), MailContextError> {
-        let mut metadata = DraftMetadata::find_by_id(metadata_id, tether)
-            .await?
-            .ok_or(ExpirationError::MetadataNotFound(metadata_id))?;
-
-        metadata.expiration_time = None;
-        tether.tx(async |tx| metadata.save(tx).await).await?;
-
-        info!("Expiration removed from draft {metadata_id}");
+        if let DraftExpirationTime::Never = expiration_time {
+            info!("Expiration removed from draft {metadata_id}");
+        } else {
+            info!("Expiration applied to draft {metadata_id}");
+        }
 
         Ok(())
     }
@@ -1780,12 +1781,12 @@ impl Draft {
     pub async fn expiration_time(
         &self,
         tether: &Tether,
-    ) -> Result<Option<UnixTimestamp>, MailContextError> {
+    ) -> Result<DraftExpirationTime, MailContextError> {
         let metadata = DraftMetadata::find_by_id(self.metadata_id, tether)
             .await?
             .ok_or(PasswordError::MetadataNotFound(self.metadata_id))?;
 
-        Ok(metadata.expiration_time)
+        Ok(metadata.expiration_time())
     }
 }
 
