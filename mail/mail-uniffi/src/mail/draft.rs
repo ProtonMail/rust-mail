@@ -19,7 +19,9 @@ use crate::mail::messages::{EmbeddedAttachmentInfo, ThemeOpts};
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
 use chrono::Local;
+use proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::datatypes::attachment::ContentId;
+use proton_mail_common::draft::recipients::ExpirationFeatureSupportReport;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftExpirationTime as RealDraftExpirationTime,
     DraftSyncStatus as RealDraftSyncStatus, EoData, ReplyMode, ScheduleSendOptions,
@@ -793,6 +795,29 @@ impl Draft {
             instance.address_validation_result = None;
         });
     }
+
+    pub fn validate_recipients_expiration_feature(
+        &self,
+    ) -> Result<DraftRecipientExpirationFeatureReport, ProtonError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
+        };
+        async_runtime().block_on(async move {
+            let instance = self.instance.read().await;
+            if let Ok(is_password_protected) = instance
+                .is_password_protected(&ctx.user_stash().connection())
+                .await
+                && is_password_protected
+            {
+                return Ok(DraftRecipientExpirationFeatureReport::default());
+            }
+            let mut report = ExpirationFeatureSupportReport::default();
+            instance.to_list.validate_expiration_feature(&mut report);
+            instance.cc_list.validate_expiration_feature(&mut report);
+            instance.bcc_list.validate_expiration_feature(&mut report);
+            Ok(report.into())
+        })
+    }
 }
 
 impl Draft {
@@ -931,6 +956,29 @@ impl TryFrom<DraftExpirationTime> for RealDraftExpirationTime {
                     )))?;
                 Ok(RealDraftExpirationTime::Custom(expiration_time))
             }
+        }
+    }
+}
+
+#[derive(Default, Debug, uniffi::Record)]
+pub struct DraftRecipientExpirationFeatureReport {
+    pub unsupported: Vec<String>,
+    pub unknown: Vec<String>,
+}
+
+impl From<ExpirationFeatureSupportReport> for DraftRecipientExpirationFeatureReport {
+    fn from(value: ExpirationFeatureSupportReport) -> Self {
+        Self {
+            unsupported: value
+                .unsupported
+                .into_iter()
+                .map(PrivateEmail::into_clear_text_string)
+                .collect(),
+            unknown: value
+                .unknown
+                .into_iter()
+                .map(PrivateEmail::into_clear_text_string)
+                .collect(),
         }
     }
 }
