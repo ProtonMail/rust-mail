@@ -12,6 +12,7 @@ use proton_core_api::{consts::CoreBundle, services::proton::ProtonCore};
 use proton_core_common::models::ContactEmail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Tether;
+use std::collections::HashSet;
 use std::future::Future;
 use std::sync::Arc;
 use tracing::error;
@@ -171,6 +172,27 @@ impl ContactGroupResolver for ProtonContactGroupResolver<'_> {
 impl<'t> ProtonContactGroupResolver<'t> {
     pub fn new(tether: &'t Tether) -> Self {
         Self(tether)
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ExpirationFeatureSupportReport {
+    pub unsupported: HashSet<PrivateEmail>,
+    pub unknown: HashSet<PrivateEmail>,
+}
+
+impl ExpirationFeatureSupportReport {
+    fn check(&mut self, email: PrivateEmailRef, validation_state: ValidationState) {
+        match validation_state {
+            ValidationState::Valid(is_proton) => {
+                if !is_proton {
+                    self.unsupported.insert(email.to_owned());
+                }
+            }
+            _ => {
+                self.unknown.insert(email.to_owned());
+            }
+        };
     }
 }
 
@@ -589,6 +611,19 @@ impl RecipientList {
 
         false
     }
+
+    pub fn validate_expiration_feature(&self, report: &mut ExpirationFeatureSupportReport) {
+        for recipient in &self.recipients {
+            match recipient {
+                Recipient::Single(r) => report.check(r.email.as_ref(), r.state),
+                Recipient::Group(group) => {
+                    for recipient in &group.recipients {
+                        report.check(recipient.email.as_ref(), recipient.state)
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Specifies the behaviour for the mechanism through which updates are notified.
@@ -795,6 +830,10 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
     /// Returns a copy of the underlying recipient list.
     pub fn list(&self) -> RecipientList {
         self.list.read().clone()
+    }
+
+    pub fn validate_expiration_feature(&self, report: &mut ExpirationFeatureSupportReport) {
+        self.list.read().validate_expiration_feature(report);
     }
 }
 
