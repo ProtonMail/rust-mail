@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.116.0] - 2025-08-05
+
+### Features
+
+- [ET-3911] Add record_human_verification_screen_view
+- [ET-3911] Add record_human_verification_result
+- Action auto dependencies
+
+### Fixes
+
+- [ET-4011] Improve error handling for attachment uploads
+
+
+## [mail-uniffi-v0.115.7] - 2025-08-05
 
 ### Fixes
 
@@ -56,17 +69,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Share extension uses correct client id to authenticate
+- Remove account tables from user db
 - Share extension is loading user key secret
 - [ET-4103] Always encrypt outside regardless of encryption settings
 - Rsvp: support user keys
-
-
-## [mail-uniffi-v0.115.1] - 2025-08-01
-
-### Fixes
-
-- Remove account tables from user db
-- Share extension uses correct client id to authenticate
 
 
 ## [mail-uniffi-v0.115.0] - 2025-07-31
