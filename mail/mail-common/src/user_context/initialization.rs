@@ -8,7 +8,7 @@ use proton_core_common::models::{
     InitializedComponent, User,
 };
 
-use proton_core_common::services::InitializationService;
+use proton_core_common::services::{EventLoopService, InitializationService};
 use proton_event_loop::EventLoopError;
 use proton_task_service::{AsyncTaskResult, TaskService};
 use std::sync::Arc;
@@ -51,7 +51,7 @@ impl MailUserContext {
     pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
         let ctx_cloned = Arc::clone(&ctx);
 
-        ctx.get_service::<InitializationMediator>()?
+        ctx.get_service::<InitializationMediator>()
             .initialize(ctx_cloned)
             .await
     }
@@ -160,8 +160,8 @@ async fn initialize_event_loop(
             // We want to avoid the deadlock, and we do not depend on any dependencies.
             // So initializing it here is not really harmful, just weird.
             ctx_clone
+                .get_service::<EventLoopService>()
                 .event_loop()
-                .map_err(|_| EventLoopError::EventLoopNotInitialized)?
                 .initialize()
                 .await?;
             Ok(())
@@ -225,7 +225,7 @@ impl InitializationMediator {
         }
         let watcher = ctx
             .user_context
-            .get_service::<InitializationService>()?
+            .get_service::<InitializationService>()
             .initialization_watcher()
             .clone();
         let watcher_clone = watcher.clone();
