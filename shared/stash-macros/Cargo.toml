@@ -15,6 +15,6 @@ quote = "1.0.38"
 syn = "2.0.96"
 
 [dev-dependencies]
-# serde = { workspace = true }
-# stash = { workspace = true }
-# uuid = { workspace = true }
+serde = { workspace = true }
+stash = { workspace = true }
+uuid = { workspace = true }

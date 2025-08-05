@@ -7455,7 +7455,10 @@ version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",
+ "serde",
+ "stash",
  "syn 2.0.104",
+ "uuid",
 ]
 
 [[package]]
