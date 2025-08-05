@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Rsvp/uniffi: support attendee-less reminders
+
+
+## [mail-uniffi-v0.115.6] - 2025-08-04
+
+### Fixes
+
+- Rsvp: support attendee-less reminders
+
+
+## [mail-uniffi-v0.115.5] - 2025-08-04
+
+### Fixes
+
 - [ET-4056] Snooze as an action is only available in inbox label
 - [ET-4054] Include snooze on conversation action sheet
 - Rsvp: use `calendarevent.addressid`

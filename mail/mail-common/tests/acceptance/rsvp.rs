@@ -295,7 +295,7 @@ async fn fetch_and_answer() {
             calendar_id: CALENDAR_ID.into(),
             address_key_packet,
             shared_key_packet,
-            attendees_events: [cal::CalendarEventPayload {
+            attendees_events: vec![cal::CalendarEventPayload {
                 ty: cal::CalendarEventPayloadType::Encrypted,
                 data: attendees_event.into_base64(),
                 signature: None,
