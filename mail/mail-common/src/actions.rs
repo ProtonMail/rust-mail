@@ -21,8 +21,8 @@ use anyhow::Context;
 use futures::future::{join, join_all};
 use indoc::formatdoc;
 use proton_action_queue::action::{
-    self, ActionDependencyKey, ActionDependencyKeys, FactoryError, Handler, WriterGuard,
-    WriterGuardError,
+    self, ActionDependencyKey, ActionDependencyKeys, ActionGroup, FactoryError, Handler,
+    WriterGuard, WriterGuardError,
 };
 use proton_action_queue::queue::{ActionRequeueReason, Queue};
 use proton_core_api::consts::General;
@@ -49,6 +49,8 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::Weak;
 use tracing::{error, info, warn};
+
+pub const PREFETCH_ROLLBACK_ACTION_GROUP: ActionGroup = ActionGroup::new("MAIL_PREFETCH_ROLLBACK");
 
 #[derive(Debug, thiserror::Error)]
 pub enum MailActionError {

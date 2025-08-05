@@ -4,7 +4,7 @@ mod images;
 mod initialization;
 
 use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
-use crate::actions::register_actions;
+use crate::actions::{PREFETCH_ROLLBACK_ACTION_GROUP, register_actions};
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
@@ -15,7 +15,8 @@ use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_account_api::password::PasswordFlow;
-use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
+use proton_action_queue::action::ActionGroup;
+use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
 use proton_core_api::services::proton::muon::rest::auth::v4::fido2;
@@ -49,6 +50,9 @@ use tokio::task::JoinHandle;
 use tracing::{error, instrument};
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
+const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 2;
+
+const DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE: usize = 2;
 const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
 const DEFAULT_PREFETCH_BOUND: usize = 4;
 
@@ -578,7 +582,8 @@ impl MailUserContext {
 
 pub enum MailUserQueues {
     App {
-        default: QueueAutoExecutor,
+        default: QueueAutoExecutorPool,
+        prefetch_rollback: QueueAutoExecutorPool,
         send: QueueAutoExecutorPool,
     },
     ShareExt {
@@ -595,7 +600,10 @@ impl MailUserQueues {
 
         match mail_context.core_context().origin() {
             Origin::App => {
-                let default = user_context.queue().new_executor().into_auto_executor(
+                let default = QueueAutoExecutorPool::new(
+                    user_context.queue(),
+                    &ActionGroup::default(),
+                    NonZeroUsize::new(DEFAULT_DEFAULT_QUEUE_POOL_SIZE).unwrap(),
                     online.clone(),
                     true,
                     user_context,
@@ -605,12 +613,25 @@ impl MailUserQueues {
                     user_context.queue(),
                     &SEND_ACTION_GROUP,
                     NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
+                    online.clone(),
+                    true,
+                    user_context,
+                );
+
+                let prefetch_rollback = QueueAutoExecutorPool::new(
+                    user_context.queue(),
+                    &PREFETCH_ROLLBACK_ACTION_GROUP,
+                    NonZeroUsize::new(DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE).unwrap(),
                     online,
                     true,
                     user_context,
                 );
 
-                MailUserQueues::App { default, send }
+                MailUserQueues::App {
+                    default,
+                    send,
+                    prefetch_rollback,
+                }
             }
 
             Origin::ShareExt => {
@@ -630,9 +651,14 @@ impl MailUserQueues {
 
     pub fn pause(&self) {
         match self {
-            MailUserQueues::App { default, send } => {
+            MailUserQueues::App {
+                default,
+                send,
+                prefetch_rollback,
+            } => {
                 default.pause();
                 send.pause();
+                prefetch_rollback.pause();
             }
             MailUserQueues::ShareExt { queue } => {
                 queue.pause();
@@ -642,9 +668,14 @@ impl MailUserQueues {
 
     pub fn resume(&self) {
         match self {
-            MailUserQueues::App { default, send } => {
+            MailUserQueues::App {
+                default,
+                send,
+                prefetch_rollback,
+            } => {
                 default.resume();
                 send.resume();
+                prefetch_rollback.resume();
             }
             MailUserQueues::ShareExt { queue } => {
                 queue.resume();
@@ -654,9 +685,14 @@ impl MailUserQueues {
 
     pub fn terminate(&self) {
         match self {
-            MailUserQueues::App { default, send } => {
+            MailUserQueues::App {
+                default,
+                send,
+                prefetch_rollback,
+            } => {
                 default.terminate();
                 send.terminate();
+                prefetch_rollback.terminate();
             }
             MailUserQueues::ShareExt { queue } => {
                 queue.terminate();

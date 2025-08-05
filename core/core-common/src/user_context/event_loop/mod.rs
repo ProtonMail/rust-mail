@@ -1,6 +1,7 @@
 use crate::UserContext;
 use crate::actions::event_poll;
 use proton_action_queue::action::{Metadata, Priority};
+use proton_action_queue::queue::Error;
 use proton_action_queue::{action::ActionId, queue::ActionError};
 use std::time::Duration;
 use tracing::warn;
@@ -66,9 +67,17 @@ impl UserContext {
         let event_poll_action = event_poll::EventPoll {};
         {
             let output = if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
-                self.queue()
+                match self
+                    .queue()
                     .replace_or_queue_action(last_action_id, event_poll_action)
-                    .await?
+                    .await
+                {
+                    Ok(output) => Ok(output),
+                    Err(ActionError::Queue(Error::CyclicDependency)) => {
+                        self.queue().queue_action(event_poll::EventPoll {}).await
+                    }
+                    Err(error) => Err(error),
+                }?
             } else {
                 self.queue().queue_action(event_poll_action).await?
             };
