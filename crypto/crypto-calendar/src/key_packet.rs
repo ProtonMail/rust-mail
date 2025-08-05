@@ -26,7 +26,7 @@ impl KeyPacket {
     }
 
     #[must_use]
-    pub fn as_ref(&self) -> KeyPacketRef {
+    pub fn as_ref(&self) -> KeyPacketRef<'_> {
         KeyPacketRef::from_base64(self.as_base64())
     }
 }
@@ -53,7 +53,7 @@ pub struct KeyPackets<T> {
 }
 
 impl KeyPackets<KeyPacket> {
-    pub fn as_ref(&self) -> KeyPackets<KeyPacketRef> {
+    pub fn as_ref(&self) -> KeyPackets<KeyPacketRef<'_>> {
         KeyPackets {
             address_key_packet: self.address_key_packet.as_ref().map(KeyPacket::as_ref),
             shared_key_packet: self.shared_key_packet.as_ref().map(KeyPacket::as_ref),

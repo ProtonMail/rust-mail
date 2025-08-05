@@ -440,7 +440,7 @@ impl FromSql for EncryptedAccessToken {
     }
 }
 impl ToSql for EncryptedAccessToken {
-    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.0.to_sql()
     }
 }
@@ -479,7 +479,7 @@ impl FromSql for EncryptedRefreshToken {
     }
 }
 impl ToSql for EncryptedRefreshToken {
-    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.0.to_sql()
     }
 }
@@ -552,7 +552,7 @@ impl EncryptedPassword {
 }
 
 impl ToSql for EncryptedPassword {
-    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.0.to_sql()
     }
 }

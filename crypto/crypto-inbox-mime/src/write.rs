@@ -252,7 +252,7 @@ impl<'x> InboxMimeBuilder<'x> {
 }
 
 /// Encodes the text body as quoted-printable.
-fn encode_text_plain_body(text_body: &str) -> Result<MimePart, BuildMimeError> {
+fn encode_text_plain_body(text_body: &str) -> Result<MimePart<'_>, BuildMimeError> {
     let mut encoded_data = Vec::with_capacity(text_body.len());
     quoted_printable_encode(text_body.as_bytes(), &mut encoded_data, false, true)
         .map_err(|_| BuildMimeError::Encode(QUOTED_PRINTABLE_ENCODING))?;

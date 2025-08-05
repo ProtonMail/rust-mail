@@ -25,7 +25,7 @@ impl EncryptedIcs {
     }
 
     #[must_use]
-    pub fn as_ref(&self) -> EncryptedIcsRef {
+    pub fn as_ref(&self) -> EncryptedIcsRef<'_> {
         EncryptedIcsRef::from_base64(self.as_base64())
     }
 }

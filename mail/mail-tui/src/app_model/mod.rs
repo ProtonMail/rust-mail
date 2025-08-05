@@ -927,7 +927,7 @@ enum ChoosePopupWidget<T> {
 }
 
 impl<T> ChoosePopupWidget<T> {
-    fn as_line(&self) -> Line {
+    fn as_line(&self) -> Line<'_> {
         match self {
             ChoosePopupWidget::Button { key, label, .. } => Line::from_iter([
                 Span::raw(key.desc()).bold(),

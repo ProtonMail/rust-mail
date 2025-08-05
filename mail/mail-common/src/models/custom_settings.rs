@@ -129,7 +129,7 @@ impl FromSql for CustomSettingsId {
 }
 
 impl ToSql for CustomSettingsId {
-    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(i64::from(
             Self::MAGIC_ID,
         ))))

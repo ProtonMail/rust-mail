@@ -18,7 +18,7 @@ impl Signature {
     }
 
     #[must_use]
-    pub fn as_ref(&self) -> SignatureRef {
+    pub fn as_ref(&self) -> SignatureRef<'_> {
         SignatureRef::from_armored(self.as_armored())
     }
 }
