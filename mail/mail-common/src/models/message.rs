@@ -1383,7 +1383,6 @@ impl Message {
             )));
         }
 
-        info!("Fetching {remote_id:?}");
         let (_, encrypted_body) =
             Self::sync_message_and_body(remote_id, ctx.api(), &mut tx).await?;
         trace!("Message successfully downloaded. Decrypting...");
@@ -2109,6 +2108,7 @@ impl Message {
         with_attachment_prefetch: bool,
         tether: &mut Tether,
     ) -> MailContextResult<(Message, DecryptedMessageBody)> {
+        tracing::info!("Force syncing");
         let (message, encrypted) =
             Self::sync_message_and_body(message_id, ctx.api(), tether).await?;
 
@@ -2144,6 +2144,7 @@ impl Message {
         api: &Proton,
         tx: &mut impl RunTransaction,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
+        info!("Fetching message");
         let message = api.get_message(message_id).await.map(|v| v.message)?;
 
         let (mut message, mut body_metadata, body) = Message::from_api_data(message, tx.tether())
@@ -2165,6 +2166,8 @@ impl Message {
         })
         .await
         .map_err(MailContextError::Other)?;
+
+        info!("Message saved with {:?}", message.id());
 
         Ok((
             message,
