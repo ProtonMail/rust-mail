@@ -98,8 +98,9 @@ pub trait BaseTestContext {
 
 struct TestCoreDatabaseInitializer;
 
+#[async_trait::async_trait]
 impl UserDatabaseInitializer for TestCoreDatabaseInitializer {
-    fn initialize(&self, _stash: &Stash) -> Result<(), MigratorError> {
+    async fn initialize(&self, _stash: &Stash) -> Result<(), MigratorError> {
         Ok(())
     }
 }
