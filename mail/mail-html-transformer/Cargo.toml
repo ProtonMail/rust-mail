@@ -17,14 +17,14 @@ regex = { workspace = true }
 lightningcss = { version = "1.0.0-alpha.66", features = [
   "visitor",
 ], default-features = false }
-smart-default = { workspace = true }
 html2text = { workspace = true }
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-cpuprofiler = "0.0.4"
+# The code related to cpuprofiler usage has been commented, we can remove the import for now
+# cpuprofiler = "0.0.4"
 criterion = "0.5.1"
 insta = { workspace = true }
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }

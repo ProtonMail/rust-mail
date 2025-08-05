@@ -63,7 +63,6 @@ jiff = { workspace = true }
 [dev-dependencies]
 futures = { workspace = true }
 tempdir = { workspace = true }
-clap = { workspace = true }
 rand = { workspace = true }
 insta = { workspace = true }
 proton-core-common = { path = ".", features = ["test-utils"] }

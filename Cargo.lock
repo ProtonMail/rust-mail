@@ -1278,17 +1278,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cpuprofiler"
-version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43f8479dbcfd2bbaa0c0c26779b913052b375981cdf533091f2127ea3d42e52b"
-dependencies = [
- "error-chain",
- "lazy_static",
- "pkg-config",
-]
-
-[[package]]
 name = "crc24"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2110,7 +2099,6 @@ version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d2f06b9cac1506ece98fe3231e3cc9c4410ec3d5b1f24ae1c8946f0742cdefc"
 dependencies = [
- "backtrace",
  "version_check",
 ]
 
@@ -5655,7 +5643,6 @@ dependencies = [
  "bitflags 2.9.1",
  "bytes",
  "chrono",
- "clap",
  "derive_more 2.0.1",
  "email_address",
  "flume",
@@ -5826,7 +5813,6 @@ dependencies = [
  "futures",
  "indexmap 2.10.0",
  "parking_lot",
- "paste",
  "proton-core-api",
  "serde",
  "serde_json",
@@ -5994,7 +5980,6 @@ dependencies = [
 name = "proton-mail-html-transformer"
 version = "0.2.3"
 dependencies = [
- "cpuprofiler",
  "criterion",
  "html2text",
  "html5ever 0.26.0",
@@ -6006,7 +5991,6 @@ dependencies = [
  "pprof",
  "pretty_assertions",
  "regex",
- "smart-default",
  "test-case",
  "thiserror 1.0.69",
  "tracing",
@@ -6092,7 +6076,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "tracing-appender",
  "tracing-oslog",
  "tracing-subscriber",
  "uniffi",
@@ -6112,9 +6095,6 @@ version = "0.1.0"
 [[package]]
 name = "proton-payment-uniffi"
 version = "0.1.0"
-dependencies = [
- "proton-payment-sdk",
-]
 
 [[package]]
 name = "proton-sqlite3"
@@ -6128,7 +6108,6 @@ dependencies = [
  "itertools 0.13.0",
  "notify",
  "parking_lot",
- "paste",
  "rand 0.8.5",
  "rusqlite",
  "serde",
@@ -6175,7 +6154,6 @@ name = "proton-vcard"
 version = "0.2.1"
 dependencies = [
  "anyhow",
- "base64",
  "chrono",
  "ical",
  "itertools 0.13.0",
@@ -6184,7 +6162,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tracing",
  "url",
- "velcro",
 ]
 
 [[package]]
@@ -7478,11 +7455,7 @@ version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "rusqlite",
- "serde",
- "stash",
  "syn 2.0.104",
- "uuid",
 ]
 
 [[package]]
@@ -8389,7 +8362,6 @@ dependencies = [
  "proton-core-api",
  "uniffi",
  "uniffi-macros",
- "uniffi-runtime",
 ]
 
 [[package]]
@@ -8409,7 +8381,6 @@ version = "0.1.0"
 dependencies = [
  "jni",
  "tokio",
- "tracing",
 ]
 
 [[package]]

@@ -11,6 +11,8 @@ proc-macro = true
 proc-macro2 = "1.0.93"
 quote = "1.0.38"
 cruet = "0.14.0"
+
+[dev-dependencies]
 uniffi = { workspace = true }
 
 [dependencies.syn]
