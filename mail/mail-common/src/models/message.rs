@@ -154,6 +154,8 @@ pub struct Message {
     #[DbField]
     pub snooze_time: UnixTimestamp,
 
+    pub display_snooze_reminder: bool,
+
     #[DbField]
     pub subject: String,
 
@@ -1631,6 +1633,7 @@ impl Message {
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),
+            display_snooze_reminder: value.snooze_time > 0,
             subject: value.subject,
             time: value.time.into(),
             to_list: MessageRecipients {
@@ -2562,6 +2565,7 @@ impl ModelHooks for Message {
     async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         self.attachments_metadata =
             Attachment::load_message_attachment_metadata(self.id(), tether).await?;
+        self.display_snooze_reminder = self.snooze_time.as_u64() > 0;
 
         let labels = self.all_message_labels(tether).await?;
 
@@ -2782,6 +2786,7 @@ impl Message {
             sender: Default::default(),
             size: Default::default(),
             snooze_time: UnixTimestamp::new(0),
+            display_snooze_reminder: false,
             subject: Default::default(),
             time: UnixTimestamp::new(0),
             to_list: Default::default(),

@@ -1451,8 +1451,13 @@ pub struct Message {
     /// TODO: Document this field.
     pub size: u64,
 
-    /// TODO: Document this field.
     pub snooze_time: UnixTimestamp,
+
+    /// Whether the snooze reminder should be displayed.
+    /// Technically its impossible to snooze a message but if user
+    /// snoozes a conversation and switches view to a message, we need to
+    /// display the snooze reminder.
+    pub display_snooze_reminder: bool,
 
     /// TODO: Document this field.
     pub subject: String,
@@ -1508,6 +1513,7 @@ impl From<RealMessage> for Message {
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),
+            display_snooze_reminder: value.display_snooze_reminder,
             subject: value.subject,
             time: value.time.into(),
             to_list: value.to_list.value.map_vec(),

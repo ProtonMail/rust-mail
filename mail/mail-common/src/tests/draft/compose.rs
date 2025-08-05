@@ -707,6 +707,7 @@ fn existing_message() -> Message {
         },
         size: 0,
         snooze_time: 0.into(),
+        display_snooze_reminder: false,
         subject: "".to_string(),
         time: 0.into(),
         to_list: Default::default(),

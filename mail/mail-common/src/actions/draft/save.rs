@@ -822,6 +822,7 @@ impl Save {
             },
             size: body_len,
             snooze_time: Default::default(),
+            display_snooze_reminder: false,
             subject: self.subject.clone(),
             time,
             to_list: self.to_list.to_message_recipients().into(),

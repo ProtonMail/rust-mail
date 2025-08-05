@@ -1749,17 +1749,42 @@ impl Conversation {
 
         Self::remove_label(local_inbox_id, ids.to_vec(), bond).await?;
         Self::apply_label(local_snoozed_id, ids.to_vec(), bond).await?;
+        Self::apply_snooze_state(snooze_until, ids.to_vec(), bond).await?;
 
-        Self::modify_labels(
-            |label| {
-                let modified = label.context_snooze_time != snooze_until;
+        Ok(())
+    }
+
+    async fn apply_snooze_state(
+        snooze_until: UnixTimestamp,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
+        for id in ids {
+            let conversation = Conversation::find_by_id(id, bond).await?;
+
+            let Some(mut conversation) = conversation else {
+                warn!("Conversation with id {id} does not exist!");
+                continue;
+            };
+
+            let mut modified = false;
+
+            for label in conversation.labels.iter_mut() {
+                modified |= label.context_snooze_time != snooze_until;
                 label.context_snooze_time = snooze_until;
-                modified
-            },
-            ids.to_vec(),
-            bond,
-        )
-        .await?;
+            }
+
+            let messages = Message::in_conversation(id, bond).await?;
+            for mut message in messages {
+                message.snooze_time = snooze_until;
+                message.display_snooze_reminder = true;
+                message.save(bond).await?;
+            }
+
+            if modified {
+                conversation.save(bond).await?;
+            }
+        }
 
         Ok(())
     }
@@ -1783,38 +1808,12 @@ impl Conversation {
 
         Self::remove_label(local_snoozed_id, ids.to_vec(), bond).await?;
         Self::apply_label(local_inbox_id, ids.to_vec(), bond).await?;
-
-        Self::modify_labels(
-            |label| {
-                let modified = label.context_snooze_time != label.context_time;
-                label.context_snooze_time = label.context_time;
-                modified
-            },
-            ids.to_vec(),
-            bond,
-        )
-        .await?;
+        Self::remove_snooze_state(ids.to_vec(), bond).await?;
 
         Ok(())
     }
 
-    async fn validate_snooze_location(
-        local_label_id: LocalLabelId,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        let label = Label::find_by_id(local_label_id, bond)
-            .await?
-            .ok_or(AppError::LabelNotFound(local_label_id))?;
-
-        if !label.is_snooze_location() {
-            return Err(AppError::InvalidSnoozeLocation(label.name.clone()));
-        }
-
-        Ok(())
-    }
-
-    async fn modify_labels(
-        mut modify_label: impl FnMut(&mut ConversationLabel) -> bool,
+    async fn remove_snooze_state(
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
@@ -1829,12 +1828,35 @@ impl Conversation {
             let mut modified = false;
 
             for label in conversation.labels.iter_mut() {
-                modified |= modify_label(label);
+                modified |= label.context_snooze_time != label.context_time;
+                label.context_snooze_time = label.context_time;
+            }
+
+            let messages = Message::in_conversation(id, bond).await?;
+            for mut message in messages {
+                message.snooze_time = UnixTimestamp::new(0);
+                message.display_snooze_reminder = false;
+                message.save(bond).await?;
             }
 
             if modified {
                 conversation.save(bond).await?;
             }
+        }
+
+        Ok(())
+    }
+
+    async fn validate_snooze_location(
+        local_label_id: LocalLabelId,
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
+        let label = Label::find_by_id(local_label_id, bond)
+            .await?
+            .ok_or(AppError::LabelNotFound(local_label_id))?;
+
+        if !label.is_snooze_location() {
+            return Err(AppError::InvalidSnoozeLocation(label.name.clone()));
         }
 
         Ok(())
