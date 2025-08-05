@@ -1543,7 +1543,7 @@ impl From<PasswordMode> for ApiPasswordMode {
 }
 
 impl ToSql for PasswordMode {
-    fn to_sql(&self) -> Result<ToSqlOutput, SqlError> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqlError> {
         Ok((*self as u8).into())
     }
 }
@@ -1643,7 +1643,7 @@ impl FromSql for Timestamp {
 }
 
 impl ToSql for Timestamp {
-    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         f64::to_sql(&self.0)
     }
 }

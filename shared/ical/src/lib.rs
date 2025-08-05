@@ -141,7 +141,7 @@ impl VCalendar {
     /// See [`CleanVCalendar::to_string()`] and [`DirtyVCalendar::to_string()`].
     #[doc(alias = "to_string")]
     #[must_use]
-    pub fn validate(&self) -> ValidatedVCalendar {
+    pub fn validate(&self) -> ValidatedVCalendar<'_> {
         let mut viols = Vec::new();
 
         for (idx, event) in self.events.iter().enumerate() {
