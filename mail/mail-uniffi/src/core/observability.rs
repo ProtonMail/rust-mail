@@ -430,3 +430,211 @@ pub fn record_fido_sign_result(result: FidoSignResultStatus) {
         ObservabilityRecorder::default().record(SecondFactorFidoSignResultTotal::new(result));
     });
 }
+
+// Payments
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "camelCase")]
+pub enum PaymentObservabilityEvent {
+    InAppPurchaseSubscribe,
+    SendPaymentToken,
+    CreateSubscription,
+    GetPlans,
+    GetSubscription,
+}
+
+#[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "camelCase")]
+pub enum PaymentObservabilityEventStatus {
+    Success,
+    Http4xx,
+    Http5xx,
+    SerializationError,
+    Unknown,
+}
+
+#[uniffi_export]
+pub fn send_payment_observability_event(
+    event_type: PaymentObservabilityEvent,
+    status: PaymentObservabilityEventStatus,
+) {
+    let recorder = ObservabilityRecorder::default();
+
+    match event_type {
+        PaymentObservabilityEvent::InAppPurchaseSubscribe => {
+            recorder.record(InAppPurchaseSubscribeTotal::new(status));
+        }
+        PaymentObservabilityEvent::SendPaymentToken => {
+            recorder.record(SendPaymentTokenTotal::new(status));
+        }
+        PaymentObservabilityEvent::CreateSubscription => {
+            recorder.record(CreateSubscriptionTotal::new(status));
+        }
+        PaymentObservabilityEvent::GetPlans => {
+            recorder.record(GetPlansTotal::new(status));
+        }
+        PaymentObservabilityEvent::GetSubscription => {
+            recorder.record(GetSubscriptionTotal::new(status));
+        }
+    }
+}
+
+// Payments: IAP Subscribe
+metric! {
+    #[name = "payments_iap_subscribe_total"]
+    #[version = 1]
+    pub struct InAppPurchaseSubscribeTotal {
+        pub status: PaymentObservabilityEventStatus
+    }
+}
+
+// Payments: Token
+metric! {
+    #[name = "payments_iap_send_payment_token_total"]
+    #[version = 1]
+    pub struct SendPaymentTokenTotal {
+        pub status: PaymentObservabilityEventStatus
+    }
+}
+
+// Payments: Create Subscription
+metric! {
+    #[name = "payments_iap_create_subscription_total"]
+    #[version = 1]
+    pub struct CreateSubscriptionTotal {
+        pub status: PaymentObservabilityEventStatus
+    }
+}
+
+// Payments: Get Subscription
+metric! {
+    #[name = "payments_get_subscription_total"]
+    #[version = 1]
+    pub struct GetSubscriptionTotal {
+        pub status: PaymentObservabilityEventStatus
+    }
+}
+
+// Payments: Get Plans
+metric! {
+    #[name = "payments_get_plans_total"]
+    #[version = 1]
+    pub struct GetPlansTotal {
+        pub status: PaymentObservabilityEventStatus
+    }
+}
+
+// Payments: Tests
+#[cfg(test)]
+mod payments_tests {
+
+    use super::*;
+    use proton_core_api::services::{
+        observability::ObservabilityRecorder,
+        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    };
+    use serde_json::{self, json};
+
+    const EVENT_IAP_SUBSCRIBE: &str = "payments_iap_subscribe_total";
+    const EVENT_SEND_PAYMENT_TOKEN: &str = "payments_iap_send_payment_token_total";
+    const EVENT_CREATE_SUBSCRIPTION: &str = "payments_iap_create_subscription_total";
+    const EVENT_GET_SUBSCRIPTION: &str = "payments_get_subscription_total";
+    const EVENT_GET_PLANS: &str = "payments_get_plans_total";
+    const TEST_DATA_TIMESTAMP: i64 = 1_741_021_308;
+    const TEST_DATA_VALUE: u64 = 1;
+    const TEST_DATA_STATUS: &str = "unknown";
+
+    fn test_data_json(event_name: &str) -> String {
+        format!(
+            r#"{{"Name":"{event_name}","Version":1,"Timestamp":{TEST_DATA_TIMESTAMP},"Data":{{"Labels":{{"status":"{TEST_DATA_STATUS}"}},"Value":{TEST_DATA_VALUE}}}}}"#,
+        )
+    }
+
+    fn test_serialized_metric<T: ObservabilityMetric>(test_metric: T) -> String {
+        serde_json::to_string(
+            &ObservabilityRecorder::into_metrics_element(
+                test_metric,
+                TEST_DATA_TIMESTAMP,
+                TEST_DATA_VALUE,
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn test_request_element(event_name: &str) -> PostMetricsRequestElement {
+        PostMetricsRequestElement {
+            name: event_name.to_string(),
+            version: 1,
+            timestamp: TEST_DATA_TIMESTAMP,
+            data: PostMetricsRequestData {
+                labels: json!({ "status": TEST_DATA_STATUS}),
+                value: TEST_DATA_VALUE,
+            },
+        }
+    }
+
+    #[test]
+    fn test_in_app_purchase_subscribe_total() {
+        let serialized_metric = test_serialized_metric(InAppPurchaseSubscribeTotal {
+            status: PaymentObservabilityEventStatus::Unknown,
+        });
+
+        assert_eq!(serialized_metric, test_data_json(EVENT_IAP_SUBSCRIBE));
+        assert_eq!(
+            test_request_element(EVENT_IAP_SUBSCRIBE),
+            serde_json::de::from_str(&serialized_metric).unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_send_payment_token_total() {
+        let serialized_metric = test_serialized_metric(SendPaymentTokenTotal {
+            status: PaymentObservabilityEventStatus::Unknown,
+        });
+
+        assert_eq!(serialized_metric, test_data_json(EVENT_SEND_PAYMENT_TOKEN));
+        assert_eq!(
+            test_request_element(EVENT_SEND_PAYMENT_TOKEN),
+            serde_json::de::from_str(&serialized_metric).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_create_subscription_total() {
+        let serialized_metric = test_serialized_metric(CreateSubscriptionTotal {
+            status: PaymentObservabilityEventStatus::Unknown,
+        });
+
+        assert_eq!(serialized_metric, test_data_json(EVENT_CREATE_SUBSCRIPTION));
+        assert_eq!(
+            test_request_element(EVENT_CREATE_SUBSCRIPTION),
+            serde_json::de::from_str(&serialized_metric).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_get_subscription_total() {
+        let serialized_metric = test_serialized_metric(GetSubscriptionTotal {
+            status: PaymentObservabilityEventStatus::Unknown,
+        });
+
+        assert_eq!(serialized_metric, test_data_json(EVENT_GET_SUBSCRIPTION));
+        assert_eq!(
+            test_request_element(EVENT_GET_SUBSCRIPTION),
+            serde_json::de::from_str(&serialized_metric).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_get_plans_total() {
+        let serialized_metric = test_serialized_metric(GetPlansTotal {
+            status: PaymentObservabilityEventStatus::Unknown,
+        });
+
+        assert_eq!(serialized_metric, test_data_json(EVENT_GET_PLANS));
+        assert_eq!(
+            test_request_element(EVENT_GET_PLANS),
+            serde_json::de::from_str(&serialized_metric).unwrap()
+        );
+    }
+}
