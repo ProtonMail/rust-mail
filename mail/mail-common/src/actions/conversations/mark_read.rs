@@ -14,12 +14,17 @@ use stash::stash::Bond;
 use tracing::error;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MarkRead(GenericLabelRelatedActionData<Conversation>);
+pub struct MarkRead {
+    data: GenericLabelRelatedActionData<Conversation>,
+    snooze_remind_ids: Vec<LocalConversationId>,
+}
 
 impl MarkRead {
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
-        // TODO(db-tests): label_id was present in the original action, why was it used.
-        Self(GenericLabelRelatedActionData::new(label_id, ids))
+        Self {
+            data: GenericLabelRelatedActionData::new(label_id, ids),
+            snooze_remind_ids: Vec::new(),
+        }
     }
 }
 
@@ -48,17 +53,23 @@ impl Handler for MarkReadHandler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // API call return an error 2501(Conversation was not updated) for conversation already read
-        let conversations = Conversation::find_by_ids(action.0.data.target_ids.clone(), tx).await?;
-        action.0.data.target_ids = conversations
+        let conversations =
+            Conversation::find_by_ids(action.data.data.target_ids.clone(), tx).await?;
+        action.snooze_remind_ids = conversations
+            .iter()
+            .filter(|c| c.display_snooze_reminder)
+            .filter_map(|c| c.local_id)
+            .collect();
+        action.data.data.target_ids = conversations
             .into_iter()
-            .filter_map(|c| ContextualConversation::new(c, action.0.label_id))
-            .filter(|c| c.num_unread > 0)
+            .filter_map(|c| ContextualConversation::new(c, action.data.label_id))
+            .filter(|c| c.num_unread > 0 || c.display_snooze_reminder)
             .map(|c| c.local_id)
             .collect();
 
-        action.0.resolve_ids(tx).await?;
+        action.data.resolve_ids(tx).await?;
 
-        Conversation::mark_read(action.0.data.target_ids.clone(), tx).await?;
+        Conversation::mark_read(action.data.data.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -68,9 +79,18 @@ impl Handler for MarkReadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::mark_unread(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
+        if !action.snooze_remind_ids.is_empty() {
+            Conversation::set_display_snooze_reminder(&action.snooze_remind_ids, tx).await?;
+        }
+
+        Conversation::mark_unread(
+            action.data.label_id,
+            action.data.data.target_ids.clone(),
+            tx,
+        )
+        .await?;
         action
-            .0
+            .data
             .mark_rollback(RollbackItemType::Conversation, tx)
             .await?;
 
@@ -84,7 +104,7 @@ impl Handler for MarkReadHandler {
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let responses = Conversation::mark_multiple_as_read_remote::<Proton>(
-            action.0.data.remote_target_ids.clone(),
+            action.data.data.remote_target_ids.clone(),
             &self.api,
         )
         .await?;
@@ -102,7 +122,7 @@ impl Handler for MarkReadHandler {
                     let local_ids =
                         Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-                    Conversation::mark_unread(action.0.label_id, local_ids, tx)
+                    Conversation::mark_unread(action.data.label_id, local_ids, tx)
                         .await
                         .map_err(|e| {
                             error!("Failed to rollback failed conversations: {e:?}");

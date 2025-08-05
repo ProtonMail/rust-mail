@@ -1366,12 +1366,17 @@ impl Conversation {
             let mut conversation = Conversation::find_by_id(conversation_id, bond)
                 .await?
                 .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
-            // If conversation has no unread messages, there is nothing to do.
+            // If conversation has no unread messages, we need to check if it has a snooze reminder.
             if conversation.num_unread == 0 {
+                if conversation.display_snooze_reminder {
+                    conversation.display_snooze_reminder = false;
+                    conversation.save(bond).await?;
+                }
+
                 continue;
             }
 
-            // Update conversation unread count.
+            // Otherwise, update conversation unread count.
             conversation.num_unread = 0;
             conversation.display_snooze_reminder = false;
             conversation.save(bond).await?;
@@ -1831,6 +1836,25 @@ impl Conversation {
                 conversation.save(bond).await?;
             }
         }
+
+        Ok(())
+    }
+
+    pub async fn set_display_snooze_reminder(
+        ids: &[LocalConversationId],
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
+        let placeholders = placeholders(ids);
+        let params = ids.to_sql();
+        bond.execute(
+            format!(
+                "UPDATE {} SET display_snooze_reminder = 1 WHERE {} IN ({placeholders})",
+                Conversation::table_name(),
+                Conversation::id_field_name()
+            ),
+            params,
+        )
+        .await?;
 
         Ok(())
     }
