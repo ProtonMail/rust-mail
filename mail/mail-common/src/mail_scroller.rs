@@ -438,7 +438,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                             return;
                         }
                         let _ = ordered_command_sender
-                            .send(ScrollerOrderedCommand::Refresh(ScrollerSource::Invalidation))
+                            .send_async(ScrollerOrderedCommand::Refresh(ScrollerSource::Invalidation)).await
                             .inspect_err(|e| tracing::error!("Failed to send refresh command: {e:?}"));
                     }
                     r = db_update.recv_async() => {
@@ -447,7 +447,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                             return;
                         }
                         let _ = ordered_command_sender
-                            .send(ScrollerOrderedCommand::Refresh(ScrollerSource::Database))
+                            .send_async(ScrollerOrderedCommand::Refresh(ScrollerSource::Database)).await
                             .inspect_err(|e| tracing::error!("Failed to send refresh command: {e:?}"));
                     }
                     r = command_receiver.recv_async() => {
@@ -497,7 +497,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
                 if result.is_some() || result.is_scroll_event() {
                     self.update
-                        .send(result)
+                        .send_async(result)
+                        .await
                         .map_err(|e| anyhow!("Failed to send refresh update: {e:?}"))?;
                 }
             }
@@ -512,7 +513,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
                 if result.is_some() || result.is_scroll_event() {
                     self.update
-                        .send(result)
+                        .send_async(result)
+                        .await
                         .map_err(|e| anyhow!("Failed to send force refresh update: {e:?}"))?;
                 }
             }
@@ -524,7 +526,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
                 if result.is_some() || result.is_scroll_event() {
                     self.update
-                        .send(result)
+                        .send_async(result)
+                        .await
                         .map_err(|e| anyhow!("Failed to send change filter update: {e:?}"))?;
                 }
             }
@@ -535,7 +538,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
                 self.update
-                    .send(result)
+                    .send_async(result)
+                    .await
                     .map_err(|e| anyhow!("Failed to send clear cursor update: {e:?}"))?;
             }
         }
@@ -776,10 +780,10 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 if let Ok(result) = self.fetch_more(src).await
                     && result.is_some()
                 {
-                    let _ = self
-                        .update
-                        .send(result)
-                        .inspect_err(|e| tracing::error!("Failed to send append update: {e:?}"));
+                    let _ =
+                        self.update.send_async(result).await.inspect_err(|e| {
+                            tracing::error!("Failed to send append update: {e:?}")
+                        });
                 }
             }
         }

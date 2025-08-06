@@ -1,13 +1,17 @@
 use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::{Action, EventId, LabelId};
+use proton_core_common::models::ModelExtension;
 use proton_core_common::{
     datatypes::SystemLabel,
     models::{Label, ModelIdExtension},
 };
+use proton_mail_api::services::proton::prelude::{ConversationEvent, MailEvent};
+use proton_mail_api::services::proton::response_data::ConversationCount;
 use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
+    response_data::ConversationLabel as ApiConversationLabel,
 };
 use proton_mail_common::datatypes::{
     SystemLabelId,
@@ -1175,6 +1179,122 @@ async fn setup_api_conversation_pages(
     // Do not download any conv on init
     params.conversations = vec![];
     params
+}
+
+#[tokio::test]
+async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let page_size = 5;
+    let unread = ReadFilter::All;
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+
+    ctx.mock_ping_success().await;
+    let params = TestParams::default_basic();
+    ctx.setup_user(params.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
+    let mut test_conversation = params.conversations.clone().pop().unwrap();
+    let conv_id_1 = ConversationId::from("myconv_9");
+    let conv_id_2 = ConversationId::from("myconv_10");
+    test_conversation.id = conv_id_1.clone();
+    test_conversation.order = 9;
+    test_conversation.context_time = Some(9);
+    ctx.mock_get_conversations(vec![test_conversation], 2_u64)
+        .await;
+    //mock_get_conversations_page(&ctx, vec![], &test_conv_id, 1).await;
+    ctx.catch_all().await;
+
+    // Update the inbox label to have all conversations
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 1;
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
+
+    // Online
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    // Conversations can be accessed only when progressed.
+    test_scroller.fetch_more_and_wait().await.unwrap();
+    // And every new scroller is `NotSynced` so we wait for invalidation
+    let _ = test_scroller.wait_for_update().await.unwrap();
+    assert_scroller_content(&mut test_scroller, 1, &["myconv_9"]).await;
+
+    // Simulate new event
+    let event = MailEvent {
+        event_id: EventId::from("New Event"),
+        labels: None,
+        conversation_counts: Some(vec![ConversationCount {
+            label_id: LabelId::inbox(),
+            total: 2,
+            unread: 1,
+        }]),
+        conversations: Some(vec![ConversationEvent {
+            id: conv_id_2.clone(),
+            action: Action::Create,
+            conversation: Some(ApiConversation {
+                id: conv_id_2.clone(),
+                attachment_info: Default::default(),
+                attachments_metadata: vec![],
+                display_snoozed_reminder: false,
+                expiration_time: 0,
+                labels: vec![ApiConversationLabel {
+                    id: LabelId::inbox(),
+                    context_expiration_time: 0,
+                    context_num_attachments: 0,
+                    context_num_messages: 1,
+                    context_num_unread: 1,
+                    context_size: 100,
+                    context_snooze_time: 0,
+                    context_time: 10,
+                }],
+                num_attachments: 0,
+                num_messages: 1,
+                num_unread: 1,
+                order: 10,
+                recipients: vec![],
+                senders: vec![],
+                size: 100,
+                subject: "".to_string(),
+                context_time: None,
+            }),
+        }]),
+        incoming_defaults: None,
+        mail_settings: None,
+        message_counts: None,
+        messages: None,
+        refresh: 0,
+        has_more: false,
+    };
+
+    user_ctx.apply_event(event.into()).await.unwrap();
+    // Sanity check expected state
+    let conversations = Conversation::in_label(local_label_id, &tether)
+        .await
+        .unwrap();
+    assert_eq!(conversations.len(), 2);
+    assert_eq!(conversations[0].remote_id.as_ref(), Some(&conv_id_2));
+    assert_eq!(conversations[1].remote_id.as_ref(), Some(&conv_id_1));
+    let conv_counts = ConversationCounters::find_by_id(local_label_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(conv_counts.unread, 1);
+    assert_eq!(conv_counts.total, 2);
+
+    let update = tokio::time::timeout(Duration::from_secs(5), test_scroller.wait_for_update())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(update.len(), 1);
+    assert_eq!(update[0].remote_id.as_ref(), Some(&conv_id_2));
 }
 
 #[function_name::named]
