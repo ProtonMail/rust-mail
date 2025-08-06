@@ -149,6 +149,7 @@ async fn banners() {
 
     let msg_snoozed = Message {
         snooze_time,
+        label_ids: vec![LabelId::snoozed()],
         ..Message::test_default()
     };
 

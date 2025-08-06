@@ -155,6 +155,9 @@ pub struct Message {
     pub snooze_time: UnixTimestamp,
 
     #[DbField]
+    pub display_snooze_reminder: bool,
+
+    #[DbField]
     pub subject: String,
 
     #[DbField]
@@ -1459,6 +1462,9 @@ impl Message {
             .await?
             {
                 message.unread = !mark_read;
+                if mark_read {
+                    message.display_snooze_reminder = false;
+                }
                 message.save(bond).await?;
                 updated.push(IdPair {
                     local_message_id: message.id(),
@@ -1473,8 +1479,8 @@ impl Message {
         for (conversation_id, count) in conversation_count_changed {
             if let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await? {
                 if mark_read {
-                    conversation.num_unread = conversation.num_unread.saturating_sub(count);
                     conversation.display_snooze_reminder = false;
+                    conversation.num_unread = conversation.num_unread.saturating_sub(count);
                 } else {
                     conversation.num_unread += count;
                 }
@@ -1631,6 +1637,7 @@ impl Message {
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),
+            display_snooze_reminder: value.display_snoozed_reminder,
             subject: value.subject,
             time: value.time.into(),
             to_list: MessageRecipients {
@@ -2787,6 +2794,7 @@ impl Message {
             sender: Default::default(),
             size: Default::default(),
             snooze_time: UnixTimestamp::new(0),
+            display_snooze_reminder: false,
             subject: Default::default(),
             time: UnixTimestamp::new(0),
             to_list: Default::default(),

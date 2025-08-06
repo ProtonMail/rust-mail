@@ -116,6 +116,7 @@ async fn test_new_mailbox_sync_messages() {
         is_forwarded: false,
         expiration_time: 0,
         snooze_time: 0,
+        display_snoozed_reminder: false,
         num_attachments: 0,
         attachments_metadata: vec![],
     }];
@@ -222,6 +223,7 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
         is_forwarded: false,
         expiration_time: 0,
         snooze_time: 0,
+        display_snoozed_reminder: false,
         num_attachments: 0,
         attachments_metadata: vec![],
     }];

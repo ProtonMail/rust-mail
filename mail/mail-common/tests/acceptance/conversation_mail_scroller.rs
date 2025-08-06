@@ -733,10 +733,10 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
         .local_label_id(local_label_id)
         .unread(unread)
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
-        .conversation_time(last_label.context_time)
+        .conversation_time(last_label.context_snooze_time)
         .display_order(last_conversation.display_order)
         .order_dir(ScrollOrderDir::Desc)
-        .order_field(ScrollOrderField::Time)
+        .order_field(ScrollOrderField::SnoozeTime)
         .build();
 
     tether
@@ -756,8 +756,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
 
     // Fetch more will load 8 items, 3 + 5 as in total it is less than
     // 2 separate pages so it will merge them together.
-    test_scroller.fetch_more().unwrap();
-    let fetched_page = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let fetched_page = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(fetched_page.len(), 8);
 
     assert_scroller_content(
