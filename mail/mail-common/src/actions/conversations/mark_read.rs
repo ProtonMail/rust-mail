@@ -39,7 +39,7 @@ impl Action for MarkRead {
     type Error = MailActionError;
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
-        self.0.read_unread_action_dependency_keys().build()
+        self.data.read_unread_action_dependency_keys().build()
     }
 }
 
