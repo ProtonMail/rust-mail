@@ -36,12 +36,13 @@ mod keys;
 pub mod nuke_utils;
 
 /// Extra initializer for the user database.
+#[async_trait::async_trait]
 pub trait UserDatabaseInitializer: Send + Sync {
     /// Initialize the database as needed by running database migrations.
     ///
     /// # Errors
     /// Return error if the migration failed.
-    fn initialize(&self, stash: &Stash) -> Result<(), MigratorError>;
+    async fn initialize(&self, stash: &Stash) -> Result<(), MigratorError>;
 
     /// A helper to return a boxed trait object.
     fn boxed(self) -> Box<dyn UserDatabaseInitializer>
@@ -246,7 +247,7 @@ impl UserContext {
                 migrate_core_db(&stash).await?;
 
                 for init in inits {
-                    init.initialize(&stash)?;
+                    init.initialize(&stash).await?;
                 }
             }
 

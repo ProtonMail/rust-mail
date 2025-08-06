@@ -3,7 +3,6 @@ use crate::mail_scroller::MailScrollerError;
 use crate::migration_snooper::MailMigrationSnooper;
 use crate::{AppError, MailUserContext, draft};
 use anyhow::anyhow;
-use futures::executor::block_on;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_account_api::signup::SignupFlow;
@@ -969,11 +968,10 @@ impl MailContext {
 
 pub struct MailUserDatabaseInitializer {}
 
+#[async_trait::async_trait]
 impl UserDatabaseInitializer for MailUserDatabaseInitializer {
-    fn initialize(&self, stash: &Stash) -> Result<(), MigratorError> {
-        block_on(async {
-            crate::db::migrations::migrate_db(stash).await?;
-            Ok(())
-        })
+    async fn initialize(&self, stash: &Stash) -> Result<(), MigratorError> {
+        crate::db::migrations::migrate_db(stash).await?;
+        Ok(())
     }
 }
