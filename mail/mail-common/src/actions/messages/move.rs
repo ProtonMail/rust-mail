@@ -1,11 +1,14 @@
 use crate::AppError;
-use crate::actions::{ActionMoveData, MailActionError};
+use crate::actions::messages::{LabelAs, Unread};
+use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::Message;
 use anyhow::Context;
+use itertools::Itertools;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
+use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::Proton;
 use serde::{Deserialize, Serialize};
@@ -20,7 +23,7 @@ impl Action for Move {
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = MoveHandler;
     type RemoteOutput = ();
-    type LocalOutput = ();
+    type LocalOutput = Self;
     type Error = MailActionError;
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
@@ -40,9 +43,9 @@ impl Handler for MoveHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<Self::Action, <Self::Action as Action>::Error> {
         action.0.move_to(tx).await?;
-        Ok(())
+        Ok(action.clone())
     }
 
     async fn revert_local(
@@ -52,9 +55,6 @@ impl Handler for MoveHandler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.revert_local(tx).await?;
-        for reverse in action.0.reverse() {
-            reverse.move_to(tx).await?;
-        }
         Ok(())
     }
 
@@ -81,10 +81,28 @@ impl UndoMoveToMessages {
         };
         // The queue couldn't revert. This means that we're on our own to undo this.
 
-        _ = queue
-            .queue_actions(self.action.0.reverse().map(Move))
+        let move_actions = self.action.0.reverse().map(Move).collect_vec();
+
+        let label_as_data = LabelAsData {
+            source_label_id: 0.into(), // This is fine because it's unused (no archiving, no undoing)
+            add: self.action.0.removed_labels,
+            remove: vec![],
+        };
+
+        let id = enqueue!(
+            queue,
+            [
+                LabelAs(label_as_data),
+                Unread::new(self.action.0.marked_read),
+            ]
+        )?;
+
+        queue
+            .queue_actions(move_actions, Some(id))
             .await
-            .context("Error undoing")?;
+            .context("Error undoing")?
+            .last()
+            .map(|a| a.id);
 
         Ok(())
     }

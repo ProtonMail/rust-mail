@@ -1,14 +1,14 @@
 use crate::actions::MailActionError;
-use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType, SystemLabelId};
+use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType};
 use crate::models::{Message, RollbackItem};
 use futures::future::try_join_all;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
-use proton_core_api::services::proton::{LabelId, Proton};
+use proton_core_api::services::proton::Proton;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
-use proton_core_common::models::{Label, LabelError, ModelIdExtension};
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -64,16 +64,6 @@ impl Handler for HamHandler {
             return Err(MailActionError::NoInput);
         }
 
-        let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
-            .await?
-            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
-
-        let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
-            .await?
-            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
-
-        Message::move_messages(spam, inbox, action.0.clone(), bond).await?;
-
         for &id in &action.0 {
             Message::set_flags(id, MessageFlags::HAM_MANUAL, bond).await?;
         }
@@ -87,16 +77,6 @@ impl Handler for HamHandler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
-            .await?
-            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
-
-        let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
-            .await?
-            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
-
-        Message::move_messages(inbox, spam, action.0.clone(), bond).await?;
-
         for &id in &action.0 {
             Message::unset_flags(id, MessageFlags::HAM_MANUAL, bond).await?;
         }

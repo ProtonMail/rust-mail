@@ -7,9 +7,9 @@ use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::{Conversation, ConversationCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, MetadataBuilder,
-    Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
+use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::Proton;
 use serde::{Deserialize, Serialize};
@@ -104,22 +104,9 @@ impl UndoLabelAsConversations {
             if let Some(move_action_data) =
                 ActionMoveData::new(tether, action.0.source_label_id, all).await?
             {
-                let queued_move = queue
-                    .queue_action(action)
-                    .await
-                    .context("Error queuing move to archive")?;
-
-                let meta = MetadataBuilder::new()
-                    .with_dependency(queued_move.id)
-                    .build();
-
-                queue
-                    .queue_action_with_metadata(MoveAction(move_action_data), meta)
-                    .await
-                    .context("Error queuing with move to archive dependency")?;
+                let _id = enqueue!(queue, [action, MoveAction(move_action_data)])?;
+                return Ok(());
             }
-
-            return Ok(());
         };
         queue
             .queue_action(action)

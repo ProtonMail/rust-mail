@@ -5,10 +5,8 @@ mod conversations;
 use super::network::split_request;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::r#move::UndoMoveToConversations;
-use crate::actions::conversations::{
-    Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel, Unsnooze,
-};
 use crate::actions::conversations::{LabelAs, Snooze};
+use crate::actions::conversations::{MarkRead, MarkUnread, Move, Unsnooze};
 use crate::actions::{
     ActionMoveData, ConversationAction, ConversationAvailableActions, ConversationOrMessage,
     LabelAsAction, LabelAsData, LabelAsOutput, LabelPair, MailActionError, MoveAction,
@@ -61,7 +59,7 @@ use stash::orm::Model;
 use stash::orm::ModelHooks;
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
-use stash::utils::{MapToSql as _, placeholders};
+use stash::utils::{MapToSql as _, placeholders, placeholders_n};
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
@@ -190,77 +188,29 @@ impl ModelIdExtension for Conversation {
     }
 }
 
+type LabelAsResult = Result<QueuedActionOutput<LabelAs>, QueueActionError<LabelAs>>;
+
 impl Conversation {
     pub fn label(&self, local_id: LocalLabelId) -> Option<&ConversationLabel> {
         self.labels
             .iter()
             .find(|&label| label.local_label_id == Some(local_id))
     }
-    /// Label multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
-    ///
-    pub async fn action_apply_label(
-        queue: &Queue,
-        label_id: LocalLabelId,
-        conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
-        let action = ActionLabel::new(label_id, conversation_ids);
-        queue.queue_action(action).await
-    }
 
-    /// Star multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
-    pub async fn action_star(
-        queue: &proton_action_queue::queue::Queue,
-        conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
-        let tether = queue.stash().connection();
-        let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
-            .await
-            .map_err(|e| QueueActionError::Queue(e.into()))?
-            .expect("Star system label not found");
-        let action = ActionLabel::new(label_id, conversation_ids);
-        queue.queue_action(action).await
-    }
-
-    /// Unstar multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
-    pub async fn action_unstar(
-        queue: &Queue,
-        conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
+    pub async fn action_star(queue: &Queue, ids: Vec<LocalConversationId>) -> LabelAsResult {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
             .expect("Star system label not found");
-        let action = Unlabel::new(label_id, conversation_ids.into_iter().map_into());
-        queue.queue_action(action).await
+        Self::action_remove_label(queue, label_id, ids).await
     }
 
-    /// Unlabel multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
-    ///
-    pub async fn action_remove_label(
-        queue: &Queue,
-        label_id: LocalLabelId,
-        conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
-        let action = Unlabel::new(label_id, conversation_ids);
-        queue.queue_action(action).await
+    pub async fn action_unstar(queue: &Queue, ids: Vec<LocalConversationId>) -> LabelAsResult {
+        let tether = queue.stash().connection();
+        let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
+            .await?
+            .expect("Star system label not found");
+        Self::action_apply_label(queue, label_id, ids).await
     }
 
     /// Mark multiple conversations as read.
@@ -328,9 +278,9 @@ impl Conversation {
     ) -> Result<Option<Undo>, MailContextError> {
         if let Some(action) = ActionMoveData::new(tether, destination_id, target_ids).await? {
             let action = Move(action);
-            let id = queue.queue_action(action.clone()).await?.id;
+            let QueuedActionOutput { local, id } = queue.queue_action(action).await?;
             Ok(Some(Undo::ConversationsMoveTo(UndoMoveToConversations {
-                action,
+                action: local,
                 id,
             })))
         } else {
@@ -350,6 +300,28 @@ impl Conversation {
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
     ) -> Result<QueuedActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
+        queue.queue_action(action).await
+    }
+
+    pub async fn action_remove_label(
+        queue: &Queue,
+        label: LocalLabelId,
+        ids: Vec<LocalConversationId>,
+    ) -> LabelAsResult {
+        let action = LabelAs(LabelAsData::new_remove(
+            ids.into_iter().map(|id| LabelPair { label, id }).collect(),
+        ));
+        queue.queue_action(action).await
+    }
+
+    pub async fn action_apply_label(
+        queue: &Queue,
+        label: LocalLabelId,
+        ids: Vec<LocalConversationId>,
+    ) -> LabelAsResult {
+        let action = LabelAs(LabelAsData::new_add(
+            ids.into_iter().map(|id| LabelPair { label, id }).collect(),
+        ));
         queue.queue_action(action).await
     }
 
@@ -1360,7 +1332,8 @@ impl Conversation {
     pub async fn mark_read(
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        let mut read_messages = vec![];
         for conversation_id in conversation_ids {
             info!("Marking {conversation_id:?} as read");
             let mut conversation = Conversation::find_by_id(conversation_id, bond)
@@ -1428,6 +1401,7 @@ impl Conversation {
                 let local_message_id = message.id();
                 message.unread = false;
                 message.save(bond).await?;
+                read_messages.push(local_message_id);
 
                 let label_ids = bond.query_values::<_, LocalLabelId>("SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?", params![local_message_id]).await?;
                 for label_id in label_ids {
@@ -1451,7 +1425,7 @@ impl Conversation {
             }
         }
 
-        Ok(())
+        Ok(read_messages)
     }
 
     /// Mark multiple conversations as read.
@@ -2062,71 +2036,6 @@ impl Conversation {
             }
         };
         Conversation::split_request(ids, request).await
-    }
-
-    /// Move conversations between two labels.
-    ///
-    /// Note that the logic is the same as [`Message::move_messages`],
-    /// so any changes made here should be reflected there.
-    #[tracing::instrument(skip_all)]
-    pub async fn move_conversations(
-        source_id: LocalLabelId,
-        destination_id: LocalLabelId,
-        conversation_ids: Vec<LocalConversationId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        debug_assert_ne!(source_id, destination_id);
-        if conversation_ids.is_empty() {
-            warn!("List of ids was empty");
-            return Ok(());
-        }
-
-        info!("Moving {source_id:?} to {destination_id:?}: {conversation_ids:?}");
-
-        let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
-        let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;
-
-        // If moving to trash, mark conversations as read.
-        if destination_id == trash {
-            Conversation::mark_read(conversation_ids.iter().cloned(), bond)
-                .await
-                .context("Failed to mark as read when moving to trash: {e:?}")?;
-        }
-
-        let source_label = Label::load(source_id, bond).await?.context(
-            "Failed to load source label. This should never happen because we have the local id.",
-        )?;
-
-        // When moving in Trash or Spam, remove all labels (but AllMail)
-        if [trash, spam].contains(&destination_id) {
-            // When moving to trash or spam we delete all labels except all mail.
-            Self::remove_all_labels_except_all_mail(&conversation_ids, bond).await?;
-        } else if source_label.is_movable_folder() {
-            Conversation::remove_label(source_id, conversation_ids.clone(), bond)
-                .await
-                .context("Failed to remove source label")?;
-        } else {
-            warn!("Source label {source_id} is not a movable folder, not removing...")
-        }
-
-        if [trash, spam].contains(&source_id) {
-            // When moving out of Trash or Spam, add AlmostAllMail label
-            Conversation::apply_remote_label(
-                LabelId::almost_all_mail(),
-                conversation_ids.clone(),
-                bond,
-            )
-            .await
-            .context(
-                "Failed to add conversations to almost_all_mail when moving out of spam/trash",
-            )?;
-        }
-
-        Conversation::apply_label(destination_id, conversation_ids.clone(), bond)
-            .await
-            .context("Failed to apply destination label")?;
-
-        Ok(())
     }
 
     /// Get the available actions for conversations depending on current view and stats of the given
@@ -2843,47 +2752,23 @@ impl ConversationOrMessage for Conversation {
     }
 
     async fn mark_read(
-        ids: impl IntoIterator<Item = Self::IdType>,
+        ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         Self::mark_read(ids, bond).await
     }
 
-    async fn remove_all_labels_except_all_mail(
-        ids: &[LocalConversationId],
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
-            .await?
-            .expect("AllMail should be set");
-
-        let label_ids: Vec<LocalLabelId> = bond
-            .query_values(
-                formatdoc! {"
-                SELECT DISTINCT local_label_id AS value
-                FROM conversation_labels
-                WHERE
-                    local_conversation_id in ({})"
-                    , placeholders(ids)
-                },
-                ids.to_sql(),
-            )
-            .await?;
-
-        // It's a good moment to apply all mail label to messages in the case that it slipped by
-        if !label_ids.contains(&all_mail_id) {
-            Self::apply_label(all_mail_id, ids.iter().cloned(), bond).await?;
+    fn grouped_labels_and_messages_query(placeholders: usize) -> String {
+        formatdoc! {"
+            SELECT 
+                local_label_id,
+                GROUP_CONCAT(local_conversation_id)
+            FROM conversation_labels
+            WHERE local_conversation_id IN ({})
+            GROUP BY local_label_id
+            ",
+            placeholders_n(placeholders)
         }
-
-        for label_id in label_ids {
-            if label_id == all_mail_id {
-                continue;
-            }
-
-            Self::remove_label(label_id, ids.iter().cloned(), bond).await?;
-        }
-
-        Ok(())
     }
 }
 

@@ -875,35 +875,6 @@ pub async fn watch_messages_for_label(
     .map_err(ActionError::from)
 }
 
-/// Label the given messages with the given label id.
-///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
-///
-#[uniffi_export]
-#[returns(VoidActionResult)]
-pub async fn apply_label_to_messages(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    message_ids: Vec<Id>,
-) -> Result<(), ActionError> {
-    let user_context = session.ctx()?;
-    uniffi_async(async move {
-        RealMessage::action_apply_label(
-            user_context.action_queue(),
-            label_id.into(),
-            message_ids.map_vec(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
-    })
-    .await
-    .map_err(ActionError::from)
-    .into()
-}
-
 /// Star the given messages.
 ///
 /// # Errors
@@ -946,35 +917,6 @@ pub async fn unstar_messages(
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)
-    })
-    .await
-    .map_err(ActionError::from)
-    .into()
-}
-
-/// Remove label from the given messages with the given label id.
-///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
-///
-#[uniffi_export]
-#[returns(VoidActionResult)]
-pub async fn remove_label_from_messages(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    message_ids: Vec<Id>,
-) -> Result<(), ActionError> {
-    let user_context = session.ctx()?;
-    uniffi_async(async move {
-        RealMessage::action_remove_label(
-            user_context.action_queue(),
-            label_id.into(),
-            message_ids.map_vec(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -1069,7 +1011,7 @@ pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<
     uniffi_async(async move {
         RealMessage::action_ham(ctx.action_queue(), vec![message_id.into()])
             .await
-            .map(|_| ())
+            .map(|()| ())
             .map_err(RealProtonMailError::from)
     })
     .await

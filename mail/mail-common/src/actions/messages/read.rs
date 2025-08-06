@@ -52,17 +52,15 @@ impl Handler for ReadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // API call return an error 2501(Message does not exist) for message already read
-        let messages = Message::find_by_ids(action.0.target_ids.clone(), tx).await?;
+        // API call return an error 2501(Message does not exist) for message already
+        // read, so we only pass to apply_remote the things that were unread.
 
-        action.0.target_ids = messages
-            .into_iter()
-            .filter(|m| m.unread)
-            .filter_map(|m| m.local_id)
-            .collect();
+        action.0.target_ids = Message::mark_read(action.0.target_ids.iter().copied(), tx).await?;
 
-        action.0.resolve_ids(tx).await?;
-        Message::mark_read(action.0.target_ids.clone(), tx).await?;
+        if action.0.target_ids.is_empty() {
+            tracing::warn!("mark read doesn't do anything.");
+            return Ok(());
+        }
         Ok(())
     }
 
@@ -86,8 +84,12 @@ impl Handler for ReadHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let message_ids = action.0.remote_target_ids.clone();
+        if action.0.target_ids.is_empty() {
+            return Ok(());
+        }
 
+        let message_ids =
+            Message::local_ids_counterpart(action.0.target_ids.clone(), guard.tether()).await?;
         info!("Marking {message_ids:?} as read");
 
         let response = self.api.put_messages_read(message_ids).await?.responses;

@@ -20,9 +20,7 @@ use proton_mail_common::models::{Conversation, ConversationCounters, Message, Me
 use proton_mail_common::test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::scroller::StoreLabeledModelMap as _;
-use proton_mail_common::test_utils::test_context::{
-    MailTestContext, MailUserContextTestExtension as _,
-};
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{Mailbox, conv_id, conversation, message, msg_id};
 use stash::orm::Model;
 use stash::params;
@@ -50,7 +48,7 @@ async fn move_between_folders() {
     let labels = hash_map! {
         ApiLabelType::Folder: vec![ source_label, destination_label ]
     };
-    let params = test_init_params(labels);
+    let params = test_init_params_labels(labels);
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -128,7 +126,7 @@ async fn move_between_folders_and_undo() {
     let labels = hash_map! {
         ApiLabelType::Folder: vec![ source_label, destination_label ]
     };
-    let params = test_init_params(labels);
+    let params = test_init_params_labels(labels);
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -210,7 +208,7 @@ async fn move_between_folders_and_undo() {
     .await
     .unwrap()
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     // * the message is in the second folder
@@ -240,7 +238,7 @@ async fn move_from_label_does_not_unlabel() {
     let labels = hash_map! {
         ApiLabelType::Label: vec![ source_label, destination_label ]
     };
-    let params = test_init_params(labels);
+    let params = test_init_params_labels(labels);
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -284,7 +282,7 @@ async fn move_from_label_does_not_unlabel() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     // * the message is in the second label
@@ -299,38 +297,35 @@ async fn move_from_label_does_not_unlabel() {
 #[tokio::test]
 async fn move_into_trash_remove_label_and_mark_read() {
     // Setup:
-    // * create a label
     // * create a message in inbox (or any non-trash mailbox)
     // * add the label to the message
     // * the message is unread
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection();
 
     let trash = Label::find_first("WHERE remote_id = ?", params![LabelId::trash()], &tether)
         .await
         .unwrap()
         .unwrap();
 
-    let custom_label_id = LabelId::from("custom");
-    let custom_label = test_label(&custom_label_id, ApiLabelType::Label, "custom");
-    let message = test_message(
-        vec![
-            custom_label_id.clone(),
-            LabelId::inbox(),
-            LabelId::all_mail(),
-        ],
-        true,
-    );
-    let labels = hash_map! {
-        ApiLabelType::Label: vec![ custom_label ],
-    };
-    let params = test_init_params(labels);
+    let label_set1 = vec![
+        LabelId::inbox(),
+        LabelId::starred(),
+        LabelId::all_mail(),
+        LabelId::almost_all_mail(),
+    ];
+    let label_set2 = vec![LabelId::trash(), LabelId::all_mail()];
+
+    let message = test_message(label_set1.clone(), true);
+    let params = test_init_params();
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
-    ctx.mock_label_messages(&trash.remote_id.unwrap(), vec![message.metadata.id.clone()])
+    ctx.mock_label_messages(&LabelId::trash(), vec![message.metadata.id.clone()])
+        .await;
+    ctx.mock_label_messages(&LabelId::starred(), vec![message.metadata.id.clone()])
         .await;
     ctx.catch_all().await;
 
@@ -346,30 +341,58 @@ async fn move_into_trash_remove_label_and_mark_read() {
         .unwrap();
 
     let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
-    assert!(message.label_ids.contains(&custom_label_id));
+    assert_eq!(message.label_ids, label_set1);
     assert!(message.unread);
 
     // Action:
-    // * move message in trash
-    Message::action_move(
+    // * move message in trash and undo it
+    let undo = Message::action_move(
         &tether,
         user_ctx.action_queue(),
         trash.local_id.unwrap(),
         vec![message.local_id.unwrap()],
     )
     .await
+    .unwrap()
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
 
-    // Validation:
-    // * the message only have `all_mail` label
-    // * the message is marked as read
     message.reload(&tether).await.unwrap();
-    assert_eq!(
-        message.label_ids,
-        vec![LabelId::trash(), LabelId::all_mail()]
-    );
+    assert_eq!(message.label_ids, label_set2);
     assert!(!message.unread);
+
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
+
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, label_set1);
+    assert!(message.unread);
+
+    // Action:
+    // * move message in trash and undo it (remotely)
+    let undo = Message::action_move(
+        &tether,
+        user_ctx.action_queue(),
+        trash.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
+
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, label_set2);
+    assert!(!message.unread);
+
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
+
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, label_set1);
+    assert!(message.unread);
 }
 
 #[tokio::test]
@@ -400,7 +423,7 @@ async fn move_into_spam_remove_labels() {
     let labels = hash_map! {
         ApiLabelType::Label: vec![ custom_label ],
     };
-    let params = test_init_params(labels);
+    let params = test_init_params_labels(labels);
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -433,7 +456,7 @@ async fn move_into_spam_remove_labels() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     // * the message only has the `all_mail` label (and spam)
@@ -478,7 +501,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .unwrap();
 
     let message = test_message(vec![LabelId::spam()], false);
-    let params = test_init_params(HashMap::new());
+    let params = test_init_params_labels(HashMap::new());
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -512,7 +535,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     // * the message have `almost_all_mail` label
@@ -565,22 +588,8 @@ async fn move_message_also_moves_conversation() {
         .unwrap();
 
     let convs = Conversation::in_label(local_inbox, tether).await.unwrap();
-
     assert_eq!(convs.len(), 1);
-
-    let conv = &convs[0];
-    assert_eq!(conv.num_messages, 1);
-    assert_eq!(conv.num_unread, 0);
-    assert!(
-        conv.labels
-            .iter()
-            .any(|l| *l.remote_label_id.as_ref().unwrap() == LabelId::inbox())
-    );
-    assert!(
-        conv.labels
-            .iter()
-            .all(|l| *l.remote_label_id.as_ref().unwrap() != LabelId::spam())
-    );
+    conv_is_labeled(&convs[0], [LabelId::inbox()]);
 
     let msgs = Message::in_label(local_inbox, tether).await.unwrap();
     assert_eq!(msgs.len(), 1);
@@ -594,15 +603,16 @@ async fn move_message_also_moves_conversation() {
 
     // Action:
     // * move message in the other folder
-    Message::action_move(
+    let undo = Message::action_move(
         tether,
         user_ctx.action_queue(),
         local_spam,
         vec![message.id()],
     )
     .await
+    .unwrap()
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // recheck but in the destination folder
     let msgs = Message::in_label(local_spam, tether).await.unwrap();
@@ -619,27 +629,35 @@ async fn move_message_also_moves_conversation() {
         local_spam
     );
 
-    assert_eq!(convs.len(), 1);
-    let conv = &convs[0];
-    assert_eq!(conv.num_messages, 1);
-    assert_eq!(conv.num_unread, 0);
+    conv_is_labeled(&convs[0], [LabelId::all_mail(), LabelId::spam()]);
 
-    let labels = conv
-        .labels
-        .iter()
-        .map(|l| l.remote_label_id.clone().unwrap())
-        .collect_vec();
-
-    assert_eq!(labels, vec![LabelId::all_mail(), LabelId::spam()]);
-    assert!(
-        conv.labels
-            .iter()
-            .any(|l| *l.remote_label_id.as_ref().unwrap() == LabelId::spam())
+    undo.undo(user_ctx.action_queue(), tether).await.unwrap();
+    let convs = Conversation::in_label(local_inbox, tether).await.unwrap();
+    conv_is_labeled(
+        &convs[0],
+        [
+            LabelId::all_mail(),
+            LabelId::inbox(),
+            LabelId::almost_all_mail(),
+        ],
     );
-    assert!(
-        conv.labels
-            .iter()
-            .all(|l| *l.remote_label_id.as_ref().unwrap() != LabelId::inbox())
+
+    let msgs = Message::in_label(local_inbox, tether).await.unwrap();
+    assert_eq!(msgs.len(), 1);
+    let message = &msgs[0];
+    assert_eq!(
+        message.label_ids,
+        vec![
+            LabelId::inbox(),
+            // These are not in the test setup, they get added automatically by the actions
+            LabelId::all_mail(),
+            LabelId::almost_all_mail()
+        ]
+    );
+
+    assert_eq!(
+        message.exclusive_location.as_ref().unwrap().local_id(),
+        local_inbox
     );
 }
 
@@ -684,7 +702,7 @@ async fn move_conversation_between_folders_and_undo() {
     .await;
 
     ctx.mock_get_conversations(vec![conversation], 1).await;
-    // ctx.catch_all().await;
+    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
@@ -707,12 +725,7 @@ async fn move_conversation_between_folders_and_undo() {
         .unwrap()
         .unwrap();
 
-    fn conv_is_labeled(conv: &Conversation, label: &LabelId) {
-        assert_eq!(conv.labels.len(), 1);
-        assert_eq!(conv.labels[0].remote_label_id.as_ref().unwrap(), label);
-    }
-
-    conv_is_labeled(&conv, &LabelId::inbox());
+    conv_is_labeled(&conv, [LabelId::inbox()]);
 
     // Action:
     // * move message in the other folder
@@ -727,13 +740,13 @@ async fn move_conversation_between_folders_and_undo() {
     .unwrap();
 
     conv.reload(&tether).await.unwrap();
-    conv_is_labeled(&conv, &LabelId::archive());
+    conv_is_labeled(&conv, [LabelId::archive()]);
 
     undo.undo(user_ctx.action_queue(), &mut tether)
         .await
         .unwrap();
     conv.reload(&tether).await.unwrap();
-    conv_is_labeled(&conv, &LabelId::inbox());
+    conv_is_labeled(&conv, [LabelId::inbox()]);
 
     let undo = Conversation::action_move(
         &tether,
@@ -744,17 +757,177 @@ async fn move_conversation_between_folders_and_undo() {
     .await
     .unwrap()
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     conv.reload(&tether).await.unwrap();
-    conv_is_labeled(&conv, &LabelId::archive());
+    conv_is_labeled(&conv, [LabelId::archive()]);
 
     undo.undo(user_ctx.action_queue(), &mut tether)
         .await
         .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
     conv.reload(&tether).await.unwrap();
-    conv_is_labeled(&conv, &LabelId::inbox());
+    conv_is_labeled(&conv, [LabelId::inbox()]);
+}
+
+#[tokio::test]
+async fn move_conversation_mix_unread() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::new().await;
+    let conversation_count = vec![ApiConversationCount {
+        label_id: LabelId::inbox().clone(),
+        total: 1,
+        unread: 1,
+    }];
+    let message_count = vec![ApiMessageCount {
+        label_id: LabelId::inbox().clone(),
+        total: 3,
+        unread: 2,
+    }];
+    let params = TestParams {
+        addresses: vec![ApiAddress::test_address()],
+        conversation_count,
+        message_count,
+        ..Default::default()
+    };
+    ctx.setup_user(params).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    let tether = &mut user_ctx.user_stash().connection();
+
+    let mut conv_data = hash_map! {
+        vec![LabelId::inbox()]: vec![conversation!(remote_id: conv_id!("my_conv"))]
+    };
+
+    conv_data.save_to_database(tether).await;
+
+    let conv = &conv_data.get(&vec![LabelId::inbox()]).unwrap()[0];
+
+    let mut msg_data = (
+        LabelId::inbox(),
+        vec![
+            message!(
+                remote_id: msg_id!("1"),
+                unread: false,
+                local_conversation_id: conv.local_id,
+                remote_conversation_id: conv.remote_id.clone()),
+            message!(
+                remote_id: msg_id!("2"),
+                unread: true,
+                local_conversation_id: conv.local_id,
+                remote_conversation_id: conv.remote_id.clone()),
+            message!(
+                remote_id: msg_id!("3"),
+                unread: true,
+                local_conversation_id: conv.local_id,
+                remote_conversation_id: conv.remote_id.clone()),
+        ],
+    );
+    msg_data.save_to_database(tether).await;
+
+    ctx.mock_label_conversation(&LabelId::trash(), vec!["my_conv".into()], None, vec![])
+        .await;
+    ctx.catch_all().await;
+
+    // ---
+    let local_inbox = Label::remote_id_counterpart(LabelId::inbox(), tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let local_trash = Label::remote_id_counterpart(LabelId::trash(), tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    {
+        let convs = Conversation::in_label(local_inbox, tether).await.unwrap();
+
+        assert_eq!(convs.len(), 1);
+
+        let conv = &convs[0];
+        assert_eq!(conv.num_messages, 3);
+        assert_eq!(conv.num_unread, 2);
+
+        conv_is_labeled(conv, [LabelId::inbox()]);
+
+        let msgs = Message::in_label(local_inbox, tether).await.unwrap();
+        let unreads = msgs.iter().map(|m| (m.unread)).collect_vec();
+        assert_eq!(unreads, vec![false, true, true]);
+        for message in msgs {
+            assert_eq!(message.label_ids, vec![LabelId::inbox()]);
+        }
+    }
+
+    // Action:
+    let undo = Conversation::action_move(
+        tether,
+        user_ctx.action_queue(),
+        local_trash,
+        vec![conv.id()],
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
+
+    {
+        let convs = Conversation::in_label(local_trash, tether).await.unwrap();
+
+        assert_eq!(convs.len(), 1);
+
+        let conv = &convs[0];
+        assert_eq!(conv.num_messages, 3);
+        assert_eq!(conv.num_unread, 0);
+
+        conv_is_labeled(conv, [LabelId::all_mail(), LabelId::trash()]);
+
+        let msgs = Message::in_label(local_trash, tether).await.unwrap();
+        let unreads = msgs.iter().map(|m| (m.unread)).collect_vec();
+        assert_eq!(unreads, vec![false, false, false]);
+        for message in msgs {
+            assert_eq!(
+                message.label_ids,
+                vec![LabelId::trash(), LabelId::all_mail()]
+            );
+        }
+    }
+
+    undo.undo(user_ctx.action_queue(), tether).await.unwrap();
+
+    {
+        let convs = Conversation::in_label(local_inbox, tether).await.unwrap();
+
+        assert_eq!(convs.len(), 1);
+
+        let conv = &convs[0];
+        assert_eq!(conv.num_messages, 3);
+        assert_eq!(conv.num_unread, 2);
+
+        conv_is_labeled(
+            conv,
+            [
+                LabelId::all_mail(),
+                LabelId::inbox(),
+                LabelId::almost_all_mail(),
+            ],
+        );
+
+        let msgs = Message::in_label(local_inbox, tether).await.unwrap();
+        let unreads = msgs.iter().map(|m| (m.unread)).collect_vec();
+        assert_eq!(unreads, vec![false, true, true]);
+        for message in msgs {
+            assert_eq!(
+                message.label_ids,
+                vec![
+                    LabelId::inbox(),
+                    LabelId::all_mail(),
+                    LabelId::almost_all_mail(),
+                ]
+            );
+        }
+    }
 }
 
 fn test_label(label_id: &LabelId, label_type: ApiLabelType, name: &str) -> ApiLabel {
@@ -812,12 +985,18 @@ fn test_message(label_ids: Vec<LabelId>, unread: bool) -> ApiMessage {
     }
 }
 
-fn test_init_params(labels: HashMap<ApiLabelType, Vec<ApiLabel>>) -> TestParams {
+fn test_init_params_labels(labels: HashMap<ApiLabelType, Vec<ApiLabel>>) -> TestParams {
+    TestParams {
+        labels,
+        ..test_init_params()
+    }
+}
+
+fn test_init_params() -> TestParams {
     TestParams {
         user_info: Some(test_user_info()),
         addresses: ApiAddress::test_addresses(),
         mail_settings: Some(test_mail_settings()),
-        labels,
         ..Default::default()
     }
 }
@@ -886,4 +1065,16 @@ fn test_mail_settings() -> ApiMailSettings {
         view_mode: ApiViewMode::Messages,
         ..Default::default()
     }
+}
+
+#[track_caller]
+fn conv_is_labeled(conv: &Conversation, expected_labels: impl Into<Vec<LabelId>>) {
+    let expected_labels = expected_labels.into();
+    let actual_labels = conv
+        .labels
+        .iter()
+        .map(|l| l.remote_label_id.clone().unwrap())
+        .collect_vec();
+
+    assert_eq!(actual_labels, expected_labels);
 }

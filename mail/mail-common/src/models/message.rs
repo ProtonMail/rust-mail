@@ -5,10 +5,8 @@ mod messages;
 use crate::actions::messages::Delete;
 use crate::actions::messages::DeleteAllMessagesInLabel;
 use crate::actions::messages::Ham;
-use crate::actions::messages::Label as ActionLabel;
 use crate::actions::messages::Read;
 use crate::actions::messages::ReportPhishing;
-use crate::actions::messages::Unlabel;
 use crate::actions::messages::Unread;
 use crate::actions::messages::{LabelAs, UndoLabelAsMessages};
 use crate::actions::messages::{Move, UndoMoveToMessages};
@@ -22,10 +20,14 @@ use crate::{MailContextError, find_in_query};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::action::MetadataBuilder;
+use proton_action_queue::enqueue;
+use proton_action_queue::queue::MultiActionError;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_api::services::proton::prelude::DirectAttachment;
 use sqlite_watcher::watcher::TableObserver;
+use stash::utils::IterMapToSql;
+use stash::utils::placeholders_n;
 use stash::utils::{MapToSql, placeholders};
 
 use crate::MailContextResult;
@@ -204,71 +206,44 @@ impl ScrollerEq for Message {
     }
 }
 
+type LabelAsResult = Result<QueuedActionOutput<LabelAs>, QueueActionError<LabelAs>>;
+
 impl Message {
-    /// Label multiple messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
-    ///
-    pub async fn action_apply_label(
-        queue: &Queue,
-        label_id: LocalLabelId,
-        message_ids: Vec<LocalMessageId>,
-    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
-        let action = ActionLabel::new(label_id, message_ids);
-        queue.queue_action(action).await
-    }
-
-    /// Star multiple messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
-    pub async fn action_star(
-        queue: &Queue,
-        message_ids: Vec<LocalMessageId>,
-    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
-        let tether = queue.stash().connection();
-        let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
-            .await
-            .map_err(|e| QueueActionError::Queue(e.into()))?
-            .expect("Star system label not found");
-        let action = ActionLabel::new(label_id, message_ids);
-        queue.queue_action(action).await
-    }
-
-    /// Unstar multiple messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
-    pub async fn action_unstar(
-        queue: &Queue,
-        message_ids: Vec<LocalMessageId>,
-    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
+    pub async fn action_star(queue: &Queue, ids: Vec<LocalMessageId>) -> LabelAsResult {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
             .expect("Star system label not found");
-        let action = Unlabel::new(label_id, message_ids);
+        Self::action_remove_label(queue, label_id, ids).await
+    }
+
+    pub async fn action_unstar(queue: &Queue, ids: Vec<LocalMessageId>) -> LabelAsResult {
+        let tether = queue.stash().connection();
+        let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
+            .await?
+            .expect("Star system label not found");
+        Self::action_apply_label(queue, label_id, ids).await
+    }
+
+    pub async fn action_remove_label(
+        queue: &Queue,
+        label: LocalLabelId,
+        ids: Vec<LocalMessageId>,
+    ) -> LabelAsResult {
+        let action = LabelAs(LabelAsData::new_remove(
+            ids.into_iter().map(|id| LabelPair { label, id }).collect(),
+        ));
         queue.queue_action(action).await
     }
 
-    /// Unlabel multiple messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
-    ///
-    pub async fn action_remove_label(
+    pub async fn action_apply_label(
         queue: &Queue,
-        label_id: LocalLabelId,
-        message_ids: Vec<LocalMessageId>,
-    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
-        let action = Unlabel::new(label_id, message_ids);
+        label: LocalLabelId,
+        ids: Vec<LocalMessageId>,
+    ) -> LabelAsResult {
+        let action = LabelAs(LabelAsData::new_add(
+            ids.into_iter().map(|id| LabelPair { label, id }).collect(),
+        ));
         queue.queue_action(action).await
     }
 
@@ -335,9 +310,9 @@ impl Message {
     ) -> Result<Option<Undo>, MailContextError> {
         if let Some(action) = ActionMoveData::new(tether, destination_id, target_ids).await? {
             let action = Move(action);
-            let id = queue.queue_action(action.clone()).await?.id;
+            let QueuedActionOutput { local, id } = queue.queue_action(action).await?;
             Ok(Some(Undo::MessagesMoveTo(UndoMoveToMessages {
-                action,
+                action: local,
                 id,
             })))
         } else {
@@ -373,9 +348,19 @@ impl Message {
     pub async fn action_ham(
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<QueuedActionOutput<Ham>, QueueActionError<Ham>> {
-        let action = Ham::new(message_ids);
-        queue.queue_action(action).await
+    ) -> Result<(), MultiActionError> {
+        let tether = &queue.stash().connection();
+        let inbox = Label::resolve_local_label_id(LabelId::inbox(), tether)
+            .await
+            .context("inbox doesn't exist?")?;
+
+        let move_action = ActionMoveData::new(tether, inbox, message_ids.iter().copied())
+            .await?
+            .context("No input")?;
+
+        let _id = enqueue!(queue, [Move(move_action), Ham::new(message_ids)])?;
+
+        Ok(())
     }
 
     /// Mark multiple messages as ham (not spam).
@@ -389,116 +374,13 @@ impl Message {
         message_id: LocalMessageId,
         tether: &Tether,
     ) -> anyhow::Result<()> {
-        let spam = Label::remote_id_counterpart(LabelId::spam(), tether)
+        let spam = Label::resolve_local_label_id(LabelId::spam(), tether).await?;
+
+        let move_action = ActionMoveData::new(tether, spam, [message_id])
             .await?
-            .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
+            .context("No input")?;
+        let _id = enqueue!(queue, [Move(move_action), ReportPhishing::new(message_id)])?;
 
-        let phishing_action = ReportPhishing::new(message_id);
-        if let Some(move_action) = ActionMoveData::new(tether, spam, [message_id]).await? {
-            let queued_move = queue.queue_action(Move(move_action)).await?;
-            let meta = MetadataBuilder::new()
-                .with_dependency(queued_move.id)
-                .build();
-
-            queue
-                .queue_action_with_metadata(phishing_action, meta)
-                .await?;
-        } else {
-            queue.queue_action(phishing_action).await?;
-        };
-        Ok(())
-    }
-
-    /// Move messages between two labels.
-    ///
-    /// Note that the logic is the same as [`Conversation::move_conversations`],
-    /// so any changes made here should be reflected there.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
-    pub async fn move_messages(
-        source_id: LocalLabelId,
-        destination_id: LocalLabelId,
-        message_ids: Vec<LocalMessageId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        debug_assert_ne!(source_id, destination_id);
-        info!("Moving from {source_id:?} to {destination_id:?}: {message_ids:?}");
-
-        let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
-        let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;
-
-        if destination_id == trash {
-            Message::mark_multiple_as_read(message_ids.iter().cloned(), bond)
-                .await
-                .context("Failed to mark as read when moving to trash: {e:?}")?;
-        }
-
-        let source_label = Label::load(source_id, bond).await?.context(
-            "Failed to load source label. This should never happen because we have the local id.",
-        )?;
-
-        if [trash, spam].contains(&destination_id) {
-            // When moving to trash or spam we delete all labels except all mail.
-            trace!("Deleting all labels except AllMail");
-            Self::remove_all_labels_except_all_mail(&message_ids, bond).await?;
-        } else if source_label.is_movable_folder() {
-            trace!("Deleting soruce label {source_id}");
-            Message::remove_label(source_id, message_ids.clone(), bond)
-                .await
-                .context("Failed to remove source label")?;
-        } else {
-            warn!("Source label {source_id} is not a movable folder, not removing...")
-        }
-
-        if [trash, spam].contains(&source_id) {
-            Message::apply_remote_label(
-                LabelId::almost_all_mail(),
-                message_ids.iter().cloned(),
-                bond,
-            )
-            .await
-            .context("Failed to add messages to almost_all_mail when moving out of spam/trash")?;
-        }
-
-        Message::apply_label(destination_id, message_ids, bond)
-            .await
-            .context("Failed to apply destination label")?;
-
-        Ok(())
-    }
-
-    /// Change Labels of a list of messages and optionally archive them.
-    ///
-    /// Set Labels from `selected_label_ids` while unsetting all those that are not in
-    /// `partially_selected_label_ids`.
-    ///
-    /// # Errors
-    ///
-    /// Returns errors if the operation failed.
-    ///
-    pub async fn label_as(
-        source_label_id: LocalLabelId,
-        message_ids: Vec<LocalMessageId>,
-        selected_label_ids: &[LocalLabelId],
-        partially_selected_label_ids: &[LocalLabelId],
-        all_label_ids: &[LocalLabelId],
-        must_archive: bool,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        for label_id in all_label_ids {
-            if selected_label_ids.contains(label_id) {
-                Self::apply_label(*label_id, message_ids.clone(), bond).await?
-            } else if !partially_selected_label_ids.contains(label_id) {
-                Self::remove_label(*label_id, message_ids.clone(), bond).await?
-            }
-            // else keep label as is
-        }
-
-        if must_archive {
-            let archive_id = Label::remote_id_counterpart(LabelId::archive(), bond)
-                .await?
-                .expect("Archive label must have a RemoteId");
-            Self::move_messages(source_label_id, archive_id, message_ids, bond).await?;
-        }
         Ok(())
     }
 
@@ -522,7 +404,7 @@ impl Message {
             MessageLabel::find_by_conversations_and_labels(&message_ids, &all_labels, tether)
                 .await?;
 
-        let action = LabelAs(LabelAsData::new(
+        let label_as_action = LabelAs(LabelAsData::new(
             cartesian
                 .into_iter()
                 .map(|x| LabelPair {
@@ -543,7 +425,7 @@ impl Message {
                 ActionMoveData::new(tether, archive, message_ids).await?
             } {
             let queued_move = queue
-                .queue_action(action.clone())
+                .queue_action(label_as_action.clone())
                 .await
                 .context("Error queuing move to archive")?;
 
@@ -558,12 +440,12 @@ impl Message {
             queued_move
         } else {
             queue
-                .queue_action(action.clone())
+                .queue_action(label_as_action.clone())
                 .await
                 .context("Error queuing action")?
         };
         let undo = Undo::MessagesLabelAs(UndoLabelAsMessages {
-            action,
+            action: label_as_action,
             id: output.id,
             must_archive,
         });
@@ -1437,43 +1319,47 @@ impl Message {
         mark_read: bool,
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         struct IdPair {
             local_message_id: LocalMessageId,
             local_conversation_id: LocalConversationId,
         }
 
-        let ids = ids.into_iter();
-
-        let mut updated: Vec<IdPair> = Vec::with_capacity(ids.size_hint().1.unwrap_or(0));
         let mut conversation_count_changed = HashMap::new();
 
+        let params = ids.bridge_sql();
+        let mut updated: Vec<IdPair> = Vec::with_capacity(params.len());
+
+        let msgs = Message::find(
+            format!(
+                "WHERE local_id IN ({placeholders}) AND unread = {unread}",
+                placeholders = placeholders(&params),
+                unread = if mark_read { 1 } else { 0 }
+            ),
+            params,
+            bond,
+        )
+        .await?;
+
         // update unread flag
-        for id in ids {
+        for mut msg in msgs {
             info!(
-                "Marking {id:?} as {}",
+                "Marking {:?} as {}",
+                msg.id(),
                 if mark_read { "read" } else { "unread" }
             );
-            if let Some(mut message) = Message::find_first(
-                "WHERE local_id=? AND unread=?",
-                params![id, if mark_read { 1 } else { 0 }],
-                bond,
-            )
-            .await?
-            {
-                message.unread = !mark_read;
-                if mark_read {
-                    message.display_snooze_reminder = false;
-                }
-                message.save(bond).await?;
-                updated.push(IdPair {
-                    local_message_id: message.id(),
-                    local_conversation_id: message.local_conversation_id.unwrap(),
-                });
-                *conversation_count_changed
-                    .entry(message.local_conversation_id.expect("Should be set"))
-                    .or_insert(0) += 1;
+            msg.unread = !mark_read;
+            if mark_read {
+                msg.display_snooze_reminder = false;
             }
+            msg.save(bond).await?;
+            updated.push(IdPair {
+                local_message_id: msg.id(),
+                local_conversation_id: msg.local_conversation_id.unwrap(),
+            });
+            *conversation_count_changed
+                .entry(msg.local_conversation_id.expect("Should be set"))
+                .or_insert(0) += 1;
         }
 
         for (conversation_id, count) in conversation_count_changed {
@@ -1490,7 +1376,7 @@ impl Message {
 
         if updated.is_empty() {
             // Nothing was changed.
-            return Ok(());
+            return Ok(vec![]);
         }
 
         // Publish updates for all affected ids.
@@ -1561,7 +1447,7 @@ impl Message {
             }
         }
 
-        Ok(())
+        Ok(updated.into_iter().map(|x| x.local_message_id).collect())
     }
 
     /// Converts an [`ApiMessage`] into its components.
@@ -2469,7 +2355,7 @@ impl Message {
     pub async fn mark_unread(
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         Self::mark_read_or_unread(false, ids, bond).await
     }
 }
@@ -2528,45 +2414,21 @@ impl ConversationOrMessage for Message {
     async fn mark_read(
         ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<Self::IdType>, StashError> {
         Self::mark_read_or_unread(true, ids, bond).await
     }
 
-    async fn remove_all_labels_except_all_mail(
-        ids: &[LocalMessageId],
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        let label_ids: Vec<LocalLabelId> = bond
-            .query_values(
-                formatdoc! {"
-                SELECT DISTINCT local_label_id AS value
-                FROM message_labels
-                WHERE
-                    local_message_id in ({})"
-                    , placeholders(ids)
-                },
-                ids.to_sql(),
-            )
-            .await?;
-
-        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
-            .await?
-            .expect("AllMail should be set");
-
-        // It's a good moment to apply all mail label to messages in the case that it slipped by
-        if !label_ids.contains(&all_mail_id) {
-            Self::apply_label(all_mail_id, ids.iter().cloned(), bond).await?;
+    fn grouped_labels_and_messages_query(placeholders: usize) -> String {
+        formatdoc! {"
+            SELECT 
+                local_label_id,
+                GROUP_CONCAT(local_message_id)
+            FROM message_labels
+            WHERE local_message_id IN ({})
+            GROUP BY local_label_id
+            ",
+            placeholders_n(placeholders)
         }
-
-        for label_id in label_ids {
-            if label_id == all_mail_id {
-                continue;
-            }
-
-            Self::remove_label(label_id, ids.iter().cloned(), bond).await?;
-        }
-
-        Ok(())
     }
 }
 

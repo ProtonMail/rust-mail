@@ -41,35 +41,6 @@ use std::sync::Arc;
 
 use super::messages::WatchedLabelAs;
 
-/// Label the given conversations with the given label id.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
-#[uniffi_export]
-#[returns(VoidActionResult)]
-pub async fn apply_label_to_conversations(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    ids: Vec<Id>,
-) -> Result<(), ActionError> {
-    let user_context = session.ctx()?;
-    uniffi_async(async move {
-        RealConversation::action_apply_label(
-            user_context.action_queue(),
-            label_id.into(),
-            ids.map_vec(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
-    })
-    .await
-    .map_err(ActionError::from)
-    .into()
-}
-
 /// Delete the given conversations.
 ///
 /// # Errors
@@ -562,35 +533,6 @@ pub async fn scroll_conversations_for_label(
     })
     .await
     .map_err(ActionError::from)
-}
-
-/// Unlabel the given conversations with the given label id.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
-#[uniffi_export]
-#[returns(VoidActionResult)]
-pub async fn remove_label_from_conversations(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    ids: Vec<Id>,
-) -> Result<(), ActionError> {
-    let user_context = session.ctx()?;
-    uniffi_async(async move {
-        RealConversation::action_remove_label(
-            user_context.action_queue(),
-            label_id.into(),
-            ids.map_vec(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
-    })
-    .await
-    .map_err(ActionError::from)
-    .into()
 }
 
 /// Filter or search conversations which match the specified options.

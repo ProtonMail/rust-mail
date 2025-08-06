@@ -44,11 +44,10 @@ where
         self.bridge_sql_iter().chain(other.bridge_sql_iter())
     }
 
-    fn bridge_sql_extend(
-        self,
-        other: impl IterMapToSql,
-    ) -> impl Iterator<Item = Box<dyn ToSql + Send>> {
-        self.bridge_sql_iter().chain(other.bridge_sql_iter())
+    fn bridge_sql_extend(self, other: impl IterMapToSql) -> Vec<Box<dyn ToSql + Send>> {
+        self.bridge_sql_iter()
+            .chain(other.bridge_sql_iter())
+            .collect()
     }
 
     fn bridge_sql_iter(self) -> impl Iterator<Item = Box<dyn ToSql + Send>>;

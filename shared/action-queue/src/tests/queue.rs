@@ -370,7 +370,10 @@ async fn queue_actions() {
         .map(|num| Action2 { num, die: false })
         .chain([Action2 { num: 10, die: true }]);
 
-    assert!(queue.queue_actions(actions).await.is_err(), "should fail");
+    assert!(
+        queue.queue_actions(actions, None).await.is_err(),
+        "should fail"
+    );
 
     tether
         .execute("SELECT * FROM foo", vec![])
@@ -378,7 +381,7 @@ async fn queue_actions() {
         .unwrap_err();
 
     let actions = (0..=10).map(|num| Action2 { num, die: false });
-    queue.queue_actions(actions).await.unwrap();
+    queue.queue_actions(actions, None).await.unwrap();
 
     let res: Vec<u32> = tether
         .query_values("SELECT bar AS value FROM foo ORDER BY bar", vec![])

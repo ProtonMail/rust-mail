@@ -9,6 +9,7 @@ use crate::action::{
 use crate::db::{
     self, ActionDependency, DEFAULT_LOCK_TIMEOUT, DependencyType, ExecutionGuard, StoredAction,
 };
+use anyhow::anyhow;
 use bitflags::bitflags;
 use chrono::DateTime;
 use parking_lot::RwLock;
@@ -53,15 +54,50 @@ pub enum ActionError<T: Action> {
     Queue(#[from] Error),
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum MultiActionError {
+    /// The execution of the action failed.
+    #[error("{0}")]
+    Action(#[from] anyhow::Error),
+    /// An operation on the queue failed.
+    #[error("{0}")]
+    Queue(#[from] Error),
+}
+
+impl<T: Action> From<ActionError<T>> for MultiActionError {
+    fn from(value: ActionError<T>) -> Self {
+        match value {
+            ActionError::Action(err) => {
+                MultiActionError::Action(anyhow::anyhow!("Error executing {}: {err:?}", T::TYPE))
+            }
+            ActionError::Queue(error) => MultiActionError::Queue(error),
+        }
+    }
+}
+
+impl From<StashError> for MultiActionError {
+    fn from(value: StashError) -> Self {
+        Self::Action(anyhow!("Stash error: {value:?}"))
+    }
+}
+
 // Custom debug impl, otherwise T also needs to have Debug when it is not really necessary.
 impl<T: Action> fmt::Debug for ActionError<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ActionError::Action(err) => {
-                write!(f, "ActionError::Action{{{err:?}}}")
+                write!(
+                    f,
+                    "ActionError::Action{{{err:?}}}: Error executing {}",
+                    T::TYPE
+                )
             }
             ActionError::Queue(err) => {
-                write!(f, "ActionError::Queue{{{err:?}}}")
+                write!(
+                    f,
+                    "ActionError::Queue{{{err:?}}}: Error executing {}",
+                    T::TYPE
+                )
             }
         }
     }
@@ -259,6 +295,11 @@ pub struct QueuedActionOutput<T: Action> {
 }
 
 impl Queue {
+    #[must_use]
+    pub fn tether(&self) -> Tether {
+        self.shared.stash.connection()
+    }
+
     /// Create a new queue with the given `stash`;
     ///
     /// # Errors
@@ -321,14 +362,11 @@ impl Queue {
     ///
     /// If one fails, everything is rolled back.
     ///
-    /// A default [`Metadata`] type is assigned to this `action`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action could not be executed locally.
+    /// Additionally, a `last_id` arg can be provided to say what this should depend on.
     pub async fn queue_actions<T: Action>(
         &self,
         actions: impl IntoIterator<Item = T>,
+        mut last_id: Option<ActionId>,
     ) -> Result<Vec<QueuedActionOutput<T>>, ActionError<T>> {
         self.shared
             .stash
@@ -337,8 +375,8 @@ impl Queue {
                 let mut res: Vec<QueuedActionOutput<T>> = vec![];
 
                 for action in actions {
-                    let meta = if let Some(last) = res.last() {
-                        Metadata::with_dependency(last.id)
+                    let meta = if let Some(last) = last_id {
+                        Metadata::with_dependency(last)
                     } else {
                         Metadata::default()
                     };
@@ -346,6 +384,7 @@ impl Queue {
                     let action = self
                         .queue_action_with_metadata_in_tx(action, meta, tx)
                         .await?;
+                    last_id = Some(action.id);
                     res.push(action);
                 }
                 Ok(res)
@@ -378,7 +417,7 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if action could not be executed locally.
-    async fn queue_action_with_metadata_in_tx<T: Action>(
+    pub async fn queue_action_with_metadata_in_tx<T: Action>(
         &self,
         mut action: T,
         metadata: Metadata,
@@ -1344,4 +1383,35 @@ fn decode_action(
         error!("Failed to decode action: {e:?}");
         QueuedError::Factory(action_id, e)
     })
+}
+
+#[macro_export]
+/// Enqueues actions of potentially different types directly with the queue.
+///
+/// Example usage:
+/// `let action_id = enqueue!(my_queue, [foo, bar, baz])?;`
+macro_rules! enqueue {
+    ($queue:expr, [$($action:expr),+ $(,)?]) => {{
+        use $crate::queue::{Queue, MultiActionError};
+        use $crate::action::{ActionId, Metadata};
+        use ::anyhow::anyhow;
+
+        $queue.tether().tx::<_,_, MultiActionError>(async |tx| {
+            let mut last = None;
+            $(
+                let meta = if let Some(last) = last {
+                    Metadata::with_dependency(last)
+                } else {
+                    Metadata::default()
+                };
+                let action = $queue
+                    .queue_action_with_metadata_in_tx($action, meta, tx)
+                    .await?;
+                last = Some(action.id);
+            )+
+            // This is safe to do because we'd short circuit if this would be None, and this requires
+            // 1+ params.
+            Ok(last.unwrap())
+        }).await
+    }}
 }

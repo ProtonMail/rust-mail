@@ -13,13 +13,17 @@ use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::messages::UndoLabelAsMessages;
 use crate::actions::messages::UndoMoveToMessages;
+use crate::datatypes::LocalMessageId;
 use crate::datatypes::{RollbackItemType, SystemLabelId};
+use crate::models::Message;
 use crate::models::{MailLabel, RollbackItem};
 use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
 use anyhow::Context;
+use fallible_iterator::FallibleIterator;
 use futures::future::{join, join_all};
 use indoc::formatdoc;
+use itertools::Itertools;
 use proton_action_queue::action::{
     self, ActionDependencyKey, ActionDependencyKeys, ActionGroup, FactoryError, Handler,
     WriterGuard, WriterGuardError,
@@ -42,6 +46,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
+use stash::utils::MapToSql;
 use std::any::type_name;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
@@ -137,8 +142,6 @@ pub(crate) fn register_actions(
     match origin {
         Origin::App => {
             reg(queue, conversations::DeleteHandler { api: api.clone() });
-            reg(queue, conversations::UnlabelHandler { api: api.clone() });
-            reg(queue, conversations::LabelHandler { api: api.clone() });
             reg(queue, conversations::MarkReadHandler { api: api.clone() });
             reg(queue, conversations::MarkUnreadHandler { api: api.clone() });
             reg(queue, conversations::PrefetchHandler { ctx: ctx.clone() });
@@ -155,8 +158,6 @@ pub(crate) fn register_actions(
                 queue,
                 conversations::RefreshMetadataHandler { ctx: ctx.clone() },
             );
-            reg(queue, messages::LabelHandler { api: api.clone() });
-            reg(queue, messages::UnlabelHandler { api: api.clone() });
             reg(queue, messages::MoveHandler { api: api.clone() });
             reg(queue, messages::DeleteHandler { api: api.clone() });
             reg(
@@ -382,17 +383,6 @@ where
             .with_required_related(self.label_id)
     }
 
-    fn label_unlabel_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
-        self.action_dependency_keys_builder_optional()
-            .with_required_many(label_unlabel_action_dependency_key(
-                self.data.target_ids.iter().copied(),
-            ))
-            // if there is a label as, we should execute after that
-            .with_optional_many(label_as_action_dependency_key(
-                self.data.target_ids.iter().copied(),
-            ))
-    }
-
     fn snooze_unsnooze_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
         self.action_dependency_keys_builder_optional()
             .with_required_many(snooze_unsnooze_action_dependency_key(
@@ -434,6 +424,10 @@ where
 {
     sources: HashMap<LocalLabelId, Vec<T::IdType>>,
     destination: LocalLabelId,
+
+    // These 2 exist solely for the revert and undo
+    marked_read: Vec<LocalMessageId>,
+    removed_labels: Vec<LabelPair<T::IdType>>,
 }
 
 impl<T> ActionMoveData<T>
@@ -473,15 +467,17 @@ where
         Ok(Some(Self {
             sources,
             destination,
+            marked_read: vec![],
+            removed_labels: vec![],
         }))
     }
 
-    async fn move_to(&self, bond: &Bond<'_>) -> anyhow::Result<()> {
+    async fn move_to(&mut self, bond: &Bond<'_>) -> anyhow::Result<()> {
         let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
         let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;
 
         if self.destination == trash {
-            T::mark_read(self.sources.values().flatten().copied(), bond).await?;
+            self.marked_read = T::mark_read(self.sources.values().flatten().copied(), bond).await?;
         }
 
         for (&source_id, ids) in &self.sources {
@@ -491,7 +487,7 @@ where
 
             if [trash, spam].contains(&self.destination) {
                 // When moving to trash or spam we delete all labels except all mail.
-                T::remove_all_labels_except_all_mail(ids, bond).await?;
+                self.removed_labels = T::remove_all_labels_except_all_mail(ids, bond).await?;
             } else if source_label.is_movable_folder() {
                 T::remove_label(source_id, ids.iter().cloned(), bond)
                     .await
@@ -554,13 +550,20 @@ where
             Self {
                 destination: source,
                 sources,
+                marked_read: vec![],
+                removed_labels: vec![],
             }
         })
     }
 
-    async fn revert_local(&self, tx: &Bond<'_>) -> Result<(), MailActionError> {
-        for reverse in self.reverse() {
+    async fn revert_local(&mut self, tx: &Bond<'_>) -> Result<(), MailActionError> {
+        for mut reverse in self.reverse() {
             reverse.move_to(tx).await?;
+        }
+
+        Message::mark_unread(self.marked_read.iter().copied(), tx).await?;
+        for pair in &self.removed_labels {
+            T::apply_label(pair.label, [pair.id], tx).await?;
         }
         self.queue_rollback_items(tx).await?;
         Ok(())
@@ -598,7 +601,7 @@ where
 #[allow(async_fn_in_trait, reason = "not used across threads")]
 pub trait ConversationOrMessage:
     ModelIdExtension<
-        IdType: Copy + Hash + Eq + DeserializeOwned + Serialize + LocalIdActionDepExt,
+        IdType: Copy + Hash + Eq + DeserializeOwned + Serialize + LocalIdActionDepExt + From<u64>,
         RemoteId: Display,
     >
 {
@@ -630,15 +633,78 @@ pub trait ConversationOrMessage:
 
     fn get_exclusive_location(&self) -> Option<LocalLabelId>;
 
+    // Returns the messages that actually were marked as read
     async fn mark_read(
         ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError>;
+    ) -> Result<Vec<LocalMessageId>, StashError>;
 
+    // Returns the items that were removed
     async fn remove_all_labels_except_all_mail(
         ids: &[Self::IdType],
         bond: &Bond<'_>,
-    ) -> Result<(), StashError>;
+    ) -> Result<Vec<LabelPair<Self::IdType>>, StashError> {
+        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
+            .await?
+            .expect("AllMail should be set");
+
+        let mut labels_and_messages: Vec<(LocalLabelId, Vec<Self::IdType>)> = bond
+            .do_query(
+                Self::grouped_labels_and_messages_query(ids.len()),
+                ids.to_sql(),
+                |rows| {
+                    rows.map(|x| {
+                        Ok((
+                            x.get(0)?,
+                            x.get::<_, String>(1)?
+                                .split(',')
+                                .filter_map(|x| x.parse::<u64>().ok())
+                                .map_into()
+                                .collect(),
+                        ))
+                    })
+                    .collect()
+                },
+            )
+            .await?
+            .map_err(StashError::ExecutionError)?;
+
+        let idx = labels_and_messages
+            .iter()
+            .position(|(label, _)| *label == all_mail_id);
+
+        // It's a good moment to apply all mail label to messages in the case that it slipped by
+        match idx {
+            Some(idx) => {
+                // Remove the matching entry and extract its messages
+                let (_, existing_messages) = labels_and_messages.swap_remove(idx);
+
+                // Find IDs that are missing from existing messages
+                let ids = ids
+                    .iter()
+                    .copied()
+                    .filter(|id| !existing_messages.contains(id));
+                Self::apply_label(all_mail_id, ids, bond).await?;
+            }
+            None => {
+                // No matching label found, all IDs are missing
+                Self::apply_label(all_mail_id, ids.iter().copied(), bond).await?;
+            }
+        };
+
+        let mut res = vec![];
+        for (label_id, parsed_ids) in labels_and_messages {
+            Self::remove_label(label_id, parsed_ids.iter().copied(), bond).await?;
+
+            res.extend(parsed_ids.iter().map(|&id| LabelPair {
+                id,
+                label: label_id,
+            }));
+        }
+        Ok(res)
+    }
+
+    fn grouped_labels_and_messages_query(placeholders: usize) -> String;
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -699,6 +765,22 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
             add,
             remove,
             source_label_id,
+        }
+    }
+
+    pub fn new_remove(remove: Vec<LabelPair<T::IdType>>) -> Self {
+        Self {
+            remove,
+            add: vec![],
+            source_label_id: 0.into(),
+        }
+    }
+
+    pub fn new_add(add: Vec<LabelPair<T::IdType>>) -> Self {
+        Self {
+            remove: vec![],
+            add,
+            source_label_id: 0.into(),
         }
     }
 
@@ -850,13 +932,6 @@ fn mark_read_unread_action_dependency_key<T: LocalIdActionDepExt>(
 ) -> impl IntoIterator<Item = ActionDependencyKey> {
     ids.into_iter()
         .map(|id| id.to_custom_dependency_key("mail-mark-read-unread"))
-}
-
-fn label_unlabel_action_dependency_key<T: LocalIdActionDepExt>(
-    ids: impl IntoIterator<Item = T>,
-) -> impl IntoIterator<Item = ActionDependencyKey> {
-    ids.into_iter()
-        .map(|id| id.to_custom_dependency_key("mail-label-unlabel"))
 }
 
 fn snooze_unsnooze_action_dependency_key<T: LocalIdActionDepExt>(

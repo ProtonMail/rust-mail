@@ -18,7 +18,7 @@
 //! to interface with sqlite.
 //!
 
-use crate::orm::{ConversionError, DbRecord, DbRecords, from_rows};
+use crate::orm::{ConversionError, DbRecord};
 use anyhow::{Context, anyhow};
 use core::fmt;
 use core::fmt::Debug;
@@ -43,6 +43,7 @@ use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
+use std::any::Any;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -66,9 +67,6 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 /// defaults to 100.
 // TODO: Test perf of lower values.
 const MAX_CONNECTIONS: u32 = 100;
-
-/// A type alias for a field convertor function.
-type Converter = Box<dyn Fn(Rows<'_>) -> Result<DbRecords, ConversionError> + Send>;
 
 #[derive(Debug)]
 /// These are all the operations allowed on a tether.
@@ -302,6 +300,8 @@ pub struct Notification {
     pub id: u64,
 }
 
+type QueryResult = Box<dyn Any + Send + 'static>;
+
 /// An operation to be executed by the worker, which returns data.
 ///
 /// This is used for operations such as `SELECT`, where the result is a set of
@@ -315,13 +315,13 @@ struct Query {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
     #[derivative(Debug = "ignore")]
-    sender: OneshotSender<Result<DbRecords, StashError>>,
+    sender: OneshotSender<Result<QueryResult, StashError>>,
 
     /// The deserialisation function to use to convert the query results into
     /// the desired type. This is necessary because the [`Rows`] type returned
     /// by the [`rusqlite`] library is not thread-safe.
     #[derivative(Debug = "ignore")]
-    converter: Converter,
+    converter: Box<dyn FnOnce(Rows<'_>) -> QueryResult + Send + 'static>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
@@ -336,22 +336,28 @@ struct Query {
 
 impl Query {
     /// Prepares and executes a query, and returns any rows of data emitted.
-    fn run(&self, connection: &Connection) -> Result<DbRecords, StashError> {
-        let mut statement = connection
-            .prepare_cached(&self.query)
-            .map_err(StashError::PreparationError)?;
-        let rows: Result<DbRecords, ConversionError> = (self.converter)(
-            statement
-                .query(params_from_iter(&self.params))
-                .map_err(StashError::ExecutionError)?,
-        );
-        if let Some(query) = statement.expanded_sql() {
+    fn run_and_send(self, connection: &Connection) {
+        let params = params_from_iter(&self.params);
+        let mut stmt = match connection.prepare_cached(&self.query) {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                _ = self.sender.send(Err(StashError::PreparationError(e)));
+                return;
+            }
+        };
+
+        if tracing::enabled!(tracing::Level::DEBUG)
+            && let Some(query) = stmt.expanded_sql()
+        {
             debug!("Query: {query}");
         }
-        if let Ok(ref records) = rows {
-            debug!("Rows: {}", records.0.len());
-        }
-        rows.map_err(StashError::DeserializationError)
+
+        let res = match stmt.query(params) {
+            Ok(val) => Ok((self.converter)(val)),
+            Err(e) => Err(StashError::ExecutionError(e)),
+        };
+
+        _ = self.sender.send(res);
     }
 }
 
@@ -724,12 +730,34 @@ impl Tether {
     where
         Q: Into<String>,
         T: DbRecord + Send + 'static,
-        DbRecords: FromIterator<Box<T>>,
     {
+        let converter = move |mut rows: Rows<'_>| {
+            let mut results = vec![];
+            while let Some(row) = rows.next()? {
+                results.push(T::from_row(row)?);
+            }
+            Ok::<_, ConversionError>(results)
+        };
+
+        Ok(self.do_query(query, params, converter).await??)
+    }
+
+    pub async fn do_query<T>(
+        &self,
+        query: impl Into<String>,
+        params: Vec<Box<dyn ToSql + Send>>,
+        convert: impl Send + 'static + FnOnce(Rows<'_>) -> T,
+    ) -> Result<T, StashError>
+    where
+        T: Send + 'static,
+    {
+        let convert =
+            move |rows: Rows<'_>| Box::new(convert(rows)) as Box<dyn Any + Send + 'static>;
+
         let (sender, receiver) = oneshot::channel();
         let query = Query {
             sender,
-            converter: Box::new(converter::<T>),
+            converter: Box::new(convert),
             params,
             query: query.into(),
         };
@@ -738,17 +766,14 @@ impl Tether {
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
-        Ok(receiver
+        let item = receiver
             .await
-            .expect("Tether closed its channel with handles still open")?
-            .into_iter()
-            .map(|item| {
-                // The type we receive back is described as Any so that it can pass through
-                // the channel without introducing unnecessary type constraints, but is in
-                // fact already known to be of type T, so we can downcast it safely.
-                *item.downcast::<T>().unwrap()
-            })
-            .collect())
+            .expect("Tether closed its channel with handles still open")?;
+        //
+        // The type we receive back is described as Any so that it can pass through
+        // the channel without introducing unnecessary type constraints, but is in
+        // fact already known to be of type T, so we can downcast it safely.
+        Ok(*item.downcast::<T>().unwrap())
     }
 
     /// Utility function to return rows of a singular type.
@@ -1492,8 +1517,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 let _ = batch.sender.send(res);
             }
             OperationExec::Query(query) => {
-                let res = query.run(connection);
-                let _ = query.sender.send(res);
+                query.run_and_send(connection);
             }
         }
     }
@@ -1508,43 +1532,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             error!("Failed to roll back transaction upon connection closure");
         }
     }
-}
-
-/// Converts the query results into the desired type.
-///
-/// This is necessary because the [`Rows`] type returned by the [`rusqlite`]
-/// library is not thread-safe. We only need one converter function, but the key
-/// is that the context of the generic type `T` is established at the point this
-/// function is used by [`Stash::query()`] and [`Tether::query()`] and passed
-/// through the queue to [`Query::run()`].
-///
-/// Notably, we cannot really get away from use of `Box<dyn Any>` here, as we
-/// need to be able to return a collection of any type that implements the
-/// [`DbRecord`] trait. We don't want to restrict the caller to a specific type,
-/// or even an enumerated list of types, and neither to we want to serialise the
-/// results into intermediary form to unpack at the other end of the queue. We
-/// therefore use `Box<dyn Any>` for a very short and specific purpose, which is
-/// to send the results back to the caller via the oneshot channel. They have in
-/// fact already been converted at this point, but must be passed generically
-/// and then downcast. This method of transport is therefore the most efficient
-/// option we can choose, and bears a very slight overhead of type manipulation,
-/// but does not introduce any wider dynamic dispatch or unnecessary byte
-/// manipulation (as the deserialisation happens exactly once).
-///
-/// # Errors
-///
-/// A [`ConversionError`] is returned if there is a problem deserialising the
-/// query results or performing any type conversions as part of the overall
-/// row-deserialisation process. This will then be converted into a
-/// [`StashError::DeserializationError`] by the caller.
-///
-#[allow(clippy::needless_pass_by_value)]
-fn converter<T>(rows: Rows<'_>) -> Result<DbRecords, ConversionError>
-where
-    T: DbRecord + Send + 'static,
-    DbRecords: FromIterator<Box<T>>,
-{
-    Ok(from_rows::<T>(rows)?.into_iter().map(Box::new).collect())
 }
 
 /// Value record struct used to generate the `DbRecord` glue code.
