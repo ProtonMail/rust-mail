@@ -3,14 +3,14 @@ use crate::actions::rollback::RollbackAction;
 use proton_action_queue::queue::ActionError;
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::services::EventLoopService;
-use proton_core_common::{CoreContextError, services::InitializationService};
+use proton_core_common::services::InitializationService;
 use proton_event_loop::EventLoopError;
 use std::time::Duration;
 use tokio::time;
 use tracing::{Instrument, error};
 
 impl MailUserContext {
-    pub(crate) fn init_event_loop_poll(&self, duration: Duration) -> Result<(), CoreContextError> {
+    pub(crate) fn init_event_loop_poll(&self, duration: Duration) {
         tracing::info!(
             "Initializing event loop poll with {} second interval",
             duration.as_secs()
@@ -67,8 +67,6 @@ impl MailUserContext {
             .instrument(tracing::debug_span!("event_loop"))
             .await;
         });
-
-        Ok(())
     }
 
     /// Queue an action to execute the event loop.
@@ -129,7 +127,7 @@ impl MailUserContext {
 
         self.user_context()
             .get_service::<EventLoopService>()
-            .event_loop()
+            .event_poll()
             .register(Box::new(mail_subscriber))
             .await?;
 

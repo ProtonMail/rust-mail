@@ -332,7 +332,7 @@ impl UserContext {
         let event_loop_service = self.event_loop_service();
 
         event_loop_service
-            .event_loop()
+            .event_poll()
             .register(Box::new(self.event_subscriber()))
             .await?;
 
@@ -352,7 +352,7 @@ impl UserContext {
     pub async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
         let event_loop_service = self.event_loop_service();
 
-        event_loop_service.event_loop().poll().await
+        event_loop_service.event_poll().poll().await
     }
 
     #[must_use]

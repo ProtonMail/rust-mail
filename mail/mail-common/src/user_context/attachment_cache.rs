@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-/// Available for both App and ShareExt origins since attachment caching is universal.
 pub struct AttachmentCacheState {
     is_cleanup_running: Arc<AtomicBool>,
 }

@@ -3,22 +3,21 @@ use proton_event_loop::EventPoll;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// For main application use only.
 pub struct EventLoopService {
-    event_loop: EventPoll,
+    event_poll: EventPoll,
     last_event_loop_action_ids: Arc<Mutex<EventLoopActionIds>>,
 }
 
 impl EventLoopService {
     pub fn new(event_loop: EventPoll) -> Self {
         Self {
-            event_loop,
+            event_poll: event_loop,
             last_event_loop_action_ids: Arc::new(Mutex::new(EventLoopActionIds::default())),
         }
     }
 
-    pub fn event_loop(&self) -> &EventPoll {
-        &self.event_loop
+    pub fn event_poll(&self) -> &EventPoll {
+        &self.event_poll
     }
 
     pub fn last_event_loop_action_ids(&self) -> &Arc<Mutex<EventLoopActionIds>> {

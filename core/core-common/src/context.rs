@@ -362,7 +362,7 @@ impl Context {
         );
 
         let ctx_weak = ctx.this.clone();
-        if let Some(session_service) = ctx.get_opt_service::<SessionObserverService>() {
+        if let Some(session_service) = ctx.get_service_opt::<SessionObserverService>() {
             session_service
                 .start(SESSION_OBSERVER_BROADCAST_CAPACITY)
                 .await?;
@@ -400,7 +400,7 @@ impl Context {
     #[allow(clippy::result_large_err)]
     /// # Panics
     /// This function panics if the service is not found.
-    /// If there is a need for a service that may not exist, use `get_opt_service`.
+    /// If there is a need for a service that may not exist, use `get_service_opt`.
     pub fn get_service<T: 'static>(&self) -> &T {
         self.services
             .get(&TypeId::of::<T>())
@@ -409,7 +409,7 @@ impl Context {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn get_opt_service<T: 'static>(&self) -> Option<&T> {
+    pub fn get_service_opt<T: 'static>(&self) -> Option<&T> {
         self.services
             .get(&TypeId::of::<T>())
             .and_then(|service| service.downcast_ref::<T>())
@@ -942,13 +942,13 @@ impl Context {
             builder = builder.with_status(status);
         }
 
-        if let Some(hv_service) = self.get_opt_service::<HvNotifierService>()
+        if let Some(hv_service) = self.get_service_opt::<HvNotifierService>()
             && let Some(notifier) = hv_service.notifier_arc()
         {
             builder = builder.with_notifier(notifier);
         }
 
-        if let Some(device_service) = self.get_opt_service::<DeviceInfoService>()
+        if let Some(device_service) = self.get_service_opt::<DeviceInfoService>()
             && let Some(provider) = device_service.provider()
         {
             builder = builder.with_info_provider(Arc::new(MuonInfoProvider {

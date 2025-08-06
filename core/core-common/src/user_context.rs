@@ -133,7 +133,7 @@ impl UserContext {
         fs::create_dir_all(this.trash_path())?;
 
         if matches!(origin, Origin::App) {
-            if let Some(init_service) = this.get_opt_service::<InitializationService>() {
+            if let Some(init_service) = this.get_service_opt::<InitializationService>() {
                 let init_watcher = init_service.initialization_watcher().clone();
                 this.spawn(async move {
                     if let Err(e) = init_watcher.task().await {
@@ -145,7 +145,7 @@ impl UserContext {
 
         let this_user_id = this.user_id.clone();
         let this_weak = Arc::downgrade(&this);
-        if let Some(session_service) = this.context.get_opt_service::<SessionObserverService>() {
+        if let Some(session_service) = this.context.get_service_opt::<SessionObserverService>() {
             session_service.on_session_deleted(move |_, user_id| {
                 let this_user_id = this_user_id.clone();
                 let this_weak = this_weak.clone();
@@ -174,7 +174,7 @@ impl UserContext {
     }
 
     #[must_use]
-    pub fn get_opt_service<T: Any + 'static>(&self) -> Option<&T> {
+    pub fn get_service_opt<T: Any + 'static>(&self) -> Option<&T> {
         self.services
             .get(&TypeId::of::<T>())
             .and_then(|service| service.downcast_ref::<T>())
@@ -183,7 +183,7 @@ impl UserContext {
     #[allow(clippy::result_large_err)]
     /// # Panics
     /// This function panics if the service is not found.
-    /// If there is a need for a service that may not exist, use `get_opt_service`.
+    /// If there is a need for a service that may not exist, use `get_service_opt`.
     #[must_use]
     pub fn get_service<T: Any + 'static>(&self) -> &T {
         self.services

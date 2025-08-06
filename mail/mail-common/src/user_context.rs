@@ -116,34 +116,37 @@ impl QueuesService {
         Self { weak }
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn pause(&self) {
         let Some(ctx) = self.weak.upgrade() else {
             tracing::error!("Could not upgrade weak ctx reference");
             return;
         };
-        if let Some(service) = ctx.get_opt_service::<DefaultQueueExecutor>() {
+        if let Some(service) = ctx.get_service_opt::<DefaultQueueExecutor>() {
             service.pause();
         };
         ctx.get_service::<SendQueueExecutorPool>().pause();
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn resume(&self) {
         let Some(ctx) = self.weak.upgrade() else {
             tracing::error!("Could not upgrade weak ctx reference");
             return;
         };
-        if let Some(service) = ctx.get_opt_service::<DefaultQueueExecutor>() {
+        if let Some(service) = ctx.get_service_opt::<DefaultQueueExecutor>() {
             service.resume();
         };
         ctx.get_service::<SendQueueExecutorPool>().resume();
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn terminate(&self) {
         let Some(ctx) = self.weak.upgrade() else {
             tracing::error!("Could not upgrade weak ctx reference");
             return;
         };
-        if let Some(service) = ctx.get_opt_service::<DefaultQueueExecutor>() {
+        if let Some(service) = ctx.get_service_opt::<DefaultQueueExecutor>() {
             service.terminate();
         };
         ctx.get_service::<SendQueueExecutorPool>().terminate();
@@ -249,7 +252,7 @@ impl MailUserContext {
                     .core_context()
                     .get_service::<EventPollConfigService>();
                 if let EventPollMode::Automatic(interval) = config.mode() {
-                    this.init_event_loop_poll(interval)?;
+                    this.init_event_loop_poll(interval);
                 }
             }
 
@@ -270,7 +273,7 @@ impl MailUserContext {
     ///
     /// # Panics
     /// Panics if the service is not found in the context.
-    /// If there is a need for a service that may not be registered, use `get_opt_service` instead.
+    /// If there is a need for a service that may not be registered, use `get_service_opt` instead.
     #[must_use]
     pub fn get_service<T: Any + Send + Sync + 'static>(&self) -> &T {
         self.services
@@ -285,7 +288,7 @@ impl MailUserContext {
     }
 
     /// Get an optional service - returns None if service is not registered
-    pub fn get_opt_service<T: Any + Send + Sync + 'static>(&self) -> Option<&T> {
+    pub fn get_service_opt<T: Any + Send + Sync + 'static>(&self) -> Option<&T> {
         self.services
             .get(&TypeId::of::<T>())
             .and_then(|service| service.downcast_ref::<T>())

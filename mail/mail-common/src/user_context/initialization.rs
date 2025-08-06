@@ -39,15 +39,6 @@ impl MailUserContext {
     ///
     /// This function probably should not be called explicitly.
     /// It is called automatically during user context session creation
-    ///
-    /// # Arguments
-    ///
-    /// * `ctx` - The mail user context to initialize, it is vital to have it as Arc, as it will be cloned multiple times, and passed to the tokio::task.
-    ///
-    /// # Returns
-    ///
-    /// An error if the initialization mediator was not registered.
-    ///
     pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
         let ctx_cloned = Arc::clone(&ctx);
 
@@ -162,7 +153,7 @@ async fn initialize_event_loop(
             ctx_clone
                 .user_context()
                 .get_service::<EventLoopService>()
-                .event_loop()
+                .event_poll()
                 .initialize()
                 .await?;
             Ok(())

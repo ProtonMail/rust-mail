@@ -218,7 +218,7 @@ async fn create_mail_session_inner(
 
     if let Some(session_service) = mail_ctx
         .core_context()
-        .get_opt_service::<SessionObserverService>()
+        .get_service_opt::<SessionObserverService>()
     {
         session_service.on_session_deleted(move |_session_id, user_id| {
             let weak_user_ctx_map = weak_user_ctx_map.clone();

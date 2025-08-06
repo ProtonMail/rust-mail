@@ -285,7 +285,7 @@ impl MailContext {
 
         let ctx_weak = Arc::downgrade(&ctx);
 
-        if let Some(session_service) = ctx.core_context.get_opt_service::<SessionObserverService>()
+        if let Some(session_service) = ctx.core_context.get_service_opt::<SessionObserverService>()
         {
             session_service.on_session_deleted(move |_, user_id| {
                 let ctx_weak = ctx_weak.clone();
