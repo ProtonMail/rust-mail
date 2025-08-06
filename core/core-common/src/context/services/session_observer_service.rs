@@ -1,19 +1,21 @@
 use crate::app_events::{UserSessionCreatedEvent, UserSessionDeletedEvent};
 use crate::db::account::{CoreSessionObserver, CoreSessionObserverNotification};
-use crate::{Context, CoreContextError};
+use crate::{Context, CoreContextError, OnSessionDeletedResponse};
 use proton_event_service::{Event, EventService, EventStream};
 use std::sync::Weak;
 
 pub struct SessionObserverService {
     event_service: EventService,
     context: Weak<Context>,
+    capacity: usize,
 }
 
 impl SessionObserverService {
-    pub fn new(event_service: EventService, context: Weak<Context>) -> Self {
+    pub fn new(event_service: EventService, context: Weak<Context>, capacity: usize) -> Self {
         Self {
             event_service,
             context,
+            capacity,
         }
     }
 
@@ -103,12 +105,38 @@ impl SessionObserverService {
                     if hook
                         .on_session_deleted(event.session_id, event.user_id)
                         .await
-                        == crate::OnSessionDeletedResponse::Terminate
+                        == OnSessionDeletedResponse::Terminate
                     {
                         break;
                     }
                 }
             });
         }
+    }
+}
+
+use super::Service;
+use async_trait::async_trait;
+
+#[async_trait]
+impl Service for SessionObserverService {
+    type Error = CoreContextError;
+
+    async fn init(&self) -> Result<(), Self::Error> {
+        self.start(self.capacity).await?;
+
+        let ctx_weak = self.context.clone();
+        self.on_session_deleted(move |_, user_id| {
+            let ctx_weak = ctx_weak.clone();
+
+            async move {
+                let Some(ctx) = ctx_weak.upgrade() else {
+                    return OnSessionDeletedResponse::Terminate;
+                };
+                ctx.active_user_contexts.lock().await.remove(&user_id);
+                OnSessionDeletedResponse::Continue
+            }
+        });
+        Ok(())
     }
 }

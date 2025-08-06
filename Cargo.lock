@@ -5664,6 +5664,7 @@ dependencies = [
  "hex",
  "ical",
  "include_dir",
+ "indexmap 2.10.0",
  "indoc",
  "insta",
  "itertools 0.13.0",

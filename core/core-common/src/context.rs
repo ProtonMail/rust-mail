@@ -2,6 +2,8 @@
 
 mod builder;
 pub mod services;
+use indexmap::IndexMap;
+use services::Service;
 
 use crate::action_queue::CoreActionError;
 use crate::auth_store::{AuthStore, DecryptExt};
@@ -56,7 +58,7 @@ use services::{
 };
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::fs;
 use std::future::Future;
@@ -268,7 +270,7 @@ pub struct Context {
     clock: CoreClock,
     log_service: LogService,
     // Service registry
-    services: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    services: IndexMap<TypeId, Box<dyn Service<Error = CoreContextError>>>,
 }
 
 const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
@@ -340,46 +342,32 @@ impl Context {
         if matches!(origin, Origin::App) {
             builder = builder
                 .with_cyclic_service(|weak_ctx| {
-                    SessionObserverService::new(EventService::new(), weak_ctx)
+                    SessionObserverService::new(
+                        EventService::new(),
+                        weak_ctx,
+                        SESSION_OBSERVER_BROADCAST_CAPACITY,
+                    )
                 })
                 .with_service(HvNotifierService::new(hv_notifier))
                 .with_service(DeviceInfoService::new(device_info_provider))
                 .with_service(EventPollConfigService::new(event_poll_mode));
         }
 
-        let ctx = builder.build(
-            origin,
-            user_db_path,
-            account_db_path,
-            cache_path.into(),
-            api_config,
-            account_stash,
-            key_chain,
-            initializers,
-            background_task_service,
-            CoreClock::default(),
-            log_service,
-        );
-
-        let ctx_weak = ctx.this.clone();
-        if let Some(session_service) = ctx.get_service_opt::<SessionObserverService>() {
-            session_service
-                .start(SESSION_OBSERVER_BROADCAST_CAPACITY)
-                .await?;
-
-            session_service.on_session_deleted(move |_, user_id| {
-                let ctx_weak = ctx_weak.clone();
-                async move {
-                    let Some(ctx) = ctx_weak.upgrade() else {
-                        return OnSessionDeletedResponse::Terminate;
-                    };
-                    ctx.active_user_contexts.lock().await.remove(&user_id);
-                    OnSessionDeletedResponse::Continue
-                }
-            });
-        }
-
-        Ok(ctx)
+        builder
+            .build(
+                origin,
+                user_db_path,
+                account_db_path,
+                cache_path.into(),
+                api_config,
+                account_stash,
+                key_chain,
+                initializers,
+                background_task_service,
+                CoreClock::default(),
+                log_service,
+            )
+            .await
     }
 
     #[must_use]
@@ -404,7 +392,7 @@ impl Context {
     pub fn get_service<T: 'static>(&self) -> &T {
         self.services
             .get(&TypeId::of::<T>())
-            .and_then(|service| service.downcast_ref::<T>())
+            .and_then(|service| <dyn std::any::Any>::downcast_ref::<T>(service))
             .unwrap_or_else(|| panic!("Service not found"))
     }
 
@@ -412,7 +400,7 @@ impl Context {
     pub fn get_service_opt<T: 'static>(&self) -> Option<&T> {
         self.services
             .get(&TypeId::of::<T>())
-            .and_then(|service| service.downcast_ref::<T>())
+            .and_then(|service| <dyn std::any::Any>::downcast_ref::<T>(service))
     }
 
     /// Get all available accounts.
