@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.115.8] - 2025-08-05
+## [mail-uniffi-v0.118.0] - 2025-08-06
+
+### Fixes
+
+- [ET-2416] Sort accounts by name
+
+
+## [mail-uniffi-v0.115.8] - 2025-08-06
 
 ### Fixes
 
@@ -16,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Message ordering and banners
 
 
-## [mail-uniffi-v0.115.7] - 2025-08-05
+## [mail-uniffi-v0.117.0] - 2025-08-05
 
 ### Features
 
@@ -26,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3911] Add record_human_verification_view_loading_result function
 - [ET-3955] Added payment specific observability events.
 - [ET-4084] Draft recipient expiration feature check
+
+
+## [mail-uniffi-v0.115.7] - 2025-08-05
+
+### Fixes
+
+- Rsvp/uniffi: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.116.0] - 2025-08-05
@@ -41,11 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4011] Improve error handling for attachment uploads
 
 
-## [mail-uniffi-v0.115.7] - 2025-08-05
+## [mail-uniffi-v0.115.6] - 2025-08-04
 
 ### Fixes
 
-- Rsvp/uniffi: support attendee-less reminders
+- Rsvp: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.115.5] - 2025-08-04
@@ -64,13 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4052] Snooze is not available as an action in allmail label
 - Rsvp: fetch address keys of the address that has created the calendar
 - Disable free account count post login check
-
-
-## [mail-uniffi-v0.115.6] - 2025-08-04
-
-### Fixes
-
-- Rsvp: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.115.3] - 2025-08-03
