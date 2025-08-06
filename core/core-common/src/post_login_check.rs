@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
-use crate::Context;
-use anyhow::anyhow;
+use crate::datatypes::UserType;
+use crate::models::User as UserTable;
+use crate::{Context, CoreAccountState};
 use async_trait::async_trait;
-use proton_core_api::services::proton::{DelinquentState, User, UserType};
+use proton_core_api::services::proton::{DelinquentState, User, UserId};
 use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use serde::{Deserialize, Serialize};
+use stash::orm::Model as _;
+use stash::stash::{Stash, StashConfiguration, StashError};
 use thiserror::Error;
-use tracing::error;
+use tracing::{error, trace};
 
 /// This enum defines possible error conditions encountered after a successful login,
 /// focusing on constraints and limits that might prevent further actions.
@@ -21,7 +24,7 @@ pub enum PostLoginValidationError {
     DelinquentUser,
 
     #[error("Error during post login check: {0}")]
-    Other(anyhow::Error),
+    Other(#[from] anyhow::Error),
 }
 
 #[async_trait]
@@ -52,39 +55,100 @@ impl PostLoginValidator for DefaultPostLoginValidator {
             user.delinquent,
             DelinquentState::Delinquent | DelinquentState::NotReceived
         ) {
+            trace!(
+                "Post login check failed, delinquent state is {:?}",
+                user.delinquent
+            );
             return Err(PostLoginValidationError::DelinquentUser);
         }
 
-        if user.user_type == UserType::CredentialLess {
-            return Ok(());
-        }
-
-        let has_subscription = user.subscribed > 0;
-        if has_subscription {
-            return Ok(());
-        }
-
-        let account_count = self
-            .ctx
-            .get_accounts()
-            .await
-            .map_err(|err| {
-                error!("Error during 'get_accounts' call: {err:?}");
-                PostLoginValidationError::Other(
-                    anyhow!(err).context("Error during 'get_accounts' call: {err:?}"),
-                )
-            })?
-            .into_iter()
-            .filter(|account| account.is_ready)
-            .count() as u64;
-        if let Some(allowed_free_account_count) = self.allowed_free_account_count
-            && allowed_free_account_count < account_count
+        if let Some(logged_in_free_account_count) =
+            Self::get_logged_in_free_account_count(&self.ctx).await
         {
-            return Err(PostLoginValidationError::FreeAccountLimitExceeded(
-                allowed_free_account_count,
-            ));
+            trace!("Logged-in free accounts: {logged_in_free_account_count}");
+            if let Some(allowed_free_account_count) = self.allowed_free_account_count
+                && allowed_free_account_count <= logged_in_free_account_count
+            {
+                return Err(PostLoginValidationError::FreeAccountLimitExceeded(
+                    allowed_free_account_count,
+                ));
+            }
         }
         Ok(())
+    }
+}
+
+impl DefaultPostLoginValidator {
+    /// Retrieves the count of logged-in free (non-subscribed, non-credentialless) accounts.
+    /// Errors are logged but do not halt execution.
+    async fn get_logged_in_free_account_count(ctx: &Arc<Context>) -> Option<u64> {
+        let mut logged_in_free_account_count = 0;
+
+        let accounts = ctx
+            .get_accounts()
+            .await
+            .inspect_err(|err| {
+                error!("Error during 'get_accounts' call: {err:?}");
+            })
+            .ok()?;
+        for account in accounts {
+            let state = ctx
+                .get_account_state(account.remote_id.clone())
+                .await
+                .inspect_err(|err| {
+                    error!("Error during 'get_account_state' call: {err:?}");
+                })
+                .ok()?;
+
+            if !matches!(state, Some(CoreAccountState::LoggedIn(_))) {
+                continue;
+            }
+            match Self::load_user(ctx, account.remote_id.clone()).await {
+                Ok(Some(user)) => {
+                    if user.user_type == UserType::CredentialLess {
+                        trace!("user '{:?}' is 'CredentialLess'", &user.name);
+                        continue;
+                    }
+                    let has_subscription = user.subscribed.0 > 0;
+                    if has_subscription {
+                        trace!("user '{:?}' has subscription", &user.name);
+                        continue;
+                    }
+                }
+                Ok(None) => continue,
+                Err(err) => {
+                    error!(
+                        "Failed to load User({}) for Account({}): {:?}",
+                        &account.remote_id, &account.name_or_addr, err
+                    );
+                }
+            }
+            trace!("{} is a Logged-in free account", &account.name_or_addr);
+            logged_in_free_account_count += 1;
+        }
+        Some(logged_in_free_account_count)
+    }
+
+    async fn load_user(
+        ctx: &Arc<Context>,
+        user_id: UserId,
+    ) -> Result<Option<UserTable>, StashError> {
+        let user_db_path = ctx.user_db_path(&user_id);
+        if !user_db_path.exists() {
+            error!("User DB file does not exists: {:?} ", &user_db_path);
+            return Ok(None);
+        }
+        let user_stash = match Stash::new(StashConfiguration {
+            path: Some(&user_db_path),
+            ..Default::default()
+        }) {
+            Ok(user_stash) => user_stash,
+            Err(err) => {
+                error!("Could not open user db: {:?} ", &err);
+                return Ok(None);
+            }
+        };
+        UserTable::load(user_id, &user_stash.connection()).await
     }
 }
 
