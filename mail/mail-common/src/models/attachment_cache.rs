@@ -247,7 +247,7 @@ impl Attachment {
                 tx.execute(
                     indoc! { "
                        UPDATE attachment_cache
-                       SET 
+                       SET
                            atime = unixepoch('now'),
                            hit_count = hit_count + 1
                        WHERE attachment_id = ?1;
@@ -570,7 +570,9 @@ impl Attachment {
     pub async fn cleanup_cache(ctx: &MailUserContext) {
         if ctx.origin() != Origin::App {
             return;
-        }
+        };
+
+        let state = ctx.attachment_cache_state();
 
         // TODO: Possibly run this in a background task instead of once-per.
         pub struct G(Arc<AtomicBool>);
@@ -580,7 +582,7 @@ impl Attachment {
             }
         }
 
-        let is_executing = ctx.is_cleanup_cache_running.clone();
+        let is_executing = state.is_cleanup_running().clone();
         if is_executing.swap(true, Ordering::Acquire) {
             debug!("Cleanup routine already running");
             return;

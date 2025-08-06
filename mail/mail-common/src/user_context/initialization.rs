@@ -1,13 +1,14 @@
 use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{CustomSettings, LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailContextResult, MailUserContext};
-use anyhow::anyhow;
 use futures::try_join;
 use proton_core_common::datatypes::{InitializationKey, InitializedComponentState};
 use proton_core_common::models::{
     Address, Contact, DependencyInitializationError, InitializationError, InitializationWatcher,
     InitializedComponent, User,
 };
+
+use proton_core_common::services::{EventLoopService, InitializationService};
 use proton_event_loop::EventLoopError;
 use proton_task_service::{AsyncTaskResult, TaskService};
 use std::sync::Arc;
@@ -38,26 +39,10 @@ impl MailUserContext {
     ///
     /// This function probably should not be called explicitly.
     /// It is called automatically during user context session creation
-    ///
-    /// # Arguments
-    ///
-    /// * `ctx` - The mail user context to initialize, it is vital to have it as Arc, as it will be cloned multiple times, and passed to the tokio::task.
-    ///
-    /// # Returns
-    ///
-    /// An error if the initialization failed for any reason
-    ///
     pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
         let ctx_cloned = Arc::clone(&ctx);
 
-        ctx.init
-            .as_ref()
-            .ok_or_else(|| {
-                // This can happen if someone tries to initialize the context
-                // from within the share extension - that's illegal, because
-                // share extension assumes the context is already initialized
-                anyhow!("Initialization mediator is missing")
-            })?
+        ctx.get_service::<InitializationMediator>()
             .initialize(ctx_cloned)
             .await
     }
@@ -165,7 +150,12 @@ async fn initialize_event_loop(
             // there is no way of initializing it with already having transaction.
             // We want to avoid the deadlock, and we do not depend on any dependencies.
             // So initializing it here is not really harmful, just weird.
-            ctx_clone.event_loop().initialize().await?;
+            ctx_clone
+                .user_context()
+                .get_service::<EventLoopService>()
+                .event_poll()
+                .initialize()
+                .await?;
             Ok(())
         },
         async |_tx, ()| Ok(()),
@@ -225,7 +215,11 @@ impl InitializationMediator {
             warn!("Context already initialized");
             return Ok(());
         }
-        let watcher = ctx.user_context.initialization_watcher.clone();
+        let watcher = ctx
+            .user_context
+            .get_service::<InitializationService>()
+            .initialization_watcher()
+            .clone();
         let watcher_clone = watcher.clone();
         let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
 

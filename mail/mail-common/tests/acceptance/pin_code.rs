@@ -108,7 +108,7 @@ async fn sign_out_all_on_too_many_attempts_of_pin_code_action(
         assert!(!mail_cache.exists());
 
         let core_user_ctx = user_ctx.user_context();
-        let core_cache = &core_user_ctx.cache_path;
+        let core_cache = core_user_ctx.cache_path();
         let user_db_path = core_user_ctx.get_user_db_path();
 
         assert!(core_cache.exists());

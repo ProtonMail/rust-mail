@@ -70,7 +70,7 @@ async fn sign_out_all() {
         assert!(!mail_cache.exists());
 
         let core_user_ctx = user_ctx.user_context();
-        let core_cache = &core_user_ctx.cache_path;
+        let core_cache = core_user_ctx.cache_path();
         let user_db_path = core_user_ctx.get_user_db_path();
 
         assert!(core_cache.exists());

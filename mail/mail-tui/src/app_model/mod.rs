@@ -25,6 +25,7 @@ use anyhow::anyhow;
 use chrono::Local;
 use futures::FutureExt;
 use proton_core_common::event_loop::EventPollMode;
+use proton_core_common::services::SessionObserverService;
 use proton_core_common::{OnSessionDeletedResponse, Origin};
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
@@ -215,7 +216,8 @@ impl Model<Messages> for AppModel {
         let ctx = self.context.clone();
         let session_observer_cmd = Command::background_task(move |sender| {
             async move {
-                ctx.core_context().on_session_deleted(move |_, user_id| {
+                let session_service = ctx.core_context().get_service::<SessionObserverService>();
+                session_service.on_session_deleted(move |_, user_id| {
                     let sender = sender.clone();
                     async move {
                         let _ = sender

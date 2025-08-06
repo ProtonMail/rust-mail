@@ -16,6 +16,7 @@ use crate::{AsyncLiveQueryCallback, watch_channel_async};
 use crate::{
     LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async, watch_channel,
 };
+use proton_core_common::services::SessionObserverService;
 
 use chrono::Local;
 use futures::TryFutureExt;
@@ -215,9 +216,11 @@ async fn create_mail_session_inner(
     let user_ctx_map = MailUserContextMap::new();
     let weak_user_ctx_map = Arc::downgrade(&user_ctx_map);
 
-    mail_ctx
+    if let Some(session_service) = mail_ctx
         .core_context()
-        .on_session_deleted(move |_session_id, user_id| {
+        .get_service_opt::<SessionObserverService>()
+    {
+        session_service.on_session_deleted(move |_session_id, user_id| {
             let weak_user_ctx_map = weak_user_ctx_map.clone();
             async move {
                 tracing::warn!("Session ended. Removing from the map");
@@ -229,6 +232,7 @@ async fn create_mail_session_inner(
                 }
             }
         });
+    }
 
     Ok(Arc::new(MailSession {
         mail_ctx,

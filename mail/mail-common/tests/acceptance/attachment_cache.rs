@@ -290,7 +290,8 @@ async fn integration() -> anyhow::Result<()> {
 
     // Evil hack to stop cleanup
     user_ctx
-        .is_cleanup_cache_running
+        .attachment_cache_state()
+        .is_cleanup_running()
         .store(true, Ordering::SeqCst);
 
     tether
@@ -338,7 +339,8 @@ async fn integration() -> anyhow::Result<()> {
 
     // Let's allow it to cleanup
     user_ctx
-        .is_cleanup_cache_running
+        .attachment_cache_state()
+        .is_cleanup_running()
         .store(false, Ordering::SeqCst);
 
     Attachment::do_cleanup_cache(&user_ctx).await?;

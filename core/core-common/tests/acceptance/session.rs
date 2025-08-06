@@ -2,6 +2,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_common::OnSessionDeletedResponse;
 use proton_core_common::db::account::CoreSession;
 use proton_core_common::models::ModelExtension;
+use proton_core_common::services::SessionObserverService;
 use proton_core_common::test_utils::test_context::TestContext;
 use stash::stash::{Bond, StashError};
 use std::time::Duration;
@@ -31,21 +32,23 @@ async fn test_session_delete_subscriber() {
     let session_id = user_ctx.session_id().clone();
     let user_id = user_ctx.user_id().clone();
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<()>(1);
-    ctx.context.on_session_deleted(
-        move |deleted_session_id: SessionId, deleted_user_id: UserId| {
-            let deleted_session_id = deleted_session_id.clone();
-            let deleted_user_id = deleted_user_id.clone();
-            let sender = sender.clone();
-            let user_id = user_id.clone();
-            let session_id = session_id.clone();
-            async move {
-                assert_eq!(deleted_user_id, user_id);
-                assert_eq!(deleted_session_id, session_id);
-                sender.send(()).await.unwrap();
-                OnSessionDeletedResponse::Terminate
-            }
-        },
-    );
+    ctx.context
+        .get_service::<SessionObserverService>()
+        .on_session_deleted(
+            move |deleted_session_id: SessionId, deleted_user_id: UserId| {
+                let deleted_session_id = deleted_session_id.clone();
+                let deleted_user_id = deleted_user_id.clone();
+                let sender = sender.clone();
+                let user_id = user_id.clone();
+                let session_id = session_id.clone();
+                async move {
+                    assert_eq!(deleted_user_id, user_id);
+                    assert_eq!(deleted_session_id, session_id);
+                    sender.send(()).await.unwrap();
+                    OnSessionDeletedResponse::Terminate
+                }
+            },
+        );
 
     real_ctx
         .account_stash()

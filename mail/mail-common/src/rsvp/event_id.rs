@@ -42,8 +42,10 @@ impl RsvpEventId {
 
         let pgp = proton_crypto::new_pgp_provider();
         let keys = RsvpKeys::new(ctx, tether);
-        let cache = ctx.rsvp_cache();
-        let contacts = ctx.rsvp_contacts();
+        let rsvp_service = ctx.rsvp_service();
+        let cache = rsvp_service.cache();
+        let contacts = rsvp_service.contacts();
+
         let now = ctx.mail_context().core_context().clock().now();
 
         let msg = Message::load(self.msg_id, tether)

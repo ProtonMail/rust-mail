@@ -100,7 +100,7 @@ impl RsvpEvent {
                 ctx.api(),
                 &pgp,
                 &keys,
-                ctx.rsvp_cache(),
+                ctx.rsvp_service().cache(),
                 sender,
                 &now,
                 answer,
