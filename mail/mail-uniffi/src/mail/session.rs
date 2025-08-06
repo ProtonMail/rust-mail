@@ -361,6 +361,8 @@ impl MailSession {
                 }
             }
 
+            accounts.sort_by_cached_key(|a| a.details().name.to_lowercase());
+
             Result::<_, RealProtonMailError>::Ok(accounts)
         })
         .await
@@ -389,6 +391,8 @@ impl MailSession {
                     accounts.push(StoredAccount::new(account, state));
                 }
             }
+
+            accounts.sort_by_cached_key(|a| a.details().name.to_lowercase());
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_sync(
                 ctx, accounts, rx, callback,
@@ -420,6 +424,8 @@ impl MailSession {
                     accounts.push(StoredAccount::new(account, state));
                 }
             }
+
+            accounts.sort_by_cached_key(|a| a.details().name.to_lowercase());
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_async(
                 ctx, accounts, rx, callback,
