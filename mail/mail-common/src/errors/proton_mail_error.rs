@@ -267,6 +267,7 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::LostContext => Self::Unexpected(Unexpected::Internal),
             MailContextError::Rsvp(_) => Self::Unexpected(Unexpected::Unknown),
             MailContextError::MailScroller(mail_scroller_error) => Self::from(mail_scroller_error),
+            MailContextError::UrlParseError(_) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

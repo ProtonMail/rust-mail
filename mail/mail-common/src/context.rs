@@ -138,6 +138,8 @@ pub enum MailContextError {
     LostContext,
     #[error(transparent)]
     Rsvp(#[from] RsvpError),
+    #[error("Error parsing url: {0:?}")]
+    UrlParseError(#[from] url::ParseError),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }

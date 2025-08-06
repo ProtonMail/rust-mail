@@ -25,7 +25,7 @@ async fn test_mail_settings_store_read() {
         shortcuts: Default::default(),
         pm_signature: Default::default(),
         pm_signature_referral_link: Default::default(),
-        image_proxy: 0,
+        image_proxy: Default::default(),
         num_message_per_page: 0,
         draft_mime_type: Default::default(),
         receive_mime_type: Default::default(),

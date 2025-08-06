@@ -165,7 +165,6 @@ pub enum PgpScheme {
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
-#[serde(transparent)]
 #[repr(transparent)]
 pub struct PmSignature(u8);
 
@@ -943,7 +942,6 @@ pub struct MessageEvent {
 /// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
-#[serde(transparent)]
 #[repr(transparent)]
 pub struct MessageFlags(u64);
 

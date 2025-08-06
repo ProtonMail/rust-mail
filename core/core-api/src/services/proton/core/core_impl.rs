@@ -278,4 +278,13 @@ impl ProtonCore for Proton {
 
         Ok(())
     }
+
+    async fn proxy_img(&self, url: &url::Url) -> ApiServiceResult<Vec<u8>> {
+        let url: String = url::form_urlencoded::byte_serialize(url.as_str().as_bytes()).collect();
+        Ok(GET!("{CORE_V4}/images/{url}")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body())
+    }
 }

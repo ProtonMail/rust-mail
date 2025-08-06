@@ -2720,11 +2720,9 @@ impl TableObserver for MessageWatcher {
 }
 
 #[derive(Debug, Clone)]
-pub struct EmbeddedAttachmentInfo {
+pub struct AttachmentData {
     pub data: Vec<u8>,
     pub mime: String,
-    pub height: Option<String>,
-    pub width: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]

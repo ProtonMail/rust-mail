@@ -192,7 +192,6 @@ impl SyncedUserSettings {
 /// What services a user has subscribed to
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(transparent)]
 #[repr(transparent)]
 pub struct PaidSubscription(pub u32);
 

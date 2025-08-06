@@ -6,13 +6,16 @@ use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::theme::MailTheme;
 use crate::datatypes::{Disposition, LocalAttachmentId, MimeType, ParsedHeaderValue};
 use crate::models::{
-    Attachment, AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
+    Attachment, AttachmentData, AttachmentType, MailSettings, Message, MessageBodyMetadata,
 };
 use crate::rsvp::RsvpEventId;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
 use proton_calendar_common::{self as cal, RsvpError};
-use proton_core_api::services::proton::AddressId;
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::muon::GET;
+use proton_core_api::services::proton::muon::http::HttpReqExt;
+use proton_core_api::services::proton::{AddressId, ProtonCore};
 use proton_mail_api::services::proton::prelude::DirectAttachment;
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
@@ -25,6 +28,7 @@ use std::sync::Arc;
 use tokio::fs;
 use tokio::task::JoinHandle;
 use tracing::{debug, trace, warn};
+use url::Url;
 
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
@@ -235,6 +239,52 @@ impl DecryptedMessageBody {
         }
     }
 
+    /// Load a remote image (potentially proxied) or embedded attachment in the email body.
+    pub async fn load_image_from_str(
+        &self,
+        ctx: &MailUserContext,
+        url: &str,
+    ) -> MailContextResult<AttachmentData> {
+        let url = Url::try_from(url)?;
+
+        self.load_image(ctx, url).await
+    }
+
+    pub async fn load_image(
+        &self,
+        ctx: &MailUserContext,
+        url: Url,
+    ) -> MailContextResult<AttachmentData> {
+        let data = if url.scheme() == "cid" {
+            self.get_embedded_attachment(ctx, &url.path().into())
+                .await?
+        } else {
+            let tether = ctx.user_stash().connection();
+            let api = ctx.api();
+            let is_proxy_enabled = MailSettings::get_or_default(&tether)
+                .await
+                .is_proxy_enabled();
+
+            let data = if is_proxy_enabled {
+                api.proxy_img(&url).await?
+            } else {
+                GET!("{url}")
+                    .send_with(api)
+                    .await
+                    .map_err(ApiServiceError::from)?
+                    .ok()
+                    .map_err(ApiServiceError::from)?
+                    .into_body()
+            };
+
+            AttachmentData {
+                data,
+                mime: String::from("image/*"),
+            }
+        };
+        Ok(data)
+    }
+
     /// Load or fetch an embedded attachment with `cid` for this message.
     ///
     /// If the attachment is not in the cache it will be downloaded from the server.
@@ -247,7 +297,7 @@ impl DecryptedMessageBody {
         &self,
         ctx: &MailUserContext,
         cid: &ContentId,
-    ) -> MailContextResult<EmbeddedAttachmentInfo> {
+    ) -> MailContextResult<AttachmentData> {
         // We use this for logging if no embedded image was found.
         let mut available_cids = vec![];
         let mut cid_match = |x: &ContentId| {
@@ -284,11 +334,9 @@ impl DecryptedMessageBody {
                 }
             }
         };
-        Ok(EmbeddedAttachmentInfo {
+        Ok(AttachmentData {
             data,
             mime: att.mime_type.to_string(),
-            height: att.image_height.clone(),
-            width: att.image_width.clone(),
         })
     }
 
