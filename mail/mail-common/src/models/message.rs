@@ -310,9 +310,9 @@ impl Message {
     ) -> Result<Option<Undo>, MailContextError> {
         if let Some(action) = ActionMoveData::new(tether, destination_id, target_ids).await? {
             let action = Move(action);
-            let id = queue.queue_action(action.clone()).await?.id;
+            let QueuedActionOutput { local, id } = queue.queue_action(action).await?;
             Ok(Some(Undo::MessagesMoveTo(UndoMoveToMessages {
-                action,
+                action: local,
                 id,
             })))
         } else {

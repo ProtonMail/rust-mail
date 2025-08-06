@@ -48,7 +48,7 @@ async fn move_between_folders() {
     let labels = hash_map! {
         ApiLabelType::Folder: vec![ source_label, destination_label ]
     };
-    let params = test_init_params(labels);
+    let params = test_init_params_labels(labels);
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -126,7 +126,7 @@ async fn move_between_folders_and_undo() {
     let labels = hash_map! {
         ApiLabelType::Folder: vec![ source_label, destination_label ]
     };
-    let params = test_init_params(labels);
+    let params = test_init_params_labels(labels);
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -238,7 +238,7 @@ async fn move_from_label_does_not_unlabel() {
     let labels = hash_map! {
         ApiLabelType::Label: vec![ source_label, destination_label ]
     };
-    let params = test_init_params(labels);
+    let params = test_init_params_labels(labels);
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -297,38 +297,35 @@ async fn move_from_label_does_not_unlabel() {
 #[tokio::test]
 async fn move_into_trash_remove_label_and_mark_read() {
     // Setup:
-    // * create a label
     // * create a message in inbox (or any non-trash mailbox)
     // * add the label to the message
     // * the message is unread
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection();
 
     let trash = Label::find_first("WHERE remote_id = ?", params![LabelId::trash()], &tether)
         .await
         .unwrap()
         .unwrap();
 
-    let custom_label_id = LabelId::from("custom");
-    let custom_label = test_label(&custom_label_id, ApiLabelType::Label, "custom");
-    let message = test_message(
-        vec![
-            custom_label_id.clone(),
-            LabelId::inbox(),
-            LabelId::all_mail(),
-        ],
-        true,
-    );
-    let labels = hash_map! {
-        ApiLabelType::Label: vec![ custom_label ],
-    };
-    let params = test_init_params(labels);
+    let label_set1 = vec![
+        LabelId::inbox(),
+        LabelId::starred(),
+        LabelId::all_mail(),
+        LabelId::almost_all_mail(),
+    ];
+    let label_set2 = vec![LabelId::trash(), LabelId::all_mail()];
+
+    let message = test_message(label_set1.clone(), true);
+    let params = test_init_params();
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
-    ctx.mock_label_messages(&trash.remote_id.unwrap(), vec![message.metadata.id.clone()])
+    ctx.mock_label_messages(&LabelId::trash(), vec![message.metadata.id.clone()])
+        .await;
+    ctx.mock_label_messages(&LabelId::starred(), vec![message.metadata.id.clone()])
         .await;
     ctx.catch_all().await;
 
@@ -344,30 +341,58 @@ async fn move_into_trash_remove_label_and_mark_read() {
         .unwrap();
 
     let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
-    assert!(message.label_ids.contains(&custom_label_id));
+    assert_eq!(message.label_ids, label_set1);
     assert!(message.unread);
 
     // Action:
-    // * move message in trash
-    Message::action_move(
+    // * move message in trash and undo it
+    let undo = Message::action_move(
         &tether,
         user_ctx.action_queue(),
         trash.local_id.unwrap(),
         vec![message.local_id.unwrap()],
     )
     .await
+    .unwrap()
+    .unwrap();
+
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, label_set2);
+    assert!(!message.unread);
+
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
+
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, label_set1);
+    assert!(message.unread);
+
+    // Action:
+    // * move message in trash and undo it (remotely)
+    let undo = Message::action_move(
+        &tether,
+        user_ctx.action_queue(),
+        trash.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap()
     .unwrap();
     user_ctx.execute_all_actions().await.unwrap();
 
-    // Validation:
-    // * the message only have `all_mail` label
-    // * the message is marked as read
     message.reload(&tether).await.unwrap();
-    assert_eq!(
-        message.label_ids,
-        vec![LabelId::trash(), LabelId::all_mail()]
-    );
+    assert_eq!(message.label_ids, label_set2);
     assert!(!message.unread);
+
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
+
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, label_set1);
+    assert!(message.unread);
 }
 
 #[tokio::test]
@@ -398,7 +423,7 @@ async fn move_into_spam_remove_labels() {
     let labels = hash_map! {
         ApiLabelType::Label: vec![ custom_label ],
     };
-    let params = test_init_params(labels);
+    let params = test_init_params_labels(labels);
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -476,7 +501,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .unwrap();
 
     let message = test_message(vec![LabelId::spam()], false);
-    let params = test_init_params(HashMap::new());
+    let params = test_init_params_labels(HashMap::new());
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
@@ -810,12 +835,18 @@ fn test_message(label_ids: Vec<LabelId>, unread: bool) -> ApiMessage {
     }
 }
 
-fn test_init_params(labels: HashMap<ApiLabelType, Vec<ApiLabel>>) -> TestParams {
+fn test_init_params_labels(labels: HashMap<ApiLabelType, Vec<ApiLabel>>) -> TestParams {
+    TestParams {
+        labels,
+        ..test_init_params()
+    }
+}
+
+fn test_init_params() -> TestParams {
     TestParams {
         user_info: Some(test_user_info()),
         addresses: ApiAddress::test_addresses(),
         mail_settings: Some(test_mail_settings()),
-        labels,
         ..Default::default()
     }
 }

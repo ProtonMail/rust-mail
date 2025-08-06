@@ -673,6 +673,7 @@ pub trait ConversationOrMessage:
             .iter()
             .position(|(label, _)| *label == all_mail_id);
 
+        // It's a good moment to apply all mail label to messages in the case that it slipped by
         match idx {
             Some(idx) => {
                 // Remove the matching entry and extract its messages
@@ -693,26 +694,12 @@ pub trait ConversationOrMessage:
 
         let mut res = vec![];
         for (label_id, parsed_ids) in labels_and_messages {
-            if label_id == all_mail_id {
-                // It's a good moment to apply all mail label to messages in the case that it slipped by
-                let mut missing = vec![];
-                for input_id in ids {
-                    if !parsed_ids.contains(input_id) {
-                        missing.push(*input_id);
-                    }
-                }
-                if !missing.is_empty() {
-                    Self::apply_label(all_mail_id, missing, bond).await?;
-                }
-            } else {
-                Self::remove_label(label_id, parsed_ids.iter().copied(), bond).await?;
-                for id in parsed_ids {
-                    res.push(LabelPair {
-                        id,
-                        label: label_id,
-                    })
-                }
-            }
+            Self::remove_label(label_id, parsed_ids.iter().copied(), bond).await?;
+
+            res.extend(parsed_ids.iter().map(|&id| LabelPair {
+                id,
+                label: label_id,
+            }));
         }
         Ok(res)
     }

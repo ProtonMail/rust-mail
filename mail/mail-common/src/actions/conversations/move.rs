@@ -23,7 +23,7 @@ impl Action for Move {
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = MoveHandler;
     type RemoteOutput = ();
-    type LocalOutput = ();
+    type LocalOutput = Self;
     type Error = MailActionError;
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
@@ -43,9 +43,9 @@ impl Handler for MoveHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<Self::Action, <Self::Action as Action>::Error> {
         action.0.move_to(tx).await?;
-        Ok(())
+        Ok(action.clone())
     }
 
     async fn revert_local(
