@@ -167,10 +167,10 @@ impl ScrollData for MessageScrollData {
         //NOTE: we only check the display order for elements with matching time
         // or we will get incorrect query results.
 
-        let (time_op, display_order_op) = if order_dir == ScrollOrderDir::Desc {
-            ('>', ">=")
+        let (time_op, display_order_op, sort_op) = if order_dir == ScrollOrderDir::Desc {
+            ('>', ">=", "DESC")
         } else {
-            ('<', "<=")
+            ('<', "<=", "ASC")
         };
 
         let mut query = formatdoc!(
@@ -202,17 +202,12 @@ impl ScrollData for MessageScrollData {
             }
         }
 
-        if order_dir == ScrollOrderDir::Asc {
-            query += " ORDER BY
-            messages.time ASC,
-            messages.display_order ASC
-        ";
-        } else {
-            query += " ORDER BY
-            messages.time DESC,
-            messages.display_order DESC
-        ";
-        }
+        query += &format!(
+            " ORDER BY
+            messages.time {sort_op},
+            messages.display_order {sort_op}
+        "
+        );
 
         if let Some(limit) = limit {
             query += &format!(" LIMIT {limit} ");

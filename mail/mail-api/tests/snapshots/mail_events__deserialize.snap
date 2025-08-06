@@ -276,6 +276,7 @@ MailEvent {
                         },
                         size: 148,
                         snooze_time: 1433890289,
+                        display_snoozed_reminder: true,
                         subject: "new subject",
                         time: 1433890289,
                         to_list: [

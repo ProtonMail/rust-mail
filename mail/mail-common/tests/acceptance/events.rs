@@ -110,6 +110,7 @@ async fn event_fetches_missing_dependencies() {
         sender: Default::default(),
         size: 0,
         snooze_time: 0,
+        display_snoozed_reminder: false,
         subject: "".to_string(),
         time: 0,
         to_list: vec![],

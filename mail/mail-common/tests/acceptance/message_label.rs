@@ -490,6 +490,7 @@ fn test_message() -> ApiMessage {
             is_forwarded: false,
             expiration_time: 0,
             snooze_time: 0,
+            display_snoozed_reminder: false,
             num_attachments: 0,
             attachments_metadata: vec![],
         },
