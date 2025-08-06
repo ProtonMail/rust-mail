@@ -29,13 +29,16 @@ async fn shared_status() {
     mock_auth_endpoints(&mock_server).await;
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path("/api");
     let api_config = Config::for_env(mock_env);
+    let status = status_watcher(500);
     let api_1 = Session::builder()
         .with_config(&api_config)
+        .with_status(status.clone())
         .build()
         .await
         .unwrap();
     let api_2 = Session::builder()
         .with_config(&api_config)
+        .with_status(status)
         .build()
         .await
         .unwrap();
