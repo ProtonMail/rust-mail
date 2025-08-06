@@ -2222,6 +2222,7 @@ impl Message {
     ///
     /// Returns an error if the network failed or if the database cannot write/read message.
     ///
+    #[tracing::instrument(skip(ctx))]
     pub async fn find_or_fetch_by_remote_id(
         ctx: &MailUserContext,
         remote_id: MessageId,
@@ -2230,8 +2231,15 @@ impl Message {
         if let Some(message) = Self::find_by_remote_id(remote_id.clone(), tether).await? {
             return Ok(message.id());
         }
-        let (message, _) = Self::force_sync_message_and_body(ctx, remote_id, false, tether).await?;
-        Ok(message.id())
+        tracing::debug!("Message does not exist, fetching");
+        let result = Message::sync_metadata(vec![remote_id], ctx.api(), tether).await?;
+        if result.len() != 1 {
+            return Err(MailContextError::Other(anyhow!(
+                "Failed to sync message from server"
+            )));
+        }
+        tracing::info!("Message metadata sync with {:?}", result[0].id());
+        Ok(result[0].id())
     }
 
     /// Set the flags without loading the whole model
@@ -2420,7 +2428,7 @@ impl ConversationOrMessage for Message {
 
     fn grouped_labels_and_messages_query(placeholders: usize) -> String {
         formatdoc! {"
-            SELECT 
+            SELECT
                 local_label_id,
                 GROUP_CONCAT(local_message_id)
             FROM message_labels
