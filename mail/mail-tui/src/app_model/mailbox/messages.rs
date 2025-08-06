@@ -1240,9 +1240,9 @@ impl DecryptedMessage {
 
         let rsvp_organizer = {
             let name = if let Some(name) = &rsvp.organizer.name {
-                format!("{name} <{}>", rsvp.organizer.email)
+                format!("{name} <{}>", rsvp.organizer.display_email)
             } else {
-                format!("<{}>", rsvp.organizer.email)
+                format!("<{}>", rsvp.organizer.display_email)
             };
 
             Text::from(format!("- {name} (organizer)")).fg(fg)

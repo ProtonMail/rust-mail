@@ -23,8 +23,8 @@ use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::MultiActionError;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
+use proton_calendar_common::is_attachment_an_invite;
 use proton_core_common::utils::MapVec as _;
-use proton_mail_api::services::proton::prelude::DirectAttachment;
 use sqlite_watcher::watcher::TableObserver;
 use stash::utils::IterMapToSql;
 use stash::utils::placeholders_n;
@@ -2370,7 +2370,7 @@ impl Message {
     pub fn is_rsvp(&self) -> bool {
         self.attachments_metadata
             .iter()
-            .any(|att| att.filename == DirectAttachment::INVITE_ICS)
+            .any(|att| is_attachment_an_invite(&att.filename))
     }
 
     pub async fn update_ids_and_display_order(

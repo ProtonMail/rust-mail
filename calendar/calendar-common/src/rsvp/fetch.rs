@@ -14,6 +14,7 @@ use proton_calendar_api::{
 };
 use proton_canonical_email::{self as email, CanonicalEmail};
 use proton_core_api::services::proton::Proton;
+use proton_core_common::validation::is_valid_email_address;
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_calendar::CalendarEventDecryptor;
 use proton_ical as ical;
@@ -279,7 +280,8 @@ where
     });
 
     if user_attendee_idx.is_none()
-        && email::canonicalize_auto(&organizer.email) != *email
+        && email::canonicalize_auto(&organizer.reply_email) != *email
+        && email::canonicalize_auto(&organizer.display_email) != *email
         && matches!(id, RsvpEventId::Invite { .. })
     //     ^ you cannot be not-invited to a reminder
     {
@@ -847,43 +849,99 @@ async fn extract_organizer(
     contacts: &impl RsvpContacts,
     source: &Source<'_>,
 ) -> RsvpResult<RsvpOrganizer> {
-    // If we have access to the raw calendar event, pull organizer from there -
-    // it's validated by the backend thus guaranteed to be a correct e-mail
-    // address.
+    // If the invite or event doesn't have any organizer, the user is probably
+    // browsing a reminder for a typical, non-invitation'able event.
     //
-    // If we're offline, pull organizer from `invite.ics` - it might be a bit
-    // off (cf. CALWEB-3201), but it's better than displaying nothing.
-
-    if let Some(event) = source.raw_event() {
-        let email = event
-            .shared_events
-            .first()
-            .ok_or(RsvpError::UnknownOrganizer)?
+    // In that case the notion of an organizer is somewhat fuzzy, but to
+    // simplify the code downstream let's just say that the user itself is the
+    // "organizer" of the event.
+    let Some(org) = &source.invite_or_event().organizer else {
+        let email = source
+            .raw_event()
+            .and_then(|event| event.shared_events.first())
+            .ok_or_else(|| RsvpError::UnknownOrganizer("missing api event data"))?
             .author
             .clone();
 
-        Ok(RsvpOrganizer {
+        return Ok(RsvpOrganizer {
             name: contacts.get_display_name(&email).await,
-            email,
-        })
+            reply_email: email.clone(),
+            display_email: email,
+        });
+    };
+
+    let ical::CalAddress::Email(org_email) = &org.address else {
+        return Err(RsvpError::UnknownOrganizer(
+            "organizer doesn't have an email address",
+        ));
+    };
+
+    let org_email = org_email.value().as_str();
+    let reply_email;
+    let display_email;
+
+    if let Some(org_alt_email) = &org.email {
+        // Some calendar providers - notably Apple - give us two different email
+        // addresses to work with, one real and the other one randomized:
+        //
+        // ```
+        // ORGANIZER;CN=Someone;EMAIL=someone@pm.me:mailto:wtzaXCGF@imip.me.com
+        //                            ^-----------^        ^------------------^
+        // ```
+        //
+        // In cases like these, `EMAIL` contains the email address we can use to
+        // identify the organizer in our contact book, while the other address
+        // is where the organizer expects to be replied at.
+        reply_email = org_email.to_owned();
+        display_email = org_alt_email.value.value().as_str().to_owned();
     } else {
-        let organizer = source
-            .invite_or_event()
-            .organizer
-            .as_ref()
-            .ok_or(RsvpError::UnknownOrganizer)?;
-
-        if let ical::CalAddress::Email(email) = &organizer.address {
-            let email = email.value().as_str();
-
-            Ok(RsvpOrganizer {
-                name: contacts.get_display_name(email).await,
-                email: email.into(),
-            })
+        // Usually though (e.g. for Proton-to-Proton invites) there's going to
+        // be just one email address, the same for identifying the organizer and
+        // replying to the invite:
+        //
+        // ```
+        // ORGANIZER;CN=Someone;mailto:someone@pm.me
+        //                             ^-----------^
+        // ```
+        //
+        // In cases like these, the only thing we're worried about is whether
+        // that email address is actually legal (cf. CALWEB-3201) - if it's not,
+        // we fall back to sender address from the invitation email message[1].
+        //
+        // As an extra edge case, if the organizer's email address is not valid,
+        // but there's no network connection available (meaning we don't have
+        // `source.raw_event()`), we pick this invalid email address anyway.
+        //
+        // Alternative would be to abort the entire process with an `Err`, which
+        // is a bit pity, since we need a "proper" email address only to build
+        // the response email, which the user cannot do while being offline.
+        //
+        // [1] since Proton Calendar automatically imports incoming invites, we
+        //     get this information "by proxy" via `SharedEvents[].Author` - we
+        //     don't have to actually load the mail message in here
+        if is_valid_email_address(org_email) || source.raw_event().is_none() {
+            reply_email = org_email.to_owned();
+            display_email = org_email.to_owned();
         } else {
-            Err(RsvpError::UnknownOrganizer)
+            // Unwrap-safety: Guarded above
+            reply_email = source
+                .raw_event()
+                .unwrap()
+                .shared_events
+                .first()
+                .ok_or_else(|| RsvpError::UnknownOrganizer("missing api event data"))?
+                .author
+                .clone();
+
+            display_email = reply_email.clone();
         }
     }
+
+    Ok(RsvpOrganizer {
+        name: contacts.get_display_name(&display_email).await,
+        reply_email,
+        display_email,
+    })
 }
 
 async fn extract_attendees<P>(
@@ -966,7 +1024,7 @@ async fn extract_attendee_from_event(
     // though, we split organizer into a different field within the top-level
     // rsvp structure, so if we happen to find attendee-organizer in here, let's
     // remove it to avoid presenting duplicate information
-    if email == organizer.email {
+    if email == organizer.reply_email || email == organizer.display_email {
         return Ok(None);
     }
 

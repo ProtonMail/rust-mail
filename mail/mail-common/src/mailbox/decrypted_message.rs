@@ -11,8 +11,9 @@ use crate::models::{
 use crate::rsvp::RsvpEventId;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
-use proton_calendar_common::{self as cal, RsvpError};
+use proton_calendar_common::{self as cal, RsvpError, is_attachment_an_invite};
 use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::muon::GET;
 use proton_core_api::services::proton::muon::http::HttpReqExt;
 use proton_core_api::services::proton::{AddressId, ProtonCore};
@@ -410,7 +411,7 @@ impl DecryptedMessageBody {
         }
 
         let invite = self.metadata.attachments.iter().find_map(|att| {
-            if att.filename == DirectAttachment::INVITE_ICS {
+            if is_attachment_an_invite(&att.filename) {
                 att.local_id
             } else {
                 None

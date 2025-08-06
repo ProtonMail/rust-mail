@@ -221,7 +221,7 @@ impl From<&cal::RsvpOrganizer> for RsvpOrganizer {
     fn from(org: &cal::RsvpOrganizer) -> Self {
         Self {
             name: org.name.clone(),
-            email: org.email.clone(),
+            email: org.display_email.clone(),
         }
     }
 }

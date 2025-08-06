@@ -522,7 +522,8 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
         },
         organizer: RsvpOrganizer {
             name: Some("Foo Localhosty".into()),
-            email: "foo@pm.me".into(),
+            reply_email: "foo@pm.me".into(),
+            display_email: "foo@pm.me".into(),
         },
         attendees: vec![
             RsvpAttendee {
@@ -574,7 +575,8 @@ fn expected_offline_event() -> RsvpEvent {
         },
         organizer: RsvpOrganizer {
             name: Some("Foo Localhosty".into()),
-            email: "foo@pm.me".into(),
+            reply_email: "foo@pm.me".into(),
+            display_email: "foo@pm.me".into(),
         },
         attendees: vec![
             RsvpAttendee {

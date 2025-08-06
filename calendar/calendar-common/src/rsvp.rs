@@ -460,7 +460,16 @@ pub struct RsvpAttendee {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpOrganizer {
     pub name: Option<String>,
-    pub email: String,
+
+    /// Email address using which we have to reply to the invite.
+    ///
+    /// This address might be different from `.display_email` for services like
+    /// Apple which generate random invite-specific email addresses.
+    pub reply_email: String,
+
+    /// Email address using which the organizer presents itself, e.g.
+    /// `foo@pm.me`.
+    pub display_email: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -624,7 +633,7 @@ pub enum RsvpError {
     UnknownAttendee,
 
     #[error("Organizer is not known")]
-    UnknownOrganizer,
+    UnknownOrganizer(&'static str),
 
     #[error("Invitation can't be answered")]
     NonAnswerable,
@@ -676,12 +685,18 @@ pub enum RsvpAnswerError<K, M> {
     Rsvp(#[from] RsvpError),
 }
 
+#[must_use]
+pub fn is_attachment_an_invite(filename: &str) -> bool {
+    filename.to_ascii_lowercase().ends_with(".ics")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use indoc::indoc;
     use pretty_assertions as pa;
     use std::str::FromStr;
+    use test_case::test_case;
 
     #[test]
     fn from_invite() {
@@ -1040,5 +1055,16 @@ mod tests {
         fn test(case: TestCase) {
             assert_eq!(case.expected, (case.given)().to_string());
         }
+    }
+
+    #[test_case("calendar.ics" => true)]
+    #[test_case("calendar.exe" => false)]
+    #[test_case("invite.ics" => true)]
+    #[test_case("invite.ics.zip" => false)]
+    #[test_case("iCal-1234.ics" => true)]
+    #[test_case("virus" => false)]
+    #[test_case("Party.ICS" => true)]
+    fn is_attachment_an_invite(filename: &str) -> bool {
+        super::is_attachment_an_invite(filename)
     }
 }
