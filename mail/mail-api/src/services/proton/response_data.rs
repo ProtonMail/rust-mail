@@ -1141,6 +1141,10 @@ pub struct MessageMetadata {
     pub snooze_time: u64,
 
     /// TODO: Document this field.
+    #[serde(default)]
+    pub display_snoozed_reminder: bool,
+
+    /// TODO: Document this field.
     pub subject: String,
 
     /// TODO: Document this field.
@@ -1178,6 +1182,7 @@ impl MessageMetadata {
             sender: MessageSender::default(),
             size: 0,
             snooze_time: 0,
+            display_snoozed_reminder: false,
             subject: String::default(),
             time: 0,
             to_list: Vec::default(),

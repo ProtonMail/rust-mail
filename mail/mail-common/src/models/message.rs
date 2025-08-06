@@ -154,6 +154,7 @@ pub struct Message {
     #[DbField]
     pub snooze_time: UnixTimestamp,
 
+    #[DbField]
     pub display_snooze_reminder: bool,
 
     #[DbField]
@@ -1462,6 +1463,9 @@ impl Message {
             .await?
             {
                 message.unread = !mark_read;
+                if mark_read {
+                    message.display_snooze_reminder = false;
+                }
                 message.save(bond).await?;
                 updated.push(IdPair {
                     local_message_id: message.id(),
@@ -1476,6 +1480,7 @@ impl Message {
         for (conversation_id, count) in conversation_count_changed {
             if let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await? {
                 if mark_read {
+                    conversation.display_snooze_reminder = false;
                     conversation.num_unread = conversation.num_unread.saturating_sub(count);
                 } else {
                     conversation.num_unread += count;
@@ -1633,7 +1638,7 @@ impl Message {
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),
-            display_snooze_reminder: value.snooze_time > 0,
+            display_snooze_reminder: value.display_snoozed_reminder,
             subject: value.subject,
             time: value.time.into(),
             to_list: MessageRecipients {
@@ -2565,7 +2570,6 @@ impl ModelHooks for Message {
     async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         self.attachments_metadata =
             Attachment::load_message_attachment_metadata(self.id(), tether).await?;
-        self.display_snooze_reminder = self.snooze_time.as_u64() > 0;
 
         let labels = self.all_message_labels(tether).await?;
 

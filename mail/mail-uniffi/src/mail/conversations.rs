@@ -710,11 +710,25 @@ pub async fn watch_conversation(
     let ctx = mailbox.ctx()?;
     let stash = mailbox.stash()?;
     let session = mailbox.session()?;
+    let label_id = mailbox.label_id();
 
     uniffi_async(async move {
         let Some(messages) = get_conversation(mailbox, stash.clone(), session, id).await? else {
             return Ok(None);
         };
+
+        if messages.conversation.display_snooze_reminder {
+            let queue = ctx.action_queue();
+            if let Err(e) = RealConversation::action_mark_read(
+                queue,
+                label_id.into(),
+                vec![messages.conversation.id.into()],
+            )
+            .await
+            {
+                tracing::error!("Failed to mark reminded conversation as read: {:?}", e);
+            }
+        }
 
         let receiver = ContextualConversation::watch(&stash)?;
         let watcher = watch_channel(ctx, receiver, callback);
