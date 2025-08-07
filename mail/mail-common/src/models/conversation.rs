@@ -2760,7 +2760,7 @@ impl ConversationOrMessage for Conversation {
 
     fn grouped_labels_and_messages_query(placeholders: usize) -> String {
         formatdoc! {"
-            SELECT 
+            SELECT
                 local_label_id,
                 GROUP_CONCAT(local_conversation_id)
             FROM conversation_labels

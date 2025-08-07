@@ -211,6 +211,55 @@ impl ContextualConversation {
             .collect())
     }
 
+    /// Open a conversation in the context of a label.
+    ///
+    /// It acts as a wrapper around [`Self::conversation_and_messages`] and
+    /// promotes the fact that the conversation is opened by a user in the context of a label.
+    /// If thats not the case, use [`Self::conversation_and_messages`] instead.
+    ///
+    /// Note: This function will also mark the conversation as read if it has a snooze reminder,
+    /// as a part of the snooze reminder logic.
+    ///
+    /// # Arguments
+    ///
+    /// * `local_conversation_id` - The local id of the conversation to open.
+    /// * `local_label_id` - The local id of the label to open the conversation in.
+    /// * `ctx` - The context of the user.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed, syncing the data failed or
+    /// the conversation has no messages.
+    pub async fn open_conversation(
+        local_conversation_id: LocalConversationId,
+        local_label_id: LocalLabelId,
+        ctx: &MailUserContext,
+    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
+        let stash = ctx.user_stash();
+        let api = ctx.session();
+        if let Some(conv_and_messages) =
+            Self::conversation_and_messages(local_conversation_id, local_label_id, stash, api)
+                .await?
+        {
+            if conv_and_messages.conversation.display_snooze_reminder {
+                let queue = ctx.action_queue();
+                if let Err(e) = Conversation::action_mark_read(
+                    queue,
+                    local_label_id,
+                    vec![local_conversation_id],
+                )
+                .await
+                {
+                    tracing::error!("Failed to mark reminded conversation as read: {:?}", e);
+                }
+            }
+
+            Ok(Some(conv_and_messages))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Retrieve the conversation with `local_conversation_id` in the
     /// context of `local_label_id` and its respective messages.
     ///
