@@ -1451,7 +1451,7 @@ pub struct Message {
     /// TODO: Document this field.
     pub size: u64,
 
-    pub snooze_time: UnixTimestamp,
+    pub snoozed_until: Option<UnixTimestamp>,
 
     /// Whether the snooze reminder should be displayed.
     /// Technically its impossible to snooze a message but if user
@@ -1512,7 +1512,11 @@ impl From<RealMessage> for Message {
             display_order: value.display_order,
             sender: value.sender.into(),
             size: value.size,
-            snooze_time: value.snooze_time.into(),
+            snoozed_until: if value.snooze_time.as_u64() > 0 {
+                Some(value.snooze_time.into())
+            } else {
+                None
+            },
             display_snooze_reminder: value.display_snooze_reminder,
             subject: value.subject,
             time: value.time.into(),

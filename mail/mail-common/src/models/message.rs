@@ -209,6 +209,31 @@ impl ScrollerEq for Message {
 type LabelAsResult = Result<QueuedActionOutput<LabelAs>, QueueActionError<LabelAs>>;
 
 impl Message {
+    /// Open a message in the either context of a label or a conversation.
+    ///
+    /// It acts as a wrapper around [`Self::load`] and promotes the fact that the message is opened by a user in the context of a label.
+    /// If thats not the case, use [`Self::load`] instead.
+    ///
+    /// Note: This function will also mark the message as read if it has a snooze reminder,
+    /// as a part of the snooze reminder logic.
+    pub async fn open_message(
+        local_message_id: LocalMessageId,
+        ctx: &MailUserContext,
+    ) -> Result<Option<Message>, AppError> {
+        let tether = ctx.user_stash().connection();
+        if let Some(message) = Message::load(local_message_id, &tether).await? {
+            if message.display_snooze_reminder {
+                let queue = ctx.action_queue();
+                if let Err(e) = Message::action_mark_read(queue, vec![message.id()]).await {
+                    tracing::error!("Failed to mark reminded message as read: {:?}", e);
+                }
+            }
+            Ok(Some(message))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub async fn action_star(queue: &Queue, ids: Vec<LocalMessageId>) -> LabelAsResult {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)

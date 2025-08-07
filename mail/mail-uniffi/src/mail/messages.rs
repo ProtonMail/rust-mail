@@ -485,18 +485,11 @@ pub async fn watch_message(
     let user_context = session.ctx()?;
     let stash = session.user_stash()?;
     uniffi_async(async move {
-        let tether = stash.connection();
-        let Some(message) = RealMessage::load(message_id.into(), &tether).await? else {
+        let Some(message) = RealMessage::open_message(message_id.into(), &user_context).await?
+        else {
             return Ok(None);
         };
-        if message.display_snooze_reminder {
-            let queue = user_context.action_queue();
-            if let Err(e) =
-                RealMessage::action_mark_read(queue, vec![message.local_id.unwrap().into()]).await
-            {
-                tracing::error!("Failed to mark reminded message as read: {:?}", e);
-            }
-        }
+
         let handle = RealMessage::watch(&stash)?;
         let handle = watch_channel(user_context, handle, callback);
         Result::<_, RealProtonMailError>::Ok(Some(WatchedMessage {
