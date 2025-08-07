@@ -28,6 +28,7 @@ impl WantTfa {
         acquire_password_scope(
             &new_srp_provider(),
             &data.client,
+            &data.auth_info,
             &data.username,
             &password,
             Some(code),
@@ -44,6 +45,7 @@ impl WantTfa {
         acquire_password_scope(
             &new_srp_provider(),
             &data.client,
+            &data.auth_info,
             &data.username,
             &password,
             None,

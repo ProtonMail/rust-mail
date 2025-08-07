@@ -3,7 +3,6 @@ use crate::password::state::complete::Complete;
 use crate::password::state::want_change::WantChange;
 use crate::password::state::want_pass::WantPass;
 use crate::password::state::want_tfa::WantTfa;
-use crate::requests::Fido2AuthData;
 use crate::shared::SecureString;
 use crate::{AccountApi, prelude::*};
 use derive_more::{Debug, Display, From};
@@ -50,9 +49,8 @@ pub enum State {
 /// Public actions that can be taken on the state.
 impl State {
     /// Create a new state machine with current password.
-    #[must_use]
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub async fn new(
         client: Client,
         parts: SessionParts,
         username: String,
@@ -60,8 +58,16 @@ impl State {
         key_secret: KeySecret,
         tfa_mode: TfaStatus,
         mbp_mode: PasswordMode,
-        fido_details: Option<fido2::Response>,
-    ) -> Self {
+    ) -> Result<Self, PasswordError> {
+        let request = PostAuthInfoRequest {
+            username: username.clone(),
+        };
+
+        let auth_info = client
+            .post_auth_info(request)
+            .map_err(PasswordError::ApiService)
+            .await?;
+
         let data = StateData {
             client,
             parts,
@@ -70,10 +76,10 @@ impl State {
             key_secret,
             tfa_mode,
             mbp_mode,
-            fido_details,
+            auth_info,
         };
 
-        WantPass::new(data).into()
+        Ok(WantPass::new(data).into())
     }
 
     /// Submit current password.
@@ -160,12 +166,17 @@ impl State {
     }
 
     /// Get the FIDO2 details for authentication.
-    pub fn fido_details(&self) -> Result<Option<&fido2::Response>, PasswordError> {
-        match self {
-            Self::WantPass(state) => Ok(state.fido_details.as_ref()),
-            Self::WantTfa(state) => Ok(state.fido_details.as_ref()),
-            Self::WantChange(state) => Ok(state.fido_details.as_ref()),
-            _ => Err(PasswordError::InvalidState),
+    pub fn fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
+        let info = match self {
+            Self::WantPass(state) => &state.auth_info,
+            Self::WantTfa(state) => &state.auth_info,
+            Self::WantChange(state) => &state.auth_info,
+            _ => return Err(PasswordError::InvalidState),
+        };
+
+        match &info.tfa {
+            Some(tfa) => Ok(tfa.fido_details()),
+            None => Ok(None),
         }
     }
 
@@ -218,54 +229,33 @@ pub struct StateData {
     key_secret: KeySecret,
     tfa_mode: TfaStatus,
     mbp_mode: PasswordMode,
-    fido_details: Option<fido2::Response>,
+    auth_info: PostAuthInfoResponse,
 }
 
 async fn acquire_password_scope(
     srp: &impl SRPProvider,
     client: &Client,
+    auth_info: &PostAuthInfoResponse,
     username: &str,
     password: &SecureString,
     totp: Option<String>,
     fido2_data: Option<fido2::Request>,
 ) -> Result<PutUsersPasswordResponse, PasswordError> {
-    let request = PostAuthInfoRequest {
-        username: username.to_owned(),
-    };
-
-    let response = client
-        .post_auth_info(request)
-        .map_err(PasswordError::ApiService)
-        .await?;
-
     let client_proof = srp.generate_client_proof(
         username,
         password,
-        response.version,
-        &response.salt,
-        &response.modulus,
-        &response.server_ephemeral,
+        auth_info.version,
+        &auth_info.salt,
+        &auth_info.modulus,
+        &auth_info.server_ephemeral,
     )?;
-
-    let fido2 = fido2_data.map(|data| Fido2AuthData {
-        authentication_options: serde_json::to_value(data.authentication_options)
-            .unwrap_or_default(),
-        client_data: data.client_data,
-        authenticator_data: data.authenticator_data,
-        signature: data.signature,
-        credential_id: data
-            .credential_id
-            .into_iter()
-            .map(|b| serde_json::to_value(b).ok())
-            .collect(),
-    });
 
     let request = PutUsersPasswordRequest {
         client_ephemeral: client_proof.ephemeral,
         client_proof: client_proof.proof,
-        srp_session: response.session,
+        srp_session: auth_info.session.clone(),
         two_factor_code: totp,
-        fido2,
+        fido2: fido2_data,
         sso_reauth_token: None,
     };
 

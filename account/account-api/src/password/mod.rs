@@ -87,34 +87,25 @@ impl PasswordFlow {
     /// * `key_secret` - The key secret
     /// * `tfa_mode` - The 2FA mode
     /// * `mbp_mode` - The mailbox password mode
-    /// * `fido_details` - Optional FIDO2 details
-    #[must_use]
-    pub fn new(
+    pub async fn new(
         session: impl Borrow<Session>,
         username: String,
         user_keys: UserKeys,
         key_secret: KeySecret,
         tfa_mode: TfaStatus,
         mbp_mode: PasswordMode,
-        fido_details: Option<fido2::Response>,
-    ) -> Self {
+    ) -> Result<Self, PasswordError> {
         let (client, parts) = session.borrow().to_parts();
 
         let state = State::new(
-            client,
-            parts,
-            username,
-            user_keys,
-            key_secret,
-            tfa_mode,
-            mbp_mode,
-            fido_details,
-        );
+            client, parts, username, user_keys, key_secret, tfa_mode, mbp_mode,
+        )
+        .await?;
 
-        Self {
+        Ok(Self {
             state: vec![state],
             recorder: ObservabilityRecorder::default(),
-        }
+        })
     }
 
     /// Submit current password.
@@ -228,7 +219,7 @@ impl PasswordFlow {
 
     /// Get the FIDO2 details for authentication.
     pub fn get_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
-        Ok(self.state()?.fido_details()?.cloned())
+        self.state()?.fido_details()
     }
 
     /// Get whether the account has a mailbox password.
