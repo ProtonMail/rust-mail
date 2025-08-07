@@ -686,6 +686,29 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
         }
     }
 
+    pub fn check_all(&self, ctx: &MailUserContext) {
+        let mut emails_to_validate = Vec::new();
+        let mut check_recipient = |recipient: &mut SingleRecipient| {
+            if recipient.state == ValidationState::Unchecked {
+                recipient.state = ValidationState::Validating;
+                emails_to_validate.push(recipient.email.clone());
+            }
+        };
+        for recipient in &mut self.list.write().recipients {
+            match recipient {
+                Recipient::Single(recipient) => {
+                    check_recipient(recipient);
+                }
+                Recipient::Group(group) => {
+                    for recipient in &mut group.recipients {
+                        check_recipient(recipient);
+                    }
+                }
+            }
+        }
+        self.validate_addresses(ctx, emails_to_validate);
+    }
+
     /// Set or remove the callback for validation changes.
     pub fn set_callback(&self, cb: Option<T>) {
         *self.cb.lock() = cb;
@@ -699,28 +722,14 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
     ) -> Result<(), RecipientError> {
         let mut list = self.list.write();
         let entry = list.add_single(entry)?;
-        if entry.state == ValidationState::Unchecked {
-            let list_cloned = Arc::clone(&self.list);
-            let email = entry.email.clone();
+        let emails = if entry.state == ValidationState::Unchecked {
             entry.state = ValidationState::Validating;
-
-            let cb = { self.cb.lock().clone() };
-
-            // run validation in the background.
-            let ctx = ctx.as_arc();
-            let ctx_cloned = Arc::clone(&ctx);
-            ctx_cloned.spawn(async move {
-                let new_state = validate_address(&ctx, email.clone()).await;
-                {
-                    let mut list = list_cloned.write();
-                    list.update_recipient_validation_state(email.as_ref(), new_state);
-                    drop(list);
-                }
-                if let Some(cb) = cb {
-                    cb.recipients_validation_state_updated().await;
-                }
-            });
-        }
+            vec![entry.email.clone()]
+        } else {
+            vec![]
+        };
+        drop(list);
+        self.validate_addresses(ctx, emails);
 
         Ok(())
     }
@@ -754,29 +763,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
             })
             .collect::<Vec<_>>();
 
-        let cb = { self.cb.lock().clone() };
-        let ctx = ctx.as_arc();
-        let ctx_cloned = Arc::clone(&ctx);
-        let list_cloned = Arc::clone(&self.list);
-        ctx_cloned.spawn(async move {
-            let mut update_statuses = Vec::with_capacity(to_validate.len());
-            for email in to_validate {
-                let status = validate_address(&ctx, email.clone()).await;
-                update_statuses.push((email, status));
-            }
-
-            {
-                let mut list = list_cloned.write();
-                for (email, state) in update_statuses {
-                    list.update_recipient_validation_state(email.as_ref(), state);
-                }
-                drop(list);
-            }
-
-            if let Some(cb) = cb {
-                cb.recipients_validation_state_updated().await;
-            }
-        });
+        self.validate_addresses(ctx, to_validate);
 
         duplicates
     }
@@ -842,6 +829,35 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
 
     pub fn validate_expiration_feature(&self, report: &mut ExpirationFeatureSupportReport) {
         self.list.read().validate_expiration_feature(report);
+    }
+
+    fn validate_addresses(&self, ctx: &MailUserContext, to_validate: Vec<PrivateEmail>) {
+        if to_validate.is_empty() {
+            return;
+        }
+        let cb = { self.cb.lock().clone() };
+        let ctx = ctx.as_arc();
+        let ctx_cloned = Arc::clone(&ctx);
+        let list_cloned = Arc::clone(&self.list);
+        ctx_cloned.spawn(async move {
+            let mut update_statuses = Vec::with_capacity(to_validate.len());
+            for email in to_validate {
+                let status = validate_address(&ctx, email.clone()).await;
+                update_statuses.push((email, status));
+            }
+
+            {
+                let mut list = list_cloned.write();
+                for (email, state) in update_statuses {
+                    list.update_recipient_validation_state(email.as_ref(), state);
+                }
+                drop(list);
+            }
+
+            if let Some(cb) = cb {
+                cb.recipients_validation_state_updated().await;
+            }
+        });
     }
 }
 

@@ -240,6 +240,10 @@ impl ComposerRecipientList {
     pub(super) fn validate_expiration_feature(&self, report: &mut ExpirationFeatureSupportReport) {
         self.list.validate_expiration_feature(report);
     }
+
+    pub(super) fn check_all_recipients(&self, ctx: &MailUserContext) {
+        self.list.check_all(ctx);
+    }
 }
 
 #[uniffi_export]
