@@ -1,8 +1,8 @@
 use crate::{
     CalendarBootstrapExt, CalendarDecryptorKeys, CalendarEventPayloadExt, RsvpAttendee, RsvpCache,
-    RsvpCalendar, RsvpContacts, RsvpError, RsvpEvent, RsvpEventId, RsvpFetchError, RsvpFetchResult,
-    RsvpIntent, RsvpKeys, RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency, RsvpRecurrence,
-    RsvpResult,
+    RsvpCalendar, RsvpContacts, RsvpError, RsvpEvent, RsvpEventId, RsvpFetchApiError,
+    RsvpFetchError, RsvpFetchResult, RsvpIntent, RsvpKeys, RsvpOccurrence, RsvpOrganizer,
+    RsvpProgress, RsvpRecency, RsvpRecurrence, RsvpResult,
 };
 use itertools::{Either, Itertools};
 use jiff::{
@@ -37,89 +37,58 @@ where
     P: PGPProviderSync,
     K: RsvpKeys,
 {
-    let fetched = match fetch(api, cache, id).await {
-        Ok(fetched) => fetched,
+    // Event decryptor as created in the `decrypt()` function borrows the
+    // decryption keys, so we need to store them somewhere up the stack compared
+    // to the decryption function itself, i.e. here.
+    //
+    // Ideally we'd include the keys within the `Decrypted` struct, but that'd
+    // make it self-referential.
+    let mut decryptor_keys = None;
 
-        Err(err) if err.is_network_failure() => {
-            warn!(?err, "Got a network failure, trying to continue anyway");
-            None
-        }
+    let state = fetch(api, cache, id).await?;
+    let state = decrypt(pgp, keys, state, &mut decryptor_keys).await?;
 
-        Err(err) => {
-            return Err(RsvpFetchError::Rsvp(err));
-        }
-    };
-
-    let decryptor;
-    let decryptor_keys;
-    let calendar;
-    let event;
-    let children;
-
-    if let Some(fetched) = fetched {
-        decryptor_keys = CalendarDecryptorKeys::rsvp(pgp, keys, &fetched.calendar, &fetched.event)
-            .await
-            .map_err(RsvpFetchError::Keys)?;
-
-        decryptor = Some(fetched.calendar.create_decryptor(
-            pgp,
-            &decryptor_keys,
-            &fetched.event,
-        )?);
-
-        calendar = Some(fetched.calendar);
-        event = Some(fetched.event);
-        children = fetched.children;
-    } else {
-        decryptor = None;
-        calendar = None;
-        event = None;
-        children = Vec::new();
-    }
-
-    // ---
-
-    let Some(source) = inflate(pgp, id, event, decryptor.as_ref())? else {
-        // This is the case for reminders - there we only know the corresponding
-        // Proton event id, so without a network connection there's nothing more
-        // we can do (we can't figure out the timestamps, attendees etc. out of
-        // thin air).
-
-        debug!(
-            "Network seems to be down and there's no way to continue with just \
-             the data at hand - giving up",
-        );
-
+    let Some(state) = inflate(pgp, id, state)? else {
         return Ok(None);
     };
 
     let email = email::canonicalize_auto(email);
 
-    extract(
-        pgp,
-        contacts,
-        now,
-        &email,
-        week_start,
-        id,
-        calendar,
-        source,
-        children,
-        decryptor.as_ref(),
-    )
-    .await
-    .map(Some)
-    .map_err(RsvpFetchError::from)
+    extract(pgp, contacts, now, &email, week_start, id, state)
+        .await
+        .map(Some)
+        .map_err(RsvpFetchError::from)
+}
+
+#[derive(Debug)]
+enum Fetched {
+    Some {
+        calendar: CalendarBootstrap,
+        event: Box<CalendarEvent>,
+        children: Vec<CalendarEvent>,
+    },
+
+    None(RsvpFetchApiError),
 }
 
 #[instrument(skip_all)]
-async fn fetch(
-    api: &Proton,
-    cache: &impl RsvpCache,
-    id: &RsvpEventId,
-) -> RsvpResult<Option<Fetched>> {
+async fn fetch(api: &Proton, cache: &impl RsvpCache, id: &RsvpEventId) -> RsvpResult<Fetched> {
     info!("Fetching event data");
 
+    match fetch_ex(api, cache, id).await {
+        Err(err) if err.is_network_failure() => {
+            warn!(?err, "Got a network failure, trying to continue anyway");
+
+            Ok(Fetched::None(RsvpFetchApiError::NetworkFailure))
+        }
+
+        val => val,
+    }
+}
+
+// Extracted out of `fetch()` since this way it's easier to catch all network
+// errors without having to `match` on each `api.whatever()`
+async fn fetch_ex(api: &Proton, cache: &impl RsvpCache, id: &RsvpEventId) -> RsvpResult<Fetched> {
     let (event, children) = match id {
         RsvpEventId::Invite { uid, rid, .. } => {
             let mut events = api.find_calendar_events(uid, *rid).await?;
@@ -170,43 +139,142 @@ async fn fetch(
             })
             .await?;
 
-        Ok(Some(Fetched {
+        Ok(Fetched::Some {
             calendar,
             event,
             children,
-        }))
+        })
     } else {
         // Not an error - event might've been already deleted, user might've
         // decided to disable the RSVP auto-importing feature etc.
 
-        Ok(None)
+        Ok(Fetched::None(RsvpFetchApiError::EventMissing))
     }
+}
+
+enum Decrypted<'a, P>
+where
+    P: PGPProviderSync,
+{
+    Some {
+        decryptor: CalendarEventDecryptor<'a, P>,
+        calendar: CalendarBootstrap,
+        event: Box<CalendarEvent>,
+        children: Vec<CalendarEvent>,
+    },
+
+    None(RsvpFetchApiError),
+}
+
+#[instrument(skip_all)]
+async fn decrypt<'a, P, K>(
+    pgp: &P,
+    keys: &K,
+    state: Fetched,
+    decryptor_keys: &'a mut Option<CalendarDecryptorKeys<P>>,
+) -> RsvpFetchResult<Decrypted<'a, P>, K>
+where
+    P: PGPProviderSync,
+    K: RsvpKeys,
+{
+    debug!("Decrypting");
+
+    match state {
+        Fetched::Some {
+            calendar,
+            event,
+            children,
+        } => {
+            let decryptor_keys = decryptor_keys.insert(
+                CalendarDecryptorKeys::rsvp(pgp, keys, &calendar, &event)
+                    .await
+                    .map_err(RsvpFetchError::Keys)?,
+            );
+
+            let decryptor = calendar.create_decryptor(pgp, decryptor_keys, &event)?;
+
+            Ok(Decrypted::Some {
+                decryptor,
+                calendar,
+                event,
+                children,
+            })
+        }
+
+        // If we've failed to fetch event from the API, there's nothing to
+        // decrypt, so let's just carry the error with us to the next stage
+        Fetched::None(err) => Ok(Decrypted::None(err)),
+    }
+}
+
+struct Inflated<'a, P>
+where
+    P: PGPProviderSync,
+{
+    decryptor: Option<CalendarEventDecryptor<'a, P>>,
+    calendar: Option<CalendarBootstrap>,
+    children: Vec<CalendarEvent>,
+    source: Source<'a>,
 }
 
 #[instrument(skip_all)]
 fn inflate<'a, P>(
     pgp: &P,
     id: &'a RsvpEventId,
-    event: Option<Box<CalendarEvent>>,
-    decryptor: Option<&CalendarEventDecryptor<P>>,
-) -> RsvpResult<Option<Source<'a>>>
+    state: Decrypted<'a, P>,
+) -> RsvpResult<Option<Inflated<'a, P>>>
 where
     P: PGPProviderSync,
 {
-    let (Some(raw), Some(decryptor)) = (event, decryptor) else {
-        return match id {
-            RsvpEventId::Invite { method, invite, .. } => Ok(Some(Source::Invite {
-                raw: None,
-                event: None,
-                method: *method,
-                invite,
-            })),
-
-            RsvpEventId::Reminder { .. } => Ok(None),
-        };
-    };
-
     debug!("Inflating");
+
+    let (decryptor, calendar, raw, children) = match state {
+        Decrypted::Some {
+            decryptor,
+            calendar,
+            event,
+            children,
+        } => (decryptor, calendar, event, children),
+
+        Decrypted::None(err) => {
+            return match id {
+                // If we've failed to fetch event from the API, we might still
+                // display the widget using data solely from the invitation
+                // attachment
+                RsvpEventId::Invite { method, invite, .. } => {
+                    let source = Source::Invite {
+                        raw: None,
+                        event: Err(err),
+                        method: *method,
+                        invite,
+                    };
+
+                    Ok(Some(Inflated {
+                        decryptor: None,
+                        calendar: None,
+                        children: Vec::new(),
+                        source,
+                    }))
+                }
+
+                // Reminders are a bit different though - for them we only know
+                // their corresponding Proton event id (via email headers), but
+                // nothing more.
+                //
+                // Those headers don't contain the event's title, timestamps
+                // etc., so without a network connection there's no way for us
+                // to show the widget, i.e. time to give up.
+                RsvpEventId::Reminder { .. } => {
+                    debug!(
+                        "Network seems to be down and there's no way to \
+                         continue with just the data at hand - giving up",
+                    );
+
+                    Ok(None)
+                }
+            };
+        }
+    };
 
     // When we fetch an event from Proton Calendar, we get a couple of disjoint
     // *.ics payloads - e.g. event summary is kept within a "shared event", but
@@ -219,7 +287,7 @@ where
         .iter()
         .chain(raw.calendar_events.iter())
         .try_fold(Box::new(ical::VEvent::default()), |mut lhs, rhs| {
-            let rhs = rhs.decrypt_and_parse(pgp, decryptor)?;
+            let rhs = rhs.decrypt_and_parse(pgp, &decryptor)?;
 
             lhs.description = lhs.description.or(rhs.description);
             lhs.dtend = lhs.dtend.or(rhs.dtend);
@@ -234,15 +302,22 @@ where
             Ok::<_, RsvpError>(lhs)
         })?;
 
-    Ok(Some(match id {
+    let source = match id {
         RsvpEventId::Invite { method, invite, .. } => Source::Invite {
             raw: Some(raw),
-            event: Some(event),
+            event: Ok(event),
             method: *method,
             invite,
         },
 
         RsvpEventId::Reminder { .. } => Source::Reminder { raw, event },
+    };
+
+    Ok(Some(Inflated {
+        decryptor: Some(decryptor),
+        calendar: Some(calendar),
+        children,
+        source,
     }))
 }
 
@@ -254,22 +329,28 @@ async fn extract<P>(
     email: &CanonicalEmail,
     week_start: Weekday,
     id: &RsvpEventId,
-    calendar: Option<CalendarBootstrap>,
-    source: Source<'_>,
-    children: Vec<CalendarEvent>,
-    decryptor: Option<&CalendarEventDecryptor<'_, P>>,
+    state: Inflated<'_, P>,
 ) -> RsvpResult<RsvpEvent>
 where
     P: PGPProviderSync,
 {
-    let metadata = extract_metadata(source.invite_or_event());
-    let recurrence = extract_recurrence(source.invite_or_event(), week_start);
-    let occurrence = extract_occurrence(source.invite_or_event())?;
-    let organizer = extract_organizer(contacts, &source).await?;
-    let attendees = extract_attendees(pgp, contacts, &source, decryptor, &organizer).await?;
-    let calendar = extract_calendar(calendar, &source);
-    let progress = extract_progress(now, &source, &occurrence);
-    let recency = extract_recency(source.invite(), source.event());
+    let metadata = extract_metadata(state.source.invite_or_event());
+    let recurrence = extract_recurrence(state.source.invite_or_event(), week_start);
+    let occurrence = extract_occurrence(state.source.invite_or_event())?;
+    let organizer = extract_organizer(contacts, &state.source).await?;
+
+    let attendees = extract_attendees(
+        pgp,
+        contacts,
+        &state.source,
+        state.decryptor.as_ref(),
+        &organizer,
+    )
+    .await?;
+
+    let calendar = extract_calendar(state.calendar, &state.source);
+    let progress = extract_progress(now, &state.source, &occurrence);
+    let recency = extract_recency(state.source.invite(), state.source.event());
 
     let user_attendee_idx = attendees.iter().enumerate().find_map(|(idx, att)| {
         if email::canonicalize_auto(&att.email) == *email {
@@ -309,8 +390,8 @@ where
         progress,
         recency,
         intent,
-        raw: source.into_raw_event(),
-        children,
+        raw: state.source.into_raw_event(),
+        children: state.children,
     })
 }
 
@@ -1087,7 +1168,7 @@ fn extract_calendar(calendar: Option<CalendarBootstrap>, source: &Source) -> Opt
 }
 
 fn extract_progress(now: &Zoned, source: &Source, occurrence: &RsvpOccurrence) -> RsvpProgress {
-    if let Some(event) = source.event() {
+    if let Ok(event) = source.event() {
         if event.status == Some(ical::Status::Cancelled) {
             return RsvpProgress::Cancelled;
         }
@@ -1154,17 +1235,21 @@ fn extract_progress(now: &Zoned, source: &Source, occurrence: &RsvpOccurrence) -
 /// Compares `DTSTAMP` and `SEQUENCE` extracted from `invite.ics` to the event
 /// data returned from the API - if there's a mismatch between those, it means
 /// that user is looking at an outdated invite and should be warned about this.
-fn extract_recency(invite: Option<&ical::VEvent>, event: Option<&ical::VEvent>) -> RsvpRecency {
+fn extract_recency(
+    invite: Option<&ical::VEvent>,
+    event: Result<&ical::VEvent, RsvpFetchApiError>,
+) -> RsvpRecency {
     let Some(invite) = invite else {
         // If there's no invite available, we must be looking at a reminder -
         // those cannot be outdated as we always fetch them fresh from the API.
         return RsvpRecency::Fresh;
     };
 
-    let Some(event) = event else {
-        // If there's no event available, the network connection must be down -
-        // in that case we cannot know whether the RSVP is fresh or outdated.
-        return RsvpRecency::Unknown;
+    let event = match event {
+        Ok(event) => event,
+        Err(err) => {
+            return RsvpRecency::Unknown(err);
+        }
     };
 
     let invite_dtstamp = invite
@@ -1193,27 +1278,18 @@ fn extract_recency(invite: Option<&ical::VEvent>, event: Option<&ical::VEvent>) 
     }
 }
 
-#[derive(Clone, Debug)]
-struct Fetched {
-    calendar: CalendarBootstrap,
-    event: Box<CalendarEvent>,
-    children: Vec<CalendarEvent>,
-}
-
 #[derive(Debug)]
 enum Source<'a> {
     Invite {
         /// Event data as fetched from Proton Calendar, with raw *.ics payloads,
         /// crypto packets etc.
         ///
-        /// This field will be `None` if there's no internet connection.
+        /// This field will be `None` if `event.is_err()`.
         raw: Option<Box<CalendarEvent>>,
 
         /// Event data as fetched from Proton Calendar, materialized from raw
         /// event data above.
-        ///
-        /// This field will be `None` if there's no internet connection.
-        event: Option<Box<ical::VEvent>>,
+        event: Result<Box<ical::VEvent>, RsvpFetchApiError>,
 
         /// Method (REQUEST / CANCEL) as extracted from `invite.ics`.
         method: ical::Method,
@@ -1259,10 +1335,13 @@ impl Source<'_> {
         }
     }
 
-    fn event(&self) -> Option<&ical::VEvent> {
+    fn event(&self) -> Result<&ical::VEvent, RsvpFetchApiError> {
         match self {
-            Source::Invite { event, .. } => event.as_deref(),
-            Source::Reminder { event, .. } => Some(event),
+            Source::Invite { event, .. } => match event {
+                Ok(event) => Ok(event),
+                Err(err) => Err(*err),
+            },
+            Source::Reminder { event, .. } => Ok(event),
         }
     }
 
@@ -1307,7 +1386,7 @@ mod tests {
 
             let source = Source::Invite {
                 raw: None,
-                event: None,
+                event: Err(RsvpFetchApiError::EventMissing),
                 method: ical::Method::Request,
                 invite: &invite,
             };
@@ -1334,7 +1413,7 @@ mod tests {
 
             let source = Source::Invite {
                 raw: None,
-                event: None,
+                event: Err(RsvpFetchApiError::EventMissing),
                 method: ical::Method::Request,
                 invite: &invite,
             };
@@ -1366,7 +1445,7 @@ mod tests {
 
             let source = Source::Invite {
                 raw: None,
-                event: None,
+                event: Err(RsvpFetchApiError::EventMissing),
                 method: ical::Method::Request,
                 invite: &invite,
             };
@@ -1389,7 +1468,7 @@ mod tests {
 
             let source = Source::Invite {
                 raw: None,
-                event: None,
+                event: Err(RsvpFetchApiError::EventMissing),
                 method: ical::Method::Cancel,
                 invite: &invite,
             };
@@ -1900,13 +1979,13 @@ mod tests {
 
         struct TestCase {
             given_invite: Option<Event>,
-            given_event: Option<Event>,
+            given_event: Result<Event, RsvpFetchApiError>,
             expected: RsvpRecency,
         }
 
         const TEST_REMINDER: TestCase = TestCase {
             given_invite: None,
-            given_event: Some(Event {
+            given_event: Ok(Event {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: Some(3),
             }),
@@ -1918,7 +1997,7 @@ mod tests {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: Some(3),
             }),
-            given_event: Some(Event {
+            given_event: Ok(Event {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: Some(3),
             }),
@@ -1930,7 +2009,7 @@ mod tests {
                 dtstamp: Some("20180101T100000Z"),
                 sequence: Some(3),
             }),
-            given_event: Some(Event {
+            given_event: Ok(Event {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: Some(3),
             }),
@@ -1942,7 +2021,7 @@ mod tests {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: Some(1),
             }),
-            given_event: Some(Event {
+            given_event: Ok(Event {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: Some(3),
             }),
@@ -1987,7 +2066,7 @@ mod tests {
                 dtstamp: Some("20180101T120005Z"),
                 sequence: Some(3),
             }),
-            given_event: Some(Event {
+            given_event: Ok(Event {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: Some(3),
             }),
@@ -1999,7 +2078,7 @@ mod tests {
                 dtstamp: None,
                 sequence: None,
             }),
-            given_event: Some(Event {
+            given_event: Ok(Event {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: Some(3),
             }),
@@ -2011,20 +2090,29 @@ mod tests {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: None,
             }),
-            given_event: Some(Event {
+            given_event: Ok(Event {
                 dtstamp: None,
                 sequence: Some(3),
             }),
             expected: RsvpRecency::Fresh,
         };
 
-        const TEST_OFFLINE_INVITE: TestCase = TestCase {
+        const TEST_MISSING_EVENT: TestCase = TestCase {
             given_invite: Some(Event {
                 dtstamp: Some("20180101T120000Z"),
                 sequence: None,
             }),
-            given_event: None,
-            expected: RsvpRecency::Unknown,
+            given_event: Err(RsvpFetchApiError::EventMissing),
+            expected: RsvpRecency::Unknown(RsvpFetchApiError::EventMissing),
+        };
+
+        const TEST_NETWORK_FAILURE: TestCase = TestCase {
+            given_invite: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: None,
+            }),
+            given_event: Err(RsvpFetchApiError::NetworkFailure),
+            expected: RsvpRecency::Unknown(RsvpFetchApiError::NetworkFailure),
         };
 
         #[test_case(TEST_REMINDER)]
@@ -2034,11 +2122,12 @@ mod tests {
         #[test_case(TEST_INVITE_WITH_FUTURE_DTSTAMP)]
         #[test_case(TEST_INVITE_WITH_MISSING_DTSTAMP_1)]
         #[test_case(TEST_INVITE_WITH_MISSING_DTSTAMP_2)]
-        #[test_case(TEST_OFFLINE_INVITE)]
+        #[test_case(TEST_MISSING_EVENT)]
+        #[test_case(TEST_NETWORK_FAILURE)]
         fn test(case: TestCase) {
             let invite = case.given_invite.map(Event::build);
             let event = case.given_event.map(Event::build);
-            let actual = extract_recency(invite.as_ref(), event.as_ref());
+            let actual = extract_recency(invite.as_ref(), event.as_ref().map_err(|err| *err));
 
             assert_eq!(case.expected, actual);
         }

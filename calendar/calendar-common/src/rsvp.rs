@@ -496,14 +496,15 @@ pub enum RsvpProgress {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RsvpRecency {
+    /// Invite is valid and can be replied to.
     Fresh,
 
-    /// Invite's event has been updated in the meantime and user it looking at
-    /// the older invite at the moment.
+    /// Invite is not valid anymore, the underlying event has been updated in
+    /// the meantime.
     Outdated,
 
-    /// Internet connection is down, invite's recency cannot be confirmed.
-    Unknown,
+    /// Invite might be valid or not, there was a problem checking it.
+    Unknown(RsvpFetchApiError),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -673,6 +674,19 @@ pub type RsvpFetchResult<T, K> = RsvpResult<T, RsvpFetchError<<K as RsvpKeys>::E
 pub enum RsvpFetchError<K> {
     Keys(K),
     Rsvp(#[from] RsvpError),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RsvpFetchApiError {
+    /// Event is not present in Proton Calendar.
+    ///
+    /// This is just a limitation of the current implementation - it cannot yet
+    /// create new events in Proton Calendar, the event must already be there
+    /// for user to be able to respond to it.
+    EventMissing,
+
+    /// There's no internet connection, Proton Calendar doesn't respond etc.
+    NetworkFailure,
 }
 
 pub type RsvpAnswerResult<T, K, M> =

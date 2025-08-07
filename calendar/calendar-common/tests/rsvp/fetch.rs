@@ -8,8 +8,8 @@ use jiff::{Zoned, civil::Weekday};
 use pretty_assertions as pa;
 use proton_calendar_api::{CalendarAttendee, CalendarAttendeeStatus, ProtonCalendarMock};
 use proton_calendar_common::{
-    RsvpAttendee, RsvpError, RsvpEventId, RsvpFetchError, RsvpIntent, RsvpOrganizer, RsvpProgress,
-    RsvpRecency,
+    RsvpAttendee, RsvpError, RsvpEventId, RsvpFetchApiError, RsvpFetchError, RsvpIntent,
+    RsvpOrganizer, RsvpProgress, RsvpRecency,
 };
 use proton_core_api::{
     session::{Config, Session},
@@ -389,7 +389,7 @@ async fn cancelled() {
 /// about that particular event will return "whoopsie, what's that?" - this test
 /// makes sure we can handle this scenario (probably like 0.1% of users though).
 #[tokio::test]
-async fn unknown() {
+async fn missing_event() {
     let world = world().await;
 
     world
@@ -413,7 +413,10 @@ async fn unknown() {
         .unwrap()
         .unwrap();
 
-    pa::assert_eq!(expected_offline_event(), actual);
+    pa::assert_eq!(
+        expected_offline_event(RsvpFetchApiError::EventMissing),
+        actual
+    );
 
     // We don't support creating events in the calendar, so non-auto-imported
     // can't be answered yet
@@ -422,7 +425,7 @@ async fn unknown() {
 
 /// Make sure that we fail gracefully if there's no internet connection.
 #[tokio::test]
-async fn offline() {
+async fn network_failure() {
     let mut world = world().await;
 
     world.sess = {
@@ -452,10 +455,12 @@ async fn offline() {
         .unwrap()
         .unwrap();
 
-    pa::assert_eq!(expected_offline_event(), actual);
+    pa::assert_eq!(
+        expected_offline_event(RsvpFetchApiError::NetworkFailure),
+        actual
+    );
 
     assert!(!actual.can_be_answered());
-    assert_eq!(RsvpRecency::Unknown, actual.recency);
 }
 
 #[tokio::test]

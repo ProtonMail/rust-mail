@@ -97,7 +97,7 @@ impl CalendarEventPayloadExt for CalendarEventPayload {
 pub(crate) trait CalendarBootstrapExt {
     fn create_decryptor<'a, P>(
         &self,
-        pgp: &'a P,
+        pgp: &P,
         keys: &'a CalendarDecryptorKeys<P>,
         event: &CalendarEvent,
     ) -> RsvpResult<CalendarEventDecryptor<'a, P>>
@@ -108,7 +108,7 @@ pub(crate) trait CalendarBootstrapExt {
 impl CalendarBootstrapExt for CalendarBootstrap {
     fn create_decryptor<'a, P>(
         &self,
-        pgp: &'a P,
+        pgp: &P,
         keys: &'a CalendarDecryptorKeys<P>,
         event: &CalendarEvent,
     ) -> RsvpResult<CalendarEventDecryptor<'a, P>>

@@ -1088,7 +1088,7 @@ impl DecryptedMessage {
             Rsvp::Success(rsvp) => {
                 let header = {
                     let recency = match rsvp.recency {
-                        RsvpRecency::Fresh | RsvpRecency::Unknown => 0,
+                        RsvpRecency::Fresh | RsvpRecency::Unknown(_) => 0,
                         RsvpRecency::Outdated => 1,
                     };
 
@@ -1179,7 +1179,7 @@ impl DecryptedMessage {
                     RsvpProgress::Cancelled => Some("! Invitation is outdated"),
                 },
 
-                RsvpRecency::Fresh | RsvpRecency::Unknown => None,
+                RsvpRecency::Fresh | RsvpRecency::Unknown(_) => None,
             };
 
             let progress = match rsvp.progress {
@@ -1205,7 +1205,7 @@ impl DecryptedMessage {
         };
 
         let fg = match rsvp.recency {
-            RsvpRecency::Fresh | RsvpRecency::Unknown => match rsvp.progress {
+            RsvpRecency::Fresh | RsvpRecency::Unknown(_) => match rsvp.progress {
                 RsvpProgress::Pending | RsvpProgress::Ongoing => Color::White,
                 RsvpProgress::Ended | RsvpProgress::Cancelled => Color::DarkGray,
             },
