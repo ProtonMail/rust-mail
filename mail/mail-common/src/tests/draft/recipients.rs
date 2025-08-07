@@ -462,6 +462,67 @@ async fn contact_group_resolution_from_message_recipients() {
     assert_eq!(group.total_in_group, 2);
 }
 
+#[test]
+fn recipient_expiration_feature() {
+    let mut list = RecipientList::default();
+
+    let valid_entry = RecipientEntry {
+        display_name: Some("Foo Ext".into()),
+        email: "foo@example.com".into(),
+    };
+
+    let valid_proton_entry = RecipientEntry {
+        display_name: Some("Foo Proton".into()),
+        email: "foo@proton.ch".into(),
+    };
+
+    let validating_entry = RecipientEntry {
+        display_name: None,
+        email: "validating@example.com".into(),
+    };
+
+    let unchecked_entry = RecipientEntry {
+        display_name: None,
+        email: "unchecked@example.com".into(),
+    };
+
+    let invalid_email_entry = RecipientEntry {
+        display_name: None,
+        email: "@".into(),
+    };
+
+    let unknown_error_entry = RecipientEntry {
+        display_name: None,
+        email: "unknown@error.org".into(),
+    };
+
+    list.add_single_with_state(valid_entry.clone(), ValidationState::Valid(false))
+        .unwrap();
+    list.add_single_with_state(valid_proton_entry.clone(), ValidationState::Valid(true))
+        .unwrap();
+    list.add_single_with_state(validating_entry.clone(), ValidationState::Validating)
+        .unwrap();
+    // Unchecked is the default state.
+    list.add_single(unchecked_entry.clone()).unwrap();
+    // email validation happen by default
+    list.add_single(invalid_email_entry.clone()).unwrap();
+    list.add_single_with_state(unknown_error_entry.clone(), ValidationState::Unknown)
+        .unwrap();
+
+    let mut report = ExpirationFeatureSupportReport::default();
+
+    list.validate_expiration_feature(&mut report);
+    assert_eq!(report.unknown.len(), 4);
+    assert_eq!(report.unsupported.len(), 1);
+    assert!(report.unsupported.contains(&valid_entry.email));
+    assert!(report.unknown.contains(&validating_entry.email));
+    assert!(report.unknown.contains(&unchecked_entry.email));
+    assert!(report.unknown.contains(&invalid_email_entry.email));
+    assert!(report.unknown.contains(&unknown_error_entry.email));
+    assert!(!report.unknown.contains(&valid_proton_entry.email));
+    assert!(!report.unsupported.contains(&valid_proton_entry.email));
+}
+
 fn group_name_always() -> NonEmptyString {
     "my_group".to_owned().try_into().unwrap()
 }
