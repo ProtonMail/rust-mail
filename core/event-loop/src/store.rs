@@ -5,6 +5,7 @@ use proton_core_api::services::proton::EventId;
 
 /// This trait allows abstraction over how to store and load events. Note that this only stores the
 /// event RemoteId, you will need to ask the `Provider` for the actual event.
+#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait Store: Send + Sync {
     async fn load(&self) -> anyhow::Result<Option<EventId>>;

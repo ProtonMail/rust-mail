@@ -1,5 +1,3 @@
-use std::any::{TypeId, type_name};
-
 use crate::store::Store;
 use crate::subscriber::{RawSubscriber, TypedSubscribers};
 use crate::{Event, EventLoopError, Provider, RawEvent, Subscriber};
@@ -7,6 +5,7 @@ use anyhow::anyhow;
 use indexmap::{IndexMap, map::Entry};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
+use std::any::{Any, TypeId, type_name};
 use tokio::sync::Mutex;
 use tracing::{self, Level, debug, error, info};
 
@@ -55,10 +54,8 @@ impl EventPoll {
         let mut subscribers = self.subscribers.lock().await;
         match subscribers.entry(TypeId::of::<T>()) {
             Entry::Occupied(mut entry) => {
-                if let Some(typed_subscribers) = entry
-                    .get_mut()
-                    .as_any_mut()
-                    .downcast_mut::<TypedSubscribers<T>>()
+                if let Some(typed_subscribers) =
+                    <dyn Any>::downcast_mut::<TypedSubscribers<T>>(entry.get_mut())
                 {
                     typed_subscribers.add_subscriber(subscriber);
                 } else {
@@ -92,6 +89,7 @@ impl EventPoll {
                 self.store.as_ref(),
                 self.provider.as_ref(),
                 &*self.subscribers.lock().await,
+                MAX_EVENTS_PER_POLL,
             )
             .await
     }
@@ -141,6 +139,7 @@ impl EventPollInternal {
         store: &dyn Store,
         provider: &dyn Provider,
         subscribers: &IndexMap<TypeId, Box<dyn RawSubscriber>>,
+        max_events: usize,
     ) -> Result<(), EventLoopError> {
         let Some(last_event_id) = store.load().await.map_err(EventLoopError::StoreRead)? else {
             let e = anyhow!("No EventId in store");
@@ -149,49 +148,65 @@ impl EventPollInternal {
         };
 
         info!("Last Event Id = {last_event_id}");
-
-        let raw_events: Vec<RawEvent> = self
-            .collect_raw_events(provider, &last_event_id)
-            .await
-            .map_err(|e| {
-                error!("Failed to collect events: {e}");
-                e
-            })?;
-
-        if raw_events.is_empty() {
-            info!("No new api events");
-            return Ok(());
-        }
-
-        info!("Received {} new events", raw_events.len());
-
-        // Run 1 tx per event to avoid having long running transactions
         let mut previous_event_id = last_event_id.clone();
-        for raw_event in raw_events {
-            let new_event_id = raw_event.event_id().clone();
-            info!("Applying {:?}", previous_event_id);
-            if raw_event.is_refresh() {
-                self.publish_raw_refresh_to_subscribers(&raw_event, subscribers.values())
-                    .await?;
-            } else {
-                self.publish_raw_events_to_subscribers(&mut [raw_event], subscribers.values())
-                    .await?;
+
+        let mut processed_event_count = 0_usize;
+
+        while processed_event_count < max_events {
+            let raw_events: Vec<RawEvent> = self
+                .collect_raw_events(provider, &previous_event_id)
+                .await
+                .map_err(|e| {
+                    error!("Failed to collect events: {e}");
+                    e
+                })?;
+
+            if raw_events.is_empty() {
+                info!("No new api events");
+                return Ok(());
             }
 
-            if let Err(e) = store.store(new_event_id.clone()).await {
-                error!("Failed to store new event id: {e}");
-                return Err(EventLoopError::StoreWrite(e));
+            let raw_event_count = raw_events.len();
+
+            info!("Received {} new events", raw_event_count);
+            // Run events 1 at a time to make sure dependencies are processed correctly.
+            for raw_event in raw_events {
+                let new_event_id = raw_event.event_id().clone();
+                info!("Applying {:?}", previous_event_id);
+                if raw_event.is_refresh() {
+                    self.publish_raw_refresh_to_subscribers(&raw_event, subscribers.values())
+                        .await?;
+                } else {
+                    self.publish_raw_events_to_subscribers(&mut [raw_event], subscribers.values())
+                        .await?;
+                }
+
+                if let Err(e) = store.store(new_event_id.clone()).await {
+                    error!("Failed to store new event id: {e}");
+                    return Err(EventLoopError::StoreWrite(e));
+                }
+                info!("New Event ID = {}", new_event_id);
+                previous_event_id = new_event_id;
             }
-            info!("New Event ID = {}", new_event_id);
-            previous_event_id = new_event_id;
+
+            processed_event_count += raw_event_count;
         }
 
         Ok(())
     }
 
-    /// Requests all events.
+    /// Collect events that are part of the same "group"/update.
     ///
-    /// The resulting vec is non empty as it contains at least the last event id.
+    /// If the events are related to a state update the `has_more` field will be set to true.
+    ///
+    /// E.g.:
+    /// ```skip
+    /// Event1 {id:2, has_more=true}  \
+    ///                                +- related
+    /// Event2 {id:3, has_more=false} /
+    /// Event3 {id:4, has_more=false} - new event unrelated
+    /// Event4 {id:4, has_more=false} - no more events
+    /// ```
     async fn collect_raw_events(
         &self,
         provider: &dyn Provider,
@@ -200,7 +215,7 @@ impl EventPollInternal {
         let mut events = Vec::with_capacity(4);
         let mut current_event_id = last_event_id.clone();
 
-        for _ in 0..MAX_EVENTS_PER_POLL {
+        loop {
             let event = provider.get_event(&current_event_id).await?;
             let has_more = event.has_more();
             let new_event_id = event.event_id().clone();
@@ -211,6 +226,9 @@ impl EventPollInternal {
             }
 
             events.push(event);
+
+            // This event "group" is now complete, lets process it before
+            // collecting more
             if !has_more {
                 break;
             }
@@ -243,5 +261,298 @@ impl EventPollInternal {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::EventMetadata;
+    use crate::provider::MockProvider;
+    use crate::store::MockStore;
+    use crate::subscriber::MockRawSubscriber;
+    use mockall::predicate;
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn event_collection() {
+        // Events 1 & 2 should be processed together.
+        // Event 3 is processed in the next loop.
+        // Event 4 terminates the loop.
+        let event_id_1 = EventId::from("1");
+        let event_id_2 = EventId::from("2");
+        let event_id_3 = EventId::from("3");
+        let event_id_4 = EventId::from("4");
+
+        let raw_event_1 = RawEvent {
+            meta: EventMetadata {
+                event_id: event_id_2.clone(),
+                has_more: true,
+                refresh: 0,
+            },
+            raw: String::new(),
+        };
+        let raw_event_2 = RawEvent {
+            meta: EventMetadata {
+                event_id: event_id_3.clone(),
+                has_more: false,
+                refresh: 0,
+            },
+            raw: String::new(),
+        };
+
+        let raw_event_3 = RawEvent {
+            meta: EventMetadata {
+                event_id: event_id_4.clone(),
+                has_more: false,
+                refresh: 0,
+            },
+            raw: String::new(),
+        };
+
+        let raw_event_4 = RawEvent {
+            meta: EventMetadata {
+                event_id: event_id_4.clone(),
+                has_more: false,
+                refresh: 0,
+            },
+            raw: String::new(),
+        };
+
+        let mut sequence = mockall::Sequence::new();
+        let mut provider = MockProvider::new();
+        let mut subscriber = MockRawSubscriber::new();
+        let mut store = MockStore::new();
+
+        let event_id = event_id_1.clone();
+        store
+            .expect_load()
+            .once()
+            .in_sequence(&mut sequence)
+            .returning(move || Ok(Some(event_id.clone())));
+
+        // First loop
+        let event = raw_event_1.clone();
+        provider
+            .expect_get_event()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_1.clone()))
+            .returning(move |_| Ok(event.clone()));
+        let event = raw_event_2.clone();
+        provider
+            .expect_get_event()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_2.clone()))
+            .returning(move |_| Ok(event.clone()));
+        let id = event_id_2.clone();
+        subscriber
+            .expect_on_raw_events()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::function(move |v: &[RawEvent]| {
+                v[0].meta.event_id == id
+            }))
+            .returning(|_| Ok(()));
+        store
+            .expect_store()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_2))
+            .returning(|_| Ok(()));
+        let id = event_id_3.clone();
+        subscriber
+            .expect_on_raw_events()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::function(move |v: &[RawEvent]| {
+                v[0].meta.event_id == id
+            }))
+            .returning(|_| Ok(()));
+        store
+            .expect_store()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_3.clone()))
+            .returning(|_| Ok(()));
+
+        // Second loop
+        let event = raw_event_3.clone();
+        provider
+            .expect_get_event()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_3.clone()))
+            .returning(move |_| Ok(event.clone()));
+        let id = event_id_4.clone();
+        subscriber
+            .expect_on_raw_events()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::function(move |v: &[RawEvent]| {
+                v[0].meta.event_id == id
+            }))
+            .returning(|_| Ok(()));
+        store
+            .expect_store()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_4.clone()))
+            .returning(|_| Ok(()));
+
+        // Exit
+        let event = raw_event_4.clone();
+        provider
+            .expect_get_event()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_4))
+            .returning(move |_| Ok(event.clone()));
+
+        let evt_poll = EventPollInternal::new();
+
+        let mut subscribers: IndexMap<TypeId, Box<dyn RawSubscriber>> = IndexMap::new();
+        subscribers.insert(TypeId::of::<i32>(), Box::new(subscriber));
+        evt_poll
+            .poll_raw(&store, &provider, &subscribers, 10)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn events_that_exceed_limit_with_has_more_are_still_collected() {
+        // Event 1 & 2 should be processed together
+        // Event 3 is not processed since we exceed the limit.
+        let event_id_1 = EventId::from("1");
+        let event_id_2 = EventId::from("2");
+        let event_id_3 = EventId::from("3");
+
+        let raw_event_1 = RawEvent {
+            meta: EventMetadata {
+                event_id: event_id_2.clone(),
+                has_more: true,
+                refresh: 0,
+            },
+            raw: String::new(),
+        };
+        let raw_event_2 = RawEvent {
+            meta: EventMetadata {
+                event_id: event_id_3.clone(),
+                has_more: false,
+                refresh: 0,
+            },
+            raw: String::new(),
+        };
+
+        let mut sequence = mockall::Sequence::new();
+        let mut provider = MockProvider::new();
+        let mut subscriber = MockRawSubscriber::new();
+        let mut store = MockStore::new();
+
+        let event_id = event_id_1.clone();
+        store
+            .expect_load()
+            .once()
+            .in_sequence(&mut sequence)
+            .returning(move || Ok(Some(event_id.clone())));
+
+        // First loop
+        let event = raw_event_1.clone();
+        provider
+            .expect_get_event()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_1.clone()))
+            .returning(move |_| Ok(event.clone()));
+        let event = raw_event_2.clone();
+        provider
+            .expect_get_event()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_2.clone()))
+            .returning(move |_| Ok(event.clone()));
+        let id = event_id_2.clone();
+        subscriber
+            .expect_on_raw_events()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::function(move |v: &[RawEvent]| {
+                v[0].meta.event_id == id
+            }))
+            .returning(|_| Ok(()));
+        store
+            .expect_store()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_2))
+            .returning(|_| Ok(()));
+        let id = event_id_3.clone();
+        subscriber
+            .expect_on_raw_events()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::function(move |v: &[RawEvent]| {
+                v[0].meta.event_id == id
+            }))
+            .returning(|_| Ok(()));
+        store
+            .expect_store()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_3.clone()))
+            .returning(|_| Ok(()));
+
+        let evt_poll = EventPollInternal::new();
+
+        let mut subscribers: IndexMap<TypeId, Box<dyn RawSubscriber>> = IndexMap::new();
+        subscribers.insert(TypeId::of::<i32>(), Box::new(subscriber));
+        evt_poll
+            .poll_raw(&store, &provider, &subscribers, 1)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn init_fetches_event_id_if_it_does_not_exist() {
+        let event_id_1 = EventId::from("1");
+
+        let mut sequence = mockall::Sequence::new();
+        let mut provider = MockProvider::new();
+        let mut store = MockStore::new();
+
+        let event_id = event_id_1.clone();
+        store
+            .expect_load()
+            .once()
+            .in_sequence(&mut sequence)
+            .returning(move || Ok(None));
+
+        // First time fetch and store,
+        let id = event_id.clone();
+        provider
+            .expect_get_latest_event_id()
+            .once()
+            .in_sequence(&mut sequence)
+            .returning(move || Ok(id.clone()));
+        store
+            .expect_store()
+            .once()
+            .in_sequence(&mut sequence)
+            .with(predicate::eq(event_id_1.clone()))
+            .returning(|_| Ok(()));
+
+        // 2nd time there is no fetch
+        let event_id = event_id_1.clone();
+        store
+            .expect_load()
+            .once()
+            .in_sequence(&mut sequence)
+            .returning(move || Ok(Some(event_id.clone())));
+
+        let evt_poll = EventPollInternal::new();
+
+        evt_poll.initialize(&store, &provider).await.unwrap();
+        evt_poll.initialize(&store, &provider).await.unwrap();
     }
 }

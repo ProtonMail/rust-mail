@@ -40,6 +40,8 @@ pub trait Subscriber<T: Event>: Send + Sync {
 /// wanting to handle the events in a different way. We keep them as raw events until we have
 /// converted them to a concrete type and pass them to the subscribers.
 ///
+///
+#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub(crate) trait RawSubscriber: Any + Send + Sync {
     /// Handle incoming events.
@@ -47,9 +49,6 @@ pub(crate) trait RawSubscriber: Any + Send + Sync {
 
     /// Handle refresh event
     async fn on_raw_refresh(&self, event: &RawEvent) -> Result<(), EventLoopError>;
-
-    /// Get mutable reference to self as Any for downcasting
-    fn as_any_mut(&mut self) -> &mut dyn Any;
 
     /// Delete old subscribers
     fn cleanup(&mut self);
@@ -128,9 +127,6 @@ where
         Ok(())
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
     fn cleanup(&mut self) {
         self.subscribers.retain(|s| s.is_alive());
     }
