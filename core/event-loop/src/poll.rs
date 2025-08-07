@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use indexmap::{IndexMap, map::Entry};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
-use std::any::{TypeId, type_name};
+use std::any::{Any, TypeId, type_name};
 use tokio::sync::Mutex;
 use tracing::{self, Level, debug, error, info};
 
@@ -54,10 +54,8 @@ impl EventPoll {
         let mut subscribers = self.subscribers.lock().await;
         match subscribers.entry(TypeId::of::<T>()) {
             Entry::Occupied(mut entry) => {
-                if let Some(typed_subscribers) = entry
-                    .get_mut()
-                    .as_any_mut()
-                    .downcast_mut::<TypedSubscribers<T>>()
+                if let Some(typed_subscribers) =
+                    <dyn Any>::downcast_mut::<TypedSubscribers<T>>(entry.get_mut())
                 {
                     typed_subscribers.add_subscriber(subscriber);
                 } else {
@@ -272,27 +270,8 @@ mod tests {
     use crate::EventMetadata;
     use crate::provider::MockProvider;
     use crate::store::MockStore;
-    use async_trait::async_trait;
-    use mockall::{mock, predicate};
-    use std::any::Any;
-
-    mock! {
-        Subscriber{}
-
-        #[async_trait]
-        impl RawSubscriber for Subscriber {
-            async fn on_raw_events(&self, events: &mut [RawEvent]) -> Result<(), EventLoopError>;
-
-            async fn on_raw_refresh(&self, event: &RawEvent) -> Result<(), EventLoopError>;
-
-            fn as_any_mut(&mut self) -> &mut dyn Any;
-
-            fn cleanup(&mut self);
-        }
-
-        unsafe impl Sync for Subscriber {}
-        unsafe impl Send for Subscriber {}
-    }
+    use crate::subscriber::MockRawSubscriber;
+    use mockall::predicate;
 
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
@@ -342,7 +321,7 @@ mod tests {
 
         let mut sequence = mockall::Sequence::new();
         let mut provider = MockProvider::new();
-        let mut subscriber = MockSubscriber::new();
+        let mut subscriber = MockRawSubscriber::new();
         let mut store = MockStore::new();
 
         let event_id = event_id_1.clone();
@@ -468,7 +447,7 @@ mod tests {
 
         let mut sequence = mockall::Sequence::new();
         let mut provider = MockProvider::new();
-        let mut subscriber = MockSubscriber::new();
+        let mut subscriber = MockRawSubscriber::new();
         let mut store = MockStore::new();
 
         let event_id = event_id_1.clone();
