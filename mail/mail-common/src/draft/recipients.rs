@@ -190,6 +190,14 @@ impl ExpirationFeatureSupportReport {
                 }
             }
             _ => {
+                // If we are unable to validate at the moment, we can still
+                // quickly validate if some address ends in a known domain as they are
+                // always supported.
+                for domain in PROTON_EMAIL_DOMAINS {
+                    if email.as_clear_text_str().ends_with(domain) {
+                        return;
+                    }
+                }
                 self.unknown.insert(email.to_owned());
             }
         };
@@ -860,3 +868,12 @@ async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> Validat
     tracing::debug!("Validation state updated for {email}: {state:?}");
     state
 }
+
+const PROTON_EMAIL_DOMAINS: [&str; 6] = [
+    "@proton.me",
+    "@protonmail.ch",
+    "@protonmail.com",
+    "@pm.me",
+    "@proton.ch",
+    "@external.proton.ch",
+];

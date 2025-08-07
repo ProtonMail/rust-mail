@@ -509,6 +509,14 @@ fn recipient_expiration_feature() {
     list.add_single_with_state(unknown_error_entry.clone(), ValidationState::Unknown)
         .unwrap();
 
+    for domain in PROTON_EMAIL_DOMAINS {
+        list.add_single(RecipientEntry {
+            display_name: None,
+            email: format!("bar{domain}").into(),
+        })
+        .unwrap();
+    }
+
     let mut report = ExpirationFeatureSupportReport::default();
 
     list.validate_expiration_feature(&mut report);
@@ -519,8 +527,12 @@ fn recipient_expiration_feature() {
     assert!(report.unknown.contains(&unchecked_entry.email));
     assert!(report.unknown.contains(&invalid_email_entry.email));
     assert!(report.unknown.contains(&unknown_error_entry.email));
-    assert!(!report.unknown.contains(&valid_proton_entry.email));
-    assert!(!report.unsupported.contains(&valid_proton_entry.email));
+
+    for domain in PROTON_EMAIL_DOMAINS {
+        let email: PrivateEmail = format!("bar{domain}").into();
+        assert!(!report.unknown.contains(&email));
+        assert!(!report.unsupported.contains(&email));
+    }
 }
 
 fn group_name_always() -> NonEmptyString {
