@@ -685,18 +685,12 @@ pub enum RsvpAnswerError<K, M> {
     Rsvp(#[from] RsvpError),
 }
 
-#[must_use]
-pub fn is_attachment_an_invite(filename: &str) -> bool {
-    filename.to_ascii_lowercase().ends_with(".ics")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use indoc::indoc;
     use pretty_assertions as pa;
     use std::str::FromStr;
-    use test_case::test_case;
 
     #[test]
     fn from_invite() {
@@ -1055,16 +1049,5 @@ mod tests {
         fn test(case: TestCase) {
             assert_eq!(case.expected, (case.given)().to_string());
         }
-    }
-
-    #[test_case("calendar.ics" => true)]
-    #[test_case("calendar.exe" => false)]
-    #[test_case("invite.ics" => true)]
-    #[test_case("invite.ics.zip" => false)]
-    #[test_case("iCal-1234.ics" => true)]
-    #[test_case("virus" => false)]
-    #[test_case("Party.ICS" => true)]
-    fn is_attachment_an_invite(filename: &str) -> bool {
-        super::is_attachment_an_invite(filename)
     }
 }

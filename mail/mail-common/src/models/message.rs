@@ -23,7 +23,6 @@ use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::MultiActionError;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
-use proton_calendar_common::is_attachment_an_invite;
 use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::utils::IterMapToSql;
@@ -2370,7 +2369,7 @@ impl Message {
     pub fn is_rsvp(&self) -> bool {
         self.attachments_metadata
             .iter()
-            .any(|att| is_attachment_an_invite(&att.filename))
+            .any(|att| att.mime_type.is_calendar())
     }
 
     pub async fn update_ids_and_display_order(
