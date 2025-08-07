@@ -4,6 +4,7 @@ use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::paginator::Paginator;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Items, Message};
 use crate::messages::Messages;
+use crate::widgets::utils::ScrollableState;
 use crate::widgets::{AsIntoTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::{Context, anyhow};
 use proton_core_common::datatypes::LocalLabelId;

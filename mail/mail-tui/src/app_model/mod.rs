@@ -19,8 +19,9 @@ use crate::app_model::path_select_popup::PathSelectPopup;
 use crate::app_model::twofa::TwoFaModel;
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
-use crate::widgets::Backdrop;
-use crate::widgets::ScrollableListState;
+use crate::widgets::utils::ScrollableState;
+use crate::widgets::{Backdrop, ScrollableParagraph};
+use crate::widgets::{ScrollableListState, ScrollableParagraphState};
 use anyhow::anyhow;
 use chrono::Local;
 use futures::FutureExt;
@@ -112,21 +113,6 @@ pub trait Popup {
     fn width(&self) -> Constraint {
         Constraint::Percentage(60)
     }
-}
-
-pub fn height_from_str(s: &str) -> Constraint {
-    Constraint::Length(s.lines().count().max(60).try_into().unwrap())
-}
-pub fn width_from_str(s: &str) -> Constraint {
-    Constraint::Length(
-        s.lines()
-            .map(|x| x.len())
-            .max()
-            .unwrap_or_default()
-            .max(60)
-            .try_into()
-            .unwrap(),
-    )
 }
 
 pub struct AppModel {
@@ -587,84 +573,61 @@ fn log_backtrace_on_panic() {
     }));
 }
 
-#[derive(Debug)]
-pub enum DialogText {
-    Error(anyhow::Error),
-    Text(String),
-}
-
-impl DialogText {
-    fn to_string(&self) -> String {
-        match self {
-            DialogText::Error(error) => error.to_string(),
-            DialogText::Text(t) => t.clone(),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct InfoDialog {
     pub title: Option<String>,
-    pub text: DialogText,
+    pub text: ScrollableParagraph<'static>,
+    state: ScrollableParagraphState,
 }
 
 impl InfoDialog {
+    #[allow(clippy::needless_pass_by_value)]
     pub fn new_error(title: Option<String>, err: anyhow::Error) -> Self {
-        Self {
-            title: Some(title.unwrap_or_else(|| "Error".to_owned())),
-            text: DialogText::Error(err),
-        }
+        let title = Some(title.unwrap_or_else(|| "Error".to_owned()));
+        Self::new(title, err.to_string(), true)
+    }
+    pub fn new_info(title: Option<String>, text: impl Into<Text<'static>>) -> Self {
+        Self::new(title, text, false)
     }
 
-    pub fn new_info(title: Option<String>, text: String) -> Self {
+    fn new(title: Option<String>, text: impl Into<Text<'static>>, is_err: bool) -> Self {
+        let mut p = Paragraph::new(text).wrap(Wrap { trim: false });
+
+        if is_err {
+            p = p.on_red();
+        }
+
         Self {
+            text: ScrollableParagraph(p),
+            state: ScrollableParagraphState::default(),
             title,
-            text: DialogText::Text(text),
         }
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 impl Popup for InfoDialog {
     fn title(&self) -> Option<String> {
         self.title.clone()
     }
 
-    fn handle_event(&mut self, _: Event) -> Command<Messages> {
-        Command::message(Messages::DismissPopup)
+    fn handle_event(&mut self, ev: Event) -> Command<Messages> {
+        let Event::Key(key) = ev else {
+            return Command::None;
+        };
+
+        if self.state.handle_event(key.code) {
+            Command::None
+        } else {
+            Command::message(Messages::DismissPopup)
+        }
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
-        let text = match &self.text {
-            DialogText::Error(error) => {
-                frame.render_widget(Block::new().white().on_red(), area);
-                format!("{error:?}")
-            }
-            DialogText::Text(text) => {
-                frame.render_widget(Block::new(), area);
-                text.clone()
-            }
-        };
+        let [msg, instructions] = Layout::vertical([Constraint::Fill(1), Constraint::Length(2)])
+            .flex(Flex::Center)
+            .areas(area);
 
-        // Split text into lines and find the maximum height
-        let lines: Vec<&str> = text.lines().collect();
-        let content_height = u16::try_from(lines.len()).unwrap_or(3);
-
-        let [_, msg, _, instructions] = Layout::vertical([
-            Constraint::Fill(1),
-            Constraint::Min(content_height),
-            Constraint::Fill(1),
-            Constraint::Length(2),
-        ])
-        .flex(Flex::Center)
-        .areas(area.inner(Margin::new(2, 2)));
-
-        frame.render_widget(
-            Paragraph::new(text)
-                .white()
-                .bold()
-                .wrap(Wrap { trim: false }),
-            msg,
-        );
+        frame.render_stateful_widget(self.text.clone(), msg, &mut self.state);
         frame.render_widget(
             Text::from("Press any key to continue...")
                 .centered()
@@ -675,11 +638,12 @@ impl Popup for InfoDialog {
     }
 
     fn height(&self) -> Constraint {
-        height_from_str(&self.text.to_string())
+        let p = &self.text.0;
+        Constraint::Length(p.line_count(p.line_width() as u16) as u16)
     }
-
     fn width(&self) -> Constraint {
-        width_from_str(&self.text.to_string())
+        let p = &self.text.0;
+        Constraint::Length(p.line_width() as u16)
     }
 }
 
@@ -857,8 +821,13 @@ impl Popup for HelpPopup {
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
-        self.list_state.handle_event(&event);
-        Command::None
+        let Event::Key(key) = event else {
+            return Command::None;
+        };
+        if self.list_state.handle_event(key.code) {
+            return Command::None;
+        }
+        Command::message(Messages::DismissPopup)
     }
 }
 

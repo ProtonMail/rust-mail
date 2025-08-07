@@ -6,6 +6,30 @@ use ratatui::symbols::scrollbar;
 use ratatui::widgets::ScrollbarOrientation::VerticalRight;
 use ratatui::widgets::{List, ListState, Scrollbar, ScrollbarState};
 
+use crate::widgets::utils::ScrollableState;
+
+impl ScrollableState for ScrollableListState {
+    fn next(&mut self) {
+        if self.element_len == 0 {
+            return;
+        }
+        if let Some(index) = self.list_state.selected() {
+            let next_index = (self.element_len - 1).min(index + 1);
+            self.list_state.select(Some(next_index));
+        }
+    }
+
+    fn prev(&mut self) {
+        if self.element_len == 0 {
+            return;
+        }
+        if let Some(index) = self.list_state.selected() {
+            let next_index = index.saturating_sub(1);
+            self.list_state.select(Some(next_index));
+        }
+    }
+}
+
 pub struct ScrollableListState {
     list_state: ListState,
     scroll_state: ScrollbarState,
@@ -35,26 +59,6 @@ impl ScrollableListState {
         *self.list_state.offset_mut() = offset;
     }
 
-    pub fn next(&mut self) {
-        if self.element_len == 0 {
-            return;
-        }
-        if let Some(index) = self.list_state.selected() {
-            let next_index = (self.element_len - 1).min(index + 1);
-            self.list_state.select(Some(next_index));
-        }
-    }
-
-    pub fn prev(&mut self) {
-        if self.element_len == 0 {
-            return;
-        }
-        if let Some(index) = self.list_state.selected() {
-            let next_index = index.saturating_sub(1);
-            self.list_state.select(Some(next_index));
-        }
-    }
-
     pub fn set_len(&mut self, len: usize) {
         self.element_len = len;
     }
@@ -77,22 +81,6 @@ impl ScrollableListState {
 
     pub fn is_focused(&self) -> bool {
         self.focused
-    }
-
-    pub fn handle_event(&mut self, event: &Event) {
-        let Event::Key(key) = event else {
-            return;
-        };
-
-        match key.code {
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.prev();
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.next();
-            }
-            _ => {}
-        }
     }
 }
 

@@ -8,7 +8,9 @@ use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Items, Message,
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::app_model::{ChoosePopup, YesNoPopup};
 use crate::messages::Messages;
-use crate::widgets::utils::{date_from_timestamp, format_recipients, format_sender};
+use crate::widgets::utils::{
+    ScrollableState, date_from_timestamp, format_recipients, format_sender,
+};
 use crate::widgets::{
     CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
     ScrollableTableState,
@@ -387,41 +389,29 @@ impl MessagesState {
         }
 
         if let DecryptedMessageStatus::Success(state) = &mut self.open_message {
-            match key.code {
-                KeyCode::Char('k') | KeyCode::Up => {
-                    if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                        state.content_scroll.scroll_up();
-                        return Command::None;
-                    }
-                }
-                KeyCode::Char('j') | KeyCode::Down => {
-                    if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                        state.content_scroll.scroll_down();
-                        return Command::None;
-                    }
-                }
-                KeyCode::Char('H') => {
-                    let tether = ctx.user_stash().connection();
-                    let id = state.msg.id();
-                    return Command::popup_from_future("Message Headers", async move {
-                        let mdata = MessageBodyMetadata::find_first(
-                            "WHERE local_message_id = ?",
-                            params![id],
-                            &tether,
-                        )
-                        .await?
-                        .context("Error getting metadata")?;
+            if state.content_scroll.handle_event(key.code) {
+                return Command::None;
+            }
+            if let KeyCode::Char('H') = key.code {
+                let tether = ctx.user_stash().connection();
+                let id = state.msg.id();
+                return Command::popup_from_future("Message Headers", async move {
+                    let mdata = MessageBodyMetadata::find_first(
+                        "WHERE local_message_id = ?",
+                        params![id],
+                        &tether,
+                    )
+                    .await?
+                    .context("Error getting metadata")?;
 
-                        let mut headers = String::new();
-                        for (k, v) in mdata.parsed_headers.headers {
-                            let v = v.to_string();
-                            writeln!(headers, r#"- "{k}": {v}"#)?;
-                        }
+                    let mut headers = String::new();
+                    for (k, v) in mdata.parsed_headers.headers {
+                        let v = v.to_string();
+                        writeln!(headers, r#"- "{k}": {v}"#)?;
+                    }
 
-                        Ok(headers)
-                    });
-                }
-                _ => {}
+                    Ok(headers)
+                });
             }
         }
 
@@ -810,7 +800,6 @@ pub struct DecryptedMessage {
     msg: MailMessage,
     content: String,
     content_scroll: ScrollableParagraphState,
-    content_lines: usize,
     date: String,
     from: String,
     to: String,
@@ -951,8 +940,7 @@ impl DecryptedMessage {
         }
 
         let content = html_to_text(&body_output.body)?;
-        let content_scroll = ScrollableParagraphState::new();
-        let content_lines = content.chars().filter(|c| *c == '\n').count();
+        let content_scroll = ScrollableParagraphState::default();
 
         let date = date_from_timestamp(msg.time);
         let from = format_sender(&msg.sender);
@@ -985,7 +973,6 @@ impl DecryptedMessage {
             msg,
             content,
             content_scroll,
-            content_lines,
             date,
             from,
             to,
@@ -1379,7 +1366,7 @@ impl DecryptedMessage {
         // ---
 
         let para = Paragraph::new(&*self.content);
-        let para = ScrollableParagraph::new(para, self.content_lines);
+        let para = ScrollableParagraph(para);
 
         frame.render_stateful_widget(para, body_area, &mut self.content_scroll);
     }

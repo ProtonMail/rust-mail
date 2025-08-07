@@ -29,7 +29,7 @@ use crate::{
     app::Command,
     app_model::mailbox::{poll_event_loop, refresh},
     messages::Messages,
-    widgets::{ScrollableList, ScrollableListState},
+    widgets::{ScrollableList, ScrollableListState, utils::ScrollableState},
 };
 
 use super::{AppState, AppStateHandler, watcher::TuiWatchHandle};
@@ -456,10 +456,12 @@ impl AppStateHandler for ContactsModel {
         Command::message(Message::Init.into())
     }
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
-        self.list_state.handle_event(&event);
         let Event::Key(key) = event else {
             return Command::None;
         };
+        if self.list_state.handle_event(key.code) {
+            return Command::None;
+        }
 
         match key.code {
             KeyCode::Enter => Command::message(Message::OpenContactPopup.into()),

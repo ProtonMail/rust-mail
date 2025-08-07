@@ -2,6 +2,7 @@ use crate::app::Command;
 use crate::app_model::Popup;
 use crate::app_model::mailbox::ComposerMessage;
 use crate::messages::Messages;
+use crate::widgets::utils::ScrollableState;
 use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
@@ -48,15 +49,10 @@ impl Popup for AddressListPopup {
         let Event::Key(key) = event else {
             return Command::none();
         };
+        if self.scrollable_list_state.handle_event(key.code) {
+            return Command::none();
+        }
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.scrollable_list_state.next();
-                Command::none()
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.scrollable_list_state.prev();
-                Command::none()
-            }
             KeyCode::Enter => {
                 self.scrollable_list_state
                     .selected()

@@ -5,41 +5,26 @@ use ratatui::symbols::scrollbar;
 use ratatui::widgets::ScrollbarOrientation::VerticalRight;
 use ratatui::widgets::{Paragraph, Scrollbar, ScrollbarState};
 
+use crate::widgets::utils::ScrollableState;
+
+#[derive(Default)]
 pub struct ScrollableParagraphState {
     scroll_state: ScrollbarState,
     offset: usize,
 }
 
-impl ScrollableParagraphState {
-    pub fn new() -> Self {
-        Self {
-            scroll_state: ScrollbarState::default(),
-            offset: 0,
-        }
-    }
-
-    pub fn scroll_up(&mut self) {
+impl ScrollableState for ScrollableParagraphState {
+    fn prev(&mut self) {
         self.offset = self.offset.saturating_sub(1);
     }
 
-    pub fn scroll_down(&mut self) {
+    fn next(&mut self) {
         self.offset = (self.offset + 1).min(u16::MAX as usize);
     }
 }
 
-pub struct ScrollableParagraph<'a> {
-    widget: Paragraph<'a>,
-    content_length: usize,
-}
-
-impl<'a> ScrollableParagraph<'a> {
-    pub fn new(widget: Paragraph<'a>, len: usize) -> Self {
-        Self {
-            widget,
-            content_length: len,
-        }
-    }
-}
+#[derive(Clone)]
+pub struct ScrollableParagraph<'a>(pub Paragraph<'a>);
 
 impl StatefulWidget for ScrollableParagraph<'_> {
     type State = ScrollableParagraphState;
@@ -48,14 +33,14 @@ impl StatefulWidget for ScrollableParagraph<'_> {
         let [main_area, scroll_area] =
             Layout::horizontal([Constraint::Fill(10), Length(1)]).areas(area);
 
-        let total_height = self.content_length;
+        let total_height = self.0.line_count(main_area.width);
         let visible_area = main_area.height as usize;
 
         let draw_scroll_bar = if total_height >= visible_area {
             let content_length = total_height - visible_area;
             state.offset = state.offset.min(content_length);
-            self.widget = self
-                .widget
+            self.0 = self
+                .0
                 .scroll((u16::try_from(state.offset).unwrap_or_default(), 0));
             state.scroll_state = state
                 .scroll_state
@@ -68,7 +53,7 @@ impl StatefulWidget for ScrollableParagraph<'_> {
         };
 
         let main_area = if draw_scroll_bar { main_area } else { area };
-        Widget::render(self.widget, main_area, buf);
+        Widget::render(self.0, main_area, buf);
         if draw_scroll_bar {
             Scrollbar::new(VerticalRight)
                 .symbols(scrollbar::VERTICAL)

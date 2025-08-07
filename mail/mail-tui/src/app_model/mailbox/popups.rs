@@ -1,6 +1,7 @@
 use crate::app::Command;
 use crate::app_model::mailbox::{ConversationMessage, Items, Message, MessageMessage};
 use crate::messages::Messages;
+use crate::widgets::utils::ScrollableState;
 use crate::widgets::{AsList, ScrollableList, ScrollableListState};
 use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::Label;
@@ -51,10 +52,12 @@ impl crate::app_model::Popup for MoveItemPopup {
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
-        self.list_state.handle_event(&event);
         let Event::Key(key) = event else {
             return Command::None;
         };
+        if self.list_state.handle_event(key.code) {
+            return Command::None;
+        }
 
         match key.code {
             KeyCode::Enter => self
@@ -133,10 +136,12 @@ impl crate::app_model::Popup for LabelItemPopup {
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
-        self.list_state.handle_event(&event);
         let Event::Key(key) = event else {
             return Command::None;
         };
+        if self.list_state.handle_event(key.code) {
+            return Command::None;
+        }
 
         match key.code {
             KeyCode::Char('s') => {
@@ -327,18 +332,11 @@ impl crate::app_model::Popup for LabelSelectPopup {
         let Event::Key(key) = event else {
             return Command::None;
         };
+        if self.selected_label_list().1.handle_event(key.code) {
+            return Command::none();
+        }
 
         match key.code {
-            KeyCode::Char('k') | KeyCode::Up => {
-                let (_, list_state) = self.selected_label_list();
-                list_state.prev();
-                Command::None
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                let (_, list_state) = self.selected_label_list();
-                list_state.next();
-                Command::None
-            }
             KeyCode::Tab => {
                 if key.modifiers.intersects(KeyModifiers::SHIFT) {
                     self.switch_to_prev_tab();
