@@ -1822,7 +1822,8 @@ async fn send_with_expiration() {
         .unwrap()
         .expect("failed to load message");
 
-    assert_eq!(draft_message.expiration_time, expiration_timestamp);
+    // Expiration time should not be set on drafts.
+    assert_eq!(draft_message.expiration_time, UnixTimestamp::new(0));
 
     draft
         .send(
