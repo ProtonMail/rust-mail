@@ -1709,6 +1709,34 @@ pub struct RegisteredDevice {
     pub push_notification_status: Option<i32>,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct ImageProxy(pub u32);
+
+bitflags::bitflags! {
+    impl ImageProxy: u32 {
+        const ENABLED = 2;
+    }
+}
+
+impl Default for ImageProxy {
+    fn default() -> Self {
+        Self(2)
+    }
+}
+
+impl FromSql for ImageProxy {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        Ok(ImageProxy(u32::column_result(value)?))
+    }
+}
+
+impl ToSql for ImageProxy {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        u32::to_sql(&self.0)
+    }
+}
+
 #[cfg(any(test, feature = "test-utils"))]
 mod tests {
     use super::{ApiConfig, AppDetails, EnvId};

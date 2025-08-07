@@ -20,7 +20,7 @@ pub use self::session_error::*;
 pub use self::snooze_error::*;
 
 use crate::mail::RsvpEvent;
-use crate::mail::messages::{BodyOutput, EmbeddedAttachmentInfo};
+use crate::mail::messages::{AttachmentData, BodyOutput};
 
 #[macro_export]
 macro_rules! export_void_result {
@@ -103,7 +103,7 @@ export_void_result! {
 }
 
 export_typed_result! {
-    EmbeddedAttachmentInfoResult(EmbeddedAttachmentInfo, ProtonError),
+    AttachmentDataResult(AttachmentData, ProtonError),
     BodyOutputResult(BodyOutput, ProtonError),
     RsvpEventGetResult(RsvpEvent, ProtonError),
 }

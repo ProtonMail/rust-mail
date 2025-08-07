@@ -1364,7 +1364,7 @@ impl From<RealMailSettings> for MailSettings {
             hide_remote_images: value.hide_remote_images,
             hide_embedded_images: value.hide_embedded_images,
             hide_sender_images: value.hide_sender_images,
-            image_proxy: value.image_proxy,
+            image_proxy: value.image_proxy.0,
             inherit_parent_folder_color: value.inherit_parent_folder_color,
             message_buttons: value.message_buttons.into(),
             mobile_settings: value.mobile_settings.map(Into::into),

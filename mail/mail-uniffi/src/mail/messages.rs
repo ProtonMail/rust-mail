@@ -15,7 +15,7 @@ use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::PaginatorSearchOptions;
 use crate::core::datatypes::{Id, RemoteId, UnixTimestamp};
 use crate::errors::{
-    ActionError, BodyOutputResult, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult,
+    ActionError, AttachmentDataResult, BodyOutputResult, ProtonError, VoidActionResult,
 };
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::mail::datatypes::{LabelAsOutput, Undo};
@@ -130,11 +130,11 @@ impl DecryptedMessage {
     /// from the cache or the attachment with `cid` does not exist.
     //NOTE: iOS request we share the same result types between
     // this function and the Draft equivalent.
-    #[returns(EmbeddedAttachmentInfoResult)]
+    #[returns(AttachmentDataResult)]
     pub async fn get_embedded_attachment(
         self: Arc<Self>,
         cid: String,
-    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+    ) -> Result<AttachmentData, ProtonError> {
         uniffi_async(async move {
             let ctx = self.ctx()?;
             let att = self
@@ -142,11 +142,31 @@ impl DecryptedMessage {
                 .get_embedded_attachment(&ctx, &ContentId::from(cid))
                 .await
                 .map_err(RealProtonMailError::from)?;
-            Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
+            Ok::<_, RealProtonMailError>(AttachmentData {
                 data: att.data,
                 mime: att.mime,
-                height: att.height,
-                width: att.width,
+            })
+        })
+        .await
+        .map_err(ProtonError::from)
+        .into()
+    }
+
+    /// Load a remote image (potentially proxied) or embedded attachment in the email body.
+    ///
+    /// This will not resolve images in the fs.
+    #[returns(AttachmentDataResult)]
+    pub async fn load_image(self: Arc<Self>, url: String) -> Result<AttachmentData, ProtonError> {
+        uniffi_async(async move {
+            let ctx = self.ctx()?;
+            let att = self
+                .body
+                .load_image_from_str(&ctx, &url)
+                .await
+                .map_err(RealProtonMailError::from)?;
+            Ok::<_, RealProtonMailError>(AttachmentData {
+                data: att.data,
+                mime: att.mime,
             })
         })
         .await
@@ -1094,12 +1114,10 @@ pub async fn report_phishing(mailbox: Arc<Mailbox>, message_id: Id) -> Result<()
 
 /// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.
 #[derive(Clone, uniffi::Record)]
-pub struct EmbeddedAttachmentInfo {
+pub struct AttachmentData {
     /// The bytes of the attachment
     pub data: Vec<u8>,
     pub mime: String,
-    pub height: Option<String>,
-    pub width: Option<String>,
 }
 
 /// Change Labels of a list of messages and optionally archive them.

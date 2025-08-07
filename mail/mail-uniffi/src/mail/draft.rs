@@ -5,9 +5,9 @@ mod recipients;
 use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
-    DraftCancelScheduleSendError, DraftDiscardError, DraftExpirationError, DraftOpenError,
-    DraftPasswordError, DraftSaveError, DraftSendError, DraftSenderAddressChangeError,
-    DraftUndoSendError, EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult,
+    AttachmentDataResult, DraftCancelScheduleSendError, DraftDiscardError, DraftExpirationError,
+    DraftOpenError, DraftPasswordError, DraftSaveError, DraftSendError,
+    DraftSenderAddressChangeError, DraftUndoSendError, ProtonError, VoidDraftDiscardResult,
     VoidDraftExpirationResult, VoidDraftPasswordResult, VoidDraftSaveResult, VoidDraftSendResult,
     VoidDraftUndoSendResult,
 };
@@ -15,7 +15,7 @@ use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
 use crate::mail::draft::attachments::AttachmentList;
 use crate::mail::draft::observer::DraftSendResult;
-use crate::mail::messages::{EmbeddedAttachmentInfo, ThemeOpts};
+use crate::mail::messages::{AttachmentData, ThemeOpts};
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
 use chrono::Local;
@@ -438,11 +438,11 @@ impl Draft {
     /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
     //NOTE: iOS request we share the same result types between
     // this function and the DecryptedMessageBody equivalent.
-    #[returns(EmbeddedAttachmentInfoResult)]
+    #[returns(AttachmentDataResult)]
     pub async fn get_embedded_attachment(
         self: Arc<Self>,
         cid: String,
-    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+    ) -> Result<AttachmentData, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
@@ -455,11 +455,11 @@ impl Draft {
     /// Same as [`get_embedded_attachment()`], but synchronous.
     //NOTE: iOS request we share the same result types between
     // this function and the DecryptedMessageBody equivalent.
-    #[returns(EmbeddedAttachmentInfoResult)]
+    #[returns(AttachmentDataResult)]
     pub fn get_embedded_attachment_sync(
         self: Arc<Self>,
         cid: String,
-    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+    ) -> Result<AttachmentData, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
@@ -825,17 +825,15 @@ impl Draft {
         &self,
         ctx: &MailUserContext,
         cid: String,
-    ) -> Result<EmbeddedAttachmentInfo, RealProtonMailError> {
+    ) -> Result<AttachmentData, RealProtonMailError> {
         let draft = self.instance.read().await;
         let att = draft
             .get_embedded_attachment(ctx, &ContentId::from(cid))
             .await
             .map_err(RealProtonMailError::from)?;
-        Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
+        Ok::<_, RealProtonMailError>(AttachmentData {
             data: att.data,
             mime: att.mime,
-            height: att.height,
-            width: att.width,
         })
     }
 }

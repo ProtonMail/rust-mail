@@ -7,7 +7,7 @@ use crate::datatypes::{
     MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved, SpamAction,
     SwipeAction, ViewLayout, ViewMode,
 };
-use proton_core_common::datatypes::InitializationKey;
+use proton_core_common::datatypes::{ImageProxy, InitializationKey};
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent,
 };
@@ -93,7 +93,7 @@ pub struct MailSettings {
     pub hide_sender_images: bool,
 
     #[DbField]
-    pub image_proxy: u32,
+    pub image_proxy: ImageProxy,
 
     #[DbField]
     #[default = true]
@@ -243,6 +243,10 @@ impl MailSettings {
         self.signature = signature.into();
         self
     }
+
+    pub fn is_proxy_enabled(&self) -> bool {
+        self.image_proxy.contains(ImageProxy::ENABLED)
+    }
 }
 
 pub struct MailSettingsWatcher {
@@ -286,7 +290,7 @@ impl From<ApiMailSettings> for MailSettings {
             hide_remote_images: value.hide_remote_images,
             hide_embedded_images: value.hide_embedded_images,
             hide_sender_images: value.hide_sender_images,
-            image_proxy: value.image_proxy,
+            image_proxy: ImageProxy(value.image_proxy),
             inherit_parent_folder_color: value.inherit_parent_folder_color,
             message_buttons: value.message_buttons.into(),
             mobile_settings: value.mobile_settings.map(Into::into),

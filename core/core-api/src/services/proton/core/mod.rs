@@ -257,4 +257,7 @@ pub trait ProtonCore {
     /// This method will return an error if the request fails.
     ///
     async fn post_report_bug(&self, body: PostReportBug) -> ApiServiceResult<()>;
+
+    /// Gets an image through proton's proxy.
+    async fn proxy_img(&self, url: &url::Url) -> ApiServiceResult<Vec<u8>>;
 }

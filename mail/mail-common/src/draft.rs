@@ -9,9 +9,9 @@ use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
 use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
-    Attachment, AttachmentType, CustomSettings, DraftAttachmentMetadata,
+    Attachment, AttachmentData, AttachmentType, CustomSettings, DraftAttachmentMetadata,
     DraftAttachmentUploadState, DraftMetadata, DraftSendResult, DraftSendResultOrigin,
-    EmbeddedAttachmentInfo, MailSettings, Message, MetadataId,
+    MailSettings, Message, MetadataId,
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::Context;
@@ -1295,7 +1295,7 @@ impl Draft {
         &self,
         ctx: &MailUserContext,
         cid: &ContentId,
-    ) -> MailContextResult<EmbeddedAttachmentInfo> {
+    ) -> MailContextResult<AttachmentData> {
         let mut tether = ctx.user_stash().connection();
 
         let attachments =
@@ -1307,11 +1307,9 @@ impl Draft {
         {
             let data = attachment.content_data(ctx, &mut tether).await?;
 
-            Ok(EmbeddedAttachmentInfo {
+            Ok(AttachmentData {
                 data,
                 mime: attachment.mime_type.to_string(),
-                height: attachment.image_height.clone(),
-                width: attachment.image_width.clone(),
             })
         } else {
             Err(AppError::UnknownCid(cid.clone(), vec![]).into())
