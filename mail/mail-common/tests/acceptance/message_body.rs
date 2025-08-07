@@ -1,11 +1,9 @@
-use proton_core_api::services::proton::{LabelId, UserId};
-use std::collections::HashSet;
-use std::str::FromStr;
-
 use indoc::formatdoc;
 use itertools::Itertools;
+use proton_core_api::services::proton::{LabelId, UserId};
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::attachment::MimeType;
+use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{AttachmentMetadata, SystemLabelId};
 use proton_mail_common::models::{Attachment, Message};
 use proton_mail_common::test_utils::message_body::{
@@ -16,6 +14,8 @@ use proton_mail_common::test_utils::message_body::{
 use proton_mail_common::test_utils::test_context::MailTestContext;
 use proton_mail_common::{AppError, MailContextError, Mailbox};
 use stash::orm::Model;
+use std::collections::HashSet;
+use std::str::FromStr;
 
 #[tokio::test]
 async fn mailbox_message_body_simple() {
@@ -343,4 +343,56 @@ async fn pgp_mime_attachments_retrievable_via_get_attachments() {
             "Attachment {index} does not match"
         )
     }
+}
+
+#[tokio::test]
+async fn message_body_failed_to_decrypt() {
+    // This test fetches a message body twice and expects it to be called only once
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = message_body_test_params();
+
+    let mut message = message_body_test_message_simple();
+    message.body.body = "RANDOM CONTENT -- WON'T DECRYPT".into();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    let (saved_message, decrypted_body) = Message::force_sync_message_and_body(
+        &user_ctx,
+        message.metadata.id.clone(),
+        false,
+        &mut tether,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(decrypted_body.body, message.body.body);
+    assert!(decrypted_body.failed_to_decrypt());
+
+    // check it is loaded correctly from the cache.
+    let decrypted_body = saved_message
+        .fetch_message_body(&user_ctx, &mut tether)
+        .await
+        .unwrap();
+    assert_eq!(decrypted_body.body, message.body.body);
+    assert!(decrypted_body.failed_to_decrypt());
+
+    let body_output = decrypted_body
+        .transformed("", Default::default(), &tether)
+        .await;
+    assert!(
+        body_output
+            .body_banners
+            .contains(&MessageBanner::UnableToDecrypt)
+    );
+    assert_eq!(body_output.body, message.body.body);
 }

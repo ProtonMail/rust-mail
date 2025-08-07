@@ -1326,7 +1326,13 @@ impl Message {
         trace!("Message successfully decrypted. Caching...");
 
         tx.run_tx(async |tx| {
-            Self::store_decrypted_message_body(self.id(), decrypted.body.clone(), tx).await?;
+            Self::store_decrypted_message_body(
+                self.id(),
+                decrypted.body.clone(),
+                decrypted.decryption_error.clone(),
+                tx,
+            )
+            .await?;
 
             Ok(())
         })
@@ -2059,7 +2065,13 @@ impl Message {
         let body = decrypted.body.clone();
         tether
             .tx::<_, _, StashError>(async |tx| {
-                Self::store_decrypted_message_body(message.id(), body, tx).await?;
+                Self::store_decrypted_message_body(
+                    message.id(),
+                    body,
+                    decrypted.decryption_error.clone(),
+                    tx,
+                )
+                .await?;
                 Ok(())
             })
             .await?;
@@ -2158,7 +2170,7 @@ impl Message {
             return Ok(None);
         };
 
-        let Some(body) = Self::load_decrypted_message_body(local_id, tether)
+        let Some((body, decryption_error)) = Self::load_decrypted_message_body(local_id, tether)
             .await
             .context("Failed to retrieve decrypted message body from db")?
         else {
@@ -2170,6 +2182,7 @@ impl Message {
             metadata,
             None,
             address_id.clone(),
+            decryption_error,
         )))
     }
 
@@ -2181,27 +2194,45 @@ impl Message {
     pub(crate) async fn load_decrypted_message_body(
         local_id: LocalMessageId,
         tether: &Tether,
-    ) -> Result<Option<String>, StashError> {
-        tether
-            .query_value_opt::<String>(
+    ) -> Result<Option<(String, Option<String>)>, StashError> {
+        #[derive(DbRecord, Eq, PartialEq, Clone, Debug)]
+        struct DecryptedMessageData {
+            #[DbField]
+            pub body: String,
+            #[DbField]
+            pub decryption_error: Option<String>,
+        }
+
+        let results = tether
+            .query::<_, DecryptedMessageData>(
                 indoc! { "
-                    SELECT body AS value
+                    SELECT body, decryption_error
                     FROM message_body
                     WHERE message_id = ?"
                 },
                 params![local_id],
             )
-            .await
+            .await?;
+        if results.is_empty() {
+            return Ok(None);
+        };
+
+        Ok(results
+            .into_iter()
+            .next()
+            .map(|v| Some((v.body, v.decryption_error)))
+            .expect("Should be present"))
     }
 
     pub async fn store_decrypted_message_body(
         local_id: LocalMessageId,
         message: String,
+        decryption_error: Option<String>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         bond.execute(
-            "INSERT OR REPLACE INTO message_body (message_id, body) VALUES (?,?)",
-            params![local_id, message],
+            "INSERT OR REPLACE INTO message_body (message_id, body, decryption_error) VALUES (?,?, ?)",
+            params![local_id, message, decryption_error],
         )
         .await?;
         Ok(())

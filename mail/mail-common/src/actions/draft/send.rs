@@ -381,7 +381,7 @@ impl Send {
             .unwrap_or_default();
 
         // Load body - it is not encrypted.
-        let Some(stored_message_body) =
+        let Some((stored_message_body, _)) =
             Message::load_decrypted_message_body(message_metadata.id(), guard.tether()).await?
         else {
             return Err(SendError::MessageBodyMissing(message_metadata.id()).into());

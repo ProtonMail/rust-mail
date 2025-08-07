@@ -365,7 +365,7 @@ impl Handler for SaveHandler {
             message
         };
 
-        Message::store_decrypted_message_body(message.id(), action.body.clone(), bond)
+        Message::store_decrypted_message_body(message.id(), action.body.clone(), None, bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to store draft body in cache :{e:?}");

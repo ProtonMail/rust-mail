@@ -613,6 +613,7 @@ async fn create_reply_with_mime_and_body_and_message(
         pgp_subject: None,
         address_id: address.remote_id.clone().unwrap(),
         in_flight: Default::default(),
+        decryption_error: None,
     };
 
     let resolver = NullContactGroupResolver {};

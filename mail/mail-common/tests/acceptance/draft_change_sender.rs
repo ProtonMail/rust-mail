@@ -200,7 +200,8 @@ async fn change_sender_address_with_alias() {
         .tx(async |tx| {
             message.save(tx).await.unwrap();
             message_body_metadata.save(tx).await.unwrap();
-            Message::store_decrypted_message_body(message.id(), "Hello world".into(), tx).await
+            Message::store_decrypted_message_body(message.id(), "Hello world".into(), None, tx)
+                .await
         })
         .await
         .unwrap();

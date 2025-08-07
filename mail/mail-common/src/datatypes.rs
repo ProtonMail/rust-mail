@@ -55,7 +55,6 @@ pub mod theme;
 
 use stash::orm::Model;
 
-use anyhow::Context;
 pub use assigned_actions::*;
 pub use contextual_conversation::*;
 use derive_more::derive::TryFrom;
@@ -1028,95 +1027,111 @@ impl EncryptedMessageBody {
             .upgrade()
             .ok_or(MailContextError::MissingContext)?;
 
-        // TODO: Verify signature.
-        let (decrypted_body, _) = self
-            .decrypt(&pgp, &address_keys)
-            .context("Failed to decrypt message body")
-            .map_err(|e| {
+        match self.decrypt(&pgp, &address_keys) {
+            Ok((decrypted_body, _)) => {
+                // TODO: Verify signature.
+                match decrypted_body {
+                    DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
+                        DecryptedMessageBody::new_prefetching(
+                            body,
+                            self.metadata,
+                            None,
+                            address_id.clone(),
+                            None,
+                            ctx,
+                        )
+                    } else {
+                        DecryptedMessageBody::new_without_prefetching(
+                            body,
+                            self.metadata,
+                            None,
+                            address_id.clone(),
+                            None,
+                        )
+                    }),
+
+                    DecryptedBody::Mime(ProcessedMessage {
+                        body,
+                        // We store the pgp attachments as normal attachments
+                        attachments: pgp_attachments,
+                        encrypted_subject,
+                        ..
+                    }) => {
+                        tracing::info!(
+                            "Message is PGP Encrypted with {} PGP attachment",
+                            pgp_attachments.len()
+                        );
+                        // We create the models first to keep the tx open for less time.
+                        let mut model_attachments = vec![];
+                        for att in pgp_attachments {
+                            let model_att = Attachment {
+                                attachment_type: AttachmentType::Pgp,
+                                content_id: Some(ContentId::from(att.content_id)),
+                                disposition: att.disposition.into(),
+                                filename: att.name,
+                                size: att.size as u64,
+                                mime_type: attachment::MimeType::from_str(&att.mime_type)
+                                    .unwrap_or_default(),
+                                local_message_id: self.metadata.local_message_id,
+                                remote_message_id: self.metadata.remote_message_id.clone(),
+                                ..Default::default()
+                            };
+                            model_attachments.push((model_att, att.data));
+                        }
+
+                        let mut tether = ctx.user_stash().connection();
+                        tether
+                            .tx::<_, _, MailContextError>(async |tx| {
+                                for (mut att, data) in model_attachments {
+                                    att.save(tx).await?;
+                                    Attachment::store_in_cache(
+                                        &ctx,
+                                        &att.filename,
+                                        att.id(),
+                                        data,
+                                        tx,
+                                    )
+                                    .await?;
+                                    tracing::info!("Created PGP attachment {:?}", att.id());
+                                    self.metadata.attachments.push(att);
+                                }
+                                Ok(self.metadata.save(tx).await?)
+                            })
+                            .await?;
+
+                        Ok(if with_attachment_prefetch {
+                            DecryptedMessageBody::new_prefetching(
+                                body,
+                                self.metadata,
+                                encrypted_subject,
+                                address_id.clone(),
+                                None,
+                                ctx,
+                            )
+                        } else {
+                            DecryptedMessageBody::new_without_prefetching(
+                                body,
+                                self.metadata,
+                                encrypted_subject,
+                                address_id.clone(),
+                                None,
+                            )
+                        })
+                    }
+                }
+            }
+            Err(e) => {
                 error!(
                     "Failed to decrypt message body ({:?}): {e:?}",
                     self.metadata.remote_message_id,
                 );
-                MailContextError::Crypto
-            })?;
 
-        match decrypted_body {
-            DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
-                DecryptedMessageBody::new_prefetching(
-                    body,
+                Ok(DecryptedMessageBody::not_decryptable(
+                    self.encrypted_body,
                     self.metadata,
-                    None,
                     address_id.clone(),
-                    ctx,
-                )
-            } else {
-                DecryptedMessageBody::new_without_prefetching(
-                    body,
-                    self.metadata,
-                    None,
-                    address_id.clone(),
-                )
-            }),
-
-            DecryptedBody::Mime(ProcessedMessage {
-                body,
-                // We store the pgp attachments as normal attachments
-                attachments: pgp_attachments,
-                encrypted_subject,
-                ..
-            }) => {
-                tracing::info!(
-                    "Message is PGP Encrypted with {} PGP attachment",
-                    pgp_attachments.len()
-                );
-                // We create the models first to keep the tx open for less time.
-                let mut model_attachments = vec![];
-                for att in pgp_attachments {
-                    let model_att = Attachment {
-                        attachment_type: AttachmentType::Pgp,
-                        content_id: Some(ContentId::from(att.content_id)),
-                        disposition: att.disposition.into(),
-                        filename: att.name,
-                        size: att.size as u64,
-                        mime_type: attachment::MimeType::from_str(&att.mime_type)
-                            .unwrap_or_default(),
-                        local_message_id: self.metadata.local_message_id,
-                        remote_message_id: self.metadata.remote_message_id.clone(),
-                        ..Default::default()
-                    };
-                    model_attachments.push((model_att, att.data));
-                }
-
-                let mut tether = ctx.user_stash().connection();
-                tether
-                    .tx::<_, _, MailContextError>(async |tx| {
-                        for (mut att, data) in model_attachments {
-                            att.save(tx).await?;
-                            Attachment::store_in_cache(&ctx, &att.filename, att.id(), data, tx)
-                                .await?;
-                            tracing::info!("Created PGP attachment {:?}", att.id());
-                            self.metadata.attachments.push(att);
-                        }
-                        Ok(self.metadata.save(tx).await?)
-                    })
-                    .await?;
-
-                Ok(if with_attachment_prefetch {
-                    DecryptedMessageBody::new_prefetching(
-                        body,
-                        self.metadata,
-                        encrypted_subject,
-                        address_id.clone(),
-                        ctx,
-                    )
-                } else {
-                    DecryptedMessageBody::new_without_prefetching(
-                        body,
-                        self.metadata,
-                        encrypted_subject,
-                        address_id.clone(),
-                    )
-                })
+                    e.to_string(),
+                ))
             }
         }
     }

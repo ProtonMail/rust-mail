@@ -168,6 +168,7 @@ pub struct DecryptedMessageBody {
     pub metadata: MessageBodyMetadata,
     pub pgp_subject: Option<String>,
     pub address_id: AddressId,
+    pub decryption_error: Option<String>,
 
     /// Since the clients are holding on to this, we can request the attachments when we are
     /// decrypyting the message so that the data is ready for when they request it.
@@ -188,6 +189,7 @@ impl DecryptedMessageBody {
         metadata: MessageBodyMetadata,
         pgp_subject: Option<String>,
         address_id: AddressId,
+        decryption_error: Option<String>,
         ctx: Arc<MailUserContext>,
     ) -> Self {
         let in_flight = metadata
@@ -218,6 +220,7 @@ impl DecryptedMessageBody {
             pgp_subject,
             address_id,
             in_flight: Mutex::new(in_flight),
+            decryption_error,
         }
     }
 
@@ -228,6 +231,7 @@ impl DecryptedMessageBody {
         metadata: MessageBodyMetadata,
         pgp_subject: Option<String>,
         address_id: AddressId,
+        decryption_error: Option<String>,
     ) -> Self {
         Self {
             body,
@@ -235,7 +239,17 @@ impl DecryptedMessageBody {
             pgp_subject,
             address_id,
             in_flight: Default::default(),
+            decryption_error,
         }
+    }
+
+    pub fn not_decryptable(
+        body: String,
+        metadata: MessageBodyMetadata,
+        address_id: AddressId,
+        error: String,
+    ) -> Self {
+        Self::new_without_prefetching(body, metadata, None, address_id, Some(error))
     }
 
     /// Load a remote image (potentially proxied) or embedded attachment in the email body.
@@ -365,7 +379,7 @@ impl DecryptedMessageBody {
         // FIXME:(perf) settings get loaded twice.
         let resolved = opts.resolve(tether).await;
 
-        let banners = if let Some(id) = self.metadata.local_message_id {
+        let mut banners = if let Some(id) = self.metadata.local_message_id {
             if let Ok(Some(message)) = Message::load(id, tether).await {
                 message.get_banners(tether).await
             } else {
@@ -374,6 +388,20 @@ impl DecryptedMessageBody {
         } else {
             vec![]
         };
+
+        if self.failed_to_decrypt() {
+            banners.push(MessageBanner::UnableToDecrypt);
+            return BodyOutput {
+                body: self.body.to_string(),
+                had_blockquote: false,
+                tags_stripped: 0,
+                utm_stripped: 0,
+                remote_images_disabled: 0,
+                embedded_images_disabled: 0,
+                transform_opts: Default::default(),
+                body_banners: banners,
+            };
+        }
 
         transform_html_with_banners(
             sender,
@@ -451,6 +479,10 @@ impl DecryptedMessageBody {
         }
 
         Ok(None)
+    }
+
+    pub fn failed_to_decrypt(&self) -> bool {
+        self.decryption_error.is_some()
     }
 }
 

@@ -220,6 +220,7 @@ async fn banners() {
             Message::store_decrypted_message_body(
                 msg_normal.id(),
                 "im a nigerian prince, click this link".into(),
+                None,
                 tx,
             )
             .await
