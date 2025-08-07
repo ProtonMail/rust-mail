@@ -5,7 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.119.0] - 2025-08-07
+
+### Changed
+
+- Remove the following functions: `remove_label_from_conversations` `apply_label_to_conversations` `remove_label_from_messages` `apply_label_to_messages`
+
+### Features
+
+- [ET-3094] Limit simultaneously logged in free account count
+- [ET-4106] Tidied up payment observability events.
+- Implement proxying and add load_image fn which proxies images. s/embeddedattachmentinfo/attachmentdata.
+
+### Fixes
+
+- [ET-3926] Undo move and rollback correctly mark as unread and undoes the unlabelling
+- [ET-4100] Only fetch message metadata when resolving remote id
+- Move_conversations and move_messages no longer return voidactionresult
+- [ET-4124] Fetch event in "groups"
+- [ET-4125] Do not prefetch attachments when prefetching message body
+
+
 ## [mail-uniffi-v0.118.0] - 2025-08-06
+
+### Features
+
+- Parallel default action groups
+- Et-3917 sign-in: add observability
+- [ET-4083] Expiration time options
+- [ET-3911] Add record_human_verification_view_loading_result function
+- [ET-3955] Added payment specific observability events.
 
 ### Fixes
 
@@ -27,19 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- Parallel default action groups
-- Et-3917 sign-in: add observability
-- [ET-4083] Expiration time options
-- [ET-3911] Add record_human_verification_view_loading_result function
-- [ET-3955] Added payment specific observability events.
 - [ET-4084] Draft recipient expiration feature check
-
-
-## [mail-uniffi-v0.115.7] - 2025-08-05
-
-### Fixes
-
-- Rsvp/uniffi: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.116.0] - 2025-08-05
@@ -55,11 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4011] Improve error handling for attachment uploads
 
 
-## [mail-uniffi-v0.115.6] - 2025-08-04
+## [mail-uniffi-v0.115.7] - 2025-08-05
 
 ### Fixes
 
-- Rsvp: support attendee-less reminders
+- Rsvp/uniffi: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.115.5] - 2025-08-04
@@ -78,6 +95,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4052] Snooze is not available as an action in allmail label
 - Rsvp: fetch address keys of the address that has created the calendar
 - Disable free account count post login check
+
+
+## [mail-uniffi-v0.115.6] - 2025-08-04
+
+### Fixes
+
+- Rsvp: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.115.3] - 2025-08-03
