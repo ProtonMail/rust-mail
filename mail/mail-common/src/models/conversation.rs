@@ -1880,6 +1880,21 @@ impl Conversation {
         Ok(())
     }
 
+    pub async fn read_snooze_time(
+        id: LocalConversationId,
+        tether: &Tether,
+    ) -> Result<Option<UnixTimestamp>, StashError> {
+        let snoozed_id = SystemLabel::Snoozed
+            .local_id(tether)
+            .await?
+            .expect("Snoozed should be set");
+        let snooze_time =
+            ConversationLabel::find_by_conversation_and_label(&id, snoozed_id, tether)
+                .await?
+                .map(|l| l.context_snooze_time);
+        Ok(snooze_time)
+    }
+
     /// Given a list of conversations check if there are any missing dependencies like undownloaded
     /// labels.
     ///

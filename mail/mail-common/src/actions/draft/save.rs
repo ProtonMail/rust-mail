@@ -818,6 +818,7 @@ impl Save {
             },
             size: body_len,
             snooze_time: Default::default(),
+            snoozed_until: None,
             display_snooze_reminder: false,
             subject: self.subject.clone(),
             time,
