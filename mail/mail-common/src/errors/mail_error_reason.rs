@@ -249,7 +249,8 @@ pub enum DraftPasswordErrorReason {
 #[derive(Debug)]
 pub enum DraftExpirationErrorReason {
     ExpirationTimeInThePast,
-    ExpirationTimeExceeds30Days,
+    ExpirationTimeLessThan15Min,
+    ExpirationTimeExceeds28Days,
 }
 
 /// Specific Reason for error occurrence within Event Loop.

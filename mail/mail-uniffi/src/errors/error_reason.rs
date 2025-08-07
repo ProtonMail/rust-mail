@@ -341,6 +341,7 @@ impl From<RealDraftPasswordErrorReason> for DraftPasswordErrorReason {
 #[derive(Debug, UniffiEnum)]
 pub enum DraftExpirationErrorReason {
     ExpirationTimeInThePast,
+    ExpirationTimeLessThan15Min,
     ExpirationTimeExceeds30Days,
 }
 
@@ -350,8 +351,11 @@ impl From<RealDraftExpirationErrorReason> for DraftExpirationErrorReason {
             RealDraftExpirationErrorReason::ExpirationTimeInThePast => {
                 Self::ExpirationTimeInThePast
             }
-            RealDraftExpirationErrorReason::ExpirationTimeExceeds30Days => {
+            RealDraftExpirationErrorReason::ExpirationTimeExceeds28Days => {
                 Self::ExpirationTimeExceeds30Days
+            }
+            RealDraftExpirationErrorReason::ExpirationTimeLessThan15Min => {
+                Self::ExpirationTimeLessThan15Min
             }
         }
     }

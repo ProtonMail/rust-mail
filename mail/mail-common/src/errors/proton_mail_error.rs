@@ -730,9 +730,14 @@ impl From<DraftExpirationError> for ProtonMailError {
                     DraftExpirationErrorReason::ExpirationTimeInThePast,
                 ))
             }
-            ExpirationError::ExpirationTimeExceeds30Days => {
+            ExpirationError::ExpirationTimeExceeds28Days => {
                 ProtonMailError::Reason(MailErrorReason::DraftExpirationReason(
-                    DraftExpirationErrorReason::ExpirationTimeExceeds30Days,
+                    DraftExpirationErrorReason::ExpirationTimeExceeds28Days,
+                ))
+            }
+            ExpirationError::ExpirationTimeLessThan15Min => {
+                ProtonMailError::Reason(MailErrorReason::DraftExpirationReason(
+                    DraftExpirationErrorReason::ExpirationTimeLessThan15Min,
                 ))
             }
         }
