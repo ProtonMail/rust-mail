@@ -61,6 +61,9 @@ pub enum MessageBanner {
 
     /// The message contains remote content (e.g., external images or links).
     RemoteContent,
+
+    /// The message could not be decrypted.
+    UnableToDecrypt,
 }
 
 impl Message {

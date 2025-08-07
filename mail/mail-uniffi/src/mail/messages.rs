@@ -412,6 +412,9 @@ pub enum MessageBanner {
 
     /// The message contains remote content (e.g., external images or links).
     RemoteContent,
+
+    /// The message could not be decrypted
+    UnableToDecrypt,
 }
 
 impl From<RealMessageBanner> for MessageBanner {
@@ -435,6 +438,7 @@ impl From<RealMessageBanner> for MessageBanner {
             },
             RealMessageBanner::EmbeddedImages => Self::EmbeddedImages,
             RealMessageBanner::RemoteContent => Self::RemoteContent,
+            RealMessageBanner::UnableToDecrypt => Self::UnableToDecrypt,
         }
     }
 }

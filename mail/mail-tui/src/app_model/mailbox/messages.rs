@@ -1066,6 +1066,11 @@ impl DecryptedMessage {
                     "> This message has been snoozed until {}",
                     date_from_timestamp(*timestamp)
                 )),
+                MessageBanner::UnableToDecrypt => ListItem::from(
+                    Span::from("> This message could not be decrypted.")
+                        .bold()
+                        .fg(Color::Red),
+                ),
             })
             .collect();
 
