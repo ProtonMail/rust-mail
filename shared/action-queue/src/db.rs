@@ -2,7 +2,7 @@
 #[path = "tests/db.rs"]
 mod tests;
 
-use crate::action;
+use crate::action::{self, ActionGroup};
 use crate::action::{
     Action, ActionDependencyKey, ActionDependencyKeys, ActionId, Metadata, Priority, Resources,
     WriterGuardError,
@@ -253,6 +253,24 @@ impl StoredAction {
                 }
             }
         }
+    }
+
+    /// Delete all actions from the database within specified action group.
+    ///
+    /// # Warning
+    ///
+    /// This operation does not operate within execution guards. It is intended to be used
+    /// before queue executor is resumed (during app initialization). Use with caution.
+    pub async fn delete_all_in_group(
+        bond: &Bond<'_>,
+        group: ActionGroup,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            "DELETE FROM action_queue WHERE action_group = ?",
+            params![group.as_ref().to_owned()],
+        )
+        .await?;
+        Ok(())
     }
 
     /// Delete action with `id` from the database.

@@ -22,7 +22,7 @@ use events::subscriber::MailEventSubscriber;
 use initialization::InitializationMediator;
 use proton_account_api::password::PasswordFlow;
 use proton_action_queue::action::ActionGroup;
-use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
+use proton_action_queue::queue::{Queue, QueueAutoExecutorPool, QueueAutoTerminationPolicy};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
 use proton_core_api::services::proton::muon::rest::auth::v4::fido2;
@@ -227,14 +227,16 @@ impl MailUserContext {
 
             Origin::ShareExt => builder
                 .with_service(SendQueueExecutorPool {
-                    pool: QueueAutoExecutorPool::new(
+                    pool: QueueAutoExecutorPool::with_clear_start(
                         user_context.queue(),
                         &SHARE_EXT_ACTION_GROUP,
                         NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
                         online,
                         true,
                         user_context.as_ref(),
-                    ),
+                        QueueAutoTerminationPolicy::Never,
+                    )
+                    .await,
                 })
                 .with_cyclic_service(QueuesService::new),
         };
