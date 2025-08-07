@@ -1147,7 +1147,6 @@ pub async fn label_messages_as(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
-#[returns(VoidActionResult)]
 pub async fn move_messages(
     mailbox: Arc<Mailbox>,
     destination_id: Id,

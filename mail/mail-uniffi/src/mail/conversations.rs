@@ -483,7 +483,6 @@ pub async fn mark_conversations_as_unread(
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
-#[returns(VoidActionResult)]
 pub async fn move_conversations(
     mailbox: Arc<Mailbox>,
     label_id: Id,
