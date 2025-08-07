@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.120.0] - 2025-08-07
+
+### Changed
+
+- Move marking as read for snooze reminder to the common library
+- (breaking) rename `mail_uniffi::message::snooze_time` into `snoozed_until` and make field optional
+
+### Fixes
+
+- [ET-4142] Handle expiration time too soon error [breaking change]
+- [ET-4142] Expiration time should be between 15min and 28 days
+- Rsvp: support apple-style invites
+- [ET-4124] Check expiration time still valid when sending
+- [ET-4142] Report missing send error reasons
+- Rsvp: discriminate between network failures and missing events
+- [ET-4142] Do not set expiration time on drafts before send
+
+
 ## [mail-uniffi-v0.119.0] - 2025-08-07
 
 ### Changed
