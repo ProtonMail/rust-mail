@@ -359,6 +359,9 @@ impl From<DraftSendError> for ProtonMailError {
             DraftSendError::EOPasswordDecrypt => Self::Reason(MailErrorReason::DraftSendReason(
                 DraftSendErrorReason::EOPasswordDecrypt,
             )),
+            DraftSendError::ExpirationTimeTooSoon => Self::Reason(
+                MailErrorReason::DraftSendReason(DraftSendErrorReason::ExpirationTimeTooSoon),
+            ),
         }
     }
 }
@@ -728,9 +731,14 @@ impl From<DraftExpirationError> for ProtonMailError {
                     DraftExpirationErrorReason::ExpirationTimeInThePast,
                 ))
             }
-            ExpirationError::ExpirationTimeExceeds30Days => {
+            ExpirationError::ExpirationTimeExceeds28Days => {
                 ProtonMailError::Reason(MailErrorReason::DraftExpirationReason(
-                    DraftExpirationErrorReason::ExpirationTimeExceeds30Days,
+                    DraftExpirationErrorReason::ExpirationTimeExceeds28Days,
+                ))
+            }
+            ExpirationError::ExpirationTimeLessThan15Min => {
+                ProtonMailError::Reason(MailErrorReason::DraftExpirationReason(
+                    DraftExpirationErrorReason::ExpirationTimeLessThan15Min,
                 ))
             }
         }

@@ -70,6 +70,7 @@ pub use crate::draft::send::EoData;
 pub use send::ScheduleSendOptions;
 
 pub const MIN_PASSWORD_LEN: usize = 8;
+pub const MIN_EXPIRATION_TIME_SECONDS: u64 = 15 * 60; // 15 min
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -141,6 +142,8 @@ pub enum SendError {
     ScheduleSendMessageLimitExceeded,
     #[error("Failed to decrypt external encryption password")]
     EOPasswordDecrypt,
+    #[error("Expiration time was too soon")]
+    ExpirationTimeTooSoon,
 }
 
 impl From<SendError> for MailContextError {
@@ -382,8 +385,10 @@ pub enum ExpirationError {
     MetadataNotFound(MetadataId),
     #[error("Expiration time is older than the current time")]
     ExpirationTimeInThePast,
-    #[error("Expiration time exceeded 30 days")]
-    ExpirationTimeExceeds30Days,
+    #[error("Expiration time should be greater or egual to 15 min")]
+    ExpirationTimeLessThan15Min,
+    #[error("Expiration time exceeded 28 days")]
+    ExpirationTimeExceeds28Days,
 }
 
 impl From<ExpirationError> for MailContextError {
@@ -1745,18 +1750,23 @@ impl Draft {
         if let DraftExpirationTime::Custom(expiration_time) = expiration_time {
             let now = UnixTimestamp::now();
 
-            if now > expiration_time.into() {
+            let expiration_time_timestamp = UnixTimestamp::from(expiration_time);
+            if expiration_time_timestamp > expiration_time.into() {
                 return Err(ExpirationError::ExpirationTimeInThePast.into());
             }
 
-            let in_30_days =
-                ScheduleSendOptions::calculate_next(expiration_time, 30).map_err(|_| {
+            if expiration_time_timestamp < now.saturating_add(MIN_EXPIRATION_TIME_SECONDS) {
+                return Err(ExpirationError::ExpirationTimeLessThan15Min.into());
+            }
+
+            let in_28_days =
+                ScheduleSendOptions::calculate_next(expiration_time, 28).map_err(|_| {
                     error!("Failed to calculate 30 days into the future");
-                    ExpirationError::ExpirationTimeExceeds30Days
+                    ExpirationError::ExpirationTimeExceeds28Days
                 })?;
 
-            if expiration_time > in_30_days {
-                return Err(ExpirationError::ExpirationTimeExceeds30Days.into());
+            if expiration_time > in_28_days {
+                return Err(ExpirationError::ExpirationTimeExceeds28Days.into());
             }
         }
 

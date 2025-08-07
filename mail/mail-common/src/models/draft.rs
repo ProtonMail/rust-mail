@@ -649,6 +649,8 @@ pub enum DraftSendFailureSend {
     PackageError(String),
     MessageDoesNotExist,
     ScheduleSendExpired,
+    EOPasswordDecrypt,
+    ExpirationTimeTooSoon,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
@@ -720,6 +722,10 @@ impl DraftSendFailure {
                 SendError::ScheduleSendExpired => {
                     Self::Send(DraftSendFailureSend::ScheduleSendExpired)
                 }
+                SendError::ExpirationTimeTooSoon => {
+                    Self::Send(DraftSendFailureSend::ExpirationTimeTooSoon)
+                }
+                SendError::EOPasswordDecrypt => Self::Send(DraftSendFailureSend::EOPasswordDecrypt),
                 _ => Self::Internal,
             },
             Error::AttachmentUpload(e) => match e {
@@ -824,6 +830,12 @@ impl From<DraftSendFailure> for ProtonMailError {
                     }
                     DraftSendFailureSend::ScheduleSendExpired => {
                         DraftSendErrorReason::ScheduleSendExpired
+                    }
+                    DraftSendFailureSend::EOPasswordDecrypt => {
+                        DraftSendErrorReason::EOPasswordDecrypt
+                    }
+                    DraftSendFailureSend::ExpirationTimeTooSoon => {
+                        DraftSendErrorReason::ExpirationTimeTooSoon
                     }
                 }))
             }

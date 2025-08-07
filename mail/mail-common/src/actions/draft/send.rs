@@ -4,7 +4,9 @@ use crate::actions::draft::{
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
 use crate::draft::send::{EoData, MailType, build_packages, load_prefs};
-use crate::draft::{Draft, ReplyMode, SendError, draft_attachment_staging_path};
+use crate::draft::{
+    Draft, MIN_EXPIRATION_TIME_SECONDS, ReplyMode, SendError, draft_attachment_staging_path,
+};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
     DraftSendResultOrigin, MailSettings, Message, MessageCounters, MetadataId, RollbackItem,
@@ -339,6 +341,15 @@ impl Send {
             return Err(SendError::MetadataNotFound(action.metadata_id).into());
         };
 
+        let expiration_time = draft_metadata.expiration_time().to_optional_timestamp();
+
+        if let Some(expiration_time) = expiration_time {
+            let now = UnixTimestamp::now().saturating_add(MIN_EXPIRATION_TIME_SECONDS);
+            if expiration_time < now {
+                return Err(SendError::ExpirationTimeTooSoon.into());
+            }
+        }
+
         let Some(message_metadata) = Message::find_by_id(local_message_id, guard.tether()).await?
         else {
             return Err(AppError::MessageMissing(local_message_id).into());
@@ -442,10 +453,7 @@ impl Send {
                 auto_save_contacts,
                 Some(Duration::from_secs(mail_settings.delay_send_seconds as u64)),
                 action.delivery_time.map(|v| v.as_u64()),
-                draft_metadata
-                    .expiration_time()
-                    .to_optional_timestamp()
-                    .map(|v| v.as_u64()),
+                expiration_time.map(|v| v.as_u64()),
             )
             .await
         {
@@ -546,6 +554,8 @@ impl Send {
                     // We have no delivery time here, so we just return 0 to "cancel"
                     // all the checks that depend on this time in the future.
                     0
+                } else if proton_error.code == Mail::ExpirationTimeTooSoon as u32 {
+                    return Err(SendError::ExpirationTimeTooSoon.into());
                 } else {
                     error!("Failed to send send email request: {err:?}");
                     return Err(err.into());

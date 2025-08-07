@@ -146,6 +146,8 @@ pub enum DraftSendErrorReason {
     ScheduleSendMessageLimitExceeded,
     /// Failed to decrypt external encryption password
     EOPasswordDecrypt,
+    /// Expiration time is too soon
+    ExpirationTimeTooSoon,
 }
 
 impl From<RealDraftSaveErrorReason> for DraftSaveErrorReason {
@@ -187,6 +189,7 @@ impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
                 Self::ScheduleSendMessageLimitExceeded
             }
             RealDraftSendErrorReason::EOPasswordDecrypt => Self::EOPasswordDecrypt,
+            RealDraftSendErrorReason::ExpirationTimeTooSoon => Self::ExpirationTimeTooSoon,
         }
     }
 }
@@ -338,6 +341,7 @@ impl From<RealDraftPasswordErrorReason> for DraftPasswordErrorReason {
 #[derive(Debug, UniffiEnum)]
 pub enum DraftExpirationErrorReason {
     ExpirationTimeInThePast,
+    ExpirationTimeLessThan15Min,
     ExpirationTimeExceeds30Days,
 }
 
@@ -347,8 +351,11 @@ impl From<RealDraftExpirationErrorReason> for DraftExpirationErrorReason {
             RealDraftExpirationErrorReason::ExpirationTimeInThePast => {
                 Self::ExpirationTimeInThePast
             }
-            RealDraftExpirationErrorReason::ExpirationTimeExceeds30Days => {
+            RealDraftExpirationErrorReason::ExpirationTimeExceeds28Days => {
                 Self::ExpirationTimeExceeds30Days
+            }
+            RealDraftExpirationErrorReason::ExpirationTimeLessThan15Min => {
+                Self::ExpirationTimeLessThan15Min
             }
         }
     }
