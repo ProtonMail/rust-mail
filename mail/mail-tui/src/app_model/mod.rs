@@ -114,6 +114,21 @@ pub trait Popup {
     }
 }
 
+pub fn height_from_str(s: &str) -> Constraint {
+    Constraint::Length(s.lines().count().max(60).try_into().unwrap())
+}
+pub fn width_from_str(s: &str) -> Constraint {
+    Constraint::Length(
+        s.lines()
+            .map(|x| x.len())
+            .max()
+            .unwrap_or_default()
+            .max(60)
+            .try_into()
+            .unwrap(),
+    )
+}
+
 pub struct AppModel {
     context: Arc<MailContext>,
     state: AppState,
@@ -573,13 +588,22 @@ fn log_backtrace_on_panic() {
 }
 
 #[derive(Debug)]
-enum DialogText {
+pub enum DialogText {
     Error(anyhow::Error),
     Text(String),
 }
 
+impl DialogText {
+    fn to_string(&self) -> String {
+        match self {
+            DialogText::Error(error) => error.to_string(),
+            DialogText::Text(t) => t.clone(),
+        }
+    }
+}
+
 #[derive(Debug)]
-struct InfoDialog {
+pub struct InfoDialog {
     pub title: Option<String>,
     pub text: DialogText,
 }
@@ -636,7 +660,6 @@ impl Popup for InfoDialog {
 
         frame.render_widget(
             Paragraph::new(text)
-                .centered()
                 .white()
                 .bold()
                 .wrap(Wrap { trim: false }),
@@ -649,6 +672,14 @@ impl Popup for InfoDialog {
                 .bold(),
             instructions,
         );
+    }
+
+    fn height(&self) -> Constraint {
+        height_from_str(&self.text.to_string())
+    }
+
+    fn width(&self) -> Constraint {
+        width_from_str(&self.text.to_string())
     }
 }
 

@@ -30,7 +30,9 @@ use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts}
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::mail_scroller::{MailScroller, ScrollerUpdate};
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
-use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
+use proton_mail_common::models::{
+    Attachment, LabelWithCounters, Message as MailMessage, MessageBodyMetadata,
+};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::rsvp::RsvpEvent;
 use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox};
@@ -41,7 +43,9 @@ use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table};
 use stash::orm::Model;
+use stash::params;
 use stash::stash::Tether;
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -395,6 +399,27 @@ impl MessagesState {
                         state.content_scroll.scroll_down();
                         return Command::None;
                     }
+                }
+                KeyCode::Char('H') => {
+                    let tether = ctx.user_stash().connection();
+                    let id = state.msg.id();
+                    return Command::popup_from_future("Message Headers", async move {
+                        let mdata = MessageBodyMetadata::find_first(
+                            "WHERE local_message_id = ?",
+                            params![id],
+                            &tether,
+                        )
+                        .await?
+                        .context("Error getting metadata")?;
+
+                        let mut headers = String::new();
+                        for (k, v) in mdata.parsed_headers.headers {
+                            let v = v.to_string();
+                            writeln!(headers, r#"- "{k}": {v}"#)?;
+                        }
+
+                        Ok(headers)
+                    });
                 }
                 _ => {}
             }
@@ -764,6 +789,7 @@ impl MessagesState {
             vec.extend_from_slice(&[
                 ("Shift + ▲ ", "Scroll up in a message"),
                 ("Shift + ▼ ", "Scroll down in a message"),
+                ("Shift + h ", "View message headers"),
             ]);
         }
         vec.extend_from_slice(&[
