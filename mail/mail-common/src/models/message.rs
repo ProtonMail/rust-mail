@@ -1246,7 +1246,25 @@ impl Message {
     pub async fn fetch_message_body(
         &self,
         ctx: &MailUserContext,
+        tx: impl RunTransaction,
+    ) -> Result<DecryptedMessageBody, MailContextError> {
+        self.fetch_message_body_impl(ctx, tx, true, true).await
+    }
+
+    pub async fn prefetch_message_body(
+        &self,
+        ctx: &MailUserContext,
+        tx: impl RunTransaction,
+    ) -> Result<DecryptedMessageBody, MailContextError> {
+        self.fetch_message_body_impl(ctx, tx, false, false).await
+    }
+
+    async fn fetch_message_body_impl(
+        &self,
+        ctx: &MailUserContext,
         mut tx: impl RunTransaction,
+        with_attachment_prefetching: bool,
+        with_network_check: bool,
     ) -> Result<DecryptedMessageBody, MailContextError> {
         if let Some(decrypted) =
             Self::load_decrypted_message_from_cache(self.id(), &self.remote_address_id, tx.tether())
@@ -1261,7 +1279,7 @@ impl Message {
             return Err(AppError::MessageHasNoRemoteId(self.id()).into());
         };
 
-        if ctx.session().graceful_status().await.is_offline() {
+        if with_network_check && ctx.session().graceful_status().await.is_offline() {
             debug!("No connection, skipping sync");
             return Err(MailContextError::Api(ApiServiceError::NetworkError(
                 "No connection".to_owned(),
@@ -1278,7 +1296,7 @@ impl Message {
             &self.remote_address_id,
             encrypted_body,
             tx.tether(),
-            true,
+            with_attachment_prefetching,
         )
         .await?;
         trace!("Message successfully decrypted. Caching...");

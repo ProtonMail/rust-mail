@@ -88,7 +88,7 @@ impl Handler for PrefetchHandler {
             return Ok(());
         };
 
-        if let Err(e) = local_message.fetch_message_body(&ctx, &mut guard).await {
+        if let Err(e) = local_message.prefetch_message_body(&ctx, &mut guard).await {
             tracing::error!("Couldn't prefetch message body, details: `{e}`");
         };
 
