@@ -5,8 +5,9 @@ use itertools::Itertools;
 use non_empty_string::NonEmptyString;
 use proton_core_api::services::proton::PrivateString;
 use proton_mail_common::draft::recipients::{
-    GroupRecipient, OnBackgroundValidationComplete, Recipient as RealRecipient, RecipientEntry,
-    RecipientError, RecipientList, SingleRecipient, ValidatingRecipientList, ValidationState,
+    ExpirationFeatureSupportReport, GroupRecipient, OnBackgroundValidationComplete,
+    Recipient as RealRecipient, RecipientEntry, RecipientError, RecipientList, SingleRecipient,
+    ValidatingRecipientList, ValidationState,
 };
 use proton_mail_common::{MailContextError, MailUserContext};
 use std::sync::{Arc, Weak};
@@ -234,6 +235,10 @@ impl ComposerRecipientList {
             )
             .await?;
         Ok(())
+    }
+
+    pub(super) fn validate_expiration_feature(&self, report: &mut ExpirationFeatureSupportReport) {
+        self.list.validate_expiration_feature(report);
     }
 }
 

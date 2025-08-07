@@ -812,9 +812,12 @@ impl Draft {
                 return Ok(DraftRecipientExpirationFeatureReport::default());
             }
             let mut report = ExpirationFeatureSupportReport::default();
-            instance.to_list.validate_expiration_feature(&mut report);
-            instance.cc_list.validate_expiration_feature(&mut report);
-            instance.bcc_list.validate_expiration_feature(&mut report);
+            self.to_recipient_list
+                .validate_expiration_feature(&mut report);
+            self.cc_recipient_list
+                .validate_expiration_feature(&mut report);
+            self.bcc_recipient_list
+                .validate_expiration_feature(&mut report);
             Ok(report.into())
         })
     }

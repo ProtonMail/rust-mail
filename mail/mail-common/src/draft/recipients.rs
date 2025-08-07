@@ -843,11 +843,11 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
 ///
 async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> ValidationState {
     let options = GetKeysAllOptions {
-        email,
+        email: email.clone(),
         internal_only: Some(false),
     };
 
-    match ctx
+    let state = match ctx
         .user_context()
         .session()
         .api()
@@ -856,5 +856,7 @@ async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> Validat
     {
         Ok(response) => ValidationState::Valid(response.is_proton),
         Err(e) => ValidationState::from(e),
-    }
+    };
+    tracing::debug!("Validation state updated for {email}: {state:?}");
+    state
 }
