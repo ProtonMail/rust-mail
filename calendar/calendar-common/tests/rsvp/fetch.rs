@@ -1,13 +1,15 @@
 use crate::{
-    CALENDAR_ID, EVENT_ID, EVENT_UID, INVITE, RsvpEventIdExt, SHARED_EVENT, expected_event,
+    BAR_ATTENDEE_ID, BAR_ATTENDEE_TOKEN, CALENDAR_ID, EVENT_ID, EVENT_UID, FOO_ATTENDEE_ID,
+    FOO_ATTENDEE_TOKEN, INVITE, RsvpEventIdExt, SHARED_EVENT, expected_event,
     expected_offline_event, world,
 };
 use indoc::indoc;
 use jiff::{Zoned, civil::Weekday};
 use pretty_assertions as pa;
-use proton_calendar_api::ProtonCalendarMock;
+use proton_calendar_api::{CalendarAttendee, CalendarAttendeeStatus, ProtonCalendarMock};
 use proton_calendar_common::{
-    RsvpError, RsvpEventId, RsvpFetchError, RsvpIntent, RsvpProgress, RsvpRecency,
+    RsvpAttendee, RsvpError, RsvpEventId, RsvpFetchApiError, RsvpFetchError, RsvpIntent,
+    RsvpOrganizer, RsvpProgress, RsvpRecency,
 };
 use proton_core_api::{
     session::{Config, Session},
@@ -15,6 +17,7 @@ use proton_core_api::{
     status_watcher::StatusWatcher,
 };
 use proton_core_common::test_utils::test_context::MockApiEnv;
+use proton_ical as ical;
 use std::str::FromStr;
 
 /// Make sure we can understand RSVPs that have been auto-imported into the
@@ -386,7 +389,7 @@ async fn cancelled() {
 /// about that particular event will return "whoopsie, what's that?" - this test
 /// makes sure we can handle this scenario (probably like 0.1% of users though).
 #[tokio::test]
-async fn unknown() {
+async fn missing_event() {
     let world = world().await;
 
     world
@@ -410,7 +413,10 @@ async fn unknown() {
         .unwrap()
         .unwrap();
 
-    pa::assert_eq!(expected_offline_event(), actual);
+    pa::assert_eq!(
+        expected_offline_event(RsvpFetchApiError::EventMissing),
+        actual
+    );
 
     // We don't support creating events in the calendar, so non-auto-imported
     // can't be answered yet
@@ -419,7 +425,7 @@ async fn unknown() {
 
 /// Make sure that we fail gracefully if there's no internet connection.
 #[tokio::test]
-async fn offline() {
+async fn network_failure() {
     let mut world = world().await;
 
     world.sess = {
@@ -449,15 +455,17 @@ async fn offline() {
         .unwrap()
         .unwrap();
 
-    pa::assert_eq!(expected_offline_event(), actual);
+    pa::assert_eq!(
+        expected_offline_event(RsvpFetchApiError::NetworkFailure),
+        actual
+    );
 
     assert!(!actual.can_be_answered());
-    assert_eq!(RsvpRecency::Unknown, actual.recency);
 }
 
 #[tokio::test]
 #[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
-async fn organizer() {
+async fn user_is_organizer() {
     let world = world().await;
     let event = world.event(|event| event.basic());
 
@@ -494,7 +502,7 @@ async fn organizer() {
 
 #[tokio::test]
 #[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
-async fn party_crasher() {
+async fn user_is_party_crasher() {
     let world = world().await;
     let event = world.event(|event| event.basic());
 
@@ -528,6 +536,173 @@ async fn party_crasher() {
         actual,
         RsvpFetchError::Rsvp(RsvpError::NotInvited)
     ));
+}
+
+/// Make sure we fall back to organizer's another email address if the one
+/// present in the invite is invalid.
+#[tokio::test]
+#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
+async fn invalid_organizer() {
+    const INVITE: &str = indoc! {"
+        BEGIN:VCALENDAR
+        METHOD:REQUEST
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        DTSTAMP:20180101T080000Z
+        DTSTART:20180101T120000Z
+        DTEND:20180101T133000Z
+        DESCRIPTION:some description
+        SUMMARY:some title
+        LOCATION:some location
+        ORGANIZER:mailto:g'man
+        ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@pm.me
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
+    let world = world().await;
+    let event = world.event(|event| event.basic());
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
+        .await;
+
+    let actual = RsvpEventId::invite(INVITE)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "foo@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        RsvpOrganizer {
+            name: Some("Foo Localhosty".into()),
+            reply_email: "foo@pm.me".into(),
+            display_email: "foo@pm.me".into(),
+        },
+        actual.organizer
+    );
+}
+
+/// Make sure we can handle `ORGANIZER;EMAIL=...`, where the invitation provides
+/// a different "display email" and "reply email" for the organizer.
+#[tokio::test]
+async fn obfuscated_organizer() {
+    const INVITE: &str = indoc! {"
+        BEGIN:VCALENDAR
+        METHOD:REQUEST
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        DTSTAMP:20180101T080000Z
+        DTSTART:20180101T120000Z
+        DTEND:20180101T133000Z
+        DESCRIPTION:some description
+        SUMMARY:some title
+        LOCATION:some location
+        ORGANIZER;EMAIL=foo@pm.me:mailto:mcw2Yd8t@secret
+        ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@pm.me
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
+    const ATTENDEES_EVENT: &str = indoc! {"
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        ATTENDEE;CN=Foo;EMAIL=foo@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:mcw2Yd8t@secret
+        ATTENDEE;CN=Bar;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@pm.me
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
+    let world = world().await;
+
+    let event = world.event(|event| {
+        event
+            .with_id(EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
+            .with_shared_event(SHARED_EVENT)
+            .with_attendees_event(ATTENDEES_EVENT)
+            .with_attendees(vec![
+                CalendarAttendee {
+                    id: BAR_ATTENDEE_ID.into(),
+                    token: BAR_ATTENDEE_TOKEN.into(),
+                    status: CalendarAttendeeStatus::Unanswered,
+                },
+                CalendarAttendee {
+                    id: FOO_ATTENDEE_ID.into(),
+                    token: FOO_ATTENDEE_TOKEN.into(),
+                    status: CalendarAttendeeStatus::Maybe,
+                },
+            ])
+    });
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
+        .await;
+
+    let actual = RsvpEventId::invite(INVITE)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "foo@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        RsvpOrganizer {
+            name: Some("Foo Localhosty".into()),
+            reply_email: "mcw2Yd8t@secret".into(),
+            display_email: "foo@pm.me".into(),
+        },
+        actual.organizer
+    );
+
+    assert_eq!(
+        vec![RsvpAttendee {
+            id: Some(BAR_ATTENDEE_ID.into()),
+            token: Some(BAR_ATTENDEE_TOKEN.into()),
+            name: Some("Bar Localhosty".into()),
+            email: "bar@pm.me".into(),
+            status: Some(CalendarAttendeeStatus::Unanswered),
+            role: ical::Role::ReqParticipant,
+        }],
+        actual.attendees
+    );
 }
 
 #[tokio::test]

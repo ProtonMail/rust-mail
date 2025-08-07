@@ -9,6 +9,7 @@ pub struct Attendee {
     pub address: CalAddress,
     pub cn: Option<Cn>,
     pub cutype: Option<CuType>,
+    pub email: Option<Email>,
     pub role: Option<Role>,
     pub partstat: Option<PartStat>,
     pub rsvp: Option<Rsvp>,
@@ -27,6 +28,12 @@ impl Attendee {
     #[must_use]
     pub fn with_cutype(mut self, cutype: CuType) -> Self {
         self.cutype = Some(cutype);
+        self
+    }
+
+    #[must_use]
+    pub fn with_email(mut self, email: impl Into<Email>) -> Self {
+        self.email = Some(email.into());
         self
     }
 
@@ -64,6 +71,7 @@ where
             address: address.into(),
             cn: None,
             cutype: None,
+            email: None,
             role: None,
             partstat: None,
             rsvp: None,
@@ -76,6 +84,7 @@ impl IcsRead<Property> for Attendee {
     fn read(r: &mut IcsReader) -> Option<Self> {
         let mut cn = None;
         let mut cutype = None;
+        let mut email = None;
         let mut role = None;
         let mut partstat = None;
         let mut rsvp = None;
@@ -86,6 +95,7 @@ impl IcsRead<Property> for Attendee {
 
             if e.try_param(r, "CN", &mut cn)
                 || e.try_param(r, "CUTYPE", &mut cutype)
+                || e.try_param(r, "EMAIL", &mut email)
                 || e.try_param(r, "ROLE", &mut role)
                 || e.try_param(r, "PARTSTAT", &mut partstat)
                 || e.try_param(r, "RSVP", &mut rsvp)
@@ -105,6 +115,7 @@ impl IcsRead<Property> for Attendee {
             address: r.value()?,
             cn,
             cutype,
+            email,
             role,
             partstat,
             rsvp,
@@ -117,6 +128,7 @@ impl IcsWrite<Property> for Attendee {
     fn write(&self, w: &mut IcsWriter) {
         w.param_opt("CN", self.cn.as_ref());
         w.param_opt("CUTYPE", self.cutype.as_ref());
+        w.param_opt("EMAIL", self.email.as_ref());
         w.param_opt("ROLE", self.role.as_ref());
         w.param_opt("PARTSTAT", self.partstat.as_ref());
         w.param_opt("RSVP", self.rsvp.as_ref());
@@ -154,6 +166,7 @@ mod tests {
     #[test_case(";CN=Someone Somewhere:mailto:someone@localhost")]
     #[test_case(";CUTYPE=INDIVIDUAL:mailto:someone@localhost")]
     #[test_case(";CUTYPE=GROUP:mailto:someone@localhost")]
+    #[test_case(";EMAIL=someone@somewhere.com:mailto:localhost")]
     #[test_case(";ROLE=CHAIR:mailto:someone@localhost")]
     #[test_case(";ROLE=OPT-PARTICIPANT:mailto:someone@localhost")]
     #[test_case(";PARTSTAT=ACCEPTED:mailto:someone@localhost")]

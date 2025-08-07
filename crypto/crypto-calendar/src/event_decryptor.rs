@@ -23,7 +23,7 @@ where
     P: PGPProviderSync,
 {
     pub fn new(
-        pgp: &'a P,
+        pgp: &P,
         address_keys: &'a UnlockedAddressKeys<P>,
         calendar_key: &UnlockedCalendarKey<P>,
         key_packets: KeyPackets<KeyPacketRef>,
@@ -38,7 +38,7 @@ where
     }
 
     pub fn for_address(
-        pgp: &'a P,
+        pgp: &P,
         address_keys: &'a UnlockedAddressKeys<P>,
         address_key_packet: KeyPacketRef,
     ) -> Result<Self> {
@@ -52,7 +52,7 @@ where
     }
 
     pub fn for_calendar(
-        pgp: &'a P,
+        pgp: &P,
         address_keys: &'a UnlockedAddressKeys<P>,
         calendar_key: &UnlockedCalendarKey<P>,
         shared_key_packet: KeyPacketRef,
@@ -67,7 +67,7 @@ where
     }
 
     fn new_ex<'b, D, V>(
-        pgp: &'a P,
+        pgp: &P,
         packet: KeyPacketRef,
         decryption_keys: impl IntoIterator<Item = &'b D>,
         verification_keys: impl IntoIterator<Item = &'a V>,

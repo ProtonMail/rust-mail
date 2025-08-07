@@ -12,8 +12,8 @@ use proton_calendar_api::{
     CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
 };
 use proton_calendar_common::{
-    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpContacts, RsvpEvent, RsvpEventId, RsvpIntent,
-    RsvpKeys, RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency,
+    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpContacts, RsvpEvent, RsvpEventId, RsvpFetchApiError,
+    RsvpIntent, RsvpKeys, RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency,
 };
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::session::{Config, Session};
@@ -522,7 +522,8 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
         },
         organizer: RsvpOrganizer {
             name: Some("Foo Localhosty".into()),
-            email: "foo@pm.me".into(),
+            reply_email: "foo@pm.me".into(),
+            display_email: "foo@pm.me".into(),
         },
         attendees: vec![
             RsvpAttendee {
@@ -555,7 +556,7 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
     }
 }
 
-fn expected_offline_event() -> RsvpEvent {
+fn expected_offline_event(err: RsvpFetchApiError) -> RsvpEvent {
     RsvpEvent {
         intent: RsvpIntent::Invite,
         summary: Some("some title".into()),
@@ -574,7 +575,8 @@ fn expected_offline_event() -> RsvpEvent {
         },
         organizer: RsvpOrganizer {
             name: Some("Foo Localhosty".into()),
-            email: "foo@pm.me".into(),
+            reply_email: "foo@pm.me".into(),
+            display_email: "foo@pm.me".into(),
         },
         attendees: vec![
             RsvpAttendee {
@@ -597,7 +599,7 @@ fn expected_offline_event() -> RsvpEvent {
         user_attendee_idx: Some(0),
         calendar: None,
         progress: RsvpProgress::Pending,
-        recency: RsvpRecency::Unknown,
+        recency: RsvpRecency::Unknown(err),
         raw: None,
         children: Vec::new(),
     }

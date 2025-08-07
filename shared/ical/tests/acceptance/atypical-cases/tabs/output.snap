@@ -1,5 +1,5 @@
 ---
-source: core/ical/tests/acceptance.rs
+source: shared/ical/tests/acceptance.rs
 ---
 ```
 VCalendar {
@@ -76,6 +76,7 @@ VCalendar {
                             },
                         },
                     ),
+                    email: None,
                     sent_by: Some(
                         SentBy {
                             value: EmailAddress {

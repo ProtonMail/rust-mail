@@ -221,7 +221,7 @@ impl From<&cal::RsvpOrganizer> for RsvpOrganizer {
     fn from(org: &cal::RsvpOrganizer) -> Self {
         Self {
             name: org.name.clone(),
-            email: org.email.clone(),
+            email: org.display_email.clone(),
         }
     }
 }
@@ -355,10 +355,17 @@ impl From<&mail::RsvpEvent> for RsvpState {
                 }
             }
 
-            (cal::RsvpIntent::Invite, cal::RsvpRecency::Unknown, Some(_)) => {
-                RsvpState::UnanswerableInvite {
-                    reason: RsvpUnanswerableReason::InviteHasUnknownRecency,
-                }
+            (cal::RsvpIntent::Invite, cal::RsvpRecency::Unknown(err), Some(_)) => {
+                let reason = match err {
+                    cal::RsvpFetchApiError::EventMissing => {
+                        RsvpUnanswerableReason::EventDoesNotExist
+                    }
+                    cal::RsvpFetchApiError::NetworkFailure => {
+                        RsvpUnanswerableReason::NetworkFailure
+                    }
+                };
+
+                RsvpState::UnanswerableInvite { reason }
             }
 
             (cal::RsvpIntent::Invite, recency, None) => RsvpState::CancelledInvite {
@@ -400,13 +407,20 @@ pub enum RsvpUnanswerableReason {
     /// User is looking at a stale `invite.ics`.
     InviteIsOutdated,
 
-    /// We couldn't confirm whether the invite is stale or fresh; there's
-    /// probably no network connection.
-    InviteHasUnknownRecency,
+    /// Invite's event doesn't exist in Proton Calendar (e.g. user has the
+    /// auto-import feature disabled or the event has been manually deleted).
+    ///
+    /// This is just a limitation of the current implementation - it cannot yet
+    /// create new events in Proton Calendar, the event must already be there
+    /// for user to be able to respond to it.
+    EventDoesNotExist,
 
     /// User's address is either disabled or otherwise cannot be used to send
     /// the reply.
     AddressIsIncorrect,
+
+    /// There's no internet connection.
+    NetworkFailure,
 }
 
 #[derive(Clone, Copy, Debug, Enum)]

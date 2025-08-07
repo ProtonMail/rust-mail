@@ -1,5 +1,5 @@
 ---
-source: core/ical/tests/acceptance.rs
+source: shared/ical/tests/acceptance.rs
 ---
 ```
 VCalendar {
@@ -137,6 +137,7 @@ VCalendar {
                         },
                     ),
                     cn: None,
+                    email: None,
                     sent_by: None,
                 },
             ),
@@ -160,6 +161,7 @@ VCalendar {
                     cutype: Some(
                         Individual,
                     ),
+                    email: None,
                     role: Some(
                         ReqParticipant,
                     ),

@@ -1,6 +1,7 @@
 use mime::Mime;
 use stash::sql_using_serde;
 
+use std::fmt;
 use std::iter::repeat;
 use std::sync::LazyLock;
 use std::{collections::HashMap, str::FromStr};
@@ -143,43 +144,47 @@ impl MimeType {
 
 impl MimeType {
     pub fn text_html() -> Self {
-        MimeType {
+        Self {
             mime: mime::TEXT_HTML,
             category: MimeTypeCategory::Code,
         }
     }
 
     pub fn text_plain() -> Self {
-        MimeType {
+        Self {
             mime: mime::TEXT_PLAIN,
             category: MimeTypeCategory::Text,
         }
     }
 
     pub fn application_pdf() -> Self {
-        MimeType {
+        Self {
             mime: mime::APPLICATION_PDF,
             category: MimeTypeCategory::Pdf,
         }
     }
 
     pub fn application_json() -> Self {
-        MimeType {
+        Self {
             mime: mime::APPLICATION_JSON,
             category: MimeTypeCategory::Code,
         }
     }
 
     pub fn application_pgp_keys() -> Self {
-        MimeType {
+        Self {
             mime: "application/pgp-keys".parse().expect("Should never fail"),
             category: MimeTypeCategory::Key,
         }
     }
+
+    pub fn is_calendar(&self) -> bool {
+        self.category == MimeTypeCategory::Calendar
+    }
 }
 
-impl std::fmt::Display for MimeType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for MimeType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.mime)
     }
 }
@@ -392,18 +397,16 @@ const WORD_MIME_TYPE: &[MimeName] = &[
 
 #[cfg(test)]
 mod tests {
-    use mime::Mime;
-
-    use crate::datatypes::attachment::MimeType;
+    use super::*;
 
     #[test]
     fn test_mime_map_len() {
-        assert_eq!(super::MIME_MAP.len(), 129)
+        assert_eq!(MIME_MAP.len(), 129)
     }
 
     #[test]
     fn test_mime_structure() {
-        for mime_str in super::MIME_MAP.keys() {
+        for mime_str in MIME_MAP.keys() {
             let mime = mime_str.parse::<Mime>().unwrap();
             assert_eq!(&mime.to_string(), mime_str)
         }
@@ -411,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_deser_mime() {
-        for mime_str in super::MIME_MAP.keys() {
+        for mime_str in MIME_MAP.keys() {
             let expected_json = format!(r#"{{"mime_type":"{mime_str}"}}"#);
             let mime: MimeType = serde_json::from_str(&expected_json).unwrap();
             let actual = serde_json::to_string(&mime).unwrap();

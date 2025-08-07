@@ -8,6 +8,7 @@ use super::*;
 pub struct Organizer {
     pub address: CalAddress,
     pub cn: Option<Cn>,
+    pub email: Option<Email>,
     pub sent_by: Option<SentBy>,
 }
 
@@ -15,6 +16,12 @@ impl Organizer {
     #[must_use]
     pub fn with_cn(mut self, cn: impl Into<Cn>) -> Self {
         self.cn = Some(cn.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_email(mut self, email: impl Into<Email>) -> Self {
+        self.email = Some(email.into());
         self
     }
 
@@ -33,6 +40,7 @@ where
         Self {
             address: address.into(),
             cn: None,
+            email: None,
             sent_by: None,
         }
     }
@@ -41,12 +49,16 @@ where
 impl IcsRead<Property> for Organizer {
     fn read(r: &mut IcsReader) -> Option<Self> {
         let mut cn = None;
+        let mut email = None;
         let mut sent_by = None;
 
         loop {
             let e = r.entry()?;
 
-            if e.try_param(r, "CN", &mut cn) || e.try_param(r, "SENT-BY", &mut sent_by) {
+            if e.try_param(r, "CN", &mut cn)
+                || e.try_param(r, "EMAIL", &mut email)
+                || e.try_param(r, "SENT-BY", &mut sent_by)
+            {
                 continue;
             }
 
@@ -59,6 +71,7 @@ impl IcsRead<Property> for Organizer {
 
         Some(Self {
             address: r.value()?,
+            email,
             cn,
             sent_by,
         })
@@ -68,6 +81,7 @@ impl IcsRead<Property> for Organizer {
 impl IcsWrite<Property> for Organizer {
     fn write(&self, w: &mut IcsWriter) {
         w.param_opt("CN", self.cn.as_ref());
+        w.param_opt("EMAIL", self.email.as_ref());
         w.param_opt("SENT-BY", self.sent_by.as_ref());
         w.raw(":");
         w.value(&self.address);
@@ -83,6 +97,7 @@ mod tests {
     #[test_case(":https://somewhere.com")]
     #[test_case(";CN=Someone At Somewhere:mailto:someone@somewhere.com")]
     #[test_case(";CN=Someone At Somewhere:https://somewhere.com")]
+    #[test_case(";EMAIL=someone@somewhere.com:mailto:localhost")]
     #[test_case(";SENT-BY=\"mailto:someone-else@somewhere.com\":localhost")]
     fn smoke(s: &str) {
         assert_trip!(s, Organizer as Property);

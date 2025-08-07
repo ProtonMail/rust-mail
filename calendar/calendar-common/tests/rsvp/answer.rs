@@ -532,7 +532,7 @@ async fn recurring_with_single_edits() {
         DTEND:20180101T133000Z
         RRULE:FREQ=DAILY
         SUMMARY:ice bucket challenge
-        ORGANIZER:mailto:foo@pm.me
+        ORGANIZER;EMAIL=foo@pm.me:mailto:mcw2Yd8t@secret
         ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@pm.me
         END:VEVENT
         END:VCALENDAR
@@ -639,7 +639,7 @@ async fn recurring_with_single_edits() {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            to: "foo@pm.me".into(),
+            to: "mcw2Yd8t@secret".into(),
             body: "bar@pm.me accepted your invitation to ice bucket challenge".into(),
             ics: ics! {"
                 BEGIN:VCALENDAR

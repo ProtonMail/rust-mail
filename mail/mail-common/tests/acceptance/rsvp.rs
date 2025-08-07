@@ -332,7 +332,8 @@ async fn fetch_and_answer() {
     assert_eq!(
         RsvpOrganizer {
             name: Some(SPONGEBOB_NAME.into()),
-            email: SPONGEBOB_MAIL.into(),
+            reply_email: SPONGEBOB_MAIL.into(),
+            display_email: SPONGEBOB_MAIL.into(),
         },
         rsvp.organizer,
     );

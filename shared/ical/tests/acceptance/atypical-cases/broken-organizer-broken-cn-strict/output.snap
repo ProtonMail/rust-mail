@@ -154,6 +154,7 @@ VCalendar {
                             },
                         },
                     ),
+                    email: None,
                     sent_by: None,
                 },
             ),
@@ -177,6 +178,7 @@ VCalendar {
                     cutype: Some(
                         Individual,
                     ),
+                    email: None,
                     role: Some(
                         ReqParticipant,
                     ),

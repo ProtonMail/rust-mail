@@ -10,6 +10,7 @@ jiff = { workspace = true }
 proton-calendar-api = { workspace = true }
 proton-canonical-email = { workspace = true }
 proton-core-api = { workspace = true }
+proton-core-common = { workspace = true }
 proton-crypto = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-calendar = { workspace = true }

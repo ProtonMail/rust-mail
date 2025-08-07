@@ -16,7 +16,6 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::muon::GET;
 use proton_core_api::services::proton::muon::http::HttpReqExt;
 use proton_core_api::services::proton::{AddressId, ProtonCore};
-use proton_mail_api::services::proton::prelude::DirectAttachment;
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
@@ -410,7 +409,7 @@ impl DecryptedMessageBody {
         }
 
         let invite = self.metadata.attachments.iter().find_map(|att| {
-            if att.filename == DirectAttachment::INVITE_ICS {
+            if att.mime_type.is_calendar() {
                 att.local_id
             } else {
                 None
