@@ -216,17 +216,6 @@ impl Message {
     ///
     /// Note: This function will also mark the message as read if it has a snooze reminder,
     /// as a part of the snooze reminder logic.
-    ///
-    /// # Arguments
-    ///
-    /// * `local_message_id` - The local id of the message to open.
-    /// * `ctx` - The context of the user.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query failed, syncing the data failed or
-    /// the message has no messages.
-    ///
     pub async fn open_message(
         local_message_id: LocalMessageId,
         ctx: &MailUserContext,

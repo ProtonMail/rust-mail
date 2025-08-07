@@ -219,17 +219,6 @@ impl ContextualConversation {
     ///
     /// Note: This function will also mark the conversation as read if it has a snooze reminder,
     /// as a part of the snooze reminder logic.
-    ///
-    /// # Arguments
-    ///
-    /// * `local_conversation_id` - The local id of the conversation to open.
-    /// * `local_label_id` - The local id of the label to open the conversation in.
-    /// * `ctx` - The context of the user.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed, syncing the data failed or
-    /// the conversation has no messages.
     pub async fn open_conversation(
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
