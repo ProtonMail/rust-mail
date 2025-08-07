@@ -70,6 +70,7 @@ pub use crate::draft::send::EoData;
 pub use send::ScheduleSendOptions;
 
 pub const MIN_PASSWORD_LEN: usize = 8;
+pub const MIN_EXPIRATION_TIME_SECONDS: u64 = 15 * 60; // 15 min
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -1756,7 +1757,7 @@ impl Draft {
                 return Err(ExpirationError::ExpirationTimeInThePast.into());
             }
 
-            if expiration_time_timestamp < now.saturating_add(15 * 60) {
+            if expiration_time_timestamp < now.saturating_add(MIN_EXPIRATION_TIME_SECONDS) {
                 return Err(ExpirationError::ExpirationTimeLessThan15Min.into());
             }
 
