@@ -146,6 +146,8 @@ pub enum DraftSendErrorReason {
     ScheduleSendMessageLimitExceeded,
     /// Failed to decrypt external encryption password
     EOPasswordDecrypt,
+    /// Expiration time is too soon
+    ExpirationTimeTooSoon,
 }
 
 impl From<RealDraftSaveErrorReason> for DraftSaveErrorReason {
@@ -187,6 +189,7 @@ impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
                 Self::ScheduleSendMessageLimitExceeded
             }
             RealDraftSendErrorReason::EOPasswordDecrypt => Self::EOPasswordDecrypt,
+            RealDraftSendErrorReason::ExpirationTimeTooSoon => Self::ExpirationTimeTooSoon,
         }
     }
 }

@@ -172,6 +172,8 @@ pub enum DraftSendErrorReason {
     ScheduleSendMessageLimitExceeded,
     /// Failed to decrypt external encryption password
     EOPasswordDecrypt,
+    /// Failed to decrypt external encryption password
+    ExpirationTimeTooSoon,
 }
 
 /// Specific Reason when attempting to cancel sending of an already sent draft.

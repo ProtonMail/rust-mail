@@ -141,6 +141,8 @@ pub enum SendError {
     ScheduleSendMessageLimitExceeded,
     #[error("Failed to decrypt external encryption password")]
     EOPasswordDecrypt,
+    #[error("Expiration time was too soon")]
+    ExpirationTimeTooSoon,
 }
 
 impl From<SendError> for MailContextError {

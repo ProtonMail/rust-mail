@@ -358,6 +358,9 @@ impl From<DraftSendError> for ProtonMailError {
             DraftSendError::EOPasswordDecrypt => Self::Reason(MailErrorReason::DraftSendReason(
                 DraftSendErrorReason::EOPasswordDecrypt,
             )),
+            DraftSendError::ExpirationTimeTooSoon => Self::Reason(
+                MailErrorReason::DraftSendReason(DraftSendErrorReason::ExpirationTimeTooSoon),
+            ),
         }
     }
 }

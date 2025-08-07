@@ -208,6 +208,7 @@ pub enum Mail {
     AttachmentMessageAlreadySent = 11109,
     /// Too Many Attachments
     TooManyAttachments = 2024,
+    ExpirationTimeTooSoon = 2023,
 }
 
 pub enum Payments {

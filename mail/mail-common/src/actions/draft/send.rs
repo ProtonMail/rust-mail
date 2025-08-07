@@ -546,6 +546,8 @@ impl Send {
                     // We have no delivery time here, so we just return 0 to "cancel"
                     // all the checks that depend on this time in the future.
                     0
+                } else if proton_error.code == Mail::ExpirationTimeTooSoon as u32 {
+                    return Err(SendError::ExpirationTimeTooSoon.into());
                 } else {
                     error!("Failed to send send email request: {err:?}");
                     return Err(err.into());
