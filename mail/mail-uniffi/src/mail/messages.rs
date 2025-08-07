@@ -116,6 +116,11 @@ impl DecryptedMessage {
     pub fn get_pgp_subject(&self) -> Option<String> {
         self.body.pgp_subject.clone()
     }
+
+    #[must_use]
+    pub fn failed_to_decrypt(&self) -> bool {
+        self.body.failed_to_decrypt()
+    }
 }
 
 #[uniffi_export]
@@ -817,6 +822,7 @@ pub fn test_stub_message_body(
             pgp_subject: None,
             address_id: AddressId::from("Unknown"),
             in_flight: parking_lot::Mutex::default(),
+            decryption_error: None,
         },
         sender: sender.into(),
     });

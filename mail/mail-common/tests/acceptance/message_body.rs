@@ -344,3 +344,37 @@ async fn pgp_mime_attachments_retrievable_via_get_attachments() {
         )
     }
 }
+
+#[tokio::test]
+async fn message_body_failed_to_decrypt() {
+    // This test fetches a message body twice and expects it to be called only once
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = message_body_test_params();
+
+    let mut message = message_body_test_message_simple();
+    message.body.body = "RANDOM CONTENT -- WON'T DECRYPT".into();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    let (_, decrypted_body) = Message::force_sync_message_and_body(
+        &user_ctx,
+        message.metadata.id.clone(),
+        false,
+        &mut tether,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(decrypted_body.body, message.body.body);
+    assert!(decrypted_body.failed_to_decrypt());
+}
