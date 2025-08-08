@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Features
+
+- Clear action queue in share extension before running
+- [ET-4031] Password validation support when changing password.
+- Scroller syncs previous page regardless of the length of the inbox
+
+### Fixes
+
+- Scroller's cursor query does not include `order_field` when interacting with cursors
+- [ET-4155] Check the correct recipient list for expiration validation
+- [ET-4155] Always treat known proton domains as supported
+- [ET-4155] Revalidate recipients on draft open
+
+
 ## [mail-uniffi-v0.121.0] - 2025-08-08
 
 ### Features
@@ -17,36 +33,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4176] Use fresh fido2 details in change pass flow
 
 
-## [mail-uniffi-v0.119.0] - 2025-08-07
-
-### Features
-
-- Implement proxying and add load_image fn which proxies images. s/embeddedattachmentinfo/attachmentdata.
-
-### Fixes
-
-- [ET-4124] Fetch event in "groups"
-
-
 ## [mail-uniffi-v0.120.0] - 2025-08-07
 
 ### Changed
 
-- Remove the following functions: `remove_label_from_conversations` `apply_label_to_conversations` `remove_label_from_messages` `apply_label_to_messages`
 - Move marking as read for snooze reminder to the common library
 - (breaking) rename `mail_uniffi::message::snooze_time` into `snoozed_until` and make field optional
 
-### Features
-
-- [ET-3094] Limit simultaneously logged in free account count
-- [ET-4106] Tidied up payment observability events.
-
 ### Fixes
 
-- [ET-3926] Undo move and rollback correctly mark as unread and undoes the unlabelling
-- [ET-4100] Only fetch message metadata when resolving remote id
-- Move_conversations and move_messages no longer return voidactionresult
-- [ET-4125] Do not prefetch attachments when prefetching message body
 - [ET-4142] Handle expiration time too soon error [breaking change]
 - [ET-4142] Expiration time should be between 15min and 28 days
 - Rsvp: support apple-style invites
@@ -54,6 +49,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4142] Report missing send error reasons
 - Rsvp: discriminate between network failures and missing events
 - [ET-4142] Do not set expiration time on drafts before send
+
+
+## [mail-uniffi-v0.119.0] - 2025-08-07
+
+### Changed
+
+- Remove the following functions: `remove_label_from_conversations` `apply_label_to_conversations` `remove_label_from_messages` `apply_label_to_messages`
+
+### Features
+
+- [ET-3094] Limit simultaneously logged in free account count
+- [ET-4106] Tidied up payment observability events.
+- Implement proxying and add load_image fn which proxies images. s/embeddedattachmentinfo/attachmentdata.
+
+### Fixes
+
+- [ET-3926] Undo move and rollback correctly mark as unread and undoes the unlabelling
+- [ET-4100] Only fetch message metadata when resolving remote id
+- Move_conversations and move_messages no longer return voidactionresult
+- [ET-4124] Fetch event in "groups"
+- [ET-4125] Do not prefetch attachments when prefetching message body
 
 
 ## [mail-uniffi-v0.118.0] - 2025-08-06
@@ -118,6 +134,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rsvp: use `calendarevent.addressid`
 
 
+## [mail-uniffi-v0.115.6] - 2025-08-04
+
+### Fixes
+
+- Rsvp: support attendee-less reminders
+
+
 ## [mail-uniffi-v0.115.4] - 2025-08-04
 
 ### Fixes
@@ -125,13 +148,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4052] Snooze is not available as an action in allmail label
 - Rsvp: fetch address keys of the address that has created the calendar
 - Disable free account count post login check
-
-
-## [mail-uniffi-v0.115.6] - 2025-08-04
-
-### Fixes
-
-- Rsvp: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.115.3] - 2025-08-03
