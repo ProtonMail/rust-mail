@@ -1,4 +1,5 @@
 use crate::shared::challenge::ChallengePayload;
+use muon::rest::auth::v4::fido2;
 use proton_crypto_account::keys::{LocalAddressKey, LocalSignedKeyList};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -394,23 +395,6 @@ pub struct PutKeysPrivateRequest {
     pub auth: Option<AuthInput>,
 }
 
-/// Represents FIDO2 authentication data for password change requests.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct Fido2AuthData {
-    /// Authentication options.
-    pub authentication_options: serde_json::Value,
-    /// Client data.
-    pub client_data: String,
-    /// Authenticator data.
-    pub authenticator_data: String,
-    /// Signature.
-    pub signature: String,
-    /// Credential ID.
-    #[serde(rename = "CredentialID")]
-    pub credential_id: Vec<Option<serde_json::Value>>,
-}
-
 /// Represents `PUT /core/v4/users/password` request body for password change authentication.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -432,7 +416,7 @@ pub struct PutUsersPasswordRequest {
     /// FIDO2 authentication data (optional).
     #[serde(rename = "FIDO2")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fido2: Option<Fido2AuthData>,
+    pub fido2: Option<fido2::Request>,
 
     /// SSO re-authentication token (optional).
     #[serde(skip_serializing_if = "Option::is_none")]

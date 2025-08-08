@@ -19,20 +19,18 @@ use anyhow::anyhow;
 use attachment_cache::AttachmentCacheState;
 use builder::MailUserContextBuilder;
 use events::subscriber::MailEventSubscriber;
+use futures::TryFutureExt;
 use initialization::InitializationMediator;
 use proton_account_api::password::PasswordFlow;
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
-use proton_core_api::services::proton::muon::rest::auth::v4::fido2;
 use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
 use proton_core_api::services::proton::{Proton, ProtonCore};
 use proton_core_api::session::{CoreSession as _, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
-use proton_core_common::db::account::CoreSession;
 use proton_core_common::event_loop::EventPollMode;
-use proton_core_common::models::ModelExtension;
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::services::EventPollConfigService;
 use proton_core_common::{
@@ -553,34 +551,24 @@ impl MailUserContext {
         let account = self.user_context.core_account().await?;
         let tfa_mode = account.second_factor_mode.unwrap_or_default();
         let mbp_mode = account.password_mode.unwrap_or_default();
-        let fido_details = self.get_fido_details().await?;
 
         let key_secret = (session.expose_key_secret().await)
             .map(|s| s.expose_secret().to_owned())
             .ok_or(KeyHandlingError::NoUserSecret)
             .map_err(CoreContextError::PGPKeyAccess)?;
 
-        Ok(PasswordFlow::new(
+        PasswordFlow::new(
             session,
             user.email,
             user.keys.into(),
             key_secret,
             tfa_mode,
             mbp_mode,
-            fido_details,
-        ))
-    }
-
-    async fn get_fido_details(&self) -> MailContextResult<Option<fido2::Response>> {
-        let stash = self.core_context().account_stash();
-        let tether = stash.connection();
-        let session_id = self.session_id();
-
-        let core_session = CoreSession::find_by_id(session_id.clone(), &tether)
-            .await?
-            .ok_or_else(|| MailContextError::Other(anyhow!("Session not found")))?;
-
-        Ok(core_session.fido_details.map(|f| f.into_inner()))
+        )
+        .map_err(|e| {
+            MailContextError::Other(anyhow!("Failed to create password change flow: {e:?}"))
+        })
+        .await
     }
 
     pub async fn logout(&self) -> MailContextResult<()> {

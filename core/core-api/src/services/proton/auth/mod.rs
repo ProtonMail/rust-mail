@@ -3,6 +3,7 @@ mod responses;
 
 pub use self::responses::*;
 use crate::service::ApiServiceResult;
+use muon::rest::auth::v4::tfa::TFA;
 use serde::{Deserialize, Serialize};
 
 /// The Proton Auth API base path (v4).
@@ -39,6 +40,19 @@ pub struct PostAuthInfoResponse {
 
     /// The server's SRP ephemeral.
     pub server_ephemeral: String,
+
+    /// The user's 2FA info (only if already logged in).
+    #[serde(default)]
+    #[serde(rename = "2FA")]
+    pub tfa: Option<TFA>,
+}
+
+impl Clone for PostAuthInfoResponse {
+    fn clone(&self) -> Self {
+        serde_json::to_value(self)
+            .and_then(serde_json::from_value)
+            .unwrap()
+    }
 }
 
 #[allow(async_fn_in_trait)]
