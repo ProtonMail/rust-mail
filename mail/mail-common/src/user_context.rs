@@ -225,14 +225,25 @@ impl MailUserContext {
 
             Origin::ShareExt => builder
                 .with_service(SendQueueExecutorPool {
-                    pool: QueueAutoExecutorPool::new(
-                        user_context.queue(),
-                        &SHARE_EXT_ACTION_GROUP,
-                        NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
-                        online,
-                        true,
-                        user_context.as_ref(),
-                    ),
+                    pool: {
+                        if let Err(e) = Queue::delete_all_in_group(
+                            user_context.queue(),
+                            SHARE_EXT_ACTION_GROUP.clone(),
+                        )
+                        .await
+                        {
+                            tracing::warn!("Could not clear share extension queue: {}", e);
+                            tracing::warn!("Continuing with existing queue");
+                        };
+                        QueueAutoExecutorPool::new(
+                            user_context.queue(),
+                            &SHARE_EXT_ACTION_GROUP,
+                            NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
+                            online,
+                            true,
+                            user_context.as_ref(),
+                        )
+                    },
                 })
                 .with_cyclic_service(QueuesService::new),
         };

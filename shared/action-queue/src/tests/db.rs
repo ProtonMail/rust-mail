@@ -515,6 +515,75 @@ async fn action_store_records_all_dependencies() {
     assert_eq!(&action_ids, &[third_action_id]);
 }
 
+#[tokio::test]
+async fn clear_all_actions_in_chosen_action_group() {
+    let state = TestAction {
+        foo: "foo".to_string(),
+        bar: 2048,
+        dependency_keys: ActionDependencyKeys::default(),
+    };
+
+    let stash = new_test_connection().await;
+    let mut conn = stash.connection();
+
+    // Create two actions in the default group.
+    let mut stored_default_1 =
+        StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
+    let mut stored_default_2 =
+        StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
+
+    // Create two actions in a custom group (simulating share extension group).
+    let share_group = ActionGroup::new("SHARE_EXTENSION");
+    let metadata = MetadataBuilder::new()
+        .with_group_override(share_group.clone())
+        .build();
+    let mut stored_share_1 = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
+    let mut stored_share_2 = StoredAction::new::<TestAction>(&state, metadata).unwrap();
+
+    // Save all actions in a single transaction.
+    conn.tx::<_, _, StashError>(async |tx| {
+        stored_default_1.save(tx).await?;
+        stored_default_2.save(tx).await?;
+        stored_share_1.save(tx).await?;
+        stored_share_2.save(tx).await?;
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    // Ensure all actions are present.
+    let total = StoredAction::pending_count(&conn).await.unwrap();
+    assert_eq!(total, 4);
+
+    // Delete only the share extension group.
+    conn.tx::<_, _, StashError>(async |tx| {
+        StoredAction::delete_all_in_group(tx, share_group.clone()).await?;
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    // After deletion, only the two default-group actions should remain.
+    let remaining = StoredAction::pending_count(&conn).await.unwrap();
+    assert_eq!(remaining, 2);
+
+    // The share extension group should have no actions.
+    let action_in_share_group = conn
+        .tx::<_, _, StashError>(async |tx| StoredAction::next(share_group.as_ref(), tx).await)
+        .await
+        .unwrap();
+    assert!(action_in_share_group.is_none());
+
+    // Default group should still have at least one action.
+    let action_in_default = conn
+        .tx::<_, _, StashError>(async |tx| {
+            StoredAction::next(ActionGroup::default().as_ref(), tx).await
+        })
+        .await
+        .unwrap();
+    assert!(action_in_default.is_some());
+}
+
 async fn new_test_connection() -> Stash {
     use std::io::stdout;
     use tracing::Level;
