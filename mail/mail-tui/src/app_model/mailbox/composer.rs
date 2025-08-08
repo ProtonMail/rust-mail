@@ -11,6 +11,7 @@ use crate::app_model::mailbox::composer::password_protect::PasswordProtectPopup;
 use crate::app_model::mailbox::composer::schedule_send::ScheduleSendPopup;
 use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
+use crate::widgets::utils::ScrollableState;
 use crate::widgets::{ScrollableList, ScrollableListState, TextInput, TextInputState};
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
@@ -906,15 +907,7 @@ impl Composer {
             }
             SelectedInput::Attachments => {
                 if let Event::Key(key) = &event {
-                    match key.code {
-                        KeyCode::Char('k') | KeyCode::Up => {
-                            self.attachment_list_state.prev();
-                        }
-                        KeyCode::Char('j') | KeyCode::Down => {
-                            self.attachment_list_state.next();
-                        }
-                        _ => {}
-                    }
+                    self.attachment_list_state.handle_event(key.code);
                 }
             }
         }

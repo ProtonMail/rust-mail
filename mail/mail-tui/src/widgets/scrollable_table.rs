@@ -12,11 +12,25 @@ use ratatui::widgets::ScrollbarOrientation::VerticalRight;
 use ratatui::widgets::{List, ListState, Scrollbar, ScrollbarState, Table, TableState};
 
 use crate::widgets::IntoTable;
+use crate::widgets::utils::ScrollableState;
 
 pub struct ScrollableTableState {
     table_state: TableState,
     scroll_state: ScrollbarState,
     pub marked: HashSet<usize>,
+}
+
+impl ScrollableState for ScrollableTableState {
+    fn next(&mut self) {
+        if let Some(index) = self.table_state.selected() {
+            self.select(index.saturating_add(1));
+        }
+    }
+
+    fn prev(&mut self) {
+        let index = self.table_state.selected().unwrap_or_default();
+        self.select(index.saturating_sub(1));
+    }
 }
 
 impl ScrollableTableState {
@@ -34,17 +48,6 @@ impl ScrollableTableState {
 
     pub fn select(&mut self, index: usize) {
         self.table_state.select(Some(index));
-    }
-
-    pub fn next(&mut self) {
-        if let Some(index) = self.table_state.selected() {
-            self.select(index.saturating_add(1));
-        }
-    }
-
-    pub fn prev(&mut self) {
-        let index = self.table_state.selected().unwrap_or_default();
-        self.select(index.saturating_sub(1));
     }
 
     pub fn toggle(&mut self) {

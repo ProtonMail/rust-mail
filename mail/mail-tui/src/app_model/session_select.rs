@@ -3,6 +3,7 @@ use crate::app::Command;
 use crate::app_model::login::LoginModel;
 use crate::app_model::{AppState, AppStateHandler, YesNoPopup, mailbox};
 use crate::messages::Messages;
+use crate::widgets::utils::ScrollableState;
 use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::{Context as _, anyhow};
 use proton_core_common::db::account::CoreAccount;
@@ -53,18 +54,13 @@ impl AppStateHandler for SessionSelectModel {
         let Event::Key(key) = event else {
             return Command::None;
         };
+        if self.session_list_state.handle_event(key.code) {
+            return Command::None;
+        }
 
         match key.code {
             KeyCode::Char('n') => Command::message(Message::NewAccount.into()),
             KeyCode::Char('d') => Command::message(Message::Delete.into()),
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.session_list_state.prev();
-                Command::None
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.session_list_state.next();
-                Command::None
-            }
             KeyCode::Char('l') => Command::message(Message::Logout.into()),
             KeyCode::Enter => Command::message(Message::Submit.into()),
             _ => Command::None,

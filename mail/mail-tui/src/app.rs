@@ -1,4 +1,5 @@
 use crate::TerminalType;
+use crate::app_model::InfoDialog;
 use crate::messages::Messages;
 use anyhow::bail;
 use crossterm::event::{Event, EventStream};
@@ -187,6 +188,22 @@ impl Command<Messages> {
                 Err(e) => {
                     tracing::error!("{e:?}");
                     Command::message(e.into())
+                }
+            }
+        })
+    }
+
+    pub fn popup_from_future(
+        title: impl Into<String>,
+        f: impl Future<Output = anyhow::Result<String>> + Send + 'static,
+    ) -> Self {
+        let title = title.into();
+        Command::task(async move {
+            match f.await {
+                Ok(s) => Messages::raise_popup(InfoDialog::new_info(Some(title), s)).into(),
+                Err(e) => {
+                    tracing::error!("{e:?}");
+                    Messages::raise_popup(InfoDialog::new_error(Some(title), e)).into()
                 }
             }
         })

@@ -1,5 +1,6 @@
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, Local, MappedLocalTime, NaiveDateTime, TimeZone};
+use crossterm::event::KeyCode;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_mail_common::datatypes::{
     MessageRecipient, MessageRecipients, MessageSender, MessageSenders,
@@ -78,5 +79,23 @@ pub fn parse_date_time(dt: &str) -> anyhow::Result<DateTime<Local>> {
     match Local.from_local_datetime(&dt) {
         MappedLocalTime::Single(dt) | MappedLocalTime::Ambiguous(dt, _) => Ok(dt),
         MappedLocalTime::None => Err(anyhow!("No local time found")),
+    }
+}
+
+pub trait ScrollableState {
+    fn next(&mut self);
+    fn prev(&mut self);
+    fn handle_event(&mut self, key: KeyCode) -> bool {
+        match key {
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.prev();
+                true
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.next();
+                true
+            }
+            _ => false,
+        }
     }
 }

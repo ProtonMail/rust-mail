@@ -8,7 +8,9 @@ use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Items, Message,
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::app_model::{ChoosePopup, YesNoPopup};
 use crate::messages::Messages;
-use crate::widgets::utils::{date_from_timestamp, format_recipients, format_sender};
+use crate::widgets::utils::{
+    ScrollableState, date_from_timestamp, format_recipients, format_sender,
+};
 use crate::widgets::{
     CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
     ScrollableTableState,
@@ -30,7 +32,9 @@ use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts}
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::mail_scroller::{MailScroller, ScrollerUpdate};
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
-use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
+use proton_mail_common::models::{
+    Attachment, LabelWithCounters, Message as MailMessage, MessageBodyMetadata,
+};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::rsvp::RsvpEvent;
 use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox};
@@ -41,7 +45,9 @@ use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table};
 use stash::orm::Model;
+use stash::params;
 use stash::stash::Tether;
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -383,20 +389,29 @@ impl MessagesState {
         }
 
         if let DecryptedMessageStatus::Success(state) = &mut self.open_message {
-            match key.code {
-                KeyCode::Char('k') | KeyCode::Up => {
-                    if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                        state.content_scroll.scroll_up();
-                        return Command::None;
+            if state.content_scroll.handle_event(key.code) {
+                return Command::None;
+            }
+            if let KeyCode::Char('H') = key.code {
+                let tether = ctx.user_stash().connection();
+                let id = state.msg.id();
+                return Command::popup_from_future("Message Headers", async move {
+                    let mdata = MessageBodyMetadata::find_first(
+                        "WHERE local_message_id = ?",
+                        params![id],
+                        &tether,
+                    )
+                    .await?
+                    .context("Error getting metadata")?;
+
+                    let mut headers = String::new();
+                    for (k, v) in mdata.parsed_headers.headers {
+                        let v = v.to_string();
+                        writeln!(headers, r#"- "{k}": {v}"#)?;
                     }
-                }
-                KeyCode::Char('j') | KeyCode::Down => {
-                    if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                        state.content_scroll.scroll_down();
-                        return Command::None;
-                    }
-                }
-                _ => {}
+
+                    Ok(headers)
+                });
             }
         }
 
@@ -764,6 +779,7 @@ impl MessagesState {
             vec.extend_from_slice(&[
                 ("Shift + ▲ ", "Scroll up in a message"),
                 ("Shift + ▼ ", "Scroll down in a message"),
+                ("Shift + h ", "View message headers"),
             ]);
         }
         vec.extend_from_slice(&[
@@ -784,7 +800,6 @@ pub struct DecryptedMessage {
     msg: MailMessage,
     content: String,
     content_scroll: ScrollableParagraphState,
-    content_lines: usize,
     date: String,
     from: String,
     to: String,
@@ -925,8 +940,7 @@ impl DecryptedMessage {
         }
 
         let content = html_to_text(&body_output.body)?;
-        let content_scroll = ScrollableParagraphState::new();
-        let content_lines = content.chars().filter(|c| *c == '\n').count();
+        let content_scroll = ScrollableParagraphState::default();
 
         let date = date_from_timestamp(msg.time);
         let from = format_sender(&msg.sender);
@@ -959,7 +973,6 @@ impl DecryptedMessage {
             msg,
             content,
             content_scroll,
-            content_lines,
             date,
             from,
             to,
@@ -1358,7 +1371,7 @@ impl DecryptedMessage {
         // ---
 
         let para = Paragraph::new(&*self.content);
-        let para = ScrollableParagraph::new(para, self.content_lines);
+        let para = ScrollableParagraph(para);
 
         frame.render_stateful_widget(para, body_area, &mut self.content_scroll);
     }
