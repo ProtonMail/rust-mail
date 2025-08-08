@@ -152,8 +152,13 @@ pub struct Message {
     #[DbField]
     pub size: u64,
 
+    /// Field managed by the api which notoriously gets wrong values.
     #[DbField]
     pub snooze_time: UnixTimestamp,
+
+    /// The unix timestamp at which this message is snoozed until.
+    /// `None` means that the message is not snoozed.
+    pub snoozed_until: Option<UnixTimestamp>,
 
     #[DbField]
     pub display_snooze_reminder: bool,
@@ -1571,6 +1576,7 @@ impl Message {
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),
+            snoozed_until: None,
             display_snooze_reminder: value.display_snoozed_reminder,
             subject: value.subject,
             time: value.time.into(),
@@ -2525,6 +2531,10 @@ impl ModelHooks for Message {
             .iter()
             .map(|l| l.remote_id.clone().unwrap())
             .collect();
+        if self.label_ids.contains(&LabelId::snoozed()) {
+            self.snoozed_until =
+                Conversation::read_snooze_time(self.local_conversation_id.unwrap(), tether).await?;
+        }
 
         self.custom_labels = labels
             .into_iter()
@@ -2735,6 +2745,7 @@ impl Message {
             sender: Default::default(),
             size: Default::default(),
             snooze_time: UnixTimestamp::new(0),
+            snoozed_until: None,
             display_snooze_reminder: false,
             subject: Default::default(),
             time: UnixTimestamp::new(0),

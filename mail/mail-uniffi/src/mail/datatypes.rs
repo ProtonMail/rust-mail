@@ -1512,11 +1512,7 @@ impl From<RealMessage> for Message {
             display_order: value.display_order,
             sender: value.sender.into(),
             size: value.size,
-            snoozed_until: if value.snooze_time.as_u64() > 0 {
-                Some(value.snooze_time.into())
-            } else {
-                None
-            },
+            snoozed_until: value.snoozed_until.map(Into::into),
             display_snooze_reminder: value.display_snooze_reminder,
             subject: value.subject,
             time: value.time.into(),

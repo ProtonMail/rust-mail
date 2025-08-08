@@ -173,6 +173,7 @@ async fn change_sender_address_with_alias() {
         sender: Default::default(),
         size: 0,
         snooze_time: Default::default(),
+        snoozed_until: None,
         display_snooze_reminder: false,
         subject: "".to_string(),
         time: Default::default(),
