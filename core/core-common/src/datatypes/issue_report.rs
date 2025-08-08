@@ -286,7 +286,8 @@ async fn zip_contents_into_memory(
     let compat_cursor = cursor.compat_write(); // Make it compatible with futures-io
     let mut zip_writer = ZipFileWriter::new(compat_cursor);
     let entry = ZipEntryBuilder::new(out_name.as_str().into(), Compression::Deflate)
-        .last_modification_date(ZipDateTime::from_chrono(&now));
+        .last_modification_date(ZipDateTime::from_chrono(&now))
+        .unix_permissions(0o644);
     let mut entry_writer = zip_writer.write_entry_stream(entry).await.map_err(|e| {
         CoreContextError::Other(anyhow!(
             "Could not create stream zip writer, details: `{e}`"
