@@ -103,7 +103,7 @@ async fn check_reply_signature_text() {
 async fn check_reply_from_html_with_text_as_default() {
     let (draft, _, _) = create_reply_with(ReplyMode::All, MimeType::TextPlain).await;
     assert_snapshot!(draft.body());
-    assert_eq!(draft.mime_type, MimeType::TextHtml);
+    assert_eq!(draft.mime_type(), MimeType::TextHtml);
 }
 
 #[tokio::test]
@@ -419,15 +419,15 @@ async fn sanitize_draft_reply_html() {
     )
     .await;
 
-    assert_snapshot!(draft.body);
+    assert_snapshot!(draft.body());
 
-    let sanitized = draft.body.clone();
+    let sanitized = draft.body().to_owned();
 
     draft.sanitize_body();
     assert_snapshot!(draft.body());
 
     // This should be identical before the save.
-    assert_eq!(sanitized, draft.body);
+    assert_eq!(sanitized, draft.body());
 }
 
 #[test_case(ReplyMode::Sender; "Sender")]
