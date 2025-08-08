@@ -399,19 +399,19 @@ fn extract_metadata(event: &ical::VEvent) -> Metadata {
     let summary = event
         .summary
         .as_ref()
-        .map(|sum| sum.value.as_str().to_owned())
-        .filter(|desc| !desc.is_empty());
+        .map(|sum| sum.value.as_str().trim().to_owned())
+        .filter(|sum| !sum.is_empty());
 
     let location = event
         .location
         .as_ref()
-        .map(|loc| loc.value.as_str().to_owned())
-        .filter(|desc| !desc.is_empty());
+        .map(|loc| loc.value.as_str().trim().to_owned())
+        .filter(|loc| !loc.is_empty());
 
     let description = event
         .description
         .as_ref()
-        .map(|desc| desc.value.as_str().to_owned())
+        .map(|desc| desc.value.as_str().trim().to_owned())
         .filter(|desc| !desc.is_empty());
 
     Metadata {
@@ -1353,7 +1353,7 @@ impl Source<'_> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Metadata {
     summary: Option<String>,
     location: Option<String>,
@@ -1482,6 +1482,162 @@ mod tests {
                 RsvpProgress::Cancelled,
                 extract_progress(&now, &source, &occurrence)
             );
+        }
+    }
+
+    mod extract_metadata {
+        use super::*;
+        use proton_ical::ics;
+        use test_case::test_case;
+
+        struct TestCase {
+            given_event: fn() -> String,
+            expected: fn() -> Metadata,
+        }
+
+        const TEST_ALL: TestCase = TestCase {
+            given_event: || {
+                ics! {"
+                    SUMMARY:drinking kool-aid
+                    LOCATION:united america of states
+                    DESCRIPTION:get a refreshment with me
+                "}
+            },
+            expected: || Metadata {
+                summary: Some("drinking kool-aid".into()),
+                location: Some("united america of states".into()),
+                description: Some("get a refreshment with me".into()),
+            },
+        };
+
+        const TEST_WHITESPACE: TestCase = TestCase {
+            given_event: || {
+                ics! {"
+                    SUMMARY: drinking kool-aid
+                    LOCATION: united america of states
+                    DESCRIPTION: get a refreshment with me
+                "}
+            },
+            expected: || Metadata {
+                summary: Some("drinking kool-aid".into()),
+                location: Some("united america of states".into()),
+                description: Some("get a refreshment with me".into()),
+            },
+        };
+
+        const TEST_EMPTY_SUMMARY: TestCase = TestCase {
+            given_event: || {
+                ics! {"
+                    SUMMARY:
+                    LOCATION:united america of states
+                    DESCRIPTION:get a refreshment with me
+                "}
+            },
+            expected: || Metadata {
+                summary: None,
+                location: Some("united america of states".into()),
+                description: Some("get a refreshment with me".into()),
+            },
+        };
+
+        const TEST_JUST_SUMMARY: TestCase = TestCase {
+            given_event: || {
+                ics! {"
+                    SUMMARY:drinking kool-aid
+                "}
+            },
+            expected: || Metadata {
+                summary: Some("drinking kool-aid".into()),
+                location: None,
+                description: None,
+            },
+        };
+
+        const TEST_EMPTY_LOCATION: TestCase = TestCase {
+            given_event: || {
+                ics! {"
+                    SUMMARY:drinking kool-aid
+                    LOCATION:
+                    DESCRIPTION:get a refreshment with me
+                "}
+            },
+            expected: || Metadata {
+                summary: Some("drinking kool-aid".into()),
+                location: None,
+                description: Some("get a refreshment with me".into()),
+            },
+        };
+
+        const TEST_JUST_LOCATION: TestCase = TestCase {
+            given_event: || {
+                ics! {"
+                    LOCATION:united america of states
+                "}
+            },
+            expected: || Metadata {
+                summary: None,
+                location: Some("united america of states".into()),
+                description: None,
+            },
+        };
+
+        const TEST_EMPTY_DESCRIPTION: TestCase = TestCase {
+            given_event: || {
+                ics! {"
+                    SUMMARY:drinking kool-aid
+                    LOCATION:united america of states
+                    DESCRIPTION:
+                "}
+            },
+            expected: || Metadata {
+                summary: Some("drinking kool-aid".into()),
+                location: Some("united america of states".into()),
+                description: None,
+            },
+        };
+
+        const TEST_JUST_DESCRIPTION: TestCase = TestCase {
+            given_event: || {
+                ics! {"
+                    DESCRIPTION:get a refreshment with me
+                "}
+            },
+            expected: || Metadata {
+                summary: None,
+                location: None,
+                description: Some("get a refreshment with me".into()),
+            },
+        };
+
+        #[test_case(TEST_ALL)]
+        #[test_case(TEST_WHITESPACE)]
+        #[test_case(TEST_EMPTY_SUMMARY)]
+        #[test_case(TEST_JUST_SUMMARY)]
+        #[test_case(TEST_EMPTY_LOCATION)]
+        #[test_case(TEST_JUST_LOCATION)]
+        #[test_case(TEST_EMPTY_DESCRIPTION)]
+        #[test_case(TEST_JUST_DESCRIPTION)]
+        #[allow(clippy::needless_pass_by_value)]
+        fn test(case: TestCase) {
+            let given_event = {
+                let src = [
+                    "BEGIN:VCALENDAR",
+                    "BEGIN:VEVENT",
+                    &(case.given_event)(),
+                    "END:VEVENT",
+                    "END:VCALENDAR",
+                ]
+                .iter()
+                .join("\n");
+
+                ical::VCalendar::from_str(&src)
+                    .unwrap()
+                    .cal
+                    .events
+                    .remove(0)
+            };
+
+            assert_eq!((case.expected)(), extract_metadata(&given_event));
         }
     }
 
