@@ -4,6 +4,7 @@ use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
 use muon::common::ParseEndpointErr;
 use muon::env::DynEnv;
 use std::borrow::Borrow;
+use std::fmt::Formatter;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, watch};
@@ -292,14 +293,23 @@ impl Builder {
 }
 
 /// An API session, capable of making requests to the API on behalf of a user.
-#[derive(Debug, Deref, Clone)]
-#[debug("Session {{ client: {client:?}, config: {config:?} }}")]
+#[derive(Deref, Clone)]
 pub struct Session {
     #[deref]
     client: Proton,
     config: Arc<Config>,
     store: DynStore,
     status: StatusWatcher,
+}
+
+impl std::fmt::Debug for Session {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Session {{ client: {:?}, config: {:?} }}",
+            self.client, self.config
+        )
+    }
 }
 
 impl Session {
