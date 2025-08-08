@@ -6,13 +6,14 @@ use std::{
 use crate::{
     UserContext,
     datatypes::Refresh,
+    db::account::CoreAccount,
     events::{Action, AddressEvent, ContactEmailEvent, ContactEvent, CoreEvent},
     models::{Address, Contact, Label, ModelExtension, User},
 };
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use proton_core_api::{
-    services::proton::{EventId, ProtonCore},
+    services::proton::{EventId, ProtonCore, UserId},
     session::CoreSession,
 };
 use proton_event_loop::{
@@ -207,63 +208,14 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
             return Ok(());
         };
         debug!("Handling {} events", events.len());
+
         let user_id = ctx.user_id().clone();
         let stash = ctx.stash().clone();
 
         let mut conn = stash.connection();
         conn.tx::<_, _, StashError>(async |tx| {
             for event in events.iter_mut() {
-                if let Some(user) = event.user.as_mut() {
-                    debug!("Handling user event");
-                    user.save(tx).await.map_err(|e| {
-                        error!("Failed to update user: {e:?}");
-                        e
-                    })?;
-                }
-                if let Some(settings) = event.user_settings.as_mut() {
-                    debug!("Handling user setting event");
-                    settings.remote_id = Some(user_id.clone());
-                    settings.save(tx).await.map_err(|e| {
-                        error!("Failed to update user settings:{e:?}");
-                        e
-                    })?;
-                }
-                if let Some(used_space) = event.used_space {
-                    debug!("Handling user space event");
-                    let mut user = User::load(user_id.clone(), tx).await?.unwrap();
-                    user.used_space = used_space;
-                    user.save(tx).await.map_err(|e| {
-                        error!("Failed to update used space:{e:?}");
-                        e
-                    })?;
-                }
-                if let Some(used_product_space) = event.product_used_space.as_ref() {
-                    debug!("Handling user product space event");
-                    let mut user = User::load(user_id.clone(), tx).await?.unwrap();
-                    user.product_used_space = used_product_space.clone();
-                    user.save(tx).await.map_err(|e| {
-                        error!("Failed to update used space:{e:?}");
-                        e
-                    })?;
-                }
-                if let Some(addresses) = event.addresses.as_mut() {
-                    debug!("Handling address event");
-                    handle_address_event(tx, addresses).await?;
-                }
-
-                if let Some(labels) = event.labels.as_mut() {
-                    debug!("Handling label event");
-                    handle_label_events(tx, labels).await?;
-                }
-
-                if let Some(contacts) = event.contacts.as_mut() {
-                    debug!("Handling contact events");
-                    handle_contact_event(tx, contacts).await?;
-                }
-                if let Some(contact_emails) = event.contact_emails.as_mut() {
-                    debug!("Handling contact email events");
-                    handle_contact_email_event(tx, contact_emails).await?;
-                }
+                handle_event(&ctx, event, tx, &user_id).await?;
             }
             Ok(())
         })
@@ -283,6 +235,87 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
     fn is_alive(&self) -> bool {
         self.0.strong_count() > 0
     }
+}
+
+async fn handle_event(
+    ctx: &Arc<UserContext>,
+    event: &mut CoreEvent,
+    tx: &Bond<'_>,
+    user_id: &UserId,
+) -> Result<(), StashError> {
+    if let Some(user) = event.user.as_mut() {
+        debug!("Handling user event");
+
+        // Update CoreAccount table:
+        ctx.context
+            .account_stash()
+            .connection()
+            .tx::<_, _, StashError>(async |account_tx| {
+                if let Some(account) = CoreAccount::load(user.id(), account_tx).await? {
+                    account
+                        .with_display_name(user.display_name.clone().unwrap_or_default())
+                        .with_name_or_addr(user.name.clone().unwrap_or_else(|| user.email.clone()))
+                        .with_primary_addr(user.email.clone())
+                        .with_username(user.name.clone().unwrap_or_default())
+                        .save(account_tx)
+                        .await
+                } else {
+                    Ok(())
+                }
+            })
+            .await?;
+
+        // Update user:
+        user.save(tx).await.map_err(|e| {
+            error!("Failed to update user: {e:?}");
+            e
+        })?;
+    }
+    if let Some(settings) = event.user_settings.as_mut() {
+        debug!("Handling user setting event");
+        settings.remote_id = Some(user_id.clone());
+        settings.save(tx).await.map_err(|e| {
+            error!("Failed to update user settings:{e:?}");
+            e
+        })?;
+    }
+    if let Some(used_space) = event.used_space {
+        debug!("Handling user space event");
+        let mut user = User::load(user_id.clone(), tx).await?.unwrap();
+        user.used_space = used_space;
+        user.save(tx).await.map_err(|e| {
+            error!("Failed to update used space:{e:?}");
+            e
+        })?;
+    }
+    if let Some(used_product_space) = event.product_used_space.as_ref() {
+        debug!("Handling user product space event");
+        let mut user = User::load(user_id.clone(), tx).await?.unwrap();
+        user.product_used_space = used_product_space.clone();
+        user.save(tx).await.map_err(|e| {
+            error!("Failed to update used space:{e:?}");
+            e
+        })?;
+    }
+    if let Some(addresses) = event.addresses.as_mut() {
+        debug!("Handling address event");
+        handle_address_event(tx, addresses).await?;
+    }
+
+    if let Some(labels) = event.labels.as_mut() {
+        debug!("Handling label event");
+        handle_label_events(tx, labels).await?;
+    }
+
+    if let Some(contacts) = event.contacts.as_mut() {
+        debug!("Handling contact events");
+        handle_contact_event(tx, contacts).await?;
+    }
+    if let Some(contact_emails) = event.contact_emails.as_mut() {
+        debug!("Handling contact email events");
+        handle_contact_email_event(tx, contact_emails).await?;
+    }
+    Ok(())
 }
 
 impl UserContext {
