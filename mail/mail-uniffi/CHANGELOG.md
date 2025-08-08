@@ -5,15 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.121.0] - 2025-08-08
+
+### Features
+
+- [ET-2602] Add unable to decrypt message body banner
+
+### Fixes
+
+- [ET-2602] Store undecryptable message bodies
+- [ET-4176] Use fresh fido2 details in change pass flow
+
+
+## [mail-uniffi-v0.119.0] - 2025-08-07
+
+### Features
+
+- Implement proxying and add load_image fn which proxies images. s/embeddedattachmentinfo/attachmentdata.
+
+### Fixes
+
+- [ET-4124] Fetch event in "groups"
+
+
 ## [mail-uniffi-v0.120.0] - 2025-08-07
 
 ### Changed
 
+- Remove the following functions: `remove_label_from_conversations` `apply_label_to_conversations` `remove_label_from_messages` `apply_label_to_messages`
 - Move marking as read for snooze reminder to the common library
 - (breaking) rename `mail_uniffi::message::snooze_time` into `snoozed_until` and make field optional
 
+### Features
+
+- [ET-3094] Limit simultaneously logged in free account count
+- [ET-4106] Tidied up payment observability events.
+
 ### Fixes
 
+- [ET-3926] Undo move and rollback correctly mark as unread and undoes the unlabelling
+- [ET-4100] Only fetch message metadata when resolving remote id
+- Move_conversations and move_messages no longer return voidactionresult
+- [ET-4125] Do not prefetch attachments when prefetching message body
 - [ET-4142] Handle expiration time too soon error [breaking change]
 - [ET-4142] Expiration time should be between 15min and 28 days
 - Rsvp: support apple-style invites
@@ -21,27 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4142] Report missing send error reasons
 - Rsvp: discriminate between network failures and missing events
 - [ET-4142] Do not set expiration time on drafts before send
-
-
-## [mail-uniffi-v0.119.0] - 2025-08-07
-
-### Changed
-
-- Remove the following functions: `remove_label_from_conversations` `apply_label_to_conversations` `remove_label_from_messages` `apply_label_to_messages`
-
-### Features
-
-- [ET-3094] Limit simultaneously logged in free account count
-- [ET-4106] Tidied up payment observability events.
-- Implement proxying and add load_image fn which proxies images. s/embeddedattachmentinfo/attachmentdata.
-
-### Fixes
-
-- [ET-3926] Undo move and rollback correctly mark as unread and undoes the unlabelling
-- [ET-4100] Only fetch message metadata when resolving remote id
-- Move_conversations and move_messages no longer return voidactionresult
-- [ET-4124] Fetch event in "groups"
-- [ET-4125] Do not prefetch attachments when prefetching message body
 
 
 ## [mail-uniffi-v0.118.0] - 2025-08-06
