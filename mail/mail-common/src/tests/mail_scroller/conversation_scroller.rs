@@ -137,7 +137,6 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
         local_label_id,
         unread,
         ScrollOrderDir::Desc,
-        ScrollOrderField::Time,
         &tether,
     )
     .await
@@ -513,6 +512,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    // Create new entries for each filter type
     let mut scroller_all = ConversationScrollData::builder()
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
@@ -569,6 +569,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
     assert!(all.contains(&scroller_read));
     assert!(all.contains(&scroller_unread));
 
+    // Verify that the entries can be saved again
     tether
         .tx::<_, _, StashError>(async |bond| {
             scroller_all.save(bond).await.unwrap();
@@ -586,6 +587,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
     assert_eq!(scroller_read.id, Some(2));
     assert_eq!(scroller_unread.id, Some(3));
 
+    // Create identical entries and save them
     let mut scroller_all = ConversationScrollData::builder()
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
@@ -633,6 +635,55 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
     assert_eq!(scroller_read.id, Some(2));
     assert_eq!(scroller_unread.id, Some(3));
 
+    // Create new entries with different snooze time and save them
+    let mut scroller_all = ConversationScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::All)
+        .remote_conversation_id(ConversationId::from("150"))
+        .conversation_time(0.into())
+        .display_order(0)
+        .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::SnoozeTime)
+        .build();
+
+    let mut scroller_read = ConversationScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::Read)
+        .remote_conversation_id(ConversationId::from("150"))
+        .conversation_time(0.into())
+        .display_order(0)
+        .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::SnoozeTime)
+        .build();
+
+    let mut scroller_unread = ConversationScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::Unread)
+        .remote_conversation_id(ConversationId::from("150"))
+        .conversation_time(0.into())
+        .display_order(0)
+        .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::SnoozeTime)
+        .build();
+
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            scroller_all.save(bond).await.unwrap();
+            scroller_read.save(bond).await.unwrap();
+            scroller_unread.save(bond).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let count = ConversationScrollData::all_count(&tether).await.unwrap();
+
+    assert_eq!(count, 3);
+    assert_eq!(scroller_all.id, Some(1));
+    assert_eq!(scroller_read.id, Some(2));
+    assert_eq!(scroller_unread.id, Some(3));
+
+    // Create new entries with different time and display order and save them
     let mut scroller_all = ConversationScrollData::builder()
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
@@ -691,6 +742,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
     assert_eq!(scroller_unread.conversation_time, 1.into());
     assert_eq!(scroller_unread.display_order, 2);
 
+    // Create new entries with different local label id and save them
     let diff_local_label_id = SystemLabel::AllMail
         .local_id(&tether)
         .await

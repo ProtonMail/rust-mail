@@ -28,13 +28,12 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         order_dir: ScrollOrderDir,
-        order_field: ScrollOrderField,
         tether: &Tether,
     ) -> impl Future<Output = Result<Option<Self>, StashError>> + Send {
         async move {
             Self::find_first(
-                "WHERE local_label_id=? AND unread=? AND order_dir=? AND order_field=?",
-                params![local_label_id, unread, order_dir, order_field],
+                "WHERE local_label_id=? AND unread=? AND order_dir=?",
+                params![local_label_id, unread, order_dir],
                 tether,
             )
             .await
@@ -104,14 +103,8 @@ pub struct MessageScrollData {
 
 impl MessageScrollData {
     pub async fn save(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(existing) = Self::find_with_key(
-            self.local_label_id,
-            self.unread,
-            self.order_dir,
-            self.order_field,
-            tx,
-        )
-        .await?
+        if let Some(existing) =
+            Self::find_with_key(self.local_label_id, self.unread, self.order_dir, tx).await?
         {
             self.id = existing.id;
         } else {
@@ -302,14 +295,8 @@ pub struct ConversationScrollData {
 
 impl ConversationScrollData {
     pub async fn save(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(existing) = Self::find_with_key(
-            self.local_label_id,
-            self.unread,
-            self.order_dir,
-            self.order_field,
-            tx,
-        )
-        .await?
+        if let Some(existing) =
+            Self::find_with_key(self.local_label_id, self.unread, self.order_dir, tx).await?
         {
             self.id = existing.id;
         } else {
@@ -668,7 +655,7 @@ impl<T: ScrollData> CachedScrollData<T> {
         let order_dir = ScrollOrderDir::for_local_label(local_label_id, tether).await?;
         let order_field = ScrollOrderField::for_local_label(local_label_id, tether).await?;
 
-        let data = T::find_with_key(local_label_id, unread, order_dir, order_field, tether).await?;
+        let data = T::find_with_key(local_label_id, unread, order_dir, tether).await?;
 
         Ok(match data {
             Some(data) => {
@@ -897,24 +884,18 @@ impl<T: ScrollData> CachedScrollData<T> {
         // they should be the same however `end` var is just shorter.
         let end = &self.end;
 
-        T::find_with_key(
-            end.local_label_id,
-            end.unread,
-            end.order_dir,
-            end.order_field,
-            tether,
-        )
-        .await
-        .and_then(|op| {
-            op.ok_or_else(|| {
-                StashError::Critical(anyhow!(
-                    "Non-generic ScrollData not found for label_id: {}, \
+        T::find_with_key(end.local_label_id, end.unread, end.order_dir, tether)
+            .await
+            .and_then(|op| {
+                op.ok_or_else(|| {
+                    StashError::Critical(anyhow!(
+                        "Non-generic ScrollData not found for label_id: {}, \
                      unread: {:?}. This is serious issue.",
-                    end.local_label_id,
-                    end.unread
-                ))
+                        end.local_label_id,
+                        end.unread
+                    ))
+                })
             })
-        })
     }
 }
 
