@@ -212,6 +212,11 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         if let Some(scroller) = self.state.online() {
             debug!("We have paginated here before, try to create cached scroller");
             if let Some(scroll_data) = scroller.scroll_data_begin(&tether).await? {
+                if ctx.session().status().await.is_online() {
+                    debug!("Syncing previous page in background");
+                    self.sync_previous_page(ctx, &scroll_data, remote_label_id.clone())
+                        .await?;
+                }
                 let task =
                     if !scroller.has_next_page(&tether).await? && total > self.page_size as u64 {
                         if is_offline().await {
@@ -223,13 +228,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                                 .await?
                         }
                     } else {
-                        if ctx.session().status().await.is_online() {
-                            debug!("Syncing previous page in background");
-                            self.sync_previous_page(ctx, &scroll_data, remote_label_id)
-                                .await?;
-                        }
-
-                        // Previous page should not be awaited
                         None
                     };
                 return Ok(task);
