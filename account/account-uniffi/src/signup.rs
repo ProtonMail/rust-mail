@@ -2,6 +2,7 @@
 
 //! Implements the sign-up flow.
 
+use crate::password_validator::PasswordType;
 use crate::password_validator::PasswordValidatorService;
 use crate::user_behavior::UserBehavior;
 use itertools::Itertools;
@@ -225,7 +226,7 @@ impl SignupFlow {
     }
 
     /// Submit validated password.
-    pub async fn submit_validated_password(
+    pub async fn submit_password(
         &self,
         password: String,
         confirm_password: String,
@@ -233,19 +234,10 @@ impl SignupFlow {
     ) -> Result<SimpleSignupState, SignupError> {
         token
             .ok_or(SignupError::PasswordNotValidated)?
-            .matches(&password)
+            .matches(PasswordType::Main, &password)
             .then_some(())
             .ok_or(SignupError::PasswordValidationMismatch)?;
 
-        self.submit_password_flow(password, confirm_password).await
-    }
-
-    /// Submit password.
-    pub async fn submit_password(
-        &self,
-        password: String,
-        confirm_password: String,
-    ) -> Result<SimpleSignupState, SignupError> {
         self.submit_password_flow(password, confirm_password).await
     }
 
