@@ -71,21 +71,14 @@ async fn create_empty_draft() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-    let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
+    let draft_conversation_id = draft.conversation_id().await.unwrap().unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -272,50 +265,42 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Update the draft
-    draft.subject = new_subject.to_owned();
-    draft.set_body(new_body.to_owned());
-    draft.to_list = new_to_list.clone();
-    draft.cc_list = new_cc_list.clone();
-    draft.bcc_list = new_bcc_list.clone();
-
+    draft.set_subject(new_subject.to_owned()).await.unwrap();
+    draft.set_body(new_body.to_owned()).await.unwrap();
     draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .set_recipients(
+            new_to_list.clone(),
+            new_cc_list.clone(),
+            new_bcc_list.clone(),
         )
         .await
         .unwrap();
 
+    draft.save().await.unwrap();
+
     user_ctx.execute_all_send_actions().await.unwrap();
 
     let tether = user_ctx.user_stash().connection();
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     // Opening the draft and check if all the information is up to date
     let (draft, _) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
-    assert_eq!(draft.body(), new_body);
-    assert_eq!(draft.subject, new_subject);
-    assert_eq!(draft.to_list, new_to_list);
-    assert_eq!(draft.cc_list, new_cc_list);
-    assert_eq!(draft.bcc_list, new_bcc_list);
+    let state = draft.state().await.unwrap();
+    assert_eq!(state.body, new_body);
+    assert_eq!(state.subject, new_subject);
+    assert_eq!(state.to_list, new_to_list);
+    assert_eq!(state.cc_list, new_cc_list);
+    assert_eq!(state.bcc_list, new_bcc_list);
 
-    let draft_conv_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+    let draft_conv_id = draft.conversation_id().await.unwrap().unwrap();
 
     let conv = Conversation::find_by_id(draft_conv_id, &tether)
         .await
@@ -563,16 +548,9 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
@@ -580,7 +558,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     let tether = user_ctx.user_stash().connection();
 
     let send_result =
-        DraftSendResult::find_by_id(draft.message_id(&tether).await.unwrap().unwrap(), &tether)
+        DraftSendResult::find_by_id(draft.message_id().await.unwrap().unwrap(), &tether)
             .await
             .unwrap()
             .unwrap();
@@ -789,7 +767,7 @@ async fn create_draft_reply_with_override_impl(
         .unwrap();
 
     // Create draft.
-    let mut draft = Draft::reply(
+    let draft = Draft::reply(
         &user_ctx,
         existing_message.local_id.unwrap(),
         reply_mode,
@@ -799,20 +777,13 @@ async fn create_draft_reply_with_override_impl(
     .await
     .unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-    let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
+    let draft_conversation_id = draft.conversation_id().await.unwrap().unwrap();
 
     // Load the draft.
     let draft_message = Message::load(draft_message_id, &tether)
@@ -826,7 +797,7 @@ async fn create_draft_reply_with_override_impl(
         .unwrap();
 
     if let Some(alias_override) = alias_override {
-        assert_eq!(draft.sender, alias_override);
+        assert_eq!(draft.sender().await.unwrap(), alias_override);
     }
 
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
@@ -918,23 +889,15 @@ async fn open_draft_sync_status_success() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Load the draft.
-    let tether = user_ctx.user_stash().connection();
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     // Opening this draft should work;
     let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
@@ -989,23 +952,15 @@ async fn open_draft_sync_status_cached() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Load the draft.
-    let tether = user_ctx.user_stash().connection();
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     // Opening this draft should work;
     let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
@@ -1035,20 +990,12 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Load the draft.
-    let tether = user_ctx.user_stash().connection();
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     // Opening this draft should work;
     let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
@@ -1089,21 +1036,14 @@ async fn new_draft_conversation_remote_id_updated_externally() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Load the draft.
     let mut tether = user_ctx.user_stash().connection();
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-    let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
+    let draft_conversation_id = draft.conversation_id().await.unwrap().unwrap();
 
     // Simulate the new conversation being created via other means.
     let mut fetched_conv = Conversation::find_by_id(draft_conversation_id, &tether)
@@ -1146,7 +1086,7 @@ async fn new_draft_conversation_remote_id_updated_externally() {
     );
 
     assert_eq!(
-        draft.conversation_id(&tether).await.unwrap().unwrap(),
+        draft.conversation_id().await.unwrap().unwrap(),
         draft_conversation_id
     );
 }
@@ -1195,34 +1135,20 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
-    draft.subject = "Modified".to_owned();
+    draft.set_subject("Modified".to_owned()).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     let err = user_ctx.execute_all_send_actions().await.unwrap_err();
 
@@ -1395,25 +1321,18 @@ async fn open_draft_resets_password() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .set_password(&user_ctx, "foo_bar_and_some", Some("foo".to_string()))
+        .set_password("foo_bar_and_some", Some("foo".to_string()))
         .await
         .unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -1422,7 +1341,7 @@ async fn open_draft_resets_password() {
     let (draft, status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
 
     assert_eq!(status, DraftSyncStatus::Synced);
-    assert!(draft.get_password(&user_ctx).await.unwrap().is_none());
+    assert!(draft.get_password().await.unwrap().is_none());
 
     let metadata = DraftMetadata::find_by_id(draft.metadata_id, &tether)
         .await
@@ -1488,7 +1407,7 @@ async fn create_draft_reply_with_invalid_address_produces_address_validation_err
     .unwrap();
 
     // Create draft.
-    let mut draft = Draft::reply(
+    let draft = Draft::reply(
         &user_ctx,
         existing_message.local_id.unwrap(),
         ReplyMode::Sender,
@@ -1498,9 +1417,13 @@ async fn create_draft_reply_with_invalid_address_produces_address_validation_err
     .await
     .unwrap();
 
-    assert_eq!(draft.address_id, params.addresses[1].id);
+    assert_eq!(draft.address_id().await.unwrap(), params.addresses[1].id);
 
-    let validation_result = draft.address_validation_result.take().unwrap();
+    let validation_result = draft
+        .take_address_validation_result()
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(validation_result.email, params.addresses[0].email);
     assert_eq!(
@@ -1545,36 +1468,41 @@ async fn open_draft_catches_invalid_address() {
 
     // Create draft.
     let mut tether = user_ctx.user_stash().connection();
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(user_ctx.action_queue(), &tether, user_ctx.origin())
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Change the address to invalid
-    let mut address = Address::find_by_remote_id(draft.address_id.clone(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
+    let mut address =
+        Address::find_by_remote_id(draft.address_id().await.unwrap().clone(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
 
     address.status = AddressStatus::Disabled.into();
 
     tether.tx(async |tx| address.save(tx).await).await.unwrap();
 
     // Load the draft.
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     // Opening this draft again should trigger the address change invalidation
     let (draft, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
 
     assert_eq!(sync_status, DraftSyncStatus::Synced);
-    assert_ne!(draft.address_id, address.remote_id.unwrap());
+    assert_ne!(
+        draft.address_id().await.unwrap(),
+        address.remote_id.unwrap()
+    );
 
-    let validation_result = draft.address_validation_result.unwrap();
+    let validation_result = draft
+        .take_address_validation_result()
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(validation_result.email, address.email);
     assert_eq!(
@@ -1683,8 +1611,8 @@ async fn open_draft_detects_sender_alias() {
     let (draft, sync_status) = Draft::open(&user_ctx, message.id()).await.unwrap();
 
     assert_eq!(sync_status, DraftSyncStatus::Synced);
-    assert_eq!(draft.sender, alias_address);
-    let addresses = draft.sender_addresses(&tether).await.unwrap();
+    assert_eq!(draft.sender().await.unwrap(), alias_address);
+    let addresses = draft.sender_addresses().await.unwrap();
     // Alias address should be at the top.
     assert_eq!(addresses[0].email, alias_address);
 }

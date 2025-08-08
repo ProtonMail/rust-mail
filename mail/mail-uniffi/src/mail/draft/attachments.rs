@@ -2,12 +2,13 @@ use crate::core::datatypes::Id;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{DraftAttachmentUploadError, DraftAttachmentUploadErrorReason, ProtonError};
 use crate::mail::datatypes::AttachmentMetadata;
-use crate::mail::draft::Draft;
+use crate::mail::state::MailUserContextPtr;
 use crate::{AsyncLiveQueryCallback, uniffi_async};
 use anyhow::anyhow;
 use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId};
+use proton_mail_common::draft::Draft as RealDraft;
 use proton_mail_common::draft::attachments::{
     DraftAttachment as RealDraftAttachment, DraftAttachmentState as RealDraftAttachmentState,
 };
@@ -17,7 +18,7 @@ use proton_mail_common::models::{
     Attachment as RealAttachment, DraftAttachmentUploadError as RealDraftAttachmentUploadError,
 };
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use tokio::task::AbortHandle;
 use tracing::error;
 use uniffi_common::errors::UserApiServiceError;
@@ -99,13 +100,15 @@ impl From<RealDraftAttachment> for DraftAttachment {
 /// Access and modify the [`Draft`]'s attachments.
 #[derive(uniffi::Object)]
 pub struct AttachmentList {
+    ctx: MailUserContextPtr,
     staging_path: String,
-    draft: Weak<Draft>,
+    draft: RealDraft,
 }
 
 impl AttachmentList {
-    pub(crate) fn new(staging_path: &Path, draft: Weak<Draft>) -> Arc<Self> {
+    pub(crate) fn new(ctx: MailUserContextPtr, staging_path: &Path, draft: RealDraft) -> Arc<Self> {
         Arc::new(Self {
+            ctx,
             staging_path: staging_path.to_string_lossy().into_owned(),
             draft,
         })
@@ -117,29 +120,19 @@ impl AttachmentList {
     /// Add a new attachment to this draft. If `filename_override` is present, that will become
     /// the filename of the attachment. Otherwise, it is extracted from the path.
     pub async fn add(
-        &self,
+        self: Arc<Self>,
         path: String,
         filename_override: Option<String>,
     ) -> Result<(), DraftAttachmentUploadError> {
-        let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
-                UnexpectedError::Draft,
-            )));
-        };
-
-        let Some(ctx) = draft.ctx.upgrade() else {
+        let Some(ctx) = self.ctx.upgrade() else {
             return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
-
         uniffi_async::<(), RealProtonMailError, _>(async move {
             let path = PathBuf::from(path);
 
-            let address_id = {
-                let instance = draft.instance.read().await;
-                instance.address_id.clone()
-            };
+            let address_id = self.draft.address_id().await?;
             let mut tether = ctx.user_stash().connection();
 
             let result = RealAttachment::create_local(
@@ -152,12 +145,11 @@ impl AttachmentList {
             )
             .await;
 
-            let instance = draft.instance.read().await;
-            instance
+            self.draft
                 .delete_attachment_if_in_staging_area(&ctx, &path)
                 .await;
             let attachment = result?;
-            instance.add_attachment(&ctx, attachment).await?;
+            self.draft.add_attachment(&attachment).await?;
             Ok(())
         })
         .await
@@ -169,16 +161,11 @@ impl AttachmentList {
     ///
     /// Returns the assigned content id.
     pub async fn add_inline(
-        &self,
+        self: Arc<Self>,
         path: String,
         filename_override: Option<String>,
     ) -> Result<String, DraftAttachmentUploadError> {
-        let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
-                UnexpectedError::Draft,
-            )));
-        };
-        let Some(ctx) = draft.ctx.upgrade() else {
+        let Some(ctx) = self.ctx.upgrade() else {
             return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
@@ -187,10 +174,7 @@ impl AttachmentList {
         uniffi_async::<String, RealProtonMailError, _>(async move {
             let path = PathBuf::from(path);
 
-            let address_id = {
-                let instance = draft.instance.read().await;
-                instance.address_id.clone()
-            };
+            let address_id = self.draft.address_id().await?;
             let mut tether = ctx.user_stash().connection();
 
             let result = RealAttachment::create_local(
@@ -203,8 +187,7 @@ impl AttachmentList {
             )
             .await;
 
-            let instance = draft.instance.read().await;
-            instance
+            self.draft
                 .delete_attachment_if_in_staging_area(&ctx, &path)
                 .await;
             let attachment = result?;
@@ -214,7 +197,7 @@ impl AttachmentList {
                 .ok_or(MailContextError::Other(anyhow!(
                     "Somehow missing attachment content id"
                 )))?;
-            instance.add_attachment(&ctx, attachment).await?;
+            self.draft.add_attachment(&attachment).await?;
             Ok(content_id.into_inner())
         })
         .await
@@ -222,19 +205,10 @@ impl AttachmentList {
     }
 
     /// Remove an attachment from this draft.
-    pub async fn remove(&self, id: Id) -> Result<(), ProtonError> {
+    pub async fn remove(self: Arc<Self>, id: Id) -> Result<(), ProtonError> {
         let id: LocalAttachmentId = id.into();
-        let Some(draft) = self.draft.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Draft));
-        };
-
-        let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
-        };
-
         uniffi_async::<(), RealProtonMailError, _>(async move {
-            let instance = draft.instance.read().await;
-            instance.remove_attachment(&ctx, id).await?;
+            self.draft.remove_attachment(id).await?;
             Ok(())
         })
         .await
@@ -243,25 +217,12 @@ impl AttachmentList {
 
     /// Remove an attachment from this draft by `content-id`.
     pub async fn remove_with_cid(
-        &self,
+        self: Arc<Self>,
         content_id: String,
     ) -> Result<(), DraftAttachmentUploadError> {
         let id = ContentId::from(content_id);
-        let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
-                UnexpectedError::Draft,
-            )));
-        };
-
-        let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
-
         uniffi_async::<(), RealProtonMailError, _>(async move {
-            let instance = draft.instance.read().await;
-            instance.remove_attachment_with_cid(&ctx, id).await?;
+            self.draft.remove_attachment_with_cid(id).await?;
             Ok(())
         })
         .await
@@ -274,23 +235,13 @@ impl AttachmentList {
     ///
     /// Returns error if the attachment is not in the error state or the action could not
     /// be queued.
-    pub async fn retry(&self, attachment_id: Id) -> Result<(), DraftAttachmentUploadError> {
-        let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
-                UnexpectedError::Draft,
-            )));
-        };
-
-        let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
-
+    pub async fn retry(
+        self: Arc<Self>,
+        attachment_id: Id,
+    ) -> Result<(), DraftAttachmentUploadError> {
         uniffi_async::<(), RealProtonMailError, _>(async move {
-            let instance = draft.instance.read().await;
-            instance
-                .retry_attachment_upload(&ctx, attachment_id.into())
+            self.draft
+                .retry_attachment_upload(attachment_id.into())
                 .await?;
             Ok(())
         })
@@ -307,22 +258,8 @@ impl AttachmentList {
     pub async fn attachments(
         self: Arc<Self>,
     ) -> Result<Vec<DraftAttachment>, DraftAttachmentUploadError> {
-        let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
-                UnexpectedError::Draft,
-            )));
-        };
-
-        let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
-
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            let tether = ctx.user_stash().connection();
-            let instance = draft.instance.read().await;
-            let attachments = instance.attachments(&tether).await?;
+            let attachments = self.draft.attachments().await?;
             Ok(attachments.into_iter().map(DraftAttachment::from).collect())
         })
         .await
@@ -331,23 +268,16 @@ impl AttachmentList {
 
     /// Create a new watcher for attachment status updates..
     pub async fn watcher(
-        &self,
+        self: Arc<Self>,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<DraftAttachmentWatcher>, DraftAttachmentUploadError> {
-        let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
-                UnexpectedError::Draft,
-            )));
-        };
-        let Some(ctx) = draft.ctx.upgrade() else {
+        let Some(ctx) = self.ctx.upgrade() else {
             return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            let instance = draft.instance.read().await;
-            let metadata_id = instance.metadata_id.clone();
-            drop(instance);
+            let metadata_id = self.draft.metadata_id;
             let stash = ctx.user_stash().clone();
             let mut observer = DraftAttachmentObserver::new(metadata_id, stash)
                 .await

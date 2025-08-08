@@ -37,7 +37,7 @@ use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
 use proton_mail_common::draft::observers::{DraftSendResultWatcher, DraftSendResultWatcherMode};
 use proton_mail_common::draft::recipients::RecipientEntry;
-use proton_mail_common::draft::{Draft, DraftExpirationTime};
+use proton_mail_common::draft::{Draft, DraftExpirationTime, RecipientGroupId};
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendFailureSend, DraftSendResult, DraftSendResultOrigin, MailSettings,
     Message, MessageBodyMetadata,
@@ -158,39 +158,28 @@ async fn basic_send_check() {
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft.save().await.unwrap();
 
     // Save at least once so we can retrieve the message id.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // get draft message id.
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
-    draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.send().await.unwrap();
 
     // Check draft is in outbox.
     let draft_message = Message::load(draft_message_id, &tether)
@@ -359,40 +348,28 @@ async fn basic_schedule_send_check() {
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft.save().await.unwrap();
 
     // Save at least once so we can retrieve the message id.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // get draft message id.
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
-    draft
-        .schedule_send(
-            delivery_time,
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.schedule_send(delivery_time).await.unwrap();
 
     // Check draft is in outbox.
     let mut draft_message = Message::load(draft_message_id, &tether)
@@ -504,25 +481,20 @@ async fn schedule_send_with_old_delivery_time_fails() {
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .schedule_send(
-            delivery_time,
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft.schedule_send(delivery_time).await.unwrap();
 
     let Err(QueuedError::Action(schedule_send_error, _)) =
         user_ctx.execute_all_send_actions().await
@@ -542,7 +514,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
     ));
 
     // get draft message id.
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     // Check draft is back in the drafts folder
     let draft_message = Message::load(draft_message_id, &tether)
@@ -677,24 +649,20 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft.send().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
@@ -702,7 +670,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     let tether = user_ctx.user_stash().connection();
 
     let send_result =
-        DraftSendResult::find_by_id(draft.message_id(&tether).await.unwrap().unwrap(), &tether)
+        DraftSendResult::find_by_id(draft.message_id().await.unwrap().unwrap(), &tether)
             .await
             .unwrap()
             .unwrap();
@@ -736,42 +704,25 @@ async fn save_after_send_is_an_error() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft.save().await.unwrap();
 
     // Save at least once so we can retrieve the message id.
-    draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.send().await.unwrap();
 
-    let result = draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await;
+    let result = draft.save().await;
 
     let Err(e) = result else {
         panic!("Should have failed");
@@ -848,24 +799,20 @@ async fn already_sent_error_does_not_produce_error() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft.send().await.unwrap();
 
     let mut observer = DraftSendResultWatcher::new(
         user_ctx.user_stash().clone(),
@@ -970,27 +917,22 @@ async fn cancel_schedule_send_on_queued_send() {
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .schedule_send(
-            delivery_time,
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
 
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    draft.schedule_send(delivery_time).await.unwrap();
+
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     // Cancels the queued action, no network requests are made.
     Draft::cancel_schedule_send(&user_ctx, draft_message_id)
@@ -1197,24 +1139,20 @@ async fn schedule_send_message_limit() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
+        )
+        .await
         .unwrap();
 
-    let result = draft
-        .schedule_send(
-            delivery_time,
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await;
+    let result = draft.schedule_send(delivery_time).await;
 
     assert!(matches!(
         result,
@@ -1254,16 +1192,9 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -1301,7 +1232,7 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
 
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     let draft_message = Message::load(draft_message_id, &tether)
         .await
@@ -1361,19 +1292,15 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
-    draft.set_mime_type(MimeType::TextPlain);
-    *draft.body_mut() = String::from("Nobody expects");
+    let draft = Draft::empty(&user_ctx).await.unwrap();
+    draft.set_mime_type(MimeType::TextPlain).await.unwrap();
     draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
+        .set_body(String::from("Nobody expects"))
         .await
         .unwrap();
+    draft.save().await.unwrap();
 
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     let body = Message::message_body(&user_ctx, draft_message_id)
         .await
@@ -1482,36 +1409,25 @@ async fn already_sent_from_even_update() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft.save().await.unwrap();
 
     // Save at least once so we can retrieve the message id.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.send().await.unwrap();
 
     // Simulate Event update
     user_ctx
@@ -1647,33 +1563,29 @@ async fn send_external_with_password() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .set_password(&user_ctx, "password", Some("hint".into()))
-        .await
-        .unwrap();
-
-    let eo_data = draft.get_password(&user_ctx).await.unwrap().unwrap();
-    assert_eq!(eo_data.password.expose_secret(), "password");
-    assert_eq!(eo_data.password_hint.as_deref(), Some("hint"));
-
-    draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft
+        .set_password("password", Some("hint".into()))
+        .await
+        .unwrap();
+
+    let eo_data = draft.get_password().await.unwrap().unwrap();
+    assert_eq!(eo_data.password.expose_secret(), "password");
+    assert_eq!(eo_data.password_hint.as_deref(), Some("hint"));
+
+    draft.send().await.unwrap();
 
     user_ctx.execute_all_send_actions().await.unwrap();
 }
@@ -1783,38 +1695,34 @@ async fn send_with_expiration() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .set_expiration_time(&mut tether, DraftExpirationTime::Custom(expiration_time))
-        .await
-        .unwrap();
-
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft
+        .set_expiration_time(DraftExpirationTime::Custom(expiration_time))
+        .await
+        .unwrap();
+
+    draft.save().await.unwrap();
 
     // Save at least once so we can retrieve the message id.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // get draft message id.
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     // Check expiration is set
     let draft_message = Message::load(draft_message_id, &tether)
@@ -1825,14 +1733,7 @@ async fn send_with_expiration() {
     // Expiration time should not be set on drafts.
     assert_eq!(draft_message.expiration_time, UnixTimestamp::new(0));
 
-    draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.send().await.unwrap();
 
     user_ctx.execute_all_send_actions().await.unwrap();
 
@@ -2011,33 +1912,29 @@ async fn send_external_with_password_even_if_contact_has_pgp_mime_encryption() {
         .unwrap();
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .set_password(&user_ctx, "password", Some("hint".into()))
-        .await
-        .unwrap();
-
-    let eo_data = draft.get_password(&user_ctx).await.unwrap().unwrap();
-    assert_eq!(eo_data.password.expose_secret(), "password");
-    assert_eq!(eo_data.password_hint.as_deref(), Some("hint"));
-
-    draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft
+        .set_password("password", Some("hint".into()))
+        .await
+        .unwrap();
+
+    let eo_data = draft.get_password().await.unwrap().unwrap();
+    assert_eq!(eo_data.password.expose_secret(), "password");
+    assert_eq!(eo_data.password_hint.as_deref(), Some("hint"));
+
+    draft.send().await.unwrap();
 
     user_ctx.execute_all_send_actions().await.unwrap();
 }
@@ -2106,24 +2003,20 @@ async fn send_fails_if_recipient_is_not_valid_impl(
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            email: "foo@bar.com".into(),
-            display_name: None,
-        })
-        .unwrap();
-
-    draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
         )
         .await
         .unwrap();
+
+    draft.send().await.unwrap();
 
     // Execute action.
     let err = MailContextError::from(user_ctx.execute_all_send_actions().await.unwrap_err());
@@ -2132,15 +2025,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         panic!("invalid error");
     };
 
-    (
-        err,
-        draft
-            .message_id(&user_ctx.user_stash().connection())
-            .await
-            .unwrap()
-            .unwrap(),
-        user_ctx,
-    )
+    (err, draft.message_id().await.unwrap().unwrap(), user_ctx)
 }
 
 fn draft_test_params() -> TestParams {

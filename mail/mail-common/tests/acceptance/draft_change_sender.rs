@@ -43,7 +43,7 @@ async fn change_sender_address() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
     // Extract first attachment key id
     let draft_attachment_metadata = DraftAttachmentMetadata::find_by_metadata_id(
@@ -57,14 +57,14 @@ async fn change_sender_address() {
     let first_key_attachment_id = draft_attachment_metadata[0].local_attachment_id;
 
     draft
-        .change_sender_address(&user_ctx, new_address.email.clone())
+        .change_sender_address(new_address.email.clone())
         .await
         .unwrap();
-    assert_eq!(draft.address_id, new_address.id);
-    assert_eq!(draft.sender, new_address.email);
-    dbg!(draft.body());
-    assert!(!draft.body().contains(&old_address.signature));
-    assert!(draft.body().contains(&new_address.signature));
+    let state = draft.state().await.unwrap();
+    assert_eq!(state.address_id, new_address.id);
+    assert_eq!(state.sender, new_address.email);
+    assert!(!state.body.contains(&old_address.signature));
+    assert!(state.body.contains(&new_address.signature));
 
     // One attachment remove action should be queued.
     assert_eq!(
@@ -208,37 +208,37 @@ async fn change_sender_address_with_alias() {
         .unwrap();
 
     // Create draft.
-    let mut draft = Draft::reply(&user_ctx, message.id(), ReplyMode::Sender, true, None)
+    let draft = Draft::reply(&user_ctx, message.id(), ReplyMode::Sender, true, None)
         .await
         .unwrap();
 
-    let addresses = draft.sender_addresses(&tether).await.unwrap();
+    let addresses = draft.sender_addresses().await.unwrap();
     assert_eq!(addresses[0].email, alias_address);
     // change to another address
-    let old_body = draft.body().to_owned();
+    let old_body = draft.body().await.unwrap();
     draft
-        .change_sender_address(&user_ctx, new_address.email.clone())
+        .change_sender_address(new_address.email.clone())
         .await
         .unwrap();
-    assert_ne!(old_body, draft.body()); //signature changed
+    assert_ne!(old_body, draft.body().await.unwrap()); //signature changed
 
     // change back to alias - alias is still present in the address list
-    let addresses = draft.sender_addresses(&tether).await.unwrap();
+    let addresses = draft.sender_addresses().await.unwrap();
     assert_eq!(addresses[0].email, alias_address);
-    let old_body = draft.body().to_owned();
+    let old_body = draft.body().await.unwrap();
     draft
-        .change_sender_address(&user_ctx, alias_address.to_owned())
+        .change_sender_address(alias_address.to_owned())
         .await
         .unwrap();
-    assert_ne!(old_body, draft.body()); //signature changed
-    assert_eq!(draft.sender, alias_address);
+    assert_ne!(old_body, draft.body().await.unwrap()); //signature changed
+    assert_eq!(draft.sender().await.unwrap(), alias_address);
 
     // change to the same email without alias
-    let old_body = draft.body().to_owned();
+    let old_body = draft.body().await.unwrap();
     draft
-        .change_sender_address(&user_ctx, old_address.email.clone())
+        .change_sender_address(old_address.email.clone())
         .await
         .unwrap();
-    assert_eq!(old_body, draft.body()); //signature does not change.
-    assert_eq!(draft.sender, old_address.email);
+    assert_eq!(old_body, draft.body().await.unwrap()); //signature does not change.
+    assert_eq!(draft.sender().await.unwrap(), old_address.email);
 }

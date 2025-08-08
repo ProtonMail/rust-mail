@@ -19,10 +19,10 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use futures::FutureExt;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentState};
-use proton_mail_common::draft::compose::DraftAddressChangeOutput;
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
+use proton_mail_common::draft::recipients::RecipientList;
 use proton_mail_common::draft::{
-    Draft, DraftExpirationTime, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode, recipients,
+    Draft, DraftExpirationTime, DraftSyncStatus, ReplyMode, recipients,
 };
 use proton_mail_common::models::{Attachment, MetadataId};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
@@ -142,9 +142,10 @@ impl Composer {
     }
 
     /// Save a draft.
-    fn save(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
-        let save_action = match self.create_save_action() {
-            Ok(action) => action,
+    fn save(&mut self) -> Command<Messages> {
+        let draft = self.draft.clone();
+        let composer_state = match self.to_composer_draft_state() {
+            Ok(state) => state,
             Err(err) => {
                 return Command::message(Messages::DisplayError(
                     Some("Invalid recipient".to_owned()),
@@ -159,15 +160,8 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match save_action
-                        .queue(
-                            context.action_queue(),
-                            &context.user_stash().connection(),
-                            context.origin(),
-                        )
-                        .await
-                    {
-                        Ok(_) => Command::none(),
+                    match composer_state.apply(&draft).await {
+                        Ok(()) => Command::none(),
                         Err(e) => {
                             error!("Failed to save draft: {e:?}");
                             Command::message(e.into())
@@ -178,65 +172,55 @@ impl Composer {
         ])
     }
 
-    fn update_draft_from_state(&mut self) -> Result<(), recipients::RecipientError> {
-        // We are TUI, what else can we do?
-        self.draft.set_mime_type(MimeType::TextPlain);
-        self.draft.subject = self.subject_input_state.value().to_owned();
-        self.draft.set_body(self.text_area.lines().join("\n"));
-        self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value())?;
-        self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value())?;
-        self.draft.to_list = recipients_value_to_list(self.to_input_state.value())?;
-        Ok(())
-    }
-
-    fn create_save_action(&mut self) -> Result<DraftSaveActionQueuer, recipients::RecipientError> {
-        self.update_draft_from_state()?;
-        Ok(self.draft.to_save_action())
+    #[allow(clippy::result_large_err)]
+    fn to_composer_draft_state(&self) -> Result<ComposerDraftState, MailContextError> {
+        Ok(ComposerDraftState {
+            subject: self.subject_input_state.value().to_owned(),
+            body: self.text_area.lines().join("\n"),
+            to: recipients_value_to_list(self.to_input_state.value())?,
+            cc: recipients_value_to_list(self.cc_input_state.value())?,
+            bcc: recipients_value_to_list(self.bcc_input_state.value())?,
+        })
     }
 
     /// Send the draft.
-    fn send(
-        &mut self,
-        scheduled_time: Option<DateTime<Local>>,
-        context: Arc<MailUserContext>,
-    ) -> Command<Messages> {
-        if let Err(err) = self.update_draft_from_state() {
-            return Command::message(Messages::DisplayError(
-                Some("Invalid recipient".to_owned()),
-                err.into(),
-            ));
-        }
-        match if let Some(scheduled_time) = scheduled_time {
-            self.draft.to_schedule_send_action(scheduled_time)
-        } else {
-            self.draft.to_send_action()
-        } {
-            Ok(send_action) => Command::batch([
-                Command::message(Messages::DisplayBackgroundProgress(
-                    "Sending draft...".to_owned(),
-                )),
-                Command::task(async move {
-                    Command::batch([
-                        Command::message(Messages::DismissBackgroundProgress),
-                        match send_action
-                            .queue(
-                                context.action_queue(),
-                                &context.user_stash().connection(),
-                                context.origin(),
-                            )
-                            .await
-                        {
+    fn send(&mut self, scheduled_time: Option<DateTime<Local>>) -> Command<Messages> {
+        let composer_state = match self.to_composer_draft_state() {
+            Ok(state) => state,
+            Err(err) => {
+                return Command::message(Messages::DisplayError(
+                    Some("Invalid recipient".to_owned()),
+                    err.into(),
+                ));
+            }
+        };
+        let draft = self.draft.clone();
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Sending draft...".to_owned(),
+            )),
+            Command::task(async move {
+                Command::batch([
+                    Command::message(Messages::DismissBackgroundProgress),
+                    if let Err(e) = composer_state.apply(&draft).await {
+                        error!("Failed to save draft: {e:?}");
+                        Command::message(e.into())
+                    } else {
+                        match if let Some(scheduled_time) = scheduled_time {
+                            draft.schedule_send(scheduled_time).await
+                        } else {
+                            draft.send().await
+                        } {
                             Ok(_) => Command::message(Message::CloseComposer.into()),
                             Err(e) => {
-                                error!("Failed to save draft: {e:?}");
+                                error!("Failed to send draft: {e:?}");
                                 Command::message(e.into())
                             }
-                        },
-                    ])
-                }),
-            ]),
-            Err(e) => Command::message(MailContextError::from(e).into()),
-        }
+                        }
+                    },
+                ])
+            }),
+        ])
     }
     async fn create(
         draft: Draft,
@@ -244,18 +228,20 @@ impl Composer {
         stash: Stash,
     ) -> Command<Messages> {
         match Self::new_impl(draft, sync_status, stash).await {
-            Ok((mut composer, background_cmd)) => {
-                let error_msg =
-                    composer
-                        .draft
-                        .address_validation_result
-                        .take()
-                        .map_or(Command::none(), |e| {
+            Ok((composer, background_cmd)) => {
+                let error_msg = composer
+                    .draft
+                    .take_address_validation_result()
+                    .await
+                    .map(|v| {
+                        v.map_or(Command::none(), |e| {
                             Command::message(Messages::DisplayError(
                                 Some("Address Validation".into()),
                                 anyhow!("Address {} is not valid: {}", e.email, e.error),
                             ))
-                        });
+                        })
+                    })
+                    .unwrap_or(Command::none());
                 Command::batch([
                     Command::message(Message::OpenComposer(composer).into()),
                     error_msg,
@@ -273,25 +259,24 @@ impl Composer {
         draft: Draft,
         sync_status: Option<DraftSyncStatus>,
         stash: Stash,
-    ) -> Result<(Self, Command<Messages>), StashError> {
-        let sender = draft.sender.clone();
-        let to_list = recipient_list_to_display_value(&draft.to_list);
-        let cc_list = recipient_list_to_display_value(&draft.cc_list);
-        let bcc_list = recipient_list_to_display_value(&draft.bcc_list);
-        let text_area = if draft.mime_type() == MimeType::TextHtml {
+    ) -> Result<(Self, Command<Messages>), MailContextError> {
+        let state = draft.state().await?;
+        let to_list = recipient_list_to_display_value(&state.to_list);
+        let cc_list = recipient_list_to_display_value(&state.cc_list);
+        let bcc_list = recipient_list_to_display_value(&state.bcc_list);
+        let text_area = if state.mime_type == MimeType::TextHtml {
             let text = proton_mail_html_transformer::Transformer::html2text_str(
-                draft.body(),
+                &state.body,
                 Html2TextOptions::default(),
             )
             .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
             TextArea::new(text.split('\n').map(str::to_owned).collect())
-        } else if draft.mime_type() == MimeType::TextPlain {
-            TextArea::new(draft.body().split('\n').map(str::to_owned).collect())
+        } else if state.mime_type == MimeType::TextPlain {
+            TextArea::new(state.body.split('\n').map(str::to_owned).collect())
         } else {
             TextArea::new(vec!["Unknown mime type".to_owned()])
         };
 
-        let subject = draft.subject.clone();
         let tether = stash.connection();
         let attachment_infos = Self::build_attachment_infos(draft.metadata_id, &tether).await?;
         drop(tether);
@@ -325,11 +310,11 @@ impl Composer {
                 draft,
                 text_area,
                 selected_input: SelectedInput::To,
-                sender_input_state: TextInputState::with_value(sender),
+                sender_input_state: TextInputState::with_value(state.sender),
                 to_input_state: TextInputState::with_value(to_list).selected(true),
                 cc_input_state: TextInputState::with_value(cc_list),
                 bcc_input_state: TextInputState::with_value(bcc_list),
-                subject_input_state: TextInputState::with_value(subject),
+                subject_input_state: TextInputState::with_value(state.subject),
                 attachment_list_state: ScrollableListState::new(None),
                 attachment_infos,
                 draft_sync_status: sync_status,
@@ -352,8 +337,8 @@ impl Composer {
     }
 
     /// Discard the draft.
-    fn discard(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
-        let discard_action = self.draft.to_discard_action();
+    fn discard(&mut self) -> Command<Messages> {
+        let draft = self.draft.clone();
         let popup = YesNoPopup::new(
             "Discard Draft",
             "Are you sure you wish to discard the current draft?",
@@ -364,10 +349,7 @@ impl Composer {
                 "Discarding Draft".to_owned(),
             )),
             Command::task(async move {
-                let cmd = match discard_action
-                    .queue(context.action_queue(), context.origin())
-                    .await
-                {
+                let cmd = match draft.discard().await {
                     Ok(_) => Command::none(),
                     Err(e) => Command::message(Messages::DisplayError(None, anyhow::Error::new(e))),
                 };
@@ -384,13 +366,22 @@ impl Composer {
         context: Arc<MailUserContext>,
         path: PathBuf,
     ) -> Command<Messages> {
-        let address_id = self.draft.address_id.clone();
+        let draft = self.draft.clone();
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Preparing Attachment".to_owned(),
             )),
             Command::task(async move {
                 let mut tether = context.user_stash().connection();
+                let Ok(address_id) = draft.address_id().await else {
+                    return Command::batch([
+                        Command::message(Messages::DismissBackgroundProgress),
+                        Command::message(Messages::DisplayError(
+                            None,
+                            anyhow!("Failed to get address id"),
+                        )),
+                    ]);
+                };
                 let cmd = match Attachment::create_local(
                     &context,
                     address_id,
@@ -413,25 +404,16 @@ impl Composer {
     }
 
     /// Add attachment to the draft
-    fn add_attachment(
-        &mut self,
-        context: Arc<MailUserContext>,
-        attachment: Attachment,
-    ) -> Command<Messages> {
+    fn add_attachment(&mut self, attachment: Box<Attachment>) -> Command<Messages> {
+        let draft = self.draft.clone();
         // Note that we want to make sure the action is queued first
         // before we allow the user to send or we can run into missing depencency issues.
-        let action = self.draft.to_add_attachment_action(attachment);
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Adding Attachment to message".to_owned(),
             )),
             Command::task(async move {
-                let tether = context.user_stash().connection();
-
-                let cmd = if let Err(e) = action
-                    .queue(context.action_queue(), &tether, context.origin())
-                    .await
-                {
+                let cmd = if let Err(e) = draft.add_attachment(&attachment).await {
                     Command::message(anyhow::Error::new(e).into())
                 } else {
                     Command::message(ComposerMessage::RefreshAttachmentList.into())
@@ -443,23 +425,14 @@ impl Composer {
     }
 
     /// Remove an attachment from the draft
-    fn remove_attachment(
-        &mut self,
-        context: Arc<MailUserContext>,
-        id: LocalAttachmentId,
-    ) -> Command<Messages> {
-        let action = self.draft.to_remove_attachment_action(id);
+    fn remove_attachment(&mut self, id: LocalAttachmentId) -> Command<Messages> {
+        let draft = self.draft.clone();
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Removing Attachment from message".to_owned(),
             )),
             Command::task(async move {
-                let tether = context.user_stash().connection();
-
-                let cmd = if let Err(e) = action
-                    .queue(context.action_queue(), &tether, context.origin())
-                    .await
-                {
+                let cmd = if let Err(e) = draft.remove_attachment(id).await {
                     Command::message(anyhow::Error::new(e).into())
                 } else {
                     Command::message(ComposerMessage::RefreshAttachmentList.into())
@@ -484,24 +457,19 @@ impl Composer {
 
     fn start_sender_address_change(
         &mut self,
-        context: Arc<MailUserContext>,
-        email_address_id: (String, AddressId),
+        (email, _): (String, AddressId),
     ) -> Command<Messages> {
-        let address_change_request = self.draft.new_change_sender_address_request();
+        let draft = self.draft.clone();
         let task = Command::task(async move {
-            let mut tether = context.user_stash().connection();
-            let cmd = match address_change_request
-                .apply(
-                    &context,
-                    email_address_id.0,
-                    email_address_id.1,
-                    &mut tether,
-                )
-                .await
-            {
-                Ok(output) => output.map_or(Command::none(), |output| {
-                    Command::message(ComposerMessage::FinishChangeAddress(output).into())
-                }),
+            let cmd = match draft.change_sender_address(email).await {
+                Ok(()) => match (draft.sender().await, draft.body().await) {
+                    (Ok(sender), Ok(body)) => Command::message(
+                        ComposerMessage::FinishChangeAddress { sender, body }.into(),
+                    ),
+                    (Err(e), _) | (_, Err(e)) => {
+                        Command::message(Messages::DisplayError(None, anyhow::Error::new(e)))
+                    }
+                },
                 Err(e) => Command::message(Messages::DisplayError(
                     Some("Failed to change address".to_owned()),
                     anyhow::Error::new(e),
@@ -521,33 +489,28 @@ impl Composer {
     fn finish_sender_address_change(
         &mut self,
         context: Arc<MailUserContext>,
-        output: DraftAddressChangeOutput,
+        sender: String,
+        body: &str,
     ) -> Command<Messages> {
-        self.draft.finalize_sender_address_change_request(output);
-        self.sender_input_state = TextInputState::with_value(self.draft.sender.clone());
-        self.text_area = TextArea::new(self.draft.body().split('\n').map(str::to_owned).collect());
+        self.sender_input_state = TextInputState::with_value(sender);
+        self.text_area = TextArea::new(body.split('\n').map(str::to_owned).collect());
         self.refresh_attachment_list(context)
     }
 
     fn apply_password_protection(
         &mut self,
-        context: Arc<MailUserContext>,
         password: SecretString,
         hint: Option<String>,
     ) -> Command<Messages> {
-        let id = self.draft.metadata_id;
+        let draft = self.draft.clone();
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Applying password".to_owned(),
             )),
             Command::task(async move {
-                let cmd = match Draft::set_password_by_id(
-                    &context,
-                    id,
-                    password.expose_secret().as_str(),
-                    hint,
-                )
-                .await
+                let cmd = match draft
+                    .set_password(password.expose_secret().as_str(), hint)
+                    .await
                 {
                     Ok(()) => Command::message(Messages::DisplayInfo(
                         None,
@@ -563,25 +526,16 @@ impl Composer {
         ])
     }
 
-    fn set_expiration_time(
-        &mut self,
-        context: Arc<MailUserContext>,
-        expiration_time: DateTime<Local>,
-    ) -> Command<Messages> {
-        let id = self.draft.metadata_id;
-
+    fn set_expiration_time(&mut self, expiration_time: DateTime<Local>) -> Command<Messages> {
+        let draft = self.draft.clone();
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Setting Expiration Time".to_owned(),
             )),
             Command::task(async move {
-                let mut tether = context.user_stash().connection();
-                let cmd = match Draft::set_expiration_time_by_id(
-                    &mut tether,
-                    id,
-                    DraftExpirationTime::Custom(expiration_time),
-                )
-                .await
+                let cmd = match draft
+                    .set_expiration_time(DraftExpirationTime::Custom(expiration_time))
+                    .await
                 {
                     Ok(()) => Command::message(Messages::DisplayInfo(
                         None,
@@ -872,8 +826,7 @@ impl Composer {
                 }
                 KeyCode::Char('k') => {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
-                        let ctx = ctx.clone();
-                        return AddressListPopup::open(ctx, &self.draft);
+                        return AddressListPopup::open(self.draft.clone());
                     }
                 }
                 KeyCode::Char('p') => {
@@ -925,18 +878,14 @@ impl Composer {
         };
 
         match message {
-            ComposerMessage::Save => self.save(user_ctx.to_owned()),
-            ComposerMessage::Send => self.send(None, user_ctx.to_owned()),
-            ComposerMessage::ScheduleSend(delivery_time) => {
-                self.send(Some(delivery_time), user_ctx.to_owned())
-            }
-            ComposerMessage::Discard => self.discard(user_ctx.to_owned()),
+            ComposerMessage::Save => self.save(),
+            ComposerMessage::Send => self.send(None),
+            ComposerMessage::ScheduleSend(delivery_time) => self.send(Some(delivery_time)),
+            ComposerMessage::Discard => self.discard(),
             ComposerMessage::CreateAttachment(path) => {
                 self.create_attachment(user_ctx.to_owned(), path)
             }
-            ComposerMessage::AddAttachment(attachment) => {
-                self.add_attachment(user_ctx.to_owned(), *attachment)
-            }
+            ComposerMessage::AddAttachment(attachment) => self.add_attachment(attachment),
             ComposerMessage::RefreshAttachmentList => {
                 self.refresh_attachment_list(user_ctx.to_owned())
             }
@@ -944,21 +893,17 @@ impl Composer {
                 self.attachment_infos = list.into_iter().map(AttachmentInfo::from).collect();
                 Command::none()
             }
-            ComposerMessage::RemoveAttachment(id) => {
-                self.remove_attachment(user_ctx.to_owned(), id)
-            }
+            ComposerMessage::RemoveAttachment(id) => self.remove_attachment(id),
             ComposerMessage::StartChangeAddress(email_address_id) => {
-                self.start_sender_address_change(user_ctx.to_owned(), email_address_id)
+                self.start_sender_address_change(email_address_id)
             }
-            ComposerMessage::FinishChangeAddress(output) => {
-                self.finish_sender_address_change(user_ctx.to_owned(), output)
+            ComposerMessage::FinishChangeAddress { sender, body } => {
+                self.finish_sender_address_change(user_ctx.to_owned(), sender, &body)
             }
             ComposerMessage::SetPasswordProtection(password, hint) => {
-                self.apply_password_protection(user_ctx.to_owned(), password, hint)
+                self.apply_password_protection(password, hint)
             }
-            ComposerMessage::SetExpirationTime(dt) => {
-                self.set_expiration_time(user_ctx.to_owned(), dt)
-            }
+            ComposerMessage::SetExpirationTime(dt) => self.set_expiration_time(dt),
         }
     }
 
@@ -984,10 +929,8 @@ enum SelectedInput {
     Attachments,
 }
 
-fn recipients_value_to_list(
-    recipients: &str,
-) -> Result<recipients::RecipientList, recipients::RecipientError> {
-    let mut list = recipients::RecipientList::default();
+fn recipients_value_to_list(recipients: &str) -> Result<RecipientList, recipients::RecipientError> {
+    let mut list = RecipientList::default();
     for addr in recipients.split(',') {
         list.add_single(recipients::RecipientEntry {
             email: addr.into(),
@@ -997,10 +940,30 @@ fn recipients_value_to_list(
     Ok(list)
 }
 
-fn recipient_list_to_display_value(list: &recipients::RecipientList) -> String {
+fn recipient_list_to_display_value(list: &RecipientList) -> String {
     list.to_message_recipients()
         .into_iter()
         .map(|v| v.address.into_clear_text_string())
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+struct ComposerDraftState {
+    subject: String,
+    body: String,
+    to: RecipientList,
+    cc: RecipientList,
+    bcc: RecipientList,
+}
+
+impl ComposerDraftState {
+    async fn apply(self, draft: &Draft) -> Result<(), MailContextError> {
+        // We are TUI, what else can we do?
+        draft.set_mime_type(MimeType::TextPlain).await?;
+        draft.set_subject(self.subject).await?;
+        draft.set_body(self.body).await?;
+        draft.set_recipients(self.to, self.cc, self.bcc).await?;
+        draft.save().await?;
+        Ok(())
+    }
 }

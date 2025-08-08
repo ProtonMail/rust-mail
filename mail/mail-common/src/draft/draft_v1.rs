@@ -18,7 +18,7 @@ use crate::draft::compose::{
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::draft::{
-    AttachmentUploadError, DraftExpirationTime, EoData, Error, ExpirationError,
+    AttachmentUploadError, DraftExpirationTime, DraftSyncStatus, EoData, Error, ExpirationError,
     MIN_EXPIRATION_TIME_SECONDS, MIN_PASSWORD_LEN, OpenError, PasswordError, ReplyMode, SaveError,
     ScheduleSendOptions, SendError, SenderAddressChangeError, compose, send,
 };
@@ -88,18 +88,6 @@ pub struct Draft {
     /// This is only set when creating a reply and is only valid while the instance
     /// of the draft is open after it has been opened or a rew reply has been created.
     sender_alias: Option<String>,
-}
-
-/// Indicates the status of syncing a draft.
-///
-/// By default we always sync the draft bodies from the server, but if there is no network
-/// we will serve the local cached version.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum DraftSyncStatus {
-    /// We managed to sync the draft body from the server
-    Synced,
-    /// We only have a cached version available.
-    Cached,
 }
 
 impl Draft {
@@ -815,7 +803,7 @@ impl Draft {
         )
     }
 
-    pub fn to_save_action(&self) -> DraftSaveActionQueuer {
+    fn to_save_action(&self) -> DraftSaveActionQueuer {
         DraftSaveActionQueuer::new(
             self.metadata_id,
             self.address_id.clone(),
@@ -823,11 +811,11 @@ impl Draft {
         )
     }
 
-    pub fn to_send_action(&self) -> Result<DraftSendActionQueuer, Error> {
+    fn to_send_action(&self) -> Result<DraftSendActionQueuer, Error> {
         self.to_send_action_impl(None)
     }
 
-    pub fn to_schedule_send_action(
+    fn to_schedule_send_action(
         &self,
         delivery_time: DateTime<Local>,
     ) -> Result<DraftSendActionQueuer, Error> {
@@ -895,14 +883,14 @@ impl Draft {
     }
 
     pub async fn get_embedded_attachment(
-        &self,
+        metadata_id: MetadataId,
         ctx: &MailUserContext,
         cid: &ContentId,
     ) -> MailContextResult<AttachmentData> {
         let mut tether = ctx.user_stash().connection();
 
         let attachments =
-            DraftAttachmentMetadata::attachment_for_draft(self.metadata_id, &tether).await?;
+            DraftAttachmentMetadata::attachment_for_draft(metadata_id, &tether).await?;
 
         if let Some(attachment) = attachments
             .iter()
@@ -941,9 +929,9 @@ impl Draft {
     pub async fn add_attachment(
         &self,
         ctx: &MailUserContext,
-        attachment: Attachment,
+        attachment_id: LocalAttachmentId,
     ) -> Result<ActionId, MailContextError> {
-        let upload_action = self.to_add_attachment_action(attachment);
+        let upload_action = self.to_add_attachment_action(attachment_id);
 
         let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
@@ -952,10 +940,12 @@ impl Draft {
         Ok(result.id)
     }
 
-    pub fn to_add_attachment_action(&self, attachment: Attachment) -> DraftAttachmentUploadQueuer {
+    pub fn to_add_attachment_action(
+        &self,
+        attachment_id: LocalAttachmentId,
+    ) -> DraftAttachmentUploadQueuer {
         // create save action before the attachment is registered as we need a message to upload.
         let save_action = self.to_save_action();
-        let attachment_id = attachment.local_id.unwrap();
 
         DraftAttachmentUploadQueuer::new(
             self.metadata_id,
@@ -1396,7 +1386,7 @@ impl Draft {
     }
 }
 
-pub struct DraftSaveActionQueuer {
+struct DraftSaveActionQueuer {
     id: MetadataId,
     address_id: AddressId,
     action: Save,

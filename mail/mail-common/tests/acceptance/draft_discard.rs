@@ -36,10 +36,7 @@ async fn discard_before_save_only_deletes_metadata() {
     // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .discard(user_ctx.action_queue(), user_ctx.origin())
-        .await
-        .unwrap();
+    draft.discard().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -73,10 +70,7 @@ async fn discard_by_message_id() {
     // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .discard(user_ctx.action_queue(), user_ctx.origin())
-        .await
-        .unwrap();
+    draft.discard().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -138,25 +132,15 @@ async fn discard_draft_after_save_marks_message_deleted() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // queue discard.
-    draft
-        .discard(user_ctx.action_queue(), user_ctx.origin())
-        .await
-        .unwrap();
+    draft.discard().await.unwrap();
 
     // Check the message is marked as deleted.
     let message = Message::find_by_remote_id(
@@ -226,22 +210,11 @@ async fn discard_draft_by_message_id() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
-    let message_id = draft
-        .message_id(&user_ctx.user_stash().connection())
-        .await
-        .unwrap()
-        .unwrap();
+    let message_id = draft.message_id().await.unwrap().unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -302,29 +275,18 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    let action_id = draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap()
-        .id;
+    let action_id = draft.save().await.unwrap().id;
 
-    let local_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-    let local_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+    let local_message_id = draft.message_id().await.unwrap().unwrap();
+    let local_conversation_id = draft.conversation_id().await.unwrap().unwrap();
 
     // Cancel create draft, will leave the message and conversation there.
     user_ctx.action_queue().cancel(action_id).await.unwrap();
 
     // queue discard.
-    draft
-        .discard(user_ctx.action_queue(), user_ctx.origin())
-        .await
-        .unwrap();
+    draft.discard().await.unwrap();
 
     // Check the message is marked as deleted.
     let draft_message = Message::find_by_id(local_message_id, &tether)
@@ -385,20 +347,12 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    let action_id = draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap()
-        .id;
+    let action_id = draft.save().await.unwrap().id;
 
-    let local_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-    let local_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+    let local_message_id = draft.message_id().await.unwrap().unwrap();
+    let local_conversation_id = draft.conversation_id().await.unwrap().unwrap();
 
     // Cancel create draft, will leave the message and conversation there.
     user_ctx.action_queue().cancel(action_id).await.unwrap();
@@ -501,31 +455,20 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
         .unwrap();
 
     // Create draft.
-    let mut draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
+    let draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
         .await
         .unwrap();
 
-    let action_id = draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap()
-        .id;
+    let action_id = draft.save().await.unwrap().id;
 
-    let local_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-    let local_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+    let local_message_id = draft.message_id().await.unwrap().unwrap();
+    let local_conversation_id = draft.conversation_id().await.unwrap().unwrap();
 
     // Cancel create draft, will leave the message and conversation there.
     user_ctx.action_queue().cancel(action_id).await.unwrap();
 
     // queue discard.
-    draft
-        .discard(user_ctx.action_queue(), user_ctx.origin())
-        .await
-        .unwrap();
+    draft.discard().await.unwrap();
 
     // Check the message is marked as deleted.
     let draft_message = Message::find_by_id(local_message_id, &tether)
@@ -619,22 +562,14 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         .unwrap();
 
     // Create draft.
-    let mut draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
+    let draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
         .await
         .unwrap();
 
-    let action_id = draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap()
-        .id;
+    let action_id = draft.save().await.unwrap().id;
 
-    let local_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-    let local_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+    let local_message_id = draft.message_id().await.unwrap().unwrap();
+    let local_conversation_id = draft.conversation_id().await.unwrap().unwrap();
 
     // Cancel create draft, will leave the message and conversation there.
     user_ctx.action_queue().cancel(action_id).await.unwrap();
@@ -732,25 +667,15 @@ async fn discard_draft_failure_undeletes_message() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // queue discard.
-    draft
-        .discard(user_ctx.action_queue(), user_ctx.origin())
-        .await
-        .unwrap();
+    draft.discard().await.unwrap();
 
     // Check the message is marked as deleted.
     let local_message = Message::find_by_remote_id(

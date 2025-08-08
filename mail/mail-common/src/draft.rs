@@ -1,9 +1,11 @@
-use crate::MailContextError;
 use crate::datatypes::attachment::ContentId;
-use crate::datatypes::{LocalAttachmentId, LocalMessageId};
-use crate::models::MetadataId;
+use crate::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId, MimeType};
+use crate::models::{Attachment, AttachmentData, DraftSendResult, MetadataId};
+use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::{DateTime, Local};
+use derive_more::Display;
 use derive_more::derive::TryFrom;
+use non_empty_string::NonEmptyString;
 use proton_account_api::ApiError;
 use proton_action_queue::action::ActionId;
 use proton_core_api::service::ApiServiceError;
@@ -14,15 +16,23 @@ use proton_crypto_inbox::eo::EoError;
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
 use proton_crypto_inbox::message::MessageError;
 use proton_mail_api::services::proton::request_data::DraftAction;
+use proton_mail_api::services::proton::response_data::Message as ApiMessage;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use stash::exports::{FromSql, ToSql, ToSqlOutput};
-use tracing::error;
+use std::fmt;
+use std::fmt::Formatter;
+use std::path::{Path, PathBuf};
+use std::sync::Weak;
+use tokio::fs;
+use tokio::sync::{mpsc, oneshot};
+use tracing::{error, warn};
 
 pub mod attachments;
 pub mod compose;
-mod draft_v1;
+pub mod draft_v1;
 pub mod observers;
 pub mod recipients;
 pub(crate) mod send;
@@ -30,7 +40,19 @@ pub(crate) mod send;
 pub use crate::draft::send::EoData;
 pub use send::ScheduleSendOptions;
 
-pub use draft_v1::*;
+use crate::actions::draft;
+use crate::actions::draft::{Discard, Save, UndoSend};
+use crate::decrypted_message::ThemeOpts;
+use crate::draft::attachments::DraftAttachment;
+use crate::draft::compose::DraftAddressValidationResult;
+use crate::draft::recipients::{Recipient, RecipientEntry, RecipientError, RecipientList};
+use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
+use proton_core_api::session::Session;
+use proton_core_common::Origin;
+use proton_core_common::models::Address;
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::prelude::DraftReplyOrForwardParams;
+use stash::stash::Tether;
 
 pub const MIN_PASSWORD_LEN: usize = 8;
 pub const MIN_EXPIRATION_TIME_SECONDS: u64 = 15 * 60; // 15 min
@@ -59,6 +81,10 @@ pub enum Error {
     Password(PasswordError),
     #[error(transparent)]
     Expiration(ExpirationError),
+    #[error(transparent)]
+    Recipient(#[from] RecipientError),
+    #[error("Failed to communicate with actor")]
+    Actor,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -360,6 +386,12 @@ impl From<ExpirationError> for MailContextError {
     }
 }
 
+impl From<RecipientError> for MailContextError {
+    fn from(err: RecipientError) -> Self {
+        MailContextError::Draft(Error::Recipient(err))
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
@@ -419,3 +451,1060 @@ impl DraftExpirationTime {
         }
     }
 }
+
+/// Indicates the status of syncing a draft.
+///
+/// By default we always sync the draft bodies from the server, but if there is no network
+/// we will serve the local cached version.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum DraftSyncStatus {
+    /// We managed to sync the draft body from the server
+    Synced,
+    /// We only have a cached version available.
+    Cached,
+}
+
+#[derive(Debug, Clone)]
+pub struct DraftState {
+    pub sender: String,
+    pub to_list: RecipientList,
+    pub cc_list: RecipientList,
+    pub bcc_list: RecipientList,
+    pub address_id: AddressId,
+    pub subject: String,
+    pub send_result: Option<DraftSendResult>,
+    pub body: String,
+    pub mime_type: MimeType,
+}
+
+impl DraftState {
+    fn from_draft(draft: &draft_v1::Draft) -> Self {
+        Self {
+            sender: draft.sender.clone(),
+            to_list: draft.to_list.clone(),
+            cc_list: draft.cc_list.clone(),
+            bcc_list: draft.bcc_list.clone(),
+            address_id: draft.address_id.clone(),
+            subject: draft.subject.clone(),
+            send_result: draft.send_result.clone(),
+            body: draft.body().to_owned(),
+            mime_type: draft.mime_type(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct DraftActor {
+    sender: mpsc::Sender<DraftActorMessage>,
+    pub metadata_id: MetadataId,
+}
+
+impl fmt::Debug for DraftActor {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "DraftActor{{{:?}}}", self.metadata_id)
+    }
+}
+
+impl DraftActor {
+    pub async fn sender_addresses(&self) -> Result<Vec<Address>, MailContextError> {
+        self.act(DraftActorMessage::SenderAddresses).await?
+    }
+
+    pub async fn schedule_send_options(
+        ctx: &MailUserContext,
+    ) -> MailContextResult<ScheduleSendOptions<Local>> {
+        draft_v1::Draft::schedule_send_options(ctx).await
+    }
+
+    pub async fn open(
+        context: &MailUserContext,
+        message_id: LocalMessageId,
+    ) -> Result<(Self, DraftSyncStatus), MailContextError> {
+        let (draft, sync_status) = draft_v1::Draft::open(context, message_id).await?;
+        Ok((Self::create(context, draft), sync_status))
+    }
+    pub async fn empty(context: &MailUserContext) -> Result<Self, MailContextError> {
+        let draft = draft_v1::Draft::empty(context).await?;
+        Ok(Self::create(context, draft))
+    }
+
+    pub async fn reply(
+        context: &MailUserContext,
+        message_id: LocalMessageId,
+        reply_mode: ReplyMode,
+        use_utc: bool,
+        mime_type_override: Option<MimeType>,
+    ) -> Result<Self, MailContextError> {
+        let draft =
+            draft_v1::Draft::reply(context, message_id, reply_mode, use_utc, mime_type_override)
+                .await?;
+        Ok(Self::create(context, draft))
+    }
+
+    pub async fn save(&self) -> Result<QueuedActionOutput<Save>, MailContextError> {
+        self.act(|sender| DraftActorMessage::Save { sender })
+            .await?
+    }
+    pub async fn send(&self) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+        self.act(|sender| DraftActorMessage::Send { sender })
+            .await?
+    }
+
+    pub async fn schedule_send(
+        &self,
+        delivery_time: DateTime<Local>,
+    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+        self.act(|sender| DraftActorMessage::ScheduleSend {
+            delivery_time,
+            sender,
+        })
+        .await?
+    }
+
+    pub async fn discard(&self) -> Result<QueuedActionOutput<Discard>, MailContextError> {
+        self.act(|sender| DraftActorMessage::Discard { sender })
+            .await?
+    }
+    pub async fn message_id(&self) -> Result<Option<LocalMessageId>, MailContextError> {
+        self.act(DraftActorMessage::GetMessageId).await?
+    }
+    pub async fn conversation_id(&self) -> Result<Option<LocalConversationId>, MailContextError> {
+        self.act(DraftActorMessage::GetConversationId).await?
+    }
+    pub async fn get_embedded_attachment(
+        &self,
+        cid: &ContentId,
+    ) -> MailContextResult<AttachmentData> {
+        self.act(|sender| DraftActorMessage::GetEmbeddedAttachment {
+            cid: cid.clone(),
+            sender,
+        })
+        .await?
+    }
+
+    pub async fn delete_attachment_if_in_staging_area(&self, ctx: &MailUserContext, path: &Path) {
+        let staging_path = self.attachment_staging_path(ctx);
+
+        if path.starts_with(&staging_path) {
+            if let Err(e) = fs::remove_file(&staging_path).await {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    // This is a warning as the background process will try again.
+                    warn!("Failed to delete attachment from staging area at {path:?}: {e:?}");
+                }
+            }
+        }
+    }
+    pub async fn add_attachment(
+        &self,
+        attachment: &Attachment,
+    ) -> Result<ActionId, MailContextError> {
+        self.act(|sender| DraftActorMessage::AddAttachment {
+            attachment_id: attachment.local_id.unwrap(),
+            sender,
+        })
+        .await?
+    }
+
+    pub async fn remove_attachment(
+        &self,
+        attachment_id: LocalAttachmentId,
+    ) -> Result<ActionId, MailContextError> {
+        self.act(|sender| DraftActorMessage::RemoveAttachment {
+            attachment_id,
+            sender,
+        })
+        .await?
+    }
+
+    pub async fn remove_attachment_with_cid(
+        &self,
+        content_id: ContentId,
+    ) -> Result<ActionId, MailContextError> {
+        self.act(|sender| DraftActorMessage::RemoveAttachmentWithCid {
+            content_id: content_id.clone(),
+            sender,
+        })
+        .await?
+    }
+
+    pub async fn retry_attachment_upload(
+        &self,
+        attachment_id: LocalAttachmentId,
+    ) -> Result<ActionId, MailContextError> {
+        self.act(|sender| DraftActorMessage::RetryAttachmentUpload {
+            attachment_id,
+            sender,
+        })
+        .await?
+    }
+    pub fn attachment_staging_path(&self, context: &MailUserContext) -> PathBuf {
+        draft_v1::draft_attachment_staging_path(context, self.metadata_id)
+    }
+
+    pub async fn attachments(&self) -> Result<Vec<DraftAttachment>, MailContextError> {
+        self.act(DraftActorMessage::GetAttachments).await?
+    }
+
+    pub async fn html_head_content_for_composer(
+        &self,
+        theme_opts: ThemeOpts,
+        editor_id: String,
+    ) -> Result<String, MailContextError> {
+        self.act(|sender| DraftActorMessage::HtmlHeadForComposer {
+            theme_opts,
+            editor_id,
+            sender,
+        })
+        .await?
+    }
+
+    pub async fn body(&self) -> Result<String, MailContextError> {
+        self.act(DraftActorMessage::GetBody).await
+    }
+
+    pub async fn set_body(&self, body: String) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SetBody { body, sender })
+            .await?
+    }
+    pub async fn mime_type(&self) -> Result<MimeType, MailContextError> {
+        self.act(DraftActorMessage::GetMimeType).await
+    }
+    pub async fn set_mime_type(&self, mime_type: MimeType) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SetMimeType { sender, mime_type })
+            .await
+    }
+    pub async fn sanitize_body(&self) -> Result<(), MailContextError> {
+        self.act(DraftActorMessage::SanitizeBody).await?
+    }
+
+    pub async fn cancel_schedule_send(
+        ctx: &MailUserContext,
+        message_id: LocalMessageId,
+    ) -> MailContextResult<DateTime<Local>> {
+        draft_v1::Draft::cancel_schedule_send(ctx, message_id).await
+    }
+
+    pub async fn change_sender_address(&self, email: String) -> Result<(), MailContextError> {
+        self.act(move |sender| DraftActorMessage::ChangeSenderAddress { email, sender })
+            .await?
+    }
+    pub async fn is_password_protected(&self) -> Result<bool, MailContextError> {
+        self.act(DraftActorMessage::IsPasswordProtected).await?
+    }
+    pub async fn get_password(&self) -> Result<Option<EoData>, MailContextError> {
+        self.act(DraftActorMessage::GetPassword).await?
+    }
+
+    pub async fn set_password(
+        &self,
+        password: &str,
+        hint: Option<String>,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SetPassword {
+            sender,
+            password: SecretString::new(String::from(password)),
+            hint,
+        })
+        .await?
+    }
+
+    pub async fn set_password_with_secret(
+        &self,
+        password: SecretString,
+        hint: Option<String>,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SetPassword {
+            sender,
+            password,
+            hint,
+        })
+        .await?
+    }
+    pub async fn remove_password(&self) -> Result<(), MailContextError> {
+        self.act(DraftActorMessage::RemovePassword).await?
+    }
+    pub async fn set_expiration_time(
+        &self,
+        expiration_time: DraftExpirationTime,
+    ) -> Result<(), MailContextError> {
+        self.act(move |sender| DraftActorMessage::SetExpirationTime {
+            time: expiration_time,
+            sender,
+        })
+        .await?
+    }
+    pub async fn expiration_time(&self) -> Result<DraftExpirationTime, MailContextError> {
+        self.act(DraftActorMessage::GetExpirationTime).await?
+    }
+
+    #[cfg(feature = "test-utils")]
+    pub async fn test_mutate(
+        &self,
+        closure: impl FnOnce(&mut draft_v1::Draft) + Send + 'static,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::TestMutate {
+            mutate: Box::new(closure),
+            sender,
+        })
+        .await
+    }
+
+    pub async fn address_id(&self) -> Result<AddressId, MailContextError> {
+        self.act(DraftActorMessage::GetAddressId).await
+    }
+
+    pub async fn sender(&self) -> Result<String, MailContextError> {
+        self.act(DraftActorMessage::GetSender).await
+    }
+
+    pub async fn address_validation_result(
+        &self,
+    ) -> Result<Option<DraftAddressValidationResult>, MailContextError> {
+        self.act(DraftActorMessage::GetAddressValidationResult)
+            .await
+    }
+
+    pub async fn clear_address_validation_result(&self) -> Result<(), MailContextError> {
+        self.act(DraftActorMessage::ClearAddressValidationResult)
+            .await
+    }
+
+    pub async fn take_address_validation_result(
+        &self,
+    ) -> Result<Option<DraftAddressValidationResult>, MailContextError> {
+        self.act(DraftActorMessage::TakeAddressValidationResult)
+            .await
+    }
+
+    pub async fn add_single_recipient(
+        &self,
+        group: RecipientGroupId,
+        recipient: RecipientEntry,
+    ) -> Result<(), MailContextError> {
+        Ok(self
+            .act(|sender| DraftActorMessage::AddSingleRecipient {
+                group,
+                recipient,
+                sender,
+            })
+            .await??)
+    }
+
+    pub async fn add_recipient_to_group(
+        &self,
+        group: RecipientGroupId,
+        group_name: NonEmptyString,
+        recipients: impl IntoIterator<Item = RecipientEntry>,
+        total_in_group: u64,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::AddRecipientGroup {
+            group,
+            group_name,
+            recipients: recipients.into_iter().collect(),
+            total_in_group,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn set_recipients(
+        &self,
+        to: RecipientList,
+        cc: RecipientList,
+        bcc: RecipientList,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SetRecipientLists {
+            to,
+            cc,
+            bcc,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn remove_single_recipient(
+        &self,
+        group: RecipientGroupId,
+        email: PrivateEmail,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::RemoveSingleRecipient {
+            group,
+            email,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn remove_recipient_from_group(
+        &self,
+        group: RecipientGroupId,
+        email: PrivateEmail,
+        group_name: NonEmptyString,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::RemoveRecipientFromGroup {
+            group,
+            email,
+            group_name,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn remove_recipient_group(
+        &self,
+        group: RecipientGroupId,
+        group_name: NonEmptyString,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::RemoveRecipientGroup {
+            group,
+            group_name,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn recipients(
+        &self,
+        group: RecipientGroupId,
+    ) -> Result<Vec<Recipient>, MailContextError> {
+        self.act(|sender| DraftActorMessage::GetRecipients { group, sender })
+            .await
+    }
+
+    pub async fn state(&self) -> Result<DraftState, MailContextError> {
+        self.act(DraftActorMessage::GetState).await
+    }
+
+    pub async fn set_subject(&self, subject: String) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SetSubject { sender, subject })
+            .await
+    }
+
+    pub async fn subject(&self) -> Result<String, MailContextError> {
+        self.act(DraftActorMessage::GetSubject).await
+    }
+
+    pub async fn to_list(&self) -> Result<RecipientList, MailContextError> {
+        self.act(|sender| DraftActorMessage::GetRecipientList {
+            group: RecipientGroupId::To,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn cc_list(&self) -> Result<RecipientList, MailContextError> {
+        self.act(|sender| DraftActorMessage::GetRecipientList {
+            group: RecipientGroupId::Cc,
+            sender,
+        })
+        .await
+    }
+    pub async fn bcc_list(&self) -> Result<RecipientList, MailContextError> {
+        self.act(|sender| DraftActorMessage::GetRecipientList {
+            group: RecipientGroupId::Bcc,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn set_to_list(&self, recipients: RecipientList) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SetRecipientList {
+            group: RecipientGroupId::To,
+            recipients,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn set_cc_list(&self, recipients: RecipientList) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SetRecipientList {
+            group: RecipientGroupId::Cc,
+            recipients,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn set_bcc_list(&self, recipients: RecipientList) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SetRecipientList {
+            group: RecipientGroupId::Bcc,
+            recipients,
+            sender,
+        })
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn remote_create(
+        context: &MailUserContext,
+        session: &Session,
+        address_id: AddressId,
+        save_action: &Save,
+        attachments: &[Attachment],
+        message_body: &str,
+        draft_reply_or_forward_params: Option<DraftReplyOrForwardParams>,
+        tether: &Tether,
+    ) -> Result<ApiMessage, MailContextError> {
+        draft_v1::Draft::remote_create(
+            context,
+            session,
+            address_id,
+            save_action,
+            attachments,
+            message_body,
+            draft_reply_or_forward_params,
+            tether,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn remote_update(
+        context: &MailUserContext,
+        session: &Session,
+        address_id: AddressId,
+        local_message_id: LocalMessageId,
+        message_id: MessageId,
+        save_action: &Save,
+        attachments: &[Attachment],
+        message_body: &str,
+        tether: &Tether,
+    ) -> Result<ApiMessage, MailContextError> {
+        draft_v1::Draft::remote_update(
+            context,
+            session,
+            address_id,
+            local_message_id,
+            message_id,
+            save_action,
+            attachments,
+            message_body,
+            tether,
+        )
+        .await
+    }
+    pub async fn action_discard(
+        message_id: LocalMessageId,
+        tether: &Tether,
+        queue: &Queue,
+        origin: Origin,
+    ) -> Result<QueuedActionOutput<Discard>, MailContextError> {
+        draft_v1::Draft::action_discard(message_id, tether, queue, origin).await
+    }
+
+    pub async fn action_undo_send(
+        queue: &Queue,
+        message_id: LocalMessageId,
+    ) -> Result<QueuedActionOutput<UndoSend>, ActionError<UndoSend>> {
+        draft_v1::Draft::action_undo_send(queue, message_id).await
+    }
+}
+
+#[derive(Display)]
+enum DraftActorMessage {
+    #[display("GetExpirationTime")]
+    GetExpirationTime(oneshot::Sender<Result<DraftExpirationTime, MailContextError>>),
+    #[display("SetExpirationTime")]
+    SetExpirationTime {
+        time: DraftExpirationTime,
+        sender: oneshot::Sender<Result<(), MailContextError>>,
+    },
+    #[display("RemovePassword")]
+    RemovePassword(oneshot::Sender<Result<(), MailContextError>>),
+    #[display("SetPassword")]
+    SetPassword {
+        password: SecretString,
+        hint: Option<String>,
+        sender: oneshot::Sender<Result<(), MailContextError>>,
+    },
+    #[display("GetPassword")]
+    GetPassword(oneshot::Sender<Result<Option<EoData>, MailContextError>>),
+    #[display("IsPasswordProtected")]
+    IsPasswordProtected(oneshot::Sender<Result<bool, MailContextError>>),
+    #[display("ChangeSenderAddress")]
+    ChangeSenderAddress {
+        email: String,
+        sender: oneshot::Sender<Result<(), MailContextError>>,
+    },
+    #[display("SanitizeBody")]
+    SanitizeBody(oneshot::Sender<Result<(), MailContextError>>),
+    #[display("SetMimeType")]
+    SetMimeType {
+        mime_type: MimeType,
+        sender: oneshot::Sender<()>,
+    },
+    #[display("GetMimeType")]
+    GetMimeType(oneshot::Sender<MimeType>),
+    #[display("SetBody")]
+    SetBody {
+        body: String,
+        sender: oneshot::Sender<Result<(), MailContextError>>,
+    },
+    #[display("GetBody")]
+    GetBody(oneshot::Sender<String>),
+    #[display("HtmlHeadForComposer")]
+    HtmlHeadForComposer {
+        theme_opts: ThemeOpts,
+        editor_id: String,
+        sender: oneshot::Sender<Result<String, MailContextError>>,
+    },
+    #[display("GetAttachments")]
+    GetAttachments(oneshot::Sender<Result<Vec<DraftAttachment>, MailContextError>>),
+    #[display("RetryAttachmentUpload")]
+    RetryAttachmentUpload {
+        attachment_id: LocalAttachmentId,
+        sender: oneshot::Sender<Result<ActionId, MailContextError>>,
+    },
+    #[display("RemoveAttachmentWithCid")]
+    RemoveAttachmentWithCid {
+        content_id: ContentId,
+        sender: oneshot::Sender<Result<ActionId, MailContextError>>,
+    },
+    #[display("RemoveAttachment")]
+    RemoveAttachment {
+        attachment_id: LocalAttachmentId,
+        sender: oneshot::Sender<Result<ActionId, MailContextError>>,
+    },
+    #[display("AddAttachment")]
+    AddAttachment {
+        attachment_id: LocalAttachmentId,
+        sender: oneshot::Sender<Result<ActionId, MailContextError>>,
+    },
+    #[display("GetEmbeddedAttachment")]
+    GetEmbeddedAttachment {
+        cid: ContentId,
+        sender: oneshot::Sender<Result<AttachmentData, MailContextError>>,
+    },
+    #[display("GetMessageId")]
+    GetMessageId(oneshot::Sender<Result<Option<LocalMessageId>, MailContextError>>),
+    #[display("GetConversationId")]
+    GetConversationId(oneshot::Sender<Result<Option<LocalConversationId>, MailContextError>>),
+    #[display("Discard")]
+    Discard {
+        sender: oneshot::Sender<Result<QueuedActionOutput<Discard>, MailContextError>>,
+    },
+    #[display("ScheduleSend")]
+    ScheduleSend {
+        delivery_time: DateTime<Local>,
+        sender: oneshot::Sender<Result<QueuedActionOutput<draft::Send>, MailContextError>>,
+    },
+    #[display("Send")]
+    Send {
+        sender: oneshot::Sender<Result<QueuedActionOutput<draft::Send>, MailContextError>>,
+    },
+    #[display("Save")]
+    Save {
+        sender: oneshot::Sender<Result<QueuedActionOutput<draft::Save>, MailContextError>>,
+    },
+    #[display("SenderAddresses")]
+    SenderAddresses(oneshot::Sender<Result<Vec<Address>, MailContextError>>),
+    #[display("GetAddressId")]
+    GetAddressId(oneshot::Sender<AddressId>),
+    #[display("GetSender")]
+    GetSender(oneshot::Sender<String>),
+    #[display("GetAddressValidationResult")]
+    GetAddressValidationResult(oneshot::Sender<Option<DraftAddressValidationResult>>),
+    #[display("ClearAddressValidationResult")]
+    ClearAddressValidationResult(oneshot::Sender<()>),
+    #[display("TakeAddressValidationResult")]
+    TakeAddressValidationResult(oneshot::Sender<Option<DraftAddressValidationResult>>),
+    #[display("AddSingleRecipient")]
+    AddSingleRecipient {
+        group: RecipientGroupId,
+        recipient: RecipientEntry,
+        sender: oneshot::Sender<Result<(), RecipientError>>,
+    },
+    #[display("AddRecipienGroup")]
+    AddRecipientGroup {
+        group: RecipientGroupId,
+        group_name: NonEmptyString,
+        recipients: Vec<RecipientEntry>,
+        total_in_group: u64,
+        sender: oneshot::Sender<()>,
+    },
+    #[display("SetRecipientLists")]
+    SetRecipientLists {
+        to: RecipientList,
+        cc: RecipientList,
+        bcc: RecipientList,
+        sender: oneshot::Sender<()>,
+    },
+    #[display("RemoveSingleRecipient")]
+    RemoveSingleRecipient {
+        group: RecipientGroupId,
+        email: PrivateEmail,
+        sender: oneshot::Sender<()>,
+    },
+    #[display("RemoveRecipientFromGroup")]
+    RemoveRecipientFromGroup {
+        group: RecipientGroupId,
+        email: PrivateEmail,
+        group_name: NonEmptyString,
+        sender: oneshot::Sender<()>,
+    },
+    #[display("RemoveRecipientGroup")]
+    RemoveRecipientGroup {
+        group: RecipientGroupId,
+        group_name: NonEmptyString,
+        sender: oneshot::Sender<()>,
+    },
+    #[display("GetRecipients")]
+    GetRecipients {
+        group: RecipientGroupId,
+        sender: oneshot::Sender<Vec<Recipient>>,
+    },
+    #[cfg(feature = "test-utils")]
+    #[display("TestMutate")]
+    TestMutate {
+        mutate: Box<dyn FnOnce(&mut draft_v1::Draft) + Send + 'static>,
+        sender: oneshot::Sender<()>,
+    },
+    #[display("GetState")]
+    GetState(oneshot::Sender<DraftState>),
+    #[display("SetSubject")]
+    SetSubject {
+        subject: String,
+        sender: oneshot::Sender<()>,
+    },
+    #[display("GetRecipientList")]
+    GetSubject(oneshot::Sender<String>),
+    #[display("GetRecipientList")]
+    GetRecipientList {
+        group: RecipientGroupId,
+        sender: oneshot::Sender<RecipientList>,
+    },
+    #[display("SetRecipientList")]
+    SetRecipientList {
+        group: RecipientGroupId,
+        recipients: RecipientList,
+        sender: oneshot::Sender<()>,
+    },
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum RecipientGroupId {
+    To,
+    Cc,
+    Bcc,
+}
+
+impl DraftActor {
+    fn create(ctx: &MailUserContext, draft: draft_v1::Draft) -> Self {
+        let metadata_id = draft.metadata_id;
+        let (sender, receiver) = mpsc::channel(1);
+
+        let weak = ctx.as_weak();
+        ctx.spawn(async move { Self::background_loop(weak, receiver, draft).await });
+        Self {
+            sender,
+            metadata_id,
+        }
+    }
+
+    async fn act<T: Send>(
+        &self,
+        build_message: impl FnOnce(oneshot::Sender<T>) -> DraftActorMessage,
+    ) -> Result<T, MailContextError> {
+        let (sender, receiver) = oneshot::channel::<T>();
+        let msg = build_message(sender);
+        tracing::trace!("Sending message: {msg}");
+        self.sender.send(msg).await.map_err(|_| Error::Actor)?;
+        tracing::trace!("Awaiting reply");
+        let r = receiver.await.map_err(|_| Error::Actor)?;
+        tracing::trace!("Reply received");
+        Ok(r)
+    }
+
+    #[tracing::instrument(name="draft_actor",skip_all, fields(id=%draft.metadata_id))]
+    async fn background_loop(
+        ctx: Weak<MailUserContext>,
+        mut receiver: mpsc::Receiver<DraftActorMessage>,
+        mut draft: draft_v1::Draft,
+    ) {
+        tracing::info!("Starting");
+        while let Some(message) = receiver.recv().await {
+            let Some(ctx) = ctx.upgrade() else {
+                tracing::error!("Mail User Context is dead, terminating");
+                return;
+            };
+
+            tracing::debug!("Received message: {message}");
+
+            match message {
+                DraftActorMessage::GetExpirationTime(sender) => {
+                    let tether = ctx.user_stash().connection();
+                    let r = draft.expiration_time(&tether).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::SetExpirationTime { time, sender } => {
+                    let mut tether = ctx.user_stash().connection();
+                    let r = draft.set_expiration_time(&mut tether, time).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::RemovePassword(sender) => {
+                    let mut tether = ctx.user_stash().connection();
+                    let r = draft.remove_password(&mut tether).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::SetPassword {
+                    password,
+                    hint,
+                    sender,
+                } => {
+                    let r = draft
+                        .set_password(&ctx, password.expose_secret(), hint)
+                        .await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::GetPassword(sender) => {
+                    let r = draft.get_password(&ctx).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::IsPasswordProtected(sender) => {
+                    let tether = ctx.user_stash().connection();
+                    let r = draft.is_password_protected(&tether).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::ChangeSenderAddress { email, sender } => {
+                    let r = draft.change_sender_address(&ctx, email).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::SanitizeBody(sender) => {
+                    draft.sanitize_body();
+                    let _ = sender.send(Ok(()));
+                }
+                DraftActorMessage::SetMimeType { mime_type, sender } => {
+                    draft.set_mime_type(mime_type);
+                    let _ = sender.send(());
+                }
+                DraftActorMessage::GetMimeType(sender) => {
+                    let _ = sender.send(draft.mime_type());
+                }
+                DraftActorMessage::SetBody { body, sender } => {
+                    draft.set_body(body);
+                    let _ = sender.send(Ok(()));
+                }
+                DraftActorMessage::GetBody(sender) => {
+                    let _ = sender.send(draft.body().to_owned());
+                }
+                DraftActorMessage::HtmlHeadForComposer {
+                    theme_opts,
+                    editor_id,
+                    sender,
+                } => {
+                    let _ = sender.send(Ok(
+                        draft.html_head_content_for_composer(theme_opts, editor_id)
+                    ));
+                }
+                DraftActorMessage::GetAttachments(sender) => {
+                    let tether = ctx.user_stash().connection();
+                    let r = draft.attachments(&tether).await;
+                    let _ = sender.send(r.map_err(Into::into));
+                }
+                DraftActorMessage::RetryAttachmentUpload {
+                    attachment_id,
+                    sender,
+                } => {
+                    let r = draft.retry_attachment_upload(&ctx, attachment_id).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::RemoveAttachmentWithCid { content_id, sender } => {
+                    let r = draft.remove_attachment_with_cid(&ctx, content_id).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::RemoveAttachment {
+                    attachment_id,
+                    sender,
+                } => {
+                    let r = draft.remove_attachment(&ctx, attachment_id).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::AddAttachment {
+                    attachment_id,
+                    sender,
+                } => {
+                    let r = draft.add_attachment(&ctx, attachment_id).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::GetEmbeddedAttachment { cid, sender } => {
+                    // We don't wait to wait for this to finish so we can run in parallel
+                    let ctx_cloned = ctx.clone();
+                    let id = draft.metadata_id;
+                    ctx_cloned.spawn(async move {
+                        let r = draft_v1::Draft::get_embedded_attachment(id, &ctx, &cid).await;
+                        let _ = sender.send(r);
+                    });
+                }
+                DraftActorMessage::GetMessageId(sender) => {
+                    let tether = ctx.user_stash().connection();
+                    let _ = sender.send(draft.message_id(&tether).await.map_err(Into::into));
+                }
+                DraftActorMessage::GetConversationId(sender) => {
+                    let tether = ctx.user_stash().connection();
+                    let _ = sender.send(draft.conversation_id(&tether).await.map_err(Into::into));
+                }
+                DraftActorMessage::Discard { sender } => {
+                    let r = draft.discard(ctx.action_queue(), ctx.origin()).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::ScheduleSend {
+                    delivery_time,
+                    sender,
+                } => {
+                    let tether = ctx.user_stash().connection();
+                    let queue = ctx.action_queue();
+                    let r = draft
+                        .schedule_send(delivery_time, queue, &tether, ctx.origin())
+                        .await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::Send { sender } => {
+                    let tether = ctx.user_stash().connection();
+                    let queue = ctx.action_queue();
+                    let r = draft.send(queue, &tether, ctx.origin()).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::SenderAddresses(sender) => {
+                    let tether = ctx.user_stash().connection();
+                    let r = draft.sender_addresses(&tether).await;
+                    let _ = sender.send(r.map_err(Into::into));
+                }
+                DraftActorMessage::Save { sender } => {
+                    let tether = ctx.user_stash().connection();
+                    let queue = ctx.action_queue();
+                    let r = draft.save(queue, &tether, ctx.origin()).await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::GetAddressId(sender) => {
+                    let _ = sender.send(draft.address_id.clone());
+                }
+                DraftActorMessage::GetSender(sender) => {
+                    let _ = sender.send(draft.sender.clone());
+                }
+                DraftActorMessage::GetAddressValidationResult(sender) => {
+                    let _ = sender.send(draft.address_validation_result.clone());
+                }
+                DraftActorMessage::ClearAddressValidationResult(sender) => {
+                    draft.address_validation_result = None;
+                    let _ = sender.send(());
+                }
+                DraftActorMessage::TakeAddressValidationResult(sender) => {
+                    let _ = sender.send(draft.address_validation_result.take());
+                }
+                DraftActorMessage::AddSingleRecipient {
+                    group,
+                    recipient,
+                    sender,
+                } => {
+                    let r =
+                        match recipient_group_from_draft(&mut draft, group).add_single(recipient) {
+                            Ok(_) => Ok(()),
+                            Err(e) => Err(e),
+                        };
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::AddRecipientGroup {
+                    group,
+                    group_name,
+                    recipients,
+                    total_in_group,
+                    sender,
+                } => {
+                    recipient_group_from_draft(&mut draft, group).add_group(
+                        group_name,
+                        recipients,
+                        total_in_group,
+                    );
+                    let _ = sender.send(());
+                }
+                DraftActorMessage::SetRecipientLists {
+                    to,
+                    cc,
+                    bcc,
+                    sender,
+                } => {
+                    draft.to_list = to;
+                    draft.cc_list = cc;
+                    draft.bcc_list = bcc;
+                    let _ = sender.send(());
+                }
+                DraftActorMessage::RemoveSingleRecipient {
+                    group,
+                    email,
+                    sender,
+                } => {
+                    recipient_group_from_draft(&mut draft, group)
+                        .remove_single(email.as_clear_text_str());
+                    let _ = sender.send(());
+                }
+                DraftActorMessage::RemoveRecipientFromGroup {
+                    group,
+                    email,
+                    group_name,
+                    sender,
+                } => {
+                    recipient_group_from_draft(&mut draft, group)
+                        .remove_group_recipient(&group_name, email.as_clear_text_str());
+                    let _ = sender.send(());
+                }
+                DraftActorMessage::RemoveRecipientGroup {
+                    group,
+                    group_name,
+                    sender,
+                } => {
+                    recipient_group_from_draft(&mut draft, group).remove_group(&group_name);
+                    let _ = sender.send(());
+                }
+                DraftActorMessage::GetRecipients { group, sender } => {
+                    let recipients = recipient_group_from_draft(&mut draft, group)
+                        .recipients()
+                        .to_vec();
+                    let _ = sender.send(recipients);
+                }
+                #[cfg(feature = "test-utils")]
+                DraftActorMessage::TestMutate { mutate, sender } => {
+                    mutate(&mut draft);
+                    let _ = sender.send(());
+                }
+                DraftActorMessage::GetState(sender) => {
+                    let state = DraftState::from_draft(&draft);
+                    let _ = sender.send(state);
+                }
+                DraftActorMessage::SetSubject { subject, sender } => {
+                    draft.subject = subject;
+                    let _ = sender.send(());
+                }
+                DraftActorMessage::GetSubject(sender) => {
+                    let _ = sender.send(draft.subject.clone());
+                }
+                DraftActorMessage::GetRecipientList { group, sender } => {
+                    let recipients = recipient_group_from_draft(&mut draft, group).clone();
+                    let _ = sender.send(recipients);
+                }
+
+                DraftActorMessage::SetRecipientList {
+                    group,
+                    recipients,
+                    sender,
+                } => {
+                    *recipient_group_from_draft(&mut draft, group) = recipients;
+                    let _ = sender.send(());
+                }
+            }
+        }
+        tracing::info!("Terminating");
+    }
+}
+
+fn recipient_group_from_draft(
+    draft: &mut draft_v1::Draft,
+    group: RecipientGroupId,
+) -> &mut RecipientList {
+    match group {
+        RecipientGroupId::To => &mut draft.to_list,
+        RecipientGroupId::Cc => &mut draft.cc_list,
+        RecipientGroupId::Bcc => &mut draft.bcc_list,
+    }
+}
+
+pub type Draft = DraftActor;

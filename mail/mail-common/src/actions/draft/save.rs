@@ -9,7 +9,7 @@ use crate::datatypes::{
 use crate::datatypes::{LocalAttachmentId, LocalConversationId};
 use crate::draft::compose::maybe_sanitize;
 use crate::draft::recipients::RecipientList;
-use crate::draft::{Draft, ReplyMode, SaveError, compose};
+use crate::draft::{Draft, ReplyMode, SaveError, compose, draft_v1};
 use crate::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
     DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata,
@@ -84,7 +84,7 @@ pub struct Save {
 
 impl Save {
     /// Create a new empty draft.
-    pub fn new(draft: &Draft, save_origin: DraftSendResultOrigin) -> Self {
+    pub fn new(draft: &draft_v1::Draft, save_origin: DraftSendResultOrigin) -> Self {
         // Undo all transformations to the body
         let transformed = maybe_sanitize(draft.mime_type(), draft.body());
         Self {

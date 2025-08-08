@@ -1,8 +1,8 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, ParsedHeaderValue};
 use crate::draft::recipients::{ContactGroupResolver, MaybeEmptyString, RecipientList};
 use crate::draft::{
-    AttachmentRemovalId, Draft, DraftAttachmentRemovalQueuer, Error, ReplyMode, SaveError,
-    SenderAddressChangeError,
+    Error, ReplyMode, SaveError, SenderAddressChangeError, draft_v1, draft_v1::AttachmentRemovalId,
+    draft_v1::DraftAttachmentRemovalQueuer,
 };
 use crate::models::{
     Attachment, CustomSettings, DraftAttachmentMetadata, MailSettings, Message,
@@ -40,7 +40,7 @@ mod tests;
 /// into account `reply_mode` of the draft.
 pub(super) async fn patch_draft_with_reply_mode(
     contact_group_resolver: &impl ContactGroupResolver,
-    draft: &mut Draft,
+    draft: &mut draft_v1::Draft,
     source_message: &Message,
     source_message_body: &MessageBodyMetadata,
     reply_mode: ReplyMode,
