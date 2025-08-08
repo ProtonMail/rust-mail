@@ -652,6 +652,7 @@ impl Message {
         }
 
         self.set_coversation_before_save(bond).await?;
+        self.set_snooze_time_before_save(bond).await?;
         self.save(bond).await?;
         Ok(())
     }
@@ -671,6 +672,40 @@ impl Message {
                     conversation.save(bond).await?;
                     self.local_conversation_id = conversation.local_id;
                 }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn set_snooze_time_before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if self.display_snooze_reminder {
+            let local_label_id = SystemLabel::Inbox
+                .local_id(bond)
+                .await?
+                .expect("Inbox should be set");
+            if let Some(snooze_time) = Conversation::context_snooze_time(
+                self.local_conversation_id.unwrap(),
+                local_label_id,
+                bond,
+            )
+            .await?
+            {
+                self.snooze_time = snooze_time;
+            }
+        } else if self.label_ids.contains(&LabelId::snoozed()) {
+            let local_label_id = SystemLabel::Snoozed
+                .local_id(bond)
+                .await?
+                .expect("Snoozed should be set");
+            if let Some(snooze_time) = Conversation::context_snooze_time(
+                self.local_conversation_id.unwrap(),
+                local_label_id,
+                bond,
+            )
+            .await?
+            {
+                self.snooze_time = snooze_time;
             }
         }
 
@@ -2531,9 +2566,35 @@ impl ModelHooks for Message {
             .iter()
             .map(|l| l.remote_id.clone().unwrap())
             .collect();
-        if self.label_ids.contains(&LabelId::snoozed()) {
-            self.snoozed_until =
-                Conversation::read_snooze_time(self.local_conversation_id.unwrap(), tether).await?;
+        // Snooze time is stored either in the snoozed label or in the inbox label.
+        // Depending on the state of the snooze action. If it is reminded its in inbox,
+        // if it is snoozed its in snoozed label.
+        if let Some(label) = labels
+            .iter()
+            .find(|l| l.remote_id == Some(LabelId::snoozed()))
+        {
+            self.snoozed_until = Conversation::context_snooze_time(
+                self.local_conversation_id.unwrap(),
+                label.local_id.unwrap(),
+                tether,
+            )
+            .await?;
+            if let Some(snooze_time) = self.snoozed_until {
+                self.snooze_time = snooze_time;
+            }
+        } else if let Some(label) = labels
+            .iter()
+            .find(|l| l.remote_id == Some(LabelId::inbox()))
+        {
+            if let Some(snooze_time) = Conversation::context_snooze_time(
+                self.local_conversation_id.unwrap(),
+                label.local_id.unwrap(),
+                tether,
+            )
+            .await?
+            {
+                self.snooze_time = snooze_time;
+            }
         }
 
         self.custom_labels = labels

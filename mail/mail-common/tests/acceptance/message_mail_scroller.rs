@@ -391,7 +391,7 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         remote_address_id: address.remote_id.unwrap(),
         label_ids: vec![SystemLabel::Inbox.remote_id()],
         display_order: 100,
-        time: 100.into()
+        snooze_time: 100.into()
     );
 
     tether
@@ -550,6 +550,7 @@ async fn setup_api_message_pages_ext(
                 new.id = format!("{}_{}", new.id, i).into();
                 new.order = i as u64;
                 new.time = new.order + 1;
+                new.snooze_time = new.time;
                 new
             })
             .collect_vec();
@@ -560,6 +561,7 @@ async fn setup_api_message_pages_ext(
                 new.id = format!("{}_{}", new.id, i).into();
                 new.order = i as u64;
                 new.time = new.order + 1;
+                new.snooze_time = new.time;
                 new
             })
             .collect_vec();
@@ -572,6 +574,7 @@ async fn setup_api_message_pages_ext(
                 new.id = format!("{}_{}", new.id, i).into();
                 new.order = i as u64;
                 new.time = new.order + 1;
+                new.snooze_time = new.time;
                 new
             })
             .collect_vec();
@@ -581,6 +584,7 @@ async fn setup_api_message_pages_ext(
                 new.id = format!("{}_{}", new.id, i).into();
                 new.order = i as u64;
                 new.time = new.order + 1;
+                new.snooze_time = new.time;
                 new
             })
             .collect_vec();
