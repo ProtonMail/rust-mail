@@ -120,17 +120,12 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     assert_eq!(actual, expected);
 
     // Test if new scroller read from database returns exactly the same data.
-    let new_scroller: ScrollCursor<MessageScrollData> = MessageScrollData::find_with_key(
-        local_label_id,
-        unread,
-        ScrollOrderDir::Desc,
-        ScrollOrderField::Time,
-        &tether,
-    )
-    .await
-    .unwrap()
-    .unwrap()
-    .into();
+    let new_scroller: ScrollCursor<MessageScrollData> =
+        MessageScrollData::find_with_key(local_label_id, unread, ScrollOrderDir::Desc, &tether)
+            .await
+            .unwrap()
+            .unwrap()
+            .into();
 
     let count = new_scroller.seen_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64);
