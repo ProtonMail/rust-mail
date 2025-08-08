@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use super::CoreContextError;
+use super::registry::ServiceRegistry;
 use super::services::Service;
 
 enum ServiceUnderConstruction<Err> {
@@ -34,6 +35,7 @@ impl ContextBuilder {
 
     #[must_use]
     pub fn with_service<T: Service<Error = CoreContextError>>(mut self, service: T) -> Self {
+        tracing::info!("Adding service {}", std::any::type_name::<T>());
         self.services.insert(
             TypeId::of::<T>(),
             ServiceUnderConstruction::Simple(Box::new(service)),
@@ -49,6 +51,7 @@ impl ContextBuilder {
         T: Service<Error = CoreContextError>,
         F: FnOnce(Weak<Context>) -> T + 'static + Send + Sync,
     {
+        tracing::info!("Adding service constructor {}", std::any::type_name::<T>());
         self.services.insert(
             TypeId::of::<T>(),
             ServiceUnderConstruction::Cyclic(Box::new(move |this| Box::new(service(this)))),
@@ -95,11 +98,11 @@ impl ContextBuilder {
                 cancellation_token: CancellationToken::new(),
                 user_db_initializers,
                 task_service,
-                services,
+                service_registry: ServiceRegistry::new(services),
             }
         });
 
-        for service in this.services.values() {
+        for service in this.services() {
             service.init().await?;
         }
 

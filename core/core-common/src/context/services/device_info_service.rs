@@ -14,6 +14,9 @@ pub struct DeviceInfoService {
 #[async_trait]
 impl Service for DeviceInfoService {
     type Error = CoreContextError;
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl DeviceInfoService {

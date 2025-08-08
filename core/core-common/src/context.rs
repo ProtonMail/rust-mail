@@ -1,9 +1,9 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
 mod builder;
+mod registry;
 pub mod services;
-use indexmap::IndexMap;
-use services::Service;
+use registry::ServiceRegistry;
 use services::logging_service::LoggingService;
 
 use crate::action_queue::CoreActionError;
@@ -59,7 +59,6 @@ use services::{
 };
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
-use std::any::TypeId;
 use std::collections::HashMap;
 use std::fs;
 use std::future::Future;
@@ -268,8 +267,15 @@ pub struct Context {
     cancellation_token: CancellationToken,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     task_service: BackgroundAwareTaskService,
-    // Service registry
-    services: IndexMap<TypeId, Box<dyn Service<Error = CoreContextError>>>,
+    service_registry: ServiceRegistry<CoreContextError>,
+}
+
+impl std::ops::Deref for Context {
+    type Target = ServiceRegistry<CoreContextError>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.service_registry
+    }
 }
 
 const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
@@ -382,24 +388,6 @@ impl Context {
     #[must_use]
     pub fn origin(&self) -> Origin {
         self.origin
-    }
-
-    #[allow(clippy::result_large_err)]
-    /// # Panics
-    /// This function panics if the service is not found.
-    /// If there is a need for a service that may not exist, use `get_service_opt`.
-    pub fn get_service<T: 'static>(&self) -> &T {
-        self.services
-            .get(&TypeId::of::<T>())
-            .and_then(|service| <dyn std::any::Any>::downcast_ref::<T>(service))
-            .unwrap_or_else(|| panic!("Service not found"))
-    }
-
-    #[allow(clippy::result_large_err)]
-    pub fn get_service_opt<T: 'static>(&self) -> Option<&T> {
-        self.services
-            .get(&TypeId::of::<T>())
-            .and_then(|service| <dyn std::any::Any>::downcast_ref::<T>(service))
     }
 
     /// Get all available accounts.

@@ -106,4 +106,7 @@ impl Default for ActivityClock {
 #[async_trait]
 impl Service for CoreClock {
     type Error = CoreContextError;
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
