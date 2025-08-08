@@ -1,9 +1,7 @@
-use crate::core_clock::CoreClock;
 use crate::datatypes::ApiConfig;
 use crate::os::KeyChain;
 use crate::{Context, Origin, UserDatabaseInitializer};
 use indexmap::IndexMap;
-use proton_log_service::LogService;
 use proton_task_service::BackgroundAwareTaskService;
 use stash::stash::Stash;
 use std::any::TypeId;
@@ -70,8 +68,6 @@ impl ContextBuilder {
         key_chain: Arc<dyn KeyChain>,
         user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
         task_service: BackgroundAwareTaskService,
-        clock: CoreClock,
-        log_service: LogService,
     ) -> Result<Arc<Context>, CoreContextError> {
         let this = Arc::new_cyclic(|this| {
             let services = self
@@ -99,8 +95,6 @@ impl ContextBuilder {
                 cancellation_token: CancellationToken::new(),
                 user_db_initializers,
                 task_service,
-                clock,
-                log_service,
                 services,
             }
         });

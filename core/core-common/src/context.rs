@@ -4,6 +4,7 @@ mod builder;
 pub mod services;
 use indexmap::IndexMap;
 use services::Service;
+use services::logging_service::LoggingService;
 
 use crate::action_queue::CoreActionError;
 use crate::auth_store::{AuthStore, DecryptExt};
@@ -267,8 +268,6 @@ pub struct Context {
     cancellation_token: CancellationToken,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     task_service: BackgroundAwareTaskService,
-    clock: CoreClock,
-    log_service: LogService,
     // Service registry
     services: IndexMap<TypeId, Box<dyn Service<Error = CoreContextError>>>,
 }
@@ -337,7 +336,9 @@ impl Context {
         let task_service = TaskService::new()?;
         let background_task_service = BackgroundAwareTaskService::new(task_service);
 
-        let mut builder = ContextBuilder::new();
+        let mut builder = ContextBuilder::new()
+            .with_service(CoreClock::default())
+            .with_service(LoggingService::new(log_service));
 
         if matches!(origin, Origin::App) {
             builder = builder
@@ -364,8 +365,6 @@ impl Context {
                 key_chain,
                 initializers,
                 background_task_service,
-                CoreClock::default(),
-                log_service,
             )
             .await
     }
@@ -1125,7 +1124,7 @@ impl Context {
     }
 
     pub fn log_service(&self) -> &LogService {
-        &self.log_service
+        self.get_service::<LoggingService>().service()
     }
 
     /// Spawns a new task.
@@ -1172,7 +1171,7 @@ impl Context {
     }
 
     pub fn clock(&self) -> &CoreClock {
-        &self.clock
+        self.get_service::<CoreClock>()
     }
 
     #[allow(clippy::result_large_err)]

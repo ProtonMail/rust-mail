@@ -1,6 +1,7 @@
 pub mod device_info_service;
 pub mod event_poll_config_service;
 pub mod hv_notifier_service;
+pub mod logging_service;
 pub mod service;
 pub mod session_observer_service;
 
