@@ -305,6 +305,18 @@ impl Queue {
         &self.shared.stash
     }
 
+    /// # Warning
+    ///
+    /// This operation does not operate within execution guards. It is intended to be used
+    /// before queue executor is resumed (during app initialization). Use with caution.
+    pub async fn delete_all_in_group(this: &Self, action_group: ActionGroup) -> QueuedResult<()> {
+        let mut tether = this.shared.stash.connection();
+        tether
+            .tx(async |tx| StoredAction::delete_all_in_group(tx, action_group).await)
+            .await?;
+        Ok(())
+    }
+
     /// Queue an `action` for execution at a later time.
     ///
     /// A default [`Metadata`] type is assigned to this `action`.
@@ -757,19 +769,6 @@ impl QueueExecutor {
         QueueAutoExecutor::new(self, online, start_paused, task_spawner, termination_policy)
     }
 
-    /// # Warning
-    ///
-    /// This operation does not operate within execution guards. It is intended to be used
-    /// before queue executor is resumed (during app initialization). Use with caution.
-    pub async fn delete_all_in_group(&self) -> QueuedResult<()> {
-        let mut tether = self.shared.stash.connection();
-        let action_group = self.action_group.clone();
-        tether
-            .tx(async |tx| StoredAction::delete_all_in_group(tx, action_group).await)
-            .await?;
-        Ok(())
-    }
-
     /// Execute one action from the queue.
     ///
     /// # Errors
@@ -1104,8 +1103,8 @@ impl QueueAutoExecutorPool {
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
-        let executors = std::iter::repeat_n((), count.get())
-            .map(move |()| {
+        let executors = (0..count.get())
+            .map(move |_| {
                 queue
                     .new_executor_with_group(action_group.clone())
                     .into_auto_executor_with_policy(
@@ -1116,46 +1115,6 @@ impl QueueAutoExecutorPool {
                     )
             })
             .collect::<Vec<_>>();
-
-        Self { executors }
-    }
-
-    /// Creates a new queue that during initialization cleans-up (DELETE) any leftover actions in the action group.
-    /// Only afterwards it starts processing actions.
-    #[must_use]
-    pub async fn with_clear_start(
-        queue: &Queue,
-        action_group: &ActionGroup,
-        count: NonZeroUsize,
-        online: watch::Receiver<bool>,
-        start_paused: bool,
-        task_spawner: &impl TaskSpawner,
-        termination_policy: QueueAutoTerminationPolicy,
-    ) -> Self {
-        let executors: Vec<QueueExecutor> = std::iter::repeat_n((), count.get())
-            .map(|()| queue.new_executor_with_group(action_group.clone()))
-            .collect();
-
-        // Since we have a pool of executors, we just need to clear group once.
-        if let Some(executor) = executors.first() {
-            if let Err(e) = executor.delete_all_in_group().await {
-                tracing::warn!("Could not clear action group: {}", action_group.clone());
-                tracing::warn!("Cause: {e}");
-                // If it failed, shame; but let's not block the process tho.
-            }
-        }
-
-        let executors: Vec<QueueAutoExecutor> = executors
-            .into_iter()
-            .map(move |executor| {
-                executor.into_auto_executor_with_policy(
-                    online.clone(),
-                    start_paused,
-                    task_spawner,
-                    termination_policy,
-                )
-            })
-            .collect();
 
         Self { executors }
     }
