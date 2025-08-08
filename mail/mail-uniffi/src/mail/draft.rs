@@ -253,8 +253,14 @@ pub async fn open_draft(
     let ptr = session.ptr();
     uniffi_async(async move {
         let (draft, status) = RealDraft::open(&ctx, message_id.into()).await?;
+        let draft = Draft::new_impl(ptr, &ctx, draft);
+        // Revalidate all recipients
+        draft.to_recipient_list.check_all_recipients(&ctx);
+        draft.cc_recipient_list.check_all_recipients(&ctx);
+        draft.bcc_recipient_list.check_all_recipients(&ctx);
+
         Ok::<_, RealProtonMailError>(OpenDraft {
-            draft: Draft::new_impl(ptr, &ctx, draft),
+            draft,
             sync_status: status.into(),
         })
     })
@@ -812,9 +818,12 @@ impl Draft {
                 return Ok(DraftRecipientExpirationFeatureReport::default());
             }
             let mut report = ExpirationFeatureSupportReport::default();
-            instance.to_list.validate_expiration_feature(&mut report);
-            instance.cc_list.validate_expiration_feature(&mut report);
-            instance.bcc_list.validate_expiration_feature(&mut report);
+            self.to_recipient_list
+                .validate_expiration_feature(&mut report);
+            self.cc_recipient_list
+                .validate_expiration_feature(&mut report);
+            self.bcc_recipient_list
+                .validate_expiration_feature(&mut report);
             Ok(report.into())
         })
     }
