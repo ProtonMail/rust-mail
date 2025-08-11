@@ -7,12 +7,10 @@ use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
 use proton_core_common::models::Address;
-use proton_mail_common::MailUserContext;
 use proton_mail_common::draft::Draft;
 use ratatui::Frame;
 use ratatui::layout::{Margin, Rect};
 use ratatui::widgets::{List, ListItem};
-use std::sync::Arc;
 
 pub struct AddressListPopup {
     addresses: Vec<Address>,
@@ -27,10 +25,9 @@ impl AddressListPopup {
         }
     }
 
-    pub fn open(ctx: Arc<MailUserContext>, draft: &Draft) -> Command<Messages> {
-        let sender_addresses = draft.sender_addresses_deferred();
+    pub fn open(draft: Draft) -> Command<Messages> {
         Command::task(async move {
-            match sender_addresses.run(&ctx.user_stash().connection()).await {
+            match draft.sender_addresses().await {
                 Ok(address) => Command::message(Messages::RaisePopup(Box::new(Self::new(address)))),
                 Err(e) => Command::message(Messages::DisplayError(
                     None,

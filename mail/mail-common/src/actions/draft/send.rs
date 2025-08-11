@@ -5,7 +5,8 @@ use crate::actions::draft::{
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
 use crate::draft::send::{EoData, MailType, build_packages, load_prefs};
 use crate::draft::{
-    Draft, MIN_EXPIRATION_TIME_SECONDS, ReplyMode, SendError, draft_attachment_staging_path,
+    MIN_EXPIRATION_TIME_SECONDS, ReplyMode, SendError, draft_v1,
+    draft_v1::draft_attachment_staging_path,
 };
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
@@ -45,7 +46,7 @@ pub struct Send {
 }
 
 impl Send {
-    pub fn new(draft: &Draft) -> Self {
+    pub fn new(draft: &draft_v1::Draft) -> Self {
         Self {
             metadata_id: draft.metadata_id,
             local_message_id: None,
@@ -56,7 +57,7 @@ impl Send {
         }
     }
 
-    pub fn scheduled(draft: &Draft, delivery_time: DateTime<Local>) -> Self {
+    pub fn scheduled(draft: &draft_v1::Draft, delivery_time: DateTime<Local>) -> Self {
         Self {
             metadata_id: draft.metadata_id,
             local_message_id: None,
@@ -67,7 +68,7 @@ impl Send {
         }
     }
 
-    fn combine_recipients(draft: &Draft) -> Vec<PrivateEmail> {
+    fn combine_recipients(draft: &draft_v1::Draft) -> Vec<PrivateEmail> {
         let to_list = draft.to_list.to_message_recipients();
         let cc_list = draft.cc_list.to_message_recipients();
         let bcc_list = draft.bcc_list.to_message_recipients();

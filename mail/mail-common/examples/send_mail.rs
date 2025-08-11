@@ -11,8 +11,8 @@ use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use proton_mail_common::datatypes::Disposition;
-use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::recipients::RecipientEntry;
+use proton_mail_common::draft::{Draft, RecipientGroupId};
 use proton_mail_common::models::Attachment;
 use tempdir::TempDir;
 use tracing::{error, info};
@@ -105,23 +105,23 @@ async fn main() {
 
     let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
 
-    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
     if let Some(email_password) = email_password {
-        draft
-            .set_password(&user_ctx, &email_password, None)
-            .await
-            .unwrap();
+        draft.set_password(&email_password, None).await.unwrap();
     }
 
-    draft.subject = subject;
-    body.push_str(draft.body());
-    draft.set_body(body);
+    draft.set_subject(subject).await.unwrap();
+    body.push_str(draft.body().await.unwrap().as_ref());
+    draft.set_body(body).await.unwrap();
     draft
-        .to_list
-        .add_single(RecipientEntry {
-            display_name: None,
-            email: recipient.into(),
-        })
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                display_name: None,
+                email: recipient.into(),
+            },
+        )
+        .await
         .unwrap();
 
     let mut tether = user_ctx.user_stash().connection();
@@ -130,11 +130,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let id = draft
-        .save(user_ctx.action_queue(), &tether, user_ctx.origin())
-        .await
-        .unwrap()
-        .id;
+    let id = draft.save().await.unwrap().id;
 
     ActionAwaiter::new(user_ctx.action_queue(), id)
         .wait()
@@ -144,7 +140,7 @@ async fn main() {
     // Add attachment after save.
     let attachment = Attachment::create_local(
         &user_ctx,
-        draft.address_id.clone(),
+        draft.address_id().await.unwrap(),
         Disposition::Attachment,
         &tmp_file,
         None,
@@ -153,17 +149,9 @@ async fn main() {
     .await
     .unwrap();
 
-    draft.add_attachment(&user_ctx, attachment).await.unwrap();
+    draft.add_attachment(&attachment).await.unwrap();
 
-    let id = draft
-        .send(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap()
-        .id;
+    let id = draft.send().await.unwrap().id;
 
     let send_awaiter = ActionAwaiter::new(user_ctx.action_queue(), id);
 

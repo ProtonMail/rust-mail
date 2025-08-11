@@ -21,7 +21,6 @@ use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
 };
 use proton_mail_common::draft::attachments::DraftAttachment;
-use proton_mail_common::draft::compose::DraftAddressChangeOutput;
 use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::{
     AddressId, PrivateEmail,
@@ -141,7 +140,7 @@ pub enum ComposerMessage {
     AttachmentListRefreshed(Vec<DraftAttachment>),
     ScheduleSend(DateTime<Local>),
     StartChangeAddress((String, AddressId)),
-    FinishChangeAddress(DraftAddressChangeOutput),
+    FinishChangeAddress { sender: String, body: String },
     SetPasswordProtection(SecretString, Option<String>),
     SetExpirationTime(DateTime<Local>),
 }

@@ -30,10 +30,11 @@ use proton_mail_common::draft::{
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::DraftMetadata;
+use proton_mail_common::models::DraftSendResult as RealDraftSendResult;
 use proton_mail_common::{MailContextError, MailUserContext};
 use recipients::ComposerRecipientList;
 use secrecy::{ExposeSecret, SecretString};
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Draft creation mode.
@@ -127,11 +128,18 @@ impl From<EoData> for DraftPassword {
     }
 }
 
+struct CachedDraftData {
+    subject: String,
+    body: String,
+    mime_type: MimeType,
+    send_result: Option<RealDraftSendResult>,
+}
 /// Represents a draft message which can be crafted as empty or as a reply/forward
 /// to an existing message.
 #[derive(uniffi::Object)]
 pub struct Draft {
-    instance: RwLock<RealDraft>,
+    instance: RealDraft,
+    cached: RwLock<CachedDraftData>,
     ctx: MailUserContextPtr,
     to_recipient_list: Arc<ComposerRecipientList>,
     bcc_recipient_list: Arc<ComposerRecipientList>,
@@ -139,31 +147,39 @@ pub struct Draft {
     attachment_list: Arc<AttachmentList>,
 }
 impl Draft {
-    fn new_impl(
+    async fn new_impl(
         ctx: MailUserContextPtr,
         real_ctx: &MailUserContext,
         draft: proton_mail_common::draft::Draft,
-    ) -> Arc<Self> {
-        let to_list = draft.to_list.clone();
-        let cc_list = draft.cc_list.clone();
-        let bcc_list = draft.bcc_list.clone();
+    ) -> Result<Arc<Self>, MailContextError> {
+        let state = draft.state().await?;
         let staging_path = draft.attachment_staging_path(real_ctx);
-        Arc::new_cyclic(|weak| Self {
-            instance: RwLock::new(draft),
+        Ok(Arc::new_cyclic(|_| Self {
+            cached: RwLock::new(CachedDraftData {
+                subject: state.subject,
+                body: state.body,
+                mime_type: state.mime_type.into(),
+                send_result: state.send_result,
+            }),
             ctx: ctx.clone(),
             to_recipient_list: ComposerRecipientList::new_to_list(
                 ctx.clone(),
-                Weak::clone(weak),
-                to_list,
+                draft.clone(),
+                state.to_list,
             ),
             bcc_recipient_list: ComposerRecipientList::new_bcc_list(
                 ctx.clone(),
-                Weak::clone(weak),
-                bcc_list,
+                draft.clone(),
+                state.bcc_list,
             ),
-            cc_recipient_list: ComposerRecipientList::new_cc_list(ctx, Weak::clone(weak), cc_list),
-            attachment_list: AttachmentList::new(&staging_path, Weak::clone(weak)),
-        })
+            cc_recipient_list: ComposerRecipientList::new_cc_list(
+                ctx.clone(),
+                draft.clone(),
+                state.cc_list,
+            ),
+            attachment_list: AttachmentList::new(ctx, &staging_path, draft.clone()),
+            instance: draft,
+        }))
     }
 }
 
@@ -231,7 +247,7 @@ pub async fn new_draft(
         }
         .map_err(RealProtonMailError::from)?;
 
-        Result::<_, RealProtonMailError>::Ok(Draft::new_impl(ptr, &ctx, draft))
+        Result::<_, RealProtonMailError>::Ok(Draft::new_impl(ptr, &ctx, draft).await?)
     })
     .await
     .map_err(DraftOpenError::from)
@@ -253,7 +269,7 @@ pub async fn open_draft(
     let ptr = session.ptr();
     uniffi_async(async move {
         let (draft, status) = RealDraft::open(&ctx, message_id.into()).await?;
-        let draft = Draft::new_impl(ptr, &ctx, draft);
+        let draft = Draft::new_impl(ptr, &ctx, draft).await?;
         // Revalidate all recipients
         draft.to_recipient_list.check_all_recipients(&ctx);
         draft.cc_recipient_list.check_all_recipients(&ctx);
@@ -273,7 +289,8 @@ pub async fn open_draft(
 impl Draft {
     /// Get the sender of the draft.
     pub fn sender(&self) -> String {
-        async_runtime().block_on(async { self.instance.read().await.sender.clone() })
+        //TODO: Improve in follow up with event updates.
+        async_runtime().block_on(async { self.instance.sender().await.unwrap_or_default() })
     }
 
     /// Get the To recipients of the draft.
@@ -293,7 +310,7 @@ impl Draft {
 
     /// Get the draft's subject.
     pub fn subject(&self) -> String {
-        async_runtime().block_on(async { self.instance.read().await.subject.clone() })
+        async_runtime().block_on(async { self.cached.read().await.subject.clone() })
     }
 
     /// Returns both HTML content for <head> in the composer editor, as well as modified (as in with dark mode)
@@ -319,7 +336,7 @@ impl Draft {
     /// <head>
     ///
     ///    <meta ...things set up for the composer />
-    ///    
+    ///
     ///    {head_to_inject}
     ///
     /// </head>
@@ -331,41 +348,44 @@ impl Draft {
     /// </html>
     /// ");
     /// ```
-    pub fn html_for_composer(&self, theme_opts: ThemeOpts, editor_id: String) -> HtmlForComposer {
+    pub fn html_for_composer(
+        &self,
+        theme_opts: ThemeOpts,
+        editor_id: String,
+    ) -> Result<HtmlForComposer, ProtonError> {
         let theme_opts = theme_opts.into();
-        async_runtime().block_on(async {
-            let mut instance = self.instance.write().await;
-            let head_content = instance.html_head_content_for_composer(theme_opts, editor_id);
-            let initial_body = instance.body().to_owned();
+        Ok(async_runtime().block_on(async {
+            let instance = self.cached.read().await;
+            let head_content = self
+                .instance
+                .html_head_content_for_composer(theme_opts, editor_id)
+                .await?;
+            let initial_body = instance.body.clone();
 
-            HtmlForComposer {
+            Ok::<_, RealProtonMailError>(HtmlForComposer {
                 head_content,
                 initial_body,
-            }
-        })
+            })
+        })?)
     }
 
     /// Get the draft's body.
     pub fn body(&self) -> String {
-        async_runtime().block_on(async { self.instance.read().await.body().to_owned() })
+        async_runtime().block_on(async { self.cached.read().await.body.clone() })
     }
 
     /// Set the draft's `subject`.
     #[returns(VoidDraftSaveResult)]
     pub fn set_subject(&self, subject: String) -> Result<(), DraftSaveError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftSaveError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
         async_runtime()
             .block_on(async {
-                let mut instance = self.instance.write().await;
+                let mut instance = self.cached.write().await;
                 if instance.subject == subject {
                     return Ok(());
                 }
+                self.instance.set_subject(subject.clone()).await?;
                 instance.subject = subject;
-                save_draft(&ctx, &mut instance)
+                save_draft(&self.instance)
                     .await
                     .map_err(RealProtonMailError::from)
             })
@@ -376,19 +396,15 @@ impl Draft {
     /// Set the draft's `body`.
     #[returns(VoidDraftSaveResult)]
     pub fn set_body(&self, body: String) -> Result<(), DraftSaveError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftSaveError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
         async_runtime()
             .block_on(async {
-                let mut instance = self.instance.write().await;
-                if instance.body() == body {
+                let mut instance = self.cached.write().await;
+                if instance.body == body {
                     return Ok(());
                 }
-                instance.set_body(body);
-                save_draft(&ctx, &mut instance)
+                self.instance.set_body(body.clone()).await?;
+                instance.body = body;
+                save_draft(&self.instance)
                     .await
                     .map_err(RealProtonMailError::from)
             })
@@ -398,7 +414,7 @@ impl Draft {
 
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
-        async_runtime().block_on(async { self.instance.read().await.mime_type().into() })
+        async_runtime().block_on(async { self.cached.read().await.mime_type })
     }
 
     /// Get the Draft's message id .
@@ -409,7 +425,7 @@ impl Draft {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
         uniffi_async::<Option<Id>, RealProtonMailError, _>(async move {
-            let metadata_id = { self.instance.read().await.metadata_id };
+            let metadata_id = self.instance.metadata_id;
             let tether = ctx.user_stash().connection();
             DraftMetadata::message_id(metadata_id, &tether)
                 .await
@@ -425,14 +441,8 @@ impl Draft {
     ///
     /// Note this only loaded with [`open_draft()`].
     pub fn send_result(&self) -> Option<DraftSendResult> {
-        async_runtime().block_on(async {
-            self.instance
-                .read()
-                .await
-                .send_result
-                .clone()
-                .map(Into::into)
-        })
+        async_runtime()
+            .block_on(async { self.cached.read().await.send_result.clone().map(Into::into) })
     }
 
     /// Load an embedded attachment in this draft message.
@@ -485,18 +495,10 @@ impl Draft {
         self: Arc<Self>,
         email: String,
     ) -> Result<(), DraftSenderAddressChangeError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal).into());
-        };
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            let mut instance = self.instance.write().await;
-            instance.change_sender_address(&ctx, email).await?;
-            instance
-                .save(
-                    ctx.action_queue(),
-                    &ctx.user_stash().connection(),
-                    ctx.origin(),
-                )
+            self.instance.change_sender_address(email).await?;
+            self.instance
+                .save()
                 .await
                 .map_err(RealProtonMailError::from)?;
             Ok(())
@@ -508,20 +510,15 @@ impl Draft {
     pub async fn list_sender_addresses(
         self: Arc<Self>,
     ) -> Result<DraftSenderAddressList, ProtonError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
-        };
-
         Ok(uniffi_async::<_, RealProtonMailError, _>(async move {
-            let tether = ctx.user_stash().connection();
-            let instance = self.instance.read().await;
-            let addresses = instance
-                .sender_addresses(&tether)
+            let addresses = self
+                .instance
+                .sender_addresses()
                 .await?
                 .into_iter()
                 .map(|v| v.email)
                 .collect::<Vec<_>>();
-            let current = instance.sender.clone();
+            let current = self.instance.sender().await?;
             Ok(DraftSenderAddressList {
                 available: addresses,
                 active: current,
@@ -542,19 +539,9 @@ impl Draft {
     /// Returns error if the query failed.
     #[returns(VoidDraftSaveResult)]
     pub async fn save(self: Arc<Self>) -> Result<(), DraftSaveError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftSaveError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
         uniffi_async(async move {
-            let mut instance = self.instance.write().await;
-            instance
-                .save(
-                    ctx.action_queue(),
-                    &ctx.user_stash().connection(),
-                    ctx.origin(),
-                )
+            self.instance
+                .save()
                 .await
                 .map_err(RealProtonMailError::from)?;
             Result::<_, RealProtonMailError>::Ok(())
@@ -573,19 +560,9 @@ impl Draft {
     /// Returns error if the query failed.
     #[returns(VoidDraftSendResult)]
     pub async fn send(self: Arc<Self>) -> Result<(), DraftSendError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftSendError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
         uniffi_async(async move {
-            let mut instance = self.instance.write().await;
-            instance
-                .send(
-                    ctx.action_queue(),
-                    &ctx.user_stash().connection(),
-                    ctx.origin(),
-                )
+            self.instance
+                .send()
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -599,25 +576,14 @@ impl Draft {
     /// Schedule the sending of the given draft at the `timestamp`.
     #[returns(VoidDraftSendResult)]
     pub async fn schedule(self: Arc<Self>, timestamp: UnixTimestamp) -> Result<(), DraftSendError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftSendError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
         let timestamp = proton_core_common::datatypes::UnixTimestamp::from(timestamp)
             .to_date_time()
             .ok_or(DraftSendError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )))?;
         uniffi_async(async move {
-            let mut instance = self.instance.write().await;
-            instance
-                .schedule_send(
-                    timestamp,
-                    ctx.action_queue(),
-                    &ctx.user_stash().connection(),
-                    ctx.origin(),
-                )
+            self.instance
+                .schedule_send(timestamp)
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -652,16 +618,9 @@ impl Draft {
     /// Returns error if the query failed.
     #[returns(VoidDraftDiscardResult)]
     pub async fn discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftDiscardError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
         uniffi_async(async move {
-            let instance = self.instance.read().await;
-
-            instance
-                .discard(ctx.action_queue(), ctx.origin())
+            self.instance
+                .discard()
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -673,26 +632,18 @@ impl Draft {
     }
 
     pub fn is_password_protected(&self) -> Result<bool, ProtonError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
-        };
         Ok(async_runtime().block_on(async move {
-            let instance = self.instance.read().await;
-            instance
-                .is_password_protected(&ctx.user_stash().connection())
+            self.instance
+                .is_password_protected()
                 .await
                 .map_err(RealProtonMailError::from)
         })?)
     }
 
     pub fn get_password(&self) -> Result<Option<DraftPassword>, ProtonError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
-        };
         Ok(async_runtime().block_on(async move {
-            let instance = self.instance.read().await;
-            instance
-                .get_password(&ctx)
+            self.instance
+                .get_password()
                 .await
                 .map(|v| v.map(Into::into))
                 .map_err(RealProtonMailError::from)
@@ -706,15 +657,9 @@ impl Draft {
         hint: Option<String>,
     ) -> Result<(), DraftPasswordError> {
         let password = SecretString::new(password);
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftPasswordError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
         uniffi_async(async move {
-            let instance = self.instance.read().await;
-            instance
-                .set_password(&ctx, password.expose_secret(), hint)
+            self.instance
+                .set_password_with_secret(password, hint)
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -727,16 +672,9 @@ impl Draft {
 
     #[returns(VoidDraftPasswordResult)]
     pub async fn remove_password(self: Arc<Self>) -> Result<(), DraftPasswordError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftPasswordError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
         uniffi_async(async move {
-            let instance = self.instance.read().await;
-            let mut tether = ctx.user_stash().connection();
-            instance
-                .remove_password(&mut tether)
+            self.instance
+                .remove_password()
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -753,16 +691,9 @@ impl Draft {
         expiration_time: DraftExpirationTime,
     ) -> Result<(), DraftExpirationError> {
         let expiration_time = RealDraftExpirationTime::try_from(expiration_time)?;
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftExpirationError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
-        };
         uniffi_async(async move {
-            let instance = self.instance.read().await;
-            let mut tether = ctx.user_stash().connection();
-            instance
-                .set_expiration_time(&mut tether, expiration_time.into())
+            self.instance
+                .set_expiration_time(expiration_time.into())
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -774,14 +705,9 @@ impl Draft {
     }
 
     pub fn expiration_time(&self) -> Result<DraftExpirationTime, ProtonError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
-        };
         Ok(async_runtime().block_on(async move {
-            let instance = self.instance.read().await;
-            let tether = ctx.user_stash().connection();
-            instance
-                .expiration_time(&tether)
+            self.instance
+                .expiration_time()
                 .await
                 .map(Into::into)
                 .map_err(RealProtonMailError::from)
@@ -790,29 +716,30 @@ impl Draft {
 
     pub fn address_validation_result(&self) -> Option<DraftAddressValidationResult> {
         async_runtime().block_on(async move {
-            let instance = self.instance.read().await;
-            instance.address_validation_result.clone().map(Into::into)
+            self.instance
+                .address_validation_result()
+                .await
+                .unwrap_or(None)
+                .map(Into::into)
         })
     }
 
     pub fn clear_address_validation_error(&self) {
         async_runtime().block_on(async move {
-            let mut instance = self.instance.write().await;
-            instance.address_validation_result = None;
+            if let Err(e) = self.instance.clear_address_validation_result().await {
+                tracing::error!("failed to clear address validation error: {:?}", e);
+            }
         });
     }
 
     pub fn validate_recipients_expiration_feature(
         &self,
     ) -> Result<DraftRecipientExpirationFeatureReport, ProtonError> {
-        let Some(ctx) = self.ctx.upgrade() else {
+        let Some(_) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
         async_runtime().block_on(async move {
-            let instance = self.instance.read().await;
-            if let Ok(is_password_protected) = instance
-                .is_password_protected(&ctx.user_stash().connection())
-                .await
+            if let Ok(is_password_protected) = self.instance.is_password_protected().await
                 && is_password_protected
             {
                 return Ok(DraftRecipientExpirationFeatureReport::default());
@@ -832,12 +759,12 @@ impl Draft {
 impl Draft {
     async fn get_embedded_attachment_impl(
         &self,
-        ctx: &MailUserContext,
+        _: &MailUserContext,
         cid: String,
     ) -> Result<AttachmentData, RealProtonMailError> {
-        let draft = self.instance.read().await;
-        let att = draft
-            .get_embedded_attachment(ctx, &ContentId::from(cid))
+        let att = self
+            .instance
+            .get_embedded_attachment(&ContentId::from(cid))
             .await
             .map_err(RealProtonMailError::from)?;
         Ok::<_, RealProtonMailError>(AttachmentData {
@@ -914,14 +841,8 @@ pub async fn draft_cancel_schedule_send(
     })
 }
 
-async fn save_draft(ctx: &MailUserContext, draft: &mut RealDraft) -> Result<(), MailContextError> {
-    draft
-        .save(
-            ctx.action_queue(),
-            &ctx.user_stash().connection(),
-            ctx.origin(),
-        )
-        .await?;
+async fn save_draft(draft: &RealDraft) -> Result<(), MailContextError> {
+    draft.save().await?;
     Ok(())
 }
 

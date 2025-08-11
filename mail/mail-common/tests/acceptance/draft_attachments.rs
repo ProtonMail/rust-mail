@@ -82,14 +82,7 @@ async fn attachment_not_removed_on_error() {
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -110,8 +103,8 @@ async fn attachment_not_removed_on_error() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
 
-    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
+    let draft_attachments = draft.attachments().await.unwrap();
     assert_eq!(draft_attachments.len(), 1);
     assert!(matches!(
         draft_attachments[0].state,
@@ -125,7 +118,7 @@ async fn attachment_not_removed_on_error() {
     // Opening this draft will sync the data from the server, since the upload failed of the attachment
     // failed we need to preserve the failed attachments or they will get lost.
     let (draft, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
-    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    let draft_attachments = draft.attachments().await.unwrap();
     assert!(matches!(sync_status, DraftSyncStatus::Synced));
     assert_eq!(draft_attachments.len(), 1);
     assert!(matches!(
@@ -154,14 +147,7 @@ async fn remove_attachment_updates_attachment_list() {
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Create attachment
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
@@ -177,18 +163,15 @@ async fn remove_attachment_updates_attachment_list() {
     )
     .await;
 
-    let action_id = draft
-        .remove_attachment(&user_ctx, attachment.id())
-        .await
-        .unwrap();
+    let action_id = draft.remove_attachment(attachment.id()).await.unwrap();
 
-    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    let draft_attachments = draft.attachments().await.unwrap();
     assert_eq!(draft_attachments.len(), 0);
 
     // cancelling the action  should undo the change.
     user_ctx.action_queue().cancel(action_id).await.unwrap();
 
-    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    let draft_attachments = draft.attachments().await.unwrap();
     assert_eq!(draft_attachments.len(), 1);
 }
 
@@ -211,14 +194,7 @@ async fn remove_attachment_by_cid() {
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Create attachment
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
@@ -253,7 +229,7 @@ async fn remove_attachment_by_cid() {
 
     // Removing with unknown cid is an error
     let err = draft
-        .remove_attachment_with_cid(&user_ctx, ContentId::new())
+        .remove_attachment_with_cid(ContentId::new())
         .await
         .unwrap_err();
 
@@ -265,17 +241,17 @@ async fn remove_attachment_by_cid() {
     ));
 
     let action_id = draft
-        .remove_attachment_with_cid(&user_ctx, attachment.content_id.unwrap())
+        .remove_attachment_with_cid(attachment.content_id.unwrap())
         .await
         .unwrap();
 
-    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    let draft_attachments = draft.attachments().await.unwrap();
     assert_eq!(draft_attachments.len(), 0);
 
     // cancelling the action  should undo the change.
     user_ctx.action_queue().cancel(action_id).await.unwrap();
 
-    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    let draft_attachments = draft.attachments().await.unwrap();
     assert_eq!(draft_attachments.len(), 1);
 }
 
@@ -324,14 +300,7 @@ async fn removing_non_uploaded_attachment() {
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -354,14 +323,14 @@ async fn removing_non_uploaded_attachment() {
 
     // Remove attachment
     draft
-        .remove_attachment(&user_ctx, local_attachment.id())
+        .remove_attachment(local_attachment.id())
         .await
         .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    let draft_attachments = draft.attachments().await.unwrap();
     assert_eq!(draft_attachments.len(), 0);
 
     // Check attachment was deleted
@@ -431,14 +400,7 @@ async fn removing_uploaded_attachment() {
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -461,14 +423,14 @@ async fn removing_uploaded_attachment() {
 
     // Remove attachment
     draft
-        .remove_attachment(&user_ctx, local_attachment.id())
+        .remove_attachment(local_attachment.id())
         .await
         .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    let draft_attachments = draft.attachments().await.unwrap();
     assert_eq!(draft_attachments.len(), 0);
 
     // Check attachment was deleted
@@ -634,18 +596,11 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     ctx.catch_all().await;
 
     // Create draft.
-    let mut draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true, None)
+    let draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true, None)
         .await
         .unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute actions.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -747,10 +702,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     assert_eq!(attachments.len(), 3);
 
     // delete draft.
-    draft
-        .discard(user_ctx.action_queue(), user_ctx.origin())
-        .await
-        .unwrap();
+    draft.discard().await.unwrap();
 
     // Execute actions.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -794,7 +746,7 @@ async fn override_attachment_name() {
 
     let local_attachment = Attachment::create_local(
         &user_ctx,
-        draft.address_id,
+        draft.address_id().await.unwrap(),
         Disposition::Attachment,
         attachment_file.path(),
         Some(filename_override.to_owned()),
@@ -851,14 +803,7 @@ async fn total_attachment_size_more_than_limit() {
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -973,14 +918,7 @@ async fn total_attachment_count_exceeds_limit() {
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
-    draft
-        .save(
-            user_ctx.action_queue(),
-            &user_ctx.user_stash().connection(),
-            user_ctx.origin(),
-        )
-        .await
-        .unwrap();
+    draft.save().await.unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -1064,10 +1002,7 @@ async fn create_and_add_attachment(
     let local_attachment =
         create_attachment(ctx, path, disposition, draft, file_name_override, tether).await;
 
-    draft
-        .add_attachment(ctx, local_attachment.clone())
-        .await
-        .unwrap();
+    draft.add_attachment(&local_attachment).await.unwrap();
 
     local_attachment
 }
@@ -1084,7 +1019,7 @@ async fn create_attachment(
 
     Attachment::create_local(
         ctx,
-        draft.address_id.clone(),
+        draft.address_id().await.unwrap(),
         disposition,
         path,
         file_name_override,

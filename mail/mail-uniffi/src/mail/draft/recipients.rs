@@ -1,16 +1,16 @@
 use crate::async_runtime;
-use crate::mail::draft::Draft;
 use crate::mail::state::MailUserContextPtr;
 use itertools::Itertools;
 use non_empty_string::NonEmptyString;
 use proton_core_api::services::proton::PrivateString;
+use proton_mail_common::draft::Draft as RealDraft;
 use proton_mail_common::draft::recipients::{
     ExpirationFeatureSupportReport, GroupRecipient, OnBackgroundValidationComplete,
     Recipient as RealRecipient, RecipientEntry, RecipientError, RecipientList, SingleRecipient,
     ValidatingRecipientList, ValidationState,
 };
 use proton_mail_common::{MailContextError, MailUserContext};
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use tracing::error;
 
 /// Single email recipient.
@@ -172,14 +172,14 @@ enum ComposerListType {
 pub struct ComposerRecipientList {
     list_type: ComposerListType,
     list: ValidatingRecipientList<ComposerRecipientValidationCallbackWrapper>,
-    draft: Weak<Draft>,
+    draft: RealDraft,
     ctx: MailUserContextPtr,
 }
 
 impl ComposerRecipientList {
     pub(super) fn new_to_list(
         ctx: MailUserContextPtr,
-        draft: Weak<Draft>,
+        draft: RealDraft,
         list: RecipientList,
     ) -> Arc<Self> {
         Arc::new(Self {
@@ -191,7 +191,7 @@ impl ComposerRecipientList {
     }
     pub(super) fn new_bcc_list(
         ctx: MailUserContextPtr,
-        draft: Weak<Draft>,
+        draft: RealDraft,
         list: RecipientList,
     ) -> Arc<Self> {
         Arc::new(Self {
@@ -204,7 +204,7 @@ impl ComposerRecipientList {
 
     pub(super) fn new_cc_list(
         ctx: MailUserContextPtr,
-        draft: Weak<Draft>,
+        draft: RealDraft,
         list: RecipientList,
     ) -> Arc<Self> {
         Arc::new(Self {
@@ -215,25 +215,14 @@ impl ComposerRecipientList {
         })
     }
 
-    async fn save_draft(&self, ctx: &MailUserContext) -> Result<(), MailContextError> {
-        let upgrade = self.draft.upgrade().ok_or_else(|| {
-            MailContextError::Other(anyhow::anyhow!("Draft reference no longer valid"))
-        })?;
-
+    async fn save_draft(&self, _: &MailUserContext) -> Result<(), MailContextError> {
         let list = self.list.list();
-        let mut draft = upgrade.instance.write().await;
         match self.list_type {
-            ComposerListType::To => draft.to_list = list,
-            ComposerListType::Cc => draft.cc_list = list,
-            ComposerListType::Bcc => draft.bcc_list = list,
+            ComposerListType::To => self.draft.set_to_list(list).await?,
+            ComposerListType::Cc => self.draft.set_cc_list(list).await?,
+            ComposerListType::Bcc => self.draft.set_bcc_list(list).await?,
         }
-        draft
-            .save(
-                ctx.action_queue(),
-                &ctx.user_stash().connection(),
-                ctx.origin(),
-            )
-            .await?;
+        self.draft.save().await?;
         Ok(())
     }
 

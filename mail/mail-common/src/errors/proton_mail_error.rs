@@ -302,6 +302,12 @@ impl From<DraftError> for ProtonMailError {
             DraftError::SenderAddressChange(v) => v.into(),
             DraftError::Password(v) => v.into(),
             DraftError::Expiration(v) => v.into(),
+            DraftError::Actor => ProtonMailError::Unexpected(Unexpected::Draft),
+            DraftError::Recipient(_) => {
+                // Recipient errors are not directly exposed via uniffi, we will
+                // handle this later to avoid to many api breaks.
+                ProtonMailError::Unexpected(Unexpected::Draft)
+            }
         }
     }
 }
