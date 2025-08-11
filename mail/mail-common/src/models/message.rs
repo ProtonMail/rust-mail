@@ -651,8 +651,6 @@ impl Message {
             }
         }
 
-        self.set_coversation_before_save(bond).await?;
-        self.set_snooze_time_before_save(bond).await?;
         self.save(bond).await?;
         Ok(())
     }
@@ -2574,27 +2572,11 @@ impl ModelHooks for Message {
             .find(|l| l.remote_id == Some(LabelId::snoozed()))
         {
             self.snoozed_until = Conversation::context_snooze_time(
-                self.local_conversation_id.unwrap(),
-                label.local_id.unwrap(),
+                self.local_conversation_id.expect("Should be set"),
+                label.id(),
                 tether,
             )
             .await?;
-            if let Some(snooze_time) = self.snoozed_until {
-                self.snooze_time = snooze_time;
-            }
-        } else if let Some(label) = labels
-            .iter()
-            .find(|l| l.remote_id == Some(LabelId::inbox()))
-        {
-            if let Some(snooze_time) = Conversation::context_snooze_time(
-                self.local_conversation_id.unwrap(),
-                label.local_id.unwrap(),
-                tether,
-            )
-            .await?
-            {
-                self.snooze_time = snooze_time;
-            }
         }
 
         self.custom_labels = labels
@@ -2712,6 +2694,7 @@ impl ModelHooks for Message {
         }
 
         self.set_coversation_before_save(bond).await?;
+        self.set_snooze_time_before_save(bond).await?;
         Ok(())
     }
 }
