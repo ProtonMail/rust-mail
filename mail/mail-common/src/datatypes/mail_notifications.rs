@@ -24,26 +24,11 @@ use tracing::error;
 /// Quick actions available for mail related push notifications.
 /// It operates on remote ids since local ids are unknown at this point.
 ///
+#[derive(Debug)]
 pub enum PushNotificationQuickAction {
-    /// Marks email (being a subject of this notification) as "Read".
-    /// It might be no-op if user managed to mark it on another device
-    /// (It does not act as "toggle").
-    MarkAsRead {
-        /// Remote id of the message.
-        remote_id: MessageId,
-    },
-
-    /// Moves email (being a subject of this notification) to "Archive" folder.
-    MoveToArchive {
-        /// Remote id of the message.
-        remote_id: MessageId,
-    },
-
-    /// Moves email (being a subject of this notification) to "Trash" folder.
-    MoveToTrash {
-        /// Remote id of the message.
-        remote_id: MessageId,
-    },
+    MarkAsRead { remote_id: MessageId },
+    MoveToArchive { remote_id: MessageId },
+    MoveToTrash { remote_id: MessageId },
 }
 
 /// Decrypted notification usable only in the context of the Inbox application
