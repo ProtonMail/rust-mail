@@ -7,7 +7,7 @@ use crate::{
     datatypes::mail_notifications::PushNotificationQuickAction,
     models::Message,
 };
-use proton_action_queue::action::Metadata;
+use proton_action_queue::action::{Metadata, Priority};
 use proton_core_common::{
     actions::event_poll::EventPoll, datatypes::SystemLabel, models::LabelError,
 };
@@ -65,7 +65,10 @@ async fn move_msg(
             .queue()
             .queue_action_with_metadata(
                 EventPoll {},
-                Metadata::builder().with_dependency(action.id).build(),
+                Metadata::builder()
+                    .with_dependency(action.id)
+                    .with_priority_override(Priority::High)
+                    .build(),
             )
             .await
             .map_err(|err| {
