@@ -6,6 +6,9 @@ use crate::messages::Messages;
 use crate::widgets::utils::ScrollableState;
 use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::{Context as _, anyhow};
+use futures::StreamExt as _;
+use futures::stream::iter;
+use proton_core_common::CoreAccountState;
 use proton_core_common::db::account::CoreAccount;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::{MailContext, MailContextError};
@@ -27,7 +30,7 @@ pub enum Message {
 }
 
 pub struct SessionSelectModel {
-    accounts: Vec<CoreAccount>,
+    accounts: Vec<(CoreAccount, Option<CoreAccountState>)>,
     session_list_state: ScrollableListState,
 }
 
@@ -38,6 +41,17 @@ impl SessionSelectModel {
             .iter()
             .position(|ac| ac.username == CLI_ARGS.username)
             .unwrap_or(0);
+
+        let accounts = iter(accounts)
+            .then(|account| async {
+                let state = ctx
+                    .get_account_state(account.remote_id.clone())
+                    .await
+                    .unwrap_or(None);
+                (account, state)
+            })
+            .collect()
+            .await;
 
         Ok(Self {
             accounts,
@@ -81,7 +95,7 @@ impl AppStateHandler for SessionSelectModel {
                     ));
                 };
 
-                let Some(account) = self.accounts.get(index) else {
+                let Some((account, _stase)) = self.accounts.get(index) else {
                     return Command::message(Messages::DisplayError(
                         None,
                         anyhow!("Invalid session index",),
@@ -124,7 +138,7 @@ impl AppStateHandler for SessionSelectModel {
                     ));
                 };
 
-                let Some(account) = self.accounts.get(index) else {
+                let Some((account, _state)) = self.accounts.get(index) else {
                     return Command::message(Messages::DisplayError(
                         None,
                         anyhow!("Invalid session index",),
@@ -169,7 +183,7 @@ impl AppStateHandler for SessionSelectModel {
                     ));
                 };
 
-                let Some(account) = self.accounts.get(index).cloned() else {
+                let Some((account, _state)) = self.accounts.get(index).cloned() else {
                     return Command::message(Messages::DisplayError(
                         None,
                         anyhow!("Invalid session index",),
@@ -237,7 +251,7 @@ impl AppStateHandler for SessionSelectModel {
             }
             Message::DeleteSuccess(email) => {
                 self.accounts
-                    .retain(|account| account.name_or_addr != email);
+                    .retain(|(account, _state)| account.name_or_addr != email);
                 Command::none()
             }
         }
@@ -260,7 +274,20 @@ impl AppStateHandler for SessionSelectModel {
         let list_sessions = self
             .accounts
             .iter()
-            .map(|session| ListItem::new(Text::from(session.name_or_addr.clone())))
+            .map(|(session, state)| {
+                ListItem::new(Text::from(format!(
+                    "{} ({})",
+                    session.name_or_addr,
+                    match state {
+                        Some(CoreAccountState::NotReady) => "NotReady",
+                        Some(CoreAccountState::LoggedIn(_)) => "LoggedIn",
+                        Some(CoreAccountState::NeedMbp(_)) => "NeedMbp",
+                        Some(CoreAccountState::NeedTfa(_)) => "NeedTfa",
+                        Some(CoreAccountState::LoggedOut) => "LoggedOut",
+                        None => "",
+                    }
+                )))
+            })
             .collect::<Vec<_>>();
         self.session_list_state.set_len(self.accounts.len());
 
