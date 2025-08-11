@@ -167,7 +167,7 @@ pub enum ContactError {
 }
 
 /// Represents the state of an account.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CoreAccountState {
     /// The account is not yet ready to be used.
     NotReady,
