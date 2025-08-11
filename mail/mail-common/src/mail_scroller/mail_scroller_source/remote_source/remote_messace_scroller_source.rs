@@ -404,7 +404,12 @@ impl RemoteMessageScrollerSource {
                 }
 
                 let last = messages.last().unwrap();
-                let time = last.time;
+                let time = if matches!(order_field, ScrollOrderField::SnoozeTime) {
+                    last.snooze_time
+                } else {
+                    last.time
+                };
+
                 // Unwrap safety: RemoteId is present as this method is called on message
                 // downloaded from API
                 let remote_id = last.remote_id.clone().unwrap();

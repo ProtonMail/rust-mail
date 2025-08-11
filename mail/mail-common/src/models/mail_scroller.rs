@@ -155,7 +155,7 @@ impl ScrollData for MessageScrollData {
         require_remote_id: bool,
         offset: Option<u64>,
         order_dir: ScrollOrderDir,
-        _: ScrollOrderField,
+        order_field: ScrollOrderField,
     ) -> String {
         //NOTE: we only check the display order for elements with matching time
         // or we will get incorrect query results.
@@ -164,6 +164,11 @@ impl ScrollData for MessageScrollData {
             ('>', ">=", "DESC")
         } else {
             ('<', "<=", "ASC")
+        };
+
+        let time_column = match order_field {
+            ScrollOrderField::Time => "messages.time",
+            ScrollOrderField::SnoozeTime => "messages.snooze_time",
         };
 
         let mut query = formatdoc!(
@@ -175,9 +180,9 @@ impl ScrollData for MessageScrollData {
             AND
                 messages.deleted = 0
             AND (
-                    messages.time {time_op} ?2
+                    {time_column} {time_op} ?2
                 OR
-                    (messages.time = ?2 AND messages.display_order {display_order_op} ?3)
+                    ({time_column} = ?2 AND messages.display_order {display_order_op} ?3)
                 )
             "
         );
@@ -197,7 +202,7 @@ impl ScrollData for MessageScrollData {
 
         query += &format!(
             " ORDER BY
-            messages.time {sort_op},
+            {time_column} {sort_op},
             messages.display_order {sort_op}
         "
         );
@@ -217,8 +222,11 @@ impl ScrollData for MessageScrollData {
         items
     }
 
-    fn time(item: &Self::Item, _: ScrollOrderField) -> UnixTimestamp {
-        item.time
+    fn time(item: &Self::Item, order_field: ScrollOrderField) -> UnixTimestamp {
+        match order_field {
+            ScrollOrderField::Time => item.time,
+            ScrollOrderField::SnoozeTime => item.snooze_time,
+        }
     }
 
     fn display_order(item: &Self::Item) -> u64 {

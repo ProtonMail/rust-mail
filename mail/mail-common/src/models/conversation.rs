@@ -1743,10 +1743,19 @@ impl Conversation {
             };
 
             let mut modified = false;
+            let snoozed_label_id = SystemLabel::Snoozed.local_id(bond).await?;
 
-            for label in conversation.labels.iter_mut() {
-                modified |= label.context_snooze_time != snooze_until;
-                label.context_snooze_time = snooze_until;
+            if let Some(snooze_label) = conversation
+                .labels
+                .iter_mut()
+                .find(|l| l.local_label_id == snoozed_label_id)
+            {
+                modified |= snooze_label.context_snooze_time != snooze_until;
+                snooze_label.context_snooze_time = snooze_until;
+                // Conversation needs to be saved before messages are updated
+                if modified {
+                    conversation.save(bond).await?;
+                }
             }
 
             let mut messages = Message::in_conversation(id, bond).await?;
@@ -1757,7 +1766,6 @@ impl Conversation {
                 {
                     // unwrap safety: It is there as `Conversation::message_id_to_open` returns Error on empty messages
                     let last_message = messages.last_mut().unwrap();
-                    last_message.display_snooze_reminder = true;
                     last_message.snooze_time = snooze_until;
                     last_message.save(bond).await?;
 
@@ -1767,15 +1775,10 @@ impl Conversation {
                             .iter_mut()
                             .find(|m| m.id() == message_id_to_open)
                             .unwrap();
-                        message_to_open.display_snooze_reminder = true;
                         message_to_open.snooze_time = snooze_until;
                         message_to_open.save(bond).await?;
                     }
                 }
-            }
-
-            if modified {
-                conversation.save(bond).await?;
             }
         }
 
@@ -1822,10 +1825,19 @@ impl Conversation {
             };
 
             let mut modified = false;
+            let inbox_label_id = SystemLabel::Inbox.local_id(bond).await?;
 
-            for label in conversation.labels.iter_mut() {
-                modified |= label.context_snooze_time != label.context_time;
-                label.context_snooze_time = label.context_time;
+            if let Some(inbox_label) = conversation
+                .labels
+                .iter_mut()
+                .find(|l| l.local_label_id == inbox_label_id)
+            {
+                modified |= inbox_label.context_snooze_time != inbox_label.context_time;
+                inbox_label.context_snooze_time = inbox_label.context_time;
+                // Conversation needs to be saved before messages are updated
+                if modified {
+                    conversation.save(bond).await?;
+                }
             }
 
             let messages = Message::in_conversation(id, bond).await?;
@@ -1836,10 +1848,6 @@ impl Conversation {
                     message.display_snooze_reminder = false;
                     message.save(bond).await?;
                 }
-            }
-
-            if modified {
-                conversation.save(bond).await?;
             }
         }
 
@@ -1880,16 +1888,13 @@ impl Conversation {
         Ok(())
     }
 
-    pub async fn read_snooze_time(
+    pub async fn context_snooze_time(
         id: LocalConversationId,
+        local_label_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<Option<UnixTimestamp>, StashError> {
-        let snoozed_id = SystemLabel::Snoozed
-            .local_id(tether)
-            .await?
-            .expect("Snoozed should be set");
         let snooze_time =
-            ConversationLabel::find_by_conversation_and_label(&id, snoozed_id, tether)
+            ConversationLabel::find_by_conversation_and_label(&id, local_label_id, tether)
                 .await?
                 .map(|l| l.context_snooze_time);
         Ok(snooze_time)

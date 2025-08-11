@@ -1515,7 +1515,11 @@ impl From<RealMessage> for Message {
             snoozed_until: value.snoozed_until.map(Into::into),
             display_snooze_reminder: value.display_snooze_reminder,
             subject: value.subject,
-            time: value.time.into(),
+            time: if value.display_snooze_reminder {
+                value.snooze_time.into()
+            } else {
+                value.time.into()
+            },
             to_list: value.to_list.value.map_vec(),
             unread: value.unread,
             custom_labels: value.custom_labels.map_vec(),
