@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.123.0] - 2025-08-11
+
+### Features
+
+- [ET-3094] Log out account and clear its state if login fails during post login validation
+- Show account state in mail-tui account-switcher
+- Add comprehensive support for message view with snooze_time ordering
+
+### Fixes
+
+- Message.snoozed_until is read directly from converstation's label instead of `snooze_time` api field.
+- [ET-3992] Update the account data when receiving a user via event loop.
+- [et-4002] support multipart emails with local-only attachments
+- [et-3605] poll event loop after answering a notification
+
+
+## [mail-uniffi-v0.122.0] - 2025-08-08
 
 ### Features
 
@@ -74,14 +90,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.118.0] - 2025-08-06
 
-### Features
-
-- Parallel default action groups
-- Et-3917 sign-in: add observability
-- [ET-4083] Expiration time options
-- [ET-3911] Add record_human_verification_view_loading_result function
-- [ET-3955] Added payment specific observability events.
-
 ### Fixes
 
 - [ET-2416] Sort accounts by name
@@ -102,7 +110,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- Parallel default action groups
+- Et-3917 sign-in: add observability
+- [ET-4083] Expiration time options
+- [ET-3911] Add record_human_verification_view_loading_result function
+- [ET-3955] Added payment specific observability events.
 - [ET-4084] Draft recipient expiration feature check
+
+
+## [mail-uniffi-v0.115.7] - 2025-08-05
+
+### Fixes
+
+- Rsvp/uniffi: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.116.0] - 2025-08-05
@@ -116,13 +136,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-4011] Improve error handling for attachment uploads
-
-
-## [mail-uniffi-v0.115.7] - 2025-08-05
-
-### Fixes
-
-- Rsvp/uniffi: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.115.5] - 2025-08-04
