@@ -291,13 +291,8 @@ where
     // There is no streaming currently.
     for attachment in attachments {
         match attachment.attachment_type {
-            AttachmentType::Remote(Some(_)) => (),
-            AttachmentType::Remote(None) => {
-                return Err(PackageError::AttachmentHasNoRemoteId);
-            }
-            AttachmentType::Pgp => {
-                continue;
-            }
+            AttachmentType::Remote(_) => (),
+            AttachmentType::Pgp => continue,
         }
 
         let loaded_data = attachment
