@@ -10,33 +10,37 @@ use tracing::warn;
 
 pub async fn handle_message_events(
     tx: &Bond<'_>,
-    message_events: &[MessageEvent],
+    events: &[MessageEvent],
     data: &mut PostEventSyncData,
 ) -> Result<(), AppError> {
-    for message_event in message_events {
-        message_event.action.log_entry(&message_event.remote_id);
-        match message_event.action {
+    for event in events {
+        event.action.log_entry(&event.remote_id);
+
+        match event.action {
             Action::Delete => {
                 tx.execute(
                     "DELETE FROM messages WHERE remote_id = ?",
-                    params![message_event.remote_id.clone()],
+                    params![event.remote_id.clone()],
                 )
                 .await?;
             }
+
             Action::Create => {
-                let Some(message) = &message_event.message else {
-                    warn!("Received update message without label");
+                let Some(message) = &event.message else {
+                    warn!("Got a message-event without any message, skipping it");
                     continue;
                 };
 
-                let created =
+                let ids =
                     Message::create_or_update_messages_from_metadata(vec![message.clone()], tx)
                         .await?;
-                data.msg_for_prefetch.extend(created);
+
+                data.msg_for_prefetch.extend(ids);
             }
+
             Action::Update | Action::UpdateFlags => {
-                let Some(message) = &message_event.message else {
-                    warn!("Received update message without label");
+                let Some(message) = &event.message else {
+                    warn!("Got a message-event without any message, skipping it");
                     continue;
                 };
 
@@ -89,7 +93,7 @@ pub async fn handle_message_events(
                 }
 
                 // Case 4.
-                if message_event.action == Action::Update || is_stale_draft {
+                if event.action == Action::Update || is_stale_draft {
                     if let Some(local_id) =
                         Message::remote_id_counterpart(message.id.clone(), tx).await?
                     {
