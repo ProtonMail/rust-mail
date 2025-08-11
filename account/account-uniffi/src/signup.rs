@@ -282,13 +282,16 @@ impl SignupFlow {
     }
 
     /// Skip providing recovery information.
-    pub async fn skip_recovery(&self) -> Result<SimpleSignupState, SignupError> {
+    pub async fn skip_recovery(
+        &self,
+        user_behavior: Option<UserBehavior>,
+    ) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 
         uniffi_async(async move {
             flow.lock()
                 .await
-                .skip_recovery()
+                .skip_recovery(user_behavior.map(Into::into))
                 .await
                 .map_err(SignupError::from)
         })
