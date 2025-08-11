@@ -22,6 +22,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 ical = { workspace = true }
 include_dir = { workspace = true }
+indexmap = { workspace = true }
 parking_lot = { workspace = true }
 proton-core-api = { workspace = true, features = ["sql"] }
 proton-action-queue = { workspace = true }

@@ -1,9 +1,12 @@
 pub mod device_info_service;
 pub mod event_poll_config_service;
 pub mod hv_notifier_service;
+pub mod logging_service;
+pub mod service;
 pub mod session_observer_service;
 
 pub use device_info_service::DeviceInfoService;
 pub use event_poll_config_service::EventPollConfigService;
 pub use hv_notifier_service::HvNotifierService;
+pub use service::Service;
 pub use session_observer_service::SessionObserverService;

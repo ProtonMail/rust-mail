@@ -1,3 +1,6 @@
+use crate::CoreContextError;
+use crate::context::services::Service;
+use async_trait::async_trait;
 use jiff::Zoned;
 use parking_lot::{Mutex, RwLock};
 use std::{
@@ -97,5 +100,13 @@ impl Default for ActivityClock {
             accessed: AtomicBool::new(false),
             just_created: AtomicBool::new(true),
         }
+    }
+}
+
+#[async_trait]
+impl Service for CoreClock {
+    type Error = CoreContextError;
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

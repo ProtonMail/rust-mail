@@ -1,7 +1,10 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
 mod builder;
+mod registry;
 pub mod services;
+use registry::ServiceRegistry;
+use services::logging_service::LoggingService;
 
 use crate::action_queue::CoreActionError;
 use crate::auth_store::{AuthStore, DecryptExt};
@@ -56,7 +59,6 @@ use services::{
 };
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
-use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fs;
 use std::future::Future;
@@ -265,10 +267,15 @@ pub struct Context {
     cancellation_token: CancellationToken,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     task_service: BackgroundAwareTaskService,
-    clock: CoreClock,
-    log_service: LogService,
-    // Service registry
-    services: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    service_registry: ServiceRegistry<CoreContextError>,
+}
+
+impl std::ops::Deref for Context {
+    type Target = ServiceRegistry<CoreContextError>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.service_registry
+    }
 }
 
 const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
@@ -335,51 +342,37 @@ impl Context {
         let task_service = TaskService::new()?;
         let background_task_service = BackgroundAwareTaskService::new(task_service);
 
-        let mut builder = ContextBuilder::new();
+        let mut builder = ContextBuilder::new()
+            .with_service(CoreClock::default())
+            .with_service(LoggingService::new(log_service));
 
         if matches!(origin, Origin::App) {
             builder = builder
                 .with_cyclic_service(|weak_ctx| {
-                    SessionObserverService::new(EventService::new(), weak_ctx)
+                    SessionObserverService::new(
+                        EventService::new(),
+                        weak_ctx,
+                        SESSION_OBSERVER_BROADCAST_CAPACITY,
+                    )
                 })
                 .with_service(HvNotifierService::new(hv_notifier))
                 .with_service(DeviceInfoService::new(device_info_provider))
                 .with_service(EventPollConfigService::new(event_poll_mode));
         }
 
-        let ctx = builder.build(
-            origin,
-            user_db_path,
-            account_db_path,
-            cache_path.into(),
-            api_config,
-            account_stash,
-            key_chain,
-            initializers,
-            background_task_service,
-            CoreClock::default(),
-            log_service,
-        );
-
-        let ctx_weak = ctx.this.clone();
-        if let Some(session_service) = ctx.get_service_opt::<SessionObserverService>() {
-            session_service
-                .start(SESSION_OBSERVER_BROADCAST_CAPACITY)
-                .await?;
-
-            session_service.on_session_deleted(move |_, user_id| {
-                let ctx_weak = ctx_weak.clone();
-                async move {
-                    let Some(ctx) = ctx_weak.upgrade() else {
-                        return OnSessionDeletedResponse::Terminate;
-                    };
-                    ctx.active_user_contexts.lock().await.remove(&user_id);
-                    OnSessionDeletedResponse::Continue
-                }
-            });
-        }
-
-        Ok(ctx)
+        builder
+            .build(
+                origin,
+                user_db_path,
+                account_db_path,
+                cache_path.into(),
+                api_config,
+                account_stash,
+                key_chain,
+                initializers,
+                background_task_service,
+            )
+            .await
     }
 
     #[must_use]
@@ -395,24 +388,6 @@ impl Context {
     #[must_use]
     pub fn origin(&self) -> Origin {
         self.origin
-    }
-
-    #[allow(clippy::result_large_err)]
-    /// # Panics
-    /// This function panics if the service is not found.
-    /// If there is a need for a service that may not exist, use `get_service_opt`.
-    pub fn get_service<T: 'static>(&self) -> &T {
-        self.services
-            .get(&TypeId::of::<T>())
-            .and_then(|service| service.downcast_ref::<T>())
-            .unwrap_or_else(|| panic!("Service not found"))
-    }
-
-    #[allow(clippy::result_large_err)]
-    pub fn get_service_opt<T: 'static>(&self) -> Option<&T> {
-        self.services
-            .get(&TypeId::of::<T>())
-            .and_then(|service| service.downcast_ref::<T>())
     }
 
     /// Get all available accounts.
@@ -1137,7 +1112,7 @@ impl Context {
     }
 
     pub fn log_service(&self) -> &LogService {
-        &self.log_service
+        self.get_service::<LoggingService>().service()
     }
 
     /// Spawns a new task.
@@ -1184,7 +1159,7 @@ impl Context {
     }
 
     pub fn clock(&self) -> &CoreClock {
-        &self.clock
+        self.get_service::<CoreClock>()
     }
 
     #[allow(clippy::result_large_err)]

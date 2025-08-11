@@ -1,37 +1,41 @@
-use crate::core_clock::CoreClock;
 use crate::datatypes::ApiConfig;
 use crate::os::KeyChain;
 use crate::{Context, Origin, UserDatabaseInitializer};
-use proton_log_service::LogService;
+use indexmap::IndexMap;
 use proton_task_service::BackgroundAwareTaskService;
 use stash::stash::Stash;
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-enum ServiceUnderConstruction {
-    Simple(Box<dyn Any + Send + Sync>),
-    Cyclic(Box<dyn FnOnce(Weak<Context>) -> Box<dyn Any + Send + Sync> + Send + Sync>),
+use super::CoreContextError;
+use super::registry::ServiceRegistry;
+use super::services::Service;
+
+enum ServiceUnderConstruction<Err> {
+    Simple(Box<dyn Service<Error = Err>>),
+    Cyclic(Box<dyn FnOnce(Weak<Context>) -> Box<dyn Service<Error = Err>> + Send + Sync>),
 }
 
 #[derive(Default)]
 pub struct ContextBuilder {
-    services: HashMap<TypeId, ServiceUnderConstruction>,
+    services: IndexMap<TypeId, ServiceUnderConstruction<CoreContextError>>,
 }
 
 impl ContextBuilder {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            services: HashMap::new(),
+            services: IndexMap::new(),
         }
     }
 
     #[must_use]
-    pub fn with_service<T: Any + Send + Sync + 'static>(mut self, service: T) -> Self {
+    pub fn with_service<T: Service<Error = CoreContextError>>(mut self, service: T) -> Self {
+        tracing::info!("Adding service {}", std::any::type_name::<T>());
         self.services.insert(
             TypeId::of::<T>(),
             ServiceUnderConstruction::Simple(Box::new(service)),
@@ -44,9 +48,10 @@ impl ContextBuilder {
     #[must_use]
     pub fn with_cyclic_service<T, F>(mut self, service: F) -> Self
     where
-        T: Any + Send + Sync + 'static,
+        T: Service<Error = CoreContextError>,
         F: FnOnce(Weak<Context>) -> T + 'static + Send + Sync,
     {
+        tracing::info!("Adding service constructor {}", std::any::type_name::<T>());
         self.services.insert(
             TypeId::of::<T>(),
             ServiceUnderConstruction::Cyclic(Box::new(move |this| Box::new(service(this)))),
@@ -54,9 +59,8 @@ impl ContextBuilder {
         self
     }
 
-    #[must_use]
     #[allow(clippy::too_many_arguments)]
-    pub fn build(
+    pub async fn build(
         self,
         origin: Origin,
         user_db_path: PathBuf,
@@ -67,10 +71,8 @@ impl ContextBuilder {
         key_chain: Arc<dyn KeyChain>,
         user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
         task_service: BackgroundAwareTaskService,
-        clock: CoreClock,
-        log_service: LogService,
-    ) -> Arc<Context> {
-        Arc::new_cyclic(|this| {
+    ) -> Result<Arc<Context>, CoreContextError> {
+        let this = Arc::new_cyclic(|this| {
             let services = self
                 .services
                 .into_iter()
@@ -96,10 +98,14 @@ impl ContextBuilder {
                 cancellation_token: CancellationToken::new(),
                 user_db_initializers,
                 task_service,
-                clock,
-                log_service,
-                services,
+                service_registry: ServiceRegistry::new(services),
             }
-        })
+        });
+
+        for service in this.services() {
+            service.init().await?;
+        }
+
+        Ok(this)
     }
 }

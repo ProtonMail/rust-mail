@@ -1,3 +1,6 @@
+use super::Service;
+use crate::CoreContextError;
+use async_trait::async_trait;
 use proton_core_api::verification::DynChallengeNotifier;
 use std::sync::Arc;
 
@@ -15,5 +18,13 @@ impl HvNotifierService {
         &self,
     ) -> Option<Arc<dyn proton_core_api::verification::ChallengeNotifier>> {
         self.notifier.as_ref().map(Arc::clone)
+    }
+}
+
+#[async_trait]
+impl Service for HvNotifierService {
+    type Error = CoreContextError;
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

@@ -1,4 +1,6 @@
-use crate::event_loop::EventPollMode;
+use super::Service;
+use crate::{CoreContextError, event_loop::EventPollMode};
+use async_trait::async_trait;
 
 pub struct EventPollConfigService {
     mode: EventPollMode,
@@ -31,5 +33,13 @@ impl EventPollConfigService {
             EventPollMode::Automatic(duration) => Some(duration),
             EventPollMode::Manual => None,
         }
+    }
+}
+
+#[async_trait]
+impl Service for EventPollConfigService {
+    type Error = CoreContextError;
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

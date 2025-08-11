@@ -1,7 +1,22 @@
-use crate::device::{DeviceInfo, DynDeviceInfoProvider};
+use async_trait::async_trait;
+
+use crate::{
+    CoreContextError,
+    device::{DeviceInfo, DynDeviceInfoProvider},
+};
+
+use super::Service;
 
 pub struct DeviceInfoService {
     provider: Option<DynDeviceInfoProvider>,
+}
+
+#[async_trait]
+impl Service for DeviceInfoService {
+    type Error = CoreContextError;
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl DeviceInfoService {
