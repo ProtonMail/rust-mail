@@ -1,5 +1,5 @@
 use crate::{
-    MailContextResult, MailUserContext,
+    MailContextError, MailContextResult, MailUserContext,
     actions::{
         ActionMoveData,
         messages::{Move, Read},
@@ -7,10 +7,13 @@ use crate::{
     datatypes::mail_notifications::PushNotificationQuickAction,
     models::Message,
 };
-use proton_core_common::{datatypes::SystemLabel, models::LabelError};
+use proton_action_queue::action::Metadata;
+use proton_core_common::{
+    actions::event_poll::EventPoll, datatypes::SystemLabel, models::LabelError,
+};
 use proton_mail_api::services::proton::common::MessageId;
 use std::iter;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 #[instrument(skip(ctx))]
 pub async fn execute_notification_quick_action(
@@ -56,7 +59,19 @@ async fn move_msg(
         .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(label.remote_id()))?;
 
     if let Some(action) = ActionMoveData::new(&tether, label_id, [msg_id]).await? {
-        ctx.queue_action(Move(action)).await?;
+        let action = ctx.queue_action(Move(action)).await?;
+
+        ctx.user_context()
+            .queue()
+            .queue_action_with_metadata(
+                EventPoll {},
+                Metadata::builder().with_dependency(action.id).build(),
+            )
+            .await
+            .map_err(|err| {
+                warn!(?err, "Couldn't poll event loop");
+                MailContextError::Other(err.into())
+            })?;
     }
 
     Ok(())
