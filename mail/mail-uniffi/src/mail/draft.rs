@@ -15,6 +15,7 @@ use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
 use crate::mail::draft::attachments::AttachmentList;
 use crate::mail::draft::observer::DraftSendResult;
+use crate::mail::draft::recipients::{ComposerRecipient, ComposerRecipientValidationCallback};
 use crate::mail::messages::{AttachmentData, ThemeOpts};
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
@@ -23,8 +24,9 @@ use proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::draft::recipients::ExpirationFeatureSupportReport;
 use proton_mail_common::draft::{
-    Draft as RealDraft, DraftExpirationTime as RealDraftExpirationTime,
-    DraftSyncStatus as RealDraftSyncStatus, EoData, ReplyMode, ScheduleSendOptions,
+    Draft as RealDraft, DraftActorOptions, DraftEvent,
+    DraftExpirationTime as RealDraftExpirationTime, DraftSyncStatus as RealDraftSyncStatus, EoData,
+    RecipientGroupId, ReplyMode, ScheduleSendOptions,
     compose::DraftAddressValidationError as RealDraftAddressValidationError,
     compose::DraftAddressValidationResult as RealDraftAddressValidationResult,
 };
@@ -34,8 +36,8 @@ use proton_mail_common::models::DraftSendResult as RealDraftSendResult;
 use proton_mail_common::{MailContextError, MailUserContext};
 use recipients::ComposerRecipientList;
 use secrecy::{ExposeSecret, SecretString};
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::{Arc, Weak};
+use tokio::sync::{RwLock, broadcast};
 
 /// Draft creation mode.
 #[derive(Debug, Copy, Clone, uniffi::Enum)]
@@ -133,17 +135,20 @@ struct CachedDraftData {
     body: String,
     mime_type: MimeType,
     send_result: Option<RealDraftSendResult>,
+    to_list: Vec<ComposerRecipient>,
+    to_list_cb: Option<Arc<dyn ComposerRecipientValidationCallback>>,
+    cc_list: Vec<ComposerRecipient>,
+    cc_list_cb: Option<Arc<dyn ComposerRecipientValidationCallback>>,
+    bcc_list: Vec<ComposerRecipient>,
+    bcc_list_cb: Option<Arc<dyn ComposerRecipientValidationCallback>>,
 }
 /// Represents a draft message which can be crafted as empty or as a reply/forward
 /// to an existing message.
 #[derive(uniffi::Object)]
 pub struct Draft {
     instance: RealDraft,
-    cached: RwLock<CachedDraftData>,
+    cached: Arc<RwLock<CachedDraftData>>,
     ctx: MailUserContextPtr,
-    to_recipient_list: Arc<ComposerRecipientList>,
-    bcc_recipient_list: Arc<ComposerRecipientList>,
-    cc_recipient_list: Arc<ComposerRecipientList>,
     attachment_list: Arc<AttachmentList>,
 }
 impl Draft {
@@ -154,32 +159,117 @@ impl Draft {
     ) -> Result<Arc<Self>, MailContextError> {
         let state = draft.state().await?;
         let staging_path = draft.attachment_staging_path(real_ctx);
+        let cached = Arc::new(RwLock::new(CachedDraftData {
+            subject: state.subject,
+            body: state.body,
+            mime_type: state.mime_type.into(),
+            send_result: state.send_result,
+            to_list: state
+                .to_list
+                .recipients()
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect(),
+            cc_list: state
+                .cc_list
+                .recipients()
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect(),
+            bcc_list: state
+                .bcc_list
+                .recipients()
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect(),
+            to_list_cb: None,
+            cc_list_cb: None,
+            bcc_list_cb: None,
+        }));
+        let cached_cloned = Arc::downgrade(&cached);
+        let event_received = draft.subscribe();
+        real_ctx.spawn(async move {
+            Self::handle_draft_event(cached_cloned, event_received).await;
+        });
         Ok(Arc::new_cyclic(|_| Self {
-            cached: RwLock::new(CachedDraftData {
-                subject: state.subject,
-                body: state.body,
-                mime_type: state.mime_type.into(),
-                send_result: state.send_result,
-            }),
             ctx: ctx.clone(),
-            to_recipient_list: ComposerRecipientList::new_to_list(
-                ctx.clone(),
-                draft.clone(),
-                state.to_list,
-            ),
-            bcc_recipient_list: ComposerRecipientList::new_bcc_list(
-                ctx.clone(),
-                draft.clone(),
-                state.bcc_list,
-            ),
-            cc_recipient_list: ComposerRecipientList::new_cc_list(
-                ctx.clone(),
-                draft.clone(),
-                state.cc_list,
-            ),
+            cached,
             attachment_list: AttachmentList::new(ctx, &staging_path, draft.clone()),
             instance: draft,
         }))
+    }
+
+    async fn handle_draft_event(
+        state: Weak<RwLock<CachedDraftData>>,
+        mut receiver: broadcast::Receiver<DraftEvent>,
+    ) {
+        loop {
+            let msg = match receiver.recv().await {
+                Ok(msg) => msg,
+                Err(broadcast::error::RecvError::Lagged(x)) => {
+                    tracing::warn!("Draft Event Observer was {x} events behind");
+                    continue;
+                }
+                Err(_) => {
+                    // Draft instance is dead
+                    return;
+                }
+            };
+
+            let Some(state) = state.upgrade() else {
+                return;
+            };
+
+            match msg {
+                DraftEvent::RecipientListUpdated { group, list } => {
+                    let mut state = state.write().await;
+                    let cb = match group {
+                        RecipientGroupId::To => {
+                            state.to_list =
+                                list.into_recipients().into_iter().map(Into::into).collect();
+                            state.to_list_cb.clone()
+                        }
+                        RecipientGroupId::Cc => {
+                            state.cc_list =
+                                list.into_recipients().into_iter().map(Into::into).collect();
+                            state.cc_list_cb.clone()
+                        }
+                        RecipientGroupId::Bcc => {
+                            state.bcc_list =
+                                list.into_recipients().into_iter().map(Into::into).collect();
+                            state.bcc_list_cb.clone()
+                        }
+                    };
+                    drop(state);
+                    if let Some(cb) = cb {
+                        async_runtime().spawn_blocking(move || cb.on_update());
+                    }
+                }
+                DraftEvent::RecipientListsUpdated { to, cc, bcc } => {
+                    let mut state = state.write().await;
+                    state.to_list = to.into_recipients().into_iter().map(Into::into).collect();
+                    let to_cb = state.to_list_cb.clone();
+                    state.cc_list = cc.into_recipients().into_iter().map(Into::into).collect();
+                    let cc_cb = state.cc_list_cb.clone();
+                    state.bcc_list = bcc.into_recipients().into_iter().map(Into::into).collect();
+                    let bcc_cb = state.bcc_list_cb.clone();
+                    drop(state);
+
+                    if let Some(cb) = to_cb {
+                        async_runtime().spawn_blocking(move || cb.on_update());
+                    }
+                    if let Some(cb) = cc_cb {
+                        async_runtime().spawn_blocking(move || cb.on_update());
+                    }
+                    if let Some(cb) = bcc_cb {
+                        async_runtime().spawn_blocking(move || cb.on_update());
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -233,16 +323,17 @@ pub async fn new_draft(
     let ctx = session.ctx()?;
     let ptr = session.ptr();
     uniffi_async(async move {
+        let options = draft_options();
         let draft = match create_mode {
-            DraftCreateMode::Empty => RealDraft::empty(&ctx).await,
+            DraftCreateMode::Empty => RealDraft::empty_ex(&ctx, options).await,
             DraftCreateMode::Reply(id) => {
-                RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false, None).await
+                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Sender, false, None, options).await
             }
             DraftCreateMode::ReplyAll(id) => {
-                RealDraft::reply(&ctx, id.into(), ReplyMode::All, false, None).await
+                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::All, false, None, options).await
             }
             DraftCreateMode::Forward(id) => {
-                RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false, None).await
+                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Forward, false, None, options).await
             }
         }
         .map_err(RealProtonMailError::from)?;
@@ -268,13 +359,9 @@ pub async fn open_draft(
     let ctx = session.ctx()?;
     let ptr = session.ptr();
     uniffi_async(async move {
-        let (draft, status) = RealDraft::open(&ctx, message_id.into()).await?;
+        let options = draft_options();
+        let (draft, status) = RealDraft::open_ex(&ctx, message_id.into(), options).await?;
         let draft = Draft::new_impl(ptr, &ctx, draft).await?;
-        // Revalidate all recipients
-        draft.to_recipient_list.check_all_recipients(&ctx);
-        draft.cc_recipient_list.check_all_recipients(&ctx);
-        draft.bcc_recipient_list.check_all_recipients(&ctx);
-
         Ok::<_, RealProtonMailError>(OpenDraft {
             draft,
             sync_status: status.into(),
@@ -295,17 +382,29 @@ impl Draft {
 
     /// Get the To recipients of the draft.
     pub fn to_recipients(&self) -> Arc<ComposerRecipientList> {
-        Arc::clone(&self.to_recipient_list)
+        ComposerRecipientList::new_to_list(
+            self.ctx.clone(),
+            self.instance.clone(),
+            self.cached.clone(),
+        )
     }
 
     /// Get the Cc recipients of the draft.
     pub fn cc_recipients(&self) -> Arc<ComposerRecipientList> {
-        Arc::clone(&self.cc_recipient_list)
+        ComposerRecipientList::new_cc_list(
+            self.ctx.clone(),
+            self.instance.clone(),
+            self.cached.clone(),
+        )
     }
 
     /// Get the Bcc recipients of the draft.
     pub fn bcc_recipients(&self) -> Arc<ComposerRecipientList> {
-        Arc::clone(&self.bcc_recipient_list)
+        ComposerRecipientList::new_bcc_list(
+            self.ctx.clone(),
+            self.instance.clone(),
+            self.cached.clone(),
+        )
     }
 
     /// Get the draft's subject.
@@ -739,18 +838,11 @@ impl Draft {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
         async_runtime().block_on(async move {
-            if let Ok(is_password_protected) = self.instance.is_password_protected().await
-                && is_password_protected
-            {
-                return Ok(DraftRecipientExpirationFeatureReport::default());
-            }
-            let mut report = ExpirationFeatureSupportReport::default();
-            self.to_recipient_list
-                .validate_expiration_feature(&mut report);
-            self.cc_recipient_list
-                .validate_expiration_feature(&mut report);
-            self.bcc_recipient_list
-                .validate_expiration_feature(&mut report);
+            let report = self
+                .instance
+                .validate_expiration_feature()
+                .await
+                .map_err(RealProtonMailError::from)?;
             Ok(report.into())
         })
     }
@@ -908,5 +1000,11 @@ impl From<ExpirationFeatureSupportReport> for DraftRecipientExpirationFeatureRep
                 .map(PrivateEmail::into_clear_text_string)
                 .collect(),
         }
+    }
+}
+
+fn draft_options() -> DraftActorOptions {
+    DraftActorOptions {
+        address_validation_enabled: true,
     }
 }

@@ -27,7 +27,7 @@ use std::fmt::Formatter;
 use std::path::{Path, PathBuf};
 use std::sync::Weak;
 use tokio::fs;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{error, warn};
 
 pub mod attachments;
@@ -45,7 +45,10 @@ use crate::actions::draft::{Discard, Save, UndoSend};
 use crate::decrypted_message::ThemeOpts;
 use crate::draft::attachments::DraftAttachment;
 use crate::draft::compose::DraftAddressValidationResult;
-use crate::draft::recipients::{Recipient, RecipientEntry, RecipientError, RecipientList};
+use crate::draft::recipients::{
+    ExpirationFeatureSupportReport, OnBackgroundValidationComplete, Recipient, RecipientEntry,
+    RecipientError, RecipientList, RecipientValidationUpdate, ValidatingRecipientList,
+};
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_core_api::session::Session;
 use proton_core_common::Origin;
@@ -493,10 +496,24 @@ impl DraftState {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum DraftEvent {
+    RecipientListUpdated {
+        group: RecipientGroupId,
+        list: RecipientList,
+    },
+    RecipientListsUpdated {
+        to: RecipientList,
+        cc: RecipientList,
+        bcc: RecipientList,
+    },
+}
+
 #[derive(Clone)]
 pub struct DraftActor {
     sender: mpsc::Sender<DraftActorMessage>,
     pub metadata_id: MetadataId,
+    event_sender: broadcast::Sender<DraftEvent>,
 }
 
 impl fmt::Debug for DraftActor {
@@ -505,7 +522,12 @@ impl fmt::Debug for DraftActor {
     }
 }
 
+const DRAFT_EVENT_CHANNEL_CAPACITY: usize = 8;
 impl DraftActor {
+    pub fn subscribe(&self) -> broadcast::Receiver<DraftEvent> {
+        self.event_sender.subscribe()
+    }
+
     pub async fn sender_addresses(&self) -> Result<Vec<Address>, MailContextError> {
         self.act(DraftActorMessage::SenderAddresses).await?
     }
@@ -520,12 +542,35 @@ impl DraftActor {
         context: &MailUserContext,
         message_id: LocalMessageId,
     ) -> Result<(Self, DraftSyncStatus), MailContextError> {
+        Self::open_ex(context, message_id, DraftActorOptions::default()).await
+    }
+
+    pub async fn open_ex(
+        context: &MailUserContext,
+        message_id: LocalMessageId,
+        options: DraftActorOptions,
+    ) -> Result<(Self, DraftSyncStatus), MailContextError> {
         let (draft, sync_status) = draft_v1::Draft::open(context, message_id).await?;
-        Ok((Self::create(context, draft), sync_status))
+        let draft = Self::create(context, draft, options);
+        if sync_status == DraftSyncStatus::Synced {
+            draft
+                .sender
+                .send(DraftActorMessage::RevalidateAllRecipients)
+                .await
+                .map_err(|_| Error::Actor)?;
+        }
+        Ok((draft, sync_status))
     }
     pub async fn empty(context: &MailUserContext) -> Result<Self, MailContextError> {
+        Self::empty_ex(context, DraftActorOptions::default()).await
+    }
+
+    pub async fn empty_ex(
+        context: &MailUserContext,
+        options: DraftActorOptions,
+    ) -> Result<Self, MailContextError> {
         let draft = draft_v1::Draft::empty(context).await?;
-        Ok(Self::create(context, draft))
+        Ok(Self::create(context, draft, options))
     }
 
     pub async fn reply(
@@ -535,10 +580,28 @@ impl DraftActor {
         use_utc: bool,
         mime_type_override: Option<MimeType>,
     ) -> Result<Self, MailContextError> {
+        Self::reply_ex(
+            context,
+            message_id,
+            reply_mode,
+            use_utc,
+            mime_type_override,
+            DraftActorOptions::default(),
+        )
+        .await
+    }
+    pub async fn reply_ex(
+        context: &MailUserContext,
+        message_id: LocalMessageId,
+        reply_mode: ReplyMode,
+        use_utc: bool,
+        mime_type_override: Option<MimeType>,
+        options: DraftActorOptions,
+    ) -> Result<Self, MailContextError> {
         let draft =
             draft_v1::Draft::reply(context, message_id, reply_mode, use_utc, mime_type_override)
                 .await?;
-        Ok(Self::create(context, draft))
+        Ok(Self::create(context, draft, options))
     }
 
     pub async fn save(&self) -> Result<QueuedActionOutput<Save>, MailContextError> {
@@ -796,7 +859,7 @@ impl DraftActor {
         group_name: NonEmptyString,
         recipients: impl IntoIterator<Item = RecipientEntry>,
         total_in_group: u64,
-    ) -> Result<(), MailContextError> {
+    ) -> Result<Vec<RecipientEntry>, MailContextError> {
         self.act(|sender| DraftActorMessage::AddRecipientGroup {
             group,
             group_name,
@@ -841,9 +904,24 @@ impl DraftActor {
         email: PrivateEmail,
         group_name: NonEmptyString,
     ) -> Result<(), MailContextError> {
-        self.act(|sender| DraftActorMessage::RemoveRecipientFromGroup {
+        self.act(|sender| DraftActorMessage::RemoveGroupRecipient {
             group,
             email,
+            group_name,
+            sender,
+        })
+        .await
+    }
+
+    pub async fn remove_recipients_from_group(
+        &self,
+        group: RecipientGroupId,
+        emails: impl IntoIterator<Item = PrivateEmail>,
+        group_name: NonEmptyString,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::RemoveGroupRecipients {
+            group,
+            emails: emails.into_iter().collect(),
             group_name,
             sender,
         })
@@ -998,6 +1076,12 @@ impl DraftActor {
     ) -> Result<QueuedActionOutput<UndoSend>, ActionError<UndoSend>> {
         draft_v1::Draft::action_undo_send(queue, message_id).await
     }
+
+    pub async fn validate_expiration_feature(
+        &self,
+    ) -> Result<ExpirationFeatureSupportReport, MailContextError> {
+        self.act(DraftActorMessage::ValidateExpirationFeature).await
+    }
 }
 
 #[derive(Display)]
@@ -1114,13 +1198,13 @@ enum DraftActorMessage {
         recipient: RecipientEntry,
         sender: oneshot::Sender<Result<(), RecipientError>>,
     },
-    #[display("AddRecipienGroup")]
+    #[display("AddRecipientGroup")]
     AddRecipientGroup {
         group: RecipientGroupId,
         group_name: NonEmptyString,
         recipients: Vec<RecipientEntry>,
         total_in_group: u64,
-        sender: oneshot::Sender<()>,
+        sender: oneshot::Sender<Vec<RecipientEntry>>,
     },
     #[display("SetRecipientLists")]
     SetRecipientLists {
@@ -1136,9 +1220,16 @@ enum DraftActorMessage {
         sender: oneshot::Sender<()>,
     },
     #[display("RemoveRecipientFromGroup")]
-    RemoveRecipientFromGroup {
+    RemoveGroupRecipient {
         group: RecipientGroupId,
         email: PrivateEmail,
+        group_name: NonEmptyString,
+        sender: oneshot::Sender<()>,
+    },
+    #[display("RemoveRecipientsFromGroup")]
+    RemoveGroupRecipients {
+        group: RecipientGroupId,
+        emails: Vec<PrivateEmail>,
         group_name: NonEmptyString,
         sender: oneshot::Sender<()>,
     },
@@ -1179,6 +1270,15 @@ enum DraftActorMessage {
         recipients: RecipientList,
         sender: oneshot::Sender<()>,
     },
+    #[display("OnRecipientValidation")]
+    OnRecipientValidation {
+        group: RecipientGroupId,
+        updates: RecipientValidationUpdate,
+    },
+    #[display("ReValidateAllRecipients")]
+    RevalidateAllRecipients,
+    #[display("ValidateExpirationFeature")]
+    ValidateExpirationFeature(oneshot::Sender<ExpirationFeatureSupportReport>),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -1188,19 +1288,37 @@ pub enum RecipientGroupId {
     Bcc,
 }
 
+#[derive(Default, Debug, Clone)]
+pub struct DraftActorOptions {
+    pub address_validation_enabled: bool,
+}
+
 impl DraftActor {
-    fn create(ctx: &MailUserContext, draft: draft_v1::Draft) -> Self {
+    fn create(ctx: &MailUserContext, draft: draft_v1::Draft, options: DraftActorOptions) -> Self {
         let metadata_id = draft.metadata_id;
-        let (sender, receiver) = mpsc::channel(1);
+        let (sender, receiver) = mpsc::channel(2);
+        let (event_sender, _) = broadcast::channel(DRAFT_EVENT_CHANNEL_CAPACITY);
 
         let weak = ctx.as_weak();
-        ctx.spawn(async move { Self::background_loop(weak, receiver, draft).await });
+        let cloned_event_sender = event_sender.clone();
+        let cloned_sender = sender.clone();
+        ctx.spawn(async move {
+            Self::background_loop(
+                weak,
+                receiver,
+                cloned_sender,
+                draft,
+                cloned_event_sender,
+                options,
+            )
+            .await
+        });
         Self {
             sender,
             metadata_id,
+            event_sender,
         }
     }
-
     async fn act<T: Send>(
         &self,
         build_message: impl FnOnce(oneshot::Sender<T>) -> DraftActorMessage,
@@ -1218,11 +1336,19 @@ impl DraftActor {
     #[tracing::instrument(name="draft_actor",skip_all, fields(id=%draft.metadata_id))]
     async fn background_loop(
         ctx: Weak<MailUserContext>,
-        mut receiver: mpsc::Receiver<DraftActorMessage>,
+        mut actor_receiver: mpsc::Receiver<DraftActorMessage>,
+        actor_sender: mpsc::Sender<DraftActorMessage>,
         mut draft: draft_v1::Draft,
+        event_sender: broadcast::Sender<DraftEvent>,
+        options: DraftActorOptions,
     ) {
+        let publish_event = |event: DraftEvent| {
+            // sending on broadcast only fails if there are no receivers
+            let _ = event_sender.send(event);
+        };
+
         tracing::info!("Starting");
-        while let Some(message) = receiver.recv().await {
+        while let Some(message) = actor_receiver.recv().await {
             let Some(ctx) = ctx.upgrade() else {
                 tracing::error!("Mail User Context is dead, terminating");
                 return;
@@ -1396,11 +1522,22 @@ impl DraftActor {
                     recipient,
                     sender,
                 } => {
-                    let r =
-                        match recipient_group_from_draft(&mut draft, group).add_single(recipient) {
+                    let list = recipient_group_from_draft(&mut draft, group);
+                    let r = if options.address_validation_enabled {
+                        DraftOnRecipientValidation::new_list(group, actor_sender.clone(), list)
+                            .add_single(&ctx, recipient)
+                    } else {
+                        match list.add_single(recipient) {
                             Ok(_) => Ok(()),
                             Err(e) => Err(e),
-                        };
+                        }
+                    };
+                    if r.is_ok() {
+                        publish_event(DraftEvent::RecipientListUpdated {
+                            group,
+                            list: list.clone(),
+                        });
+                    }
                     let _ = sender.send(r);
                 }
                 DraftActorMessage::AddRecipientGroup {
@@ -1410,12 +1547,20 @@ impl DraftActor {
                     total_in_group,
                     sender,
                 } => {
-                    recipient_group_from_draft(&mut draft, group).add_group(
-                        group_name,
-                        recipients,
-                        total_in_group,
-                    );
-                    let _ = sender.send(());
+                    let list = recipient_group_from_draft(&mut draft, group);
+                    let duplicates = if options.address_validation_enabled {
+                        DraftOnRecipientValidation::new_list(group, actor_sender.clone(), list)
+                            .add_group(&ctx, group_name, recipients, total_in_group)
+                    } else {
+                        let (_, duplicates) =
+                            list.add_group(group_name, recipients, total_in_group);
+                        duplicates
+                    };
+                    let _ = sender.send(duplicates);
+                    publish_event(DraftEvent::RecipientListUpdated {
+                        group,
+                        list: list.clone(),
+                    });
                 }
                 DraftActorMessage::SetRecipientLists {
                     to,
@@ -1426,34 +1571,83 @@ impl DraftActor {
                     draft.to_list = to;
                     draft.cc_list = cc;
                     draft.bcc_list = bcc;
+
+                    if options.address_validation_enabled {
+                        for id in [
+                            RecipientGroupId::To,
+                            RecipientGroupId::Cc,
+                            RecipientGroupId::Bcc,
+                        ] {
+                            let list = recipient_group_from_draft(&mut draft, id);
+                            DraftOnRecipientValidation::new_list(id, actor_sender.clone(), list)
+                                .check_all(&ctx);
+                        }
+                    }
+
                     let _ = sender.send(());
+
+                    publish_event(DraftEvent::RecipientListsUpdated {
+                        to: draft.to_list.clone(),
+                        cc: draft.cc_list.clone(),
+                        bcc: draft.bcc_list.clone(),
+                    });
                 }
                 DraftActorMessage::RemoveSingleRecipient {
                     group,
                     email,
                     sender,
                 } => {
-                    recipient_group_from_draft(&mut draft, group)
-                        .remove_single(email.as_clear_text_str());
+                    let list = recipient_group_from_draft(&mut draft, group);
+                    list.remove_single(email.as_clear_text_str());
                     let _ = sender.send(());
+                    publish_event(DraftEvent::RecipientListUpdated {
+                        group,
+                        list: list.clone(),
+                    });
                 }
-                DraftActorMessage::RemoveRecipientFromGroup {
+                DraftActorMessage::RemoveGroupRecipient {
                     group,
                     email,
                     group_name,
                     sender,
                 } => {
-                    recipient_group_from_draft(&mut draft, group)
-                        .remove_group_recipient(&group_name, email.as_clear_text_str());
+                    let list = recipient_group_from_draft(&mut draft, group);
+                    list.remove_group_recipient(&group_name, email.as_clear_text_str());
                     let _ = sender.send(());
+                    publish_event(DraftEvent::RecipientListUpdated {
+                        group,
+                        list: list.clone(),
+                    });
+                }
+                DraftActorMessage::RemoveGroupRecipients {
+                    group,
+                    emails,
+                    group_name,
+                    sender,
+                } => {
+                    let list = recipient_group_from_draft(&mut draft, group);
+                    list.remove_group_recipients(
+                        &group_name,
+                        emails.into_iter().map(|v| v.into_clear_text_string()),
+                    );
+                    let _ = sender.send(());
+                    publish_event(DraftEvent::RecipientListUpdated {
+                        group,
+                        list: list.clone(),
+                    });
                 }
                 DraftActorMessage::RemoveRecipientGroup {
                     group,
                     group_name,
                     sender,
                 } => {
-                    recipient_group_from_draft(&mut draft, group).remove_group(&group_name);
+                    let list = recipient_group_from_draft(&mut draft, group);
+                    list.remove_group(&group_name);
                     let _ = sender.send(());
+                    publish_event(DraftEvent::RecipientListUpdated {
+                        group,
+                        list: list.clone(),
+                    });
                 }
                 DraftActorMessage::GetRecipients { group, sender } => {
                     let recipients = recipient_group_from_draft(&mut draft, group)
@@ -1487,8 +1681,52 @@ impl DraftActor {
                     recipients,
                     sender,
                 } => {
-                    *recipient_group_from_draft(&mut draft, group) = recipients;
+                    let list = recipient_group_from_draft(&mut draft, group);
+                    *list = recipients;
+                    if options.address_validation_enabled {
+                        DraftOnRecipientValidation::new_list(group, actor_sender.clone(), list)
+                            .check_all(&ctx);
+                    }
                     let _ = sender.send(());
+                    publish_event(DraftEvent::RecipientListUpdated {
+                        group,
+                        list: list.clone(),
+                    });
+                }
+                DraftActorMessage::OnRecipientValidation { group, updates } => {
+                    let list = recipient_group_from_draft(&mut draft, group);
+                    updates.apply(list);
+
+                    publish_event(DraftEvent::RecipientListUpdated {
+                        group,
+                        list: list.clone(),
+                    });
+                }
+                DraftActorMessage::RevalidateAllRecipients => {
+                    if options.address_validation_enabled {
+                        for id in [
+                            RecipientGroupId::To,
+                            RecipientGroupId::Cc,
+                            RecipientGroupId::Bcc,
+                        ] {
+                            let list = recipient_group_from_draft(&mut draft, id);
+                            DraftOnRecipientValidation::new_list(id, actor_sender.clone(), list)
+                                .check_all(&ctx);
+                        }
+                    }
+                }
+                DraftActorMessage::ValidateExpirationFeature(sender) => {
+                    let tether = ctx.user_stash().connection();
+                    let report = if let Ok(true) = draft.is_password_protected(&tether).await {
+                        ExpirationFeatureSupportReport::default()
+                    } else {
+                        let mut report = ExpirationFeatureSupportReport::default();
+                        draft.to_list.validate_expiration_feature(&mut report);
+                        draft.cc_list.validate_expiration_feature(&mut report);
+                        draft.bcc_list.validate_expiration_feature(&mut report);
+                        report
+                    };
+                    let _ = sender.send(report);
                 }
             }
         }
@@ -1508,3 +1746,33 @@ fn recipient_group_from_draft(
 }
 
 pub type Draft = DraftActor;
+
+#[derive(Clone)]
+struct DraftOnRecipientValidation {
+    group: RecipientGroupId,
+    sender: mpsc::Sender<DraftActorMessage>,
+}
+
+impl DraftOnRecipientValidation {
+    fn new_list(
+        group: RecipientGroupId,
+        sender: mpsc::Sender<DraftActorMessage>,
+        list: &mut RecipientList,
+    ) -> DraftValidatingRecipientList {
+        ValidatingRecipientList::new(list, DraftOnRecipientValidation { group, sender })
+    }
+}
+
+impl OnBackgroundValidationComplete for DraftOnRecipientValidation {
+    async fn recipients_validation_state_updated(&self, updates: RecipientValidationUpdate) {
+        let _ = self
+            .sender
+            .send(DraftActorMessage::OnRecipientValidation {
+                group: self.group,
+                updates,
+            })
+            .await;
+    }
+}
+
+type DraftValidatingRecipientList<'l> = ValidatingRecipientList<'l, DraftOnRecipientValidation>;

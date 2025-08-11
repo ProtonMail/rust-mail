@@ -1,16 +1,17 @@
 use crate::async_runtime;
+use crate::mail::draft::CachedDraftData;
 use crate::mail::state::MailUserContextPtr;
 use itertools::Itertools;
 use non_empty_string::NonEmptyString;
-use proton_core_api::services::proton::PrivateString;
-use proton_mail_common::draft::Draft as RealDraft;
+use proton_core_api::services::proton::{PrivateEmail, PrivateString};
 use proton_mail_common::draft::recipients::{
-    ExpirationFeatureSupportReport, GroupRecipient, OnBackgroundValidationComplete,
-    Recipient as RealRecipient, RecipientEntry, RecipientError, RecipientList, SingleRecipient,
-    ValidatingRecipientList, ValidationState,
+    GroupRecipient, Recipient as RealRecipient, RecipientEntry, RecipientError, SingleRecipient,
+    ValidationState,
 };
+use proton_mail_common::draft::{Draft as RealDraft, Error, RecipientGroupId};
 use proton_mail_common::{MailContextError, MailUserContext};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::error;
 
 /// Single email recipient.
@@ -150,28 +151,10 @@ pub trait ComposerRecipientValidationCallback: Send + Sync {
     fn on_update(&self);
 }
 
-#[derive(Clone)]
-struct ComposerRecipientValidationCallbackWrapper(Arc<dyn ComposerRecipientValidationCallback>);
-
-impl OnBackgroundValidationComplete for ComposerRecipientValidationCallbackWrapper {
-    async fn recipients_validation_state_updated(&self) {
-        let cloned = Arc::clone(&self.0);
-        async_runtime().spawn_blocking(move || {
-            cloned.on_update();
-        });
-    }
-}
-
-enum ComposerListType {
-    To,
-    Cc,
-    Bcc,
-}
-
 #[derive(uniffi::Object)]
 pub struct ComposerRecipientList {
-    list_type: ComposerListType,
-    list: ValidatingRecipientList<ComposerRecipientValidationCallbackWrapper>,
+    list_type: RecipientGroupId,
+    state: Arc<RwLock<CachedDraftData>>,
     draft: RealDraft,
     ctx: MailUserContextPtr,
 }
@@ -180,11 +163,11 @@ impl ComposerRecipientList {
     pub(super) fn new_to_list(
         ctx: MailUserContextPtr,
         draft: RealDraft,
-        list: RecipientList,
+        state: Arc<RwLock<CachedDraftData>>,
     ) -> Arc<Self> {
         Arc::new(Self {
-            list_type: ComposerListType::To,
-            list: ValidatingRecipientList::with_list(list, None),
+            list_type: RecipientGroupId::To,
+            state,
             draft,
             ctx,
         })
@@ -192,11 +175,11 @@ impl ComposerRecipientList {
     pub(super) fn new_bcc_list(
         ctx: MailUserContextPtr,
         draft: RealDraft,
-        list: RecipientList,
+        state: Arc<RwLock<CachedDraftData>>,
     ) -> Arc<Self> {
         Arc::new(Self {
-            list_type: ComposerListType::Bcc,
-            list: ValidatingRecipientList::with_list(list, None),
+            list_type: RecipientGroupId::Bcc,
+            state,
             draft,
             ctx,
         })
@@ -205,33 +188,19 @@ impl ComposerRecipientList {
     pub(super) fn new_cc_list(
         ctx: MailUserContextPtr,
         draft: RealDraft,
-        list: RecipientList,
+        state: Arc<RwLock<CachedDraftData>>,
     ) -> Arc<Self> {
         Arc::new(Self {
-            list_type: ComposerListType::Cc,
-            list: ValidatingRecipientList::with_list(list, None),
+            list_type: RecipientGroupId::Cc,
             draft,
+            state,
             ctx,
         })
     }
 
     async fn save_draft(&self, _: &MailUserContext) -> Result<(), MailContextError> {
-        let list = self.list.list();
-        match self.list_type {
-            ComposerListType::To => self.draft.set_to_list(list).await?,
-            ComposerListType::Cc => self.draft.set_cc_list(list).await?,
-            ComposerListType::Bcc => self.draft.set_bcc_list(list).await?,
-        }
         self.draft.save().await?;
         Ok(())
-    }
-
-    pub(super) fn validate_expiration_feature(&self, report: &mut ExpirationFeatureSupportReport) {
-        self.list.validate_expiration_feature(report);
-    }
-
-    pub(super) fn check_all_recipients(&self, ctx: &MailUserContext) {
-        self.list.check_all(ctx);
     }
 }
 
@@ -239,16 +208,43 @@ impl ComposerRecipientList {
 impl ComposerRecipientList {
     /// Set the callback to receive validation updates.
     pub fn set_callback(&self, cb: Arc<dyn ComposerRecipientValidationCallback>) {
-        self.list
-            .set_callback(Some(ComposerRecipientValidationCallbackWrapper(cb)));
+        async_runtime().block_on(async {
+            let mut state = self.state.write().await;
+            match self.list_type {
+                RecipientGroupId::To => {
+                    state.to_list_cb = Some(cb);
+                }
+                RecipientGroupId::Cc => {
+                    state.cc_list_cb = Some(cb);
+                }
+                RecipientGroupId::Bcc => {
+                    state.bcc_list_cb = Some(cb);
+                }
+            }
+        });
     }
     /// Get the ordered list of recipients.
     pub fn recipients(&self) -> Vec<ComposerRecipient> {
-        self.list
-            .recipients()
-            .into_iter()
-            .map(ComposerRecipient::from)
-            .collect()
+        //TODO: change this after the clients change their logic to get updates via the callback
+        // rather than right after they modify the list
+        async_runtime().block_on(async {
+            self.draft
+                .recipients(self.list_type)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(Into::into)
+                .collect()
+        })
+        /*
+        async_runtime().block_on(async {
+            let state = self.state.read().await;
+            match self.list_type {
+                RecipientGroupId::To => state.to_list.clone(),
+                RecipientGroupId::Cc => state.cc_list.clone(),
+                RecipientGroupId::Bcc => state.bcc_list.clone(),
+            }
+        })*/
     }
 
     /// Add a new single recipient to the list.
@@ -259,19 +255,31 @@ impl ComposerRecipientList {
         // internally the function spawns an async task.
         async_runtime().block_on(async move {
             let email = recipient.email.clone();
-            match self.list.add_single(&ctx, recipient.into()) {
+            match self
+                .draft
+                .add_single_recipient(self.list_type, recipient.into())
+                .await
+            {
                 Ok(()) => {
+                    //TODO: Auto save logic
                     if let Err(e) = self.save_draft(&ctx).await {
                         error!("Failed to queue draft save after recipient add: {e:?}");
-                        self.list.remove_single(&email);
+                        let _ = self
+                            .draft
+                            .remove_single_recipient(self.list_type, email.into())
+                            .await;
                         AddSingleRecipientError::SaveFailed
                     } else {
                         AddSingleRecipientError::Ok
                     }
                 }
-                Err(e) => match e {
+                Err(MailContextError::Draft(Error::Recipient(e))) => match e {
                     RecipientError::DuplicateAddress(_) => AddSingleRecipientError::Duplicate,
                 },
+                Err(e) => {
+                    error!("Unknown error occurred: {e:?}");
+                    AddSingleRecipientError::SaveFailed
+                }
             }
         })
     }
@@ -296,19 +304,32 @@ impl ComposerRecipientList {
         // internally the function spawns an async task.
         async_runtime().block_on(async move {
             let recipients_cloned = recipients.clone();
-            let duplicates = self.list.add_group(
-                &ctx,
-                group_name.clone(),
-                recipients.into_iter().map_into(),
-                total_contacts_in_group,
-            );
+            let Ok(duplicates) = self
+                .draft
+                .add_recipient_to_group(
+                    self.list_type,
+                    group_name.clone(),
+                    recipients.into_iter().map_into(),
+                    total_contacts_in_group,
+                )
+                .await
+            else {
+                return AddGroupRecipientError::SaveFailed;
+            };
 
+            //TODO: Auto save logic
             if let Err(e) = self.save_draft(&ctx).await {
                 error!("Failed to queue draft save after recipient add: {e:?}");
-                self.list.remove_group_recipients(
-                    &group_name,
-                    recipients_cloned.into_iter().map(|e| e.email),
-                );
+                let _ = self
+                    .draft
+                    .remove_recipients_from_group(
+                        self.list_type,
+                        recipients_cloned
+                            .into_iter()
+                            .map(|e| PrivateEmail::new(e.email)),
+                        group_name,
+                    )
+                    .await;
                 return AddGroupRecipientError::SaveFailed;
             }
 
@@ -330,8 +351,12 @@ impl ComposerRecipientList {
         let Some(ctx) = self.ctx.upgrade() else {
             return RemoveRecipientError::SaveFailed;
         };
-        self.list.remove_single(email);
         async_runtime().block_on(async move {
+            //TODO: draft auto save
+            let _ = self
+                .draft
+                .remove_single_recipient(self.list_type, email.into())
+                .await;
             if let Err(e) = self.save_draft(&ctx).await {
                 error!("Failed to queue draft save after recipient remove: {e:?}");
                 RemoveRecipientError::SaveFailed
@@ -350,8 +375,12 @@ impl ComposerRecipientList {
         let Some(ctx) = self.ctx.upgrade() else {
             return RemoveRecipientError::SaveFailed;
         };
-        self.list.remove_group(&group_name);
         async_runtime().block_on(async move {
+            //TODO: draft auto save
+            let _ = self
+                .draft
+                .remove_recipient_group(self.list_type, group_name)
+                .await;
             if let Err(e) = self.save_draft(&ctx).await {
                 error!("Failed to queue draft save after removing group: {e:?}");
                 RemoveRecipientError::SaveFailed
@@ -374,8 +403,12 @@ impl ComposerRecipientList {
         let Some(ctx) = self.ctx.upgrade() else {
             return RemoveRecipientError::SaveFailed;
         };
-        self.list.remove_group_recipient(&group_name, email);
         async_runtime().block_on(async move {
+            //TODO: draft auto save
+            let _ = self
+                .draft
+                .remove_recipient_from_group(self.list_type, email.into(), group_name)
+                .await;
             if let Err(e) = self.save_draft(&ctx).await {
                 error!("Failed to queue draft save after removing recipient from group: {e:?}");
                 RemoveRecipientError::SaveFailed
