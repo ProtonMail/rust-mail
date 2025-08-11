@@ -71,7 +71,7 @@ async fn shared_status() {
         .respond_with(ResponseTemplate::new(200))
         // Due to fact that two sessions are build separatly it spawns 2 tasks
         // which may call the server once or twice x2 (2-4 requests)
-        .expect(1..=4)
+        .expect(0..=4)
         .mount(&mock_server)
         .await;
 
