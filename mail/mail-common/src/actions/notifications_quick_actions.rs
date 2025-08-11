@@ -1,6 +1,3 @@
-use proton_core_common::{datatypes::SystemLabel, models::LabelError};
-use proton_mail_api::services::proton::common::MessageId;
-
 use crate::{
     MailContextResult, MailUserContext,
     actions::{
@@ -10,45 +7,57 @@ use crate::{
     datatypes::mail_notifications::PushNotificationQuickAction,
     models::Message,
 };
+use proton_core_common::{datatypes::SystemLabel, models::LabelError};
+use proton_mail_api::services::proton::common::MessageId;
+use std::iter;
+use tracing::instrument;
 
-/// Insert the quick action into the queue and execute local part immediately.
-///
+#[instrument(skip(ctx))]
 pub async fn execute_notification_quick_action(
     ctx: &MailUserContext,
     action: PushNotificationQuickAction,
 ) -> MailContextResult<()> {
     match action {
         PushNotificationQuickAction::MarkAsRead { remote_id } => {
-            let local_id = Message::find_or_fetch_by_remote_id(ctx, remote_id).await?;
-
-            ctx.queue_action(Read::new(std::iter::once(local_id)))
-                .await?;
+            read_msg(ctx, remote_id).await?;
         }
         PushNotificationQuickAction::MoveToArchive { remote_id } => {
-            move_to_system_label(ctx, SystemLabel::Archive, remote_id).await?;
+            move_msg(ctx, SystemLabel::Archive, remote_id).await?;
         }
         PushNotificationQuickAction::MoveToTrash { remote_id } => {
-            move_to_system_label(ctx, SystemLabel::Trash, remote_id).await?;
+            move_msg(ctx, SystemLabel::Trash, remote_id).await?;
         }
     }
+
     Ok(())
 }
 
-async fn move_to_system_label(
+#[instrument(skip_all)]
+async fn read_msg(ctx: &MailUserContext, msg_id: MessageId) -> MailContextResult<()> {
+    let msg_id = Message::find_or_fetch_by_remote_id(ctx, msg_id).await?;
+
+    ctx.queue_action(Read::new(iter::once(msg_id))).await?;
+
+    Ok(())
+}
+
+#[instrument(skip_all)]
+async fn move_msg(
     ctx: &MailUserContext,
-    system_label: SystemLabel,
-    remote_id: MessageId,
+    label: SystemLabel,
+    msg_id: MessageId,
 ) -> MailContextResult<()> {
-    let local_id = Message::find_or_fetch_by_remote_id(ctx, remote_id).await?;
+    let msg_id = Message::find_or_fetch_by_remote_id(ctx, msg_id).await?;
     let tether = ctx.user_stash().connection();
 
-    let destination_label = system_label
+    let label_id = label
         .local_id(&tether)
         .await?
-        .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(system_label.remote_id()))?;
+        .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(label.remote_id()))?;
 
-    if let Some(move_action) = ActionMoveData::new(&tether, destination_label, [local_id]).await? {
-        ctx.queue_action(Move(move_action)).await?;
+    if let Some(action) = ActionMoveData::new(&tether, label_id, [msg_id]).await? {
+        ctx.queue_action(Move(action)).await?;
     }
+
     Ok(())
 }
