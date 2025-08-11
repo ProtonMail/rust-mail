@@ -574,8 +574,8 @@ fn log_backtrace_on_panic() {
 }
 
 pub struct InfoDialog {
-    pub title: Option<String>,
-    pub text: ScrollableParagraph<'static>,
+    title: Option<String>,
+    text: ScrollableParagraph<'static>,
     state: ScrollableParagraphState,
 }
 
@@ -583,21 +583,28 @@ impl InfoDialog {
     #[allow(clippy::needless_pass_by_value)]
     pub fn new_error(title: Option<String>, err: anyhow::Error) -> Self {
         let title = Some(title.unwrap_or_else(|| "Error".to_owned()));
-        Self::new(title, err.to_string(), true)
+
+        Self::new(
+            title,
+            format!("{err:?}")
+                .lines()
+                .map(|line| line.to_owned().on_red())
+                .collect::<Text>(),
+        )
     }
+
     pub fn new_info(title: Option<String>, text: impl Into<Text<'static>>) -> Self {
-        Self::new(title, text, false)
+        Self::new(title, text.into())
     }
 
-    fn new(title: Option<String>, text: impl Into<Text<'static>>, is_err: bool) -> Self {
-        let mut p = Paragraph::new(text).wrap(Wrap { trim: false });
+    fn new(title: Option<String>, mut text: Text<'static>) -> Self {
+        text.lines.push(Line::raw(""));
 
-        if is_err {
-            p = p.on_red();
-        }
+        text.lines
+            .push(Line::raw("Press any key to continue...").bold());
 
         Self {
-            text: ScrollableParagraph(p),
+            text: ScrollableParagraph(Paragraph::new(text).wrap(Wrap { trim: false })),
             state: ScrollableParagraphState::default(),
             title,
         }
@@ -623,27 +630,15 @@ impl Popup for InfoDialog {
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
-        let [msg, instructions] = Layout::vertical([Constraint::Fill(1), Constraint::Length(2)])
-            .flex(Flex::Center)
-            .areas(area);
-
-        frame.render_stateful_widget(self.text.clone(), msg, &mut self.state);
-        frame.render_widget(
-            Text::from("Press any key to continue...")
-                .centered()
-                .white()
-                .bold(),
-            instructions,
-        );
+        frame.render_stateful_widget(self.text.clone(), area, &mut self.state);
     }
 
     fn height(&self) -> Constraint {
-        let p = &self.text.0;
-        Constraint::Length(p.line_count(p.line_width() as u16) as u16)
+        Constraint::Percentage(40)
     }
+
     fn width(&self) -> Constraint {
-        let p = &self.text.0;
-        Constraint::Length(p.line_width() as u16)
+        Constraint::Percentage(60)
     }
 }
 
