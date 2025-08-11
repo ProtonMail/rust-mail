@@ -51,6 +51,19 @@ impl DefaultPostLoginValidator {
 #[async_trait]
 impl PostLoginValidator for DefaultPostLoginValidator {
     async fn validate(&self, user: &User) -> Result<(), PostLoginValidationError> {
+        let result = self.do_validate(user).await;
+        if result.is_err() {
+            self.ctx
+                .logout_account(user.id.clone())
+                .await
+                .map_err(anyhow::Error::new)?;
+        }
+        result
+    }
+}
+
+impl DefaultPostLoginValidator {
+    async fn do_validate(&self, user: &User) -> Result<(), PostLoginValidationError> {
         if matches!(
             user.delinquent,
             DelinquentState::Delinquent | DelinquentState::NotReceived
@@ -76,9 +89,7 @@ impl PostLoginValidator for DefaultPostLoginValidator {
         }
         Ok(())
     }
-}
 
-impl DefaultPostLoginValidator {
     /// Retrieves the count of logged-in free (non-subscribed, non-credentialless) accounts.
     /// Errors are logged but do not halt execution.
     async fn get_logged_in_free_account_count(ctx: &Arc<Context>) -> Option<u64> {

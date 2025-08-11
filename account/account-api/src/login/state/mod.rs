@@ -406,17 +406,6 @@ impl State {
 
         let recorder: ObservabilityRecorder = ObservabilityRecorder::default();
 
-        // Run Post Login checks
-        match post_login_validator.validate(&user).await {
-            Ok(()) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Success));
-            }
-            Err(err) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Failure));
-                return Err(err.into());
-            }
-        }
-
         // Fetch user addresses.
         let mut addr = ProtonCore::get_addresses(&client)
             .map_ok(|res| res.addresses)
@@ -496,6 +485,18 @@ impl State {
                 key_secret: UserKeySecret(user_key_pass.clone()),
             })
             .await?;
+
+        // Validations are run after `set_user_data` is called, se even if the login flow is stopped and login is prevented for now,
+        // the account itself remains in a "ready to use" state (e.g. is_ready flag is set) for later, when login rules are not violated anymore (e.g. logged-in free account count)
+        match post_login_validator.validate(&user).await {
+            Ok(()) => {
+                recorder.record(UserCheckResult::new(UserCheckStatus::Success));
+            }
+            Err(err) => {
+                recorder.record(UserCheckResult::new(UserCheckStatus::Failure));
+                return Err(err.into());
+            }
+        }
 
         recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::Success));
         Ok(Complete::new(client, data, Some(user)).into())
