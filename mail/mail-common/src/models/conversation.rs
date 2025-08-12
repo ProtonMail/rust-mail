@@ -1778,65 +1778,20 @@ impl Conversation {
             .await?
             .expect("Snoozed should be set");
 
-        Self::remove_label(local_inbox_id, ids.to_vec(), bond).await?;
-        Self::apply_label(local_snoozed_id, ids.to_vec(), bond).await?;
-        Self::apply_snooze_state(local_label_id, snooze_until, ids.to_vec(), bond).await?;
-
-        Ok(())
-    }
-
-    async fn apply_snooze_state(
-        local_label_id: LocalLabelId,
-        snooze_until: UnixTimestamp,
-        ids: impl IntoIterator<Item = LocalConversationId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
         for id in ids {
-            let conversation = Conversation::find_by_id(id, bond).await?;
+            let message_ids = Message::ids_in_conversation_unordered(*id, bond).await?;
+            let removed_ids = Message::remove_label(local_inbox_id, message_ids, bond).await?;
+            Message::apply_label(local_snoozed_id, removed_ids.iter().copied(), bond).await?;
 
-            let Some(mut conversation) = conversation else {
-                warn!("Conversation with id {id} does not exist!");
-                continue;
-            };
-
-            let mut modified = false;
-            let snoozed_label_id = SystemLabel::Snoozed.local_id(bond).await?;
-
-            if let Some(snooze_label) = conversation
-                .labels
-                .iter_mut()
-                .find(|l| l.local_label_id == snoozed_label_id)
+            if let Some(mut label) =
+                ConversationLabel::find_by_conversation_and_label_id(*id, local_snoozed_id, bond)
+                    .await?
             {
-                modified |= snooze_label.context_snooze_time != snooze_until;
-                snooze_label.context_snooze_time = snooze_until;
-                // Conversation needs to be saved before messages are updated
-                if modified {
-                    conversation.save(bond).await?;
-                }
+                label.context_snooze_time = snooze_until;
+                label.save(bond).await?;
             }
 
-            let mut messages = Message::in_conversation(id, bond).await?;
-            let label = Label::find_by_id(local_label_id, bond).await?;
-            if let Some(label) = label {
-                if let Ok(message_id_to_open) =
-                    Conversation::message_id_to_open(id, &label, &messages)
-                {
-                    // unwrap safety: It is there as `Conversation::message_id_to_open` returns Error on empty messages
-                    let last_message = messages.last_mut().unwrap();
-                    last_message.snooze_time = snooze_until;
-                    last_message.save(bond).await?;
-
-                    if message_id_to_open != last_message.id() {
-                        // unwrap safety: It is there as it was returned by `Conversation::message_id_to_open`
-                        let message_to_open = messages
-                            .iter_mut()
-                            .find(|m| m.id() == message_id_to_open)
-                            .unwrap();
-                        message_to_open.snooze_time = snooze_until;
-                        message_to_open.save(bond).await?;
-                    }
-                }
-            }
+            Message::update_snooze_time(removed_ids, snooze_until, bond).await?;
         }
 
         Ok(())
@@ -1849,63 +1804,31 @@ impl Conversation {
     ) -> Result<(), AppError> {
         Self::validate_snooze_location(local_label_id, bond).await?;
 
+        let local_snoozed_id = SystemLabel::Snoozed
+            .local_id(bond)
+            .await?
+            .expect("Snoozed should be set");
         let local_inbox_id = SystemLabel::Inbox
             .local_id(bond)
             .await?
             .expect("Inbox should be set");
 
-        let local_snoozed_id = SystemLabel::Snoozed
-            .local_id(bond)
-            .await?
-            .expect("Snoozed should be set");
-
-        Self::remove_label(local_snoozed_id, ids.to_vec(), bond).await?;
-        Self::apply_label(local_inbox_id, ids.to_vec(), bond).await?;
-        Self::remove_snooze_state(ids.to_vec(), bond).await?;
-
-        Ok(())
-    }
-
-    async fn remove_snooze_state(
-        ids: impl IntoIterator<Item = LocalConversationId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
         for id in ids {
-            let conversation = Conversation::find_by_id(id, bond).await?;
-            let Some(mut conversation) = conversation else {
-                warn!("Conversation with id {id} does not exist!");
-                continue;
-            };
-            let Some(snooze_until) = conversation.snoozed_until else {
-                warn!("Conversation with id {id} is not snoozed!");
-                continue;
-            };
+            let message_ids = Message::ids_in_conversation_unordered(*id, bond).await?;
+            let removed_ids = Message::remove_label(local_snoozed_id, message_ids, bond).await?;
+            Message::apply_label(local_inbox_id, removed_ids.iter().copied(), bond).await?;
 
-            let mut modified = false;
-            let inbox_label_id = SystemLabel::Inbox.local_id(bond).await?;
-
-            if let Some(inbox_label) = conversation
-                .labels
-                .iter_mut()
-                .find(|l| l.local_label_id == inbox_label_id)
+            // Reset the snooze time for the conversation
+            if let Some(mut label) =
+                ConversationLabel::find_by_conversation_and_label_id(*id, local_inbox_id, bond)
+                    .await?
             {
-                modified |= inbox_label.context_snooze_time != inbox_label.context_time;
-                inbox_label.context_snooze_time = inbox_label.context_time;
-                // Conversation needs to be saved before messages are updated
-                if modified {
-                    conversation.save(bond).await?;
-                }
+                label.context_snooze_time = label.context_time;
+                label.save(bond).await?;
             }
 
-            let messages = Message::in_conversation(id, bond).await?;
-
-            for mut message in messages {
-                if message.snooze_time == snooze_until {
-                    message.snooze_time = UnixTimestamp::new(0);
-                    message.display_snooze_reminder = false;
-                    message.save(bond).await?;
-                }
-            }
+            // Reset the message's snooze time to recieve time
+            Message::update_snooze_time(removed_ids, UnixTimestamp::new(0), bond).await?;
         }
 
         Ok(())
@@ -3084,7 +3007,7 @@ impl TableObserver for ConversationActionWatcher {
 /// [`ConversationLabel`] information is superimposed over the [`Conversation`]
 /// for that context.
 ///
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Eq, Model, PartialEq, Ord, PartialOrd)]
 #[TableName("conversation_labels")]
 pub struct ConversationLabel {
     // NOTE: This id is essentially useless. Stash does not support composite primary keys
@@ -3184,6 +3107,19 @@ impl ConversationLabel {
             ),
             vec![],
             tether,
+        )
+        .await
+    }
+
+    pub async fn find_by_conversation_and_label_id(
+        conversation_id: LocalConversationId,
+        label_id: LocalLabelId,
+        bond: &Bond<'_>,
+    ) -> Result<Option<Self>, StashError> {
+        Self::find_first(
+            "WHERE local_conversation_id = ? AND local_label_id = ?",
+            params![conversation_id, label_id],
+            bond,
         )
         .await
     }

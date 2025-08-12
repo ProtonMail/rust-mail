@@ -38,6 +38,7 @@ use proton_core_common::actions::dependency_builder::{
     ActionDependencyKeysBuilder, LocalIdActionDepExt,
 };
 use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::OperationResult;
@@ -485,11 +486,14 @@ where
                 "Failed to load source label. This should never happen because we have the local id.",
             )?;
 
+            let is_snoozed =
+                SystemLabel::new(&source_label).is_some_and(|label| label.is_snoozed());
+
             if [trash, spam].contains(&self.destination) {
                 // When moving to trash or spam we delete all labels except all mail.
                 self.removed_labels = T::remove_all_labels_except_all_mail(ids, bond).await?;
                 self.removed_labels.retain(|x| x.label != source_id);
-            } else if source_label.is_movable_folder() {
+            } else if source_label.is_movable_folder() || is_snoozed {
                 T::remove_label(source_id, ids.iter().cloned(), bond)
                     .await
                     .context("Failed to remove source label")?;
