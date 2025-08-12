@@ -496,6 +496,11 @@ fn recipient_expiration_feature() {
         email: "unknown@error.org".into(),
     };
 
+    let valid_proton_entry_with_is_proton_false = RecipientEntry {
+        display_name: None,
+        email: "v@pm.me".into(),
+    };
+
     list.add_single_with_state(valid_entry.clone(), ValidationState::Valid(false))
         .unwrap();
     list.add_single_with_state(valid_proton_entry.clone(), ValidationState::Valid(true))
@@ -508,6 +513,11 @@ fn recipient_expiration_feature() {
     list.add_single(invalid_email_entry.clone()).unwrap();
     list.add_single_with_state(unknown_error_entry.clone(), ValidationState::Unknown)
         .unwrap();
+    list.add_single_with_state(
+        valid_proton_entry_with_is_proton_false.clone(),
+        ValidationState::Valid(false),
+    )
+    .unwrap();
 
     for domain in PROTON_EMAIL_DOMAINS {
         list.add_single(RecipientEntry {
@@ -520,6 +530,7 @@ fn recipient_expiration_feature() {
     let mut report = ExpirationFeatureSupportReport::default();
 
     list.validate_expiration_feature(&mut report);
+    assert_eq!(report.supported.len(), PROTON_EMAIL_DOMAINS.len() + 2);
     assert_eq!(report.unknown.len(), 4);
     assert_eq!(report.unsupported.len(), 1);
     assert!(report.unsupported.contains(&valid_entry.email));
@@ -527,11 +538,18 @@ fn recipient_expiration_feature() {
     assert!(report.unknown.contains(&unchecked_entry.email));
     assert!(report.unknown.contains(&invalid_email_entry.email));
     assert!(report.unknown.contains(&unknown_error_entry.email));
+    assert!(report.supported.contains(&valid_proton_entry.email));
+    assert!(
+        report
+            .supported
+            .contains(&valid_proton_entry_with_is_proton_false.email)
+    );
 
     for domain in PROTON_EMAIL_DOMAINS {
         let email: PrivateEmail = format!("bar{domain}").into();
         assert!(!report.unknown.contains(&email));
         assert!(!report.unsupported.contains(&email));
+        assert!(report.supported.contains(&email));
     }
 }
 
