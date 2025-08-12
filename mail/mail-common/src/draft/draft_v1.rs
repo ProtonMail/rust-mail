@@ -741,7 +741,7 @@ impl Draft {
     }
 
     pub async fn save(
-        &mut self,
+        &self,
         queue: &Queue,
         tether: &Tether,
         origin: Origin,
@@ -750,7 +750,7 @@ impl Draft {
     }
 
     pub async fn send(
-        &mut self,
+        &self,
         queue: &Queue,
         tether: &Tether,
         origin: Origin,
