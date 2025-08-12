@@ -2,8 +2,10 @@ use crate::ApiError;
 use crate::password::observability::{ObservableResult, ObservableState};
 use crate::password::state::{State, StateKind};
 use crate::shared::SecureString;
+use muon::Status;
 use muon::rest::auth::v4::fido2;
 use proton_core_api::auth::KeySecret;
+use proton_core_api::consts::CoreBundle;
 use proton_core_api::service::{ApiServiceError, ServiceError};
 use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::prelude::*;
@@ -12,6 +14,7 @@ use proton_core_api::store::StoreError;
 use proton_core_common::datatypes::{PasswordMode, TfaStatus};
 use proton_crypto_account::keys::UserKeys;
 use proton_crypto_account::proton_crypto::CryptoError;
+use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::string::FromUtf8Error;
 use thiserror::Error;
@@ -24,6 +27,38 @@ pub mod state;
 
 mod observability;
 
+/// Auth errors that can occur during the password change flow.
+#[derive(Debug, Error)]
+pub enum FlowAuthError {
+    #[error("Password wrong: {0:?}")]
+    PasswordWrong(#[from] PasswordWrongDetails),
+
+    #[error("Auth error: {0} ({})", _0.err_info().map(|i| i.to_string()).unwrap_or_default())]
+    Other(#[from] ApiError),
+}
+
+/// Details provided by the backend in case of `PasswordWrong` error.
+#[derive(Debug, Error, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+#[error(transparent)]
+pub struct PasswordWrongDetails {
+    pub login_failed_reason: LoginFailedReason,
+}
+
+/// Specific reasons why a `PasswordWrong` error was returned by the backend.
+#[derive(Debug, Error, Serialize, Deserialize)]
+pub enum LoginFailedReason {
+    #[error("Wrong 2FA code")]
+    TotpWrong,
+    #[error("2FA code already used")]
+    TotpReuse,
+    #[error("Wrong recovery phrase")]
+    RecoveryPhrase,
+    #[serde(other)]
+    #[error("Other")]
+    Other,
+}
+
 /// Errors that can occur during the password change flow.
 #[derive(Debug, Error)]
 pub enum PasswordError {
@@ -33,8 +68,8 @@ pub enum PasswordError {
     #[error("API service error: {0}")]
     ApiService(#[source] ApiServiceError),
 
-    #[error("Auth error: {0} ({})", _0.err_info().map(|i| i.to_string()).unwrap_or_default())]
-    FlowAuth(#[source] ApiError),
+    #[error("Auth error: {0}")]
+    FlowAuth(#[from] FlowAuthError),
 
     #[error("Failed to verify server proof")]
     ServerProof,
@@ -65,6 +100,24 @@ pub enum PasswordError {
 }
 
 impl ServiceError for PasswordError {}
+
+impl From<ApiError> for PasswordError {
+    fn from(api_error: ApiError) -> Self {
+        if api_error.err_status() == Some(Status::UNPROCESSABLE_ENTITY)
+            && api_error.err_code() == Some(CoreBundle::PasswordWrong as u32)
+        {
+            api_error
+                .err_info()
+                .and_then(|info| info.details)
+                .and_then(|value| serde_json::from_value::<PasswordWrongDetails>(value).ok())
+                .map(FlowAuthError::from)
+                .map(PasswordError::from)
+        } else {
+            None
+        }
+        .unwrap_or_else(|| PasswordError::FlowAuth(FlowAuthError::Other(api_error)))
+    }
+}
 
 /// A password change flow that can be used to change a user's password.
 ///

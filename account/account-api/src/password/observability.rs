@@ -1,5 +1,5 @@
 use super::PasswordError;
-use crate::password::state::State;
+use crate::password::{FlowAuthError, state::State};
 use proton_core_api::{
     metric,
     services::observability::{
@@ -84,8 +84,11 @@ impl From<&PasswordError> for ApiServiceObservabilityResponse {
         match error {
             PasswordError::Api(api_error) => api_error.into(),
             PasswordError::ApiService(api_service_error) => api_service_error.into(),
-            PasswordError::FlowAuth(_)
-            | PasswordError::ServerProof
+            PasswordError::FlowAuth(flow_auth_error) => match flow_auth_error {
+                FlowAuthError::Other(api_error) => api_error.into(),
+                FlowAuthError::PasswordWrong(_) => Self::Http4xx,
+            },
+            PasswordError::ServerProof
             | PasswordError::MissingPrimaryKey
             | PasswordError::KeySecretSaltFetch(_)
             | PasswordError::KeySecretDerivation(_)

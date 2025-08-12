@@ -259,10 +259,7 @@ async fn acquire_password_scope(
         sso_reauth_token: None,
     };
 
-    let response = client
-        .put_users_password(request)
-        .map_err(PasswordError::FlowAuth)
-        .await?;
+    let response = client.put_users_password(request).await?;
 
     if response.server_proof == client_proof.expected_server_proof {
         Ok(response)
