@@ -980,6 +980,12 @@ impl Attachment {
         .await?;
         Ok(())
     }
+
+    pub fn as_inline_img(&self) -> Option<String> {
+        self.content_id
+            .as_ref()
+            .map(|cid| format!(r#"<img src="cid:{cid}" style="max-width: 100%;"><br>"#))
+    }
 }
 
 // TODO: The use of the "Real" wrappers is because the source types don't

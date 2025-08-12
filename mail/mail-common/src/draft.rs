@@ -3,9 +3,10 @@ use crate::datatypes::{
     Disposition, LocalAttachmentId, LocalConversationId, LocalMessageId, MimeType,
 };
 use crate::ios_share_ext::IosShareExtension;
-use crate::models::{Attachment, AttachmentData, DraftSendResult, MetadataId};
+use crate::models::{Attachment, AttachmentData, DraftSendResult, MailSettings, MetadataId};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::{DateTime, Local};
+use compose::find_default_sender_address;
 use derive_more::Display;
 use derive_more::derive::TryFrom;
 use non_empty_string::NonEmptyString;
@@ -105,6 +106,8 @@ pub enum OpenError {
     MessageBodyMissing(LocalMessageId),
     #[error("Can't reply or forward to a draft message {0}")]
     ReplyOrForwardToDraft(LocalMessageId),
+    #[error("Missing share extension's stub-draft")]
+    ShareExtensionStubDraftMissing,
 }
 
 impl From<OpenError> for MailContextError {
@@ -580,29 +583,30 @@ impl DraftActor {
     #[instrument(skip_all)]
     pub async fn from_ios_share_extension(
         context: &MailUserContext,
+        options: DraftActorOptions,
     ) -> Result<Self, MailContextError> {
         info!("Creating a draft from share extension's stub-draft");
 
-        let this = Self::empty(context).await?;
         let mail_cache_path = context.mail_context().mail_cache_path();
 
-        let Some(draft) = IosShareExtension::load_draft(mail_cache_path)
-            .ok()
-            .flatten()
-        else {
+        let draft = IosShareExtension::load_draft(mail_cache_path)?.ok_or_else(|| {
             warn!("Whoopsie, looks like there's no stub-draft to load");
+            OpenError::ShareExtensionStubDraftMissing
+        })?;
 
-            return Ok(this);
-        };
-
-        let address_id = this.address_id().await?;
-        let signature = this.body().await?;
-        let mut tether = context.user_stash().connection();
         let mut body = String::new();
+        let mut tether = context.user_stash().connection();
 
-        if let Some(subject) = draft.subject {
-            this.set_subject(subject).await?;
-        }
+        let address_id = find_default_sender_address(&tether)
+            .await?
+            .ok_or(OpenError::UserHasNoAddresses)?
+            .remote_id
+            .unwrap();
+
+        let mime_type = MailSettings::get_or_default(&tether).await.draft_mime_type;
+
+        // ---
+        // Create attachments
 
         let atts = {
             let atts = draft
@@ -611,10 +615,8 @@ impl DraftActor {
                 .map(|att| (att, Disposition::Attachment));
 
             // If the draft's mime type doesn't support inline attachments,
-            // force them to be regular ones (alternatively we could modify the
-            // mime type, but that would require regenerating the signature
-            // etc., it'd be more messy)
-            let inline_atts_disp = if this.mime_type().await?.supports_inline_attachments() {
+            // force them to be normal ones
+            let inline_atts_disp = if mime_type.supports_inline_attachments() {
                 Disposition::Inline
             } else {
                 Disposition::Attachment
@@ -627,6 +629,8 @@ impl DraftActor {
 
             atts.chain(inline_atts)
         };
+
+        let mut created_atts = Vec::new();
 
         for (att_idx, (att, att_disp)) in atts.enumerate() {
             debug!(?att_idx, "Creating attachment");
@@ -641,26 +645,42 @@ impl DraftActor {
             )
             .await?;
 
-            if let Some(cid) = &att.content_id {
-                body.push_str(&format!(
-                    r#"<img src="cid:{cid}" style="max-width: 100%;"><br>"#
-                ));
+            if let Some(img) = att.as_inline_img() {
+                body.push_str(&img);
             }
 
+            created_atts.push(att);
+        }
+
+        // ---
+        // Create draft itself
+
+        let this = Self::empty_ex(context, options).await?;
+
+        for att in created_atts {
             this.add_attachment(&att).await?;
         }
 
-        if let Some(user_body) = draft.body {
-            body.push_str(&user_body);
+        if let Some(subject) = draft.subject {
+            this.set_subject(subject).await?;
         }
 
-        if !signature.is_empty() {
-            body.push_str(&signature);
-        }
+        this.set_body({
+            if let Some(user_body) = draft.body {
+                body.push_str(&user_body);
+            }
 
-        if !body.is_empty() {
-            this.set_body(body).await?;
-        }
+            let signature = this.body().await?;
+
+            if !signature.is_empty() {
+                body.push_str(&signature);
+            }
+
+            body
+        })
+        .await?;
+
+        // ---
 
         IosShareExtension::delete_draft(mail_cache_path);
 

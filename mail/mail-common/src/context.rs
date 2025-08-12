@@ -856,7 +856,7 @@ impl MailContext {
     }
 
     #[must_use]
-    pub(crate) fn mail_cache_path(&self) -> &Path {
+    pub fn mail_cache_path(&self) -> &Path {
         &self.mail_cache_path
     }
 

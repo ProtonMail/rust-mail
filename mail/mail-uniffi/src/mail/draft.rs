@@ -332,7 +332,7 @@ pub async fn new_draft(
                 RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Forward, false, None, options).await
             }
             DraftCreateMode::FromIosShareExtension => {
-                RealDraft::from_ios_share_extension(&ctx).await
+                RealDraft::from_ios_share_extension(&ctx, options).await
             }
         }
         .map_err(RealProtonMailError::from)?;

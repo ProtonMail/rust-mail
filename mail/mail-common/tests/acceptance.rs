@@ -10,6 +10,7 @@ mod acceptance {
     mod draft_attachments;
     mod draft_change_sender;
     mod draft_discard;
+    mod draft_ios_share_ext;
     mod draft_recipients;
     mod draft_save;
     mod draft_send;
