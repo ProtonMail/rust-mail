@@ -1,11 +1,10 @@
-//! Everything Proton Mailbox related.
-
 pub mod actions;
 pub mod context;
 pub mod datatypes;
 pub mod db;
 pub mod errors;
 mod events;
+pub mod ios_share_ext;
 mod mailbox;
 pub mod migration_snooper;
 pub mod models;
@@ -29,22 +28,19 @@ pub use self::mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
 pub use self::rsvp::{RsvpEvent, RsvpEventId};
 pub use self::sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use self::user_context::MailUserContext;
+use crate::datatypes::LocalConversationId;
+use crate::datatypes::{LocalAttachmentId, LocalMessageId};
+use datatypes::attachment::ContentId;
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError, MultiActionError};
-use proton_core_common::models::LabelError;
-
-// re-exports
-use crate::datatypes::{LocalAttachmentId, LocalMessageId};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::LabelId;
 pub use proton_core_common;
 use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
+use proton_core_common::models::LabelError;
+use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 pub use proton_mail_api;
 use stash::stash::StashError;
-
-use crate::datatypes::LocalConversationId;
-use datatypes::attachment::ContentId;
-use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use thiserror::Error;
 
 #[macro_export]

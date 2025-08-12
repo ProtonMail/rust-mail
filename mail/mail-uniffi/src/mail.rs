@@ -6,6 +6,7 @@ pub mod conversations;
 pub mod datatypes;
 mod device;
 mod draft;
+mod ios_share_ext;
 mod logging;
 pub mod mail_scroller;
 pub mod mailbox;
@@ -19,6 +20,7 @@ mod state;
 mod user_session;
 
 pub use self::device::*;
+pub use self::ios_share_ext::*;
 pub use self::mailbox::*;
 pub use self::notifications::*;
 pub use self::rsvp::*;

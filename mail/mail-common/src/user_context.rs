@@ -713,7 +713,7 @@ impl MailUserContext {
     /// be consumed later by the SDK. We can't directly use file system paths
     pub fn attachment_staging_path(&self) -> PathBuf {
         self.mail_context
-            .mail_cache_path(self.user_id())
+            .mail_cache_path_for(self.user_id())
             .join("attachment-staging")
     }
 

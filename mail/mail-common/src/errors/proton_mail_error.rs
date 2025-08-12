@@ -329,6 +329,9 @@ impl From<DraftOpenError> for ProtonMailError {
             DraftOpenError::ReplyOrForwardToDraft(_) => Self::Reason(
                 MailErrorReason::DraftOpenReason(DraftOpenErrorReason::MessageBodyMissing),
             ),
+            DraftOpenError::ShareExtensionStubDraftMissing => {
+                Self::Unexpected(Unexpected::Internal)
+            }
         }
     }
 }

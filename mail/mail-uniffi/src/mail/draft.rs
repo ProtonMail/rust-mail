@@ -39,17 +39,13 @@ use secrecy::{ExposeSecret, SecretString};
 use std::sync::{Arc, Weak};
 use tokio::sync::{RwLock, broadcast};
 
-/// Draft creation mode.
 #[derive(Debug, Copy, Clone, uniffi::Enum)]
 pub enum DraftCreateMode {
-    /// Empty, new message.
     Empty,
-    /// Reply to the sender of a message.
     Reply(Id),
-    /// Reply to all recipients of a message and the sender.
     ReplyAll(Id),
-    /// Forward the message to
     Forward(Id),
+    FromIosShareExtension,
 }
 
 #[derive(Debug, uniffi::Record)]
@@ -334,6 +330,9 @@ pub async fn new_draft(
             }
             DraftCreateMode::Forward(id) => {
                 RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Forward, false, None, options).await
+            }
+            DraftCreateMode::FromIosShareExtension => {
+                RealDraft::from_ios_share_extension(&ctx, options).await
             }
         }
         .map_err(RealProtonMailError::from)?;

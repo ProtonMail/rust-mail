@@ -772,7 +772,6 @@ pub fn validate_sender_address(
     None
 }
 
-//
 pub async fn find_default_sender_address(tether: &Tether) -> Result<Option<Address>, StashError> {
     Address::find_first(
         indoc! {"

@@ -42,7 +42,7 @@ use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
@@ -827,7 +827,7 @@ impl MailContext {
     ) -> MailContextResult<()> {
         tracing::info!("Logout account `{user_id}`");
         self.active_user_contexts.lock().await.remove(&user_id);
-        let mail_cache_path = self.mail_cache_path(&user_id);
+        let mail_cache_path = self.mail_cache_path_for(&user_id);
         Ok(self
             .core_context
             .logout_and_delete_user_data(user_id, vec![mail_cache_path])
@@ -847,7 +847,7 @@ impl MailContext {
     pub async fn delete_account(&self, user_id: UserId) -> MailContextResult<()> {
         tracing::info!("Delete account `{user_id}`");
         self.active_user_contexts.lock().await.remove(&user_id);
-        let mail_cache_path = self.mail_cache_path(&user_id);
+        let mail_cache_path = self.mail_cache_path_for(&user_id);
 
         Ok(self
             .core_context
@@ -855,9 +855,13 @@ impl MailContext {
             .await?)
     }
 
-    /// Path where mail content should be cached for user with `user_id`.
-    ///
-    pub fn mail_cache_path(&self, user_id: &UserId) -> PathBuf {
+    #[must_use]
+    pub fn mail_cache_path(&self) -> &Path {
+        &self.mail_cache_path
+    }
+
+    #[must_use]
+    pub fn mail_cache_path_for(&self, user_id: &UserId) -> PathBuf {
         self.mail_cache_path.join(user_id.to_string())
     }
 
