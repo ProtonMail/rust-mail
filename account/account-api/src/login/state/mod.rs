@@ -274,6 +274,24 @@ impl State {
         Self::want_login(client, parts, challenge_info)
     }
 
+    /// Create a `WantNewPassword` state from a resumed login flow.
+    #[must_use]
+    pub fn new_from_new_password(
+        client: muon::Client,
+        parts: SessionParts,
+        user_id: UserId,
+        session_id: SessionId,
+    ) -> Self {
+        let data = StateData {
+            parts,
+            user_id,
+            session_id,
+            observability: ObservabilityRecorder::default(),
+        };
+
+        Self::want_new_password(client, data)
+    }
+
     /// Create a `WantTfa` state from a resumed login flow.
     #[allow(clippy::too_many_arguments)]
     #[must_use]
@@ -343,8 +361,8 @@ impl State {
     }
 
     /// Create a `WantNewPassword` state.
-    fn want_new_password(client: muon::Client, data: StateData, user: User) -> Self {
-        WantNewPassword::new(client, data, user).into()
+    fn want_new_password(client: muon::Client, data: StateData) -> Self {
+        WantNewPassword::new(client, data).into()
     }
 
     /// Inspect the user after successful authentication and determine the appropriate next step.
@@ -376,7 +394,8 @@ impl State {
 
         // Check if user has temporary password - transition to WantNewPassword
         if user.flags.has_temporary_password {
-            return Ok(Self::want_new_password(client, data, user));
+            data.parts.store.write().await.set_temp_pass(true).await?;
+            return Ok(Self::want_new_password(client, data));
         }
 
         // Check if user has mailbox password - transition to WantMbp

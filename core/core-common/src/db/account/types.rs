@@ -63,6 +63,9 @@ pub struct CoreAccount {
     pub primary_seq: i64,
 
     #[DbField]
+    pub temp_pass: bool,
+
+    #[DbField]
     pub is_ready: bool,
 }
 
@@ -80,6 +83,7 @@ impl CoreAccount {
             primary_addr: None,
             second_factor_mode: None,
             password_mode: None,
+            temp_pass: false,
         }
     }
 
@@ -167,6 +171,14 @@ impl CoreAccount {
     pub fn with_primary_seq(self, primary_seq: i64) -> Self {
         Self {
             primary_seq,
+            ..self
+        }
+    }
+
+    #[must_use]
+    pub fn with_temp_pass(self, value: bool) -> Self {
+        Self {
+            temp_pass: value,
             ..self
         }
     }
