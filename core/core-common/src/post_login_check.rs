@@ -75,8 +75,10 @@ impl DefaultPostLoginValidator {
             return Err(PostLoginValidationError::DelinquentUser);
         }
 
-        if let Some(logged_in_free_account_count) =
-            Self::get_logged_in_free_account_count(&self.ctx).await
+        let has_subscription = user.subscribed > 0;
+        if !has_subscription
+            && let Some(logged_in_free_account_count) =
+                Self::get_logged_in_free_account_count(&self.ctx).await
         {
             trace!("Logged-in free accounts: {logged_in_free_account_count}");
             if let Some(allowed_free_account_count) = self.allowed_free_account_count
