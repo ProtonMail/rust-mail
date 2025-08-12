@@ -1926,14 +1926,14 @@ impl From<RealMobileSettings> for MobileSettings {
 #[derive(uniffi::Record)]
 pub struct LabelAsOutput {
     pub input_label_is_empty: bool,
-    pub undo: Arc<Undo>,
+    pub undo: Option<Arc<Undo>>,
 }
 
 impl From<RealLabelAsOutput> for LabelAsOutput {
     fn from(value: RealLabelAsOutput) -> Self {
         Self {
             input_label_is_empty: value.input_label_is_empty,
-            undo: Arc::new(value.undo.into()),
+            undo: value.undo.map(|undo| Arc::new(undo.into())),
         }
     }
 }
