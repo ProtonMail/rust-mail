@@ -5,7 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-proton-payment-sdk = { workspace = true }
+# Empty crate not needed for now
+# proton-payment-sdk = { workspace = true }
 
 [lints]
 workspace = true

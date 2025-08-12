@@ -41,7 +41,6 @@ secrecy = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 uniffi = { workspace = true }
 uniffi-common = { workspace = true }
