@@ -72,7 +72,7 @@ async fn sign_out_all_on_too_many_attempts_of_pin_code_action(
 
         // Add some stuff to the cache
         let mail_ctx = user_ctx.mail_context();
-        let mail_cache = mail_ctx.mail_cache_path(user_ctx.user_id());
+        let mail_cache = mail_ctx.mail_cache_path_for(user_ctx.user_id());
         let contents = "First line.\nSecond line.\nThird line.\n";
 
         tokio::fs::write(mail_cache.join(CACHED_FILE_NAME), contents.as_bytes())
@@ -102,7 +102,7 @@ async fn sign_out_all_on_too_many_attempts_of_pin_code_action(
 
         // And that cache is empty
         let mail_ctx = user_ctx.mail_context();
-        let mail_cache = mail_ctx.mail_cache_path(user_ctx.user_id());
+        let mail_cache = mail_ctx.mail_cache_path_for(user_ctx.user_id());
 
         assert!(!mail_cache.join(CACHED_FILE_NAME).exists());
         assert!(!mail_cache.exists());

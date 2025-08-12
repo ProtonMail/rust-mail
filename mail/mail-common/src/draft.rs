@@ -1,5 +1,8 @@
 use crate::datatypes::attachment::ContentId;
-use crate::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId, MimeType};
+use crate::datatypes::{
+    Disposition, LocalAttachmentId, LocalConversationId, LocalMessageId, MimeType,
+};
+use crate::ios_share_ext::IosShareExtension;
 use crate::models::{Attachment, AttachmentData, DraftSendResult, MetadataId};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::{DateTime, Local};
@@ -28,7 +31,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Weak;
 use tokio::fs;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tracing::{error, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 pub mod attachments;
 pub mod compose;
@@ -561,6 +564,7 @@ impl DraftActor {
         }
         Ok((draft, sync_status))
     }
+
     pub async fn empty(context: &MailUserContext) -> Result<Self, MailContextError> {
         Self::empty_ex(context, DraftActorOptions::default()).await
     }
@@ -571,6 +575,96 @@ impl DraftActor {
     ) -> Result<Self, MailContextError> {
         let draft = draft_v1::Draft::empty(context).await?;
         Ok(Self::create(context, draft, options))
+    }
+
+    #[instrument(skip_all)]
+    pub async fn from_ios_share_extension(
+        context: &MailUserContext,
+    ) -> Result<Self, MailContextError> {
+        info!("Creating a draft from share extension's stub-draft");
+
+        let this = Self::empty(context).await?;
+        let mail_cache_path = context.mail_context().mail_cache_path();
+
+        let Some(draft) = IosShareExtension::load_draft(mail_cache_path)
+            .ok()
+            .flatten()
+        else {
+            warn!("Whoopsie, looks like there's no stub-draft to load");
+
+            return Ok(this);
+        };
+
+        let address_id = this.address_id().await?;
+        let signature = this.body().await?;
+        let mut tether = context.user_stash().connection();
+        let mut body = String::new();
+
+        if let Some(subject) = draft.subject {
+            this.set_subject(subject).await?;
+        }
+
+        let atts = {
+            let atts = draft
+                .attachments
+                .into_iter()
+                .map(|att| (att, Disposition::Attachment));
+
+            // If the draft's mime type doesn't support inline attachments,
+            // force them to be regular ones (alternatively we could modify the
+            // mime type, but that would require regenerating the signature
+            // etc., it'd be more messy)
+            let inline_atts_disp = if this.mime_type().await?.supports_inline_attachments() {
+                Disposition::Inline
+            } else {
+                Disposition::Attachment
+            };
+
+            let inline_atts = draft
+                .inline_attachments
+                .into_iter()
+                .map(move |att| (att, inline_atts_disp));
+
+            atts.chain(inline_atts)
+        };
+
+        for (att_idx, (att, att_disp)) in atts.enumerate() {
+            debug!(?att_idx, "Creating attachment");
+
+            let att = Attachment::create_local(
+                context,
+                address_id.clone(),
+                att_disp,
+                &att.path,
+                att.name,
+                &mut tether,
+            )
+            .await?;
+
+            if let Some(cid) = &att.content_id {
+                body.push_str(&format!(
+                    r#"<img src="cid:{cid}" style="max-width: 100%;"><br>"#
+                ));
+            }
+
+            this.add_attachment(&att).await?;
+        }
+
+        if let Some(user_body) = draft.body {
+            body.push_str(&user_body);
+        }
+
+        if !signature.is_empty() {
+            body.push_str(&signature);
+        }
+
+        if !body.is_empty() {
+            this.set_body(body).await?;
+        }
+
+        IosShareExtension::delete_draft(mail_cache_path);
+
+        Ok(this)
     }
 
     pub async fn reply(
