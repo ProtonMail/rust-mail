@@ -3,8 +3,8 @@ use proton_core_api::services::proton::GetKeysAllResponse;
 use proton_core_api::services::proton::UserId;
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_mail_common::draft::recipients::{
-    ChannelBackgroundValidationComplete, Recipient, RecipientEntry, ValidatingRecipientList,
-    ValidationState,
+    ChannelBackgroundValidationComplete, Recipient, RecipientEntry, RecipientList,
+    ValidatingRecipientList, ValidationState,
 };
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
@@ -40,8 +40,9 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     )
     .await;
 
+    let mut recipient_list = RecipientList::new();
     let (cb, receiver) = ChannelBackgroundValidationComplete::new(1);
-    let list = ValidatingRecipientList::new(Some(cb));
+    let mut list = ValidatingRecipientList::new(&mut recipient_list, cb);
 
     let params = Params::default_basic();
     ctx.setup_user(params).await;
@@ -69,9 +70,11 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     )
     .unwrap();
 
-    receiver.recv_async().await.unwrap();
+    let updates = receiver.recv_async().await.unwrap();
 
-    let recipients = list.recipients();
+    drop(list);
+    updates.apply(&mut recipient_list);
+    let recipients = recipient_list.recipients();
     assert_eq!(recipients.len(), 1);
     match &recipients[0] {
         Recipient::Single(r) => {
@@ -113,8 +116,9 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
     )
     .await;
 
+    let mut recipient_list = RecipientList::new();
     let (cb, receiver) = ChannelBackgroundValidationComplete::new(1);
-    let list = ValidatingRecipientList::new(Some(cb));
+    let mut list = ValidatingRecipientList::new(&mut recipient_list, cb);
 
     let params = Params::default_basic();
     ctx.setup_user(params).await;
@@ -143,9 +147,12 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
         1,
     );
 
-    receiver.recv_async().await.unwrap();
+    let updates = receiver.recv_async().await.unwrap();
+    drop(list);
 
-    let recipients = list.recipients();
+    updates.apply(&mut recipient_list);
+
+    let recipients = recipient_list.recipients();
     assert_eq!(recipients.len(), 1);
     match &recipients[0] {
         Recipient::Group(group) => {

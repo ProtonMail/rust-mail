@@ -2,7 +2,6 @@ use crate::MailUserContext;
 use crate::datatypes::MessageRecipient;
 use crate::models::MessageReplyTo;
 use non_empty_string::NonEmptyString;
-use parking_lot::{Mutex, RwLock};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{
     GetKeysAllOptions, PrivateEmail, PrivateEmailRef, PrivateString,
@@ -437,6 +436,11 @@ impl RecipientList {
     pub fn recipients(&self) -> &[Recipient] {
         &self.recipients
     }
+
+    pub fn into_recipients(self) -> Vec<Recipient> {
+        self.recipients
+    }
+
     fn find_group_mut(&mut self, group_name: &NonEmptyString) -> Option<&mut GroupRecipient> {
         for r in self.recipients.iter_mut() {
             if let Recipient::Group(recipient) = r {
@@ -634,25 +638,40 @@ impl RecipientList {
     }
 }
 
+pub struct RecipientValidationUpdate {
+    updates: Vec<(PrivateEmail, ValidationState)>,
+}
+
+impl RecipientValidationUpdate {
+    pub fn apply(self, list: &mut RecipientList) {
+        for (email, state) in self.updates {
+            list.update_recipient_validation_state(email.as_ref(), state);
+        }
+    }
+}
+
 /// Specifies the behaviour for the mechanism through which updates are notified.
 pub trait OnBackgroundValidationComplete: Send + Sync + Clone + 'static {
-    fn recipients_validation_state_updated(&self) -> impl Future<Output = ()> + Send;
+    fn recipients_validation_state_updated(
+        &self,
+        updates: RecipientValidationUpdate,
+    ) -> impl Future<Output = ()> + Send;
 }
 
 /// Channel based background validation updates.
 #[derive(Clone)]
-pub struct ChannelBackgroundValidationComplete(flume::Sender<()>);
+pub struct ChannelBackgroundValidationComplete(flume::Sender<RecipientValidationUpdate>);
 
 impl ChannelBackgroundValidationComplete {
-    pub fn new(capacity: usize) -> (Self, flume::Receiver<()>) {
+    pub fn new(capacity: usize) -> (Self, flume::Receiver<RecipientValidationUpdate>) {
         let (sender, receiver) = flume::bounded(capacity);
         (Self(sender), receiver)
     }
 }
 
 impl OnBackgroundValidationComplete for ChannelBackgroundValidationComplete {
-    async fn recipients_validation_state_updated(&self) {
-        let _ = self.0.send_async(()).await;
+    async fn recipients_validation_state_updated(&self, updates: RecipientValidationUpdate) {
+        let _ = self.0.send_async(updates).await;
     }
 }
 
@@ -665,28 +684,20 @@ impl OnBackgroundValidationComplete for ChannelBackgroundValidationComplete {
 ///
 /// This type exists so that the UI layer can defer the validation of the addresses as the user
 /// types them.
-pub struct ValidatingRecipientList<T: OnBackgroundValidationComplete> {
-    list: Arc<RwLock<RecipientList>>,
-    cb: Mutex<Option<T>>,
+pub struct ValidatingRecipientList<'l, T: OnBackgroundValidationComplete> {
+    list: &'l mut RecipientList,
+    cb: T,
 }
-impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
+impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
     /// Create a new instance.
-    pub fn new(on_updated: Option<T>) -> Self {
+    pub fn new(list: &'l mut RecipientList, on_updated: T) -> Self {
         Self {
-            list: Arc::new(RwLock::new(RecipientList::new())),
-            cb: Mutex::new(on_updated),
+            list,
+            cb: on_updated,
         }
     }
 
-    /// Create a new instance from an existing `list`.
-    pub fn with_list(list: RecipientList, on_updated: Option<T>) -> Self {
-        Self {
-            list: Arc::new(RwLock::new(list)),
-            cb: Mutex::new(on_updated),
-        }
-    }
-
-    pub fn check_all(&self, ctx: &MailUserContext) {
+    pub fn check_all(&mut self, ctx: &MailUserContext) {
         let mut emails_to_validate = Vec::new();
         let mut check_recipient = |recipient: &mut SingleRecipient| {
             if recipient.state == ValidationState::Unchecked {
@@ -694,7 +705,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
                 emails_to_validate.push(recipient.email.clone());
             }
         };
-        for recipient in &mut self.list.write().recipients {
+        for recipient in &mut self.list.recipients {
             match recipient {
                 Recipient::Single(recipient) => {
                     check_recipient(recipient);
@@ -709,46 +720,33 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
         self.validate_addresses(ctx, emails_to_validate);
     }
 
-    /// Set or remove the callback for validation changes.
-    pub fn set_callback(&self, cb: Option<T>) {
-        *self.cb.lock() = cb;
-    }
-
     /// See [`RecipientList::add_single`] for more details.
     pub fn add_single(
-        &self,
+        &mut self,
         ctx: &MailUserContext,
         entry: RecipientEntry,
     ) -> Result<(), RecipientError> {
-        let mut list = self.list.write();
-        let entry = list.add_single(entry)?;
+        let entry = self.list.add_single(entry)?;
         let emails = if entry.state == ValidationState::Unchecked {
             entry.state = ValidationState::Validating;
             vec![entry.email.clone()]
         } else {
             vec![]
         };
-        drop(list);
         self.validate_addresses(ctx, emails);
 
         Ok(())
     }
 
-    /// See [`RecipientList::remove_group`] for more details.
-    pub fn remove_single(&self, email: &str) {
-        self.list.write().remove_single(email);
-    }
-
     /// See [`RecipientList::add_group`] for more details.
     pub fn add_group(
-        &self,
+        &mut self,
         ctx: &MailUserContext,
         group_name: NonEmptyString,
         entries: impl IntoIterator<Item = RecipientEntry>,
         total_in_group: u64,
     ) -> Vec<RecipientEntry> {
-        let mut list = self.list.write();
-        let (group, duplicates) = list.add_group(group_name, entries, total_in_group);
+        let (group, duplicates) = self.list.add_group(group_name, entries, total_in_group);
 
         let to_validate = group
             .recipients
@@ -768,77 +766,13 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
         duplicates
     }
 
-    /// See [`RecipientList::remove_group`] for more details;
-    pub fn remove_group(&self, group_name: &NonEmptyString) {
-        self.list.write().remove_group(group_name);
-    }
-
-    /// See [`RecipientList::remove_group_recipient`] for more details.
-    pub fn remove_group_recipient(&self, group_name: &NonEmptyString, email: &str) {
-        self.list.write().remove_group_recipient(group_name, email);
-    }
-
-    /// See [`RecipientList::remove_group_recipients`] for more details.
-    pub fn remove_group_recipients<E: AsRef<str>>(
-        &self,
-        group_name: &NonEmptyString,
-        emails: impl IntoIterator<Item = E>,
-    ) {
-        self.list
-            .write()
-            .remove_group_recipients(group_name, emails);
-    }
-
-    /// Get all recipients.
-    pub fn recipients(&self) -> Vec<Recipient> {
-        self.list.read().recipients.to_vec()
-    }
-
-    /// See [`RecipientList::to_message_recipients`] for more details.
-    pub fn to_message_recipients(&self) -> Vec<MessageRecipient> {
-        self.list.read().to_message_recipients()
-    }
-
-    /// Number of recipients in this list.
-    pub fn len(&self) -> usize {
-        self.list.read().len()
-    }
-
-    /// Whether this recipient list is empty
-    pub fn is_empty(&self) -> bool {
-        self.list.read().is_empty()
-    }
-
-    /// Check whether this list contains the given `email`.
-    pub fn contains_email(&self, email: PrivateEmailRef) -> bool {
-        self.list.read().contains_email(email)
-    }
-
-    /// Check whether this list contains all the given `emails`.
-    pub fn contains_emails<'e, E: Into<PrivateEmailRef<'e>>>(
-        &self,
-        emails: impl IntoIterator<Item = E>,
-    ) -> bool {
-        self.list.read().contains_emails(emails)
-    }
-
-    /// Returns a copy of the underlying recipient list.
-    pub fn list(&self) -> RecipientList {
-        self.list.read().clone()
-    }
-
-    pub fn validate_expiration_feature(&self, report: &mut ExpirationFeatureSupportReport) {
-        self.list.read().validate_expiration_feature(report);
-    }
-
     fn validate_addresses(&self, ctx: &MailUserContext, to_validate: Vec<PrivateEmail>) {
         if to_validate.is_empty() {
             return;
         }
-        let cb = { self.cb.lock().clone() };
+        let cb = self.cb.clone();
         let ctx = ctx.as_arc();
         let ctx_cloned = Arc::clone(&ctx);
-        let list_cloned = Arc::clone(&self.list);
         ctx_cloned.spawn(async move {
             let mut update_statuses = Vec::with_capacity(to_validate.len());
             for email in to_validate {
@@ -846,17 +780,10 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
                 update_statuses.push((email, status));
             }
 
-            {
-                let mut list = list_cloned.write();
-                for (email, state) in update_statuses {
-                    list.update_recipient_validation_state(email.as_ref(), state);
-                }
-                drop(list);
-            }
-
-            if let Some(cb) = cb {
-                cb.recipients_validation_state_updated().await;
-            }
+            cb.recipients_validation_state_updated(RecipientValidationUpdate {
+                updates: update_statuses,
+            })
+            .await;
         });
     }
 }
