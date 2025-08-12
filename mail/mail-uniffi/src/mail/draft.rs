@@ -37,6 +37,7 @@ use proton_mail_common::{MailContextError, MailUserContext};
 use recipients::ComposerRecipientList;
 use secrecy::{ExposeSecret, SecretString};
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::sync::{RwLock, broadcast};
 
 #[derive(Debug, Copy, Clone, uniffi::Enum)]
@@ -381,29 +382,17 @@ impl Draft {
 
     /// Get the To recipients of the draft.
     pub fn to_recipients(&self) -> Arc<ComposerRecipientList> {
-        ComposerRecipientList::new_to_list(
-            self.ctx.clone(),
-            self.instance.clone(),
-            self.cached.clone(),
-        )
+        ComposerRecipientList::new_to_list(self.instance.clone(), self.cached.clone())
     }
 
     /// Get the Cc recipients of the draft.
     pub fn cc_recipients(&self) -> Arc<ComposerRecipientList> {
-        ComposerRecipientList::new_cc_list(
-            self.ctx.clone(),
-            self.instance.clone(),
-            self.cached.clone(),
-        )
+        ComposerRecipientList::new_cc_list(self.instance.clone(), self.cached.clone())
     }
 
     /// Get the Bcc recipients of the draft.
     pub fn bcc_recipients(&self) -> Arc<ComposerRecipientList> {
-        ComposerRecipientList::new_bcc_list(
-            self.ctx.clone(),
-            self.instance.clone(),
-            self.cached.clone(),
-        )
+        ComposerRecipientList::new_bcc_list(self.instance.clone(), self.cached.clone())
     }
 
     /// Get the draft's subject.
@@ -478,14 +467,9 @@ impl Draft {
         async_runtime()
             .block_on(async {
                 let mut instance = self.cached.write().await;
-                if instance.subject == subject {
-                    return Ok(());
-                }
                 self.instance.set_subject(subject.clone()).await?;
                 instance.subject = subject;
-                save_draft(&self.instance)
-                    .await
-                    .map_err(RealProtonMailError::from)
+                Ok::<_, RealProtonMailError>(())
             })
             .map_err(DraftSaveError::from)
             .into()
@@ -497,14 +481,9 @@ impl Draft {
         async_runtime()
             .block_on(async {
                 let mut instance = self.cached.write().await;
-                if instance.body == body {
-                    return Ok(());
-                }
                 self.instance.set_body(body.clone()).await?;
                 instance.body = body;
-                save_draft(&self.instance)
-                    .await
-                    .map_err(RealProtonMailError::from)
+                Ok::<_, RealProtonMailError>(())
             })
             .map_err(DraftSaveError::from)
             .into()
@@ -932,11 +911,6 @@ pub async fn draft_cancel_schedule_send(
     })
 }
 
-async fn save_draft(draft: &RealDraft) -> Result<(), MailContextError> {
-    draft.save().await?;
-    Ok(())
-}
-
 #[derive(Debug, uniffi::Enum)]
 pub enum DraftExpirationTime {
     Never,
@@ -1011,5 +985,6 @@ impl From<ExpirationFeatureSupportReport> for DraftRecipientExpirationFeatureRep
 fn draft_options() -> DraftActorOptions {
     DraftActorOptions {
         address_validation_enabled: true,
+        auto_save_every: Some(Duration::from_secs(2)),
     }
 }

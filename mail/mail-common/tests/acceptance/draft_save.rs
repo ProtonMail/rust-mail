@@ -22,7 +22,8 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::compose::DraftAddressValidationError;
 use proton_mail_common::draft::{
-    Draft, DraftExpirationTime, DraftSyncStatus, Error, OpenError, ReplyMode, SaveError,
+    Draft, DraftActorOptions, DraftExpirationTime, DraftSyncStatus, Error, OpenError, ReplyMode,
+    SaveError,
 };
 use proton_mail_common::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
@@ -33,6 +34,7 @@ use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserCont
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::collections::HashMap;
+use std::time::Duration;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -1615,6 +1617,48 @@ async fn open_draft_detects_sender_alias() {
     let addresses = draft.sender_addresses().await.unwrap();
     // Alias address should be at the top.
     assert_eq!(addresses[0].email, alias_address);
+}
+
+#[tokio::test]
+async fn auto_save_draft() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let mut params = draft_test_params();
+    if let Some(setting) = params.mail_settings.as_mut() {
+        setting.draft_mime_type = MimeType::TextPlain.into();
+    }
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    // Create draft.
+    let draft = Draft::empty_ex(
+        &user_ctx,
+        DraftActorOptions {
+            auto_save_every: Some(Duration::from_millis(500)),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    draft.set_body("foo".into()).await.unwrap();
+    let msg_id = draft.message_id().await.unwrap().unwrap();
+    draft.set_body("foo_bar".into()).await.unwrap();
+    // Body remains unchanged
+    let body = Message::message_body(&user_ctx, msg_id).await.unwrap();
+    assert_eq!(body.body, "foo");
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    // We have elapsed the save interval, we should see changes now.
+    draft.set_body("foo_barish".into()).await.unwrap();
+    let body = Message::message_body(&user_ctx, msg_id).await.unwrap();
+    assert_eq!(body.body, "foo_barish");
 }
 
 async fn prepare_draft_reply_attach_public_key(
