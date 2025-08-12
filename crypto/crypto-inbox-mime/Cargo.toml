@@ -8,7 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 mail-parser = "0.10.2"
-mail-builder = "0.4.2"
+mail-builder = "=0.4.2"                             # https://github.com/stalwartlabs/mail-builder/issues/50
 thiserror = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
