@@ -176,6 +176,7 @@ impl<'t> ProtonContactGroupResolver<'t> {
 
 #[derive(Debug, Default, Clone)]
 pub struct ExpirationFeatureSupportReport {
+    pub supported: HashSet<PrivateEmail>,
     pub unsupported: HashSet<PrivateEmail>,
     pub unknown: HashSet<PrivateEmail>,
 }
@@ -183,17 +184,27 @@ pub struct ExpirationFeatureSupportReport {
 impl ExpirationFeatureSupportReport {
     fn check(&mut self, email: PrivateEmailRef, validation_state: ValidationState) {
         match validation_state {
-            ValidationState::Valid(is_proton) => {
-                if !is_proton {
-                    self.unsupported.insert(email.to_owned());
+            ValidationState::Valid(true) => {
+                self.supported.insert(email.to_owned());
+            }
+            ValidationState::Valid(false) => {
+                // API is currently returning `IsProton:0` for known official proton email addresses,
+                // so we have to manually match here to correctly detect this.
+                for domain in PROTON_EMAIL_DOMAINS {
+                    if email.as_clear_text_str().to_lowercase().ends_with(domain) {
+                        self.supported.insert(email.to_owned());
+                        return;
+                    }
                 }
+                self.unsupported.insert(email.to_owned());
             }
             _ => {
                 // If we are unable to validate at the moment, we can still
                 // quickly validate if some address ends in a known domain as they are
                 // always supported.
                 for domain in PROTON_EMAIL_DOMAINS {
-                    if email.as_clear_text_str().ends_with(domain) {
+                    if email.as_clear_text_str().to_lowercase().ends_with(domain) {
+                        self.supported.insert(email.to_owned());
                         return;
                     }
                 }

@@ -982,6 +982,7 @@ impl TryFrom<DraftExpirationTime> for RealDraftExpirationTime {
 
 #[derive(Default, Debug, uniffi::Record)]
 pub struct DraftRecipientExpirationFeatureReport {
+    pub supported: Vec<String>,
     pub unsupported: Vec<String>,
     pub unknown: Vec<String>,
 }
@@ -989,6 +990,11 @@ pub struct DraftRecipientExpirationFeatureReport {
 impl From<ExpirationFeatureSupportReport> for DraftRecipientExpirationFeatureReport {
     fn from(value: ExpirationFeatureSupportReport) -> Self {
         Self {
+            supported: value
+                .supported
+                .into_iter()
+                .map(PrivateEmail::into_clear_text_string)
+                .collect(),
             unsupported: value
                 .unsupported
                 .into_iter()
