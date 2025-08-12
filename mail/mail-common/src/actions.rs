@@ -901,6 +901,10 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
 
         builder.build()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.add.is_empty() && self.remove.is_empty()
+    }
 }
 
 pub enum Undo {
@@ -924,7 +928,7 @@ impl Undo {
 
 pub struct LabelAsOutput {
     pub input_label_is_empty: bool,
-    pub undo: Undo,
+    pub undo: Option<Undo>,
 }
 
 fn mark_read_unread_action_dependency_key<T: LocalIdActionDepExt>(

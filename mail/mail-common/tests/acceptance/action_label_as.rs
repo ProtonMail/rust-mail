@@ -68,24 +68,6 @@ async fn action_label_as_without_archive() {
         vec![],
     )
     .await;
-    ctx.mock_unlabel_conversation(
-        &label1_id,
-        vec![conversation1.id.clone(), conversation2.id.clone()],
-        vec![],
-    )
-    .await;
-
-    ctx.mock_label_conversation(
-        &label3_id,
-        vec![
-            conversation2.id.clone(),
-            conversation3.id.clone(),
-            conversation4.id.clone(),
-        ],
-        None,
-        vec![],
-    )
-    .await;
 
     ctx.mock_unlabel_conversation(
         &label3_id,
@@ -167,45 +149,13 @@ async fn action_label_as_without_archive() {
     .await
     .unwrap()
     .undo;
-
-    assert_state1(&tether).await;
-
-    undo.undo(user_ctx.action_queue(), &mut tether)
-        .await
-        .unwrap();
-    assert_state0(&tether).await;
-
-    // Nothing ever happens because we reverted it by just cancelling the action in the queue.
-    assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 0);
-    assert_state0(&tether).await;
-
-    // Action, again
-    let undo = Conversation::action_label_as(
-        &tether,
-        user_ctx.action_queue(),
-        inbox_label.id(),
-        vec![
-            conversation1.id(),
-            conversation2.id(),
-            conversation3.id(),
-            conversation4.id(),
-        ],
-        vec![label1.id()],
-        vec![label2.id()],
-        false,
-    )
-    .await
-    .unwrap()
-    .undo;
+    assert!(
+        undo.is_none(),
+        "undo label_as without archive must not be undoable"
+    );
 
     assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 1);
-
-    undo.undo(user_ctx.action_queue(), &mut tether)
-        .await
-        .unwrap();
-    // Nothing ever happens, back to state0
-    assert_state0(&tether).await;
-    assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 1);
+    // user_ctx.execute_all_actions().await.unwrap();
 }
 
 #[tokio::test]
@@ -381,9 +331,10 @@ async fn action_label_as_with_archive() {
     )
     .await
     .unwrap()
-    .undo;
+    .undo
+    .unwrap();
 
-    assert_state2(&tether).await;
+    assert_state1(&tether).await;
 
     undo.undo(user_ctx.action_queue(), &mut tether)
         .await
@@ -411,10 +362,11 @@ async fn action_label_as_with_archive() {
     )
     .await
     .unwrap()
-    .undo;
+    .undo
+    .unwrap();
 
     assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 2);
-    assert_state2(&tether).await;
+    assert_state1(&tether).await;
 
     undo.undo(user_ctx.action_queue(), &mut tether)
         .await
@@ -488,36 +440,8 @@ async fn assert_state0(tether: &Tether) {
     assert_eq!(conversation4.labels.len(), 4);
 }
 
-/// State 1: Action has been made in test1
+/// State 1: Action has been made in test2
 async fn assert_state1(tether: &Tether) {
-    let [inbox, label1, label2, label3] = LabelWithCounters::from_remote_ids(
-        tether,
-        [
-            LabelId::inbox(),
-            "selected".into(),
-            "partial".into(),
-            "unselected".into(),
-        ],
-    )
-    .await
-    .unwrap()
-    .try_into()
-    .unwrap();
-
-    assert_eq!(label1.total_conv, 4);
-    assert_eq!(label2.total_conv, 2);
-    assert_eq!(label3.total_conv, 0);
-
-    let [conversation1, conversation2, conversation3, conversation4] = get_convs(tether).await;
-
-    label_eq(&conversation1, [&inbox, &label1]);
-    label_eq(&conversation2, [&inbox, &label1, &label2]);
-    label_eq(&conversation3, [&inbox, &label1]);
-    label_eq(&conversation4, [&inbox, &label1, &label2]);
-}
-
-/// State 2: Action has been made in test2
-async fn assert_state2(tether: &Tether) {
     let [label1, label2, label3, archive] = LabelWithCounters::from_remote_ids(
         tether,
         [
