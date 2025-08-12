@@ -240,18 +240,22 @@ impl Message {
 
     pub async fn action_star(queue: &Queue, ids: Vec<LocalMessageId>) -> LabelAsResult {
         let tether = queue.stash().connection();
+
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
             .expect("Star system label not found");
-        Self::action_remove_label(queue, label_id, ids).await
+
+        Self::action_apply_label(queue, label_id, ids).await
     }
 
     pub async fn action_unstar(queue: &Queue, ids: Vec<LocalMessageId>) -> LabelAsResult {
         let tether = queue.stash().connection();
+
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
             .expect("Star system label not found");
-        Self::action_apply_label(queue, label_id, ids).await
+
+        Self::action_remove_label(queue, label_id, ids).await
     }
 
     pub async fn action_remove_label(
