@@ -488,6 +488,7 @@ where
             if [trash, spam].contains(&self.destination) {
                 // When moving to trash or spam we delete all labels except all mail.
                 self.removed_labels = T::remove_all_labels_except_all_mail(ids, bond).await?;
+                self.removed_labels.retain(|x| x.label != source_id);
             } else if source_label.is_movable_folder() {
                 T::remove_label(source_id, ids.iter().cloned(), bond)
                     .await
@@ -531,11 +532,11 @@ where
             reqs.push(T::remote_label(api, remote_ids, dest_label.clone()));
         }
 
-        let items = join_all(reqs).await.into_iter().flatten();
+        let failed_items = join_all(reqs).await.into_iter().flatten();
 
         guard
             .tx::<_, _, anyhow::Error>(async move |tx| {
-                RollbackItem::save_many(tx, items, T::ROLLBACK_ITEM_TYPE).await?;
+                RollbackItem::save_many(tx, failed_items, T::ROLLBACK_ITEM_TYPE).await?;
                 Ok(())
             })
             .await?;
@@ -691,15 +692,20 @@ pub trait ConversationOrMessage:
                 Self::apply_label(all_mail_id, ids.iter().copied(), bond).await?;
             }
         };
+        let almost_all_mail = Label::resolve_local_label_id(LabelId::almost_all_mail(), bond)
+            .await
+            .expect("almost_all_mail not set");
 
         let mut res = vec![];
         for (label_id, parsed_ids) in labels_and_messages {
             Self::remove_label(label_id, parsed_ids.iter().copied(), bond).await?;
 
-            res.extend(parsed_ids.iter().map(|&id| LabelPair {
-                id,
-                label: label_id,
-            }));
+            if label_id != almost_all_mail {
+                res.extend(parsed_ids.iter().map(|&id| LabelPair {
+                    id,
+                    label: label_id,
+                }));
+            }
         }
         Ok(res)
     }
