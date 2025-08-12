@@ -36,7 +36,7 @@ pub enum SignupError {
 
     /// Username is unavailable.
     #[error("Username unavailable")]
-    UsernameUnavailable,
+    UsernameUnavailable(Option<String>),
 
     /// Placeholder for errors during account creation step.
     #[error("Account creation failed")]
