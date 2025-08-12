@@ -759,7 +759,7 @@ async fn override_attachment_name() {
 }
 
 #[tokio::test]
-async fn total_attachment_size_more_than_limit() {
+async fn total_attachment_size_more_than_limit_local() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
@@ -782,20 +782,6 @@ async fn total_attachment_size_more_than_limit() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
-
-    ctx.mock_create_attachment(
-        new_attachment_params(attachment_file.path(), message.metadata.id.clone()),
-        Err((
-            422,
-            ApiErrorInfo {
-                code: Mail::TooManyAttachments as u32,
-                error: None,
-                details: None,
-            },
-        )),
-    )
-    .await;
-
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
@@ -846,6 +832,76 @@ async fn total_attachment_size_more_than_limit() {
     }
 
     // Create attachment
+    let local_attachment = create_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Attachment,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+
+    let err = draft.add_attachment(&local_attachment).await.unwrap_err();
+    assert!(matches!(
+        err,
+        MailContextError::Draft(draft::Error::AttachmentUpload(
+            draft::AttachmentUploadError::TotalAttachmentSizeTooLarge
+        ))
+    ));
+}
+#[tokio::test]
+async fn total_attachment_size_more_than_limit() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let params = draft_test_params();
+    let attachment_file = tempfile::NamedTempFile::new().unwrap();
+    let message = draft_message();
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    ctx.mock_create_attachment(
+        new_attachment_params(attachment_file.path(), message.metadata.id.clone()),
+        Err((
+            422,
+            ApiErrorInfo {
+                code: Mail::TooManyAttachments as u32,
+                error: None,
+                details: None,
+            },
+        )),
+    )
+    .await;
+
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
+    draft.save().await.unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    let mut tether = user_ctx.user_stash().connection();
+    // Create normal attachment first so we don't trip the local check
     let _ = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
@@ -855,6 +911,41 @@ async fn total_attachment_size_more_than_limit() {
         &mut tether,
     )
     .await;
+    // Create on very large attachment
+    {
+        let mut attachment = Attachment {
+            local_id: None,
+            attachment_type: Default::default(),
+            local_address_id: None,
+            remote_address_id: None,
+            local_conversation_id: None,
+            remote_conversation_id: None,
+            local_message_id: None,
+            remote_message_id: None,
+            disposition: Default::default(),
+            enc_signature: None,
+            is_auto_forwardee: false,
+            key_packets: None,
+            mime_type: Default::default(),
+            filename: "".to_string(),
+            sender: None,
+            signature: None,
+            size: Attachment::MAX_ATTACHMENT_SIZE,
+            content_id: None,
+            transfer_encoding: None,
+            image_width: None,
+            image_height: None,
+        };
+        tether
+            .tx(async |tx| {
+                attachment.save(tx).await?;
+                let mut attachment_metadata =
+                    DraftAttachmentMetadata::new(draft.metadata_id, attachment.id(), 1, false);
+                attachment_metadata.save(tx).await
+            })
+            .await
+            .unwrap();
+    }
 
     // Execute action.
     let QueuedError::Action(err, _) = user_ctx.execute_all_send_actions().await.unwrap_err() else {
@@ -923,8 +1014,21 @@ async fn total_attachment_count_exceeds_limit() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    // Create 100 small attachments
     let mut tether = user_ctx.user_stash().connection();
+
+    // Create attachment before filling the database to avoid triggering local check
+
+    let _ = create_and_add_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Attachment,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+
+    // Create 100 small attachments
     {
         tether
             .tx::<_, _, StashError>(async |tx| {
@@ -963,17 +1067,6 @@ async fn total_attachment_count_exceeds_limit() {
             .unwrap();
     }
 
-    // Create attachment
-    let _ = create_and_add_attachment(
-        &user_ctx,
-        attachment_file.path(),
-        Disposition::Attachment,
-        &mut draft,
-        None,
-        &mut tether,
-    )
-    .await;
-
     // Execute action.
     let QueuedError::Action(err, _) = user_ctx.execute_all_send_actions().await.unwrap_err() else {
         unreachable!();
@@ -988,6 +1081,101 @@ async fn total_attachment_count_exceeds_limit() {
         ActionError::Action(MailContextError::Draft(draft::Error::AttachmentUpload(
             draft::AttachmentUploadError::TooManyAttachments
         )))
+    ));
+}
+
+#[tokio::test]
+async fn total_attachment_count_exceeds_limit_local() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let params = draft_test_params();
+    let attachment_file = tempfile::NamedTempFile::new().unwrap();
+    let message = draft_message();
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
+    draft.save().await.unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    let mut tether = user_ctx.user_stash().connection();
+
+    // Create 100 small attachments
+    {
+        tether
+            .tx::<_, _, StashError>(async |tx| {
+                for _ in 0..100 {
+                    let mut attachment = Attachment {
+                        local_id: None,
+                        attachment_type: Default::default(),
+                        local_address_id: None,
+                        remote_address_id: None,
+                        local_conversation_id: None,
+                        remote_conversation_id: None,
+                        local_message_id: None,
+                        remote_message_id: None,
+                        disposition: Default::default(),
+                        enc_signature: None,
+                        is_auto_forwardee: false,
+                        key_packets: None,
+                        mime_type: Default::default(),
+                        filename: "".to_string(),
+                        sender: None,
+                        signature: None,
+                        size: 10,
+                        content_id: None,
+                        transfer_encoding: None,
+                        image_width: None,
+                        image_height: None,
+                    };
+                    attachment.save(tx).await?;
+                    let mut attachment_metadata =
+                        DraftAttachmentMetadata::new(draft.metadata_id, attachment.id(), 1, false);
+                    attachment_metadata.save(tx).await?;
+                }
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
+    let local_attachment = create_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Attachment,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+
+    let err = draft.add_attachment(&local_attachment).await.unwrap_err();
+    assert!(matches!(
+        err,
+        MailContextError::Draft(draft::Error::AttachmentUpload(
+            draft::AttachmentUploadError::TooManyAttachments
+        ))
     ));
 }
 
