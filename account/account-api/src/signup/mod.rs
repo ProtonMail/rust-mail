@@ -243,10 +243,10 @@ impl SignupFlow {
     }
 
     /// Skip recovery information.
-    pub async fn skip_recovery(&mut self) -> Result<(), SignupError> {
+    pub async fn skip_recovery(&mut self, behavior: Option<Behavior>) -> Result<(), SignupError> {
         let recovery = Recovery::None;
 
-        let next = self.state()?.submit_recovery(recovery, None).await?;
+        let next = self.state()?.submit_recovery(recovery, behavior).await?;
 
         self.state.push(next);
 

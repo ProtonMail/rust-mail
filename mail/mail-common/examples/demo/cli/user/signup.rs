@@ -69,7 +69,7 @@ impl Cmd {
     }
 
     async fn on_want_recovery(flow: &mut SignupFlow) -> Result<()> {
-        flow.skip_recovery().await?;
+        flow.skip_recovery(None).await?;
 
         Ok(())
     }
