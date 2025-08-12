@@ -283,6 +283,7 @@ impl AppStateHandler for SessionSelectModel {
                         Some(CoreAccountState::LoggedIn(_)) => "LoggedIn",
                         Some(CoreAccountState::NeedMbp(_)) => "NeedMbp",
                         Some(CoreAccountState::NeedTfa(_)) => "NeedTfa",
+                        Some(CoreAccountState::NeedNewPass(_)) => "NeedNewPass",
                         Some(CoreAccountState::LoggedOut) => "LoggedOut",
                         None => "",
                     }

@@ -6,7 +6,7 @@ use crate::shared::SecureString;
 use crate::shared::crypto::{NewAddrKey, NewUserKey};
 use crate::{AccountApi, prelude::*};
 use futures::TryFutureExt;
-use proton_core_api::services::proton::{AddressId, ProtonCore, SessionId, User, UserId};
+use proton_core_api::services::proton::{AddressId, ProtonCore, SessionId, UserId};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use std::collections::HashMap;
@@ -20,7 +20,7 @@ pub struct WantNewPassword {
 }
 
 impl WantNewPassword {
-    pub(crate) fn new(client: muon::Client, data: StateData, _user: User) -> Self {
+    pub(crate) fn new(client: muon::Client, data: StateData) -> Self {
         info!("Login flow wants new password for temporary password user");
 
         Self { client, data }
@@ -69,11 +69,17 @@ impl WantNewPassword {
             .map_err(|e| (State::Invalid, e))?;
 
         // Re-fetch user to get updated key information
-        let _user = self
+        let user = self
             .client
             .get_users()
             .map_ok(|res| res.user)
             .map_err(|e| (State::Invalid, LoginError::UserFetch(e)))
+            .await?;
+
+        // Update the temporary password flag in the store.
+        (self.data.parts.store.write().await)
+            .set_temp_pass(user.flags.has_temporary_password)
+            .map_err(|e| (State::Invalid, LoginError::AuthStore(e)))
             .await?;
 
         // Call finalize to complete the login process with the new password
