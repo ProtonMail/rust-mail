@@ -40,7 +40,7 @@ use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::Subscriber;
-use proton_task_service::{AsyncTaskResult, Runtime, Spawner};
+use proton_task_service::{AsyncTaskResult, Spawner};
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
 use std::any::{Any, TypeId};
@@ -718,15 +718,6 @@ impl MailUserContext {
         F: Future<Output: Send> + Send + 'static,
     {
         self.user_context.spawn(task)
-    }
-
-    /// See [`UserContext::spawn_with()`].
-    pub fn spawn_with<R, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        R: Runtime,
-        F: Future<Output: Send> + Send + 'static,
-    {
-        self.user_context.spawn_with::<R, _>(task)
     }
 
     pub async fn has_unsent_messages(&self) -> Result<bool, MailContextError> {

@@ -37,7 +37,7 @@ use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, Runtime, Spawner};
+use proton_task_service::{AsyncTaskResult, Spawner};
 use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
@@ -962,15 +962,6 @@ impl MailContext {
         F: Future<Output: Send> + Send + 'static,
     {
         self.core_context.spawn(task)
-    }
-
-    /// See [`Context::spawn_with()`].
-    pub fn spawn_with<R, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        R: Runtime,
-        F: Future<Output: Send> + Send + 'static,
-    {
-        self.core_context.spawn_with::<R, _>(task)
     }
 
     /// Get all the logged in user context that are active and initialized.

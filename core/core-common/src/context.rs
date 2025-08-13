@@ -49,7 +49,7 @@ use proton_event_loop::EventLoopError;
 use proton_event_service::EventService;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, Runtime, Spawner, Tokio};
+use proton_task_service::{AsyncTaskResult, Spawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretVec};
@@ -1134,19 +1134,9 @@ impl Context {
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn_with::<Tokio, _>(task)
-    }
-
-    /// Like [`Self::spawn()`], but using given [`Runtime`].
-    pub fn spawn_with<R, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        R: Runtime,
-        F: Future<Output: Send> + Send + 'static,
-    {
         let token = self.cancellation_token.clone();
 
-        self.task_service
-            .spawn_cancellable_with::<R, _>(token, task)
+        self.task_service.spawn_cancellable(token, task)
     }
 
     /// Returns a cancellation token that is a child of the the one owned by the context.
