@@ -128,6 +128,10 @@ pub enum StoredAccountState {
     /// The variant holds the (remote) IDs of the sessions that require a second factor.
     NeedTfa(Vec<String>),
 
+    /// The account has a temporary password that must be set before it can be used.
+    /// The variant holds the (remote) IDs of the sessions that require a new password.
+    NeedNewPass(Vec<String>),
+
     /// The account has no active sessions.
     LoggedOut,
 }
@@ -149,6 +153,7 @@ impl From<&CoreAccountState> for StoredAccountState {
             CoreAccountState::LoggedIn(vec) => Self::LoggedIn(from_inner(vec)),
             CoreAccountState::NeedMbp(vec) => Self::NeedMbp(from_inner(vec)),
             CoreAccountState::NeedTfa(vec) => Self::NeedTfa(from_inner(vec)),
+            CoreAccountState::NeedNewPass(vec) => Self::NeedNewPass(from_inner(vec)),
             CoreAccountState::LoggedOut => Self::LoggedOut,
         }
     }

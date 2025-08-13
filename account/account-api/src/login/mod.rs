@@ -173,6 +173,26 @@ impl LoginFlow {
         }
     }
 
+    /// Resume the login flow at the new password step.
+    #[must_use]
+    pub fn new_from_new_password(
+        session: Session,
+        user_id: UserId,
+        session_id: SessionId,
+        migration_snooper: Box<dyn MigrationSnooper>,
+        post_login_validator: Box<dyn PostLoginValidator>,
+    ) -> Self {
+        let (client, parts) = session.to_parts();
+        let state = State::new_from_new_password(client, parts, user_id, session_id);
+
+        Self {
+            session,
+            state,
+            migration_snooper,
+            post_login_validator,
+        }
+    }
+
     /// Resume the login flow at the 2FA step.
     #[allow(clippy::too_many_arguments)]
     #[must_use]

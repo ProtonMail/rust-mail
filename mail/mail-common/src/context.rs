@@ -378,6 +378,7 @@ impl MailContext {
         session_id: SessionId,
     ) -> MailContextResult<LoginFlow> {
         let key = self.core_context.get_encryption_key()?;
+
         let tether = self.core_context.account_stash().connection();
 
         let account = CoreAccount::find_by_id(user_id.clone(), &tether)
@@ -400,8 +401,29 @@ impl MailContext {
             Arc::clone(&self.core_context),
         ));
 
-        match CoreSessionState::of(&session) {
-            CoreSessionState::NeedTfa => {
+        match self
+            .core_context
+            .get_account_state(user_id.clone())
+            .await?
+            .ok_or(MailContextError::AccountMissing(user_id.clone()))?
+        {
+            CoreAccountState::NotReady => {
+                Err(MailContextError::Other(anyhow!("account not ready")))
+            }
+
+            CoreAccountState::LoggedIn(_) => Err(MailContextError::Other(anyhow!(
+                "account already logged in"
+            ))),
+
+            CoreAccountState::NeedMbp(_) => Ok(LoginFlow::new_from_mbp(
+                api_session,
+                user_id,
+                session_id,
+                migration_snooper,
+                post_login_validator,
+            )),
+
+            CoreAccountState::NeedTfa(_) => {
                 let password = (account.password)
                     .map(|p| p.decrypt_to_string(&key))
                     .transpose()
@@ -426,7 +448,7 @@ impl MailContext {
                 ))
             }
 
-            CoreSessionState::NeedKey => Ok(LoginFlow::new_from_mbp(
+            CoreAccountState::NeedNewPass(_) => Ok(LoginFlow::new_from_new_password(
                 api_session,
                 user_id,
                 session_id,
@@ -434,9 +456,9 @@ impl MailContext {
                 post_login_validator,
             )),
 
-            CoreSessionState::Authenticated => Err(MailContextError::Other(anyhow!(
-                "session is already logged in"
-            ))),
+            CoreAccountState::LoggedOut => {
+                Err(MailContextError::Other(anyhow!("account logged out")))
+            }
         }
     }
 
