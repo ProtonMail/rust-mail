@@ -212,7 +212,7 @@ impl ChallengeLoader {
         let query = query.into_iter().map_into();
         let header = header.into_iter().map_into();
 
-        let res = uniffi_async(async move {
+        uniffi_async(async move {
             inner
                 .get(base, path, query, header)
                 .map_err(RealUserApiServiceError::try_from)
@@ -222,10 +222,37 @@ impl ChallengeLoader {
                 })
                 .await
         })
-        .map_err(ProtonError::from)
-        .await?;
+        .ok_into()
+        .err_into()
+        .await
+    }
 
-        Ok(res.into())
+    /// Send a POST request to the server and return the response.
+    pub async fn post(
+        &self,
+        base: String,
+        path: String,
+        query: Vec<Query>,
+        header: Vec<Header>,
+        body: Vec<u8>,
+    ) -> Result<ChallengeLoaderResponse, ProtonError> {
+        let inner = self.inner.clone();
+        let query = query.into_iter().map_into();
+        let header = header.into_iter().map_into();
+
+        uniffi_async(async move {
+            inner
+                .post(base, path, query, header, body)
+                .map_err(RealUserApiServiceError::try_from)
+                .map_err(|e| match e {
+                    Ok(e) => RealProtonMailError::ServerError(e.into()),
+                    Err(e) => RealProtonMailError::Unexpected(e.into()),
+                })
+                .await
+        })
+        .ok_into()
+        .err_into()
+        .await
     }
 }
 
