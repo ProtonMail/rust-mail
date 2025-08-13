@@ -431,17 +431,11 @@ impl MailContext {
                     .map(|p| p.expose_secret().to_owned())
                     .ok_or(MailContextError::Other(anyhow!("password not found")))?;
 
-                let mbp_mode = account
-                    .password_mode
-                    .map(|p| p.into())
-                    .ok_or(MailContextError::Other(anyhow!("password mode not found")))?;
-
                 Ok(LoginFlow::new_from_tfa(
                     api_session,
                     user_id,
                     session_id,
                     password,
-                    mbp_mode,
                     session.fido_details.map(|it| it.into_inner()),
                     migration_snooper,
                     post_login_validator,
