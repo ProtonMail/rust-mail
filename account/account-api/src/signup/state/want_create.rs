@@ -27,7 +27,6 @@ use proton_core_api::services::proton::SessionId;
 use proton_core_api::services::proton::UserId;
 use proton_core_api::store::AuthInfo;
 use proton_core_api::store::DynStore;
-use proton_core_api::store::MbpMode;
 use proton_core_api::store::TfaMode;
 use proton_core_api::store::UserData;
 use proton_core_api::{metric, services::observability::ObservabilityMetric};
@@ -98,7 +97,7 @@ impl WantCreate {
             )
             .await;
 
-        let client = match flow {
+        let (client, password_mode) = match flow {
             LoginFlow::Ok(client, data) => {
                 info!("Login successful after signup");
 
@@ -106,7 +105,6 @@ impl WantCreate {
                     user_id: UserId::from(user.id.clone()),
                     session_id: SessionId::from(data.session_id),
                     tfa_mode: TfaMode::none(),
-                    mbp_mode: MbpMode::from(data.password_mode),
                     fido_details: None,
                 };
 
@@ -117,7 +115,7 @@ impl WantCreate {
                     .map_err(SignupError::SetAuthInfoFailed)
                     .await?;
 
-                client
+                (client, data.password_mode)
             }
 
             LoginFlow::TwoFactor(..) => {
@@ -150,6 +148,7 @@ impl WantCreate {
             username: user.name.clone().unwrap_or_default(),
             display_name: user.display_name.clone().unwrap_or_default(),
             primary_addr: addr.email.clone(),
+            password_mode: password_mode.into(),
             key_secret: UserKeySecret(key_secret),
         };
 

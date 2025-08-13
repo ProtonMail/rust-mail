@@ -9,7 +9,6 @@ use muon::rest::auth::v4::fido2;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::observability::metrics;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::store::MbpMode;
 use proton_core_common::post_login_check::PostLoginValidator;
 use tracing::info;
 
@@ -18,7 +17,6 @@ pub struct WantTfa {
     flow: TfaFlow,
     data: StateData,
     pass: SecureString,
-    mode: MbpMode,
     fido_details: Option<fido2::Response>,
 }
 
@@ -27,7 +25,6 @@ impl WantTfa {
         flow: TfaFlow,
         data: StateData,
         pass: SecureString,
-        mode: MbpMode,
         fido_details: Option<fido2::Response>,
     ) -> Self {
         info!("Login flow wants 2FA");
@@ -36,7 +33,6 @@ impl WantTfa {
             flow,
             data,
             pass,
-            mode,
             fido_details,
         }
     }
@@ -50,7 +46,6 @@ impl WantTfa {
             flow,
             data,
             pass,
-            mode,
             fido_details,
         } = self;
 
@@ -63,7 +58,7 @@ impl WantTfa {
 
         match result {
             Ok(client) => {
-                Self::advance(client, data, pass, mode, post_login_validator)
+                Self::advance(client, data, pass, post_login_validator)
                     .map_err(|err| (State::TfaError, err))
                     .await
             }
@@ -73,7 +68,7 @@ impl WantTfa {
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.session_id, pass, mode, fido_details),
+                State::TfaRetry(data.user_id, data.session_id, pass, fido_details),
                 LoginError::FlowTotp(err),
             )),
         }
@@ -88,7 +83,6 @@ impl WantTfa {
             flow,
             data,
             pass,
-            mode,
             fido_details,
         } = self;
 
@@ -101,13 +95,13 @@ impl WantTfa {
 
         match result {
             Ok(client) => {
-                Self::advance(client, data, pass, mode, post_login_validator)
+                Self::advance(client, data, pass, post_login_validator)
                     .map_err(|err| (State::TfaError, err))
                     .await
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.session_id, pass, mode, fido_details),
+                State::TfaRetry(data.user_id, data.session_id, pass, fido_details),
                 LoginError::FlowFido(err),
             )),
         }
@@ -117,12 +111,11 @@ impl WantTfa {
         client: Client,
         data: StateData,
         pass: SecureString,
-        mode: MbpMode,
         post_login_validator: &dyn PostLoginValidator,
     ) -> Result<State, LoginError> {
         data.parts.store.write().await.clear_pass().await?;
 
-        State::inspect_user(client, data, pass, mode, post_login_validator).await
+        State::inspect_user(client, data, pass, post_login_validator).await
     }
 
     pub fn fido_details(&self) -> Option<&fido2::Response> {

@@ -41,7 +41,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Config as RealApiConfig;
 use proton_core_api::session::Session as ApiSession;
 use proton_core_api::status_watcher::StatusWatcher;
-use proton_core_api::store::{Store, TempStore, UserData};
+use proton_core_api::store::{MbpMode, Store, TempStore, UserData};
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
@@ -997,17 +997,18 @@ impl Context {
             .await
             .context("Missing key secret")?;
         let store = {
-            let mut store = TempStore::boxed();
             let account = self
                 .get_account(user_id)
                 .await?
                 .context("Missing account")?;
 
+            let mut store = TempStore::boxed();
             store
                 .set_user_data(UserData {
                     username: account.username.context("Missing username")?,
                     display_name: account.display_name.context("Missing display name")?,
                     primary_addr: account.primary_addr.context("Missing primary address")?,
+                    password_mode: account.password_mode.map_or(MbpMode::One, Into::into),
                     key_secret,
                 })
                 .await?;
