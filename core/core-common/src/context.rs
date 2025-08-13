@@ -49,7 +49,7 @@ use proton_event_loop::EventLoopError;
 use proton_event_service::EventService;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
+use proton_task_service::{AsyncTaskResult, Runtime, Spawner, Tokio};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretVec};
@@ -942,7 +942,7 @@ impl Context {
             }));
         }
 
-        Ok(builder.build().await?)
+        Ok(builder.build(self.as_weak()).await?)
     }
 
     async fn new_api_session_ext(
@@ -1032,7 +1032,7 @@ impl Context {
             builder = builder.with_status(status);
         }
 
-        let primary_session = builder.build().await?;
+        let primary_session = builder.build(self.as_weak()).await?;
 
         let forked_session = primary_session
             .downgrade_to_fork(
@@ -1133,19 +1133,19 @@ impl Context {
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn_with::<DefaultTaskSpawner, _>(task)
+        self.spawn_with::<Tokio, _>(task)
     }
 
-    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
-    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    /// Like [`Self::spawn()`], but using given [`Runtime`].
+    pub fn spawn_with<R, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
     where
-        S: TaskSpawner,
+        R: Runtime,
         F: Future<Output: Send> + Send + 'static,
     {
         let token = self.cancellation_token.clone();
 
         self.task_service
-            .spawn_cancellable_with::<S, _>(token, task)
+            .spawn_cancellable_with::<R, _>(token, task)
     }
 
     /// Returns a cancellation token that is a child of the the one owned by the context.
@@ -1207,6 +1207,15 @@ impl Context {
             .remote_id
             .clone();
         Ok(session_id)
+    }
+}
+
+impl Spawner for Context {
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(f)
     }
 }
 

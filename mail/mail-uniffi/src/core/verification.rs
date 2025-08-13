@@ -7,6 +7,7 @@ use proton_core_api::verification as hv;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::api_service_error::UserApiServiceError as RealUserApiServiceError;
 use proton_mail_common::errors::unexpected::Unexpected;
+use proton_task_service::Tokio;
 use std::{ops::Deref, sync::Arc};
 use tracing::error;
 
@@ -188,7 +189,7 @@ pub async fn new_challenge_loader(
         .map_err(|_| UnexpectedError::Config)?;
 
     let inner = uniffi_async(async move {
-        hv::ChallengeLoader::new(cfg.into())
+        hv::ChallengeLoader::new(cfg.into(), Tokio::weak())
             .inspect_err(|e| error!("{e:?}"))
             .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Config))
             .await

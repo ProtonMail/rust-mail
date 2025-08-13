@@ -1,5 +1,7 @@
 use super::proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement};
-use crate::{service::ApiServiceError, services::proton::ProtonData};
+use crate::{
+    service::ApiServiceError, services::proton::ProtonData, status_watcher::StatusWatcher,
+};
 use std::{
     sync::{Arc, LazyLock, Once},
     time::Duration,
@@ -15,15 +17,11 @@ use tracing::{debug, error, info, trace};
 pub mod metrics;
 pub mod store;
 
-use crate::status_observer::StatusObserver;
-
 static START: Once = Once::new();
 
-/// Global singleton for the observability manager, lazily initialized.
 static MANAGER: LazyLock<Arc<ObservabilityManager>> = LazyLock::new(|| {
     Arc::new(ObservabilityManager {
-        status: StatusObserver::default(),
-        store: Arc::new(RwLock::new(InMemoryMetricStore::default())),
+        store: RwLock::new(InMemoryMetricStore::default()),
     })
 });
 
@@ -32,34 +30,9 @@ pub trait ObservabilityMetric: Serialize {
     const VERSION: u64;
 }
 
-/// Manages the observability system, coordinating metric storage and sending.
-///
-/// This struct holds a `StatusObserver` for checking client connectivity and a
-/// thread-safe `MetricStore` for storing metrics. It supports periodic metric
-/// sending via an asynchronous task.
-// #[derive(Clone)]
 #[derive(Debug)]
 pub struct ObservabilityManager {
-    status: StatusObserver,
-    store: Arc<RwLock<InMemoryMetricStore>>,
-}
-
-/// Records metrics to the observability manager.
-///
-/// This struct provides a convenient interface for recording metrics, delegating
-/// storage to the global [`ObservabilityManager`]. It uses a reference to the
-/// singleton `MANAGER` for thread-safe operations.
-#[derive(Clone, Debug)]
-pub struct ObservabilityRecorder {
-    manager: Arc<ObservabilityManager>,
-}
-
-impl Default for ObservabilityRecorder {
-    fn default() -> Self {
-        Self {
-            manager: Arc::clone(&MANAGER),
-        }
-    }
+    store: RwLock<InMemoryMetricStore>,
 }
 
 impl ObservabilityManager {
@@ -74,15 +47,17 @@ impl ObservabilityManager {
     /// * `send_period` - The `Duration` between each metric-sending operation.
     /// * `batch_size` - The maximum number of metrics to send in each batch.
     ///
-    pub fn start(client: Client, send_period: Duration, batch_size: usize) {
+    pub fn start(status: StatusWatcher, client: Client, send_period: Duration, batch_size: usize) {
         START.call_once(|| {
             tokio::spawn(async move {
                 info!("Start ObservabilityManager task");
+
                 let mut interval = tokio::time::interval(send_period);
+
                 loop {
                     interval.tick().await;
                     trace!("ObservabilityManager tick");
-                    Self::post_metrics(batch_size, &client, MANAGER.store.clone()).await;
+                    Self::post_metrics(batch_size, &client, &status).await;
                 }
             });
         });
@@ -98,22 +73,19 @@ impl ObservabilityManager {
     ///
     /// * `count` - The maximum number of metrics to send.
     /// * `client` - The client used to send metrics.
-    async fn post_metrics(
-        batch_size: usize,
-        client: &Client,
-        store: Arc<RwLock<InMemoryMetricStore>>,
-    ) {
-        if MANAGER.status.status(client.clone()).await.is_offline() {
+    async fn post_metrics(batch_size: usize, client: &Client, status: &StatusWatcher) {
+        if status.status(client.clone()).await.is_offline() {
             trace!("Client is offline");
             return;
         }
+
         let elements = {
-            let mut store_lock = store.write();
             // We intentionally drop metrics even on failure. If we break schema compatibility,
             // we prefer to continue sending newer, supported events rather than getting stuck
             // retrying outdated or malformed ones indefinitely.
-            store_lock.remove_first_n(batch_size)
+            MANAGER.store.write().remove_first_n(batch_size)
         };
+
         let metric_count = elements.len();
 
         if metric_count == 0 {
@@ -144,30 +116,37 @@ impl ObservabilityManager {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct ObservabilityRecorder {
+    _priv: (),
+}
+
 impl ObservabilityRecorder {
     /// Records a metric to the observability system.
     ///
-    /// Serializes the metric and stores it
-    /// asynchronously in the manager's store. Errors during serialization or
-    /// storage are logged.
+    /// Serializes the metric and stores it asynchronously in the manager's
+    /// store. Errors during serialization or storage are logged.
     pub fn record<T: ObservabilityMetric>(&self, metric: T) {
-        let element = match Self::into_metrics_element(metric, Utc::now().timestamp(), 1) {
-            Ok(element) => element,
+        match Self::into_metrics_element(metric, Utc::now().timestamp(), 1) {
+            Ok(element) => {
+                MANAGER.store.write().store(element);
+            }
             Err(err) => {
                 error!("Could not serialize metric: {err:?}");
-                return;
             }
-        };
-        let mut store_lock = self.manager.store.write();
-        store_lock.store(element);
+        }
     }
 
-    pub fn into_metrics_element<T: ObservabilityMetric>(
+    pub fn into_metrics_element<T>(
         metric: T,
         timestamp: i64,
         value: u64,
-    ) -> Result<PostMetricsRequestElement, serde_json::Error> {
+    ) -> Result<PostMetricsRequestElement, serde_json::Error>
+    where
+        T: ObservabilityMetric,
+    {
         let labels = serde_json::to_value(metric)?;
+
         Ok(PostMetricsRequestElement {
             name: T::NAME.to_owned(),
             version: T::VERSION,

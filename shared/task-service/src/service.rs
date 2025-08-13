@@ -1,4 +1,4 @@
-use crate::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
+use crate::{AsyncTaskResult, Runtime, Tokio};
 use anyhow::anyhow;
 use parking_lot::Mutex;
 use pin_project::pin_project;
@@ -196,16 +196,16 @@ impl TaskService {
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn_with::<DefaultTaskSpawner, _>(future)
+        self.spawn_with::<Tokio, _>(future)
     }
 
-    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
-    pub fn spawn_with<S, F>(&self, future: F) -> JoinHandle<F::Output>
+    /// Like [`Self::spawn()`], but using given [`Runtime`].
+    pub fn spawn_with<R, F>(&self, future: F) -> JoinHandle<F::Output>
     where
-        S: TaskSpawner,
+        R: Runtime,
         F: Future<Output: Send> + Send + 'static,
     {
-        S::spawn(self.guard(future))
+        R::spawn(self.guard(future))
     }
 
     /// Spawns a new task that races with given cancellation token.
@@ -214,16 +214,16 @@ impl TaskService {
     /// otherwise this function returns [`AsyncTaskResult::Cancelled`].
     ///
     /// Spawned task can have its execution paused with [`Self::pause()`].
-    pub fn spawn_cancellable_with<S, F>(
+    pub fn spawn_cancellable_with<R, F>(
         &self,
         token: CancellationToken,
         future: F,
     ) -> JoinHandle<AsyncTaskResult<F::Output>>
     where
-        S: TaskSpawner,
+        R: Runtime,
         F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn_with::<S, _>(async move {
+        self.spawn_with::<R, _>(async move {
             tokio::select! {
                 () = token.cancelled() => AsyncTaskResult::Cancelled,
                 r = future => AsyncTaskResult::Completed(r),
@@ -421,13 +421,13 @@ impl BackgroundAwareTaskService {
         self.service.spawn(future)
     }
 
-    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
-    pub fn spawn_with<S, F>(&self, future: F) -> JoinHandle<F::Output>
+    /// Like [`Self::spawn()`], but using given [`Runtime`].
+    pub fn spawn_with<R, F>(&self, future: F) -> JoinHandle<F::Output>
     where
-        S: TaskSpawner,
+        R: Runtime,
         F: Future<Output: Send> + Send + 'static,
     {
-        self.service.spawn_with::<S, _>(future)
+        self.service.spawn_with::<R, _>(future)
     }
 
     /// Spawns a new task that races with given cancellation token.
@@ -436,16 +436,16 @@ impl BackgroundAwareTaskService {
     /// otherwise this function returns [`AsyncTaskResult::Cancelled`].
     ///
     /// Spawned task can have its execution paused with [`Self::pause()`].
-    pub fn spawn_cancellable_with<S, F>(
+    pub fn spawn_cancellable_with<R, F>(
         &self,
         token: CancellationToken,
         future: F,
     ) -> JoinHandle<AsyncTaskResult<F::Output>>
     where
-        S: TaskSpawner,
+        R: Runtime,
         F: Future<Output: Send> + Send + 'static,
     {
-        self.service.spawn_cancellable_with::<S, _>(token, future)
+        self.service.spawn_cancellable_with::<R, _>(token, future)
     }
 
     pub fn task_service(&self) -> &TaskService {

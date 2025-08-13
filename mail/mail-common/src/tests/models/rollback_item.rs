@@ -16,6 +16,7 @@ use proton_mail_common::{
     api_conversation, api_label, api_message_meta, conversation, label, message,
     test_utils::utils::create_address,
 };
+use proton_task_service::Tokio;
 use test_case::test_case;
 #[allow(unused_imports)]
 use wiremock::{
@@ -255,7 +256,7 @@ async fn start_server(tether: &Tether, batch_size: usize) -> (MockServer, Sessio
     let api = Session::builder()
         .with_config(api_config)
         .with_status(StatusWatcher::with_observer(StatusObserver::test()))
-        .build()
+        .build(Tokio::weak())
         .await
         .unwrap();
     let kinds = vec![

@@ -14,6 +14,7 @@ muon = { workspace = true }
 proton-account-api = { workspace = true }
 proton-core-api = { workspace = true }
 proton-crypto-inbox = { workspace = true }
+proton-task-service = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }

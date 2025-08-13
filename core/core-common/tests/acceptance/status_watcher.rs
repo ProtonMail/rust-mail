@@ -5,6 +5,7 @@ use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::test_utils::test_context::MockApiEnv;
 use proton_core_common::test_utils::utils::{catch_all, mock_auth_endpoints};
+use proton_task_service::Tokio;
 use std::time::Duration;
 use test_case::test_case;
 use tokio::time::sleep;
@@ -33,13 +34,13 @@ async fn shared_status() {
     let api_1 = Session::builder()
         .with_config(&api_config)
         .with_status(status.clone())
-        .build()
+        .build(Tokio::weak())
         .await
         .unwrap();
     let api_2 = Session::builder()
         .with_config(&api_config)
         .with_status(status)
-        .build()
+        .build(Tokio::weak())
         .await
         .unwrap();
     let api_3 = api_1.clone();
@@ -104,7 +105,7 @@ async fn make_another_request_when_stale() {
     let api = Session::builder()
         .with_config(api_config)
         .with_status(status)
-        .build()
+        .build(Tokio::weak())
         .await
         .unwrap();
 
@@ -135,7 +136,7 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
     let api = Session::builder()
         .with_config(api_config)
         .with_status(status)
-        .build()
+        .build(Tokio::weak())
         .await
         .unwrap();
 
@@ -168,7 +169,7 @@ async fn wait_for_online() {
     let api = Session::builder()
         .with_config(api_config)
         .with_status(status)
-        .build()
+        .build(Tokio::weak())
         .await
         .unwrap();
 
@@ -208,7 +209,7 @@ async fn multiple_subscribers() {
     let api = Session::builder()
         .with_config(api_config)
         .with_status(status)
-        .build()
+        .build(Tokio::weak())
         .await
         .unwrap();
 
@@ -276,7 +277,7 @@ async fn status_reflected_in_response_http_code(http_code: u16, expected_status:
     let api = Session::builder()
         .with_config(api_config)
         .with_status(status_watcher(500))
-        .build()
+        .build(Tokio::weak())
         .await
         .unwrap();
 

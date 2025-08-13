@@ -57,5 +57,5 @@
 mod service;
 mod spawn;
 
-pub use service::*;
-pub use spawn::*;
+pub use self::service::*;
+pub use self::spawn::*;
