@@ -442,12 +442,10 @@ impl Draft {
     ) -> Result<HtmlForComposer, ProtonError> {
         let theme_opts = theme_opts.into();
         Ok(async_runtime().block_on(async {
-            let instance = self.cached.read().await;
-            let head_content = self
+            let (head_content, initial_body) = self
                 .instance
                 .html_head_content_for_composer(theme_opts, editor_id)
                 .await?;
-            let initial_body = instance.body.clone();
 
             Ok::<_, RealProtonMailError>(HtmlForComposer {
                 head_content,
