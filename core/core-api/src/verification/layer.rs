@@ -6,7 +6,7 @@ use crate::verification::{ChallengePayload, DynChallengeNotifier};
 use muon::common::{BoxFut, Sender, SenderLayer};
 use muon::util::ProtonRequestExt;
 use muon::{ProtonRequest, ProtonResponse, Result as MuonResult, Status};
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 /// A type that wraps a [`ChallengeObserver`] and to implement the [`SenderLayer`] trait.
 pub struct ChallengeNotifierLayer {
@@ -39,7 +39,21 @@ impl ChallengeNotifierLayer {
             return Ok(res);
         }
 
-        self.on_challenge(inner, req, res, err).await
+        let ctl = req.get_timeout_ctl();
+
+        if let Some(ctl) = &ctl {
+            debug!("pausing timeout during human verification");
+            ctl.pause();
+        }
+
+        let res = self.on_challenge(inner, req, res, err).await?;
+
+        if let Some(ctl) = &ctl {
+            debug!("resuming timeout after human verification");
+            ctl.resume();
+        }
+
+        Ok(res)
     }
 
     async fn on_challenge<S>(
