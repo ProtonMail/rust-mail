@@ -5,7 +5,7 @@ macro_rules! declare_proton_id {
         $visibility:vis $name:ident
     ) => {
         $(#[$($attrss)*])*
-        #[derive(Clone, Debug, serde::Deserialize, Eq, Hash, PartialEq, serde::Serialize)]
+        #[derive(Clone, Debug, serde::Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
         $visibility struct $ name(String);
 
         impl $name {

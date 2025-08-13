@@ -1069,12 +1069,15 @@ fn test_mail_settings() -> ApiMailSettings {
 
 #[track_caller]
 fn conv_is_labeled(conv: &Conversation, expected_labels: impl Into<Vec<LabelId>>) {
-    let expected_labels = expected_labels.into();
-    let actual_labels = conv
+    let mut expected_labels: Vec<_> = expected_labels.into();
+    let mut actual_labels = conv
         .labels
         .iter()
         .map(|l| l.remote_label_id.clone().unwrap())
         .collect_vec();
+
+    expected_labels.sort();
+    actual_labels.sort();
 
     assert_eq!(actual_labels, expected_labels);
 }
