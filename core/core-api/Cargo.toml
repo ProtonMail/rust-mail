@@ -32,7 +32,6 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 
-
 [dev-dependencies]
 insta = { workspace = true }
 proton-core-api = { path = ".", features = ["mocks"] }

@@ -11,12 +11,6 @@ pub enum AsyncTaskResult<T> {
     Cancelled,
 }
 
-pub trait Runtime {
-    fn spawn<F>(f: F) -> JoinHandle<F::Output>
-    where
-        F: Future<Output: Send> + Send + 'static;
-}
-
 pub struct Tokio;
 
 impl Tokio {
@@ -29,15 +23,6 @@ impl Tokio {
         mem::forget(this);
 
         this_weak
-    }
-}
-
-impl Runtime for Tokio {
-    fn spawn<F>(f: F) -> JoinHandle<F::Output>
-    where
-        F: Future<Output: Send> + Send + 'static,
-    {
-        tokio::spawn(f)
     }
 }
 

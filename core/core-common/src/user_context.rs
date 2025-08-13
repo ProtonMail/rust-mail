@@ -15,7 +15,7 @@ use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, Runtime, Tokio};
+use proton_task_service::AsyncTaskResult;
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use stash::watcher::TableWatcher;
@@ -299,20 +299,9 @@ impl UserContext {
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn_with::<Tokio, _>(task)
-    }
-
-    /// Like [`Self::spawn()`], but using given [`Runtime`].
-    pub fn spawn_with<R, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        R: Runtime,
-        F: Future<Output: Send> + Send + 'static,
-    {
         let token = self.cancellation_token.clone();
 
-        self.context
-            .task_service()
-            .spawn_cancellable_with::<R, _>(token, task)
+        self.context.task_service().spawn_cancellable(token, task)
     }
 
     #[must_use]
