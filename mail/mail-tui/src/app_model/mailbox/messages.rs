@@ -1466,6 +1466,10 @@ fn label_message(
     Command::task(async move {
         match f.await {
             Ok(output) => {
+                let Some(undo) = output.undo else {
+                    return Command::None;
+                };
+
                 let ctx = ctx.clone();
                 let popup = YesNoPopup::new(
                     "Undo Labeling?",
@@ -1476,8 +1480,7 @@ fn label_message(
                         "Cancelling Send".to_owned(),
                     )),
                     Command::task(async move {
-                        if let Err(e) = output
-                            .undo
+                        if let Err(e) = undo
                             .undo(ctx.action_queue(), &mut ctx.user_stash().connection())
                             .await
                             .context("Error undoing message labelling")

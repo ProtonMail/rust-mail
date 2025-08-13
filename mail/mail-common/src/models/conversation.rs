@@ -356,60 +356,113 @@ impl Conversation {
         )
         .await?;
 
-        let action = LabelAs(LabelAsData::new(
-            cartesian
-                .into_iter()
-                .filter_map(|x| {
-                    Some(LabelPair {
-                        label: x.local_label_id?,
-                        id: x.local_conversation_id?,
+        let label_as_action = {
+            let action = LabelAs(LabelAsData::new(
+                cartesian
+                    .into_iter()
+                    .filter_map(|x| {
+                        Some(LabelPair {
+                            label: x.local_label_id?,
+                            id: x.local_conversation_id?,
+                        })
                     })
-                })
-                .collect(),
-            source_label_id,
-            conversation_ids.clone(),
-            &selected_label_ids,
-            &partially_selected_label_ids,
-            &all_labels,
-        ));
+                    .collect(),
+                source_label_id,
+                conversation_ids.clone(),
+                &selected_label_ids,
+                &partially_selected_label_ids,
+                &all_labels,
+            ));
 
-        let output = if must_archive
-            && let Some(move_action) = {
-                let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
-                ActionMoveData::new(tether, archive, conversation_ids).await?
-            } {
-            // We have to undo the archiving
-            let queued_move = queue
-                .queue_action(action.clone())
-                .await
-                .context("Error queuing move to archive")?;
-
-            let meta = MetadataBuilder::new()
-                .with_dependency(queued_move.id)
-                .build();
-
-            queue
-                .queue_action_with_metadata(Move(move_action), meta)
-                .await
-                .context("Error queuing with move to archive dependency")?;
-            queued_move
-        } else {
-            queue
-                .queue_action(action.clone())
-                .await
-                .context("Error queuing action")?
+            if action.0.is_empty() {
+                None
+            } else {
+                Some(action)
+            }
         };
 
-        let undo = Undo::ConversationsLabelAs(UndoLabelAsConversations {
-            action,
-            id: output.id,
-            must_archive,
-        });
+        let move_action = if must_archive {
+            let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
+            ActionMoveData::new(tether, archive, conversation_ids)
+                .await?
+                .map(Move)
+        } else {
+            None
+        };
 
-        Ok(LabelAsOutput {
-            input_label_is_empty: output.local,
-            undo,
-        })
+        // There are 4 possibilities:
+        // - No labels   && no archive -> do nothing,  no undo
+        // - some labels && no archive -> queue label, no undo
+        // - no labels   && archive    -> just move,   undo
+        // - some labels && archive    -> queue both,  undo
+
+        let output = match (label_as_action, move_action) {
+            (None, None) => {
+                warn!("No labels && no archive -> noop");
+                LabelAsOutput {
+                    input_label_is_empty: false,
+                    undo: None,
+                }
+            }
+            (Some(label_as_action), None) => {
+                debug!("some labels && no archive -> queue label, no undo");
+                let input_label_is_empty = queue
+                    .queue_action(label_as_action)
+                    .await
+                    .context("Error labeling locally")?
+                    .local;
+
+                LabelAsOutput {
+                    input_label_is_empty,
+                    undo: None,
+                }
+            }
+            (None, Some(move_action)) => {
+                debug!("no labels && archive -> just move, undo");
+                let QueuedActionOutput { local, id } = queue
+                    .queue_action(move_action)
+                    .await
+                    .context("Error queuing move to archive")?;
+
+                let undo = Some(Undo::ConversationsMoveTo(UndoMoveToConversations {
+                    action: local,
+                    id,
+                }));
+
+                LabelAsOutput {
+                    input_label_is_empty: false,
+                    undo,
+                }
+            }
+            (Some(label_as_action), Some(move_action)) => {
+                debug!("some labels && archive -> queue both, undo");
+                let queued_label_as = queue
+                    .queue_action(label_as_action.clone())
+                    .await
+                    .context("Error queuing move to archive")?;
+
+                let meta = MetadataBuilder::new()
+                    .with_dependency(queued_label_as.id)
+                    .build();
+
+                queue
+                    .queue_action_with_metadata(move_action, meta)
+                    .await
+                    .context("Error queuing with move to archive dependency")?;
+                let undo = Some(Undo::ConversationsLabelAs(UndoLabelAsConversations {
+                    action: label_as_action,
+                    id: queued_label_as.id,
+                    must_archive: true,
+                }));
+
+                LabelAsOutput {
+                    input_label_is_empty: queued_label_as.local,
+                    undo,
+                }
+            }
+        };
+
+        Ok(output)
     }
 
     pub async fn action_snooze(
