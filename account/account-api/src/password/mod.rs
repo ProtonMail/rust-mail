@@ -271,8 +271,19 @@ impl PasswordFlow {
     }
 
     /// Get the FIDO2 details for authentication.
-    pub fn get_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
-        self.state()?.fido_details()
+    ///
+    /// ⚠️  WARNING: This returns potentially stale FIDO2 details from the initial auth info.
+    /// For actual authentication, use `fetch_fresh_fido_details()` instead.
+    pub fn get_cached_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
+        self.state()?.cached_fido_details()
+    }
+
+    /// Fetch fresh FIDO2 details for authentication.
+    ///
+    /// This method calls the `/auth/info` endpoint to get current FIDO2 challenge details.
+    /// Use this instead of `get_cached_fido_details()` for actual authentication flows.
+    pub async fn fetch_fresh_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
+        self.state()?.fetch_fresh_fido_details().await
     }
 
     /// Get whether the account has a mailbox password.

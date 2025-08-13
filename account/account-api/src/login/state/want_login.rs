@@ -8,7 +8,7 @@ use base64::prelude::BASE64_STANDARD;
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginFlow, LoginFlowData, WithCodeFlow};
 use muon::client::{Auth, Tokens};
-use muon::rest::auth::v4::fido2;
+
 use proton_core_api::auth::KeySecret;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::observability::metrics::AuthV4RequestMetric;
@@ -156,7 +156,7 @@ impl WantLogin {
             .write()
             .await
             .set_name_or_addr(&user.username);
-        let info = get_auth_info(&data, false, None);
+        let info = get_auth_info(&data, false, false);
         self.parts
             .store
             .write()
@@ -193,7 +193,7 @@ impl WantLogin {
                     ApiServiceObservabilityResponse::Success,
                 ));
 
-                let info = get_auth_info(&flow_data, false, None);
+                let info = get_auth_info(&flow_data, false, false);
                 self.parts.store.write().await.set_auth_info(info).await?;
                 let data = get_state_data(&flow_data, self.parts);
 
@@ -220,7 +220,8 @@ impl WantLogin {
                 // Always cache the password temporarily - we'll determine later if we need it
                 self.parts.store.write().await.set_pass(&pass).await?;
 
-                let info = get_auth_info(&flow_data, flow.has_totp(), flow.fido_details());
+                let info =
+                    get_auth_info(&flow_data, flow.has_totp(), flow.fido_details().is_some());
                 let mode = flow_data.password_mode.into();
                 self.parts.store.write().await.set_auth_info(info).await?;
                 let data = get_state_data(&flow_data, self.parts);
@@ -288,17 +289,12 @@ async fn check_store_auth(parts: &SessionParts, user_id: &str) -> Result<(), Log
     Err(LoginError::MissingSession)
 }
 
-fn get_auth_info(
-    data: &LoginFlowData,
-    totp: bool,
-    fido_details: Option<&fido2::Response>,
-) -> AuthInfo {
+fn get_auth_info(data: &LoginFlowData, totp: bool, has_fido: bool) -> AuthInfo {
     AuthInfo {
         user_id: UserId::from(data.user_id.clone()),
         session_id: SessionId::from(data.session_id.clone()),
-        tfa_mode: TfaMode::new(totp, fido_details.is_some()),
+        tfa_mode: TfaMode::new(totp, has_fido),
         mbp_mode: MbpMode::from(data.password_mode),
-        fido_details: fido_details.cloned(),
     }
 }
 

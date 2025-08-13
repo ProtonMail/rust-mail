@@ -166,7 +166,11 @@ impl State {
     }
 
     /// Get the FIDO2 details for authentication.
-    pub fn fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
+    ///
+    /// ⚠️  WARNING: This returns potentially stale FIDO2 details from the initial auth info.
+    /// For actual authentication, use `fetch_fresh_fido_details()` instead.
+    /// This method should only be used for UI purposes to show available auth methods.
+    pub fn cached_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
         let info = match self {
             Self::WantPass(state) => &state.auth_info,
             Self::WantTfa(state) => &state.auth_info,
@@ -175,6 +179,33 @@ impl State {
         };
 
         match &info.tfa {
+            Some(tfa) => Ok(tfa.fido_details()),
+            None => Ok(None),
+        }
+    }
+
+    /// Fetch fresh FIDO2 details for authentication.
+    ///
+    /// This method calls the `/auth/info` endpoint to get current FIDO2 challenge details.
+    /// Use this instead of `fido_details()` for actual authentication flows.
+    pub async fn fetch_fresh_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
+        let (client, username) = match self {
+            Self::WantPass(state) => (&state.client, &state.username),
+            Self::WantTfa(state) => (&state.client, &state.username),
+            Self::WantChange(state) => (&state.client, &state.username),
+            _ => return Err(PasswordError::InvalidState),
+        };
+
+        let request = PostAuthInfoRequest {
+            username: username.clone(),
+        };
+
+        let fresh_auth_info = client
+            .post_auth_info(request)
+            .map_err(PasswordError::ApiService)
+            .await?;
+
+        match &fresh_auth_info.tfa {
             Some(tfa) => Ok(tfa.fido_details()),
             None => Ok(None),
         }

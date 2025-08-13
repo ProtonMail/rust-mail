@@ -270,16 +270,18 @@ impl PasswordFlow {
         async_runtime().block_on(async { Ok(self.flow.lock().await.has_fido()?) })
     }
 
-    /// Get the FIDO2 details for authentication.
-    pub fn get_fido_details(&self) -> Result<Option<Fido2ResponseFfi>, PasswordError> {
-        async_runtime().block_on(async {
-            Ok(self
-                .flow
-                .lock()
-                .await
-                .get_fido_details()?
-                .map(Fido2ResponseFfi::from))
+    /// Get fresh FIDO2 details for authentication.
+    ///
+    /// This method calls the `/auth/info` endpoint to get current FIDO2 challenge details.
+    pub async fn get_fido_details(&self) -> Result<Option<Fido2ResponseFfi>, PasswordError> {
+        let flow = self.flow.clone();
+
+        uniffi_async::<_, PasswordError, _>(async move {
+            let guard = flow.lock().await;
+            let fido_details = guard.fetch_fresh_fido_details().await?;
+            Ok(fido_details.map(Fido2ResponseFfi::from))
         })
+        .await
     }
 
     /// Get whether the account has a mailbox password.

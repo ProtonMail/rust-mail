@@ -1,7 +1,7 @@
 use anyhow::bail;
 use async_trait::async_trait;
 use muon::client::PasswordMode;
-use muon::rest::auth::v4::fido2;
+
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ pub struct AuthInfo {
     pub session_id: SessionId,
     pub tfa_mode: TfaMode,
     pub mbp_mode: MbpMode,
-    pub fido_details: Option<fido2::Response>,
+    // FIDO2 details removed - they are single-use and should not be persisted
 }
 
 #[derive(Debug, Clone)]

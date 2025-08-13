@@ -442,7 +442,7 @@ impl MailContext {
                     session_id,
                     password,
                     mbp_mode,
-                    session.fido_details.map(|it| it.into_inner()),
+                    None, // Don't use persisted FIDO2 details - they are single-use
                     migration_snooper,
                     post_login_validator,
                 ))

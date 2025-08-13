@@ -68,6 +68,10 @@ impl LoginFlow {
         .into()
     }
 
+    /// Get the FIDO2 details for authentication.
+    ///
+    /// ⚠️  WARNING: This returns potentially stale FIDO2 details from the initial auth info.
+    /// For actual authentication, use `get_fido_details()` from the `PasswordFlow` instead.
     #[must_use]
     pub fn get_fido_details(&self) -> Option<Fido2ResponseFfi> {
         async_runtime().block_on(async {
