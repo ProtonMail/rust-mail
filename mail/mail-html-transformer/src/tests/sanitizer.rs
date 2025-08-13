@@ -41,3 +41,13 @@ fn style_elements_are_kept() {
     let html = t.to_string();
     insta::assert_snapshot!(html);
 }
+
+#[test]
+fn strip_invalid_uris() {
+    let html = include_str!("../../tests/htmls/strip_uri_elements.html");
+
+    let mut t = Transformer::new(html);
+    let _count = t.strip_whitelist();
+    let html = t.to_string();
+    insta::assert_snapshot!(html);
+}

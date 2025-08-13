@@ -2,7 +2,10 @@
 #[path = "tests/sanitizer.rs"]
 mod tests;
 
-use kuchikiki::{NodeData, NodeRef, iter::NodeEdge};
+use html5ever::ns;
+use html5ever::{LocalName, namespace_url};
+use kuchikiki::{Attribute, ExpandedName, NodeData, NodeRef, iter::NodeEdge};
+use std::sync::OnceLock;
 use std::{collections::HashSet, sync::LazyLock};
 use velcro::hash_set;
 
@@ -129,122 +132,122 @@ static TAG_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     }
 });
 
-static ATTR_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+static ATTR_SET: LazyLock<HashSet<LocalName>> = LazyLock::new(|| {
     hash_set! {
-        "data-proton-original-style", // For reverting dark mode injection in inline attributes.
-        "proton-src",
-        "target",
-        "accept",
-        "action",
-        "align",
-        "alt",
-        "autocapitalize",
-        "autocomplete",
-        "autopictureinpicture",
-        "autoplay",
-        "background",
-        "bgcolor",
-        "border",
-        "capture",
-        "cellpadding",
-        "cellspacing",
-        "checked",
-        "cite",
-        "class",
-        "clear",
-        "color",
-        "cols",
-        "colspan",
-        "controls",
-        "controlslist",
-        "coords",
-        "crossorigin",
-        "datetime",
-        "decoding",
-        "default",
-        "dir",
-        "disabled",
-        "disablepictureinpicture",
-        "disableremoteplayback",
-        "download",
-        "draggable",
-        "enctype",
-        "enterkeyhint",
-        "face",
-        "headers",
-        "height",
-        "hidden",
-        "high",
-        "href",
-        "hreflang",
-        "id",
-        "inputmode",
-        "integrity",
-        "ismap",
-        "kind",
-        "label",
-        "lang",
-        "list",
-        "loading",
-        "loop",
-        "low",
-        "max",
-        "maxlength",
-        "media",
-        "method",
-        "min",
-        "minlength",
-        "multiple",
-        "muted",
-        "name",
-        "nonce",
-        "noshade",
-        "novalidate",
-        "nowrap",
-        "open",
-        "optimum",
-        "pattern",
-        "placeholder",
-        "playsinline",
-        "popover",
-        "popovertarget",
-        "popovertargetaction",
-        "poster",
-        "preload",
-        "pubdate",
-        "radiogroup",
-        "readonly",
-        "rel",
-        "required",
-        "rev",
-        "reversed",
-        "role",
-        "rows",
-        "rowspan",
-        "spellcheck",
-        "scope",
-        "selected",
-        "shape",
-        "size",
-        "sizes",
-        "span",
-        "srclang",
-        "start",
-        "src",
-        "step",
-        "style",
-        "summary",
-        "tabindex",
-        "title",
-        "translate",
-        "type",
-        "usemap",
-        "valign",
-        "value",
-        "width",
-        "wrap",
-        "xmlns",
-        "slot",
+        LocalName::from("data-proton-original-style"), // For reverting dark mode injection in inline attributes.
+        LocalName::from("proton-src"),
+        LocalName::from("target"),
+        LocalName::from("accept"),
+        LocalName::from("action"),
+        LocalName::from("align"),
+        LocalName::from("alt"),
+        LocalName::from("autocapitalize"),
+        LocalName::from("autocomplete"),
+        LocalName::from("autopictureinpicture"),
+        LocalName::from("autoplay"),
+        LocalName::from("background"),
+        LocalName::from("bgcolor"),
+        LocalName::from("border"),
+        LocalName::from("capture"),
+        LocalName::from("cellpadding"),
+        LocalName::from("cellspacing"),
+        LocalName::from("checked"),
+        LocalName::from("cite"),
+        LocalName::from("class"),
+        LocalName::from("clear"),
+        LocalName::from("color"),
+        LocalName::from("cols"),
+        LocalName::from("colspan"),
+        LocalName::from("controls"),
+        LocalName::from("controlslist"),
+        LocalName::from("coords"),
+        LocalName::from("crossorigin"),
+        LocalName::from("datetime"),
+        LocalName::from("decoding"),
+        LocalName::from("default"),
+        LocalName::from("dir"),
+        LocalName::from("disabled"),
+        LocalName::from("disablepictureinpicture"),
+        LocalName::from("disableremoteplayback"),
+        LocalName::from("download"),
+        LocalName::from("draggable"),
+        LocalName::from("enctype"),
+        LocalName::from("enterkeyhint"),
+        LocalName::from("face"),
+        LocalName::from("headers"),
+        LocalName::from("height"),
+        LocalName::from("hidden"),
+        LocalName::from("high"),
+        LocalName::from("href"),
+        LocalName::from("hreflang"),
+        LocalName::from("id"),
+        LocalName::from("inputmode"),
+        LocalName::from("integrity"),
+        LocalName::from("ismap"),
+        LocalName::from("kind"),
+        LocalName::from("label"),
+        LocalName::from("lang"),
+        LocalName::from("list"),
+        LocalName::from("loading"),
+        LocalName::from("loop"),
+        LocalName::from("low"),
+        LocalName::from("max"),
+        LocalName::from("maxlength"),
+        LocalName::from("media"),
+        LocalName::from("method"),
+        LocalName::from("min"),
+        LocalName::from("minlength"),
+        LocalName::from("multiple"),
+        LocalName::from("muted"),
+        LocalName::from("name"),
+        LocalName::from("nonce"),
+        LocalName::from("noshade"),
+        LocalName::from("novalidate"),
+        LocalName::from("nowrap"),
+        LocalName::from("open"),
+        LocalName::from("optimum"),
+        LocalName::from("pattern"),
+        LocalName::from("placeholder"),
+        LocalName::from("playsinline"),
+        LocalName::from("popover"),
+        LocalName::from("popovertarget"),
+        LocalName::from("popovertargetaction"),
+        LocalName::from("poster"),
+        LocalName::from("preload"),
+        LocalName::from("pubdate"),
+        LocalName::from("radiogroup"),
+        LocalName::from("readonly"),
+        LocalName::from("rel"),
+        LocalName::from("required"),
+        LocalName::from("rev"),
+        LocalName::from("reversed"),
+        LocalName::from("role"),
+        LocalName::from("rows"),
+        LocalName::from("rowspan"),
+        LocalName::from("spellcheck"),
+        LocalName::from("scope"),
+        LocalName::from("selected"),
+        LocalName::from("shape"),
+        LocalName::from("size"),
+        LocalName::from("sizes"),
+        LocalName::from("span"),
+        LocalName::from("srclang"),
+        LocalName::from("start"),
+        LocalName::from("src"),
+        LocalName::from("step"),
+        LocalName::from("style"),
+        LocalName::from("summary"),
+        LocalName::from("tabindex"),
+        LocalName::from("title"),
+        LocalName::from("translate"),
+        LocalName::from("type"),
+        LocalName::from("usemap"),
+        LocalName::from("valign"),
+        LocalName::from("value"),
+        LocalName::from("width"),
+        LocalName::from("wrap"),
+        LocalName::from("xmlns"),
+        LocalName::from("slot"),
     }
 });
 
@@ -281,7 +284,9 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
                 }
 
                 let mut attrs = e.attributes.borrow_mut();
-                attrs.map.retain(|name, _| ATTR_SET.contains(&&*name.local));
+                attrs.map.retain(|name, value| {
+                    ATTR_SET.contains(&name.local) && validate_uri_attribute(name, value)
+                });
                 None
             }
             _ => None,
@@ -298,4 +303,69 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
         node.detach();
     }
     total as u64
+}
+
+fn validate_uri_attribute(name: &ExpandedName, value: &mut Attribute) -> bool {
+    if !get_uri_attributes().contains(name) {
+        return true;
+    }
+
+    let Ok(uri) = url::Url::parse(&value.value) else {
+        // Invalid urls should be ignored
+        return false;
+    };
+
+    let scheme = uri.scheme().to_lowercase();
+
+    if scheme == "cid" {
+        // Check if the cid data is actually valid
+        // https://datatracker.ietf.org/doc/html/rfc2392
+        let cid_data = uri.path();
+        return if email_address::EmailAddress::parse_with_options(
+            cid_data,
+            email_address::Options::default()
+                .without_display_text()
+                .with_long_local_parts()
+                .with_required_tld(),
+        )
+        .is_err()
+        {
+            // We are using uids for while in ET, check if this actually a UID.
+            uri.path()
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        } else {
+            true
+        };
+    }
+
+    scheme == "https" || scheme == "http" || scheme == "data"
+}
+static URI_ATTRIBUTES: OnceLock<HashSet<ExpandedName>> = OnceLock::new();
+
+fn get_uri_attributes() -> &'static HashSet<ExpandedName> {
+    URI_ATTRIBUTES.get_or_init(|| {
+        HashSet::from([
+            ExpandedName::new("", "url"),
+            ExpandedName::new("", "src"),
+            ExpandedName::new("", "srcset"),
+            ExpandedName::new("", "svg"),
+            ExpandedName::new("", "background"),
+            ExpandedName::new("", "poster"),
+            ExpandedName::new("", "data-src"),
+            ExpandedName::new("", "href"),
+            ExpandedName::new("", "cite"),
+            ExpandedName::new("", "action"),
+            ExpandedName::new("", "profile"),
+            ExpandedName::new("", "longdesc"),
+            ExpandedName::new("", "classid"),
+            ExpandedName::new("", "codebase"),
+            ExpandedName::new("", "data"),
+            ExpandedName::new("", "usemap"),
+            ExpandedName::new("", "fromaction"),
+            ExpandedName::new("", "poster"),
+            ExpandedName::new("", "archive"),
+            ExpandedName::new(ns!(xlink), "href"),
+        ])
+    })
 }

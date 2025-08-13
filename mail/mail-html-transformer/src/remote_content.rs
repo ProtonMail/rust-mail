@@ -87,11 +87,12 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
             let Some(attr) = attributes.map.get_mut(item) else {
                 continue;
             };
+            let attr_lower = attr.value.to_lowercase();
             let attr = &mut attr.value;
-            if attr.starts_with("cid:") ||
+            if attr_lower.starts_with("cid:") ||
             // We disable data: because otherwise the clients might freak out
             // If at some point we treat PGP inline attachments different revisit this.
-            attr.starts_with("data:")
+            attr_lower.starts_with("data:")
             {
                 if hide_embedded {
                     *attr = String::new();
