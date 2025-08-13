@@ -1548,7 +1548,7 @@ impl Message {
             }
         }
 
-        let mut label_ids = BTreeSet::new();
+        let mut label_ids: HashMap<LocalLabelId, u64> = HashMap::new();
         // Update conversation labels
         for id_pair in &updated {
             let mut conversation_labels = ConversationLabel::find(
@@ -1566,26 +1566,30 @@ impl Message {
                         conversation_label.context_num_unread.saturating_sub(1);
 
                     if conversation_label.context_num_unread == 0 {
-                        label_ids.insert(conversation_label.local_label_id.unwrap());
+                        *label_ids
+                            .entry(conversation_label.local_label_id.unwrap())
+                            .or_insert(0) += 1;
                     }
                 } else {
                     conversation_label.context_num_unread += 1;
 
                     if conversation_label.context_num_unread == 1 {
-                        label_ids.insert(conversation_label.local_label_id.unwrap());
+                        *label_ids
+                            .entry(conversation_label.local_label_id.unwrap())
+                            .or_insert(0) += 1;
                     }
                 }
                 conversation_label.save(bond).await?
             }
         }
 
-        for label_id in label_ids {
+        for (label_id, count) in label_ids {
             // Update conversation label counts.
             if let Some(mut counters) = ConversationCounters::find_by_id(label_id, bond).await? {
                 if mark_read {
-                    counters.unread = counters.unread.saturating_sub(1);
+                    counters.unread = counters.unread.saturating_sub(count);
                 } else {
-                    counters.unread += 1;
+                    counters.unread += count;
                 }
                 counters.save(bond).await?;
             }
