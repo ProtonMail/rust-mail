@@ -187,7 +187,7 @@ sql_using_serde!(AttachmentType);
 
 impl Attachment {
     pub const MAX_ATTACHMENTS_PER_MESSAGE: usize = 100;
-    pub const MAX_ATTACHMENT_SIZE: u64 = 25 * 1025 * 1024;
+    pub const MAX_ATTACHMENT_SIZE: u64 = 25 * 1024 * 1024;
 
     pub fn remote_id(&self) -> Option<AttachmentId> {
         match &self.attachment_type {

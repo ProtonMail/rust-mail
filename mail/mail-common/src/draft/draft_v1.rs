@@ -1584,6 +1584,16 @@ impl DraftAttachmentUploadQueuer {
     ) -> Result<QueuedActionOutput<AttachmentUpload>, MailContextError> {
         let mut last_draft_save_action_id = None;
 
+        let stats =
+            DraftAttachmentMetadata::total_attachments_size_and_count(self.id, tether).await?;
+        if stats.total_size >= Attachment::MAX_ATTACHMENT_SIZE {
+            return Err(AttachmentUploadError::TotalAttachmentSizeTooLarge.into());
+        }
+
+        if stats.total >= Attachment::MAX_ATTACHMENTS_PER_MESSAGE {
+            return Err(AttachmentUploadError::TooManyAttachments.into());
+        }
+
         // We only need this when creating, if we are retrying this must have already
         // happened.
         if self.mode == AttachmentUploadMode::Create {

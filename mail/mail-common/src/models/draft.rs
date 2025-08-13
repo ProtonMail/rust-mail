@@ -1243,7 +1243,7 @@ impl DraftAttachmentMetadata {
     ) -> Result<DraftAttachmentsTotalCountAndSize, StashError> {
         Ok(tether.query::<_, DraftAttachmentsTotalCountAndSize>(
             formatdoc! {"
-                SELECT COUNT(attachments.local_id) AS total, SUM(attachments.size) AS total_size
+                SELECT IFNULL(COUNT(attachments.local_id),0) AS total, IFNULL(SUM(attachments.size),0) AS total_size
                 FROM attachments
                 JOIN  {table} ON {table}.local_attachment_id= attachments.local_id AND {table}.metadata_id = ?
                 WHERE {table}.deleted = 0
