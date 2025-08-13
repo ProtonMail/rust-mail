@@ -573,11 +573,9 @@ impl Draft {
         email: String,
     ) -> Result<(), DraftSenderAddressChangeError> {
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            self.instance.change_sender_address(email).await?;
-            self.instance
-                .save()
-                .await
-                .map_err(RealProtonMailError::from)?;
+            let mut cached = self.cached.write().await;
+            let new_body = self.instance.change_sender_address(email).await?;
+            cached.body = new_body;
             Ok(())
         })
         .await
