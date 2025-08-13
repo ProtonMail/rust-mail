@@ -3,7 +3,7 @@ use crate::password::PasswordError;
 use crate::password::state::complete::Complete;
 use crate::shared::SecureString;
 use crate::{AccountApi, prelude::*};
-use derive_more::Deref;
+use derive_more::{Deref, DerefMut};
 use futures::TryFutureExt;
 use muon::Client;
 use proton_core_api::auth::UserKeySecret;
@@ -15,7 +15,7 @@ use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::KeySalt;
 
 /// Represents the password change flow state where we're waiting for the new password.
-#[derive(Clone, Deref)]
+#[derive(Clone, Deref, DerefMut)]
 pub struct WantChange {
     data: StateData,
 }

@@ -417,10 +417,6 @@ pub struct PutUsersPasswordRequest {
     #[serde(rename = "FIDO2")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fido2: Option<fido2::Request>,
-
-    /// SSO re-authentication token (optional).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sso_reauth_token: Option<String>,
 }
 
 #[cfg(test)]
