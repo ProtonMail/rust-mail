@@ -55,7 +55,9 @@ impl WantUsername {
                         self.recorder
                             .record(UsernameAvailabilityStatus::success(UsernameKind::Internal));
                     })
-                    .map_err(|_| SignupError::UsernameUnavailable)
+                    .map_err(|err| {
+                        SignupError::UsernameUnavailable(err.err_info().and_then(|info| info.error))
+                    })
                     .await?;
             }
 
@@ -72,7 +74,9 @@ impl WantUsername {
                         self.recorder
                             .record(UsernameAvailabilityStatus::success(UsernameKind::External));
                     })
-                    .map_err(|_| SignupError::UsernameUnavailable)
+                    .map_err(|err| {
+                        SignupError::UsernameUnavailable(err.err_info().and_then(|info| info.error))
+                    })
                     .await?;
             }
         }

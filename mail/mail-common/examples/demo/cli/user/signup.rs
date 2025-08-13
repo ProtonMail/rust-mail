@@ -50,8 +50,8 @@ impl Cmd {
                 .submit_internal_username(username, domain, Some(behaviour))
                 .await
             {
-                Err(SignupError::UsernameUnavailable) => {
-                    println!("Username unavailable, try again");
+                Err(SignupError::UsernameUnavailable(msg)) => {
+                    println!("Username unavailable, try again (error: {msg:?})");
                 }
 
                 Ok(()) => return Ok(()),

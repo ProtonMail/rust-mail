@@ -36,7 +36,7 @@ pub enum SignupError {
 
     /// Username is unavailable.
     #[error("Username unavailable")]
-    UsernameUnavailable,
+    UsernameUnavailable(Option<String>),
 
     #[error("Username empty")]
     UsernameEmpty,
@@ -84,7 +84,7 @@ impl From<RealSignupError> for SignupError {
             RealSignupError::Api(err) => Self::Api(err.to_string()),
             RealSignupError::Crypto(msg) => Self::Crypto(msg.to_string()),
             RealSignupError::SignupBlockedByServer => Self::SignupBlockedByServer,
-            RealSignupError::UsernameUnavailable => Self::UsernameUnavailable,
+            RealSignupError::UsernameUnavailable(msg) => Self::UsernameUnavailable(msg),
             RealSignupError::AccountCreationFailed => Self::AccountCreationFailed,
             RealSignupError::AddressSetupFailed => Self::AddressSetupFailed,
             RealSignupError::KeySetupFailed => Self::KeySetupFailed,
