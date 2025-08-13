@@ -1,10 +1,11 @@
-use proton_account_api::password::PasswordError as RealPasswordError;
-use proton_account_api::password::PasswordFlow as RealPasswordFlow;
 use proton_account_api::password::state::StateKind;
+use proton_account_api::password::{FlowAuthError, PasswordError as RealPasswordError};
+use proton_account_api::password::{LoginFailedReason, PasswordFlow as RealPasswordFlow};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::task::JoinError;
+use tracing::warn;
 use uniffi_runtime::async_runtime;
 use uniffi_runtime::uniffi_async;
 
@@ -27,6 +28,12 @@ pub enum PasswordError {
 
     #[error("Invalid 2FA code")]
     Invalid2FACode,
+
+    #[error("TOTP code was already used")]
+    Reused2FACode,
+
+    #[error("Invalid recovery code")]
+    InvalidRecoveryCode,
 
     #[error("Key unlock error")]
     KeyUnlock,
@@ -56,9 +63,21 @@ impl From<RealPasswordError> for PasswordError {
             RealPasswordError::InvalidState => Self::InvalidState,
 
             // Auth error caused by invalid 2FA input/token
-            RealPasswordError::FlowAuth(_)
-            | RealPasswordError::KeySecretSaltFetch(_)
-            | RealPasswordError::ServerProof => Self::InvalidCredentials,
+            RealPasswordError::FlowAuth(flow_auth_error) => match flow_auth_error {
+                FlowAuthError::PasswordWrong(details) => match details.login_failed_reason {
+                    LoginFailedReason::TotpWrong => Self::Invalid2FACode,
+                    LoginFailedReason::TotpReuse => Self::Reused2FACode,
+                    LoginFailedReason::RecoveryPhrase => Self::InvalidRecoveryCode,
+                    LoginFailedReason::Other => Self::InvalidCredentials,
+                },
+                FlowAuthError::Other(err) => {
+                    warn!(?err);
+                    Self::InvalidCredentials
+                }
+            },
+            RealPasswordError::KeySecretSaltFetch(_) | RealPasswordError::ServerProof => {
+                Self::InvalidCredentials
+            }
 
             // Key unlock error
             RealPasswordError::MissingPrimaryKey
