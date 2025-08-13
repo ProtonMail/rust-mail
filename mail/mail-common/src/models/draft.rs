@@ -1340,6 +1340,8 @@ pub enum DraftAttachmentUploadError {
     MessageAlreadySent,
     /// Server replied with error that we are not aware of.
     Server(String),
+    AttachmentTooLarge,
+    TotalAttachmentsTooLarge,
     /// Unexpected internal error
     Unexpected,
 }
@@ -1361,6 +1363,12 @@ impl DraftAttachmentUploadError {
                 Self::Crypto(e.to_string())
             }
             MailContextError::AttachmentEncryption(e) => Self::Crypto(e.to_string()),
+            MailContextError::Draft(Error::AttachmentUpload(
+                AttachmentUploadError::AttachmentTooLarge,
+            )) => Self::AttachmentTooLarge,
+            MailContextError::Draft(Error::AttachmentUpload(
+                AttachmentUploadError::TotalAttachmentSizeTooLarge,
+            )) => Self::TotalAttachmentsTooLarge,
             _ => Self::Unexpected,
         }
     }
