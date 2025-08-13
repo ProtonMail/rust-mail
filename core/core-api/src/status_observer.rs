@@ -42,10 +42,6 @@ impl Deref for CachedStatus {
     }
 }
 
-/// A background ping request.
-///
-/// It keeps track of the request background task and the receiver to know when it's finished.
-///
 #[derive(Debug)]
 struct BackgroundPing {
     request: JoinHandle<()>,
@@ -57,19 +53,12 @@ impl BackgroundPing {
     }
 }
 
-/// Configuration for the `StatusObserver`.
-///
 #[derive(Clone, Debug)]
 struct StatusObserverConfig {
-    /// Forground ping's retry policy.
     fg_retry: RetryPolicy,
-    /// Forground ping's timeout.
     fg_timeout: Duration,
-    /// Background ping's retry policy.
     bg_retry: RetryPolicy,
-    /// Background ping's timeout.
     bg_timeout: Duration,
-    /// Number of seconds before the status is considered stale.
     up_to_date: Duration,
 }
 
@@ -80,7 +69,6 @@ impl Default for StatusObserverConfig {
 }
 
 impl StatusObserverConfig {
-    /// Create a new `StatusObserverConfig` with default production values.
     fn new() -> Self {
         Self {
             up_to_date: UP_TO_DATE_DURATION,
@@ -94,7 +82,6 @@ impl StatusObserverConfig {
         }
     }
 
-    /// Create a new `StatusObserverConfig` with default test values.
     #[cfg(feature = "mocks")]
     fn test() -> Self {
         let never = RetryPolicy::default().never();
@@ -112,13 +99,6 @@ impl StatusObserverConfig {
     }
 }
 
-/// A `StatusObserver` that will keep track of the connection status.
-///
-/// It will ping the server to get the current status if the status is stale.
-/// If the status is `Offline`, it will start a background check.
-/// The status is initialized to `Online`.
-/// With the default configuration, the last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-///
 #[must_use]
 #[derive(Clone, Debug)]
 pub struct StatusObserver {
@@ -130,11 +110,6 @@ pub struct StatusObserver {
 }
 
 impl StatusObserver {
-    /// Create a new `StatusObserver`.
-    ///
-    /// The status is initialized to `Online`.
-    /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-    ///
     pub fn new() -> Self {
         let (status_tx, _) = watch::channel(ConnectionStatus::Online);
 
@@ -147,11 +122,6 @@ impl StatusObserver {
         }
     }
 
-    /// Create a new test `StatusObserver` without shared state.
-    ///
-    /// The status is initialized to `Online`.
-    /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-    ///
     #[cfg(feature = "mocks")]
     pub fn test() -> Self {
         let (status_tx, _) = watch::channel(ConnectionStatus::Online);
@@ -169,11 +139,6 @@ impl StatusObserver {
         }
     }
 
-    /// Sets the number of seconds before the status is considered stale.
-    ///
-    /// The status is initialized to `Online`.
-    /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-    ///
     #[cfg(feature = "mocks")]
     pub fn set_up_to_date(&mut self, up_to_date: Duration) {
         let stale_instant = Instant::now()
@@ -184,10 +149,6 @@ impl StatusObserver {
         self.config.up_to_date = up_to_date;
     }
 
-    /// Get the current status of the connection.
-    /// If the status is stale, it will ping the server to get the current status.
-    /// If the status is `Offline`, it will start a background check.
-    ///
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
         self.status_fresher_than(api, self.config.up_to_date, false)
             .await
@@ -214,8 +175,6 @@ impl StatusObserver {
             .await
     }
 
-    /// Underlying logic behind [`status`] methods.
-    ///
     async fn status_fresher_than(
         &self,
         api: Proton,
@@ -245,8 +204,6 @@ impl StatusObserver {
         self.get_cached_status()
     }
 
-    /// Subscribes to changes of the connection status.
-    ///
     #[must_use]
     pub fn subscribe(&self) -> watch::Receiver<ConnectionStatus> {
         self.status_tx.subscribe()
@@ -273,8 +230,6 @@ impl StatusObserver {
     }
 
     async fn ping(self, api: Proton, timeout: Duration, retry: RetryPolicy) {
-        // TIMEOUT is never passed through the layer, which means
-        // we need to make the assertion here to detect it.
         match api.get_tests_ping(Some(timeout), Some(retry)).await {
             Err(e) if e.is_server_unreachable() => self.update(ConnectionStatus::ServerUnreachable),
             Err(e) if e.is_network_failure() => self.update(ConnectionStatus::Offline),
@@ -285,7 +240,6 @@ impl StatusObserver {
     fn spawn_ping(&self, api: Proton) {
         let mut ping = self.ping.write();
 
-        // If a ping is already pending, don't spawn another one
         if let Some(ping) = &mut *ping {
             if !ping.is_finished() {
                 return;
@@ -293,6 +247,7 @@ impl StatusObserver {
         }
 
         let this = self.clone();
+
         *ping = Some(BackgroundPing {
             request: tokio::spawn(this.ping(api, self.config.bg_timeout, self.config.bg_retry)),
         });
@@ -316,7 +271,6 @@ impl Default for StatusObserver {
     }
 }
 
-/// A type that wraps a [`StatusObserver`] and to implement the [`SenderLayer`] trait.
 #[derive(Debug, Deref)]
 pub struct StatusObserverLayer(StatusObserver);
 
