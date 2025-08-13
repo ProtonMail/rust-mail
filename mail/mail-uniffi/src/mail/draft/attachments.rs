@@ -72,6 +72,12 @@ impl From<RealDraftAttachmentUploadError> for DraftAttachmentUploadError {
             RealDraftAttachmentUploadError::Unexpected => {
                 Self::Other(ProtonError::Unexpected(UnexpectedError::Draft))
             }
+            RealDraftAttachmentUploadError::AttachmentTooLarge => {
+                Self::Reason(DraftAttachmentUploadErrorReason::AttachmentTooLarge)
+            }
+            RealDraftAttachmentUploadError::TotalAttachmentsTooLarge => {
+                Self::Reason(DraftAttachmentUploadErrorReason::TotalAttachmentSizeTooLarge)
+            }
         }
     }
 }
