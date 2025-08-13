@@ -14,7 +14,7 @@ use crate::models::{Conversation, MailSettings, Message, MessageBodyMetadata};
 use crate::test_utils::db::new_test_connection_file;
 use crate::test_utils::db_states::{
     new_test_delete_all_messages_in_conv_label_db_state, new_test_delete_db_state,
-    new_test_label_db_state, new_test_unread_db_state,
+    new_test_label_db_state, new_test_unread_db_state, new_test_unread_db_state_multi_conv,
 };
 use crate::test_utils::search::{
     MY_ADDRESS_ID, MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels,
@@ -2362,6 +2362,111 @@ async fn messages_mark_read() {
     )
     .unwrap();
     assert_eq!(db_conv.num_unread, 0);
+}
+
+#[tokio::test]
+async fn messages_mark_read_with_separate_conversations() {
+    // Mark conversation as read and update all conversation / message counts
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut conn = stash.connection();
+    let mut state = new_test_unread_db_state_multi_conv();
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
+
+    let local_conv_id1 = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_conv_id2 = *state_map
+        .conversations
+        .get(state.conversations[1].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id1 = *state_map
+        .messages
+        .get(state.messages[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id2 = *state_map
+        .messages
+        .get(state.messages[1].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id3 = *state_map
+        .messages
+        .get(state.messages[2].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id4 = *state_map
+        .messages
+        .get(state.messages[3].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+
+    conn.tx::<_, _, StashError>(async |tx| {
+        Message::mark_read(
+            [local_msg_id1, local_msg_id2, local_msg_id3, local_msg_id4],
+            tx,
+        )
+        .await
+        .expect("failed to mark as read");
+        Ok(())
+    })
+    .await
+    .unwrap();
+    let db_conv = ContextualConversation::new(
+        Conversation::find_by_id(local_conv_id1, &conn)
+            .await
+            .unwrap()
+            .unwrap(),
+        local_label_id1,
+    )
+    .unwrap();
+    assert_eq!(db_conv.num_unread, 0);
+    let db_conv = ContextualConversation::new(
+        Conversation::find_by_id(local_conv_id2, &conn)
+            .await
+            .unwrap()
+            .unwrap(),
+        local_label_id1,
+    )
+    .unwrap();
+    assert_eq!(db_conv.num_unread, 0);
+    {
+        let conv_counts = conv_counts_as_map(&conn).await;
+        // Check conversation label1 values, values should be unchanged.
+        {
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+            let label_counts = conv_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 0);
+
+            assert_eq!(label_counts.total, start_label_counts.total);
+        }
+        // Check conversation label2 values - should be unchanged.
+        {
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+            let label_counts = conv_counts.get(&local_label_id2).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, start_label_counts.total);
+        }
+    }
+
+    // Check message counts
+    {
+        let message_counts = msg_counts_as_map(&conn).await;
+
+        // Check label1
+        {
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
+            let label_counts = message_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, start_label_counts.total);
+        }
+        // Check label2 - should be unchanged.
+        {
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+            let label_counts = message_counts.get(&local_label_id2).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, start_label_counts.total);
+        }
+    }
 }
 
 #[tokio::test]

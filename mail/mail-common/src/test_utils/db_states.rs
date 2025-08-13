@@ -341,6 +341,71 @@ pub fn new_test_unread_db_state() -> TestDBState {
     }
 }
 
+pub fn new_test_unread_db_state_multi_conv() -> TestDBState {
+    let conv_id1 = DELETE_DB_CONV1.clone();
+    let conv_id2 = DELETE_DB_CONV2.clone();
+    TestDBState {
+        addresses: vec![test_address()],
+        labels: vec![test_label1(), test_label2()],
+        conversations: vec![
+            Conversation {
+                remote_id: Some(conv_id1.clone()),
+                labels: vec![
+                    ConversationLabel {
+                        remote_label_id: Some(MY_LABEL_ID1.clone()),
+                        ..ConversationLabel::test_default()
+                    },
+                    ConversationLabel {
+                        remote_label_id: Some(MY_LABEL_ID2.clone()),
+                        ..ConversationLabel::test_default()
+                    },
+                ],
+                ..Conversation::test_default()
+            },
+            Conversation {
+                remote_id: Some(conv_id2.clone()),
+                labels: vec![
+                    ConversationLabel {
+                        remote_label_id: Some(MY_LABEL_ID1.clone()),
+                        ..ConversationLabel::test_default()
+                    },
+                    ConversationLabel {
+                        remote_label_id: Some(MY_LABEL_ID2.clone()),
+                        ..ConversationLabel::test_default()
+                    },
+                ],
+                ..Conversation::test_default()
+            },
+        ],
+        messages: vec![
+            Message {
+                label_ids: vec![MY_LABEL_ID1.clone()],
+                unread: true,
+                time: 100.into(),
+                ..CONV1_MSG1.to_owned()
+            },
+            Message {
+                label_ids: vec![MY_LABEL_ID2.clone()],
+                unread: true,
+                time: 200.into(),
+                ..CONV1_MSG2.to_owned()
+            },
+            Message {
+                label_ids: vec![MY_LABEL_ID1.clone()],
+                unread: true,
+                time: 300.into(),
+                ..CONV2_MSG1.to_owned()
+            },
+            Message {
+                label_ids: vec![MY_LABEL_ID2.clone()],
+                unread: true,
+                time: 400.into(),
+                ..CONV2_MSG2.to_owned()
+            },
+        ],
+    }
+}
+
 pub fn new_test_unread_db_state_unread_label_in_folder() -> TestDBState {
     let conv_id1 = DELETE_DB_CONV1.clone();
     TestDBState {
