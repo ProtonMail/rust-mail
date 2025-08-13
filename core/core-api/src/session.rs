@@ -3,6 +3,7 @@ use muon::client::InfoProvider;
 use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
 use muon::common::ParseEndpointErr;
 use muon::env::DynEnv;
+use proton_task_service::WeakSpawner;
 use std::borrow::Borrow;
 use std::fmt::Formatter;
 use std::sync::Arc;
@@ -174,7 +175,6 @@ impl Default for Config {
     }
 }
 
-/// An API session builder.
 #[must_use]
 #[derive(Default)]
 pub struct Builder {
@@ -186,18 +186,15 @@ pub struct Builder {
 }
 
 impl Builder {
-    /// Create a new session builder.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Set the session configuration.
     pub fn with_config(mut self, config: impl Borrow<Config>) -> Self {
         config.borrow().clone_into(&mut self.config);
         self
     }
 
-    /// Set the app version (`x-pm-appversion`) based on platform, product, and version.
     pub fn with_app_version(
         mut self,
         platform: impl AsRef<str>,
@@ -209,66 +206,56 @@ impl Builder {
         self
     }
 
-    /// Set the user agent.
     pub fn with_user_agent(mut self, user_agent: impl AsRef<str>) -> Self {
         self.config.user_agent = Some(String::from(user_agent.as_ref()));
         self
     }
 
-    /// Set the environment to connect to.
     pub fn with_env_id(mut self, env_id: impl Borrow<EnvId>) -> Self {
         env_id.borrow().clone_into(&mut self.config.env_id);
         self
     }
 
-    /// Set the proxy to use.
     pub fn with_proxy(mut self, proxy: impl AsRef<str>) -> Self {
         self.config.proxy = Some(String::from(proxy.as_ref()));
         self
     }
 
-    /// Use the Atlas environment.
     pub fn with_atlas_env(mut self) -> Self {
         self.config.env_id = EnvId::new_atlas();
         self
     }
 
-    /// Use a custom environment.
     pub fn with_custom_env(mut self, env: impl Env) -> Self {
         self.config.env_id = EnvId::new_custom(env);
         self
     }
 
-    /// Set the store to use.
     pub fn with_store(mut self, store: impl Store) -> Self {
         self.store = Some(Box::new(store));
         self
     }
 
-    /// Set the status observer.
     pub fn with_status(mut self, status: StatusWatcher) -> Self {
         self.status = Some(status);
         self
     }
 
-    /// Set the challenge notifier.
     pub fn with_notifier(mut self, notifier: DynChallengeNotifier) -> Self {
         self.notifier = Some(notifier);
         self
     }
 
-    /// Set the info provider. Used by muon to request the fingerprint.
     pub fn with_info_provider(mut self, info_provider: Arc<dyn InfoProvider>) -> Self {
         self.info_provider = Some(info_provider);
         self
     }
 
-    /// Build the session from the builder.
-    pub async fn build(self) -> Result<Session, BuildError> {
+    pub async fn build(self, spawner: WeakSpawner) -> Result<Session, BuildError> {
         init_server_crypto_clock();
 
         let store = self.store.unwrap_or_else(TempStore::boxed);
-        let mut status = self.status.unwrap_or_default();
+        let mut status = self.status.unwrap_or_else(|| StatusWatcher::new(spawner));
         let notifier = self.notifier.unwrap_or_else(FailNotifier::arced);
 
         let config = Arc::new(self.config);
@@ -278,6 +265,7 @@ impl Builder {
         status.initialize(client.clone());
 
         ObservabilityManager::start(
+            status.clone(),
             client.clone(),
             Duration::from_secs(60),
             OBSERVABILITY_BATCH_SIZE,
@@ -313,16 +301,10 @@ impl std::fmt::Debug for Session {
 }
 
 impl Session {
-    /// Create a new session.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the API service failed to initialize.
-    pub async fn new() -> Result<Self, BuildError> {
-        Self::builder().build().await
+    pub async fn new(spawner: WeakSpawner) -> Result<Self, BuildError> {
+        Self::builder().build(spawner).await
     }
 
-    /// Create a new session builder.
     pub fn builder() -> Builder {
         Builder::new()
     }

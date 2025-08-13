@@ -435,7 +435,7 @@ async fn network_failure() {
         Session::builder()
             .with_config(&cfg)
             .with_status(StatusWatcher::with_observer(StatusObserver::test()))
-            .build()
+            .build(world.ctx.context.as_weak())
             .await
             .unwrap()
     };

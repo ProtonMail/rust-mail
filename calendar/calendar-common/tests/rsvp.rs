@@ -137,7 +137,7 @@ async fn world() -> World<impl PGPProviderSync> {
         Session::builder()
             .with_config(&cfg)
             .with_status(StatusWatcher::with_observer(StatusObserver::test()))
-            .build()
+            .build(ctx.context.as_weak())
             .await
             .unwrap()
     };

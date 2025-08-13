@@ -1,5 +1,6 @@
 use crate::status_observer::StatusObserver;
 use crate::{connection_status::ConnectionStatus, services::proton::Proton};
+use proton_task_service::WeakSpawner;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,16 +29,10 @@ impl DerefMut for StatusWatcher {
     }
 }
 
-impl Default for StatusWatcher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl StatusWatcher {
     #[must_use]
-    pub fn new() -> Self {
-        Self::with_observer(StatusObserver::new())
+    pub fn new(spawner: WeakSpawner) -> Self {
+        Self::with_observer(StatusObserver::new(spawner))
     }
 
     #[must_use]

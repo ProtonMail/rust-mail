@@ -500,7 +500,7 @@ pub async fn watch_message(
         };
 
         let handle = RealMessage::watch(&stash)?;
-        let handle = watch_channel(user_context, handle, callback);
+        let handle = watch_channel(&*user_context, handle, callback);
         Result::<_, RealProtonMailError>::Ok(Some(WatchedMessage {
             message: message.into(),
             handle,
@@ -728,7 +728,7 @@ pub async fn watch_available_label_as_actions_for_messages(
         let (actions, handle) =
             RealMessage::watch_available_label_as_actions(ids.map_vec(), &tether).await?;
         let actions = actions.map_vec();
-        let handle = watch_channel(ctx, handle, callback);
+        let handle = watch_channel(&*ctx, handle, callback);
 
         Ok::<_, RealProtonMailError>(WatchedLabelAs { actions, handle })
     })
@@ -888,7 +888,7 @@ pub async fn watch_messages_for_label(
         let tether = stash.connection();
         let messages = RealMessage::in_label(label_id.into(), &tether).await?;
         let handle = RealMessage::watch(&stash)?;
-        let watcher = watch_channel(user_context, handle, callback);
+        let watcher = watch_channel(&*user_context, handle, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedMessages {
             messages: messages.map_vec(),
             handle: watcher,

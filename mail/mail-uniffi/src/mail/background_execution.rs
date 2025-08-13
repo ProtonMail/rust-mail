@@ -1,6 +1,6 @@
+use crate::async_runtime;
 use crate::errors::UserSessionError;
 use crate::mail::MailSession;
-use crate::{async_runtime, spawn_async};
 use proton_mail_common::MailContext;
 use proton_mail_common::background_execution::{
     BackgroundExecutionContext, BackgroundExecutionResult as RealBackgroundExecutionResult,
@@ -162,7 +162,7 @@ impl Drop for BackgroundExecutionHandle {
     fn drop(&mut self) {
         let sender = self.sender.clone();
         if let Some(ctx) = self.ctx.upgrade() {
-            spawn_async(ctx, async move {
+            ctx.spawn(async move {
                 let _ = sender.send(false).await;
             });
         } else {
