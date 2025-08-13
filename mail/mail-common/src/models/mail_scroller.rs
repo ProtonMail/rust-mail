@@ -168,7 +168,7 @@ impl ScrollData for MessageScrollData {
 
         let time_column = match order_field {
             ScrollOrderField::Time => "messages.time",
-            ScrollOrderField::SnoozeTime => "messages.snooze_time",
+            ScrollOrderField::SnoozeTime => "MAX(messages.snooze_time, messages.time)",
         };
 
         let mut query = formatdoc!(
@@ -367,7 +367,9 @@ impl ScrollData for ConversationScrollData {
 
         let time_column = match order_field {
             ScrollOrderField::Time => "conversation_labels.context_time",
-            ScrollOrderField::SnoozeTime => "conversation_labels.context_snooze_time",
+            ScrollOrderField::SnoozeTime => {
+                "MAX(conversation_labels.context_snooze_time, conversation_labels.context_time)"
+            }
         };
 
         let mut query = formatdoc!(
