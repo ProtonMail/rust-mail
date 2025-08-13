@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Features
+
+- Allow for optional behavior, when skipping recovery setup during the sign-up.
+- Implement share extension v2.0
+- Checking username availability: pass the error message from be to the client app.
+- Expose apiserviceerror::unknownerror string
+
+### Fixes
+
+- [ET-4248] Correctly detect valid proton addresses
+- [ET-4191] Fix starring and unstarring
+- [ET-3948] Draft auto save
+- Fixed doc test builds due to removed dependency
+- [ET-4018] Skip subscribed user when doing free accounts post-login-check
+- [ET-4244] Handle neednewpass state
+- [ET-2495] Validate total attachment size and count before upload
+- Label_as + also archive with no labels selected now behave like a normal move to archive
+
+
 ## [mail-uniffi-v0.123.0] - 2025-08-11
 
 ### Features
@@ -90,8 +111,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.118.0] - 2025-08-06
 
+### Features
+
+- [ET-3914] Add observability for /domains/available endpoint
+- [ET-3914] Delete dead code
+- [ET-3914] Fix wrong test name
+- [ET-3914] Add observability for unlocking user keys
+- [ET-3914] Add observability for post login user checks
+- Action auto dependencies
+- [ET-3911] Add record_human_verification_screen_view
+- Parallel default action groups
+- [ET-3911] Add record_human_verification_result
+- Et-3917 sign-in: add observability
+- [ET-4083] Expiration time options
+- [ET-3911] Add record_human_verification_view_loading_result function
+- [ET-3955] Added payment specific observability events.
+
 ### Fixes
 
+- [ET-4011] Improve error handling for attachment uploads
 - [ET-2416] Sort accounts by name
 
 
@@ -110,11 +148,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- Parallel default action groups
-- Et-3917 sign-in: add observability
-- [ET-4083] Expiration time options
-- [ET-3911] Add record_human_verification_view_loading_result function
-- [ET-3955] Added payment specific observability events.
 - [ET-4084] Draft recipient expiration feature check
 
 
@@ -123,19 +156,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Rsvp/uniffi: support attendee-less reminders
-
-
-## [mail-uniffi-v0.116.0] - 2025-08-05
-
-### Features
-
-- [ET-3911] Add record_human_verification_screen_view
-- [ET-3911] Add record_human_verification_result
-- Action auto dependencies
-
-### Fixes
-
-- [ET-4011] Improve error handling for attachment uploads
 
 
 ## [mail-uniffi-v0.115.5] - 2025-08-04
@@ -147,13 +167,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rsvp: use `calendarevent.addressid`
 
 
-## [mail-uniffi-v0.115.6] - 2025-08-04
-
-### Fixes
-
-- Rsvp: support attendee-less reminders
-
-
 ## [mail-uniffi-v0.115.4] - 2025-08-04
 
 ### Fixes
@@ -161,6 +174,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4052] Snooze is not available as an action in allmail label
 - Rsvp: fetch address keys of the address that has created the calendar
 - Disable free account count post login check
+
+
+## [mail-uniffi-v0.115.6] - 2025-08-04
+
+### Fixes
+
+- Rsvp: support attendee-less reminders
 
 
 ## [mail-uniffi-v0.115.3] - 2025-08-03
@@ -193,11 +213,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-3914] Add observability for /domains/available endpoint
-- [ET-3914] Delete dead code
-- [ET-3914] Fix wrong test name
-- [ET-3914] Add observability for unlocking user keys
-- [ET-3914] Add observability for post login user checks
 - [ET-3864] Connect actuall snooze implementation with uniffi layer
 
 ### Fixes
