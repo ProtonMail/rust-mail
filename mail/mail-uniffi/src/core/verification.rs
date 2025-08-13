@@ -254,6 +254,34 @@ impl ChallengeLoader {
         .err_into()
         .await
     }
+
+    /// Send a PUT request to the server and return the response.
+    pub async fn put(
+        &self,
+        base: String,
+        path: String,
+        query: Vec<Query>,
+        header: Vec<Header>,
+        body: Vec<u8>,
+    ) -> Result<ChallengeLoaderResponse, ProtonError> {
+        let inner = self.inner.clone();
+        let query = query.into_iter().map_into();
+        let header = header.into_iter().map_into();
+
+        uniffi_async(async move {
+            inner
+                .put(base, path, query, header, body)
+                .map_err(RealUserApiServiceError::try_from)
+                .map_err(|e| match e {
+                    Ok(e) => RealProtonMailError::ServerError(e.into()),
+                    Err(e) => RealProtonMailError::Unexpected(e.into()),
+                })
+                .await
+        })
+        .ok_into()
+        .err_into()
+        .await
+    }
 }
 
 /// An interface by which human verification challenges can be handled.

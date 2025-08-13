@@ -126,6 +126,27 @@ impl ChallengeLoader {
         .await
     }
 
+    /// Make a `PUT` request to the given base/path.
+    pub async fn put(
+        &self,
+        base: impl AsRef<str>,
+        path: impl AsRef<str>,
+        query: impl IntoIterator<Item = (String, Option<String>)>,
+        header: impl IntoIterator<Item = (String, String)>,
+        body: impl Into<Vec<u8>>,
+    ) -> Result<ChallengeLoaderResponse, ApiServiceError> {
+        self.send(
+            Method::PUT,
+            base.as_ref().parse()?,
+            path,
+            query,
+            header,
+            Some(body.into()),
+        )
+        .ok_into()
+        .await
+    }
+
     async fn send(
         &self,
         method: Method,
