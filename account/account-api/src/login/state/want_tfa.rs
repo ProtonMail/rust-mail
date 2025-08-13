@@ -120,7 +120,7 @@ impl WantTfa {
         mode: MbpMode,
         post_login_validator: &dyn PostLoginValidator,
     ) -> Result<State, LoginError> {
-        data.parts.store.write().await.clear_temp_pass().await?;
+        data.parts.store.write().await.clear_pass().await?;
 
         State::inspect_user(client, data, pass, mode, post_login_validator).await
     }

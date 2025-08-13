@@ -182,15 +182,25 @@ pub enum CoreAccountState {
     /// The variant holds the (remote) IDs of the sessions that require a second factor.
     NeedTfa(Vec<SessionId>),
 
+    /// The account has a temporary password that must be set before it can be used.
+    /// The variant holds the (remote) IDs of the sessions that require a new password.
+    NeedNewPass(Vec<SessionId>),
+
     /// The account has no active sessions.
     LoggedOut,
 }
 
 impl CoreAccountState {
-    fn of(account: &CoreAccount, sessions: &[CoreSession]) -> Self {
+    pub fn of(account: &CoreAccount, sessions: &[CoreSession]) -> Self {
+        // Group sessions by state.
         let mut sessions_by_state = (sessions.iter())
             .map(|session| (CoreSessionState::of(session), session.remote_id.clone()))
             .into_group_map();
+
+        // Does the account have a temporary password?
+        if account.temp_pass {
+            return CoreAccountState::NeedNewPass(sessions_by_state.into_values().concat());
+        }
 
         // Does the account have any fully authenticated sessions?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::Authenticated) {

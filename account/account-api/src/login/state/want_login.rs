@@ -218,7 +218,7 @@ impl WantLogin {
                 ));
 
                 // Always cache the password temporarily - we'll determine later if we need it
-                self.parts.store.write().await.set_temp_pass(&pass).await?;
+                self.parts.store.write().await.set_pass(&pass).await?;
 
                 let info = get_auth_info(&flow_data, flow.has_totp(), flow.fido_details());
                 let mode = flow_data.password_mode.into();

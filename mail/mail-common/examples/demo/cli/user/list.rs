@@ -1,5 +1,5 @@
 use anyhow::Result;
-use proton_core_common::{CoreAccountState, db::account::CoreAccount};
+use proton_core_common::{CoreAccountState::*, db::account::CoreAccount};
 use proton_mail_common::MailContext;
 use std::sync::Arc;
 
@@ -25,11 +25,12 @@ impl Cmd {
             }
 
             match state {
-                CoreAccountState::LoggedIn(_) => println!(),
-                CoreAccountState::NeedMbp(_) => println!(" (MBP)"),
-                CoreAccountState::NeedTfa(_) => println!(" (2FA)"),
-                CoreAccountState::LoggedOut => println!(" (OUT)"),
-                CoreAccountState::NotReady => println!(" (BAD)"),
+                LoggedIn(_) => println!(),
+                NeedMbp(_) => println!(" (MBP)"),
+                NeedTfa(_) => println!(" (2FA)"),
+                NeedNewPass(_) => println!(" (TMP)"),
+                LoggedOut => println!(" (OUT)"),
+                NotReady => println!(" (BAD)"),
             }
         }
 

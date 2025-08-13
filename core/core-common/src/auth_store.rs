@@ -264,10 +264,32 @@ impl Store for AuthStore {
             .await
     }
 
-    async fn set_temp_pass(&mut self, pass: &str) -> Result<(), StoreError> {
+    async fn set_pass(&mut self, pass: &str) -> Result<(), StoreError> {
         info!("setting temp pass in store");
 
-        let key = self.encryption_key()?;
+        self.stash
+            .connection()
+            .tx(async |tx| {
+                let key = self.encryption_key()?;
+
+                let Some(user_id) = self.user_id.clone() else {
+                    bail!("failed to set temp pass: no user ID");
+                };
+
+                let Some(account) = CoreAccount::find_by_id(user_id.clone(), tx).await? else {
+                    bail!("failed to set temp pass: missing {user_id}");
+                };
+
+                account.with_password(pass, &key)?.save(tx).await?;
+
+                Ok(())
+            })
+            .await
+    }
+
+    async fn clear_pass(&mut self) -> Result<(), StoreError> {
+        info!("clearing temp pass in store");
+
         self.stash
             .connection()
             .tx(async |tx| {
@@ -279,7 +301,28 @@ impl Store for AuthStore {
                     bail!("failed to set temp pass: missing {user_id}");
                 };
 
-                account.with_password(pass, &key)?.save(tx).await?;
+                account.without_password().save(tx).await?;
+
+                Ok(())
+            })
+            .await
+    }
+
+    async fn set_temp_pass(&mut self, value: bool) -> Result<(), StoreError> {
+        info!("setting temp pass in store");
+
+        self.stash
+            .connection()
+            .tx(async |tx| {
+                let Some(user_id) = self.user_id.clone() else {
+                    bail!("failed to set temp pass: no user ID");
+                };
+
+                let Some(account) = CoreAccount::find_by_id(user_id.clone(), tx).await? else {
+                    bail!("failed to set temp pass: missing {user_id}");
+                };
+
+                account.with_temp_pass(value).save(tx).await?;
 
                 Ok(())
             })
@@ -353,27 +396,6 @@ impl Store for AuthStore {
             .map_err(|e| format!("failed to expose key secret: {e}"))
             .inspect_err(|e| error!(e))
             .unwrap_or_else(|_| None)
-            .await
-    }
-
-    async fn clear_temp_pass(&mut self) -> Result<(), StoreError> {
-        info!("clearing temp pass in store");
-
-        self.stash
-            .connection()
-            .tx(async |tx| {
-                let Some(user_id) = self.user_id.clone() else {
-                    bail!("failed to set temp pass: no user ID");
-                };
-
-                let Some(account) = CoreAccount::find_by_id(user_id.clone(), tx).await? else {
-                    bail!("failed to set temp pass: missing {user_id}");
-                };
-
-                account.without_password().save(tx).await?;
-
-                Ok(())
-            })
             .await
     }
 

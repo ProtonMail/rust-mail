@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError};
 use thiserror::Error;
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 
 /// This enum defines possible error conditions encountered after a successful login,
 /// focusing on constraints and limits that might prevent further actions.
@@ -135,7 +135,7 @@ impl DefaultPostLoginValidator {
     ) -> Result<Option<UserTable>, StashError> {
         let user_db_path = ctx.user_db_path(&user_id);
         if !user_db_path.exists() {
-            error!("User DB file does not exists: {:?} ", &user_db_path);
+            warn!("User DB file does not exist: {user_db_path:?}");
             return Ok(None);
         }
         let user_stash = match Stash::new(StashConfiguration {
@@ -144,7 +144,7 @@ impl DefaultPostLoginValidator {
         }) {
             Ok(user_stash) => user_stash,
             Err(err) => {
-                error!("Could not open user db: {:?} ", &err);
+                error!("Could not open user db: {err:?}");
                 return Ok(None);
             }
         };
