@@ -985,6 +985,8 @@ impl From<ExpirationFeatureSupportReport> for DraftRecipientExpirationFeatureRep
 fn draft_options() -> DraftActorOptions {
     DraftActorOptions {
         address_validation_enabled: true,
-        auto_save_every: Some(Duration::from_secs(2)),
+        // Auto save is set to 0 to mimic old behavior where setting the body would trigger an immediate save.
+        // to be reverted after release.
+        auto_save_every: Some(Duration::from_secs(0)),
     }
 }
