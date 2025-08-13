@@ -735,21 +735,7 @@ impl Message {
     }
 
     async fn set_snooze_time_before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.display_snooze_reminder {
-            let local_label_id = SystemLabel::Inbox
-                .local_id(bond)
-                .await?
-                .expect("Inbox should be set");
-            if let Some(snooze_time) = Conversation::context_snooze_time(
-                self.local_conversation_id.unwrap(),
-                local_label_id,
-                bond,
-            )
-            .await?
-            {
-                self.snooze_time = snooze_time;
-            }
-        } else if self.label_ids.contains(&LabelId::snoozed()) {
+        if self.label_ids.contains(&LabelId::snoozed()) {
             let local_label_id = SystemLabel::Snoozed
                 .local_id(bond)
                 .await?
@@ -1749,13 +1735,13 @@ impl Message {
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         let mut ids = ids.into_iter().peekable();
         if ids.peek().is_none() {
             if cfg!(debug_assertions) {
                 panic!("remove_label for no messages")
             } else {
-                return Ok(());
+                return Ok(vec![]);
             }
         }
 
@@ -1779,10 +1765,11 @@ impl Message {
             )
             .await?;
 
+        let mut modified_ids = vec![];
         for id in ids {
             info!("Removing {local_label_id:?} from {id:?}");
             // unlabel the message and return whether it was unlabeled
-            if bond
+            if let Some(id) = bond
                 .query_value_opt::<LocalMessageId>(
                     indoc::indoc! {"
                     DELETE FROM message_labels
@@ -1793,11 +1780,10 @@ impl Message {
                     params![local_label_id, id],
                 )
                 .await?
-                .is_none()
             {
+                modified_ids.push(id);
+            } else {
                 tracing::trace!("Message {id} was not labeled with {local_label_id}");
-                //  Notice that we're not updating updated_count
-                continue;
             };
 
             let unread = bond
@@ -1818,7 +1804,7 @@ impl Message {
         // Update message counters
         if updated_count == 0 {
             warn!("No updated messages?");
-            return Ok(());
+            return Ok(vec![]);
         }
 
         let mut msg_counters = MessageCounters::find_by_id(local_label_id, bond)
@@ -1924,7 +1910,7 @@ impl Message {
             .await
             .context("Error saving counters")?;
 
-        Ok(())
+        Ok(modified_ids)
     }
 
     /// Retrieve all the messages which are in a given label.
@@ -2018,6 +2004,17 @@ impl Message {
         .await
     }
 
+    pub async fn ids_in_conversation_unordered(
+        local_conversation_id: LocalConversationId,
+        tether: &Tether,
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        tether.query_values::<_, LocalMessageId>(
+            "SELECT local_id as value FROM messages WHERE local_conversation_id = ? AND messages.deleted = 0",
+            params![local_conversation_id],
+        )
+        .await
+    }
+
     /// This fn should be called for message endpoints.
     /// Repeatedly calls `endpoint` in batches of 150 in parallel.
     async fn split_request<F, Fut>(
@@ -2029,6 +2026,26 @@ impl Message {
         Fut: Future<Output = Result<Vec<OperationResult<MessageId>>, ApiServiceError>>,
     {
         split_request(ids, 150, endpoint).await
+    }
+
+    pub async fn update_snooze_time(
+        ids: Vec<LocalMessageId>,
+        snooze_time: UnixTimestamp,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        let placeholders = placeholders(&ids);
+        let mut params = params![snooze_time];
+        params.extend(ids.to_sql());
+
+        bond.execute(
+            format!(
+                "UPDATE messages SET snooze_time = MAX(time, ?) WHERE local_id IN ({placeholders})"
+            ),
+            params,
+        )
+        .await?;
+
+        Ok(())
     }
 
     /// Update message counters for `messages` after being marked as deleted.
@@ -2554,7 +2571,8 @@ impl ConversationOrMessage for Message {
         ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        Self::remove_label(local_label_id, ids, bond).await
+        Self::remove_label(local_label_id, ids, bond).await?;
+        Ok(())
     }
 
     async fn remote_label(
