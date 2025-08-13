@@ -5,14 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.122.1] - 2025-08-13
+## [Unreleased]
+
+### Features
+
+- [ET-3780] Expose change password auth errors
 
 ### Fixes
 
-- [ET-4244] Handle neednewpass state
+- Undo move now works when undoing a move out of inbox
+- Scroller snooze-time ordering is now taking max value of time and snooze time instead of snooze time alone
+- Moving out of snooze folder will remove snoozed label
+- [ET-3948] Restore `draft.set_body` behavior
+- [ET-3905] Marking messages read updates to conversation counters
 
 
-## [mail-uniffi-v0.122.0] - 2025-08-08
+## [mail-uniffi-v0.124.0] - 2025-08-13
 
 ### Features
 
@@ -33,29 +41,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Label_as + also archive with no labels selected now behave like a normal move to archive
 
 
-## [mail-uniffi-v0.123.0] - 2025-08-11
-
-### Features
-
-- [ET-3094] Log out account and clear its state if login fails during post login validation
-- Show account state in mail-tui account-switcher
-- Add comprehensive support for message view with snooze_time ordering
+## [mail-uniffi-v0.122.1] - 2025-08-13
 
 ### Fixes
 
-- Message.snoozed_until is read directly from converstation's label instead of `snooze_time` api field.
-- [ET-3992] Update the account data when receiving a user via event loop.
-- [et-4002] support multipart emails with local-only attachments
-- [et-3605] poll event loop after answering a notification
+- [ET-4244] Handle neednewpass state
 
 
-## [mail-uniffi-v0.122.0] - 2025-08-08
+## [mail-uniffi-v0.123.0] - 2025-08-11
 
 ### Features
 
 - Clear action queue in share extension before running
 - [ET-4031] Password validation support when changing password.
 - Scroller syncs previous page regardless of the length of the inbox
+- [ET-3094] Log out account and clear its state if login fails during post login validation
+- Show account state in mail-tui account-switcher
+- Add comprehensive support for message view with snooze_time ordering
 
 ### Fixes
 
@@ -63,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4155] Check the correct recipient list for expiration validation
 - [ET-4155] Always treat known proton domains as supported
 - [ET-4155] Revalidate recipients on draft open
+- Message.snoozed_until is read directly from converstation's label instead of `snooze_time` api field.
+- [ET-3992] Update the account data when receiving a user via event loop.
+- [et-4002] support multipart emails with local-only attachments
+- [et-3605] poll event loop after answering a notification
 
 
 ## [mail-uniffi-v0.121.0] - 2025-08-08
@@ -120,15 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-3914] Add observability for /domains/available endpoint
-- [ET-3914] Delete dead code
-- [ET-3914] Fix wrong test name
-- [ET-3914] Add observability for unlocking user keys
-- [ET-3914] Add observability for post login user checks
-- Action auto dependencies
-- [ET-3911] Add record_human_verification_screen_view
 - Parallel default action groups
-- [ET-3911] Add record_human_verification_result
 - Et-3917 sign-in: add observability
 - [ET-4083] Expiration time options
 - [ET-3911] Add record_human_verification_view_loading_result function
@@ -136,7 +134,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- [ET-4011] Improve error handling for attachment uploads
 - [ET-2416] Sort accounts by name
 
 
@@ -156,6 +153,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - [ET-4084] Draft recipient expiration feature check
+
+
+## [mail-uniffi-v0.116.0] - 2025-08-05
+
+### Features
+
+- [ET-3911] Add record_human_verification_screen_view
+- [ET-3911] Add record_human_verification_result
+- Action auto dependencies
+
+### Fixes
+
+- [ET-4011] Improve error handling for attachment uploads
 
 
 ## [mail-uniffi-v0.115.7] - 2025-08-05
@@ -220,6 +230,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- [ET-3914] Add observability for /domains/available endpoint
+- [ET-3914] Delete dead code
+- [ET-3914] Fix wrong test name
+- [ET-3914] Add observability for unlocking user keys
+- [ET-3914] Add observability for post login user checks
 - [ET-3864] Connect actuall snooze implementation with uniffi layer
 
 ### Fixes
