@@ -28,77 +28,6 @@ static CACHE: LazyLock<Arc<RwLock<CachedStatus>>> = LazyLock::new(|| {
     }))
 });
 
-#[derive(Clone, Debug)]
-struct CachedStatus {
-    status: ConnectionStatus,
-    checked_at: Option<Instant>,
-}
-
-impl Deref for CachedStatus {
-    type Target = ConnectionStatus;
-
-    fn deref(&self) -> &Self::Target {
-        &self.status
-    }
-}
-
-#[derive(Debug)]
-struct BackgroundPing {
-    request: JoinHandle<()>,
-}
-
-impl BackgroundPing {
-    fn is_finished(&self) -> bool {
-        self.request.is_finished()
-    }
-}
-
-#[derive(Clone, Debug)]
-struct StatusObserverConfig {
-    fg_retry: RetryPolicy,
-    fg_timeout: Duration,
-    bg_retry: RetryPolicy,
-    bg_timeout: Duration,
-    up_to_date: Duration,
-}
-
-impl Default for StatusObserverConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl StatusObserverConfig {
-    fn new() -> Self {
-        Self {
-            up_to_date: UP_TO_DATE_DURATION,
-            fg_retry: RetryPolicy::default().never(),
-            fg_timeout: Timeouts::TWO_SECONDS,
-            bg_retry: RetryPolicy::default()
-                .max_count(2)
-                .max_delay(5.s())
-                .iter_mul(1.0),
-            bg_timeout: Timeouts::QUARTER_MINUTE,
-        }
-    }
-
-    #[cfg(feature = "mocks")]
-    fn test() -> Self {
-        let never = RetryPolicy::default().never();
-        let fg_timeout = Timeouts::ONE_SECOND;
-        let bg_timeout = Timeouts::ONE_SECOND * 2;
-        let up_to_date = Duration::from_secs(2);
-
-        Self {
-            up_to_date,
-            fg_retry: never,
-            fg_timeout,
-            bg_retry: never,
-            bg_timeout,
-        }
-    }
-}
-
 #[must_use]
 #[derive(Clone, Debug)]
 pub struct StatusObserver {
@@ -268,6 +197,77 @@ impl StatusObserver {
 impl Default for StatusObserver {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct StatusObserverConfig {
+    fg_retry: RetryPolicy,
+    fg_timeout: Duration,
+    bg_retry: RetryPolicy,
+    bg_timeout: Duration,
+    up_to_date: Duration,
+}
+
+impl StatusObserverConfig {
+    fn new() -> Self {
+        Self {
+            up_to_date: UP_TO_DATE_DURATION,
+            fg_retry: RetryPolicy::default().never(),
+            fg_timeout: Timeouts::TWO_SECONDS,
+            bg_retry: RetryPolicy::default()
+                .max_count(2)
+                .max_delay(5.s())
+                .iter_mul(1.0),
+            bg_timeout: Timeouts::QUARTER_MINUTE,
+        }
+    }
+
+    #[cfg(feature = "mocks")]
+    fn test() -> Self {
+        let never = RetryPolicy::default().never();
+        let fg_timeout = Timeouts::ONE_SECOND;
+        let bg_timeout = Timeouts::ONE_SECOND * 2;
+        let up_to_date = Duration::from_secs(2);
+
+        Self {
+            up_to_date,
+            fg_retry: never,
+            fg_timeout,
+            bg_retry: never,
+            bg_timeout,
+        }
+    }
+}
+
+impl Default for StatusObserverConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CachedStatus {
+    status: ConnectionStatus,
+    checked_at: Option<Instant>,
+}
+
+impl Deref for CachedStatus {
+    type Target = ConnectionStatus;
+
+    fn deref(&self) -> &Self::Target {
+        &self.status
+    }
+}
+
+#[derive(Debug)]
+struct BackgroundPing {
+    request: JoinHandle<()>,
+}
+
+impl BackgroundPing {
+    fn is_finished(&self) -> bool {
+        self.request.is_finished()
     }
 }
 
