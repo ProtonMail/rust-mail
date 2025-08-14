@@ -3,7 +3,18 @@ source: mail/mail-html-transformer/src/tests/remote_content.rs
 expression: transformer.to_string()
 snapshot_kind: text
 ---
-<html><head></head><body><section>
+<html><head>
+    <style>body {
+  background: #00d url("https://mdn.github.io/shared-assets/images/examples/leopard.jpg") no-repeat fixed;
+}
+
+ul {
+  list-style: url("");
+}
+</style>
+</head>
+<body>
+<section>
     <svg id="svigi" width="5cm" height="4cm" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
         <image x="0" y="0" height="50px" width="50px" xlink:href="firefox.jpg"></image>
         <image x="0" y="0" height="50px" width="50px" xlink:href="chrome.jpg"></image>
@@ -50,5 +61,8 @@ snapshot_kind: text
         Example style that caused regexps to crash
     </p>
     <img id="babase64" src="">
+    <div style="background: url(&quot;&quot;)">css_background_style_embedded</div>
+    <div style="background:url(https://foo.bar.com/img.png)">css_background_style_remote</div>
 </section>
+
 </body></html>

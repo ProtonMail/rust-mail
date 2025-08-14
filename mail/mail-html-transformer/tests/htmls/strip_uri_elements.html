@@ -4,6 +4,27 @@
     <meta charset="UTF-8">
     <meta http-equiv="refresh" content="seconds; foo://bar.com">
     <title>Title</title>
+    <style>
+        body {
+            background: url("https://mdn.github.io/shared-assets/images/examples/leopard.jpg") #0000dd no-repeat fixed;
+        }
+
+        ul {
+            list-style: outside url("cid:css223232");
+        }
+
+        div {
+            background: url(javascript:console.log('css_hello')) #0000dd no-repeat fixed;
+        }
+
+        div > ul {
+            list-style: outside url("data:image/png;base63,AAA==");
+        }
+
+        tr > ul {
+            list-style: outside url("/foo.png");
+        }
+    </style>
 </head>
 <body>
 <img srcset="xxx://f.com 2x, http://y.com 789w, https://foo.bar"/>
@@ -22,6 +43,9 @@ ANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4
 <form action="javascript:console.log('foo')">
     <button formaction="javascript:console.log('foo')">foo</button>
 </form>
+
+<div style="background: url(javascript:console.log('hello'))"> invalid_css_style</div>;
+<div style="background: url(https://foo.bar.com/img.png)"> valid_css_style</div>;
 
 <img src="/foo/bar.png">
 <img src="cid:CE85EADC-1A1B-4730-BE51-610011D32B8C">

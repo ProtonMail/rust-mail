@@ -14,6 +14,9 @@ Alll
 
 Example style that caused regexps to crash
 
+css_background_style_embedded
+css_background_style_remote
+
 [1]: lol-image.jpg
 [2]: jeanne-image.jpg
 [3]: cid:1234
