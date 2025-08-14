@@ -255,12 +255,25 @@ impl Builder {
         init_server_crypto_clock();
 
         let store = self.store.unwrap_or_else(TempStore::boxed);
-        let mut status = self.status.unwrap_or_else(|| StatusWatcher::new(spawner));
+
+        let mut status = self
+            .status
+            .unwrap_or_else(|| StatusWatcher::new(spawner.clone()));
+
         let notifier = self.notifier.unwrap_or_else(FailNotifier::arced);
 
         let config = Arc::new(self.config);
         let store = Arc::new(RwLock::new(store));
-        let client = proton::build(&config, &store, &status, notifier, self.info_provider).await?;
+
+        let client = proton::build(
+            &config,
+            &store,
+            &status,
+            spawner,
+            notifier,
+            self.info_provider,
+        )
+        .await?;
 
         status.initialize(client.clone());
 

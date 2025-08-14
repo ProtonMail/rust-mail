@@ -6212,6 +6212,8 @@ name = "proton-task-service"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
+ "muon",
  "parking_lot",
  "pin-project",
  "tokio",

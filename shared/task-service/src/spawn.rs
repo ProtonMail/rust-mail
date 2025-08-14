@@ -1,3 +1,4 @@
+use futures::future::BoxFuture;
 use std::{
     future::Future,
     pin::Pin,
@@ -82,6 +83,12 @@ impl DynSpawner for SpawnerRef {
 
             tokio::spawn(async move { AsyncTaskResult::Cancelled })
         }
+    }
+}
+
+impl muon::rt::Spawner for SpawnerRef {
+    fn spawn(&self, fut: BoxFuture<'static, ()>) {
+        self.spawn_boxed_task(fut);
     }
 }
 
