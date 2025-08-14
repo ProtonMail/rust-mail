@@ -44,6 +44,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
+use tokio::runtime;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::error;
@@ -248,6 +249,7 @@ impl MailContext {
     #[tracing::instrument("MailContextNew", skip_all)]
     pub async fn new(
         origin: Origin,
+        runtime: runtime::Handle,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         core_cache_path: impl Into<PathBuf>,
@@ -265,6 +267,7 @@ impl MailContext {
 
         let core_context = Context::new(
             origin,
+            runtime,
             session_db_path,
             user_db_path,
             key_chain,
