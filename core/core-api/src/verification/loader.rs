@@ -8,7 +8,6 @@ use muon::ProtonRequest;
 use muon::common::Server;
 use muon::{Method, ProtonResponse};
 use proton_task_service::SpawnerRef;
-use tracing::info;
 
 /// The type of a challenge loader result.
 pub type ChallengeLoaderResult<E = ApiServiceError> = Result<ChallengeLoaderResponse, E>;
