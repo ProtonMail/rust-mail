@@ -11,6 +11,8 @@ pin-project = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
+muon = { workspace = true }
+futures = { workspace = true }
 
 [dev-dependencies]
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
