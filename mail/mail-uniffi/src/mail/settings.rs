@@ -146,6 +146,7 @@ pub enum MobileSignatureStatus {
 }
 
 #[uniffi_export]
+#[must_use]
 pub fn custom_settings(ctx: &MailUserSession) -> Arc<CustomSettings> {
     Arc::new(CustomSettings { ctx: ctx.ptr() })
 }
