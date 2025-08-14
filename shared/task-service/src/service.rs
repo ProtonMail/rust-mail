@@ -8,8 +8,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::task::{Context, Poll, Waker};
-use std::thread;
 use std::time::Duration;
+use std::{io, thread};
+use tokio::runtime;
 use tokio::sync::oneshot;
 use tokio::task::{AbortHandle, JoinHandle};
 use tokio_util::sync::CancellationToken;
@@ -23,6 +24,7 @@ thread_local! {
 pub struct TaskService {
     active: Arc<AtomicBool>,
     sender: mpsc::Sender<Command>,
+    runtime: runtime::Handle,
 }
 
 impl TaskService {
@@ -31,7 +33,7 @@ impl TaskService {
     /// # Errors
     ///
     /// Returns error if we can't spawn the background thread.
-    pub fn new() -> std::io::Result<Self> {
+    pub fn new(runtime: runtime::Handle) -> io::Result<Self> {
         let (sender, receiver) = mpsc::channel();
 
         thread::Builder::new()
@@ -43,6 +45,7 @@ impl TaskService {
         Ok(Self {
             active: Arc::new(AtomicBool::new(true)),
             sender,
+            runtime,
         })
     }
 
@@ -195,7 +198,7 @@ impl TaskService {
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        tokio::spawn(self.guard(future))
+        self.runtime.spawn(self.guard(future))
     }
 
     /// Spawns a new task that races with given cancellation token.
@@ -589,9 +592,13 @@ mod tests {
     use tokio::{sync::RwLock, task, time};
     use tracing::{Instrument, trace_span};
 
+    fn service() -> TaskService {
+        TaskService::new(runtime::Handle::current()).unwrap()
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn overwrite_pause_state() {
-        let service = TaskService::new().unwrap();
+        let service = service();
         let (sender1, mut receiver1) = tokio::sync::mpsc::channel(1);
         let (sender2, mut receiver2) = tokio::sync::mpsc::channel(1);
         let (main_sender, mut main_receiver) = tokio::sync::mpsc::channel(2);
@@ -659,7 +666,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn pause_and_wait() {
-        let service = TaskService::new().unwrap();
+        let service = service();
         let (sender1, mut receiver1) = tokio::sync::mpsc::channel(1);
         let (sender2, mut receiver2) = tokio::sync::mpsc::channel(1);
         let (main_sender, mut main_receiver) = tokio::sync::mpsc::channel(2);
@@ -771,7 +778,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn non_pausable_with_multiple_yield_points() {
-        let service = Arc::new(TaskService::new().unwrap());
+        let service = Arc::new(service());
 
         let value = service.spawn({
             let service = service.clone();
@@ -795,7 +802,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn pause_and_wait_does_not_bock() {
-        let service = Arc::new(TaskService::new().unwrap());
+        let service = Arc::new(service());
 
         service
             .pause_and_wait(Duration::from_millis(100))

@@ -9,6 +9,7 @@ use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use tempdir::TempDir;
+use tokio::runtime;
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, info};
 use tracing_subscriber::EnvFilter;
@@ -44,6 +45,7 @@ async fn main() {
 
         MailContext::new(
             Origin::App,
+            runtime::Handle::current(),
             tmp_dir.path().join("session"),
             tmp_dir.path().join("user"),
             tmp_dir.path().join("core_cache"),

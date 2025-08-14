@@ -16,6 +16,7 @@ use proton_log_service::LogService;
 use std::sync::Arc;
 use tempdir::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::runtime;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -138,11 +139,14 @@ async fn create_context() -> Arc<Context> {
         .name("log".into())
         .directory(tmp_dir.path().into())
         .build();
+
     keychain
         .store(key.clone())
         .expect("failed to store in keychain");
+
     Context::new(
         Origin::App,
+        runtime::Handle::current(),
         tmp_dir.path(),
         tmp_dir.path(),
         Arc::new(InMemoryKeyChain::default()).clone(),

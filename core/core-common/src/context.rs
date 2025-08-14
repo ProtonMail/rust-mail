@@ -5,6 +5,7 @@ mod registry;
 pub mod services;
 use registry::ServiceRegistry;
 use services::logging_service::LoggingService;
+use tokio::runtime;
 
 use crate::action_queue::CoreActionError;
 use crate::auth_store::{AuthStore, DecryptExt};
@@ -294,6 +295,7 @@ impl Context {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         origin: Origin,
+        runtime: runtime::Handle,
         account_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
@@ -349,7 +351,7 @@ impl Context {
             }
         }
 
-        let task_service = TaskService::new()?;
+        let task_service = TaskService::new(runtime)?;
         let background_task_service = BackgroundAwareTaskService::new(task_service);
 
         let mut builder = ContextBuilder::new()

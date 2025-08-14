@@ -1,4 +1,3 @@
-use crate::async_runtime;
 use crate::errors::{OtherErrorReason, ProtonError, VoidActionResult};
 use crate::mail::MailSession;
 use crate::{core::datatypes::DeviceEnvironment, errors::ActionError};
@@ -75,11 +74,6 @@ impl MailSession {
     pub fn register_device_task(&self) -> Result<Arc<RegisterDeviceTaskHandle>, ActionError> {
         let ctx = self.ctx().core_context().clone();
         let (tx, rx) = watch::channel(None);
-
-        // Even though this function is synchronous, we need async runtime for spawning background task.
-        //
-        let rt = async_runtime();
-        let _guard = rt.enter();
         let handle = spawn_registered_device_task(ctx, rx).map_err(RealProtonMailError::from)?;
 
         Ok(Arc::new(RegisterDeviceTaskHandle { sender: tx, handle }))
