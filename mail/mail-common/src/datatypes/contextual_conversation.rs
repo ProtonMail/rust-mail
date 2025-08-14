@@ -19,9 +19,7 @@ use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
-use proton_core_common::models::{
-    Label, LabelError, ModelExtension, ModelIdExtension as _, PaidSubscription, User,
-};
+use proton_core_common::models::{Label, LabelError, ModelExtension, ModelIdExtension as _, User};
 use proton_mail_api::services::proton::common::ConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
@@ -459,8 +457,7 @@ impl ContextualConversation {
             return Ok(None);
         };
         let settings = MailSettings::get_or_default(tether).await;
-        let is_paid = user.subscribed.contains(PaidSubscription::MAIL) && !user.is_deliquent();
-        let state = if is_paid {
+        let state = if user.is_paying_for_mail() {
             match settings.auto_delete_spam_and_trash_days {
                 None | Some(0) => AutoDeleteState::AutoDeleteDisabled,
                 Some(_) => AutoDeleteState::AutoDeleteEnabled,
