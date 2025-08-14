@@ -16,7 +16,7 @@ fn disable_embedded_elements() {
     let mut transformer = Transformer::new(TEST_DOCUMENT);
     let (_, embedded) = transformer.disable_content(false, true);
     insta::assert_snapshot!(transformer.to_string());
-    assert_eq!(embedded, 9);
+    assert_eq!(embedded, 12);
 }
 
 #[test]

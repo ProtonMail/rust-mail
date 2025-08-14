@@ -1,0 +1,37 @@
+---
+source: mail/mail-html-transformer/src/tests/sanitizer.rs
+expression: html
+snapshot_kind: text
+---
+<!DOCTYPE html><html lang="en"><head>
+    
+    
+    <title>Title</title>
+</head>
+<body>
+<img>
+<a>foo</a>
+<img src="http://foo@bar.com">
+<img alt="" src="data:image/png;base64,iVBORw0KGgoAAA
+ANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4
+//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU
+5ErkJggg==" style="width:36pt;height:36pt">
+<img src="https://foo_bar.com/img.png">
+<img>
+
+<blockquote cite="http://www.google.com">foo</blockquote>
+<blockquote>foo</blockquote>
+
+
+    <button>foo</button>
+
+
+<img>
+<img src="cid:CE85EADC-1A1B-4730-BE51-610011D32B8C">
+<img src="cid:16eff55b@proton.ch">
+<img>
+<video>cid_invalid</video>
+
+<video>invalid_url</video>
+
+</body></html>

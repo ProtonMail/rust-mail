@@ -49,6 +49,18 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
     let mut remote_count = 0;
     let mut embedded_count = 0;
 
+    let attrs = [
+        ExpandedName::new("", "url"),
+        ExpandedName::new("", "src"),
+        ExpandedName::new("", "srcset"),
+        ExpandedName::new("", "svg"),
+        ExpandedName::new("", "background"),
+        ExpandedName::new("", "poster"),
+        ExpandedName::new("", "data-src"),
+        ExpandedName::new("", "href"),
+        ExpandedName::new(ns!(xlink), "href"),
+    ];
+
     // Unfortunately the selector library does not allow use to query attributes that are not part
     // of the html standard. Attributes such as 'xlink:href` need to handled manually, so
     // we need to traverse the document manually and check each attribute ourselves.
@@ -61,7 +73,8 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
             continue;
         };
 
-        if ["a", "base", "area"].contains(&element.name.local.as_ref()) {
+        // These do not contain remote content.
+        if hide_remote && ["a", "base", "area"].contains(&element.name.local.as_ref()) {
             continue;
         }
 
@@ -70,27 +83,16 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
         let mut disabled_remote = false;
         let mut disabled_embedded = false;
 
-        let attrs = &[
-            ExpandedName::new("", "url"),
-            ExpandedName::new("", "src"),
-            ExpandedName::new("", "srcset"),
-            ExpandedName::new("", "svg"),
-            ExpandedName::new("", "background"),
-            ExpandedName::new("", "poster"),
-            ExpandedName::new("", "data-src"),
-            ExpandedName::new("", "href"),
-            ExpandedName::new(ns!(xlink), "href"),
-        ];
-
-        for item in attrs {
+        for item in &attrs {
             let Some(attr) = attributes.map.get_mut(item) else {
                 continue;
             };
+            let attr_lower = attr.value.to_lowercase();
             let attr = &mut attr.value;
-            if attr.starts_with("cid:") || 
+            if attr_lower.starts_with("cid:") ||
             // We disable data: because otherwise the clients might freak out
             // If at some point we treat PGP inline attachments different revisit this.
-            attr.starts_with("data:")
+            attr_lower.starts_with("data:")
             {
                 if hide_embedded {
                     *attr = String::new();
@@ -104,12 +106,8 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
             }
         }
 
-        if disabled_remote {
-            remote_count += u64::from(disabled_remote);
-        }
-        if disabled_embedded {
-            embedded_count += 1;
-        }
+        remote_count += u64::from(disabled_remote);
+        embedded_count += u64::from(disabled_embedded);
     }
     (remote_count, embedded_count)
 }

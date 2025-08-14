@@ -6049,6 +6049,7 @@ name = "proton-mail-html-transformer"
 version = "0.2.3"
 dependencies = [
  "criterion",
+ "email_address",
  "html2text",
  "html5ever 0.26.0",
  "indoc",
