@@ -15,6 +15,7 @@ use kuchikiki::iter::NodeEdge;
 use kuchikiki::{Attribute, NodeRef};
 use kuchikiki::{ExpandedName, NodeData};
 use lightningcss::printer::PrinterOptions;
+use lightningcss::properties::custom::Function;
 use lightningcss::stylesheet::{ParserOptions, StyleAttribute, StyleSheet};
 use lightningcss::values::url::Url;
 use lightningcss::visitor::{Visit, VisitTypes, Visitor};
@@ -223,7 +224,7 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
     type Error = Infallible;
 
     fn visit_types(&self) -> VisitTypes {
-        VisitTypes::URLS
+        VisitTypes::URLS | VisitTypes::FUNCTIONS | VisitTypes::IMAGES
     }
 
     fn visit_url(&mut self, url: &mut Url<'i>) -> Result<(), Self::Error> {
@@ -237,5 +238,14 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
             self.has_changes = true;
         }
         Ok(())
+    }
+
+    fn visit_function(&mut self, function: &mut Function<'i>) -> Result<(), Self::Error> {
+        if function.name.to_lowercase() == "image-set" {
+            function.arguments.0.clear();
+            function.name = "proton-image-set".into();
+            self.has_changes = true;
+        }
+        function.visit_children(self)
     }
 }

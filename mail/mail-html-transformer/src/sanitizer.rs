@@ -6,7 +6,9 @@ use html5ever::ns;
 use html5ever::{LocalName, namespace_url};
 use kuchikiki::{Attribute, ExpandedName, NodeData, NodeRef, iter::NodeEdge};
 use lightningcss::printer::PrinterOptions;
+use lightningcss::properties::custom::{Function, Token, TokenOrValue, Variable};
 use lightningcss::stylesheet::{ParserOptions, StyleAttribute, StyleSheet};
+use lightningcss::values::image::Image;
 use lightningcss::values::url::Url;
 use lightningcss::visitor::{Visit, VisitTypes, Visitor};
 use std::convert::Infallible;
@@ -345,6 +347,10 @@ fn is_valid_url(value: &str) -> bool {
         return false;
     };
 
+    is_valid_url_type(uri)
+}
+
+fn is_valid_url_type(uri: url::Url) -> bool {
     let scheme = uri.scheme().to_lowercase();
 
     if scheme == "cid" {
@@ -457,12 +463,18 @@ fn handle_style_attribute(css: &mut String) {
     *css = patched.code;
 }
 
+#[derive(Default)]
 struct CssUrlVisitor;
 impl<'i> Visitor<'i> for CssUrlVisitor {
     type Error = Infallible;
 
     fn visit_types(&self) -> VisitTypes {
         VisitTypes::URLS
+            | VisitTypes::IMAGES
+            | VisitTypes::FUNCTIONS
+            | VisitTypes::VARIABLES
+            | VisitTypes::PROPERTIES
+            | VisitTypes::TOKENS
     }
 
     fn visit_url(&mut self, url: &mut Url<'i>) -> Result<(), Self::Error> {
@@ -470,5 +482,57 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
             url.url = String::new().into();
         }
         Ok(())
+    }
+
+    fn visit_image(&mut self, image: &mut Image<'i>) -> Result<(), Self::Error> {
+        match image {
+            Image::None | Image::Gradient(_) => Ok(()),
+            Image::Url(url) => self.visit_url(url),
+            Image::ImageSet(set) => {
+                for option in &mut set.options {
+                    self.visit_image(&mut option.image)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn visit_variable(&mut self, var: &mut Variable<'i>) -> Result<(), Self::Error> {
+        if let Some(tokens) = &mut var.fallback {
+            self.visit_token_list(tokens)?;
+        }
+        var.visit_children(self)
+    }
+
+    fn visit_function(&mut self, function: &mut Function<'i>) -> Result<(), Self::Error> {
+        if function.name.to_lowercase() == "image-set" {
+            self.visit_token_list(&mut function.arguments)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_token(&mut self, token: &mut TokenOrValue<'i>) -> Result<(), Self::Error> {
+        if let TokenOrValue::Token(token) = token {
+            match token {
+                Token::String(value) => {
+                    // This string could be anything, we can't make any assumptions, but
+                    // if it happens to be an uri, we can at least check it.
+                    if let Ok(uri) = url::Url::parse(value) {
+                        if !is_valid_url_type(uri) {
+                            *value = String::new().into();
+                        }
+                    }
+                }
+                Token::UnquotedUrl(url) => {
+                    if !is_valid_url(url) {
+                        *url = String::new().into();
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        token.visit_children(self)
     }
 }

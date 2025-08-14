@@ -7,7 +7,14 @@ snapshot_kind: text
     
     
     <title>Title</title>
-    <style>body {
+    <style>:root {
+  --bar: "/tmp/foo.png";
+  --foo: --bar;
+  --url: --foo;
+  --inline: "";
+}
+
+body {
   background: #00d url("https://mdn.github.io/shared-assets/images/examples/leopard.jpg") no-repeat fixed;
 }
 
@@ -24,6 +31,10 @@ div > ul {
 
 tr > ul {
   list-style: url("");
+}
+
+div {
+  background: image-set(var(--url) 1x) center / cover no-repeat;
 }
 </style>
 </head>
@@ -54,7 +65,11 @@ ANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4
 <img>
 <img src="cid:rere-.tt-ton@ch">
 <video>cid_invalid</video>
+<div style="background: image-set(var(--inline) 1x) center / cover no-repeat">
+    inline image set
+</div>
 
 <video>invalid_url</video>
+
 
 </body></html>

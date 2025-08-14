@@ -5,6 +5,13 @@
     <meta http-equiv="refresh" content="seconds; foo://bar.com">
     <title>Title</title>
     <style>
+        :root {
+            --bar: "/tmp/foo.png";
+            --foo: --bar;
+            --url: --foo;
+            --inline: "javascript:console.log(bar);";
+        }
+
         body {
             background: url("https://mdn.github.io/shared-assets/images/examples/leopard.jpg") #0000dd no-repeat fixed;
         }
@@ -24,6 +31,12 @@
         tr > ul {
             list-style: outside url("/foo.png");
         }
+
+        div {
+            background: image-set(var(--url) 1x) center / cover no-repeat;
+        }
+
+
     </style>
 </head>
 <body>
@@ -53,6 +66,9 @@ ANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4
 <img src="cid:'erer'<>rere@oton.ch">
 <img src="cid:rere-.tt-ton@ch">
 <video src="cid:console.log('foo')">cid_invalid</video>
+<div style="background: image-set(var(--inline) 1x) center / cover no-repeat">
+    inline image set
+</div>
 
 <video poster="javascript:console.log('foo')">invalid_url</video>
 </body>
