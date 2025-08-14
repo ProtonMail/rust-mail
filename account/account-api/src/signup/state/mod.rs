@@ -10,6 +10,7 @@ use complete::Complete;
 use derive_more::{Display, From, TryInto};
 use muon::Client;
 use proton_core_api::store::DynStore;
+use proton_core_common::post_login_check::PostLoginValidator;
 
 mod complete;
 mod want_create;
@@ -85,10 +86,14 @@ impl State {
         Ok(s.submit_password(password))
     }
 
-    pub async fn create(self, store: DynStore) -> StateResult {
+    pub async fn create(
+        self,
+        store: DynStore,
+        post_login_validator: &dyn PostLoginValidator,
+    ) -> StateResult {
         let s: WantCreate = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
-        s.create(store).await
+        s.create(store, post_login_validator).await
     }
 
     pub fn complete(self) -> Result<(Client, User, Address), SignupError> {

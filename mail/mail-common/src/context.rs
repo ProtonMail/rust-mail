@@ -49,6 +49,7 @@ use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::error;
 
+pub const MAIL_ALLOWED_FREE_USER_COUNT: u64 = 2;
 /// Whether we should initialize MailUserContext on creation
 #[derive(Debug, Clone, Copy)]
 pub enum ShouldInitializeMailUserContext {
@@ -352,7 +353,7 @@ impl MailContext {
         let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
 
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
-            Some(2),
+            Some(MAIL_ALLOWED_FREE_USER_COUNT),
             Arc::clone(&self.core_context),
         ));
 
@@ -400,7 +401,7 @@ impl MailContext {
         let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
 
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
-            Some(2),
+            Some(MAIL_ALLOWED_FREE_USER_COUNT),
             Arc::clone(&self.core_context),
         ));
 
@@ -489,10 +490,16 @@ impl MailContext {
             username_behavior: None,
         };
 
+        let post_login_validator = Box::new(DefaultPostLoginValidator::new(
+            Some(MAIL_ALLOWED_FREE_USER_COUNT),
+            Arc::clone(&self.core_context),
+        ));
         // Create a new signup flow
-        Ok(SignupFlow::new(client, store, challenge_info)
-            .await
-            .map_err(|api_err| anyhow!(api_err.to_string()))?)
+        Ok(
+            SignupFlow::new(client, store, challenge_info, post_login_validator)
+                .await
+                .map_err(|api_err| anyhow!(api_err.to_string()))?,
+        )
     }
 
     /// Verify the PIN code.

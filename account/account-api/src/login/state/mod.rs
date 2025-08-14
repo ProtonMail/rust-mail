@@ -423,7 +423,7 @@ impl State {
             .map_err(LoginError::UserFetch)
             .await?;
 
-        let recorder: ObservabilityRecorder = ObservabilityRecorder::default();
+        let recorder = ObservabilityRecorder::default();
 
         // Fetch user addresses.
         let mut addr = ProtonCore::get_addresses(&client)

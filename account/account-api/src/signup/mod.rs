@@ -11,6 +11,7 @@ use proton_core_api::services::observability::{
 };
 use proton_core_api::store::{DynStore, StoreError};
 use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use proton_core_common::post_login_check::{PostLoginValidationError, PostLoginValidator};
 use proton_crypto_account::errors::{AccountCryptoError, SKLError};
 use proton_crypto_account::{proton_crypto::CryptoError, salts::SaltError};
 use serde::{Deserialize, Serialize};
@@ -69,6 +70,9 @@ pub enum SignupError {
     /// The recovery phone number format is invalid
     #[error("Recovery phone number format is invalid")]
     RecoveryPhoneNumberInvalid,
+
+    #[error("Post-login check failed: {0}")]
+    PostLoginCheckFailed(#[from] PostLoginValidationError),
 }
 
 #[derive(Debug, Error)]
@@ -120,6 +124,7 @@ pub struct SignupFlow {
     state: Vec<State>,
     domains: Vec<String>,
     countries: Vec<Country>,
+    post_login_validator: Box<dyn PostLoginValidator>,
 }
 
 impl SignupFlow {
@@ -128,8 +133,9 @@ impl SignupFlow {
         client: muon::Client,
         store: DynStore,
         challenge_info: ChallengeInfo,
+        post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Result<Self, ApiError> {
-        let recorder: ObservabilityRecorder = ObservabilityRecorder::default();
+        let recorder = ObservabilityRecorder::default();
         let domains = client
             .get_available_domains(None)
             .inspect_ok(|_| {
@@ -149,6 +155,7 @@ impl SignupFlow {
             state,
             domains,
             countries,
+            post_login_validator,
         })
     }
 
@@ -257,7 +264,10 @@ impl SignupFlow {
     pub async fn create(&mut self) -> Result<(), SignupError> {
         let store = DynStore::clone(&self.store);
 
-        let next = self.state()?.create(store).await?;
+        let next = self
+            .state()?
+            .create(store, &*self.post_login_validator)
+            .await?;
 
         self.state.push(next);
 
