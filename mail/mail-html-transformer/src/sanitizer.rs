@@ -330,10 +330,11 @@ fn validate_uri_attribute(name: &ExpandedName, value: &mut Attribute) -> bool {
         )
         .is_err()
         {
-            // We are using uids for while in ET, check if this actually a UID.
+            // We are using uids for while in ET, check if this actually a UID or a non valid
+            // email address that may contain email chars for greater compatibility
             uri.path()
                 .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '@')
         } else {
             true
         };
