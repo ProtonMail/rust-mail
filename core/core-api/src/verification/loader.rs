@@ -8,6 +8,7 @@ use muon::ProtonRequest;
 use muon::common::Server;
 use muon::{Method, ProtonResponse};
 use proton_task_service::SpawnerRef;
+use std::str::FromStr;
 
 /// The type of a challenge loader result.
 pub type ChallengeLoaderResult<E = ApiServiceError> = Result<ChallengeLoaderResponse, E>;
@@ -94,16 +95,9 @@ impl ChallengeLoader {
         query: impl IntoIterator<Item = (String, Option<String>)>,
         header: impl IntoIterator<Item = (String, String)>,
     ) -> Result<ChallengeLoaderResponse, ApiServiceError> {
-        self.send(
-            Method::GET,
-            base.as_ref().parse()?,
-            path,
-            query,
-            header,
-            None,
-        )
-        .ok_into()
-        .await
+        self.send(Method::GET, base, path, query, header, None)
+            .ok_into()
+            .await
     }
 
     /// Make a `POST` request to the given base/path.
@@ -115,16 +109,9 @@ impl ChallengeLoader {
         header: impl IntoIterator<Item = (String, String)>,
         body: impl Into<Vec<u8>>,
     ) -> Result<ChallengeLoaderResponse, ApiServiceError> {
-        self.send(
-            Method::POST,
-            base.as_ref().parse()?,
-            path,
-            query,
-            header,
-            Some(body.into()),
-        )
-        .ok_into()
-        .await
+        self.send(Method::POST, base, path, query, header, Some(body.into()))
+            .ok_into()
+            .await
     }
 
     /// Make a `PUT` request to the given base/path.
@@ -136,22 +123,15 @@ impl ChallengeLoader {
         header: impl IntoIterator<Item = (String, String)>,
         body: impl Into<Vec<u8>>,
     ) -> Result<ChallengeLoaderResponse, ApiServiceError> {
-        self.send(
-            Method::PUT,
-            base.as_ref().parse()?,
-            path,
-            query,
-            header,
-            Some(body.into()),
-        )
-        .ok_into()
-        .await
+        self.send(Method::PUT, base, path, query, header, Some(body.into()))
+            .ok_into()
+            .await
     }
 
     async fn send(
         &self,
         method: Method,
-        server: Server,
+        base: impl AsRef<str>,
         path: impl AsRef<str>,
         query: impl IntoIterator<Item = (String, Option<String>)>,
         header: impl IntoIterator<Item = (String, String)>,
@@ -175,6 +155,11 @@ impl ChallengeLoader {
             req = req.body(body);
         }
 
-        Ok(self.inner.send(req.server(server)).await?)
+        req = req.servers([
+            Server::from_str(base.as_ref())?,
+            Server::from_str(base.as_ref())?.to_indirect(),
+        ]);
+
+        Ok(self.inner.send(req).await?)
     }
 }

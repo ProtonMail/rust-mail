@@ -917,18 +917,13 @@ impl Context {
         let account_stash = self.account_stash().to_owned();
         let keychain = Arc::clone(&self.key_chain);
         let store = AuthStore::new(account_stash, keychain, user_id, session_id);
+        let api_config = RealApiConfig::from(self.api_config.clone());
         let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
-        let mut builder = ApiSession::builder().with_store(store);
 
-        if app_settings.use_alternative_routing {
-            info!("Using alternative routing");
-            builder = builder.with_config(RealApiConfig::from(self.api_config.clone()));
-        } else {
-            info!("Alternative routing setting is disabled");
-            builder = builder.with_config(
-                RealApiConfig::from(self.api_config.clone()).without_alternative_routing()?,
-            );
-        }
+        let mut builder = ApiSession::builder()
+            .with_config(api_config)
+            .with_store(store)
+            .with_allow_doh(app_settings.use_alternative_routing);
 
         if let Some(status) = status {
             builder = builder.with_status(status);
@@ -1023,18 +1018,12 @@ impl Context {
             store
         };
 
-        let mut builder = ApiSession::builder().with_store(store);
-
         let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
-        if app_settings.use_alternative_routing {
-            info!("Using alternative routing");
-            builder = builder.with_config(RealApiConfig::from(self.api_config.clone()));
-        } else {
-            info!("Alternative routing setting is disabled");
-            builder = builder.with_config(
-                RealApiConfig::from(self.api_config.clone()).without_alternative_routing()?,
-            );
-        }
+
+        let mut builder = ApiSession::builder()
+            .with_config(RealApiConfig::from(self.api_config.clone()))
+            .with_store(store)
+            .with_allow_doh(app_settings.use_alternative_routing);
 
         if let Some(status) = status {
             builder = builder.with_status(status);
