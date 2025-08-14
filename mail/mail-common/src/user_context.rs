@@ -19,7 +19,6 @@ use anyhow::anyhow;
 use attachment_cache::AttachmentCacheState;
 use builder::MailUserContextBuilder;
 use events::subscriber::MailEventSubscriber;
-use futures::TryFutureExt;
 use initialization::InitializationMediator;
 use proton_account_api::password::PasswordFlow;
 use proton_action_queue::action::ActionGroup;
@@ -572,18 +571,14 @@ impl MailUserContext {
             .ok_or(KeyHandlingError::NoUserSecret)
             .map_err(CoreContextError::PGPKeyAccess)?;
 
-        PasswordFlow::new(
+        Ok(PasswordFlow::new(
             session,
             user.email,
             user.keys.into(),
             key_secret,
             tfa_mode,
             mbp_mode,
-        )
-        .map_err(|e| {
-            MailContextError::Other(anyhow!("Failed to create password change flow: {e:?}"))
-        })
-        .await
+        ))
     }
 
     pub async fn logout(&self) -> MailContextResult<()> {

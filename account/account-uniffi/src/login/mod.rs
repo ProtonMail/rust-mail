@@ -117,10 +117,10 @@ impl LoginFlow {
                 .inspect_err(|err| warn!("{err:?}"))
                 .map_err(|_| LoginError::Other("Couldn't process migration data".into()))?;
 
-            let (user, data, refresh_token) = data.into_parts();
+            let (user_id, session_id, user_data, refresh_token) = data.into_parts();
 
             guard
-                .migrate(user, data, refresh_token)
+                .migrate(user_id.into(), session_id.into(), user_data, refresh_token)
                 .await
                 .map_err(LoginError::from)
         })

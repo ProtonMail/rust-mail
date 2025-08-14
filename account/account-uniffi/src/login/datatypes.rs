@@ -1,7 +1,7 @@
-use muon::{client::flow::LoginFlowData, rest::auth::v4::fido2, util::ByteSliceExt};
+use muon::{rest::auth::v4::fido2, util::ByteSliceExt};
 use proton_core_api::{
     auth::{KeySecret, UserKeySecret},
-    store::UserData,
+    store::{MbpMode, UserData},
 };
 use secrecy::SecretString;
 use uniffi::Record;
@@ -28,7 +28,7 @@ pub struct MigrationData {
 
 impl MigrationData {
     #[must_use]
-    pub fn into_parts(self) -> (UserData, LoginFlowData, SecretString) {
+    pub fn into_parts(self) -> (String, String, UserData, SecretString) {
         let Self {
             username,
             display_name,
@@ -41,22 +41,20 @@ impl MigrationData {
             ..
         } = self;
 
-        let key_secret = key_secret.as_bytes();
+        let password_mode = match password_mode {
+            PasswordMode::One => MbpMode::One,
+            PasswordMode::Two => MbpMode::Two,
+        };
 
         (
+            user_id,
+            session_id,
             UserData {
                 username,
                 display_name,
                 primary_addr,
-                key_secret: UserKeySecret(KeySecret::new(key_secret.into())),
-            },
-            LoginFlowData {
-                user_id,
-                session_id,
-                password_mode: match password_mode {
-                    PasswordMode::One => muon::client::PasswordMode::One,
-                    PasswordMode::Two => muon::client::PasswordMode::Two,
-                },
+                password_mode,
+                key_secret: UserKeySecret(KeySecret::new(key_secret.as_bytes().into())),
             },
             SecretString::new(refresh_token),
         )

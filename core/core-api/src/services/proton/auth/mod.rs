@@ -3,7 +3,7 @@ mod responses;
 
 pub use self::responses::*;
 use crate::service::ApiServiceResult;
-use muon::rest::auth::v4::tfa::TFA;
+use muon::rest::auth::v4::{fido2, tfa::TFA};
 use serde::{Deserialize, Serialize};
 
 /// The Proton Auth API base path (v4).
@@ -45,6 +45,14 @@ pub struct PostAuthInfoResponse {
     #[serde(default)]
     #[serde(rename = "2FA")]
     pub tfa: Option<TFA>,
+}
+
+impl PostAuthInfoResponse {
+    /// Returns FIDO2 keys and auth options.
+    #[must_use]
+    pub fn fido_details(&self) -> Option<fido2::Response> {
+        self.tfa.as_ref()?.fido_details()
+    }
 }
 
 impl Clone for PostAuthInfoResponse {

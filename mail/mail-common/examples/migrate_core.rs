@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use proton_core_api::auth::UserKeySecret;
-use proton_core_api::services::proton::muon::client::flow::LoginFlowData;
 use proton_core_api::session::{CoreSession as _, EnvId};
 use proton_core_api::store::UserData;
 use proton_core_common::Origin;
@@ -14,6 +11,7 @@ use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use secrecy::SecretString;
+use std::sync::Arc;
 use tempdir::TempDir;
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, info};
@@ -114,13 +112,16 @@ async fn main() {
     tracing::info!(
         "Step 2. We simulate our ET app retrieving data from keychain + blob plist and decrypting it"
     );
-    let user_id = ctx.user_id();
+
+    let user_id = ctx.user_id().to_owned();
+    let session_id = ctx.session_id().to_owned();
     let account = ctx.user_context().core_account().await.unwrap();
 
     let legacy_encryption_key = legacy_key_chain
         .load::<SessionEncryptionKey>()
         .unwrap()
         .unwrap();
+
     let decrypted_key_secret = legacy_encryption_key
         .decrypt(&*legacy_session.key_secret.clone().unwrap())
         .unwrap();
@@ -134,19 +135,12 @@ async fn main() {
         .unwrap(),
     );
 
-    let password_mode = into_api_password_mode(account.password_mode.unwrap());
-
-    let login_flow_data = LoginFlowData {
-        user_id: user_id.to_string(),
-        session_id: ctx.session_id().to_string(),
-        password_mode,
-    };
-
     let user_data = UserData {
         username: account.username.unwrap(),
         display_name: account.display_name.unwrap(),
         primary_addr: account.primary_addr.unwrap(),
         key_secret: UserKeySecret::from(decrypted_key_secret),
+        password_mode: into_api_password_mode(account.password_mode.unwrap()).into(),
     };
 
     drop(ctx);
@@ -157,7 +151,7 @@ async fn main() {
     let et_dir = TempDir::new("core-common-et").unwrap();
     let (et_context, _et_key_chain) = prepare_context(&et_dir).await;
     let mut flow = et_context.new_login_flow().await.unwrap();
-    flow.migrate(user_data, login_flow_data, decrypted_refresh_token)
+    flow.migrate(user_id, session_id, user_data, decrypted_refresh_token)
         .await
         .unwrap();
 
