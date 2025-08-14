@@ -355,15 +355,11 @@ impl MockApiEnv {
 }
 
 const _: () = {
-    use proton_core_api::session::{AppVersion, Env, Server, TlsPinSet};
+    use proton_core_api::session::{AppVersion, Env, Server};
 
     impl Env for MockApiEnv {
         fn servers(&self, _: &AppVersion) -> Vec<Server> {
             vec![Server::new(self.host.clone(), self.path.clone())]
-        }
-
-        fn pins(&self, _: &Server) -> Option<TlsPinSet> {
-            None
         }
     }
 };

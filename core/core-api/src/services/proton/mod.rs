@@ -59,7 +59,6 @@ use crate::verification::ChallengeNotifierLayer;
 use crate::verification::DynChallengeNotifier;
 use cookie::CookieJar;
 use muon::App;
-use muon::client::Builder;
 use muon::client::InfoProvider;
 use muon::client::middleware::{DisplayLogger, Tagger};
 use muon::common::ConstProxy;
@@ -115,41 +114,17 @@ pub async fn build<S: Store>(
     status: &StatusWatcher,
     notifier: DynChallengeNotifier,
     info_provider: Option<Arc<dyn InfoProvider>>,
+    allow_doh: bool,
 ) -> Result<Proton, BuildError> {
+    let store = MuonStoreImpl::new(&config.env_id, store);
+
     let app = if let Some(agent) = &config.user_agent {
         App::new(&config.app_version)?.with_user_agent(agent)
     } else {
         App::new(&config.app_version)?
     };
 
-    let proxy = if let Some(proxy) = &config.proxy {
-        Some(ConstProxy::new(proxy.parse()?))
-    } else {
-        None
-    };
-
-    let store = MuonStoreImpl::new(&config.env_id, store);
-
-    let builder = Proton::builder_async(app, store)
-        .await
-        .spawner(Tokio::spawner());
-
-    build_with(builder, status, notifier, proxy, info_provider)
-}
-
-fn build_with(
-    mut builder: Builder,
-    status: &StatusWatcher,
-    notifier: DynChallengeNotifier,
-    proxy: Option<ConstProxy>,
-    info_provider: Option<Arc<dyn InfoProvider>>,
-) -> Result<Proton, BuildError> {
-    if let Some(proxy) = proxy {
-        builder = builder.proxy(proxy);
-    }
-
-    let mut client = builder
-        .doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()])
+    let mut builder = (Proton::builder_async(app, store).await)
         .layer_front(Tagger::default())
         .layer_back(SetCryptoClockLayer)
         .layer_back(SetDefaultServiceTypeLayer)
@@ -158,7 +133,17 @@ fn build_with(
         .layer_back(ChallengeNotifierLayer::new(notifier))
         .layer_back(CookieJarLayer::new(CookieJar::new()))
         .layer_back(DisplayLogger::debug())
-        .build()?;
+        .spawner(Tokio::spawner());
+
+    if let Some(proxy) = &config.proxy {
+        builder = builder.proxy(ConstProxy::new(proxy.parse()?));
+    }
+
+    if allow_doh {
+        builder = builder.doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()]);
+    }
+
+    let mut client = builder.build()?;
 
     if let Some(info_provider) = info_provider {
         client = client.with_info_provider(info_provider);

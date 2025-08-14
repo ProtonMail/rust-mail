@@ -17,7 +17,7 @@ use tokio::runtime::Handle;
 use tracing::{error, trace};
 use url::Url;
 use wry::http::response::Builder;
-use wry::http::{Request, Response};
+use wry::http::{Method, Request, Response};
 use wry::{Rect, WebView, WebViewBuilder};
 
 pub struct App {
@@ -168,15 +168,40 @@ fn on_web_req(c: ChallengeLoader, req: Request<Vec<u8>>) -> Response<Cow<'static
     let (tx, rx) = mpsc::channel();
 
     Handle::current().spawn(async move {
+        info!(?req, "web request");
+
         let url = Url::parse(&req.uri().to_string()).unwrap();
         let base = to_https(url.base());
         let path = url.path();
         let query = url.get_query();
         let header = req.get_header();
 
-        c.get(base, path, query, header)
-            .map(|res| tx.send(res))
-            .await
+        match req.method() {
+            &Method::GET => {
+                c.get(base, path, query, header)
+                    .map(|res| tx.send(res))
+                    .await
+                    .unwrap();
+            }
+
+            &Method::POST => {
+                c.post(base, path, query, header, req.body().to_vec())
+                    .map(|res| tx.send(res))
+                    .await
+                    .unwrap();
+            }
+
+            &Method::PUT => {
+                c.put(base, path, query, header, req.body().to_vec())
+                    .map(|res| tx.send(res))
+                    .await
+                    .unwrap();
+            }
+
+            method => {
+                warn!(?method, "unsupported method");
+            }
+        }
     });
 
     let res = rx.recv().unwrap().unwrap();
