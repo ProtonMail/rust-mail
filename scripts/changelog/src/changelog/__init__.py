@@ -17,11 +17,13 @@ from changelog.types import Commits, Tags
 @click.option("--only", type=str, help="Only include matching tags")
 @click.option("--head", type=str, help="The current commit")
 @click.option("--init", type=str, help="The initial commit")
+@click.option("--name", type=str, help="The release name")
 def main(
     path: str | None,
     only: str | None,
     head: str | None,
     init: str | None,
+    name: str | None,
 ) -> None:
     with open_repo(path) as repo:
         tags = {t.commit: t for t in repo.tags}
@@ -32,7 +34,7 @@ def main(
         commits = collect_commits(tags, head_rev, set(over_rev))
         deduped = dedupe_commits(commits)
 
-        print(render(deduped, re.compile(only) if only else None))
+        print(render(deduped, re.compile(only) if only else None, name))
 
 
 def collect_commits(tags: Tags, head: Commit, over: set[Commit]) -> Commits:
