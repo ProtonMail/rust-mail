@@ -9,7 +9,6 @@ use proton_action_queue::action::{
 };
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::prelude::GetMessagesOptions;
-use proton_task_service::AsyncTaskResult;
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
@@ -186,14 +185,16 @@ async fn refresh_conversation_messages(
             .filter(|msg| msg.remote_id.is_some())
             .map(|msg| (msg.remote_id.clone(), msg))
             .collect();
-        let AsyncTaskResult::Completed(Ok(remote_msgs)) = remote_msgs
-            .await
-            .map_err(|e| anyhow!("Failed to download remote labels: `{e}`"))?
-        else {
-            return Err(MailActionError::Other(anyhow!(
-                "The task was cancelled, we need to run refresh again"
-            )));
+
+        let remote_msgs = match remote_msgs.await {
+            Ok(msgs) => msgs.map_err(|e| anyhow!("Failed to download remote labels: `{e}`"))?,
+            Err(_) => {
+                return Err(MailActionError::Other(anyhow!(
+                    "The task was cancelled, we need to run refresh again"
+                )));
+            }
         };
+
         guard
             .tx(async |tx| {
                 for remote_msg in remote_msgs.messages {

@@ -1,6 +1,5 @@
 use std::{fmt::Debug, future::Future};
 
-use proton_task_service::AsyncTaskResult;
 use tokio::task::JoinHandle;
 
 use crate::datatypes::ReadFilter;
@@ -15,8 +14,8 @@ mod remote_source;
 pub use self::data_scroller_source::*;
 pub use self::remote_source::*;
 
-pub type MailPaginatorJoinHandle =
-    Option<JoinHandle<AsyncTaskResult<Result<(), MailContextError>>>>;
+pub type MailPaginatorJoinHandle = Option<JoinHandle<Result<(), MailContextError>>>;
+
 pub trait MailScrollerSource: Send + Sync {
     type Item: Send + Sync + Clone + ScrollerEq + Debug + 'static;
 

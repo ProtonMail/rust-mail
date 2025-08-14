@@ -49,8 +49,8 @@ use proton_event_loop::EventLoopError;
 use proton_event_service::EventService;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, Spawner, SpawnerRef};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
+use proton_task_service::{Spawner, SpawnerRef};
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretVec};
 use serde_json::json;
@@ -1135,7 +1135,7 @@ impl Context {
     ///
     /// Spawned task is bound to this context, i.e. it will get cancelled if
     /// this context gets cancelled as well.
-    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {
@@ -1207,7 +1207,7 @@ impl Context {
 }
 
 impl Spawner for Context {
-    fn spawn_task<F>(&self, f: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {

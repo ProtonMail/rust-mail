@@ -6,7 +6,6 @@ use derive_more::Display;
 use futures::select;
 use itertools::Itertools;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_task_service::AsyncTaskResult;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
 use std::sync::{Arc, Weak};
@@ -831,15 +830,14 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     async fn await_task(task: &mut MailPaginatorJoinHandle) -> Result<(), MailContextError> {
         tracing::debug!("Awaiting for previous task");
 
-        if task.is_some() {
-            task.take()
-                .unwrap()
-                .await
-                .map_err(|_| MailContextError::Other(anyhow!("Failed to receive source data")))
-                .and_then(|res| match res {
-                    AsyncTaskResult::Completed(v) => v,
-                    AsyncTaskResult::Cancelled => Err(MailContextError::TaskCancelled),
-                })
+        if let Some(task) = task.take() {
+            match task.await {
+                Ok(Ok(_)) => Ok(()),
+                Ok(Err(_)) => Err(MailContextError::Other(anyhow!(
+                    "Failed to receive source data"
+                ))),
+                Err(_) => Err(MailContextError::TaskCancelled),
+            }
         } else {
             Ok(())
         }

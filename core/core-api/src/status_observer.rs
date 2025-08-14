@@ -10,7 +10,7 @@ use muon::error::ErrorKind;
 use muon::util::DurationExt;
 use muon::{Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult};
 use parking_lot::RwLock;
-use proton_task_service::{AsyncTaskResult, DynSpawner, SpawnerRef};
+use proton_task_service::{DynSpawner, SpawnerRef};
 use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
@@ -273,7 +273,7 @@ impl Deref for CachedStatus {
 }
 
 struct BackgroundPing {
-    request: JoinHandle<AsyncTaskResult<()>>,
+    request: JoinHandle<()>,
 }
 
 impl BackgroundPing {

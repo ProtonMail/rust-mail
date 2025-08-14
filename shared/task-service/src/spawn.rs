@@ -7,12 +7,6 @@ use std::{
 use tokio::task::JoinHandle;
 use tracing::warn;
 
-#[derive(Clone, Copy, Debug)]
-pub enum AsyncTaskResult<T> {
-    Completed(T),
-    Cancelled,
-}
-
 /// An abstraction over [`tokio::spawn()`] that allows to spawn managed tasks.
 ///
 /// Contract is quite simple here - tasks spawned through `spawn_task()` are, in
@@ -33,7 +27,7 @@ pub trait Spawner
 where
     Self: Send + Sync,
 {
-    fn spawn_task<F>(&self, f: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static;
 }
@@ -43,20 +37,14 @@ pub trait DynSpawner
 where
     Self: Send + Sync,
 {
-    fn spawn_boxed_task(
-        &self,
-        f: Pin<Box<dyn Future<Output = ()> + Send>>,
-    ) -> JoinHandle<AsyncTaskResult<()>>;
+    fn spawn_boxed_task(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) -> JoinHandle<()>;
 }
 
 impl<T> DynSpawner for T
 where
     T: Spawner + ?Sized,
 {
-    fn spawn_boxed_task(
-        &self,
-        f: Pin<Box<dyn Future<Output = ()> + Send>>,
-    ) -> JoinHandle<AsyncTaskResult<()>> {
+    fn spawn_boxed_task(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) -> JoinHandle<()> {
         self.spawn_task(f)
     }
 }
@@ -72,16 +60,16 @@ impl SpawnerRef {
 }
 
 impl DynSpawner for SpawnerRef {
-    fn spawn_boxed_task(
-        &self,
-        f: Pin<Box<dyn Future<Output = ()> + Send>>,
-    ) -> JoinHandle<AsyncTaskResult<()>> {
+    fn spawn_boxed_task(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) -> JoinHandle<()> {
         if let Some(spawner) = self.0.upgrade() {
             spawner.spawn_boxed_task(f)
         } else {
-            warn!("Tried to spawn a task onto a cancelled spawner, cancelling the task");
+            warn!("Tried to spawn a task onto a cancelled spawner");
 
-            tokio::spawn(async move { AsyncTaskResult::Cancelled })
+            let task = tokio::spawn(std::future::pending());
+
+            task.abort();
+            task
         }
     }
 }
@@ -122,10 +110,10 @@ impl Tokio {
 }
 
 impl Spawner for Tokio {
-    fn spawn_task<F>(&self, f: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        tokio::spawn(async move { AsyncTaskResult::Completed(f.await) })
+        tokio::spawn(f)
     }
 }

@@ -40,7 +40,7 @@ use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::Subscriber;
-use proton_task_service::{AsyncTaskResult, Spawner};
+use proton_task_service::Spawner;
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
 use std::any::{Any, TypeId};
@@ -713,7 +713,7 @@ impl MailUserContext {
     }
 
     /// See [`UserContext::spawn()`].
-    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {
@@ -730,7 +730,7 @@ impl MailUserContext {
 }
 
 impl Spawner for MailUserContext {
-    fn spawn_task<F>(&self, f: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {

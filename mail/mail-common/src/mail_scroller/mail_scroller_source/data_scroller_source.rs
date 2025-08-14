@@ -359,7 +359,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         if is_online && self.state.is_not_synced() {
             let task = self.initialize(ctx).await?;
             if let Some(task) = task {
-                task.await?;
+                task.await??;
                 // Resync it to the new online state
                 self.sync_scroller(&tether).await?;
                 replace = true;
