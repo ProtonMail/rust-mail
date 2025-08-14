@@ -23,6 +23,7 @@ use stash::stash::{Stash, StashError};
 use std::io::stdout;
 use std::sync::{Arc, Weak};
 use tempdir::TempDir;
+use tokio::runtime;
 use tracing::subscriber::set_global_default;
 use tracing::{Level, info};
 use tracing_subscriber::fmt::layer;
@@ -193,6 +194,7 @@ impl TestContext {
         // Create core test context
         let context = Context::new(
             Origin::App,
+            runtime::Handle::current(),
             tmp_dir.path(),
             tmp_dir.path(),
             keychain.clone(),

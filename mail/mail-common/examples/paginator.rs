@@ -16,6 +16,7 @@ use stash::orm::Model;
 use std::fmt::Debug;
 use std::sync::Arc;
 use tempdir::TempDir;
+use tokio::runtime;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
@@ -63,6 +64,7 @@ async fn main() {
 
     let ctx = MailContext::new(
         Origin::App,
+        runtime::Handle::current(),
         tmp_dir.path().join("session"),
         tmp_dir.path().join("user"),
         tmp_dir.path().join("core_cache"),

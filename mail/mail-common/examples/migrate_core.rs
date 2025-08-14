@@ -13,6 +13,7 @@ use proton_mail_common::context::ShouldInitializeMailUserContext;
 use secrecy::SecretString;
 use std::sync::Arc;
 use tempdir::TempDir;
+use tokio::runtime;
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, info};
 use tracing_subscriber::EnvFilter;
@@ -44,6 +45,7 @@ async fn prepare_context(tmp_dir: &TempDir) -> (Arc<MailContext>, Arc<dyn KeyCha
 
     let context = MailContext::new(
         Origin::App,
+        runtime::Handle::current(),
         tmp_dir.path().join("session"),
         tmp_dir.path().join("user"),
         tmp_dir.path().join("core_cache"),

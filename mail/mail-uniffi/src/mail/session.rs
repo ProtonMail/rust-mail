@@ -199,6 +199,7 @@ async fn create_mail_session_inner(
 
     let mail_ctx = MailContext::new(
         params.origin.into(),
+        async_runtime().handle().clone(),
         session_path,
         user_path,
         core_cache_path,
