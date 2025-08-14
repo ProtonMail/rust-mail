@@ -1,21 +1,30 @@
-use std::sync::Arc;
-
-use crate::errors::UserSessionError;
+use super::state::MailUserContextPtr;
+use super::{MailUserSession, datatypes::MailSettings};
+use crate::errors::unexpected::UnexpectedError;
+use crate::errors::{ProtonError, UserSessionError};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use proton_core_common::models::ModelExtension;
+use proton_mail_common::MailUserContext;
+use proton_mail_common::actions::settings::{
+    UpdateMobileSignatureAction, UpdateMobileSignatureEnabledAction,
+};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::MailSettings as RealSettings;
+use proton_mail_common::models::{
+    CustomSettings as RealCustomSettings, MailSettings as RealMailSettings,
+};
+use std::sync::Arc;
 use tokio::task::JoinError;
+use tracing::instrument;
+use uniffi::{Enum, Object, Record};
 
-use super::{MailUserSession, datatypes::MailSettings};
-
-/// Gets the latest settings or a default if it can't find it.
 #[uniffi_export]
 pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserSessionError> {
     let stash = ctx.user_stash()?;
+
     Ok(uniffi_async::<_, JoinError, _>(async move {
         let tether = stash.connection();
-        Ok(RealSettings::get_or_default(&tether).await.into())
+
+        Ok(RealMailSettings::get_or_default(&tether).await.into())
     })
     .await
     .unwrap_or(MailSettings::default()))
@@ -27,23 +36,24 @@ pub struct SettingsWatcher {
     pub watch_handle: Arc<WatchHandle>,
 }
 
-/// Calls on_update with the new mail settings every time the mail settings change.
 #[uniffi_export]
 pub async fn watch_mail_settings(
     ctx: &MailUserSession,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<SettingsWatcher, UserSessionError> {
     let ctx = ctx.ctx()?;
+
     uniffi_async(async move {
         let stash = ctx.user_stash();
         let tether = stash.connection();
-        let settings = RealSettings::all(&tether)
+
+        let settings = RealMailSettings::all(&tether)
             .await?
             .pop()
             .unwrap_or_default()
             .into();
 
-        let handle = RealSettings::watch(stash)?;
+        let handle = RealMailSettings::watch(stash)?;
         let watcher = watch_channel(&*ctx, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(SettingsWatcher {
@@ -53,4 +63,94 @@ pub async fn watch_mail_settings(
     })
     .await
     .map_err(UserSessionError::from)
+}
+
+#[derive(Clone, Object)]
+pub struct CustomSettings {
+    ctx: MailUserContextPtr,
+}
+
+impl CustomSettings {
+    fn ctx(&self) -> Result<Arc<MailUserContext>, ProtonError> {
+        self.ctx
+            .upgrade()
+            .ok_or(ProtonError::Unexpected(UnexpectedError::Unknown))
+    }
+}
+
+#[uniffi_export]
+impl CustomSettings {
+    #[instrument(skip_all)]
+    pub async fn mobile_signature(&self) -> Result<MobileSignature, ProtonError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async::<_, RealProtonMailError, _>(async move {
+            let user = ctx.user().await?;
+            let tether = ctx.user_stash().connection();
+            let settings = RealCustomSettings::get_or_default(&tether).await?;
+
+            let status = if user.is_paying_for_mail() {
+                if settings.mobile_signature_enabled() {
+                    MobileSignatureStatus::Enabled
+                } else {
+                    MobileSignatureStatus::Disabled
+                }
+            } else {
+                MobileSignatureStatus::NeedsPaidVersion
+            };
+
+            Ok(MobileSignature {
+                body: settings.mobile_signature.unwrap_or_default(),
+                status,
+            })
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[instrument(skip_all)]
+    pub async fn set_mobile_signature(&self, signature: String) -> Result<(), ProtonError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async::<_, RealProtonMailError, _>(async move {
+            ctx.queue_action(UpdateMobileSignatureAction::new(Some(signature)))
+                .await?;
+
+            Ok(())
+        })
+        .await
+        .map_err(ProtonError::from)
+    }
+
+    #[instrument(skip_all)]
+    pub async fn set_mobile_signature_enabled(&self, enabled: bool) -> Result<(), ProtonError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async::<_, RealProtonMailError, _>(async move {
+            ctx.queue_action(UpdateMobileSignatureEnabledAction::new(Some(enabled)))
+                .await?;
+
+            Ok(())
+        })
+        .await
+        .map_err(ProtonError::from)
+    }
+}
+
+#[derive(Clone, Record)]
+pub struct MobileSignature {
+    pub body: String,
+    pub status: MobileSignatureStatus,
+}
+
+#[derive(Clone, Copy, Enum)]
+pub enum MobileSignatureStatus {
+    Enabled,
+    Disabled,
+    NeedsPaidVersion,
+}
+
+#[uniffi_export]
+pub fn custom_settings(ctx: &MailUserSession) -> Arc<CustomSettings> {
+    Arc::new(CustomSettings { ctx: ctx.ptr() })
 }
