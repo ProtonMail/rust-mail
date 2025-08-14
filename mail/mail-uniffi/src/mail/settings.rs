@@ -5,9 +5,6 @@ use crate::errors::{ProtonError, UserSessionError};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::MailUserContext;
-use proton_mail_common::actions::settings::{
-    UpdateMobileSignatureAction, UpdateMobileSignatureEnabledAction,
-};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::{
     CustomSettings as RealCustomSettings, MailSettings as RealMailSettings,
@@ -113,8 +110,7 @@ impl CustomSettings {
         let ctx = self.ctx()?;
 
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            ctx.queue_action(UpdateMobileSignatureAction::new(Some(signature)))
-                .await?;
+            RealCustomSettings::update_mobile_signature(&ctx, Some(signature)).await?;
 
             Ok(())
         })
@@ -127,8 +123,7 @@ impl CustomSettings {
         let ctx = self.ctx()?;
 
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            ctx.queue_action(UpdateMobileSignatureEnabledAction::new(Some(enabled)))
-                .await?;
+            RealCustomSettings::update_mobile_signature_enabled(&ctx, Some(enabled)).await?;
 
             Ok(())
         })

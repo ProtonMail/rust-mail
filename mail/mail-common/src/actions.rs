@@ -7,7 +7,6 @@ pub mod messages;
 pub mod notifications_quick_actions;
 pub mod refresh;
 pub mod rollback;
-pub mod settings;
 
 pub use self::available_action::*;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
@@ -183,8 +182,6 @@ pub(crate) fn register_actions(
             reg(queue, draft::AttachmentRemoveHandler { api: api.clone() });
             reg(queue, refresh::ActionRefreshHandler { ctx: ctx.clone() });
             reg(queue, rollback::RollbackActionHandler { api: api.clone() });
-            reg(queue, settings::UpdateMobileSignatureHandler);
-            reg(queue, settings::UpdateMobileSignatureEnabledHandler);
         }
 
         Origin::ShareExt => {
