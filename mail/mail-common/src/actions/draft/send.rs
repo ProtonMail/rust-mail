@@ -10,7 +10,8 @@ use crate::draft::{
 };
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
-    DraftSendResultOrigin, MailSettings, Message, MessageCounters, MetadataId, RollbackItem,
+    DraftSendResultOrigin, MailSettings, Message, MessageBodyMetadata, MessageCounters, MetadataId,
+    RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use chrono::{DateTime, Local};
@@ -23,6 +24,7 @@ use proton_core_api::services::proton::PrivateEmail;
 use proton_core_api::services::proton::prelude::AddressId;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::ModelExtension;
+use proton_crypto_inbox::keys::ComposerPreference;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
@@ -381,6 +383,13 @@ impl Send {
             .inspect_err(|e| error!("Failed to load mail settings: {e:?}"))?
             .unwrap_or_default();
 
+        // Load body metadata
+        let Some(stored_message_body_metadata) =
+            MessageBodyMetadata::for_message(message_metadata.id(), guard.tether()).await?
+        else {
+            return Err(SendError::MessageBodyMetadataMissing(message_metadata.id()).into());
+        };
+
         // Load body - it is not encrypted.
         let Some((stored_message_body, _)) =
             Message::load_decrypted_message_body(message_metadata.id(), guard.tether()).await?
@@ -403,6 +412,12 @@ impl Send {
 
         let pgp = new_pgp_provider();
 
+        // Composer preference to compute the recipent send preference from.
+        let composer_preference = ComposerPreference {
+            encrypt_to_outside: eo_data.is_some(),
+            composer_body_mime_type: stored_message_body_metadata.mime_type.into(),
+        };
+
         // Load send preferences for each recipient of the message.
         let send_preferences = load_prefs(
             ctx,
@@ -410,7 +425,7 @@ impl Send {
             guard,
             &action.recipients,
             mail_settings.crypto_mail_settings(),
-            eo_data.is_some(),
+            composer_preference,
         )
         .await
         .inspect_err(|err| error!("Failed to load send preferences for recipients: {err:?}"))?;

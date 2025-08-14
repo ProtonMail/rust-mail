@@ -223,7 +223,6 @@ impl MailSettings {
     pub fn crypto_mail_settings(&self) -> CryptoMailSettings {
         CryptoMailSettings {
             pgp_scheme: self.pgp_scheme.into(),
-            mime_type: self.draft_mime_type.into(),
             sign: self.sign,
         }
     }

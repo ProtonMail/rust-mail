@@ -153,12 +153,13 @@ const EXPECTED_MESSAGE_EXTERNAL: &str = r#"<div style="font-family: Arial, sans-
 fn send_internal() {
     let pgp = new_pgp_provider();
 
-    let (mail_settings, draft, sender_keys) =
+    let (mail_settings, composer_preferences, draft, sender_keys) =
         send_logic::setup_test_environment(&pgp, models::DraftMessage::load_internal);
 
     let recipient_preferences = send_logic::create_send_preferences(
         &pgp,
         mail_settings,
+        composer_preferences,
         recipient_keys::load_recipient_public_key_internal,
         PackageMimeType::Html,
     );
@@ -191,12 +192,13 @@ fn send_internal() {
 fn send_internal_v6() {
     let pgp = new_pgp_provider();
 
-    let (mail_settings, draft, sender_keys) =
+    let (mail_settings, composer_preferences, draft, sender_keys) =
         send_logic::setup_test_environment(&pgp, models::DraftMessage::load_internal);
 
     let recipient_preferences = send_logic::create_send_preferences(
         &pgp,
         mail_settings,
+        composer_preferences,
         recipient_keys::load_recipient_public_key_internal_v6,
         PackageMimeType::Html,
     );
@@ -228,13 +230,14 @@ fn send_internal_v6() {
 fn send_internal_to_self() {
     let pgp = new_pgp_provider();
 
-    let (mail_settings, draft, sender_keys) =
+    let (mail_settings, composer_preferences, draft, sender_keys) =
         send_logic::setup_test_environment(&pgp, models::DraftMessage::load_internal);
 
     let recipient_preferences = SendPreferences::new_for_self(
         &sender_keys,
         UnixTimestamp::new(1_726_502_569),
         mail_settings,
+        composer_preferences,
     )
     .unwrap();
 
@@ -262,12 +265,13 @@ fn send_internal_to_self() {
 fn send_external_no_keys() {
     let pgp = new_pgp_provider();
 
-    let (mail_settings, draft, sender_keys) =
+    let (mail_settings, composer_preferences, draft, sender_keys) =
         send_logic::setup_test_environment(&pgp, models::DraftMessage::load_internal);
 
     let recipient_preferences = send_logic::create_send_preferences(
         &pgp,
         mail_settings,
+        composer_preferences,
         recipient_keys::load_recipient_public_key_external_no_keys,
         PackageMimeType::Html,
     );
@@ -299,12 +303,13 @@ fn send_external_no_keys() {
 fn send_external_mime() {
     let pgp = new_pgp_provider();
 
-    let (mail_settings, draft, sender_keys) =
+    let (mail_settings, composer_preferences, draft, sender_keys) =
         send_logic::setup_test_environment(&pgp, models::DraftMessage::load_external);
 
     let recipient_preferences = send_logic::create_send_preferences(
         &pgp,
         mail_settings,
+        composer_preferences,
         recipient_keys::load_recipient_public_key_external,
         PackageMimeType::Multipart,
     );
@@ -342,12 +347,13 @@ fn send_external_mime() {
 fn send_external_mime_sign_only() {
     let pgp = new_pgp_provider();
 
-    let (mail_settings, draft, sender_keys) =
+    let (mail_settings, composer_preferences, draft, sender_keys) =
         send_logic::setup_test_environment(&pgp, models::DraftMessage::load_internal);
 
     let mut recipient_preferences = send_logic::create_send_preferences(
         &pgp,
         mail_settings,
+        composer_preferences,
         recipient_keys::load_recipient_public_key_external,
         PackageMimeType::Multipart,
     );
@@ -578,7 +584,6 @@ mod models {
     pub fn load_mail_settings() -> CryptoMailSettings {
         CryptoMailSettings {
             pgp_scheme: PGPScheme::PGPMime,
-            mime_type: EmailMimeType::Html,
             sign: false,
         }
     }
@@ -729,6 +734,8 @@ mod sender_keys {
 }
 
 mod send_logic {
+    use std::str::FromStr;
+
     use super::*;
     use proton_crypto_account::keys::UnlockedAddressKeys;
     use send_request::PackageSignaturesMode;
@@ -738,6 +745,7 @@ mod send_logic {
         draft_loader: fn() -> models::DraftMessage,
     ) -> (
         CryptoMailSettings,
+        ComposerPreference,
         models::DraftMessage,
         UnlockedAddressKeys<P>,
     )
@@ -748,12 +756,16 @@ mod send_logic {
         let draft = draft_loader();
         let sender_keys = sender_keys::load_sender_address_keys(pgp);
 
-        (mail_settings, draft, sender_keys)
+        let composer_preferences =
+            ComposerPreference::new(EmailMimeType::from_str(&draft.mime_type).unwrap());
+
+        (mail_settings, composer_preferences, draft, sender_keys)
     }
 
     pub fn create_send_preferences<P>(
         pgp: &P,
         mail_settings: CryptoMailSettings,
+        composer_preferences: ComposerPreference,
         keys_loader: fn(&P) -> PublicAddressKeys<P::PublicKey>,
         expected_mime_type: PackageMimeType,
     ) -> SendPreferences<P::PublicKey>
@@ -766,7 +778,7 @@ mod send_logic {
             None,
             UnixTimestamp::new(1_734_001_426),
             &mail_settings,
-            ComposerPreference::default(),
+            composer_preferences,
         )
         .unwrap();
 

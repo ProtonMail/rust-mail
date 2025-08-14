@@ -63,7 +63,7 @@ pub async fn load_prefs<P>(
     tx: &mut impl RunTransaction,
     recipient_emails: &[PrivateEmail],
     crypto_mail_settings: CryptoMailSettings,
-    eo_selected: bool,
+    composer_preference: ComposerPreference,
 ) -> MailContextResult<HashMap<PrivateEmail, SendPreferences<P::PublicKey>>>
 where
     P: PGPProviderSync,
@@ -77,9 +77,7 @@ where
                 tx,
                 PrivateEmailRef::new(recipient.as_clear_text_str()),
                 crypto_mail_settings,
-                ComposerPreference {
-                    encrypt_to_outside: eo_selected,
-                },
+                composer_preference,
             )
             .await
             .map_err(|err| {
