@@ -3,7 +3,7 @@ use muon::client::InfoProvider;
 use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
 use muon::common::ParseEndpointErr;
 use muon::env::DynEnv;
-use proton_task_service::WeakSpawner;
+use proton_task_service::SpawnerRef;
 use std::borrow::Borrow;
 use std::fmt::Formatter;
 use std::sync::Arc;
@@ -251,7 +251,7 @@ impl Builder {
         self
     }
 
-    pub async fn build(self, spawner: WeakSpawner) -> Result<Session, BuildError> {
+    pub async fn build(self, spawner: SpawnerRef) -> Result<Session, BuildError> {
         init_server_crypto_clock();
 
         let store = self.store.unwrap_or_else(TempStore::boxed);
@@ -301,7 +301,7 @@ impl std::fmt::Debug for Session {
 }
 
 impl Session {
-    pub async fn new(spawner: WeakSpawner) -> Result<Self, BuildError> {
+    pub async fn new(spawner: SpawnerRef) -> Result<Self, BuildError> {
         Self::builder().build(spawner).await
     }
 

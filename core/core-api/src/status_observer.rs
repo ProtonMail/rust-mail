@@ -10,7 +10,7 @@ use muon::error::ErrorKind;
 use muon::util::DurationExt;
 use muon::{Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult};
 use parking_lot::RwLock;
-use proton_task_service::{AsyncTaskResult, WeakSpawner};
+use proton_task_service::{AsyncTaskResult, DynSpawner, SpawnerRef};
 use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
@@ -41,11 +41,11 @@ pub struct StatusObserver {
     ping: Arc<RwLock<Option<BackgroundPing>>>,
 
     #[debug(skip)]
-    spawner: WeakSpawner,
+    spawner: SpawnerRef,
 }
 
 impl StatusObserver {
-    pub fn new(spawner: WeakSpawner) -> Self {
+    pub fn new(spawner: SpawnerRef) -> Self {
         let (status, _) = watch::channel(ConnectionStatus::Online);
 
         Self {
@@ -59,9 +59,7 @@ impl StatusObserver {
     }
 
     #[cfg(feature = "mocks")]
-    pub fn test() -> Self {
-        use proton_task_service::Tokio;
-
+    pub fn test(spawner: SpawnerRef) -> Self {
         let (status, _) = watch::channel(ConnectionStatus::Online);
         let config = StatusObserverConfig::test();
 
@@ -74,7 +72,7 @@ impl StatusObserver {
             status,
             history: StatusChanges::new(NonZeroUsize::new(3).unwrap()),
             ping: Arc::new(RwLock::new(None)),
-            spawner: Tokio::weak(),
+            spawner,
         }
     }
 
@@ -193,17 +191,8 @@ impl StatusObserver {
 
         let this = self.clone();
 
-        let Some(spawner) = self.spawner.upgrade() else {
-            warn!(
-                "Cannot spawn a background ping task since the task spawner \
-                 has died in the meantime",
-            );
-
-            return;
-        };
-
         *ping = Some(BackgroundPing {
-            request: spawner.spawn_boxed_task(Box::pin(this.ping(
+            request: self.spawner.spawn_boxed_task(Box::pin(this.ping(
                 api,
                 self.config.bg_timeout,
                 self.config.bg_retry,

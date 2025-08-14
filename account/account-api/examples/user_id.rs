@@ -13,7 +13,6 @@ use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
 use proton_core_common::{Context, Origin};
 use proton_log_service::LogService;
-use proton_task_service::Tokio;
 use std::sync::Arc;
 use tempdir::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
@@ -42,13 +41,13 @@ async fn main() {
     let app_product = std::env::var("PAPI_APP_PRODUCT").unwrap();
     let app_version = std::env::var("PAPI_APP_VERSION").unwrap();
 
+    let context = create_context().await;
+
     let session = Session::builder()
         .with_app_version(app_platform, app_product, app_version)
-        .build(Tokio::weak())
+        .build(context.spawner())
         .await
         .unwrap();
-
-    let context = create_context().await;
 
     let mut login_flow = LoginFlow::new(
         session.clone(),

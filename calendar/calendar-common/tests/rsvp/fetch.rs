@@ -432,10 +432,13 @@ async fn network_failure() {
         let env = MockApiEnv::new("http://localhost:1");
         let cfg = Config::for_env(env);
 
+        let status =
+            StatusWatcher::with_observer(StatusObserver::test(world.ctx.context.spawner()));
+
         Session::builder()
             .with_config(&cfg)
-            .with_status(StatusWatcher::with_observer(StatusObserver::test()))
-            .build(world.ctx.context.as_weak())
+            .with_status(status)
+            .build(world.ctx.context.spawner())
             .await
             .unwrap()
     };
