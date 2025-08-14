@@ -6,7 +6,7 @@ use proton_core_common::{
 };
 use stash::orm::Model;
 use stash::stash::Tether;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use super::{
     MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
@@ -357,10 +357,17 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         self.sync_scroller(&tether).await?;
 
         if is_online && self.state.is_not_synced() {
-            let task = self.initialize(ctx).await?;
-            if let Some(task) = task {
-                task.await??;
-                // Resync it to the new online state
+            if let Some(task) = self.initialize(ctx).await? {
+                match task.await {
+                    Ok(Ok(_)) => (),
+                    Ok(Err(err)) => {
+                        warn!(?err, "Couldn't initialize scroller, continuing anyway");
+                    }
+                    Err(err) => {
+                        warn!(?err, "Couldn't initialize scroller, continuing anyway");
+                    }
+                }
+
                 self.sync_scroller(&tether).await?;
                 replace = true;
             }

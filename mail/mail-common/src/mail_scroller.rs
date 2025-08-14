@@ -832,10 +832,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
         if let Some(task) = task.take() {
             match task.await {
-                Ok(Ok(_)) => Ok(()),
-                Ok(Err(_)) => Err(MailContextError::Other(anyhow!(
-                    "Failed to receive source data"
-                ))),
+                Ok(result) => result,
                 Err(_) => Err(MailContextError::TaskCancelled),
             }
         } else {
