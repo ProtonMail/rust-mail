@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- Address signature not updating
+- Missing body update in `html_for_composer`
+
+
+## [mail-uniffi-v0.125.0] - 2025-08-13
+
 ### Features
 
 - [ET-3780] Expose change password auth errors

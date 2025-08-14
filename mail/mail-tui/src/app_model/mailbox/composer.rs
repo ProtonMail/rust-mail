@@ -462,7 +462,7 @@ impl Composer {
         let draft = self.draft.clone();
         let task = Command::task(async move {
             let cmd = match draft.change_sender_address(email).await {
-                Ok(()) => match (draft.sender().await, draft.body().await) {
+                Ok(_) => match (draft.sender().await, draft.body().await) {
                     (Ok(sender), Ok(body)) => Command::message(
                         ComposerMessage::FinishChangeAddress { sender, body }.into(),
                     ),

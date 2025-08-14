@@ -827,13 +827,13 @@ impl DraftActor {
         &self,
         theme_opts: ThemeOpts,
         editor_id: String,
-    ) -> Result<String, MailContextError> {
+    ) -> Result<(String, String), MailContextError> {
         self.act(|sender| DraftActorMessage::HtmlHeadForComposer {
             theme_opts,
             editor_id,
             sender,
         })
-        .await?
+        .await
     }
 
     pub async fn body(&self) -> Result<String, MailContextError> {
@@ -862,7 +862,9 @@ impl DraftActor {
         draft_v1::Draft::cancel_schedule_send(ctx, message_id).await
     }
 
-    pub async fn change_sender_address(&self, email: String) -> Result<(), MailContextError> {
+    // Returns updated body with the new signature if any - uniffi compatability method, to be
+    // removed in the future.
+    pub async fn change_sender_address(&self, email: String) -> Result<String, MailContextError> {
         self.act(move |sender| DraftActorMessage::ChangeSenderAddress { email, sender })
             .await?
     }
@@ -1222,7 +1224,7 @@ enum DraftActorMessage {
     #[display("ChangeSenderAddress")]
     ChangeSenderAddress {
         email: String,
-        sender: oneshot::Sender<Result<(), MailContextError>>,
+        sender: oneshot::Sender<Result<String, MailContextError>>,
     },
     #[display("SanitizeBody")]
     SanitizeBody(oneshot::Sender<Result<(), MailContextError>>),
@@ -1244,7 +1246,7 @@ enum DraftActorMessage {
     HtmlHeadForComposer {
         theme_opts: ThemeOpts,
         editor_id: String,
-        sender: oneshot::Sender<Result<String, MailContextError>>,
+        sender: oneshot::Sender<(String, String)>,
     },
     #[display("GetAttachments")]
     GetAttachments(oneshot::Sender<Result<Vec<DraftAttachment>, MailContextError>>),
@@ -1515,7 +1517,10 @@ impl DraftActor {
                     let _ = sender.send(r);
                 }
                 DraftActorMessage::ChangeSenderAddress { email, sender } => {
-                    let r = draft.change_sender_address(&ctx, email).await;
+                    let r = draft
+                        .change_sender_address(&ctx, email)
+                        .await
+                        .map(|_| draft.body().to_owned());
                     let r = auto_saver.map_save(r, &ctx, &draft, &options).await;
                     let _ = sender.send(r);
                 }
@@ -1548,8 +1553,9 @@ impl DraftActor {
                     editor_id,
                     sender,
                 } => {
-                    let _ = sender.send(Ok(
-                        draft.html_head_content_for_composer(theme_opts, editor_id)
+                    let _ = sender.send((
+                        draft.html_head_content_for_composer(theme_opts, editor_id),
+                        draft.body().to_owned(),
                     ));
                 }
                 DraftActorMessage::GetAttachments(sender) => {
