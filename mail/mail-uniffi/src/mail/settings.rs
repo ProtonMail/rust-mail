@@ -8,6 +8,7 @@ use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::{
     CustomSettings as RealCustomSettings, MailSettings as RealMailSettings,
+    MobileSignatureStatus as RealMobileSignatureStatus,
 };
 use std::sync::Arc;
 use tokio::task::JoinError;
@@ -27,7 +28,7 @@ pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserSe
     .unwrap_or(MailSettings::default()))
 }
 
-#[derive(Clone, uniffi::Record)]
+#[derive(Clone, Record)]
 pub struct SettingsWatcher {
     pub settings: MailSettings,
     pub watch_handle: Arc<WatchHandle>,
@@ -85,20 +86,11 @@ impl CustomSettings {
             let user = ctx.user().await?;
             let tether = ctx.user_stash().connection();
             let settings = RealCustomSettings::get_or_default(&tether).await?;
-
-            let status = if user.is_paying_for_mail() {
-                if settings.mobile_signature_enabled() {
-                    MobileSignatureStatus::Enabled
-                } else {
-                    MobileSignatureStatus::Disabled
-                }
-            } else {
-                MobileSignatureStatus::NeedsPaidVersion
-            };
+            let status = RealMobileSignatureStatus::new(&user, &settings);
 
             Ok(MobileSignature {
                 body: settings.mobile_signature.unwrap_or_default(),
-                status,
+                status: status.into(),
             })
         })
         .await
@@ -143,6 +135,18 @@ pub enum MobileSignatureStatus {
     Enabled,
     Disabled,
     NeedsPaidVersion,
+}
+
+impl From<RealMobileSignatureStatus> for MobileSignatureStatus {
+    fn from(value: RealMobileSignatureStatus) -> Self {
+        use RealMobileSignatureStatus as Lhs;
+
+        match value {
+            Lhs::Enabled => Self::Enabled,
+            Lhs::Disabled => Self::Disabled,
+            Lhs::NeedsPaidVersion => Self::NeedsPaidVersion,
+        }
+    }
 }
 
 #[uniffi_export]

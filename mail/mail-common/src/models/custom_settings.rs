@@ -2,7 +2,7 @@ use crate::datatypes::NotAMagicLocalIdError;
 use crate::migration_snooper::PostLoginMobileMigrationPayload;
 use crate::{AppError, MailUserContext};
 use proton_core_api::services::proton::UserId;
-use proton_core_common::models::{InitializationError, InitializationWatcher};
+use proton_core_common::models::{InitializationError, InitializationWatcher, User};
 use proton_core_common::{datatypes::InitializationKey, models::InitializedComponent};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
@@ -188,6 +188,27 @@ impl SyncedCustomSettings {
         self.settings.save(tx).await?;
 
         Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum MobileSignatureStatus {
+    Enabled,
+    Disabled,
+    NeedsPaidVersion,
+}
+
+impl MobileSignatureStatus {
+    pub fn new(user: &User, settings: &CustomSettings) -> Self {
+        if user.is_paying_for_mail() {
+            if settings.mobile_signature_enabled() {
+                Self::Enabled
+            } else {
+                Self::Disabled
+            }
+        } else {
+            Self::NeedsPaidVersion
+        }
     }
 }
 
