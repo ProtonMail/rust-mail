@@ -272,8 +272,9 @@ impl PasswordFlow {
 
     /// Get the FIDO2 details for authentication.
     ///
-    /// ⚠️  WARNING: This returns potentially stale FIDO2 details from the initial auth info.
-    /// For actual authentication, use `fetch_fresh_fido_details()` instead.
+    /// # Warning
+    /// This returns potentially stale FIDO2 details from the initial auth info.
+    /// For actual authentication, use `fetch_fresh_fido_details` instead.
     pub fn get_cached_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
         self.state()?.cached_fido_details()
     }
@@ -281,7 +282,7 @@ impl PasswordFlow {
     /// Fetch fresh FIDO2 details for authentication.
     ///
     /// This method calls the `/auth/info` endpoint to get current FIDO2 challenge details.
-    /// Use this instead of `get_cached_fido_details()` for actual authentication flows.
+    /// Use this instead of `get_cached_fido_details` for actual authentication flows.
     pub async fn fetch_fresh_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
         self.state()?.fetch_fresh_fido_details().await
     }

@@ -167,8 +167,9 @@ impl State {
 
     /// Get the FIDO2 details for authentication.
     ///
-    /// ⚠️  WARNING: This returns potentially stale FIDO2 details from the initial auth info.
-    /// For actual authentication, use `fetch_fresh_fido_details()` instead.
+    /// # Warning
+    /// This returns potentially stale FIDO2 details from the initial auth info.
+    /// For actual authentication, use `fetch_fresh_fido_details` instead.
     /// This method should only be used for UI purposes to show available auth methods.
     pub fn cached_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
         let info = match self {
@@ -187,7 +188,7 @@ impl State {
     /// Fetch fresh FIDO2 details for authentication.
     ///
     /// This method calls the `/auth/info` endpoint to get current FIDO2 challenge details.
-    /// Use this instead of `fido_details()` for actual authentication flows.
+    /// Use this instead of `cached_fido_details` for actual authentication flows.
     pub async fn fetch_fresh_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
         let (client, username) = match self {
             Self::WantPass(state) => (&state.client, &state.username),
