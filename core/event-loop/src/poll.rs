@@ -55,7 +55,7 @@ impl EventPoll {
         match subscribers.entry(TypeId::of::<T>()) {
             Entry::Occupied(mut entry) => {
                 if let Some(typed_subscribers) =
-                    <dyn Any>::downcast_mut::<TypedSubscribers<T>>(entry.get_mut())
+                    <dyn Any>::downcast_mut::<TypedSubscribers<T>>(&mut *entry.get_mut())
                 {
                     typed_subscribers.add_subscriber(subscriber);
                 } else {
