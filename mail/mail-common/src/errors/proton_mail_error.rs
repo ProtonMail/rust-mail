@@ -45,29 +45,27 @@ pub enum ProtonMailError {
 /// The first attempt at converting a type will capture the allowed to log value and then release it
 /// once it is done. Subsequent attempts in nested conversions will fail.
 ///
+#[allow(dead_code)]
 struct LogStackGuard(bool);
 
 impl LogStackGuard {
     #[cfg(feature = "proton_mail_error_log")]
-    #[inline(always)]
     fn new() -> Self {
         Self(LOG_STACK.replace(false))
     }
 
     #[cfg(not(feature = "proton_mail_error_log"))]
-    #[inline(always)]
     fn new() -> Self {
         Self(true)
     }
 
-    #[inline(always)]
+    #[cfg(feature = "proton_mail_error_log")]
     fn can_log(&self) -> bool {
         self.0
     }
 }
 
 impl Drop for LogStackGuard {
-    #[inline(always)]
     fn drop(&mut self) {
         #[cfg(feature = "proton_mail_error_log")]
         LOG_STACK.set(self.0);
@@ -80,7 +78,6 @@ thread_local! {
 }
 
 #[cfg(feature = "proton_mail_error_log")]
-#[inline(always)]
 fn log_error<T: std::error::Error>(value: &T) -> LogStackGuard {
     let guard = LogStackGuard::new();
     if guard.can_log() {
@@ -88,8 +85,8 @@ fn log_error<T: std::error::Error>(value: &T) -> LogStackGuard {
     }
     guard
 }
+
 #[cfg(not(feature = "proton_mail_error_log"))]
-#[inline(always)]
 fn log_error<T: std::error::Error>(_: &T) -> LogStackGuard {
     LogStackGuard::new()
 }
