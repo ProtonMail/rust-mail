@@ -344,6 +344,7 @@ impl From<DraftSendError> for ProtonMailError {
                 MailErrorReason::DraftSendReason(DraftSendErrorReason::MessageIsNotADraft),
             ),
             DraftSendError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Internal),
+            DraftSendError::MessageBodyMetadataMissing(_) => Self::Unexpected(Unexpected::Internal),
             DraftSendError::LocalDraftWithoutMessage => Self::Unexpected(Unexpected::Internal),
             DraftSendError::SendMessage(v) => Self::from(v),
             DraftSendError::NoRecipients => Self::Reason(MailErrorReason::DraftSendReason(

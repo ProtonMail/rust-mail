@@ -141,16 +141,17 @@ fn test_sending_preferences() {
     let api_keys = create_test_public_key(&pgp);
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
-        mime_type: EmailMimeType::Text,
         sign: true,
     };
+
+    let composer_preference = ComposerPreference::new(EmailMimeType::Html);
 
     let sending_preferences = SendPreferences::new(
         api_keys.clone(),
         Some(pinned_keys.clone()),
         UnixTimestamp::new(1_723_459_962),
         &mail_setting,
-        ComposerPreference::default(),
+        composer_preference,
     )
     .expect("should be able to extract sending preferences");
 
@@ -177,7 +178,7 @@ fn test_sending_preferences() {
         None,
         UnixTimestamp::new(1_723_459_962),
         &mail_setting,
-        ComposerPreference::default(),
+        composer_preference,
     )
     .expect("should be able to extract sending preferences");
 
@@ -190,7 +191,10 @@ fn test_sending_preferences() {
         sending_preferences.selected_key.unwrap().key_fingerprint(),
         expected_key.key_fingerprint()
     );
-    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type.into());
+    assert_eq!(
+        sending_preferences.mime_type,
+        composer_preference.composer_body_mime_type.into()
+    );
 }
 
 #[test]
@@ -203,9 +207,10 @@ fn test_sending_preferences_external() {
     let mut api_keys = create_test_public_key_external(&pgp);
     let mut mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
-        mime_type: EmailMimeType::Text,
         sign: true,
     };
+
+    let composer_preference = ComposerPreference::new(EmailMimeType::Text);
 
     pinned_keys.encrypt_to_pinned = Some(true);
 
@@ -214,7 +219,7 @@ fn test_sending_preferences_external() {
         Some(pinned_keys.clone()),
         UnixTimestamp::new(1_723_459_962),
         &mail_setting,
-        ComposerPreference::default(),
+        composer_preference,
     )
     .expect("should be able to extract sending preferences");
     assert!(
@@ -234,7 +239,7 @@ fn test_sending_preferences_external() {
         Some(pinned_keys.clone()),
         UnixTimestamp::new(1_723_459_962),
         &mail_setting,
-        ComposerPreference::default(),
+        composer_preference,
     )
     .expect("should be able to extract sending preferences");
     assert!(
@@ -248,7 +253,7 @@ fn test_sending_preferences_external() {
         None,
         UnixTimestamp::new(1_723_459_962),
         &mail_setting,
-        ComposerPreference::default(),
+        composer_preference,
     )
     .expect("should be able to extract sending preferences");
     assert!(
@@ -265,7 +270,7 @@ fn test_sending_preferences_external() {
         None,
         UnixTimestamp::new(1_723_459_962),
         &mail_setting,
-        ComposerPreference::default(),
+        composer_preference,
     )
     .expect("should be able to extract sending preferences");
     assert!(
@@ -274,7 +279,10 @@ fn test_sending_preferences_external() {
             && !sending_preferences.is_selected_key_pinned
     );
     assert_eq!(sending_preferences.pgp_scheme, PackageCryptoType::Cleartext);
-    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type.into());
+    assert_eq!(
+        sending_preferences.mime_type,
+        composer_preference.composer_body_mime_type.into()
+    );
 
     let sending_preferences = SendPreferences::new(
         api_keys.clone(),
@@ -283,6 +291,7 @@ fn test_sending_preferences_external() {
         &mail_setting,
         ComposerPreference {
             encrypt_to_outside: true,
+            composer_body_mime_type: EmailMimeType::Text,
         },
     )
     .expect("should be able to extract sending preferences");
@@ -290,7 +299,7 @@ fn test_sending_preferences_external() {
         sending_preferences.pgp_scheme,
         PackageCryptoType::EncryptedOutside
     );
-    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type.into());
+    assert_eq!(sending_preferences.mime_type, EmailMimeType::Text.into());
 }
 
 #[test]
@@ -300,16 +309,17 @@ fn test_sending_preferences_user_warning() {
     let mut api_keys = create_test_public_key(&pgp);
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
-        mime_type: EmailMimeType::Text,
         sign: true,
     };
+
+    let composer_preference = ComposerPreference::new(EmailMimeType::Text);
 
     let sending_preferences = SendPreferences::new(
         api_keys.clone(),
         Some(pinned_keys.clone()),
         UnixTimestamp::new(1_723_459_962),
         &mail_setting,
-        ComposerPreference::default(),
+        composer_preference,
     );
     assert!(matches!(
         sending_preferences,
@@ -345,14 +355,22 @@ fn test_sending_preferences_own() {
 
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
-        mime_type: EmailMimeType::Html,
         sign: true,
+    };
+
+    let composer_preference = ComposerPreference {
+        encrypt_to_outside: false,
+        composer_body_mime_type: EmailMimeType::Html,
     };
 
     let sending_preferences = SendPreferences::new_for_self(
         &address_keys,
         UnixTimestamp::new(1_723_459_962),
         mail_setting,
+        ComposerPreference {
+            encrypt_to_outside: false,
+            composer_body_mime_type: EmailMimeType::Html,
+        },
     )
     .expect("should be able to extract sending preferences");
     assert!(
@@ -368,7 +386,10 @@ fn test_sending_preferences_own() {
         sending_preferences.pgp_scheme,
         PackageCryptoType::ProtonMail
     );
-    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type.into());
+    assert_eq!(
+        sending_preferences.mime_type,
+        composer_preference.composer_body_mime_type.into()
+    );
 }
 
 fn create_test_pinned_key<T: PGPProviderSync>(

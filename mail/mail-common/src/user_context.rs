@@ -510,9 +510,13 @@ impl MailUserContext {
                 .await
                 .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
 
-            let send_preferences =
-                SendPreferences::new_for_self(&address_keys, encryption_time, settings)
-                    .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
+            let send_preferences = SendPreferences::new_for_self(
+                &address_keys,
+                encryption_time,
+                settings,
+                composer_preference,
+            )
+            .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
 
             return Ok(send_preferences);
         }

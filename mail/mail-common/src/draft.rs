@@ -135,6 +135,8 @@ pub enum SendError {
     MissingAttachmentUploads,
     #[error("Message Body for {0} missing")]
     MessageBodyMissing(LocalMessageId),
+    #[error("Message Body Metadata for {0} missing")]
+    MessageBodyMetadataMissing(LocalMessageId),
     #[error("Unable to schedule send before expected delivery time")]
     ScheduleSendExpired,
     #[error("The maximum amount of scheduled messages has been reached")]
