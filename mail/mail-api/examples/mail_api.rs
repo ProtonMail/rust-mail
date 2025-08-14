@@ -1,4 +1,5 @@
 #![allow(clippy::print_stdout)]
+
 use muon::env::EnvId;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
@@ -34,12 +35,13 @@ async fn main() {
                 .with_default_directive(LevelFilter::TRACE.into())
                 .parse_lossy("info,proton_core_api=debug,proton_mail_api_debug"),
         );
+
     tracing_subscriber::registry().with(file_subscriber).init();
+
     let user_email = std::env::var("USER_EMAIL").unwrap();
     let user_password = std::env::var("USER_PASSWORD").unwrap();
-    let session = Session::new().await.unwrap();
     let context = create_context().await;
-
+    let session = Session::new(context.spawner()).await.unwrap();
     let migration_snooper = Box::new(NoopMigrationSnooper);
 
     let post_login_validator = Box::new(DefaultPostLoginValidator::new(

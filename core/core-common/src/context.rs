@@ -49,8 +49,8 @@ use proton_event_loop::EventLoopError;
 use proton_event_service::EventService;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
+use proton_task_service::{Spawner, SpawnerRef};
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretVec};
 use serde_json::json;
@@ -393,6 +393,11 @@ impl Context {
     #[must_use]
     pub fn as_weak(&self) -> Weak<Self> {
         Weak::clone(&self.this)
+    }
+
+    #[must_use]
+    pub fn spawner(&self) -> SpawnerRef {
+        SpawnerRef::new(self.as_weak())
     }
 
     #[must_use]
@@ -942,7 +947,7 @@ impl Context {
             }));
         }
 
-        Ok(builder.build().await?)
+        Ok(builder.build(self.spawner()).await?)
     }
 
     async fn new_api_session_ext(
@@ -1032,7 +1037,7 @@ impl Context {
             builder = builder.with_status(status);
         }
 
-        let primary_session = builder.build().await?;
+        let primary_session = builder.build(self.spawner()).await?;
 
         let forked_session = primary_session
             .downgrade_to_fork(
@@ -1129,23 +1134,13 @@ impl Context {
     ///
     /// Spawned task is bound to this context, i.e. it will get cancelled if
     /// this context gets cancelled as well.
-    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<F::Output>
     where
-        F: Future<Output: Send> + Send + 'static,
-    {
-        self.spawn_with::<DefaultTaskSpawner, _>(task)
-    }
-
-    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
-    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        S: TaskSpawner,
         F: Future<Output: Send> + Send + 'static,
     {
         let token = self.cancellation_token.clone();
 
-        self.task_service
-            .spawn_cancellable_with::<S, _>(token, task)
+        self.task_service.spawn_cancellable(token, task)
     }
 
     /// Returns a cancellation token that is a child of the the one owned by the context.
@@ -1207,6 +1202,15 @@ impl Context {
             .remote_id
             .clone();
         Ok(session_id)
+    }
+}
+
+impl Spawner for Context {
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
+    where
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(f)
     }
 }
 

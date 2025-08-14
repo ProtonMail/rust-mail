@@ -12,7 +12,6 @@ use proton_core_api::{
     session::CoreSession as _,
     status_watcher::StatusWatcher,
 };
-use proton_task_service::AsyncTaskResult;
 use stash::{
     exports::ToSql,
     orm::Model,
@@ -46,7 +45,7 @@ const MISSING_SCOPES_ERROR_CODE: u32 = 9100;
 pub fn spawn_registered_device_task(
     ctx: Arc<Context>,
     device_rx: watch::Receiver<Option<RegisteredDevice>>,
-) -> Result<JoinHandle<AsyncTaskResult<()>>, RegisteredDeviceTaskError> {
+) -> Result<JoinHandle<()>, RegisteredDeviceTaskError> {
     let sessions_watcher = CoreSession::watch(ctx.account_stash())?;
     let ctx_clone = ctx.clone();
     let handle = ctx.spawn(async move {

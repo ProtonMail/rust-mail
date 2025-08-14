@@ -143,11 +143,9 @@
 
 use proton_core_common::watch_handle::WatchHandle as RealWatchHandle;
 use proton_mail_common::datatypes::SearchOptions as RealSearchOptions;
-use proton_mail_common::{MailContext, MailUserContext};
-use proton_task_service::{AsyncTaskResult, TaskSpawner};
+use proton_task_service::Spawner;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
-use std::future::Future;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use uniffi_runtime::{async_runtime, async_runtime_slim, uniffi_async};
@@ -213,10 +211,7 @@ pub struct WatchHandle(RealWatchHandle);
 
 impl WatchHandle {
     #[must_use]
-    pub fn new(
-        watch_handle: DropRemoveTableObserverHandle,
-        task_handle: &JoinHandle<AsyncTaskResult<()>>,
-    ) -> Self {
+    pub fn new(watch_handle: DropRemoveTableObserverHandle, task_handle: &JoinHandle<()>) -> Self {
         Self(RealWatchHandle::new(watch_handle, task_handle))
     }
 }
@@ -228,64 +223,9 @@ impl WatchHandle {
     }
 }
 
-/// Spawn an async function on the runtime.
-fn spawn_async<S, T, F>(ctx: impl AsRef<S>, future: F) -> JoinHandle<AsyncTaskResult<T>>
-where
-    S: AsyncSpawnable,
-    T: Send + 'static,
-    F: Future<Output = T> + Send + 'static,
-{
-    ctx.as_ref().spawn(future)
-}
-
-/// Abstraction trait so we can reference either [`MailContext`] or [`MailUserContext`]
-/// when spawning tasks.
-pub trait AsyncSpawnable {
-    fn spawn<F>(&self, future: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        F: Future + Send + 'static,
-        <F as Future>::Output: Send + 'static;
-}
-
-impl AsyncSpawnable for MailUserContext {
-    fn spawn<F>(&self, future: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        F: Future + Send + 'static,
-        <F as Future>::Output: Send + 'static,
-    {
-        self.spawn_with::<UniffiTaskSpawner, _>(future)
-    }
-}
-
-impl AsyncSpawnable for MailContext {
-    fn spawn<F>(&self, future: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        F: Future + Send + 'static,
-        <F as Future>::Output: Send + 'static,
-    {
-        self.spawn_with::<UniffiTaskSpawner, _>(future)
-    }
-}
-
-/// Task spawner that works over the runtime managed by us.
-struct UniffiTaskSpawner;
-
-impl TaskSpawner for UniffiTaskSpawner {
-    fn spawn<F>(f: F) -> JoinHandle<F::Output>
-    where
-        F::Output: Send + 'static,
-        F: Future + Send + 'static,
-    {
-        async_runtime().spawn(f)
-    }
-}
-
-/// Watch a notification channel for changes and trigger the callback
-/// once a message has been received.
-///
 #[must_use]
-pub fn watch_channel<S: AsyncSpawnable>(
-    ctx: impl AsRef<S>,
+pub fn watch_channel(
+    ctx: &impl Spawner,
     handle: WatcherHandle,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
@@ -296,13 +236,13 @@ pub fn watch_channel<S: AsyncSpawnable>(
     Arc::new(WatchHandle::new(handle.handle, &task_handle))
 }
 
-fn watch_channel_inner<S: AsyncSpawnable, T: Send + 'static>(
-    ctx: impl AsRef<S>,
+fn watch_channel_inner<T: Send + 'static>(
+    ctx: &impl Spawner,
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + Sync + 'static,
-) -> JoinHandle<AsyncTaskResult<()>> {
+) -> JoinHandle<()> {
     // use a one-shot channel to act as an early exit strategy.
-    spawn_async(ctx, async move {
+    ctx.spawn_task(async move {
         let callback = Arc::new(callback);
         loop {
             if channel.recv_async().await.is_err() {
@@ -316,12 +256,9 @@ fn watch_channel_inner<S: AsyncSpawnable, T: Send + 'static>(
     })
 }
 
-/// Watch a notification channel for changes and trigger the callback
-/// once a message has been received.
-///
 #[must_use]
-pub fn watch_channel_async<S: AsyncSpawnable>(
-    ctx: impl AsRef<S>,
+pub fn watch_channel_async(
+    ctx: &impl Spawner,
     handle: WatcherHandle,
     callback: Arc<dyn AsyncLiveQueryCallback>,
 ) -> Arc<WatchHandle> {
@@ -329,7 +266,7 @@ pub fn watch_channel_async<S: AsyncSpawnable>(
         receiver, handle, ..
     } = handle;
 
-    let task_handle = spawn_async(ctx, async move {
+    let task_handle = ctx.spawn_task(async move {
         while receiver.recv_async().await.is_ok() {
             callback.on_update().await;
         }

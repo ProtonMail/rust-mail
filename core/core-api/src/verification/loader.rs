@@ -7,6 +7,7 @@ use futures::TryFutureExt;
 use muon::ProtonRequest;
 use muon::common::Server;
 use muon::{Method, ProtonResponse};
+use proton_task_service::SpawnerRef;
 
 /// The type of a challenge loader result.
 pub type ChallengeLoaderResult<E = ApiServiceError> = Result<ChallengeLoaderResponse, E>;
@@ -79,9 +80,9 @@ pub struct ChallengeLoader {
 
 impl ChallengeLoader {
     /// Create a new `ChallengeLoader`.
-    pub async fn new(cfg: Config) -> Result<Self, BuildError> {
+    pub async fn new(cfg: Config, spawner: SpawnerRef) -> Result<Self, BuildError> {
         Ok(Self {
-            inner: Session::builder().with_config(cfg).build().await?,
+            inner: Session::builder().with_config(cfg).build(spawner).await?,
         })
     }
 

@@ -1,4 +1,3 @@
-use proton_task_service::AsyncTaskResult;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use tokio::task::{AbortHandle, JoinHandle};
 
@@ -11,7 +10,7 @@ impl WatchHandle {
     #[must_use]
     pub fn new<T: Send + 'static>(
         watch_handle: DropRemoveTableObserverHandle,
-        task_handle: &JoinHandle<AsyncTaskResult<T>>,
+        task_handle: &JoinHandle<T>,
     ) -> Self {
         Self {
             watch_handle,

@@ -30,29 +30,40 @@ use stash::{
 };
 use tracing::{debug, error, info, warn};
 
-/// Common macros for event loop operations
 pub mod macros {
-    /// Macro to handle `AsyncTaskResult` completion and error handling
     #[macro_export]
     macro_rules! join_task {
         ($name:tt, $description: expr) => {{
-            if let proton_task_service::AsyncTaskResult::Completed(Ok(value)) = $name
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to download remote {}: `{e}`", $description))?
-            {
-                value
-            } else {
-                return Err(proton_event_loop::subscriber::SubscriberError::Other(
-                    anyhow::anyhow!(
-                        "The task `{}` was cancelled, we need to run refresh again",
+            match $name.await {
+                Ok(Ok(value)) => value,
+
+                Ok(Err(err)) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to download remote {}: `{err}`",
                         $description
-                    ),
-                ));
+                    )
+                    .into());
+                }
+
+                Err(err) => {
+                    return if err.is_cancelled() {
+                        Err(proton_event_loop::subscriber::SubscriberError::Other(
+                            anyhow::anyhow!(
+                                "The task `{}` was cancelled, we need to run refresh again",
+                                $description
+                            ),
+                        ))
+                    } else {
+                        Err(
+                            anyhow::anyhow!("Failed to download remote {}: `{err}`", $description)
+                                .into(),
+                        )
+                    };
+                }
             }
         }};
     }
 
-    /// Macro to implement retry logic for refresh operations
     #[macro_export]
     macro_rules! try_refresh {
         ($fn_name:tt, $ctx:expr) => {{

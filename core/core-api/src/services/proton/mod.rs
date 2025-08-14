@@ -67,6 +67,7 @@ use muon::common::IntoDyn;
 use muon::common::ParseEndpointErr;
 use muon::dns::{GoogleDoh, Quad9Doh};
 use muon::error::ParseAppVersionErr;
+use proton_task_service::SpawnerRef;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
@@ -112,6 +113,7 @@ pub async fn build<S: Store>(
     config: &Arc<Config>,
     store: &Arc<RwLock<S>>,
     status: &StatusWatcher,
+    spawner: SpawnerRef,
     notifier: DynChallengeNotifier,
     info_provider: Option<Arc<dyn InfoProvider>>,
 ) -> Result<Proton, BuildError> {
@@ -128,7 +130,7 @@ pub async fn build<S: Store>(
     };
 
     let store = MuonStoreImpl::new(&config.env_id, store);
-    let builder = Proton::builder_async(app, store).await;
+    let builder = Proton::builder_async(app, store).await.spawner(spawner);
 
     build_with(builder, status, notifier, proxy, info_provider)
 }
