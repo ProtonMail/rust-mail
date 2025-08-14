@@ -15,7 +15,6 @@ use proton_core_common::{Context, Origin};
 use proton_log_service::LogService;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
-use proton_task_service::Tokio;
 use std::io::{BufRead, Write, stdin, stdout};
 use std::sync::Arc;
 use tempdir::TempDir;
@@ -36,12 +35,13 @@ async fn main() {
                 .with_default_directive(LevelFilter::TRACE.into())
                 .parse_lossy("info,proton_core_api=debug,proton_mail_api_debug"),
         );
+
     tracing_subscriber::registry().with(file_subscriber).init();
+
     let user_email = std::env::var("USER_EMAIL").unwrap();
     let user_password = std::env::var("USER_PASSWORD").unwrap();
     let context = create_context().await;
-    let session = Session::new(Tokio::weak()).await.unwrap();
-
+    let session = Session::new(context.spawner()).await.unwrap();
     let migration_snooper = Box::new(NoopMigrationSnooper);
 
     let post_login_validator = Box::new(DefaultPostLoginValidator::new(

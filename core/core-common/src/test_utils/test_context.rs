@@ -285,11 +285,10 @@ impl TestContext {
     /// Get the test user context.
     ///
     pub async fn user_context(&self) -> Arc<UserContext> {
+        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
+
         self.context
-            .user_context_from_session(
-                &self.core_session,
-                Some(StatusWatcher::with_observer(StatusObserver::test())),
-            )
+            .user_context_from_session(&self.core_session, Some(status))
             .await
             .expect("failed to create user context")
     }

@@ -49,7 +49,7 @@ use proton_event_loop::EventLoopError;
 use proton_event_service::EventService;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, Spawner};
+use proton_task_service::{AsyncTaskResult, Spawner, SpawnerRef};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretVec};
@@ -393,6 +393,11 @@ impl Context {
     #[must_use]
     pub fn as_weak(&self) -> Weak<Self> {
         Weak::clone(&self.this)
+    }
+
+    #[must_use]
+    pub fn spawner(&self) -> SpawnerRef {
+        SpawnerRef::new(self.as_weak())
     }
 
     #[must_use]
@@ -942,7 +947,7 @@ impl Context {
             }));
         }
 
-        Ok(builder.build(self.as_weak()).await?)
+        Ok(builder.build(self.spawner()).await?)
     }
 
     async fn new_api_session_ext(
@@ -1033,7 +1038,7 @@ impl Context {
             builder = builder.with_status(status);
         }
 
-        let primary_session = builder.build(self.as_weak()).await?;
+        let primary_session = builder.build(self.spawner()).await?;
 
         let forked_session = primary_session
             .downgrade_to_fork(

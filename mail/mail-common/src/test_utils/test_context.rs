@@ -124,11 +124,13 @@ impl MailTestContext {
     /// it is programmers responsibility to initialize context manually afterwards.
     ///
     pub async fn uninitialized_mail_user_context(&self) -> Arc<MailUserContext> {
+        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
+
         let ctx = self
             .mail_context
             .user_context_from_session(
                 &self.core_session,
-                Some(StatusWatcher::with_observer(StatusObserver::test())),
+                Some(status),
                 ShouldInitializeMailUserContext::No,
             )
             .await
@@ -153,11 +155,13 @@ impl MailTestContext {
     /// Has to be called **AFTER** setting up the API mocks
     ///
     pub async fn mail_user_context(&self) -> Arc<MailUserContext> {
+        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
+
         let ctx = self
             .mail_context
             .user_context_from_session(
                 &self.core_session,
-                Some(StatusWatcher::with_observer(StatusObserver::test())),
+                Some(status),
                 ShouldInitializeMailUserContext::Yes,
             )
             .await
@@ -175,11 +179,13 @@ impl MailTestContext {
     ///
     /// Returns an error if context could not be initialized.
     pub async fn try_mail_user_context(&self) -> MailContextResult<Arc<MailUserContext>> {
+        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
+
         let ctx = self
             .mail_context
             .user_context_from_session(
                 &self.core_session,
-                Some(StatusWatcher::with_observer(StatusObserver::test())),
+                Some(status),
                 ShouldInitializeMailUserContext::Yes,
             )
             .await?;
@@ -193,12 +199,11 @@ impl MailTestContext {
     /// Get the test user context but only if its initialized
     ///
     pub async fn initialized_mail_user_context(&self) -> Option<Arc<MailUserContext>> {
+        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
+
         let ctx = self
             .mail_context
-            .initialized_user_context_from_session(
-                &self.core_session,
-                Some(StatusWatcher::with_observer(StatusObserver::test())),
-            )
+            .initialized_user_context_from_session(&self.core_session, Some(status))
             .await
             .unwrap()?;
 

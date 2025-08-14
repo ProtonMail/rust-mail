@@ -54,7 +54,7 @@ async fn main_gtk() -> Result<()> {
         ..Default::default()
     };
 
-    let loader = ChallengeLoader::new(config, Tokio::weak()).await?;
+    let loader = ChallengeLoader::new(config, Tokio::spawner()).await?;
 
     App::new(&events, loader)?.run(events)
 }
