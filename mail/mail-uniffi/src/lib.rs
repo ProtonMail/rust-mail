@@ -143,7 +143,7 @@
 
 use proton_core_common::watch_handle::WatchHandle as RealWatchHandle;
 use proton_mail_common::datatypes::SearchOptions as RealSearchOptions;
-use proton_task_service::{AsyncTaskResult, Spawner};
+use proton_task_service::Spawner;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
 use std::sync::Arc;
@@ -211,10 +211,7 @@ pub struct WatchHandle(RealWatchHandle);
 
 impl WatchHandle {
     #[must_use]
-    pub fn new(
-        watch_handle: DropRemoveTableObserverHandle,
-        task_handle: &JoinHandle<AsyncTaskResult<()>>,
-    ) -> Self {
+    pub fn new(watch_handle: DropRemoveTableObserverHandle, task_handle: &JoinHandle<()>) -> Self {
         Self(RealWatchHandle::new(watch_handle, task_handle))
     }
 }
@@ -243,7 +240,7 @@ fn watch_channel_inner<T: Send + 'static>(
     ctx: &impl Spawner,
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + Sync + 'static,
-) -> JoinHandle<AsyncTaskResult<()>> {
+) -> JoinHandle<()> {
     // use a one-shot channel to act as an early exit strategy.
     ctx.spawn_task(async move {
         let callback = Arc::new(callback);

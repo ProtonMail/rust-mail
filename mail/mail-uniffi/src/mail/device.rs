@@ -5,7 +5,6 @@ use crate::{core::datatypes::DeviceEnvironment, errors::ActionError};
 use proton_core_common::datatypes::RegisteredDevice as RealRegisteredDevice;
 use proton_core_common::device_registration::spawn_registered_device_task;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_task_service::AsyncTaskResult;
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -33,7 +32,7 @@ pub struct RegisteredDevice {
 pub struct RegisterDeviceTaskHandle {
     // None is used ONLY in the initial task state.
     sender: watch::Sender<Option<RealRegisteredDevice>>,
-    handle: JoinHandle<AsyncTaskResult<()>>,
+    handle: JoinHandle<()>,
 }
 
 impl Drop for RegisterDeviceTaskHandle {

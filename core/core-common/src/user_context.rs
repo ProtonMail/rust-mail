@@ -15,7 +15,6 @@ use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::AsyncTaskResult;
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use stash::watcher::TableWatcher;
@@ -295,7 +294,7 @@ impl UserContext {
     ///
     /// Spawned task is bound to this context, i.e. it will get cancelled if
     /// this context gets cancelled as well.
-    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {

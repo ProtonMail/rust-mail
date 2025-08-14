@@ -1,4 +1,3 @@
-use crate::AsyncTaskResult;
 use anyhow::anyhow;
 use parking_lot::Mutex;
 use pin_project::pin_project;
@@ -12,7 +11,7 @@ use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::Duration;
 use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
+use tokio::task::{AbortHandle, JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace};
 
@@ -201,24 +200,29 @@ impl TaskService {
 
     /// Spawns a new task that races with given cancellation token.
     ///
-    /// If the task wins, this function returns [`AsyncTaskResult::Completed`],
-    /// otherwise this function returns [`AsyncTaskResult::Cancelled`].
-    ///
     /// Spawned task can have its execution paused with [`Self::pause()`].
-    pub fn spawn_cancellable_with<F>(
-        &self,
-        token: CancellationToken,
-        future: F,
-    ) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn_cancellable<F>(&self, token: CancellationToken, future: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn(async move {
-            tokio::select! {
-                () = token.cancelled() => AsyncTaskResult::Cancelled,
-                r = future => AsyncTaskResult::Completed(r),
+        let (tx, rx) = oneshot::channel::<AbortHandle>();
+
+        let handle = self.spawn(async move {
+            if let Some(value) = token.run_until_cancelled(future).await {
+                value
+            } else {
+                // If `token` got cancelled, abort our task
+                rx.await.unwrap().abort();
+
+                // Soft-unreachable - once the called awaits the `JoinHandle`,
+                // it will return a `JoinError(Cancelled)`
+                std::future::pending().await
             }
-        })
+        });
+
+        _ = tx.send(handle.abort_handle());
+
+        handle
     }
 
     fn guard<F>(&self, future: F) -> Pin<Box<GuardedFuture<F>>>
@@ -413,19 +417,12 @@ impl BackgroundAwareTaskService {
 
     /// Spawns a new task that races with given cancellation token.
     ///
-    /// If the task wins, this function returns [`AsyncTaskResult::Completed`],
-    /// otherwise this function returns [`AsyncTaskResult::Cancelled`].
-    ///
     /// Spawned task can have its execution paused with [`Self::pause()`].
-    pub fn spawn_cancellable<F>(
-        &self,
-        token: CancellationToken,
-        future: F,
-    ) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn_cancellable<F>(&self, token: CancellationToken, future: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        self.service.spawn_cancellable_with(token, future)
+        self.service.spawn_cancellable(token, future)
     }
 
     pub fn task_service(&self) -> &TaskService {
