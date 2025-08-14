@@ -5,7 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.126.0] - 2025-08-14
+
+### Features
+
+- Expose challengeloader::post
+- Expose challengeloader::put
+- Timeout pause/resume during hv challenge
+
+### Fixes
+
+- [ET-4145] Missing conversions for draft attachment upload errors
+- [ET-4235] Strip cid links from all uri sources
+- [ET-4235] Strip invalid uri sources
+
+
+## [mail-uniffi-v0.125.1] - 2025-08-14
 
 ### Fixes
 
