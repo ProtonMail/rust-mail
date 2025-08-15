@@ -8,8 +8,8 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllListActions, Message};
-use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
+use super::datatypes::{AllListActions, AllMessageActions, Message};
+use super::datatypes::{LabelAsAction, MimeType, MoveAction};
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::PaginatorSearchOptions;
@@ -654,35 +654,6 @@ pub async fn search_for_messages(
     .map_err(ActionError::from)
 }
 
-/// Returns available actions for message.
-/// Any action returned here should reflect the display needs.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
-#[uniffi_export]
-pub async fn available_actions_for_message(
-    mailbox: Arc<Mailbox>,
-    theme: ThemeOpts,
-    id: Id,
-) -> Result<MessageAvailableActions, ActionError> {
-    let stash = mailbox.stash()?;
-    uniffi_async(async move {
-        let view = mailbox.mbox().label_id();
-        let tether = stash.connection();
-        let view = RealLabel::load(view, &tether)
-            .await?
-            .ok_or_else(|| RealProtonMailError::reason(RealActionErrorReason::UnknownLabel))?;
-        let actions =
-            RealMessage::available_actions(view, id.into(), theme.into(), &tether).await?;
-
-        Ok::<_, RealProtonMailError>(MessageAvailableActions::from(actions))
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
 /// Returns available label_as actions for messages.
 /// Any action returned here should reflect the display needs.
 ///
@@ -798,6 +769,37 @@ pub async fn all_available_list_actions_for_messages(
         )
         .await?
         .into();
+        Ok::<_, RealProtonMailError>(actions)
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Returns available actions for a single message (Phase 2).
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi_export]
+pub async fn all_available_message_actions_for_message(
+    mailbox: Arc<Mailbox>,
+    theme: ThemeOpts,
+    message_id: Id,
+) -> Result<AllMessageActions, ActionError> {
+    let stash = mailbox.stash()?;
+    let current_label_id = mailbox.label_id();
+    uniffi_async(async move {
+        let tether = stash.connection();
+        let actions = RealMessage::all_available_message_actions_for_message(
+            current_label_id.into(),
+            message_id.into(),
+            theme.into(),
+            &tether,
+        )
+        .await?
+        .into();
+
         Ok::<_, RealProtonMailError>(actions)
     })
     .await

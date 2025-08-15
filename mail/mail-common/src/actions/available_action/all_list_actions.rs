@@ -3,17 +3,65 @@
 mod tests;
 
 use crate::actions::MovableSystemFolderAction;
-use crate::datatypes::{MobileAction, SystemLabelId};
+use crate::actions::{
+    ActionContext, GenericAction, GenericMobileActions, MobileActionsBuilder, SystemFolders,
+};
+use crate::datatypes::MobileAction;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
-use tracing::warn;
 
-/// All actions available from list toolbar for messages
+/// All actions available from list toolbar for either conversation groupping enabled and disabled
 ///
 #[derive(Debug, Clone, PartialEq)]
 pub struct AllListActions {
     pub hidden_list_actions: Vec<ListAction>,
     pub visible_list_actions: Vec<ListAction>,
+}
+
+impl AllListActions {
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_context(
+        is_conversation: bool,
+        current_label: LabelId,
+        any_unread: bool,
+        any_read: bool,
+        any_starred: bool,
+        all_starred: bool,
+        mobile_actions: &[MobileAction],
+        inbox: MovableSystemFolderAction,
+        archive: MovableSystemFolderAction,
+        trash: MovableSystemFolderAction,
+        spam: MovableSystemFolderAction,
+    ) -> Self {
+        let all_read = any_read && !any_unread;
+
+        let context = ActionContext {
+            current_label,
+            any_unread,
+            any_read,
+            all_read,
+            any_starred,
+            all_starred,
+            theme: None, // Lists don't need theme-specific actions
+            folders: SystemFolders {
+                inbox,
+                archive,
+                trash,
+                spam,
+            },
+            can_reply: false,     // Not applicable for lists
+            can_reply_all: false, // Not applicable for lists
+            is_conversation,
+        };
+
+        let builder = MobileActionsBuilder::<ListAction>::new(context, mobile_actions);
+        let (visible_list_actions, hidden_list_actions) = builder.build();
+
+        Self {
+            hidden_list_actions,
+            visible_list_actions,
+        }
+    }
 }
 
 /// Actions available from list toolbar for messages
@@ -25,9 +73,7 @@ pub enum ListAction {
     MarkUnread,
     More,
     MoveTo,
-    #[debug("Move to {:?}", _0.name)]
     MoveToSystemFolder(MovableSystemFolderAction),
-    #[debug("NotSpam: Move to {:?}", _0.name)]
     NotSpam(MovableSystemFolderAction),
     PermanentDelete,
     Star,
@@ -36,166 +82,80 @@ pub enum ListAction {
 }
 
 impl ListAction {
-    /// Convert a MobileAction item into a ListActions
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn from_mobile_actions(
-        mobile_actions: &MobileAction,
-        any_unread: bool,
-        all_starred: bool,
-        current_label: &LabelId,
-        inbox: &MovableSystemFolderAction,
-        archive: &MovableSystemFolderAction,
-        trash: &MovableSystemFolderAction,
-        spam: &MovableSystemFolderAction,
-    ) -> Option<Self> {
-        match mobile_actions {
-            MobileAction::Archive => Some(Self::toggle_archive(current_label, inbox, archive)),
-            MobileAction::Label => Some(Self::LabelAs),
-            MobileAction::Move => Some(Self::MoveTo),
-            MobileAction::Spam => Some(Self::toggle_spam(current_label, inbox, spam)),
-            MobileAction::ToggleRead => Some(Self::toggle_read(any_unread)),
-            MobileAction::ToggleStar => Some(Self::toggle_star(all_starred)),
-            MobileAction::Trash => Some(Self::toggle_trash(current_label, trash)),
-            MobileAction::Snooze => Self::toggle_snooze(current_label),
-            _ => {
-                warn!("Invalid mobile action type: {mobile_actions:?}");
-                None
-            }
-        }
-    }
-
-    pub(crate) fn toggle_snooze(current_label: &LabelId) -> Option<Self> {
+    pub fn toggle_snooze(current_label: &LabelId) -> Option<Self> {
         SystemLabel::from_rid(current_label)
             .filter(|label| label.is_snooze_location())
             .map(|_| Self::Snooze)
     }
+}
 
-    pub(crate) fn toggle_read(any_unread: bool) -> Self {
-        if any_unread {
-            ListAction::MarkRead
-        } else {
-            ListAction::MarkUnread
+// Implementation of conversion from GenericAction to ListAction
+impl From<GenericAction> for ListAction {
+    fn from(action: GenericAction) -> Self {
+        match action {
+            GenericAction::MarkRead => Self::MarkRead,
+            GenericAction::MarkUnread => Self::MarkUnread,
+            GenericAction::Star => Self::Star,
+            GenericAction::Unstar => Self::Unstar,
+            GenericAction::LabelAs => Self::LabelAs,
+            GenericAction::MoveTo => Self::MoveTo,
+            GenericAction::MoveToSystemFolder(folder) => Self::MoveToSystemFolder(folder),
+            GenericAction::NotSpam(folder) => Self::NotSpam(folder),
+            GenericAction::PermanentDelete => Self::PermanentDelete,
+            GenericAction::More => Self::More,
+        }
+    }
+}
+
+impl GenericMobileActions for ListAction {
+    fn from_mobile_action(
+        mobile_action: &crate::datatypes::MobileAction,
+        context: &ActionContext,
+    ) -> Option<Self> {
+        use crate::datatypes::MobileAction::*;
+        match mobile_action {
+            ToggleRead => Some(Self::toggle_read(context.any_unread)),
+            ToggleStar => Some(Self::toggle_star_with_context(
+                context.any_starred,
+                context.all_starred,
+            )),
+            Archive => Some(Self::toggle_archive(
+                &context.current_label,
+                &context.folders.inbox,
+                &context.folders.archive,
+            )),
+            Trash => Some(Self::toggle_trash(
+                &context.current_label,
+                &context.folders.trash,
+            )),
+            Spam => Some(Self::toggle_spam(
+                &context.current_label,
+                &context.folders.inbox,
+                &context.folders.spam,
+            )),
+            Move => Some(Self::MoveTo),
+            Label => Some(Self::LabelAs),
+            Snooze => Self::toggle_snooze(&context.current_label),
+            // Unsupported actions for lists
+            Reply | Forward | Print | SavePDF | ViewHeaders | ViewHTML | ToggleLight
+            | ReportPhishing | SaveAttachments | SenderEmails | Remind => None,
         }
     }
 
-    pub(crate) fn toggle_archive(
-        current_label: &LabelId,
-        inbox: &MovableSystemFolderAction,
-        archive: &MovableSystemFolderAction,
-    ) -> Self {
-        if current_label == &LabelId::archive() {
-            Self::MoveToSystemFolder(inbox.clone())
-        } else {
-            Self::MoveToSystemFolder(archive.clone())
+    fn get_high_priority_actions(context: &ActionContext) -> Vec<Self> {
+        if context.is_conversation {
+            if let Some(snooze) = Self::toggle_snooze(&context.current_label) {
+                return vec![snooze];
+            }
         }
+        vec![]
     }
 
-    pub(crate) fn toggle_spam(
-        current_label: &LabelId,
-        inbox: &MovableSystemFolderAction,
-        spam: &MovableSystemFolderAction,
-    ) -> Self {
-        if current_label == &LabelId::spam() {
-            Self::NotSpam(inbox.clone())
-        } else if current_label == &LabelId::trash() {
-            Self::MoveToSystemFolder(inbox.clone())
-        } else {
-            Self::MoveToSystemFolder(spam.clone())
-        }
-    }
-
-    pub(crate) fn toggle_star(all_starred: bool) -> Self {
-        if all_starred {
-            Self::Unstar
-        } else {
-            Self::Star
-        }
-    }
-
-    pub(crate) fn toggle_trash(current_label: &LabelId, trash: &MovableSystemFolderAction) -> Self {
-        if [LabelId::trash(), LabelId::spam()].contains(current_label) {
-            Self::PermanentDelete
-        } else {
-            Self::MoveToSystemFolder(trash.clone())
-        }
-    }
-
-    /// Get actions not displayed in list toolbar when selecting messages or actions
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn hidden_list_actions(
-        is_conversation: bool,
-        current_label: LabelId,
-        any_unread: bool,
-        any_read: bool,
-        any_unstarred: bool,
-        any_starred: bool,
-        visible_actions: &[ListAction],
-        inbox: &MovableSystemFolderAction,
-        archive: &MovableSystemFolderAction,
-        trash: &MovableSystemFolderAction,
-        spam: &MovableSystemFolderAction,
-    ) -> Vec<ListAction> {
-        let mut result = Vec::new();
-
-        // Mark as read/unread
-        if any_unread && !visible_actions.contains(&ListAction::MarkRead) {
-            result.push(ListAction::MarkRead);
-        }
-        if any_read && !visible_actions.contains(&ListAction::MarkUnread) {
-            result.push(ListAction::MarkUnread);
-        }
-        // Star/Unstar
-        if any_unstarred && !visible_actions.contains(&ListAction::Star) {
-            result.push(ListAction::Star);
-        }
-        if any_starred && !visible_actions.contains(&ListAction::Unstar) {
-            result.push(ListAction::Unstar);
-        }
-        // Move to...
-        if !visible_actions.contains(&ListAction::MoveTo) {
-            result.push(ListAction::MoveTo);
-        }
-        // Label as...
-        if !visible_actions.contains(&ListAction::LabelAs) {
-            result.push(ListAction::LabelAs);
-        }
-        // Snooze
-        if is_conversation
-            && Self::toggle_snooze(&current_label)
-                .filter(|_| !visible_actions.contains(&ListAction::Snooze))
-                .is_some()
-        {
-            result.push(ListAction::Snooze);
-        }
-        // Move to Inbox
-        if [LabelId::trash(), LabelId::archive()].contains(&current_label)
-            && !visible_actions.contains(&ListAction::MoveToSystemFolder(inbox.clone()))
-        {
-            result.push(ListAction::MoveToSystemFolder(inbox.clone()));
-        }
-        if current_label == LabelId::spam()
-            && !visible_actions.contains(&ListAction::NotSpam(inbox.clone()))
-        {
-            result.push(ListAction::NotSpam(inbox.clone()));
-        }
-        // Archive
-        if current_label != LabelId::archive()
-            && !visible_actions.contains(&ListAction::MoveToSystemFolder(archive.clone()))
-        {
-            result.push(ListAction::MoveToSystemFolder(archive.clone()));
-        }
-        // Move to Spam
-        if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
-            && !visible_actions.contains(&ListAction::MoveToSystemFolder(spam.clone()))
-        {
-            result.push(ListAction::MoveToSystemFolder(spam.clone()));
-        }
-        // Move to Trash
-        if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
-            && !visible_actions.contains(&ListAction::MoveToSystemFolder(trash.clone()))
-        {
-            result.push(ListAction::MoveToSystemFolder(trash.clone()));
-        }
-        result
+    fn are_counter_actions(action1: &Self, action2: &Self) -> bool {
+        use ListAction::*;
+        matches!(
+            (action1, action2),
+            (MarkRead, MarkUnread) | (MarkUnread, MarkRead) | (Star, Unstar) | (Unstar, Star)
+        )
     }
 }

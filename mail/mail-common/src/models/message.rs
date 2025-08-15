@@ -11,8 +11,8 @@ use crate::actions::messages::Unread;
 use crate::actions::messages::{LabelAs, UndoLabelAsMessages};
 use crate::actions::messages::{Move, UndoMoveToMessages};
 use crate::actions::{
-    ActionMoveData, AllListActions, GeneralActions, LabelAsData, LabelAsOutput, LabelPair,
-    ListAction, MailActionError, MovableSystemFolderAction, Undo,
+    ActionMoveData, AllListActions, AllMessageActions, GeneralActions, LabelAsData, LabelAsOutput,
+    LabelPair, MailActionError, MessageAction, MovableSystemFolderAction, Undo,
 };
 use crate::mail_scroller::ScrollerEq;
 use crate::models::*;
@@ -31,8 +31,8 @@ use stash::utils::{MapToSql, placeholders};
 
 use crate::MailContextResult;
 use crate::actions::{
-    ConversationOrMessage, LabelAsAction, MessageAction, MessageAvailableActions, MoveAction,
-    MoveItemAction, ReplyAction, filter_responses,
+    ConversationOrMessage, LabelAsAction, MessageAvailableActions, MoveAction, MoveItemAction,
+    ReplyAction, filter_responses,
 };
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
@@ -566,119 +566,91 @@ impl Message {
         tether: &Tether,
     ) -> Result<AllListActions, AppError> {
         debug!("{message_ids:?}");
-        let messages_fut = async {
-            Self::find_by_ids(message_ids.to_vec(), tether)
-                .await
-                .map_err(AppError::from)
-        };
 
-        let current_label_fut = async {
-            Label::resolve_remote_label_id(current_label_id, tether)
-                .await
-                .map_err(AppError::from)
-        };
+        // Load the system folder actions and the list toolbar actions
+        let inbox = MovableSystemFolderAction::inbox(tether).await?;
+        let archive = MovableSystemFolderAction::archive(tether).await?;
+        let trash = MovableSystemFolderAction::trash(tether).await?;
+        let spam = MovableSystemFolderAction::spam(tether).await?;
+        let list_actions = MobileAction::list_toolbar_actions(tether).await?;
+        let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
+        let messages = Self::find_by_ids(message_ids.to_vec(), tether).await?;
 
-        let (inbox, archive, trash, spam, bottom_bar_actions, current_label, messages) = try_join!(
-            MovableSystemFolderAction::inbox(tether),
-            MovableSystemFolderAction::archive(tether),
-            MovableSystemFolderAction::trash(tether),
-            MovableSystemFolderAction::spam(tether),
-            MobileAction::list_toolbar_actions(tether),
-            current_label_fut,
-            messages_fut
-        )?;
-
-        let visible_list_actions = Self::visible_list_actions(
-            &current_label,
-            &messages,
-            &bottom_bar_actions,
-            &inbox,
-            &archive,
-            &trash,
-            &spam,
-        )?;
-        let hidden_list_actions = Self::hidden_list_actions(
-            current_label,
-            &messages,
-            &visible_list_actions,
-            &inbox,
-            &archive,
-            &trash,
-            &spam,
-        );
-
-        let actions = AllListActions {
-            hidden_list_actions,
-            visible_list_actions,
-        };
-        debug!("all available bottom bar actions for messages: {actions:?}");
-        Ok(actions)
-    }
-
-    /// Get actions to display in bottom_bar when selecting messages
-    fn visible_list_actions(
-        current_label: &LabelId,
-        messages: &[Self],
-        bottom_bar_actions: &[MobileAction],
-        inbox: &MovableSystemFolderAction,
-        archive: &MovableSystemFolderAction,
-        trash: &MovableSystemFolderAction,
-        spam: &MovableSystemFolderAction,
-    ) -> Result<Vec<ListAction>, AppError> {
-        let any_unread = messages.iter().any(|m| m.unread);
-        let all_starred = messages.iter().all(|m| m.is_starred());
-
-        let mut result: Vec<_> = bottom_bar_actions
-            .iter()
-            .filter_map(|a| {
-                ListAction::from_mobile_actions(
-                    a,
-                    any_unread,
-                    all_starred,
-                    current_label,
-                    inbox,
-                    archive,
-                    trash,
-                    spam,
-                )
-            })
-            .collect();
-        if result.len() > 5 {
-            warn!("Too many actions to put in Bottom Bar, truncating to 5: {result:?}");
-            result.truncate(5);
-        }
-        result.push(ListAction::More);
-        Ok(result)
-    }
-
-    /// Get actions not displayed in bottom_bar when selecting messages
-    fn hidden_list_actions(
-        current_label: LabelId,
-        messages: &[Self],
-        visible_actions: &[ListAction],
-        inbox: &MovableSystemFolderAction,
-        archive: &MovableSystemFolderAction,
-        trash: &MovableSystemFolderAction,
-        spam: &MovableSystemFolderAction,
-    ) -> Vec<ListAction> {
+        // Calculate state flags for the mobile actions builder
         let any_unread = messages.iter().any(|m| m.unread);
         let any_read = messages.iter().any(|m| !m.unread);
         let any_starred = messages.iter().any(|m| m.is_starred());
-        let any_unstarred = messages.iter().any(|m| !m.is_starred());
+        let all_starred = messages.iter().all(|m| m.is_starred());
 
-        ListAction::hidden_list_actions(
-            false,
+        // Use the unified from_context approach
+        let actions = AllListActions::from_context(
+            false, // is_conversation = false for messages
             current_label,
             any_unread,
             any_read,
-            any_unstarred,
             any_starred,
-            visible_actions,
+            all_starred,
+            &list_actions,
             inbox,
             archive,
             trash,
             spam,
-        )
+        );
+
+        debug!("all available bottom bar actions for messages: {actions:?}");
+
+        Ok(actions)
+    }
+
+    /// Get the available message actions for a single message (Phase 2)
+    ///
+    #[tracing::instrument(skip_all, fields(message_id=message_id.as_u64()))]
+    pub async fn all_available_message_actions_for_message(
+        current_label_id: LocalLabelId,
+        message_id: LocalMessageId,
+        theme: ThemeOpts,
+        tether: &Tether,
+    ) -> Result<AllMessageActions, AppError> {
+        debug!("Getting message actions for message: {message_id:?}");
+
+        // Load the message to get its state
+        let message = Self::load(message_id, tether).await?;
+        if message.is_none() {
+            warn!("Message not found: {message_id:?}");
+            // Return empty actions for missing message
+            return Ok(AllMessageActions {
+                visible_message_actions: vec![],
+                hidden_message_actions: vec![],
+            });
+        }
+        let message = message.unwrap();
+
+        let (inbox, archive, trash, spam, message_toolbar_actions) = try_join!(
+            MovableSystemFolderAction::inbox(tether),
+            MovableSystemFolderAction::archive(tether),
+            MovableSystemFolderAction::trash(tether),
+            MovableSystemFolderAction::spam(tether),
+            MobileAction::message_toolbar_actions(tether)
+        )?;
+        let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
+
+        // Use the unified builder-based approach
+        let actions = AllMessageActions::from_context(
+            current_label,
+            message.unread,
+            message.is_starred(),
+            message.can_reply(),
+            message.can_reply() && (message.to_list.len() + message.cc_list.len() > 1),
+            Some(theme),
+            &message_toolbar_actions,
+            inbox,
+            archive,
+            trash,
+            spam,
+        );
+
+        debug!("all available message actions for message: {actions:?}");
+        Ok(actions)
     }
 
     /// Save a non existing message to the database.

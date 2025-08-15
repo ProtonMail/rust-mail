@@ -2,13 +2,17 @@ pub mod addresses;
 mod available_action;
 pub mod conversations;
 pub mod draft;
+pub mod generic_mobile_actions;
 pub mod labels;
 pub mod messages;
+pub mod mobile_actions_builder;
 pub mod notifications_quick_actions;
 pub mod refresh;
 pub mod rollback;
 
 pub use self::available_action::*;
+pub use self::generic_mobile_actions::*;
+pub use self::mobile_actions_builder::*;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::messages::UndoLabelAsMessages;
