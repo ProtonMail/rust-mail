@@ -1,4 +1,5 @@
 use crate::datatypes::NotAMagicLocalIdError;
+use crate::draft::compose::PM_SIGNATURE;
 use crate::migration_snooper::PostLoginMobileMigrationPayload;
 use crate::{AppError, MailUserContext};
 use proton_core_api::services::proton::UserId;
@@ -89,7 +90,7 @@ impl CustomSettings {
 
     #[must_use]
     pub fn mobile_signature(&self) -> &str {
-        self.mobile_signature.as_deref().unwrap_or("")
+        self.mobile_signature.as_deref().unwrap_or(PM_SIGNATURE)
     }
 
     #[must_use]
@@ -124,7 +125,7 @@ impl CustomSettings {
 
     #[must_use]
     pub fn mobile_signature_enabled(&self) -> bool {
-        self.mobile_signature_enabled.unwrap_or(false)
+        self.mobile_signature_enabled.unwrap_or(true)
     }
 
     #[instrument(skip_all)]

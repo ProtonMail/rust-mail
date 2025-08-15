@@ -252,26 +252,48 @@ mod signatures {
         expected_mobile: &'static str,
     }
 
-    const TEST_NO_SIGNATURE: TestCase = TestCase {
+    const TEST_NO_SIGNATURES: TestCase = TestCase {
         given_address: address,
         given_mail_settings: mail_settings,
-        given_custom_settings: custom_settings,
+        given_custom_settings: || {
+            custom_settings()
+                .with_address_signature_enabled(false)
+                .with_mobile_signature_enabled(false)
+        },
         given_mime_type: MimeType::TextPlain,
         expected_desktop: "",
         expected_mobile: "",
     };
 
+    // On a fresh setup, we want to have the PM signature enabled by default
+    const TEST_DEFAULT_CUSTOM_SETTINGS: TestCase = TestCase {
+        given_address: address,
+        given_mail_settings: mail_settings,
+        given_custom_settings: custom_settings,
+        given_mime_type: MimeType::TextPlain,
+        expected_desktop: "",
+        expected_mobile: "\n\nSent with Proton Mail secure email.\n",
+    };
+
     const TEST_ADDRESS_SIGNATURE: TestCase = TestCase {
         given_address: || address().with_signature("cheers, jerry"),
         given_mail_settings: mail_settings,
-        given_custom_settings: || custom_settings().with_address_signature_enabled(true),
+        given_custom_settings: || {
+            custom_settings()
+                .with_address_signature_enabled(true)
+                .with_mobile_signature_enabled(false)
+        },
         given_mime_type: MimeType::TextPlain,
         expected_desktop: "\n\ncheers, jerry\n",
         expected_mobile: "\n\ncheers, jerry\n",
     };
 
     const TEST_DISABLED_ADDRESS_SIGNATURE: TestCase = TestCase {
-        given_custom_settings: || custom_settings().with_address_signature_enabled(false),
+        given_custom_settings: || {
+            custom_settings()
+                .with_address_signature_enabled(false)
+                .with_mobile_signature_enabled(false)
+        },
         expected_desktop: "\n\ncheers, jerry\n",
         expected_mobile: "",
         ..TEST_ADDRESS_SIGNATURE
@@ -354,13 +376,18 @@ mod signatures {
     const TEST_MAIL_SETTINGS_SIGNATURE: TestCase = TestCase {
         given_address: address,
         given_mail_settings: || mail_settings().with_signature("med vänliga hälsningar"),
-        given_custom_settings: custom_settings,
+        given_custom_settings: || {
+            custom_settings()
+                .with_address_signature_enabled(false)
+                .with_mobile_signature_enabled(false)
+        },
         given_mime_type: MimeType::TextPlain,
         expected_desktop: "",
         expected_mobile: "",
     };
 
-    #[test_case(TEST_NO_SIGNATURE)]
+    #[test_case(TEST_NO_SIGNATURES)]
+    #[test_case(TEST_DEFAULT_CUSTOM_SETTINGS)]
     #[test_case(TEST_ADDRESS_SIGNATURE)]
     #[test_case(TEST_DISABLED_ADDRESS_SIGNATURE)]
     #[test_case(TEST_MOBILE_SIGNATURE)]

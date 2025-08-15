@@ -499,6 +499,7 @@ pub struct DraftAddressChangeFullAddressParams {
     pub address_id: AddressId,
     pub sender: String,
 }
+
 impl DraftAddressChangeRequest {
     pub(super) fn new(
         metadata_id: MetadataId,
