@@ -5,8 +5,16 @@ mod tests;
 use html5ever::ns;
 use html5ever::{LocalName, namespace_url};
 use kuchikiki::{Attribute, ExpandedName, NodeData, NodeRef, iter::NodeEdge};
+use lightningcss::printer::PrinterOptions;
+use lightningcss::properties::custom::{Function, Token, TokenOrValue, Variable};
+use lightningcss::stylesheet::{ParserOptions, StyleAttribute, StyleSheet};
+use lightningcss::values::image::Image;
+use lightningcss::values::url::Url;
+use lightningcss::visitor::{Visit, VisitTypes, Visitor};
+use std::convert::Infallible;
 use std::sync::OnceLock;
 use std::{collections::HashSet, sync::LazyLock};
+use tracing::warn;
 use velcro::hash_set;
 
 static TAG_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
@@ -268,6 +276,7 @@ static TAGS_TO_REMOVE_WITH_INNER_HTML: LazyLock<HashSet<&'static str>> = LazyLoc
 /// - Extra disallowed attributes `srcset`, `for`
 /// - Only html tags and attributes are included. This is, svg and mathML are disallowed.
 pub fn strip_whitelist(doc: NodeRef) -> u64 {
+    let css_style_attribute = ExpandedName::new("", "style");
     let rem = doc
         .traverse_inclusive()
         .filter_map(|node| match node {
@@ -283,9 +292,28 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
                     return Some((node_ref, should_remove_inner_html));
                 }
 
+                // sanitize style sheet urls - invalid urls are stripped by the parser.
+                if e.name.local.as_ref() == "style" {
+                    node_ref.children().for_each(|child| {
+                        if let NodeData::Text(text) = child.data() {
+                            handle_style_sheet(&mut text.borrow_mut());
+                        }
+                    });
+                }
+
                 let mut attrs = e.attributes.borrow_mut();
                 attrs.map.retain(|name, value| {
-                    ATTR_SET.contains(&name.local) && validate_uri_attribute(name, value)
+                    if !(ATTR_SET.contains(&name.local) && validate_uri_attribute(name, value)) {
+                        return false;
+                    }
+
+                    // sanitize css style attributes urls - invalid urls are stripped
+                    // by the parser.
+                    if *name == css_style_attribute {
+                        handle_style_attribute(&mut value.value);
+                    }
+
+                    true
                 });
                 None
             }
@@ -310,11 +338,19 @@ fn validate_uri_attribute(name: &ExpandedName, value: &mut Attribute) -> bool {
         return true;
     }
 
-    let Ok(uri) = url::Url::parse(&value.value) else {
+    is_valid_url(&value.value)
+}
+
+fn is_valid_url(value: &str) -> bool {
+    let Ok(uri) = url::Url::parse(value) else {
         // Invalid urls should be ignored
         return false;
     };
 
+    is_valid_url_type(uri)
+}
+
+fn is_valid_url_type(uri: url::Url) -> bool {
     let scheme = uri.scheme().to_lowercase();
 
     if scheme == "cid" {
@@ -369,4 +405,134 @@ fn get_uri_attributes() -> &'static HashSet<ExpandedName> {
             ExpandedName::new(ns!(xlink), "href"),
         ])
     })
+}
+
+fn handle_style_sheet(css: &mut String) {
+    let Ok(mut sheet) = StyleSheet::parse(
+        css,
+        ParserOptions {
+            error_recovery: true,
+            ..Default::default()
+        },
+    )
+    .inspect_err(|e| {
+        warn!("StyleSheet parsing failed: {}", e);
+    }) else {
+        return;
+    };
+
+    let mut visitor = CssUrlVisitor;
+
+    let _ = sheet.visit(&mut visitor);
+
+    let Ok(patched) = sheet.to_css(PrinterOptions::default()) else {
+        warn!("Failed to convert style sheet to css value");
+        return;
+    };
+
+    drop(sheet);
+
+    *css = patched.code;
+}
+
+fn handle_style_attribute(css: &mut String) {
+    let Ok(mut style_attribute) = StyleAttribute::parse(
+        css,
+        ParserOptions {
+            error_recovery: true,
+            ..Default::default()
+        },
+    )
+    .inspect_err(|e| {
+        warn!("Style attribute parsing failed: {}", e);
+    }) else {
+        return;
+    };
+
+    let mut visitor = CssUrlVisitor;
+
+    let _ = style_attribute.visit(&mut visitor);
+
+    let Ok(patched) = style_attribute.to_css(PrinterOptions::default()) else {
+        warn!("Failed to convert style attribute to css value");
+        return;
+    };
+
+    drop(style_attribute);
+
+    *css = patched.code;
+}
+
+#[derive(Default)]
+struct CssUrlVisitor;
+impl<'i> Visitor<'i> for CssUrlVisitor {
+    type Error = Infallible;
+
+    fn visit_types(&self) -> VisitTypes {
+        VisitTypes::URLS
+            | VisitTypes::IMAGES
+            | VisitTypes::FUNCTIONS
+            | VisitTypes::VARIABLES
+            | VisitTypes::PROPERTIES
+            | VisitTypes::TOKENS
+    }
+
+    fn visit_url(&mut self, url: &mut Url<'i>) -> Result<(), Self::Error> {
+        if !is_valid_url(&url.url) {
+            url.url = String::new().into();
+        }
+        Ok(())
+    }
+
+    fn visit_image(&mut self, image: &mut Image<'i>) -> Result<(), Self::Error> {
+        match image {
+            Image::None | Image::Gradient(_) => Ok(()),
+            Image::Url(url) => self.visit_url(url),
+            Image::ImageSet(set) => {
+                for option in &mut set.options {
+                    self.visit_image(&mut option.image)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn visit_variable(&mut self, var: &mut Variable<'i>) -> Result<(), Self::Error> {
+        if let Some(tokens) = &mut var.fallback {
+            self.visit_token_list(tokens)?;
+        }
+        var.visit_children(self)
+    }
+
+    fn visit_function(&mut self, function: &mut Function<'i>) -> Result<(), Self::Error> {
+        if function.name.to_lowercase() == "image-set" {
+            self.visit_token_list(&mut function.arguments)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_token(&mut self, token: &mut TokenOrValue<'i>) -> Result<(), Self::Error> {
+        if let TokenOrValue::Token(token) = token {
+            match token {
+                Token::String(value) => {
+                    // This string could be anything, we can't make any assumptions, but
+                    // if it happens to be an uri, we can at least check it.
+                    if let Ok(uri) = url::Url::parse(value) {
+                        if !is_valid_url_type(uri) {
+                            *value = String::new().into();
+                        }
+                    }
+                }
+                Token::UnquotedUrl(url) => {
+                    if !is_valid_url(url) {
+                        *url = String::new().into();
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        token.visit_children(self)
+    }
 }

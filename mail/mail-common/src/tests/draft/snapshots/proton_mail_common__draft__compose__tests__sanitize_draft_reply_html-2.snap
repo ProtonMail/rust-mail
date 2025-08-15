@@ -24,7 +24,7 @@ snapshot_kind: text
     <a rel="noreferrer">Alll</a>
     <div>Alll</div>
     <div>Alll</div>
-    <p style="font-size:10.0pt;font-family:\\2018Calibri\\2019;color:black">
+    <p style="font-size: 10pt; font-family: &quot;\\2018Calibri\\2019&quot;; color: #000">
         Example style that caused regexps to crash
     </p>
     <img id="babase64" src="data:image/jpg;base64,iVBORw0KGgoAAAANSUhEUgAABoIAAAVSCAYAAAAisOk2AAAMS2lDQ1BJQ0MgUHJv

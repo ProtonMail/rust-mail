@@ -27,3 +27,11 @@ fn disable_all_elements() {
     assert_eq!(remote, 8);
     assert_eq!(embedded, 9);
 }
+
+#[test]
+fn disable_all_elements_uri_test() {
+    let html = include_str!("../../tests/htmls/strip_uri_elements.html");
+    let mut transformer = Transformer::new(html);
+    let (_, _) = transformer.disable_content(true, true);
+    insta::assert_snapshot!(transformer.to_string());
+}

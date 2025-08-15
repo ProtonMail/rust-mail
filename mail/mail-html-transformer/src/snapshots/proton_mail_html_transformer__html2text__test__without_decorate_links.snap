@@ -1,6 +1,7 @@
 ---
 source: mail/mail-html-transformer/src/html2text.rs
 expression: output
+snapshot_kind: text
 ---
 [this is an alt] Alll Alll
 Alll
@@ -13,3 +14,6 @@ Alll
 Alll
 
 Example style that caused regexps to crash
+
+css_background_style_embedded
+css_background_style_remote
