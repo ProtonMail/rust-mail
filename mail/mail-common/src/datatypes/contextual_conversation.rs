@@ -334,7 +334,7 @@ impl ContextualConversation {
             MovableSystemFolderAction::archive(tether),
             MovableSystemFolderAction::trash(tether),
             MovableSystemFolderAction::spam(tether),
-            MobileActions::bottom_bar_actions(tether),
+            MobileActions::list_toolbar_actions(tether),
             current_label_fut,
             conversations_fut
         )?;

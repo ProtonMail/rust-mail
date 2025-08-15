@@ -91,13 +91,13 @@ mod message {
     static DEFAULT_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
-            TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -115,14 +115,14 @@ mod message {
         ],
         expected_visible: vec![
             TestActions::MarkRead,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
             TestActions::Star,
-            TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -140,14 +140,14 @@ mod message {
         ],
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
             TestActions::Star,
-            TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -165,15 +165,15 @@ mod message {
         ],
         expected_visible: vec![
             TestActions::MarkRead,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
             TestActions::MarkUnread,
             TestActions::Star,
-            TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -249,15 +249,15 @@ mod message {
         ],
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
             TestActions::Star,
             TestActions::Unstar,
-            TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -318,13 +318,13 @@ mod message {
         current_local: LabelId::archive(),
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
-            TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -333,14 +333,14 @@ mod message {
         current_local: LabelId::trash(),
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::PermanentDelete,
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
         ],
         ..Default::default()
     });
@@ -348,14 +348,14 @@ mod message {
         current_local: LabelId::spam(),
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::PermanentDelete,
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::NotSpam(MovableSystemFolder::Inbox),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
         ],
         ..Default::default()
     });
@@ -381,7 +381,7 @@ mod message {
         let address = create_address(&mut tether).await;
         let mut settings = MailSettings::get_or_default(&tether).await;
         settings.mobile_settings = Some(MobileSettings {
-            message_toolbar: MobileSetting {
+            list_toolbar: MobileSetting {
                 actions: test_case.toolbar_actions.clone(),
                 is_custom: test_case.is_custom,
             },
@@ -460,14 +460,14 @@ mod conversation {
     static DEFAULT_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -489,15 +489,15 @@ mod conversation {
         ],
         expected_visible: vec![
             TestActions::MarkRead,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
             TestActions::Star,
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -519,15 +519,15 @@ mod conversation {
         ],
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
             TestActions::Star,
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -549,16 +549,16 @@ mod conversation {
         ],
         expected_visible: vec![
             TestActions::MarkRead,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
             TestActions::MarkUnread,
             TestActions::Star,
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -651,16 +651,16 @@ mod conversation {
         ],
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
             TestActions::Star,
             TestActions::Unstar,
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -680,15 +680,15 @@ mod conversation {
         ],
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
             TestActions::Star,
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -754,13 +754,13 @@ mod conversation {
         current_local: LabelId::archive(),
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
-            TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -769,14 +769,14 @@ mod conversation {
         current_local: LabelId::trash(),
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::PermanentDelete,
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
         ],
         ..Default::default()
     });
@@ -784,14 +784,14 @@ mod conversation {
         current_local: LabelId::spam(),
         expected_visible: vec![
             TestActions::MarkUnread,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::PermanentDelete,
+            TestActions::MoveTo,
             TestActions::More,
         ],
         expected_hidden: vec![
-            TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::NotSpam(MovableSystemFolder::Inbox),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
         ],
         ..Default::default()
     });
@@ -864,7 +864,7 @@ mod conversation {
 
         let mut settings = MailSettings::get_or_default(&tether).await;
         settings.mobile_settings = Some(MobileSettings {
-            message_toolbar: MobileSetting {
+            list_toolbar: MobileSetting {
                 actions: test_case.toolbar_actions.clone(),
                 is_custom: test_case.is_custom,
             },
