@@ -21,7 +21,7 @@ use crate::store::{BoxStore, DynStore, Store, TempStore};
 use crate::verification::{DynChallengeNotifier, FailNotifier};
 
 pub use muon::app::AppVersion;
-pub use muon::common::{Endpoint, Server};
+pub use muon::common::{Endpoint, Name, Server};
 pub use muon::env::{Env, EnvId};
 pub use muon::tls::TlsPinSet;
 

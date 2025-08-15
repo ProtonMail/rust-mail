@@ -50,6 +50,57 @@ impl From<(String, String)> for Header {
     }
 }
 
+/// The server of a human verification challenge.
+#[derive(Debug, uniffi::Object)]
+pub struct ChallengeServer {
+    inner: hv::ChallengeServer,
+}
+
+impl ChallengeServer {
+    fn new(inner: hv::ChallengeServer) -> Arc<Self> {
+        Arc::new(Self { inner })
+    }
+}
+
+#[uniffi_export]
+impl ChallengeServer {
+    /// The scheme of the server.
+    #[must_use]
+    pub fn scheme(&self) -> String {
+        self.inner.server.scheme().to_string()
+    }
+
+    /// The original hostname of the server.
+    #[must_use]
+    pub fn original_host(&self) -> String {
+        self.inner.server.name().to_string()
+    }
+
+    /// The resolved hostname of the server.
+    #[must_use]
+    pub fn resolved_host(&self) -> String {
+        self.inner.server.name().to_string()
+    }
+
+    /// The port of the server.
+    #[must_use]
+    pub fn port(&self) -> u16 {
+        self.inner.server.port()
+    }
+
+    /// The path of the server.
+    #[must_use]
+    pub fn path(&self) -> String {
+        self.inner.server.path.clone()
+    }
+
+    /// Whether alternative routing is enabled.
+    #[must_use]
+    pub fn doh(&self) -> bool {
+        self.original_host() != self.resolved_host()
+    }
+}
+
 /// The payload of a human verification challenge.
 #[derive(Debug, uniffi::Object)]
 pub struct ChallengePayload {
@@ -288,13 +339,26 @@ impl ChallengeLoader {
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
 pub trait ChallengeNotifier: Send + Sync + 'static {
-    async fn on_challenge(&self, payload: Arc<ChallengePayload>) -> ChallengeResponse;
+    /// Called when a human verification challenge is encountered.
+    ///
+    /// The `server` is the server that sent the challenge, and it may be a direct server,
+    /// such as `mail.proton.me`, or an indirect server (aka alternative routing),
+    /// such as `d{base32}.protonpro.xyz`.
+    async fn on_challenge(
+        &self,
+        server: Arc<ChallengeServer>,
+        payload: Arc<ChallengePayload>,
+    ) -> ChallengeResponse;
 }
 
 #[async_trait::async_trait]
 impl<T: ?Sized + ChallengeNotifier> ChallengeNotifier for Arc<T> {
-    async fn on_challenge(&self, payload: Arc<ChallengePayload>) -> ChallengeResponse {
-        self.deref().on_challenge(payload).await
+    async fn on_challenge(
+        &self,
+        server: Arc<ChallengeServer>,
+        payload: Arc<ChallengePayload>,
+    ) -> ChallengeResponse {
+        self.deref().on_challenge(server, payload).await
     }
 }
 
@@ -312,10 +376,14 @@ impl<T: ChallengeNotifier> ChallengeNotifierWrap<T> {
 
 #[async_trait::async_trait]
 impl<T: ChallengeNotifier> hv::ChallengeNotifier for ChallengeNotifierWrap<T> {
-    async fn on_challenge(&self, payload: hv::ChallengePayload) -> hv::ChallengeResponse {
-        self.inner
-            .on_challenge(ChallengePayload::new(payload))
-            .map_into()
-            .await
+    async fn on_challenge(
+        &self,
+        server: hv::ChallengeServer,
+        payload: hv::ChallengePayload,
+    ) -> hv::ChallengeResponse {
+        let server = ChallengeServer::new(server);
+        let payload = ChallengePayload::new(payload);
+
+        self.inner.on_challenge(server, payload).map_into().await
     }
 }

@@ -1,12 +1,29 @@
+use crate::services::proton::prelude::*;
 use async_trait::async_trait;
 use derive_more::Debug;
+use muon::common::{Name, Server};
 use std::{ops::Deref, sync::Arc};
 use url::Url;
 
-use crate::services::proton::prelude::HumanVerificationChallenge;
-
 /// A dynamic human verification notifier.
 pub type DynChallengeNotifier = Arc<dyn ChallengeNotifier>;
+
+/// The server that sent a human verification challenge.
+#[derive(Debug, Clone)]
+pub struct ChallengeServer {
+    pub server: Server,
+    pub name: Name,
+}
+
+impl ChallengeServer {
+    #[must_use]
+    pub fn new(server: &Server, name: &Name) -> Self {
+        Self {
+            server: server.to_owned(),
+            name: name.to_owned(),
+        }
+    }
+}
 
 /// The payload of a human verification challenge.
 #[derive(Debug, Clone)]
@@ -81,7 +98,11 @@ impl ChallengeResponse {
 /// An interface by which human verification challenges can be handled.
 #[async_trait]
 pub trait ChallengeNotifier: Send + Sync {
-    async fn on_challenge(&self, payload: ChallengePayload) -> ChallengeResponse;
+    async fn on_challenge(
+        &self,
+        server: ChallengeServer,
+        payload: ChallengePayload,
+    ) -> ChallengeResponse;
 }
 
 #[async_trait]
@@ -89,8 +110,12 @@ impl<T: ?Sized> ChallengeNotifier for Arc<T>
 where
     T: ChallengeNotifier,
 {
-    async fn on_challenge(&self, payload: ChallengePayload) -> ChallengeResponse {
-        self.deref().on_challenge(payload).await
+    async fn on_challenge(
+        &self,
+        server: ChallengeServer,
+        payload: ChallengePayload,
+    ) -> ChallengeResponse {
+        self.deref().on_challenge(server, payload).await
     }
 }
 
@@ -105,7 +130,7 @@ impl FailNotifier {
 
 #[async_trait]
 impl ChallengeNotifier for FailNotifier {
-    async fn on_challenge(&self, _: ChallengePayload) -> ChallengeResponse {
+    async fn on_challenge(&self, _: ChallengeServer, _: ChallengePayload) -> ChallengeResponse {
         ChallengeResponse::Failure
     }
 }
