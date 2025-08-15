@@ -1,8 +1,0 @@
----
-source: mail/mail-html-transformer/src/html2text.rs
-expression: output
-snapshot_kind: text
----
-My [ home ][1]!.
-
-[1]: 127.0.0.1

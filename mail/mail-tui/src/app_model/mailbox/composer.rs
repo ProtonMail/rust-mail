@@ -264,12 +264,16 @@ impl Composer {
         let to_list = recipient_list_to_display_value(&state.to_list);
         let cc_list = recipient_list_to_display_value(&state.cc_list);
         let bcc_list = recipient_list_to_display_value(&state.bcc_list);
+
         let text_area = if state.mime_type == MimeType::TextHtml {
             let text = proton_mail_html_transformer::Transformer::html2text_str(
                 &state.body,
-                Html2TextOptions::default(),
+                Html2TextOptions {
+                    decorate_links: true,
+                },
             )
             .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
+
             TextArea::new(text.split('\n').map(str::to_owned).collect())
         } else if state.mime_type == MimeType::TextPlain {
             TextArea::new(state.body.split('\n').map(str::to_owned).collect())

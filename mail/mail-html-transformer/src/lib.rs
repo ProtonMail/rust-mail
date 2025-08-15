@@ -244,7 +244,7 @@ impl Transformer {
         reader: impl Read,
         options: Html2TextOptions,
     ) -> Result<String, ::html2text::Error> {
-        html2text::convert_html_to_text(reader, options)
+        html2text::html2text(reader, options)
     }
 
     pub fn html2text_str(
