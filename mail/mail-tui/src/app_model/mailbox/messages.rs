@@ -1380,8 +1380,14 @@ impl DecryptedMessage {
 fn html_to_text(message: &str) -> Result<String> {
     // TODO: Best effort terminal image rendering. See https://docs.rs/termimage/latest/termimage/
     let cursor = std::io::Cursor::new(message);
-    proton_mail_html_transformer::Transformer::html2text(cursor, Html2TextOptions::default())
-        .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
+
+    proton_mail_html_transformer::Transformer::html2text(
+        cursor,
+        Html2TextOptions {
+            decorate_links: true,
+        },
+    )
+    .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
 
 fn mark_message_read(ctx: Arc<MailUserContext>, ids: Vec<LocalMessageId>) -> Command<Messages> {

@@ -317,8 +317,8 @@ mod signatures {
 
     const TEST_ADDRESS_AND_MOBILE_SIGNATURE_FREE: TestCase = TestCase {
         given_mail_settings: || mail_settings().with_pm_signature(PmSignature::LOCKED),
-        expected_desktop: "\n\ncheers, jerry\n\n\nSent with Proton Mail secure email.",
-        expected_mobile: "\n\ncheers, jerry\n\n\nSent with Proton Mail secure email.",
+        expected_desktop: "\n\ncheers, jerry\n\n\nSent with Proton Mail secure email.\n",
+        expected_mobile: "\n\ncheers, jerry\n\n\nSent with Proton Mail secure email.\n",
         ..TEST_ADDRESS_AND_MOBILE_SIGNATURE
     };
 
