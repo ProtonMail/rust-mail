@@ -16,6 +16,7 @@ TZ:I use  btw
 TZ:UTC + 1
 ORG:Proton
 LOGO:data:image/jpeg;base64\somelogo
+LOGO:file://somelogo.jpeg
 TITLE:🦀 Engineer
 TITLE:🧜‍♀️🧜‍♀️
 ANNIVERSARY:20250429

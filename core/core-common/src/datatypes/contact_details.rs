@@ -15,13 +15,13 @@ use tracing::warn;
 use core::fmt;
 use std::fmt::Display;
 
-use crate::datatypes::{AvatarInformation, LocalContactId};
-use proton_core_api::services::proton::PrivateEmail;
-use proton_crypto::new_pgp_provider;
-
 use crate::UserContext;
+use crate::datatypes::{AvatarInformation, LocalContactId};
 use crate::models::Contact;
 use crate::utils::MapVec as _;
+use proton_core_api::services::proton::PrivateEmail;
+use proton_crypto::new_pgp_provider;
+use url::Url;
 
 use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 use proton_vcard::values::uri::MaybeUri;
@@ -53,8 +53,8 @@ pub enum ContactField {
     TimeZones(Vec<String>),
     Titles(Vec<String>),
     Roles(Vec<String>),
-    Logos(Vec<String>),
-    Photos(Vec<String>),
+    Logos(Vec<Url>),
+    Photos(Vec<Url>),
     Organizations(Vec<String>),
     Members(Vec<String>),
     Urls(Vec<VCardUrl>),
@@ -186,12 +186,38 @@ impl InspectableContactDetails {
                 x.values.into_iter().join(", ")
             });
 
-        vcard
+        let logos = vcard
             .logos
-            .sorted_extend(v, ContactField::Logos, |logo| logo.value.0.to_string());
-        vcard
+            .to_sorted_iter(|v| v.value)
+            .filter_map(|v| {
+                if is_safe_image_uri(&v.0) {
+                    Some(v.0)
+                } else {
+                    warn!("{} is not a safe logo url, removing from list", v.0);
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if !logos.is_empty() {
+            v.push(ContactField::Logos(logos));
+        }
+
+        let photos = vcard
             .photos
-            .sorted_extend(v, ContactField::Photos, |photo| photo.value.0.to_string());
+            .to_sorted_iter(|v| v.value)
+            .filter_map(|v| {
+                if is_safe_image_uri(&v.0) {
+                    Some(v.0)
+                } else {
+                    warn!("{} is not a safe photo url, removing from list", v.0);
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if !photos.is_empty() {
+            v.push(ContactField::Photos(photos));
+        }
+
         vcard
             .time_zones
             .sorted_extend(v, ContactField::TimeZones, |x| x.value.to_string());
@@ -361,6 +387,13 @@ impl From<TelType> for VcardPropType {
             TelType::XName(xname) => VcardPropType::String(xname.0),
         }
     }
+}
+
+fn is_safe_image_uri(url: &Url) -> bool {
+    let scheme = url.scheme();
+    scheme.eq_ignore_ascii_case("http")
+        || scheme.eq_ignore_ascii_case("https")
+        || scheme.eq_ignore_ascii_case("data")
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
