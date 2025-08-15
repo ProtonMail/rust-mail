@@ -115,7 +115,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
-use tracing::{error, warn};
+use tracing::{error, trace};
 //  ENUMS
 //==============================================================================
 
@@ -1818,7 +1818,7 @@ impl MobileActions {
                 Self::toolbar_actions_from_setting(&mobile_settings.list_toolbar, "list_toolbar")
             }
             None => {
-                warn!("No mobile_settings defined in MailSettings");
+                trace!("No mobile_settings defined in MailSettings");
                 Self::default_chosen_actions()
             }
         };
@@ -1838,7 +1838,7 @@ impl MobileActions {
                 "conversation_toolbar",
             ),
             None => {
-                warn!("No mobile_settings defined in MailSettings");
+                trace!("No mobile_settings defined in MailSettings");
                 Self::default_chosen_actions()
             }
         };
@@ -1856,7 +1856,7 @@ impl MobileActions {
                 "message_toolbar",
             ),
             None => {
-                warn!("No mobile_settings defined in MailSettings");
+                trace!("No mobile_settings defined in MailSettings");
                 Self::default_chosen_actions()
             }
         };
