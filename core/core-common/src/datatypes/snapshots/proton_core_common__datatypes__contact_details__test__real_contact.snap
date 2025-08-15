@@ -1,6 +1,7 @@
 ---
 source: core/core-common/src/datatypes/contact_details.rs
 expression: get_vcard(real)
+snapshot_kind: text
 ---
 VCARD:
 BEGIN:VCARD
@@ -28,4 +29,4 @@ Languages(["English", "Spanish"])
 TimeZones(["CET"])
 Roles(["Software Engineer"])
 Organizations(["Proton AG"])
-Urls([VCardUrl { url: "https://github.com/oriongonza", url_type: [] }])
+Urls([VCardUrl { url: Http(Url { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("github.com")), port: None, path: "/oriongonza", query: None, fragment: None }), url_type: [] }])

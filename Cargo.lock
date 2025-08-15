@@ -5754,6 +5754,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-segmentation",
+ "url",
  "walkdir",
  "wiremock",
  "zeroize",
