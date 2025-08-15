@@ -73,11 +73,12 @@ impl<T: Event> TypedSubscribers<T> {
     where
         T: From<<T as Event>::Response>,
     {
-        let mut typed_subscribers = TypedSubscribers::<T>::default();
-        typed_subscribers.add_subscriber(subscriber);
+        let mut this = TypedSubscribers::<T>::default();
 
-        typed_subscribers.boxed()
+        this.add_subscriber(subscriber);
+        this.boxed()
     }
+
     pub fn add_subscriber(&mut self, subscriber: Box<dyn Subscriber<T>>) {
         self.subscribers.push(subscriber);
     }

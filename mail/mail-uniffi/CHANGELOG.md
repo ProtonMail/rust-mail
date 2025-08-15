@@ -5,11 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Extend mobileactions implementation with methods allowing to access any toolbar settings available
+- (breaking) change `all_available_bottom_bar_actions_for_xyz` to `all_available_list_actions_for_xyz`
+
+### Features
+
+- [ET-4017] Run post login validations after signup too
+
+
+## [mail-uniffi-v0.125.4] - 2025-08-15
+
+### Fixes
+
+- Support eventpoll::register() being called multiple times
+
+
+## [mail-uniffi-v0.125.3] - 2025-08-14
+
+### Fixes
+
+- Use deref to access boxed data
+
+
 ## [mail-uniffi-v0.128.1] - 2025-08-14
 
 ### Fixes
 
 - Make sure tokio is in scope
+
+
+## [mail-uniffi-v0.125.1] - 2025-08-14
+
+### Fixes
+
+- Address signature not updating
+- Missing body update in `html_for_composer`
 
 
 ## [mail-uniffi-v0.128.0] - 2025-08-14
@@ -45,14 +79,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4145] Missing conversions for draft attachment upload errors
 - [ET-4235] Strip cid links from all uri sources
 - [ET-4235] Strip invalid uri sources
-
-
-## [mail-uniffi-v0.125.1] - 2025-08-14
-
-### Fixes
-
-- Address signature not updating
-- Missing body update in `html_for_composer`
 
 
 ## [mail-uniffi-v0.125.0] - 2025-08-13
