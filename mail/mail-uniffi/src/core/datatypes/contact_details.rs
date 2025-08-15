@@ -11,6 +11,7 @@ use proton_core_common::datatypes::contact_details::Gender as RealGender;
 use proton_core_common::datatypes::contact_details::InspectableContactDetails as RealContactDetails;
 use proton_core_common::datatypes::contact_details::Telephone as RealTelephone;
 use proton_core_common::datatypes::contact_details::VCardUrl as RealVCardUrl;
+use proton_core_common::datatypes::contact_details::VCardUrlValue as RealVCardUrlValue;
 use proton_core_common::datatypes::contact_details::VcardPropType as RealVcardPropType;
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -160,15 +161,32 @@ impl From<RealTelephone> for ContactDetailsTelephones {
 
 #[derive(uniffi::Record)]
 pub struct VCardUrl {
-    pub url: String,
+    pub url: VCardUrlValue,
     pub url_type: Vec<VcardPropType>,
 }
 
 impl From<RealVCardUrl> for VCardUrl {
     fn from(value: RealVCardUrl) -> Self {
         Self {
-            url: value.url,
+            url: value.url.into(),
             url_type: value.url_type.map_vec(),
+        }
+    }
+}
+
+#[derive(uniffi::Enum)]
+pub enum VCardUrlValue {
+    Http(String),
+    NotHttp(String),
+    Text(String),
+}
+
+impl From<RealVCardUrlValue> for VCardUrlValue {
+    fn from(value: RealVCardUrlValue) -> Self {
+        match value {
+            RealVCardUrlValue::Http(v) => Self::Http(v.into()),
+            RealVCardUrlValue::NotHttp(v) => Self::NotHttp(v.into()),
+            RealVCardUrlValue::Text(v) => Self::Text(v),
         }
     }
 }

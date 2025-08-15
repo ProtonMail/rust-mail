@@ -1,6 +1,7 @@
 ---
 source: core/core-common/src/datatypes/contact_details.rs
 expression: get_vcard(full)
+snapshot_kind: text
 ---
 VCARD:
 BEGIN:VCARD
@@ -49,4 +50,4 @@ Logos(["data:image/jpeg;base64\\somelogo"])
 Photos(["data:image/svg+xml;base64\\,some_photo", "https://my_site.me/cool_photo_link.png"])
 Organizations(["Proton"])
 Members(["big"])
-Urls([VCardUrl { url: "mail.proton.me", url_type: [] }, VCardUrl { url: "not a url", url_type: [] }])
+Urls([VCardUrl { url: Text("mail.proton.me"), url_type: [] }, VCardUrl { url: Text("not a url"), url_type: [] }])

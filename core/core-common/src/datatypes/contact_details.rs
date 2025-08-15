@@ -24,6 +24,7 @@ use crate::models::Contact;
 use crate::utils::MapVec as _;
 
 use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
+use proton_vcard::values::uri::MaybeUri;
 
 /// Represents some data known from the vCard in a form more suitable for human consumption than a
 /// raw vcard.
@@ -177,7 +178,7 @@ impl InspectableContactDetails {
             .urls
             .sorted_extend(v, ContactField::Urls, |u| VCardUrl {
                 url_type: u.r#type.into_iter().map_vec(),
-                url: u.value.to_string(),
+                url: u.value.into(),
             });
         vcard
             .organizations
@@ -260,8 +261,40 @@ pub struct Telephone {
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct VCardUrl {
-    pub url: String,
+    pub url: VCardUrlValue,
     pub url_type: Vec<VcardPropType>,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub enum VCardUrlValue {
+    Http(url::Url),
+    NotHttp(url::Url),
+    Text(String),
+}
+
+impl Display for VCardUrlValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VCardUrlValue::Http(v) | VCardUrlValue::NotHttp(v) => fmt::Display::fmt(v, f),
+            VCardUrlValue::Text(v) => fmt::Display::fmt(v, f),
+        }
+    }
+}
+
+impl From<MaybeUri> for VCardUrlValue {
+    fn from(value: MaybeUri) -> Self {
+        match value {
+            MaybeUri::Uri(uri) => {
+                let scheme = uri.scheme();
+                if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
+                    Self::Http(uri)
+                } else {
+                    Self::NotHttp(uri)
+                }
+            }
+            MaybeUri::Text(v) => Self::Text(v.to_string()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
