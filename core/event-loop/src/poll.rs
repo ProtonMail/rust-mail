@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use indexmap::{IndexMap, map::Entry};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
-use std::any::{Any, TypeId, type_name};
+use std::any::{Any, TypeId};
 use tokio::sync::Mutex;
 use tracing::{self, Level, debug, error, info};
 
@@ -51,25 +51,21 @@ impl EventPoll {
         &self,
         subscriber: Box<dyn Subscriber<T>>,
     ) -> Result<&Self, EventLoopError> {
-        let mut subscribers = self.subscribers.lock().await;
-        match subscribers.entry(TypeId::of::<T>()) {
+        match self.subscribers.lock().await.entry(TypeId::of::<T>()) {
             Entry::Occupied(mut entry) => {
+                let entry: &mut dyn RawSubscriber = &mut **entry.get_mut();
+
                 if let Some(typed_subscribers) =
-                    <dyn Any>::downcast_mut::<TypedSubscribers<T>>(&mut *entry.get_mut())
+                    <dyn Any>::downcast_mut::<TypedSubscribers<T>>(entry)
                 {
                     typed_subscribers.add_subscriber(subscriber);
                 } else {
-                    // This should never happen, as the raw subscriber is already registered
-                    error!(
-                        "Subscriber could not be downcast to TypedSubscribers<{}>",
-                        type_name::<T>()
-                    );
-                    return Err(EventLoopError::Register(subscriber.name()));
+                    unreachable!();
                 }
             }
-            Entry::Vacant(_) => {
-                let raw_subscriber = TypedSubscribers::<T>::new_raw(subscriber);
-                subscribers.insert(TypeId::of::<T>(), raw_subscriber);
+
+            Entry::Vacant(entry) => {
+                entry.insert(TypedSubscribers::<T>::new_raw(subscriber));
             }
         }
 
@@ -269,9 +265,11 @@ mod tests {
     use super::*;
     use crate::EventMetadata;
     use crate::provider::MockProvider;
-    use crate::store::MockStore;
-    use crate::subscriber::MockRawSubscriber;
+    use crate::store::{InMemoryStore, MockStore};
+    use crate::subscriber::{MockRawSubscriber, SubscriberError};
+    use async_trait::async_trait;
     use mockall::predicate;
+    use serde::{Deserialize, Serialize};
 
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
@@ -554,5 +552,60 @@ mod tests {
 
         evt_poll.initialize(&store, &provider).await.unwrap();
         evt_poll.initialize(&store, &provider).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn register_same_subscriber_multiple_times() {
+        #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+        struct FakeEvent {
+            id: EventId,
+        }
+
+        impl Event for FakeEvent {
+            type Response = Self;
+
+            fn event_id(&self) -> &EventId {
+                &self.id
+            }
+
+            fn has_more(&self) -> bool {
+                false
+            }
+
+            fn is_refresh(&self) -> bool {
+                false
+            }
+        }
+
+        #[derive(Clone, Debug)]
+        struct FakeSubscriber;
+
+        #[async_trait]
+        impl Subscriber<FakeEvent> for FakeSubscriber {
+            fn name(&self) -> &'static str {
+                "FakeSubscriber"
+            }
+
+            async fn on_events(&self, _: &mut [FakeEvent]) -> Result<(), SubscriberError> {
+                todo!();
+            }
+
+            async fn on_refresh(&self, _: &FakeEvent) -> Result<(), SubscriberError> {
+                todo!();
+            }
+
+            fn is_alive(&self) -> bool {
+                true
+            }
+        }
+
+        let target = EventPoll::new(
+            Box::new(InMemoryStore::default()),
+            Box::new(MockProvider::new()),
+        );
+
+        assert!(target.register(Box::new(FakeSubscriber)).await.is_ok());
+        assert!(target.register(Box::new(FakeSubscriber)).await.is_ok());
+        assert!(target.register(Box::new(FakeSubscriber)).await.is_ok());
     }
 }
