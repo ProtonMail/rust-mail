@@ -1,4 +1,4 @@
-use crate::actions::BottomBarActions;
+use crate::actions::ListAction;
 use crate::datatypes::{MobileSetting, MobileSettings, MovableSystemFolder, SystemLabelId};
 use crate::models::{Conversation, MailSettings, Message};
 use proton_core_api::services::proton::LabelId;
@@ -46,37 +46,37 @@ enum TestActions {
     Snooze,
 }
 
-impl PartialEq<BottomBarActions> for TestActions {
-    fn eq(&self, other: &BottomBarActions) -> bool {
+impl PartialEq<ListAction> for TestActions {
+    fn eq(&self, other: &ListAction) -> bool {
         match self {
-            Self::LabelAs => matches!(other, BottomBarActions::LabelAs),
-            Self::MarkRead => matches!(other, BottomBarActions::MarkRead),
-            Self::MarkUnread => matches!(other, BottomBarActions::MarkUnread),
-            Self::More => matches!(other, BottomBarActions::More),
-            Self::MoveTo => matches!(other, BottomBarActions::MoveTo),
+            Self::LabelAs => matches!(other, ListAction::LabelAs),
+            Self::MarkRead => matches!(other, ListAction::MarkRead),
+            Self::MarkUnread => matches!(other, ListAction::MarkUnread),
+            Self::More => matches!(other, ListAction::More),
+            Self::MoveTo => matches!(other, ListAction::MoveTo),
             Self::MoveToSystemFolder(label) => {
-                if let BottomBarActions::MoveToSystemFolder(other) = other {
+                if let ListAction::MoveToSystemFolder(other) = other {
                     *label == other.name
                 } else {
                     false
                 }
             }
             Self::NotSpam(label) => {
-                if let BottomBarActions::NotSpam(other) = other {
+                if let ListAction::NotSpam(other) = other {
                     *label == other.name
                 } else {
                     false
                 }
             }
-            Self::PermanentDelete => matches!(other, BottomBarActions::PermanentDelete),
-            Self::Star => matches!(other, BottomBarActions::Star),
-            Self::Unstar => matches!(other, BottomBarActions::Unstar),
-            Self::Snooze => matches!(other, BottomBarActions::Snooze),
+            Self::PermanentDelete => matches!(other, ListAction::PermanentDelete),
+            Self::Star => matches!(other, ListAction::Star),
+            Self::Unstar => matches!(other, ListAction::Unstar),
+            Self::Snooze => matches!(other, ListAction::Snooze),
         }
     }
 }
 
-impl PartialEq<TestActions> for BottomBarActions {
+impl PartialEq<TestActions> for ListAction {
     fn eq(&self, other: &TestActions) -> bool {
         other == self
     }
@@ -410,7 +410,7 @@ mod message {
             .unwrap();
 
         // Action
-        let result = Message::all_available_bottom_bar_actions_for_messages(
+        let result = Message::all_available_list_actions_for_messages(
             current_local,
             messages.iter().map(|m| m.id()).collect(),
             &tether,
@@ -419,11 +419,8 @@ mod message {
         .unwrap();
 
         // Validation
-        assert_eq!(
-            result.visible_bottom_bar_actions,
-            test_case.expected_visible
-        );
-        assert_eq!(result.hidden_bottom_bar_actions, test_case.expected_hidden);
+        assert_eq!(result.visible_list_actions, test_case.expected_visible);
+        assert_eq!(result.hidden_list_actions, test_case.expected_hidden);
     }
 }
 
@@ -888,7 +885,7 @@ mod conversation {
             .unwrap();
 
         // Action
-        let result = ContextualConversation::all_available_bottom_bar_actions_for_conversations(
+        let result = ContextualConversation::all_available_list_actions_for_conversations(
             current_local,
             conversations.iter().map(|m| m.id()).collect(),
             &tether,
@@ -897,10 +894,7 @@ mod conversation {
         .unwrap();
 
         // Validation
-        assert_eq!(
-            result.visible_bottom_bar_actions,
-            test_case.expected_visible
-        );
-        assert_eq!(result.hidden_bottom_bar_actions, test_case.expected_hidden);
+        assert_eq!(result.visible_list_actions, test_case.expected_visible);
+        assert_eq!(result.hidden_list_actions, test_case.expected_hidden);
     }
 }

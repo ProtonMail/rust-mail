@@ -8,7 +8,7 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllBottomBarMessageActions, Message};
+use super::datatypes::{AllListActions, Message};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
@@ -777,21 +777,21 @@ pub async fn available_move_to_actions_for_messages(
     .map_err(ActionError::from)
 }
 
-/// Returns available actions for messages bottom bar.
+/// Returns available actions for messages list toolbar.
 ///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
-pub async fn all_available_bottom_bar_actions_for_messages(
+pub async fn all_available_list_actions_for_messages(
     mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
-) -> Result<AllBottomBarMessageActions, ActionError> {
+) -> Result<AllListActions, ActionError> {
     let stash = mailbox.stash()?;
     uniffi_async(async move {
         let tether = stash.connection();
-        let actions = RealMessage::all_available_bottom_bar_actions_for_messages(
+        let actions = RealMessage::all_available_list_actions_for_messages(
             mailbox.label_id().into(),
             message_ids.map_vec(),
             &tether,

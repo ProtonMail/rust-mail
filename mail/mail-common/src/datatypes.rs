@@ -1786,7 +1786,7 @@ impl From<ApiMobileSetting> for MobileSetting {
 ///          MailSettings::MobileSettings::ListToolbar::Actions
 ///
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum MobileActions {
+pub enum MobileAction {
     Archive,
     Forward,
     Label,
@@ -1808,9 +1808,9 @@ pub enum MobileActions {
     ViewHTML,
 }
 
-impl MobileActions {
+impl MobileAction {
     /// Compute the actions seen in the bottom bar on the list view (regardless of conversation grouping)
-    pub async fn list_toolbar_actions(tether: &Tether) -> Result<Vec<MobileActions>, AppError> {
+    pub async fn list_toolbar_actions(tether: &Tether) -> Result<Vec<MobileAction>, AppError> {
         let settings = MailSettings::get_or_default(tether).await;
 
         let actions = match settings.mobile_settings {
@@ -1829,7 +1829,7 @@ impl MobileActions {
     /// Compute the actions seen in the bottom bar and action sheet for conversation view
     pub async fn conversation_toolbar_actions(
         tether: &Tether,
-    ) -> Result<Vec<MobileActions>, AppError> {
+    ) -> Result<Vec<MobileAction>, AppError> {
         let settings = MailSettings::get_or_default(tether).await;
 
         let actions = match settings.mobile_settings {
@@ -1847,7 +1847,7 @@ impl MobileActions {
     }
 
     /// Compute the actions seen in the bottom bar and action sheet for message view
-    pub async fn message_toolbar_actions(tether: &Tether) -> Result<Vec<MobileActions>, AppError> {
+    pub async fn message_toolbar_actions(tether: &Tether) -> Result<Vec<MobileAction>, AppError> {
         let settings = MailSettings::get_or_default(tether).await;
 
         let actions = match settings.mobile_settings {
@@ -1864,27 +1864,27 @@ impl MobileActions {
         Ok(actions)
     }
 
-    pub fn default_chosen_actions() -> Vec<MobileActions> {
-        use self::MobileActions::*;
+    pub fn default_chosen_actions() -> Vec<MobileAction> {
+        use self::MobileAction::*;
         vec![ToggleRead, Trash, Move]
     }
 
-    pub fn all_list_actions() -> Vec<MobileActions> {
-        use self::MobileActions::*;
+    pub fn all_list_actions() -> Vec<MobileAction> {
+        use self::MobileAction::*;
         vec![
             ToggleRead, Trash, Move, Label, ToggleStar, Snooze, Archive, Spam,
         ]
     }
 
-    pub fn all_conversation_actions() -> Vec<MobileActions> {
-        use self::MobileActions::*;
+    pub fn all_conversation_actions() -> Vec<MobileAction> {
+        use self::MobileAction::*;
         vec![
             ToggleRead, Trash, Move, Label, ToggleStar, Snooze, Archive, Spam,
         ]
     }
 
-    pub fn all_message_actions() -> Vec<MobileActions> {
-        use self::MobileActions::*;
+    pub fn all_message_actions() -> Vec<MobileAction> {
+        use self::MobileAction::*;
         vec![
             ToggleRead,
             Trash,
@@ -1906,7 +1906,7 @@ impl MobileActions {
     fn toolbar_actions_from_setting(
         mobile_setting: &MobileSetting,
         toolbar_name: &str,
-    ) -> Vec<MobileActions> {
+    ) -> Vec<MobileAction> {
         if mobile_setting.is_custom {
             match Self::actions_from_strings(&mobile_setting.actions) {
                 Ok(actions) => actions,
@@ -1920,15 +1920,15 @@ impl MobileActions {
         }
     }
 
-    fn actions_from_strings(actions: &[String]) -> Result<Vec<MobileActions>, AppError> {
+    fn actions_from_strings(actions: &[String]) -> Result<Vec<MobileAction>, AppError> {
         actions
             .iter()
-            .map(|a| MobileActions::from_str(a))
+            .map(|a| MobileAction::from_str(a))
             .collect::<Result<Vec<_>, _>>()
     }
 }
 
-impl FromStr for MobileActions {
+impl FromStr for MobileAction {
     type Err = AppError;
 
     fn from_str(value: &str) -> Result<Self, AppError> {

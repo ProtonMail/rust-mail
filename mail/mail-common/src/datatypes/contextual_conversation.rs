@@ -3,11 +3,11 @@ use std::time::Instant;
 
 use super::SystemLabelId as _;
 use super::folder_banner::{AutoDeleteBanner, AutoDeleteState, SpamOrTrash};
-use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
+use crate::actions::{AllListActions, ListAction, MovableSystemFolderAction};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
-    MessageSenders, MobileActions,
+    MessageSenders, MobileAction,
 };
 use crate::mail_scroller::ScrollerEq;
 use crate::models::{
@@ -306,11 +306,11 @@ impl ContextualConversation {
     /// Get the available actions from bottom bar for given conversations
     ///
     #[tracing::instrument(skip_all, fields(label_id=current_label_id.as_u64()))]
-    pub async fn all_available_bottom_bar_actions_for_conversations(
+    pub async fn all_available_list_actions_for_conversations(
         current_label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
         tether: &Tether,
-    ) -> Result<AllBottomBarMessageActions, AppError> {
+    ) -> Result<AllListActions, AppError> {
         debug!("{conversation_ids:?}");
         let current_label_fut = async {
             Label::resolve_remote_label_id(current_label_id, tether)
@@ -334,12 +334,12 @@ impl ContextualConversation {
             MovableSystemFolderAction::archive(tether),
             MovableSystemFolderAction::trash(tether),
             MovableSystemFolderAction::spam(tether),
-            MobileActions::list_toolbar_actions(tether),
+            MobileAction::list_toolbar_actions(tether),
             current_label_fut,
             conversations_fut
         )?;
 
-        let visible_bottom_bar_actions = ContextualConversation::visible_bottom_bar_actions(
+        let visible_list_actions = ContextualConversation::visible_list_actions(
             &current_label,
             &conversations,
             &bottom_bar_actions,
@@ -348,41 +348,41 @@ impl ContextualConversation {
             &trash,
             &spam,
         )?;
-        let hidden_bottom_bar_actions = ContextualConversation::hidden_bottom_bar_actions(
+        let hidden_list_actions = ContextualConversation::hidden_list_actions(
             current_label,
             &conversations,
-            &visible_bottom_bar_actions,
+            &visible_list_actions,
             &inbox,
             &archive,
             &trash,
             &spam,
         );
 
-        let actions = AllBottomBarMessageActions {
-            hidden_bottom_bar_actions,
-            visible_bottom_bar_actions,
+        let actions = AllListActions {
+            hidden_list_actions,
+            visible_list_actions,
         };
         debug!("All available bottombar actions: {actions:?}");
         Ok(actions)
     }
 
     /// Get actions to display in bottom_bar when selecting messages
-    pub(crate) fn visible_bottom_bar_actions(
+    pub(crate) fn visible_list_actions(
         current_label: &LabelId,
         conversations: &[Self],
-        bottom_bar_actions: &[MobileActions],
+        bottom_bar_actions: &[MobileAction],
         inbox: &MovableSystemFolderAction,
         archive: &MovableSystemFolderAction,
         trash: &MovableSystemFolderAction,
         spam: &MovableSystemFolderAction,
-    ) -> Result<Vec<BottomBarActions>, AppError> {
+    ) -> Result<Vec<ListAction>, AppError> {
         let any_unread = conversations.iter().any(|c| c.num_unread > 0);
         let all_starred = conversations.iter().all(|c| c.is_starred);
 
         let mut result: Vec<_> = bottom_bar_actions
             .iter()
             .filter_map(|a| {
-                BottomBarActions::from_mobile_actions(
+                ListAction::from_mobile_actions(
                     a,
                     any_unread,
                     all_starred,
@@ -398,26 +398,26 @@ impl ContextualConversation {
             warn!("Too many actions to put in Bottom Bar, truncating to 5: {result:?}");
             result.truncate(5);
         }
-        result.push(BottomBarActions::More);
+        result.push(ListAction::More);
         Ok(result)
     }
 
     /// Get actions not displayed in bottom_bar when selecting messages
-    pub(crate) fn hidden_bottom_bar_actions(
+    pub(crate) fn hidden_list_actions(
         current_label: LabelId,
         conversations: &[Self],
-        visible_actions: &[BottomBarActions],
+        visible_actions: &[ListAction],
         inbox: &MovableSystemFolderAction,
         archive: &MovableSystemFolderAction,
         trash: &MovableSystemFolderAction,
         spam: &MovableSystemFolderAction,
-    ) -> Vec<BottomBarActions> {
+    ) -> Vec<ListAction> {
         let any_unread = conversations.iter().any(|m| m.num_unread > 0);
         let any_read = conversations.iter().any(|m| m.num_unread < m.num_messages);
         let any_starred = conversations.iter().any(|m| m.is_starred);
         let any_unstarred = conversations.iter().any(|m| !m.is_starred);
 
-        BottomBarActions::hidden_bottom_bar_actions(
+        ListAction::hidden_list_actions(
             true,
             current_label,
             any_unread,

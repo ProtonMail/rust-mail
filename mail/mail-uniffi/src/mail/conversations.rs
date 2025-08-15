@@ -12,7 +12,7 @@
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
-    AllBottomBarMessageActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
+    AllListActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
     ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction, SnoozeActions,
     Undo,
 };
@@ -269,21 +269,21 @@ pub async fn unsnooze_conversations(
     .map_err(SnoozeError::from)
 }
 
-/// Returns available actions for conversation bottom bar.
+/// Returns available actions for conversation list toolbar.
 ///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
-pub async fn all_available_bottom_bar_actions_for_conversations(
+pub async fn all_available_list_actions_for_conversations(
     mailbox: Arc<Mailbox>,
     conversation_ids: Vec<Id>,
-) -> Result<AllBottomBarMessageActions, ActionError> {
+) -> Result<AllListActions, ActionError> {
     let stash = mailbox.stash()?;
     uniffi_async(async move {
         let tether = stash.connection();
-        let actions = ContextualConversation::all_available_bottom_bar_actions_for_conversations(
+        let actions = ContextualConversation::all_available_list_actions_for_conversations(
             mailbox.label_id().into(),
             conversation_ids.map_vec(),
             &tether,
