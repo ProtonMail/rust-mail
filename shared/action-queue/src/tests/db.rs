@@ -8,6 +8,10 @@ use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
 use stash::stash::StashConfiguration;
 use stash::{orm::Model, stash::Stash};
+use tracing::subscriber::set_global_default;
+use tracing_subscriber::fmt::layer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{EnvFilter, registry};
 
 #[derive(Deserialize, Serialize, Eq, PartialEq)]
 struct TestAction {
@@ -585,20 +589,16 @@ async fn clear_all_actions_in_chosen_action_group() {
 }
 
 async fn new_test_connection() -> Stash {
-    use std::io::stdout;
-    use tracing::Level;
-    use tracing::subscriber::set_global_default;
-    use tracing_subscriber::fmt::layer;
-    use tracing_subscriber::fmt::writer::MakeWriterExt;
-    use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::{EnvFilter, registry};
-    drop(set_global_default(
+    _ = set_global_default(
         registry()
             .with(EnvFilter::new("debug,stash=debug"))
-            .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
-    ));
+            .with(layer().with_test_writer()),
+    );
+
     let stash = Stash::new(StashConfiguration::test()).unwrap();
     let mut tether = stash.connection();
+
     migrate(&mut tether).await.unwrap();
+
     stash
 }

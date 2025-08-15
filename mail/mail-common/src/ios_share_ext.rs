@@ -105,19 +105,9 @@ pub struct IosShareExtAttachment {
 mod tests {
     use super::*;
     use tempdir::TempDir;
-    use tracing::level_filters::LevelFilter;
-    use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
     #[test]
     fn smoke() {
-        FmtSubscriber::builder()
-            .with_env_filter(
-                EnvFilter::builder()
-                    .with_default_directive(LevelFilter::TRACE.into())
-                    .from_env_lossy(),
-            )
-            .init();
-
         let dir = TempDir::new("ios-share-ext").unwrap();
         let mail_cache_path = dir.path().join("mail-cache");
 
