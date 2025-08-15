@@ -105,16 +105,21 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
             let Some(attr) = attributes.map.get_mut(item) else {
                 continue;
             };
-            if is_embedded_url(attr) {
-                if hide_embedded {
+
+            match is_embedded_url(attr) {
+                Ok(true) if hide_embedded => {
                     attr.value = String::new();
+                    disabled_embedded = true;
                 }
-                disabled_embedded = true;
-            } else {
-                if hide_remote {
+                Ok(false) if hide_remote => {
                     attr.value = String::new();
+                    disabled_remote = true;
                 }
-                disabled_remote = true;
+                Err(_) => {
+                    attr.value = String::new();
+                    disabled_remote = hide_remote;
+                }
+                _ => {}
             }
         }
 
@@ -129,16 +134,17 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
     (remote_count, embedded_count)
 }
 
-fn is_embedded_url(attr: &Attribute) -> bool {
+fn is_embedded_url(attr: &Attribute) -> Result<bool, url::ParseError> {
     is_embedded_url_str(&attr.value)
 }
 
-fn is_embedded_url_str(url: &str) -> bool {
-    let url_lower = url.to_lowercase();
-    url_lower.starts_with("cid:") ||
+fn is_embedded_url_str(uri: &str) -> Result<bool, url::ParseError> {
+    let uri = url::Url::parse(uri)?;
+    let scheme = uri.scheme();
+    Ok(scheme.eq_ignore_ascii_case("cid") ||
         // We disable data: because otherwise the clients might freak out
         // If at some point we treat PGP inline attachments different revisit this.
-        url_lower.starts_with("data:")
+        scheme.eq_ignore_ascii_case("data"))
 }
 fn handle_style_sheet(css: &mut String, disable_remote: bool, disable_embedded: bool) {
     let Ok(mut sheet) = StyleSheet::parse(
@@ -228,14 +234,20 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
     }
 
     fn visit_url(&mut self, url: &mut Url<'i>) -> Result<(), Self::Error> {
-        if is_embedded_url_str(&url.url) {
-            if self.disable_embedded {
+        match is_embedded_url_str(&url.url) {
+            Ok(true) if self.disable_embedded => {
                 url.url = String::new().into();
                 self.has_changes = true;
             }
-        } else if self.disable_remote {
-            url.url = String::new().into();
-            self.has_changes = true;
+            Ok(false) if self.disable_remote => {
+                url.url = String::new().into();
+                self.has_changes = true;
+            }
+            Err(_) => {
+                url.url = String::new().into();
+                self.has_changes = true;
+            }
+            _ => {}
         }
         Ok(())
     }
