@@ -1,4 +1,9 @@
+use crate::db::migrations::migrate_core_db;
 use stash::stash::{Stash, StashConfiguration};
+use tracing::subscriber::set_global_default;
+use tracing_subscriber::fmt::layer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{EnvFilter, registry};
 
 #[macro_export]
 macro_rules! lid {
@@ -79,20 +84,15 @@ macro_rules! device_contact {
 }
 
 pub async fn new_core_test_connection() -> Stash {
-    use crate::db::migrations::migrate_core_db;
-    use std::io::stdout;
-    use tracing::Level;
-    use tracing::subscriber::set_global_default;
-    use tracing_subscriber::fmt::layer;
-    use tracing_subscriber::fmt::writer::MakeWriterExt;
-    use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::{EnvFilter, registry};
-    drop(set_global_default(
+    _ = set_global_default(
         registry()
             .with(EnvFilter::new("debug,stash=debug"))
-            .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
-    ));
-    let stash = Stash::new(StashConfiguration::test()).expect("Failed to create Stash");
+            .with(layer().with_test_writer()),
+    );
+
+    let stash = Stash::new(StashConfiguration::test()).unwrap();
+
     migrate_core_db(&stash).await.unwrap();
+
     stash
 }
