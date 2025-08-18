@@ -345,14 +345,7 @@ async fn create_draft_reply_without_body_is_error() {
     ctx.catch_all().await;
 
     // Create draft.
-    let result = Draft::reply(
-        &user_ctx,
-        existing_message.id(),
-        ReplyMode::Sender,
-        true,
-        None,
-    )
-    .await;
+    let result = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::Sender, true).await;
 
     assert!(matches!(
         result,
@@ -398,14 +391,7 @@ async fn create_draft_reply_should_fail_for_drafts() {
     ctx.catch_all().await;
 
     // Create draft.
-    let result = Draft::reply(
-        &user_ctx,
-        existing_message.id(),
-        ReplyMode::Sender,
-        true,
-        None,
-    )
-    .await;
+    let result = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::Sender, true).await;
 
     assert!(matches!(
         result,
@@ -481,17 +467,6 @@ async fn create_draft_reply_html() {
 }
 
 #[tokio::test]
-async fn create_draft_reply_plain_text() {
-    let draft_body = create_draft_reply_with_override(
-        MimeType::TextPlain,
-        ReplyMode::Sender,
-        MimeType::TextPlain,
-    )
-    .await;
-    insta::assert_snapshot!(draft_body.body)
-}
-
-#[tokio::test]
 async fn create_draft_reply_with_alias() {
     // Check if we received the email on an alias it is set correctly
     // on the message.
@@ -499,7 +474,6 @@ async fn create_draft_reply_with_alias() {
     create_draft_reply_with_override_impl(
         MimeType::TextHtml,
         ReplyMode::Sender,
-        None,
         Some(alias_email.to_owned()),
     )
     .await;
@@ -612,22 +586,12 @@ async fn create_draft_reply_impl(
     mime_type: MimeType,
     reply_mode: ReplyMode,
 ) -> DecryptedMessageBody {
-    create_draft_reply_with_override_impl(mime_type, reply_mode, None, None).await
-}
-
-async fn create_draft_reply_with_override(
-    mime_type: MimeType,
-    reply_mode: ReplyMode,
-    mime_type_override: MimeType,
-) -> DecryptedMessageBody {
-    create_draft_reply_with_override_impl(mime_type, reply_mode, Some(mime_type_override), None)
-        .await
+    create_draft_reply_with_override_impl(mime_type, reply_mode, None).await
 }
 
 async fn create_draft_reply_with_override_impl(
     mime_type: MimeType,
     reply_mode: ReplyMode,
-    mime_type_override: Option<MimeType>,
     alias_override: Option<String>,
 ) -> DecryptedMessageBody {
     // Set up a user and initialise the inbox
@@ -774,7 +738,6 @@ async fn create_draft_reply_with_override_impl(
         existing_message.local_id.unwrap(),
         reply_mode,
         true,
-        mime_type_override,
     )
     .await
     .unwrap();
@@ -1414,7 +1377,6 @@ async fn create_draft_reply_with_invalid_address_produces_address_validation_err
         existing_message.local_id.unwrap(),
         ReplyMode::Sender,
         true,
-        None,
     )
     .await
     .unwrap();
@@ -1803,7 +1765,6 @@ async fn prepare_draft_reply_attach_public_key(
         existing_message.local_id.unwrap(),
         reply_mode,
         true,
-        None,
     )
     .await
     .unwrap();

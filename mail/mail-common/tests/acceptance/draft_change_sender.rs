@@ -208,7 +208,7 @@ async fn change_sender_address_with_alias() {
         .unwrap();
 
     // Create draft.
-    let draft = Draft::reply(&user_ctx, message.id(), ReplyMode::Sender, true, None)
+    let draft = Draft::reply(&user_ctx, message.id(), ReplyMode::Sender, true)
         .await
         .unwrap();
 

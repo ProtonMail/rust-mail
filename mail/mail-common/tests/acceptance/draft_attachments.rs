@@ -596,7 +596,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     ctx.catch_all().await;
 
     // Create draft.
-    let draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true, None)
+    let draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true)
         .await
         .unwrap();
 
@@ -687,7 +687,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     .unwrap();
 
     // Create draft.
-    let draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true, None)
+    let draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true)
         .await
         .unwrap();
 

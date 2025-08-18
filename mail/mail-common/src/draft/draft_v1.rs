@@ -407,15 +407,14 @@ impl Draft {
     /// `use_utc` controls whether we should generate the sender reply using
     /// the `Utc` or `Local` timezone. For production, we should use the `Local`
     /// but for testing in CI `Utc` is more deterministic.
-    #[tracing::instrument(skip(context, use_utc, mime_type_override))]
+    #[tracing::instrument(skip(context, use_utc))]
     pub async fn reply(
         context: &MailUserContext,
         message_id: LocalMessageId,
         reply_mode: ReplyMode,
         use_utc: bool,
-        mime_type_override: Option<MimeType>,
     ) -> Result<Self, MailContextError> {
-        info!("Creating new draft reply ");
+        info!("Creating new draft reply");
 
         let mut tether = context.user_stash().connection();
 
@@ -496,7 +495,6 @@ impl Draft {
                     &source_message,
                     source_message_body,
                     use_utc,
-                    mime_type_override,
                     address_validation_error,
                 )
                 .await;
@@ -581,12 +579,9 @@ impl Draft {
         source_message: &Message,
         mut source_message_body: DecryptedMessageBody,
         use_utc: bool,
-        mime_type_override: Option<MimeType>,
         address_validation_result: Option<DraftAddressValidationResult>,
     ) -> (Self, Vec<Attachment>) {
-        let mime_type = if let Some(mime_type) = mime_type_override {
-            mime_type
-        } else if mail_settings.draft_mime_type == MimeType::TextHtml
+        let mime_type = if mail_settings.draft_mime_type == MimeType::TextHtml
             || source_message_body.metadata.mime_type == MimeType::TextHtml
         {
             MimeType::TextHtml
