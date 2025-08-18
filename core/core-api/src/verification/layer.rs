@@ -2,7 +2,7 @@ use crate::consts::CoreBundle::HumanVerificationRequired;
 use crate::services::proton::HumanVerificationChallenge;
 use crate::services::proton::common::ApiErrorInfo;
 use crate::verification::notifier::ChallengeResponse;
-use crate::verification::{ChallengePayload, DynChallengeNotifier};
+use crate::verification::{ChallengePayload, ChallengeServer, DynChallengeNotifier};
 use muon::common::{BoxFut, Sender, SenderLayer};
 use muon::util::ProtonRequestExt;
 use muon::{ProtonRequest, ProtonResponse, Result as MuonResult, Status};
@@ -83,27 +83,41 @@ impl ChallengeNotifierLayer {
             return Ok(res);
         };
 
-        let (token, ttype) = match self.notifier.on_challenge(payload).await {
-            ChallengeResponse::Success { token, ttype } => {
-                info!("challenge succeeded");
-                (token, ttype)
-            }
-
-            ChallengeResponse::Failure => {
-                error!("challenge failed");
-                return Ok(res);
-            }
-
-            ChallengeResponse::Cancelled => {
-                warn!("challenge cancelled");
-                return Ok(res);
-            }
+        let Some((token, ttype)) = self
+            .notify(ChallengeServer::new(res.server(), res.name()), payload)
+            .await
+        else {
+            error!("no challenge response");
+            return Ok(res);
         };
 
         req.header(("x-pm-human-verification-token", token))
             .header(("x-pm-human-verification-token-type", ttype))
             .send_with(inner)
             .await
+    }
+
+    async fn notify(
+        &self,
+        server: ChallengeServer,
+        payload: ChallengePayload,
+    ) -> Option<(String, String)> {
+        match self.notifier.on_challenge(server, payload).await {
+            ChallengeResponse::Success { token, ttype } => {
+                info!("challenge succeeded");
+                Some((token, ttype))
+            }
+
+            ChallengeResponse::Failure => {
+                error!("challenge failed");
+                None
+            }
+
+            ChallengeResponse::Cancelled => {
+                warn!("challenge cancelled");
+                None
+            }
+        }
     }
 }
 
