@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.131.0] - 2025-08-18
+
+### Fixes
+
+- [ET-4176] Remove fido details from db
+- Fixed documentation for the safety warnings and update fide_details function ref in doc.
+- Silence muon error logs
+- Applied post merge fmt.
+
+
 ## [mail-uniffi-v0.130.0] - 2025-08-18
 
 ### Features
