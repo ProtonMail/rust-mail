@@ -195,11 +195,45 @@ pub(super) fn get_full_signature(
 
 fn prepare_signature(signature: &str, mime_type: MimeType) -> String {
     if mime_type == MimeType::TextPlain {
-        Transformer::new(signature)
+        let sign = Transformer::new(signature)
             .to_plain_text(Html2TextOptions {
                 decorate_links: false,
             })
-            .unwrap_or_else(|_| signature.to_owned())
+            .unwrap_or_else(|_| signature.to_owned());
+
+        // html2text likes to insert "extra" whitelines, converting single-line
+        // signatures like:
+        //
+        // ```
+        // <b>cheers!</b>
+        // ```
+        //
+        // ... into two-lined:
+        //
+        // ```
+        // *cheers!*
+        //
+        // ```
+        //
+        // This is mildly awkward, because later it might happen that we'll have
+        // to compose two signatures together (e.g. if you have both the address
+        // and mobile signature activated), and that signature-composing
+        // function already inserts its own newlines to separate the
+        // "sub-signatures" it's given.
+        //
+        // So any extra "seemingly spurious" newlines we return here might cause
+        // the final, composed signature to look extremely wide and weird:
+        //
+        // ```
+        // address signature
+        //
+        //
+        //
+        // mobile signature
+        // ```
+        sign.trim_start_matches('\n')
+            .trim_end_matches('\n')
+            .to_owned()
     } else {
         signature.to_owned()
     }
@@ -499,6 +533,7 @@ pub struct DraftAddressChangeFullAddressParams {
     pub address_id: AddressId,
     pub sender: String,
 }
+
 impl DraftAddressChangeRequest {
     pub(super) fn new(
         metadata_id: MetadataId,

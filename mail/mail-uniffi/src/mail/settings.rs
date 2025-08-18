@@ -89,7 +89,7 @@ impl CustomSettings {
             let status = RealMobileSignatureStatus::new(&user, &settings);
 
             Ok(MobileSignature {
-                body: settings.mobile_signature.unwrap_or_default(),
+                body: settings.mobile_signature().to_owned(),
                 status: status.into(),
             })
         })
