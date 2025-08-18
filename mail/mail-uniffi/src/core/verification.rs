@@ -79,7 +79,7 @@ impl ChallengeServer {
     /// The resolved hostname of the server.
     #[must_use]
     pub fn resolved_host(&self) -> String {
-        self.inner.server.name().to_string()
+        self.inner.name.to_string()
     }
 
     /// The port of the server.
