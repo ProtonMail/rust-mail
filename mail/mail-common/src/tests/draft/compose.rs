@@ -657,7 +657,6 @@ async fn create_reply_with_mime_and_body_and_message(
         source_body,
         true,
         None,
-        None,
     )
     .await;
 

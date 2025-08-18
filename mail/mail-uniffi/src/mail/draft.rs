@@ -324,13 +324,13 @@ pub async fn new_draft(
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty_ex(&ctx, options).await,
             DraftCreateMode::Reply(id) => {
-                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Sender, false, None, options).await
+                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Sender, false, options).await
             }
             DraftCreateMode::ReplyAll(id) => {
-                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::All, false, None, options).await
+                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::All, false, options).await
             }
             DraftCreateMode::Forward(id) => {
-                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Forward, false, None, options).await
+                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Forward, false, options).await
             }
             DraftCreateMode::FromIosShareExtension => {
                 RealDraft::from_ios_share_extension(&ctx, options).await

@@ -695,29 +695,26 @@ impl DraftActor {
         message_id: LocalMessageId,
         reply_mode: ReplyMode,
         use_utc: bool,
-        mime_type_override: Option<MimeType>,
     ) -> Result<Self, MailContextError> {
         Self::reply_ex(
             context,
             message_id,
             reply_mode,
             use_utc,
-            mime_type_override,
             DraftActorOptions::default(),
         )
         .await
     }
+
     pub async fn reply_ex(
         context: &MailUserContext,
         message_id: LocalMessageId,
         reply_mode: ReplyMode,
         use_utc: bool,
-        mime_type_override: Option<MimeType>,
         options: DraftActorOptions,
     ) -> Result<Self, MailContextError> {
-        let draft =
-            draft_v1::Draft::reply(context, message_id, reply_mode, use_utc, mime_type_override)
-                .await?;
+        let draft = draft_v1::Draft::reply(context, message_id, reply_mode, use_utc).await?;
+
         Ok(Self::create(context, draft, options))
     }
 
@@ -725,6 +722,7 @@ impl DraftActor {
         self.act(|sender| DraftActorMessage::Save { sender })
             .await?
     }
+
     pub async fn send(&self) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
         self.act(|sender| DraftActorMessage::Send { sender })
             .await?

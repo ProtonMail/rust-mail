@@ -455,7 +455,7 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
         .unwrap();
 
     // Create draft.
-    let draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
+    let draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true)
         .await
         .unwrap();
 
@@ -562,7 +562,7 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         .unwrap();
 
     // Create draft.
-    let draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
+    let draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true)
         .await
         .unwrap();
 
