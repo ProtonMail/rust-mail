@@ -15,10 +15,17 @@ async fn test_migration() {
         .await
         .expect("Failed to run migration");
 
-    Migrator::new(TABLE, vec![Box::new(M2)])
+    let expected = Migrator::new(TABLE, vec![Box::new(M1), Box::new(M2)])
         .migrate(&mut tether)
         .await
         .expect("Failed to run migration");
+    assert_eq!(expected, 2);
+
+    let expected = Migrator::new(TABLE, vec![Box::new(M1), Box::new(M2)])
+        .migrate(&mut tether)
+        .await
+        .expect("Failed to run migration");
+    assert_eq!(expected, 2);
 }
 
 #[tokio::test]

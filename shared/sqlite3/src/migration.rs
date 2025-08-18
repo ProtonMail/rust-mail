@@ -65,23 +65,28 @@ impl Migrator {
     ///
     /// See: [`Self::verify()`].
     pub async fn migrate(&self, tether: &mut Tether) -> Result<usize, MigratorError> {
+        let expected_version = get_expected_version(&self.migrations);
+        let current_version = get_current_version(tether, &self.table).await?;
+        if let Some(current_version) = current_version
+            && current_version == expected_version
+        {
+            debug!("No migrations to run");
+            return Ok(expected_version);
+        }
         tether
             .tx(async |tx| {
-                let expected_version = get_expected_version(&self.migrations);
-
-                let current_version =
-                    if let Some(version) = get_current_version(tx, &self.table).await? {
-                        debug!("Found current version={version}");
-                        if version > expected_version {
-                            return Err(MigratorError::InvalidVersion(version));
-                        }
-                        version
-                    } else {
-                        debug!("No version table found, initializing");
-                        create_version_table(tx).await?;
-                        set_current_version(tx, &self.table, 0).await?;
-                        0
-                    };
+                let current_version = if let Some(version) = current_version {
+                    debug!("Found current version={version}");
+                    if version > expected_version {
+                        return Err(MigratorError::InvalidVersion(version));
+                    }
+                    version
+                } else {
+                    debug!("No version table found, initializing");
+                    create_version_table(tx).await?;
+                    set_current_version(tx, &self.table, 0).await?;
+                    0
+                };
 
                 debug!(?current_version, ?expected_version, "Running migrations");
                 run_migrations(tx, &self.table, current_version, &self.migrations).await?;
@@ -118,10 +123,13 @@ fn get_expected_version(m: &[Box<dyn Migration>]) -> usize {
     m.len()
 }
 
-async fn get_current_version(tx: &Bond<'_>, table_name: &str) -> Result<Option<usize>, StashError> {
+async fn get_current_version(
+    tether: &Tether,
+    table_name: &str,
+) -> Result<Option<usize>, StashError> {
     let query = "SELECT COUNT(DISTINCT `name`) AS value FROM sqlite_master WHERE `type`='table' AND name= ?";
 
-    let count = tx
+    let count = tether
         .query_value::<_, u64>(query, params![VERSION_TABLE_NAME])
         .await?;
 
@@ -129,18 +137,18 @@ async fn get_current_version(tx: &Bond<'_>, table_name: &str) -> Result<Option<u
         return Ok(None);
     }
 
-    read_current_version(tx, table_name).await.map(Some)
+    read_current_version(tether, table_name).await.map(Some)
 }
 
 const VERSION_TABLE_FIELD_ID: &str = "id";
 const VERSION_TABLE_FIELD_VERSION: &str = "version";
 const VERSION_TABLE_NAME: &str = "proton_sqlite3_db_version";
 
-async fn read_current_version(tx: &Bond<'_>, id: &str) -> Result<usize, StashError> {
+async fn read_current_version(tether: &Tether, id: &str) -> Result<usize, StashError> {
     let query = format!(
         "SELECT {VERSION_TABLE_FIELD_VERSION} AS value FROM {VERSION_TABLE_NAME} WHERE {VERSION_TABLE_FIELD_ID}=?"
     );
-    let version = match tx
+    let version = match tether
         .query_value::<_, u64>(query, params![id.to_owned()])
         .await
     {
