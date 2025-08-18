@@ -161,10 +161,11 @@ async fn test_on_refresh_impl_contacts_network_error() {
     let result = refresh(&user_ctx, Refresh::Contacts).await;
 
     // Should fail with SubscriberError
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "The task `contacts` was cancelled, we need to run refresh again"
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .starts_with("Failed to download remote contacts")
     );
 }
 

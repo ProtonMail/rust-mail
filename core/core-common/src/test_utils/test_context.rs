@@ -23,6 +23,7 @@ use stash::stash::{Stash, StashError};
 use std::io::stdout;
 use std::sync::{Arc, Weak};
 use tempdir::TempDir;
+use tokio::runtime;
 use tracing::subscriber::set_global_default;
 use tracing::{Level, info};
 use tracing_subscriber::fmt::layer;
@@ -193,6 +194,7 @@ impl TestContext {
         // Create core test context
         let context = Context::new(
             Origin::App,
+            runtime::Handle::current(),
             tmp_dir.path(),
             tmp_dir.path(),
             keychain.clone(),
@@ -285,11 +287,10 @@ impl TestContext {
     /// Get the test user context.
     ///
     pub async fn user_context(&self) -> Arc<UserContext> {
+        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
+
         self.context
-            .user_context_from_session(
-                &self.core_session,
-                Some(StatusWatcher::with_observer(StatusObserver::test())),
-            )
+            .user_context_from_session(&self.core_session, Some(status))
             .await
             .expect("failed to create user context")
     }

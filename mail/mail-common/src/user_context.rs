@@ -40,7 +40,7 @@ use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::Subscriber;
-use proton_task_service::{AsyncTaskResult, TaskSpawner};
+use proton_task_service::Spawner;
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
 use std::any::{Any, TypeId};
@@ -713,20 +713,11 @@ impl MailUserContext {
     }
 
     /// See [`UserContext::spawn()`].
-    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {
         self.user_context.spawn(task)
-    }
-
-    /// See [`UserContext::spawn_with()`].
-    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        S: TaskSpawner,
-        F: Future<Output: Send> + Send + 'static,
-    {
-        self.user_context.spawn_with::<S, _>(task)
     }
 
     pub async fn has_unsent_messages(&self) -> Result<bool, MailContextError> {
@@ -735,5 +726,14 @@ impl MailUserContext {
             .typed_actions_count::<crate::actions::draft::Send>()
             .await?
             != 0)
+    }
+}
+
+impl Spawner for MailUserContext {
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
+    where
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(f)
     }
 }

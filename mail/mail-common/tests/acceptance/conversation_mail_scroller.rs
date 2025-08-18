@@ -1076,6 +1076,8 @@ async fn snoozed_conversations() {
         tether.tx(async |tx| conv.save(tx).await).await.unwrap();
     }
 
+    ctx.catch_all().await;
+
     // ---
 
     let mut scroller = TestScroller::conversations(&user_ctx, label.id(), ReadFilter::All, 2)

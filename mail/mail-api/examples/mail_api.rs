@@ -1,4 +1,5 @@
 #![allow(clippy::print_stdout)]
+
 use muon::env::EnvId;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
@@ -17,6 +18,7 @@ use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMe
 use std::io::{BufRead, Write, stdin, stdout};
 use std::sync::Arc;
 use tempdir::TempDir;
+use tokio::runtime;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -34,12 +36,13 @@ async fn main() {
                 .with_default_directive(LevelFilter::TRACE.into())
                 .parse_lossy("info,proton_core_api=debug,proton_mail_api_debug"),
         );
+
     tracing_subscriber::registry().with(file_subscriber).init();
+
     let user_email = std::env::var("USER_EMAIL").unwrap();
     let user_password = std::env::var("USER_PASSWORD").unwrap();
-    let session = Session::new().await.unwrap();
     let context = create_context().await;
-
+    let session = Session::new(context.spawner()).await.unwrap();
     let migration_snooper = Box::new(NoopMigrationSnooper);
 
     let post_login_validator = Box::new(DefaultPostLoginValidator::new(
@@ -133,11 +136,14 @@ async fn create_context() -> Arc<Context> {
         .name("log".into())
         .directory(tmp_dir.path().into())
         .build();
+
     keychain
         .store(key.clone())
         .expect("failed to store in keychain");
+
     Context::new(
         Origin::App,
+        runtime::Handle::current(),
         tmp_dir.path(),
         tmp_dir.path(),
         Arc::new(InMemoryKeyChain::default()).clone(),

@@ -199,6 +199,7 @@ async fn create_mail_session_inner(
 
     let mail_ctx = MailContext::new(
         params.origin.into(),
+        async_runtime().handle().clone(),
         session_path,
         user_path,
         core_cache_path,
@@ -395,7 +396,7 @@ impl MailSession {
             accounts.sort_by_cached_key(|a| a.details().name.to_lowercase());
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_sync(
-                ctx, accounts, rx, callback,
+                &*ctx, accounts, rx, callback,
             ))
         })
         .await
@@ -428,7 +429,7 @@ impl MailSession {
             accounts.sort_by_cached_key(|a| a.details().name.to_lowercase());
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_async(
-                ctx, accounts, rx, callback,
+                &*ctx, accounts, rx, callback,
             ))
         })
         .await
@@ -483,7 +484,7 @@ impl MailSession {
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(
-                ctx, sessions, rx, callback,
+                &*ctx, sessions, rx, callback,
             ))
         })
         .await
@@ -514,7 +515,7 @@ impl MailSession {
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_async(
-                ctx, sessions, rx, callback,
+                &*ctx, sessions, rx, callback,
             ))
         })
         .await
@@ -575,7 +576,7 @@ impl MailSession {
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(
-                ctx, sessions, rx, callback,
+                &*ctx, sessions, rx, callback,
             ))
         })
         .await
@@ -1262,7 +1263,7 @@ impl WatchedAccounts {
     }
 
     fn new_sync(
-        ctx: impl AsRef<MailContext>,
+        ctx: &MailContext,
         accounts: Vec<Arc<StoredAccount>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
@@ -1271,7 +1272,7 @@ impl WatchedAccounts {
     }
 
     fn new_async(
-        ctx: impl AsRef<MailContext>,
+        ctx: &MailContext,
         accounts: Vec<Arc<StoredAccount>>,
         handle: WatcherHandle,
         callback: Arc<dyn AsyncLiveQueryCallback>,
@@ -1296,7 +1297,7 @@ impl WatchedSessions {
     }
 
     fn new_sync(
-        ctx: impl AsRef<MailContext>,
+        ctx: &MailContext,
         sessions: Vec<Arc<StoredSession>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
@@ -1305,7 +1306,7 @@ impl WatchedSessions {
     }
 
     fn new_async(
-        ctx: impl AsRef<MailContext>,
+        ctx: &MailContext,
         sessions: Vec<Arc<StoredSession>>,
         handle: WatcherHandle,
         callback: Arc<dyn AsyncLiveQueryCallback>,

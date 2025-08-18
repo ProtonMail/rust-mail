@@ -178,7 +178,7 @@ impl Mailbox {
 
         uniffi_async(async move {
             let receiver = mbox.watch_unread_count(ctx.user_stash()).await?;
-            let watcher = watch_channel(ctx, receiver, callback);
+            let watcher = watch_channel(&*ctx, receiver, callback);
 
             Result::<_, RealProtonMailError>::Ok(watcher)
         })

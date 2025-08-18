@@ -11,8 +11,8 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
 use crate::{
-    AsyncLiveQueryCallback, LiveQueryCallback, WatchHandle, async_runtime, spawn_async,
-    uniffi_async, watch_channel_async,
+    AsyncLiveQueryCallback, LiveQueryCallback, WatchHandle, async_runtime, uniffi_async,
+    watch_channel_async,
 };
 use futures::TryFutureExt;
 use proton_account_api::login::state::want_qr_confirmation::process_target_device_qr_code;
@@ -88,7 +88,7 @@ impl MailUserSession {
         let watcher_handle = watch_fn(ctx.user_context())
             .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
             .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
-        let watch_handle = watch_channel_async(ctx, watcher_handle, callback);
+        let watch_handle = watch_channel_async(&*ctx, watcher_handle, callback);
         Ok(watch_handle)
     }
 }
@@ -372,8 +372,10 @@ impl MailUserSession {
             return;
         };
 
-        spawn_async(ctx.clone(), async move {
-            ctx.session().wait_for_online().await;
+        let sess = ctx.session().clone();
+
+        ctx.spawn(async move {
+            sess.wait_for_online().await;
             let callback = move || callback.on_update();
             _ = async_runtime().spawn_blocking(callback).await;
         });

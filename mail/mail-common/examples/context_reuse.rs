@@ -12,6 +12,7 @@ use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::{MailContext, MailContextError};
 use std::sync::Arc;
 use tempdir::TempDir;
+use tokio::runtime;
 use tracing::info;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
@@ -53,6 +54,7 @@ async fn main() {
 
         MailContext::new(
             Origin::App,
+            runtime::Handle::current(),
             tmp_dir.path().join("session"),
             tmp_dir.path().join("user"),
             tmp_dir.path().join("core_cache"),

@@ -19,7 +19,6 @@ use proton_core_api::services::proton::{AddressId, ProtonCore};
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
-use proton_task_service::AsyncTaskResult;
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::HashMap;
@@ -159,8 +158,7 @@ impl From<TransformOptsResolved> for TransformOpts {
     }
 }
 
-type InFlightAttachments =
-    HashMap<LocalAttachmentId, JoinHandle<AsyncTaskResult<MailContextResult<Vec<u8>>>>>;
+type InFlightAttachments = HashMap<LocalAttachmentId, JoinHandle<MailContextResult<Vec<u8>>>>;
 
 /// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessageBody {
@@ -336,10 +334,10 @@ impl DecryptedMessageBody {
             // We first remove the task from the mutex to avoid locking other threads.
             let task_handle = { self.in_flight.lock().remove(&att.id()) };
             match task_handle {
-                Some(p) => match p.await? {
-                    AsyncTaskResult::Completed(Ok(data)) => data,
-                    AsyncTaskResult::Cancelled => return Err(MailContextError::TaskCancelled),
-                    AsyncTaskResult::Completed(e @ Err(_)) => e?,
+                Some(p) => match p.await {
+                    Ok(Ok(data)) => data,
+                    Ok(Err(e)) => Err(e)?,
+                    Err(_) => return Err(MailContextError::TaskCancelled),
                 },
                 None => {
                     let tether = &mut ctx.user_stash().connection();

@@ -5536,6 +5536,7 @@ dependencies = [
  "proton-crypto-account",
  "proton-crypto-subtle",
  "proton-log-service",
+ "proton-task-service",
  "regex",
  "secrecy",
  "serde",
@@ -5681,6 +5682,7 @@ dependencies = [
  "parking_lot",
  "proton-core-api",
  "proton-crypto-account",
+ "proton-task-service",
  "serde",
  "serde-aux",
  "serde_json",
@@ -5960,6 +5962,7 @@ dependencies = [
  "proton-crypto-inbox",
  "proton-log-service",
  "proton-mail-api",
+ "proton-task-service",
  "reqwest",
  "serde",
  "serde_json",
@@ -6209,6 +6212,8 @@ name = "proton-task-service"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
+ "muon",
  "parking_lot",
  "pin-project",
  "tokio",
