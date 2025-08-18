@@ -53,8 +53,7 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
         .with_default_directive(LevelFilter::DEBUG.into())
         .parse(format!(
             "info,\
-            muon=info,\
-            muon_impl=info,\
+            {},\
             proton_mail_uniffi=debug,\
             proton_sqlite3=debug,\
             proton_calendar_common=debug,\
@@ -65,6 +64,7 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
             proton_action_queue=trace,\
             proton_mail_api=debug,\
             stash={}",
+            LogService::silence_muon_errors_evn_filter(),
             if std::env::var("STASH_SQL_DEBUG").is_ok() {
                 "trace"
             } else {

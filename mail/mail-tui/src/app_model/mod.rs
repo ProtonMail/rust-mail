@@ -518,11 +518,8 @@ impl AppStateHandler for AppState {
 fn app_tracing_env_filter() -> EnvFilter {
     let directives = read_to_string("log_directives");
     let directives: String = directives
-        .as_deref()
-        .unwrap_or(
+        .unwrap_or(format!(
             "info,
-        muon=info,
-        muon_impl=info,
         proton_mail_tui=debug,
         proton_core_api=debug,
         proton_mail_db=trace,
@@ -532,8 +529,10 @@ fn app_tracing_env_filter() -> EnvFilter {
         proton_mail_common=trace,
         proton_event_loop=trace,
         proton_action_queue=trace,
-        proton_calendar_common=debug",
-        )
+        proton_calendar_common=debug,
+        {}",
+            LogService::silence_muon_errors_evn_filter()
+        ))
         .split_inclusive(',')
         .map(str::trim)
         .collect();
