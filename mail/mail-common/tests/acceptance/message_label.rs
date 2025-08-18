@@ -298,6 +298,8 @@ async fn message_action_ham() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
+    ctx.mock_label_messages(&LabelId::inbox(), vec![message.metadata.id.clone()])
+        .await;
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.mock_put_message_ham(&message.metadata.id).await;
     ctx.mock_empty_label().await;

@@ -2583,28 +2583,34 @@ impl ConversationOrMessage for Message {
         api: &impl ProtonMail,
         ids: Vec<Self::RemoteId>,
         label_id: LabelId,
-    ) -> Vec<Self::RemoteId> {
-        match api.put_messages_label(ids.clone(), label_id, None).await {
-            Ok(res) => filter_responses(res.responses),
-            Err(e) => {
-                error!("Failed to add message to label {e:?}");
-                ids
-            }
-        }
+    ) -> Result<Vec<Self::RemoteId>, ApiServiceError> {
+        info!("Applying {label_id:?} to {ids:?}");
+        let label_id = &label_id;
+        let request = |ids: Vec<MessageId>| async move {
+            api.put_messages_label(ids.clone(), label_id.clone(), None)
+                .await
+                .map(|v| v.responses)
+        };
+        Message::split_request(ids, request)
+            .await
+            .map(filter_responses)
     }
 
     async fn remote_unlabel(
         api: &impl ProtonMail,
         ids: Vec<Self::RemoteId>,
         label_id: LabelId,
-    ) -> Vec<Self::RemoteId> {
-        match api.put_messages_unlabel(ids.clone(), label_id).await {
-            Ok(res) => filter_responses(res.responses),
-            Err(e) => {
-                error!("Failed to remove message from label {e:?}");
-                ids
-            }
-        }
+    ) -> Result<Vec<Self::RemoteId>, ApiServiceError> {
+        info!("Removing {label_id:?} from {ids:?}");
+        let label_id = &label_id;
+        let request = |ids: Vec<MessageId>| async move {
+            api.put_messages_unlabel(ids.clone(), label_id.clone())
+                .await
+                .map(|v| v.responses)
+        };
+        Message::split_request(ids, request)
+            .await
+            .map(filter_responses)
     }
 
     fn get_exclusive_location(&self) -> Option<LocalLabelId> {
