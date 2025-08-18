@@ -313,10 +313,7 @@ async fn check_store_auth(parts: &SessionParts, user_id: &str) -> Result<(), Log
     Err(LoginError::MissingSession)
 }
 
-fn get_auth_info(
-    user_id: &str,
-    session_id: &str, totp: bool, has_fido: bool
-) -> AuthInfo {
+fn get_auth_info(user_id: &str, session_id: &str, totp: bool, has_fido: bool) -> AuthInfo {
     AuthInfo {
         user_id: UserId::from(user_id.to_owned()),
         session_id: SessionId::from(session_id.to_owned()),
