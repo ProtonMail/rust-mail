@@ -61,6 +61,12 @@ async fn banners() {
     test_ctx.mock_put_message_ham(&"spam".into()).await;
     test_ctx.mock_put_message_ham(&"phishing".into()).await;
     test_ctx.mock_put_message_ham(&"normal".into()).await;
+    test_ctx
+        .mock_label_messages(&LabelId::inbox(), vec!["spam".into(), "phishing".into()])
+        .await;
+    test_ctx
+        .mock_label_messages(&LabelId::inbox(), vec!["normal".into()])
+        .await;
     test_ctx.catch_all().await;
 
     let ctx = test_ctx.mail_user_context().await;

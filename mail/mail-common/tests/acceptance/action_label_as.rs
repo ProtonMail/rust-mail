@@ -61,24 +61,18 @@ async fn action_label_as_without_archive() {
     let params = test_init_params(labels, conversations.clone());
     ctx.setup_user(params).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
-    ctx.mock_label_conversation(
-        &label1_id,
-        vec![conversation1.id.clone(), conversation2.id.clone()],
-        None,
-        vec![],
-    )
-    .await;
+    ctx.mock_label_conversation(&label1_id, vec![conversation1.id.clone()], None, vec![])
+        .await;
 
-    ctx.mock_unlabel_conversation(
-        &label3_id,
-        vec![
-            conversation2.id,
-            conversation3.id.clone(),
-            conversation4.id.clone(),
-        ],
-        vec![],
-    )
-    .await;
+    ctx.mock_label_conversation(&label1_id, vec![conversation2.id.clone()], None, vec![])
+        .await;
+
+    ctx.mock_unlabel_conversation(&label3_id, vec![conversation2.id], vec![])
+        .await;
+    ctx.mock_unlabel_conversation(&label3_id, vec![conversation3.id.clone()], vec![])
+        .await;
+    ctx.mock_unlabel_conversation(&label3_id, vec![conversation4.id.clone()], vec![])
+        .await;
     ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -198,69 +192,54 @@ async fn action_label_as_with_archive() {
     let params = test_init_params(labels, conversations.clone());
     ctx.setup_user(params).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
-    ctx.mock_label_conversation(
-        &label1_id,
-        vec![conversation1.id.clone(), conversation2.id.clone()],
-        None,
-        vec![],
-    )
-    .await;
 
-    ctx.mock_label_conversation(
-        &label3_id,
-        vec![
-            conversation2.id.clone(),
-            conversation3.id.clone(),
-            conversation4.id.clone(),
-        ],
-        None,
-        vec![],
-    )
-    .await;
+    for id in [conversation1.id.clone(), conversation2.id.clone()] {
+        ctx.mock_label_conversation(&label1_id, vec![id], None, vec![])
+            .await;
+    }
 
-    ctx.mock_label_conversation(
-        &LabelId::archive(),
-        vec![
-            conversation1.id.clone(),
-            conversation2.id.clone(),
-            conversation3.id.clone(),
-            conversation4.id.clone(),
-        ],
-        None,
-        vec![],
-    )
-    .await;
+    for id in [
+        conversation2.id.clone(),
+        conversation3.id.clone(),
+        conversation4.id.clone(),
+    ] {
+        ctx.mock_label_conversation(&label3_id, vec![id], None, vec![])
+            .await;
+    }
 
-    ctx.mock_label_conversation(
-        &LabelId::inbox(),
-        vec![
-            conversation1.id.clone(),
-            conversation2.id.clone(),
-            conversation3.id.clone(),
-            conversation4.id.clone(),
-        ],
-        None,
-        vec![],
-    )
-    .await;
+    for id in [
+        conversation1.id.clone(),
+        conversation2.id.clone(),
+        conversation3.id.clone(),
+        conversation4.id.clone(),
+    ] {
+        ctx.mock_label_conversation(&LabelId::archive(), vec![id], None, vec![])
+            .await;
+    }
 
-    ctx.mock_unlabel_conversation(
-        &label1_id,
-        vec![conversation1.id, conversation2.id.clone()],
-        vec![],
-    )
-    .await;
+    for id in [
+        conversation1.id.clone(),
+        conversation2.id.clone(),
+        conversation3.id.clone(),
+        conversation4.id.clone(),
+    ] {
+        ctx.mock_label_conversation(&LabelId::inbox(), vec![id], None, vec![])
+            .await;
+    }
 
-    ctx.mock_unlabel_conversation(
-        &label3_id,
-        vec![
-            conversation2.id,
-            conversation3.id.clone(),
-            conversation4.id.clone(),
-        ],
-        vec![],
-    )
-    .await;
+    for id in [conversation1.id.clone(), conversation2.id.clone()] {
+        ctx.mock_unlabel_conversation(&label1_id, vec![id], vec![])
+            .await;
+    }
+
+    for id in [
+        conversation2.id,
+        conversation3.id.clone(),
+        conversation4.id.clone(),
+    ] {
+        ctx.mock_unlabel_conversation(&label3_id, vec![id], vec![])
+            .await;
+    }
 
     ctx.catch_all().await;
 

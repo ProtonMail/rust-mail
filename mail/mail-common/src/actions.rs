@@ -21,7 +21,6 @@ use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
 use anyhow::Context;
 use fallible_iterator::FallibleIterator;
-use futures::future::{join, join_all};
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_action_queue::action::{
@@ -54,7 +53,7 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::Weak;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 pub const PREFETCH_ROLLBACK_ACTION_GROUP: ActionGroup = ActionGroup::new("MAIL_PREFETCH_ROLLBACK");
 
@@ -528,23 +527,21 @@ where
         let tether = guard.tether();
 
         let dest_label = Label::resolve_remote_label_id(self.destination, tether).await?;
-        let mut reqs = vec![];
-        for (&source_id, ids) in &self.sources {
+        let mut all_remote_ids = Vec::new();
+        for ids in self.sources.values() {
             let remote_ids = T::local_ids_counterpart(ids.clone(), tether).await?;
-            info!("Applying {source_id:?} to {remote_ids:?}");
-
-            reqs.push(T::remote_label(api, remote_ids, dest_label.clone()));
+            all_remote_ids.extend(remote_ids);
         }
 
-        let failed_items = join_all(reqs).await.into_iter().flatten();
-
-        guard
-            .tx::<_, _, anyhow::Error>(async move |tx| {
-                RollbackItem::save_many(tx, failed_items, T::ROLLBACK_ITEM_TYPE).await?;
-                Ok(())
-            })
-            .await?;
-
+        let failed = T::remote_label(api, all_remote_ids, dest_label.clone()).await?;
+        if !failed.is_empty() {
+            guard
+                .tx::<_, _, anyhow::Error>(async move |tx| {
+                    RollbackItem::save_many(tx, failed, T::ROLLBACK_ITEM_TYPE).await?;
+                    Ok(())
+                })
+                .await?;
+        }
         Ok(())
     }
 
@@ -624,17 +621,21 @@ pub trait ConversationOrMessage:
         bond: &Bond<'_>,
     ) -> Result<(), StashError>;
 
+    /// If the request succeeds, returns the list of failed ids for which this operation
+    /// may have failed.
     async fn remote_label(
         api: &impl ProtonMail,
         ids: Vec<Self::RemoteId>,
         label_id: LabelId,
-    ) -> Vec<Self::RemoteId>;
+    ) -> Result<Vec<Self::RemoteId>, ApiServiceError>;
 
+    /// If the request succeeds, returns the list of failed ids for which this operation
+    /// may have failed.
     async fn remote_unlabel(
         api: &impl ProtonMail,
         ids: Vec<Self::RemoteId>,
         label_id: LabelId,
-    ) -> Vec<Self::RemoteId>;
+    ) -> Result<Vec<Self::RemoteId>, ApiServiceError>;
 
     fn get_exclusive_location(&self) -> Option<LocalLabelId>;
 
@@ -812,14 +813,10 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
 
         for (label, ids) in add {
             T::remove_label(label, ids.iter().copied(), tx).await?;
-            let ids = T::local_ids_counterpart(ids, tx).await?;
-            RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
         }
 
         for (label, ids) in remove {
             T::apply_label(label, ids.iter().copied(), tx).await?;
-            let ids = T::local_ids_counterpart(ids, tx).await?;
-            RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
         }
 
         Ok(())
@@ -830,47 +827,37 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
         api: &Proton,
         mut guard: WriterGuard<'_>,
     ) -> Result<(), MailActionError> {
-        let tether = guard.tether();
         let (add, remove) = self.segregate_label();
-        let mut add_requests = vec![];
 
-        for (label, messages) in add {
-            let label = Label::resolve_remote_label_id(label, tether).await?;
-            let messages = T::local_ids_counterpart(messages, tether).await?;
+        for (label, items) in add {
+            let label = Label::resolve_remote_label_id(label, guard.tether()).await?;
+            let items = T::local_ids_counterpart(items, guard.tether()).await?;
 
-            for chunk in messages.chunks(150) {
-                let chunk = chunk.to_owned();
-                let label = label.clone();
-
-                add_requests.push(T::remote_label(api, chunk, label));
+            let failed_ids = T::remote_label(api, items, label).await?;
+            if !failed_ids.is_empty() {
+                guard
+                    .tx::<_, _, anyhow::Error>(async move |tx| {
+                        RollbackItem::save_many(tx, failed_ids, T::ROLLBACK_ITEM_TYPE).await?;
+                        Ok(())
+                    })
+                    .await?;
             }
         }
 
-        let mut remove_requests = vec![];
+        for (label, items) in remove {
+            let label = Label::resolve_remote_label_id(label, guard.tether()).await?;
+            let items = T::local_ids_counterpart(items, guard.tether()).await?;
 
-        for (label, messages) in remove {
-            let label = Label::resolve_remote_label_id(label, tether).await?;
-            let messages = T::local_ids_counterpart(messages, tether).await?;
-
-            for chunk in messages.chunks(150) {
-                let chunk = chunk.to_owned();
-                let label = label.clone();
-
-                remove_requests.push(T::remote_unlabel(api, chunk, label));
+            let failed_ids = T::remote_unlabel(api, items, label).await?;
+            if !failed_ids.is_empty() {
+                guard
+                    .tx::<_, _, anyhow::Error>(async move |tx| {
+                        RollbackItem::save_many(tx, failed_ids, T::ROLLBACK_ITEM_TYPE).await?;
+                        Ok(())
+                    })
+                    .await?;
             }
         }
-
-        let (add_fails, remove_fails) =
-            join(join_all(add_requests), join_all(remove_requests)).await;
-
-        let items = add_fails.into_iter().chain(remove_fails).flatten();
-
-        guard
-            .tx::<_, _, anyhow::Error>(async move |tx| {
-                RollbackItem::save_many(tx, items, T::ROLLBACK_ITEM_TYPE).await?;
-                Ok(())
-            })
-            .await?;
 
         Ok(())
     }
