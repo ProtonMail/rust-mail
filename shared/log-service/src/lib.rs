@@ -134,4 +134,9 @@ impl LogService {
     pub fn default_log_file_name(&self) -> String {
         self.config.log_file_name(0)
     }
+
+    #[must_use]
+    pub fn silence_muon_errors_evn_filter() -> &'static str {
+        "muon::http=off,muon::dns=off,muon::rt=off,muon=info"
+    }
 }
