@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - [ET-4017] Run post login validations after signup too
+- Enable pmsignature by default
+
+### Fixes
+
+- [ET-4235] Stanitize and hide css remote/embedded content
+- [ET-4235] Best attempt at sanitizing  css variables
+- [ET-4235] Only convert http and https links to href
+- [ET-4235] Classify contact card urls [breaking change]
+- [ET-4235] Santize logo and photo urls
 
 
 ## [mail-uniffi-v0.125.4] - 2025-08-15
