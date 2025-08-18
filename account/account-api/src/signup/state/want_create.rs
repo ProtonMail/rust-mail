@@ -111,7 +111,6 @@ impl WantCreate {
                     user_id: user.id.clone(),
                     session_id: SessionId::from(data.session_id),
                     tfa_mode: TfaMode::none(),
-                    fido_details: None,
                 };
 
                 store

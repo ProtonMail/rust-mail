@@ -1,6 +1,5 @@
 use anyhow::bail;
 use async_trait::async_trait;
-use muon::rest::auth::v4::fido2;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
@@ -18,7 +17,6 @@ pub struct AuthInfo {
     pub user_id: UserId,
     pub session_id: SessionId,
     pub tfa_mode: TfaMode,
-    pub fido_details: Option<fido2::Response>,
 }
 
 #[derive(Debug, Clone)]

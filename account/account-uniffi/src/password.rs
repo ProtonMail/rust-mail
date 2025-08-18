@@ -299,7 +299,7 @@ impl PasswordFlow {
         uniffi_async(async move {
             flow.lock()
                 .await
-                .get_fido_details()
+                .fetch_fresh_fido_details()
                 .await
                 .map(|res| res.map(Fido2ResponseFfi::from))
                 .map_err(PasswordError::from)

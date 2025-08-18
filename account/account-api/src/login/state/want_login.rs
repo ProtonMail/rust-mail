@@ -8,7 +8,7 @@ use base64::prelude::BASE64_STANDARD;
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginFlow, LoginFlowData, WithCodeFlow};
 use muon::client::{Auth, Tokens};
-use muon::rest::auth::v4::fido2;
+
 use proton_core_api::auth::KeySecret;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::observability::metrics::AuthV4RequestMetric;
@@ -158,7 +158,7 @@ impl WantLogin {
             .write()
             .await
             .set_name_or_addr(&user_data.username);
-        let info = get_auth_info(&user_id, &session_id, false, None);
+        let info = get_auth_info(&user_id, &session_id, false, false);
         self.parts
             .store
             .write()
@@ -205,7 +205,7 @@ impl WantLogin {
                     .store
                     .write()
                     .await
-                    .set_auth_info(get_auth_info(&user_id, &session_id, false, None))
+                    .set_auth_info(get_auth_info(&user_id, &session_id, false, false))
                     .await?;
 
                 State::inspect_user(
@@ -241,7 +241,7 @@ impl WantLogin {
                         &user_id,
                         &session_id,
                         flow.has_totp(),
-                        flow.fido_details(),
+                        flow.fido_details().is_some(),
                     ))
                     .await?;
 
@@ -313,17 +313,11 @@ async fn check_store_auth(parts: &SessionParts, user_id: &str) -> Result<(), Log
     Err(LoginError::MissingSession)
 }
 
-fn get_auth_info(
-    user_id: &str,
-    session_id: &str,
-    totp: bool,
-    fido_details: Option<&fido2::Response>,
-) -> AuthInfo {
+fn get_auth_info(user_id: &str, session_id: &str, totp: bool, has_fido: bool) -> AuthInfo {
     AuthInfo {
         user_id: UserId::from(user_id.to_owned()),
         session_id: SessionId::from(session_id.to_owned()),
-        tfa_mode: TfaMode::new(totp, fido_details.is_some()),
-        fido_details: fido_details.cloned(),
+        tfa_mode: TfaMode::new(totp, has_fido),
     }
 }
 
