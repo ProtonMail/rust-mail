@@ -4169,7 +4169,7 @@ dependencies = [
 [[package]]
 name = "muon"
 version = "1.6.0"
-source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?branch=fix%2Falternative-routing-for-hv#c988e3f5832e83f7797740c92e979ab120eeb703"
+source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?rev=12c57e6e79c023e5d14e75d6318a878491835c3d#12c57e6e79c023e5d14e75d6318a878491835c3d"
 dependencies = [
  "anyhow",
  "async-channel",
