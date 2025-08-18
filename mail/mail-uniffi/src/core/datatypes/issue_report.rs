@@ -1,5 +1,6 @@
 use crate::{UniffiEnum, UniffiRecord};
 use proton_core_common::datatypes::{ClientType as RealClientType, IssueReport as RealIssueReport};
+use std::path::PathBuf;
 
 /// Representation of User's Report of an issue.
 #[derive(UniffiRecord)]
@@ -86,6 +87,11 @@ pub struct IssueReport {
     /// User gave permission to share the logs with bug report
     /// by selecting an option in the client app.
     pub logs: bool,
+
+    /// List of additional file paths to include in the issue report.
+    ///
+    /// Must be file system paths, not URI resources.
+    pub additional_files: Vec<String>,
 }
 
 /// Representation of Client type
@@ -116,6 +122,11 @@ impl From<IssueReport> for RealIssueReport {
             expected_result: value.expected_result,
             actual_result: value.actual_result,
             logs: value.logs,
+            additional_files: value
+                .additional_files
+                .into_iter()
+                .map(PathBuf::from)
+                .collect(),
         }
     }
 }
