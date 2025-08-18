@@ -173,11 +173,7 @@ pub(super) fn get_full_signature(
             _ = write!(signature, "{line_break}{line_break}");
         }
 
-        if mime_type == MimeType::TextHtml {
-            _ = write!(signature, "{PM_SIGNATURE_HTML}");
-        } else {
-            _ = write!(signature, "{PM_SIGNATURE_TEXT}");
-        }
+        _ = write!(signature, "{}", prepare_signature(PM_SIGNATURE, mime_type));
     } else if show_mobile_signature {
         if !signature.is_empty() {
             _ = write!(signature, "{line_break}{line_break}");
@@ -201,8 +197,7 @@ fn prepare_signature(signature: &str, mime_type: MimeType) -> String {
     if mime_type == MimeType::TextPlain {
         Transformer::new(signature)
             .to_plain_text(Html2TextOptions {
-                link_foot_notes: false,
-                ..Default::default()
+                decorate_links: false,
             })
             .unwrap_or_else(|_| signature.to_owned())
     } else {
@@ -323,10 +318,14 @@ pub(super) fn prepare_plain_text_reply(
 /// This method also performs basic html sanitizing before converting to text.
 pub fn html_to_text(input: &str) -> String {
     let mut transformer = Transformer::new(input);
+
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
-    match transformer.to_plain_text(Default::default()) {
+
+    match transformer.to_plain_text(Html2TextOptions {
+        decorate_links: true,
+    }) {
         Ok(text_body) => text_body,
         Err(e) => {
             error!("Failed to convert html to text: {e:?}");
@@ -465,8 +464,7 @@ pub const CLOSE_QUOTE: &str = "</div>";
 pub const CLOSE_BLOCKQUOTE: &str = "</blockquote>";
 pub const HTML_LINE_BREAK: &str = "<br>";
 
-const PM_SIGNATURE_HTML: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
-const PM_SIGNATURE_TEXT: &str = "Sent with Proton Mail secure email.";
+pub const PM_SIGNATURE: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
 
 // this is the value the web client is using.
 pub(super) const PM_SIGNATURE_DIV_CLASS: &str = "protonmail_signature_block-user";

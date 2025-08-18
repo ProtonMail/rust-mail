@@ -115,7 +115,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
-use tracing::{error, warn};
+use tracing::{error, trace};
 //  ENUMS
 //==============================================================================
 
@@ -1786,7 +1786,7 @@ impl From<ApiMobileSetting> for MobileSetting {
 ///          MailSettings::MobileSettings::ListToolbar::Actions
 ///
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum MobileActions {
+pub enum MobileAction {
     Archive,
     Forward,
     Label,
@@ -1808,40 +1808,127 @@ pub enum MobileActions {
     ViewHTML,
 }
 
-impl MobileActions {
-    /// Compute the actions to be seen in the bottom bar
-    pub(crate) async fn bottom_bar_actions(
-        tether: &Tether,
-    ) -> Result<Vec<MobileActions>, AppError> {
+impl MobileAction {
+    /// Compute the actions seen in the bottom bar on the list view (regardless of conversation grouping)
+    pub async fn list_toolbar_actions(tether: &Tether) -> Result<Vec<MobileAction>, AppError> {
         let settings = MailSettings::get_or_default(tether).await;
 
-        if let Some(mobile_settings) = settings.mobile_settings {
-            if mobile_settings.message_toolbar.is_custom {
-                match mobile_settings
-                    .message_toolbar
-                    .actions
-                    .iter()
-                    .map(|a| MobileActions::from_str(a))
-                    .collect::<Result<Vec<_>, _>>()
-                {
-                    Ok(actions) => return Ok(actions),
-                    Err(error) => {
-                        error!("Error parsing custom message_toolbar actions: {:?}", error);
-                    }
+        let actions = match settings.mobile_settings {
+            Some(mobile_settings) => {
+                Self::toolbar_actions_from_setting(&mobile_settings.list_toolbar, "list_toolbar")
+            }
+            None => {
+                trace!("No mobile_settings defined in MailSettings");
+                Self::default_chosen_actions()
+            }
+        };
+
+        Ok(actions)
+    }
+
+    /// Compute the actions seen in the bottom bar and action sheet for conversation view
+    pub async fn conversation_toolbar_actions(
+        tether: &Tether,
+    ) -> Result<Vec<MobileAction>, AppError> {
+        let settings = MailSettings::get_or_default(tether).await;
+
+        let actions = match settings.mobile_settings {
+            Some(mobile_settings) => Self::toolbar_actions_from_setting(
+                &mobile_settings.conversation_toolbar,
+                "conversation_toolbar",
+            ),
+            None => {
+                trace!("No mobile_settings defined in MailSettings");
+                Self::default_chosen_actions()
+            }
+        };
+
+        Ok(actions)
+    }
+
+    /// Compute the actions seen in the bottom bar and action sheet for message view
+    pub async fn message_toolbar_actions(tether: &Tether) -> Result<Vec<MobileAction>, AppError> {
+        let settings = MailSettings::get_or_default(tether).await;
+
+        let actions = match settings.mobile_settings {
+            Some(mobile_settings) => Self::toolbar_actions_from_setting(
+                &mobile_settings.message_toolbar,
+                "message_toolbar",
+            ),
+            None => {
+                trace!("No mobile_settings defined in MailSettings");
+                Self::default_chosen_actions()
+            }
+        };
+
+        Ok(actions)
+    }
+
+    pub fn default_chosen_actions() -> Vec<MobileAction> {
+        use self::MobileAction::*;
+        vec![ToggleRead, Trash, Move]
+    }
+
+    pub fn all_list_actions() -> Vec<MobileAction> {
+        use self::MobileAction::*;
+        vec![
+            ToggleRead, Trash, Move, Label, ToggleStar, Snooze, Archive, Spam,
+        ]
+    }
+
+    pub fn all_conversation_actions() -> Vec<MobileAction> {
+        use self::MobileAction::*;
+        vec![
+            ToggleRead, Trash, Move, Label, ToggleStar, Snooze, Archive, Spam,
+        ]
+    }
+
+    pub fn all_message_actions() -> Vec<MobileAction> {
+        use self::MobileAction::*;
+        vec![
+            ToggleRead,
+            Trash,
+            Move,
+            Label,
+            ToggleStar,
+            Archive,
+            Spam,
+            Reply,
+            Forward,
+            SavePDF,
+            Print,
+            ReportPhishing,
+            ViewHeaders,
+            ViewHTML,
+        ]
+    }
+
+    fn toolbar_actions_from_setting(
+        mobile_setting: &MobileSetting,
+        toolbar_name: &str,
+    ) -> Vec<MobileAction> {
+        if mobile_setting.is_custom {
+            match Self::actions_from_strings(&mobile_setting.actions) {
+                Ok(actions) => actions,
+                Err(error) => {
+                    error!("Error parsing custom {} actions: {:?}", toolbar_name, error);
+                    Self::default_chosen_actions()
                 }
             }
         } else {
-            warn!("No mobile_settings defined in MailSettings");
+            Self::default_chosen_actions()
         }
-        Ok(vec![
-            MobileActions::ToggleRead,
-            MobileActions::Archive,
-            MobileActions::Trash,
-        ])
+    }
+
+    fn actions_from_strings(actions: &[String]) -> Result<Vec<MobileAction>, AppError> {
+        actions
+            .iter()
+            .map(|a| MobileAction::from_str(a))
+            .collect::<Result<Vec<_>, _>>()
     }
 }
 
-impl FromStr for MobileActions {
+impl FromStr for MobileAction {
     type Err = AppError;
 
     fn from_str(value: &str) -> Result<Self, AppError> {

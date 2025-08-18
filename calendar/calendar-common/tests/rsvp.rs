@@ -133,11 +133,12 @@ async fn world() -> World<impl PGPProviderSync> {
     let sess = {
         let env = MockApiEnv::new(ctx.mock_server().uri()).with_path("/api");
         let cfg = Config::for_env(env);
+        let status = StatusWatcher::with_observer(StatusObserver::test(ctx.context.spawner()));
 
         Session::builder()
             .with_config(&cfg)
-            .with_status(StatusWatcher::with_observer(StatusObserver::test()))
-            .build()
+            .with_status(status)
+            .build(ctx.context.spawner())
             .await
             .unwrap()
     };

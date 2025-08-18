@@ -11,8 +11,8 @@ use crate::actions::messages::Unread;
 use crate::actions::messages::{LabelAs, UndoLabelAsMessages};
 use crate::actions::messages::{Move, UndoMoveToMessages};
 use crate::actions::{
-    ActionMoveData, AllBottomBarMessageActions, BottomBarActions, GeneralActions, LabelAsData,
-    LabelAsOutput, LabelPair, MailActionError, MovableSystemFolderAction, Undo,
+    ActionMoveData, AllListActions, GeneralActions, LabelAsData, LabelAsOutput, LabelPair,
+    ListAction, MailActionError, MovableSystemFolderAction, Undo,
 };
 use crate::mail_scroller::ScrollerEq;
 use crate::models::*;
@@ -38,7 +38,7 @@ use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
     LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageSender, MimeType,
-    MobileActions, ParsedHeaders, ReadFilter, RollbackItemType, SystemLabelId, theme::MailTheme,
+    MobileAction, ParsedHeaders, ReadFilter, RollbackItemType, SystemLabelId, theme::MailTheme,
 };
 use crate::datatypes::{LocalConversationId, ParsedHeaderValue};
 use crate::decrypted_message::ThemeOpts;
@@ -560,11 +560,11 @@ impl Message {
     /// Get the available actions from bottom bar for given messages
     ///
     #[tracing::instrument(skip_all, fields(label_id=current_label_id.as_u64()))]
-    pub async fn all_available_bottom_bar_actions_for_messages(
+    pub async fn all_available_list_actions_for_messages(
         current_label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
-    ) -> Result<AllBottomBarMessageActions, AppError> {
+    ) -> Result<AllListActions, AppError> {
         debug!("{message_ids:?}");
         let messages_fut = async {
             Self::find_by_ids(message_ids.to_vec(), tether)
@@ -583,12 +583,12 @@ impl Message {
             MovableSystemFolderAction::archive(tether),
             MovableSystemFolderAction::trash(tether),
             MovableSystemFolderAction::spam(tether),
-            MobileActions::bottom_bar_actions(tether),
+            MobileAction::list_toolbar_actions(tether),
             current_label_fut,
             messages_fut
         )?;
 
-        let visible_bottom_bar_actions = Self::visible_bottom_bar_actions(
+        let visible_list_actions = Self::visible_list_actions(
             &current_label,
             &messages,
             &bottom_bar_actions,
@@ -597,41 +597,41 @@ impl Message {
             &trash,
             &spam,
         )?;
-        let hidden_bottom_bar_actions = Self::hidden_bottom_bar_actions(
+        let hidden_list_actions = Self::hidden_list_actions(
             current_label,
             &messages,
-            &visible_bottom_bar_actions,
+            &visible_list_actions,
             &inbox,
             &archive,
             &trash,
             &spam,
         );
 
-        let actions = AllBottomBarMessageActions {
-            hidden_bottom_bar_actions,
-            visible_bottom_bar_actions,
+        let actions = AllListActions {
+            hidden_list_actions,
+            visible_list_actions,
         };
         debug!("all available bottom bar actions for messages: {actions:?}");
         Ok(actions)
     }
 
     /// Get actions to display in bottom_bar when selecting messages
-    fn visible_bottom_bar_actions(
+    fn visible_list_actions(
         current_label: &LabelId,
         messages: &[Self],
-        bottom_bar_actions: &[MobileActions],
+        bottom_bar_actions: &[MobileAction],
         inbox: &MovableSystemFolderAction,
         archive: &MovableSystemFolderAction,
         trash: &MovableSystemFolderAction,
         spam: &MovableSystemFolderAction,
-    ) -> Result<Vec<BottomBarActions>, AppError> {
+    ) -> Result<Vec<ListAction>, AppError> {
         let any_unread = messages.iter().any(|m| m.unread);
         let all_starred = messages.iter().all(|m| m.is_starred());
 
         let mut result: Vec<_> = bottom_bar_actions
             .iter()
             .filter_map(|a| {
-                BottomBarActions::from_mobile_actions(
+                ListAction::from_mobile_actions(
                     a,
                     any_unread,
                     all_starred,
@@ -647,26 +647,26 @@ impl Message {
             warn!("Too many actions to put in Bottom Bar, truncating to 5: {result:?}");
             result.truncate(5);
         }
-        result.push(BottomBarActions::More);
+        result.push(ListAction::More);
         Ok(result)
     }
 
     /// Get actions not displayed in bottom_bar when selecting messages
-    fn hidden_bottom_bar_actions(
+    fn hidden_list_actions(
         current_label: LabelId,
         messages: &[Self],
-        visible_actions: &[BottomBarActions],
+        visible_actions: &[ListAction],
         inbox: &MovableSystemFolderAction,
         archive: &MovableSystemFolderAction,
         trash: &MovableSystemFolderAction,
         spam: &MovableSystemFolderAction,
-    ) -> Vec<BottomBarActions> {
+    ) -> Vec<ListAction> {
         let any_unread = messages.iter().any(|m| m.unread);
         let any_read = messages.iter().any(|m| !m.unread);
         let any_starred = messages.iter().any(|m| m.is_starred());
         let any_unstarred = messages.iter().any(|m| !m.is_starred());
 
-        BottomBarActions::hidden_bottom_bar_actions(
+        ListAction::hidden_list_actions(
             false,
             current_label,
             any_unread,

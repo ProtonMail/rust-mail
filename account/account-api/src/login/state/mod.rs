@@ -12,13 +12,14 @@ use crate::shared::crypto::{NewAddrKey, NewUserKey, SharedCryptoError};
 use derive_more::{Debug, From};
 use futures::TryFutureExt;
 use itertools::Itertools;
-use muon::client::flow::LoginFlowData;
 use muon::rest::auth::v4::fido2;
 use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::observability::ObservabilityRecorder;
-use proton_core_api::services::proton::{Address, AddressId, ProtonCore, SessionId, User, UserId};
+use proton_core_api::services::proton::{
+    Address, AddressId, PasswordMode, ProtonCore, SessionId, User, UserId,
+};
 use proton_core_api::session::{Session, SessionParts};
-use proton_core_api::store::{MbpMode, UserData};
+use proton_core_api::store::UserData;
 use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_core_common::post_login_check::{UserCheckResult, UserCheckStatus};
 use proton_crypto_account::keys::{LockedKey, UnlockedUserKey, UserKeys};
@@ -58,13 +59,7 @@ pub enum State {
 
     /// A recoverable error occurred during the `WantTfa` state.
     #[debug("TfaRetry")]
-    TfaRetry(
-        UserId,
-        SessionId,
-        SecureString,
-        MbpMode,
-        Option<fido2::Response>,
-    ),
+    TfaRetry(UserId, SessionId, SecureString, Option<fido2::Response>),
 
     /// An error occurred during the `WantTfa` state.
     #[debug("TfaError")]
@@ -158,15 +153,18 @@ impl State {
     pub async fn migrate(
         self,
         client: muon::Client,
-        user: UserData,
-        data: LoginFlowData,
+        user_id: UserId,
+        session_id: SessionId,
+        user_data: UserData,
         refresh_token: SecretString,
     ) -> Result<Self, (Self, LoginError)> {
         let Self::WantLogin(state) = self else {
             return Err((self, LoginError::InvalidState));
         };
 
-        state.migrate(client, user, data, refresh_token).await
+        state
+            .migrate(client, user_id, session_id, user_data, refresh_token)
+            .await
     }
 
     /// Attempt to submit a TOTP code.
@@ -301,7 +299,6 @@ impl State {
         user_id: UserId,
         session_id: SessionId,
         pass: SecureString,
-        mode: MbpMode,
         fido_details: Option<fido2::Response>,
     ) -> Self {
         let data = StateData {
@@ -311,7 +308,7 @@ impl State {
             observability: ObservabilityRecorder::default(),
         };
 
-        Self::want_tfa(client.auth().into(), data, pass, mode, fido_details)
+        Self::want_tfa(client.auth().into(), data, pass, fido_details)
     }
 
     /// Create a `WantMbp` state from a resumed login flow.
@@ -349,10 +346,9 @@ impl State {
         flow: TfaFlow,
         data: StateData,
         pass: SecureString,
-        mode: MbpMode,
         fido_details: Option<fido2::Response>,
     ) -> Self {
-        WantTfa::new(flow, data, pass, mode, fido_details).into()
+        WantTfa::new(flow, data, pass, fido_details).into()
     }
 
     /// Create a `WantMbp` state.
@@ -370,10 +366,8 @@ impl State {
         client: muon::Client,
         data: StateData,
         pass: SecureString,
-        mode: MbpMode,
         post_login_validator: &dyn PostLoginValidator,
     ) -> Result<Self, LoginError> {
-        // Fetch user info.
         let user = client
             .get_users()
             .map_ok(|res| res.user)
@@ -398,10 +392,16 @@ impl State {
             return Ok(Self::want_new_password(client, data));
         }
 
+        let settings = client
+            .get_settings()
+            .map_ok(|res| res.user_settings)
+            .map_err(LoginError::SettingsFetch)
+            .await?;
+
         // Check if user has mailbox password - transition to WantMbp
-        match mode {
-            MbpMode::One => Self::finalize(client, data, pass, post_login_validator).await,
-            MbpMode::Two => Ok(Self::want_mbp(client, data)),
+        match settings.password.mode {
+            PasswordMode::One => Self::finalize(client, data, pass, post_login_validator).await,
+            PasswordMode::Two => Ok(Self::want_mbp(client, data)),
         }
     }
 
@@ -423,7 +423,7 @@ impl State {
             .map_err(LoginError::UserFetch)
             .await?;
 
-        let recorder: ObservabilityRecorder = ObservabilityRecorder::default();
+        let recorder = ObservabilityRecorder::default();
 
         // Fetch user addresses.
         let mut addr = ProtonCore::get_addresses(&client)
@@ -495,12 +495,19 @@ impl State {
             }
         }
 
+        let settings = client
+            .get_settings()
+            .map_ok(|res| res.user_settings)
+            .map_err(LoginError::SettingsFetch)
+            .await?;
+
         // Save user data to store
         (data.parts.store.write().await)
             .set_user_data(UserData {
                 username: user.name.clone().unwrap_or_default(),
                 display_name: user.display_name.clone().unwrap_or_default(),
                 primary_addr: user.email.clone(),
+                password_mode: settings.password.mode.into(),
                 key_secret: UserKeySecret(user_key_pass.clone()),
             })
             .await?;

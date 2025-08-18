@@ -2,32 +2,31 @@ use crate::mail::datatypes::MovableSystemFolderAction;
 use crate::{UniffiEnum, UniffiRecord};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::actions::{
-    AllBottomBarMessageActions as RealAllBottomBarMessageActions,
-    BottomBarActions as RealBottomBarActions,
+    AllListActions as RealAllListActions, ListActions as RealListActions,
 };
 
 /// All actions on messages selection.
 #[derive(Debug, Clone, PartialEq, UniffiRecord)]
-pub struct AllBottomBarMessageActions {
-    /// Actions hidden in bottom bar, but to be shown in corresponding More action
-    pub hidden_bottom_bar_actions: Vec<BottomBarActions>,
+pub struct AllListActions {
+    /// Actions hidden in list toolbar, but to be shown in corresponding More action
+    pub hidden_list_actions: Vec<ListActions>,
 
-    /// Actions that must be in the bottom bar
-    pub visible_bottom_bar_actions: Vec<BottomBarActions>,
+    /// Actions that must be in the list toolbar
+    pub visible_list_actions: Vec<ListActions>,
 }
 
-impl From<RealAllBottomBarMessageActions> for AllBottomBarMessageActions {
-    fn from(value: RealAllBottomBarMessageActions) -> Self {
+impl From<RealAllListActions> for AllListActions {
+    fn from(value: RealAllListActions) -> Self {
         Self {
-            hidden_bottom_bar_actions: value.hidden_bottom_bar_actions.map_vec(),
-            visible_bottom_bar_actions: value.visible_bottom_bar_actions.map_vec(),
+            hidden_list_actions: value.hidden_list_actions.map_vec(),
+            visible_list_actions: value.visible_list_actions.map_vec(),
         }
     }
 }
 
-/// Enumeration grouping all possible actions for BottomBar
+/// Enumeration grouping all possible actions for List Toolbar
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
-pub enum BottomBarActions {
+pub enum ListActions {
     LabelAs,
     MarkRead,
     MarkUnread,
@@ -41,22 +40,20 @@ pub enum BottomBarActions {
     Snooze,
 }
 
-impl From<RealBottomBarActions> for BottomBarActions {
-    fn from(value: RealBottomBarActions) -> Self {
+impl From<RealListActions> for ListActions {
+    fn from(value: RealListActions) -> Self {
         match value {
-            RealBottomBarActions::LabelAs => Self::LabelAs,
-            RealBottomBarActions::MarkRead => Self::MarkRead,
-            RealBottomBarActions::MarkUnread => Self::MarkUnread,
-            RealBottomBarActions::More => Self::More,
-            RealBottomBarActions::MoveTo => Self::MoveTo,
-            RealBottomBarActions::MoveToSystemFolder(label) => {
-                Self::MoveToSystemFolder(label.into())
-            }
-            RealBottomBarActions::NotSpam(label) => Self::NotSpam(label.into()),
-            RealBottomBarActions::PermanentDelete => Self::PermanentDelete,
-            RealBottomBarActions::Star => Self::Star,
-            RealBottomBarActions::Unstar => Self::Unstar,
-            RealBottomBarActions::Snooze => Self::Snooze,
+            RealListActions::LabelAs => Self::LabelAs,
+            RealListActions::MarkRead => Self::MarkRead,
+            RealListActions::MarkUnread => Self::MarkUnread,
+            RealListActions::More => Self::More,
+            RealListActions::MoveTo => Self::MoveTo,
+            RealListActions::MoveToSystemFolder(label) => Self::MoveToSystemFolder(label.into()),
+            RealListActions::NotSpam(label) => Self::NotSpam(label.into()),
+            RealListActions::PermanentDelete => Self::PermanentDelete,
+            RealListActions::Star => Self::Star,
+            RealListActions::Unstar => Self::Unstar,
+            RealListActions::Snooze => Self::Snooze,
         }
     }
 }

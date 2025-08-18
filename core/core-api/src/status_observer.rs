@@ -4,19 +4,20 @@ use self::fixed_queue::StatusChanges;
 use crate::services::proton::ProtonCore;
 use crate::services::proton::common::Timeouts;
 use crate::{connection_status::ConnectionStatus, services::proton::Proton};
-use derive_more::Deref;
+use derive_more::Debug;
 use muon::common::{BoxFut, RetryPolicy, Sender, SenderLayer};
 use muon::error::ErrorKind;
 use muon::util::DurationExt;
 use muon::{Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult};
 use parking_lot::RwLock;
+use proton_task_service::{DynSpawner, SpawnerRef};
 use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tracing::trace;
+use tracing::{instrument, trace, warn};
 
 const UP_TO_DATE_DURATION: Duration = Duration::from_secs(6);
 const LOW_LATENCY_UP_TO_DATE_DURATION: Duration = Duration::from_secs(1);
@@ -28,133 +29,38 @@ static CACHE: LazyLock<Arc<RwLock<CachedStatus>>> = LazyLock::new(|| {
     }))
 });
 
-#[derive(Clone, Debug)]
-struct CachedStatus {
-    status: ConnectionStatus,
-    checked_at: Option<Instant>,
-}
-
-impl Deref for CachedStatus {
-    type Target = ConnectionStatus;
-
-    fn deref(&self) -> &Self::Target {
-        &self.status
-    }
-}
-
-/// A background ping request.
-///
-/// It keeps track of the request background task and the receiver to know when it's finished.
-///
-#[derive(Debug)]
-struct BackgroundPing {
-    request: JoinHandle<()>,
-}
-
-impl BackgroundPing {
-    fn is_finished(&self) -> bool {
-        self.request.is_finished()
-    }
-}
-
-/// Configuration for the `StatusObserver`.
-///
-#[derive(Clone, Debug)]
-struct StatusObserverConfig {
-    /// Forground ping's retry policy.
-    fg_retry: RetryPolicy,
-    /// Forground ping's timeout.
-    fg_timeout: Duration,
-    /// Background ping's retry policy.
-    bg_retry: RetryPolicy,
-    /// Background ping's timeout.
-    bg_timeout: Duration,
-    /// Number of seconds before the status is considered stale.
-    up_to_date: Duration,
-}
-
-impl Default for StatusObserverConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl StatusObserverConfig {
-    /// Create a new `StatusObserverConfig` with default production values.
-    fn new() -> Self {
-        Self {
-            up_to_date: UP_TO_DATE_DURATION,
-            fg_retry: RetryPolicy::default().never(),
-            fg_timeout: Timeouts::TWO_SECONDS,
-            bg_retry: RetryPolicy::default()
-                .max_count(2)
-                .max_delay(5.s())
-                .iter_mul(1.0),
-            bg_timeout: Timeouts::QUARTER_MINUTE,
-        }
-    }
-
-    /// Create a new `StatusObserverConfig` with default test values.
-    #[cfg(feature = "mocks")]
-    fn test() -> Self {
-        let never = RetryPolicy::default().never();
-        let fg_timeout = Timeouts::ONE_SECOND;
-        let bg_timeout = Timeouts::ONE_SECOND * 2;
-        let up_to_date = Duration::from_secs(2);
-
-        Self {
-            up_to_date,
-            fg_retry: never,
-            fg_timeout,
-            bg_retry: never,
-            bg_timeout,
-        }
-    }
-}
-
-/// A `StatusObserver` that will keep track of the connection status.
-///
-/// It will ping the server to get the current status if the status is stale.
-/// If the status is `Offline`, it will start a background check.
-/// The status is initialized to `Online`.
-/// With the default configuration, the last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-///
 #[must_use]
 #[derive(Clone, Debug)]
 pub struct StatusObserver {
     cache: Arc<RwLock<CachedStatus>>,
-    ping: Arc<RwLock<Option<BackgroundPing>>>,
     config: StatusObserverConfig,
-    status_tx: watch::Sender<ConnectionStatus>,
+    status: watch::Sender<ConnectionStatus>,
     history: StatusChanges,
+
+    #[debug(skip)]
+    ping: Arc<RwLock<Option<BackgroundPing>>>,
+
+    #[debug(skip)]
+    spawner: SpawnerRef,
 }
 
 impl StatusObserver {
-    /// Create a new `StatusObserver`.
-    ///
-    /// The status is initialized to `Online`.
-    /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-    ///
-    pub fn new() -> Self {
-        let (status_tx, _) = watch::channel(ConnectionStatus::Online);
+    pub fn new(spawner: SpawnerRef) -> Self {
+        let (status, _) = watch::channel(ConnectionStatus::Online);
 
         Self {
             cache: Arc::clone(&CACHE),
-            ping: Arc::new(RwLock::new(None)),
             config: StatusObserverConfig::default(),
-            status_tx,
+            status,
             history: StatusChanges::new(NonZeroUsize::new(3).unwrap()),
+            ping: Arc::new(RwLock::new(None)),
+            spawner,
         }
     }
 
-    /// Create a new test `StatusObserver` without shared state.
-    ///
-    /// The status is initialized to `Online`.
-    /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-    ///
     #[cfg(feature = "mocks")]
-    pub fn test() -> Self {
-        let (status_tx, _) = watch::channel(ConnectionStatus::Online);
+    pub fn test(spawner: SpawnerRef) -> Self {
+        let (status, _) = watch::channel(ConnectionStatus::Online);
         let config = StatusObserverConfig::test();
 
         Self {
@@ -162,18 +68,14 @@ impl StatusObserver {
                 status: ConnectionStatus::Online,
                 checked_at: None,
             })),
-            ping: Arc::new(RwLock::new(None)),
             config,
-            status_tx,
+            status,
             history: StatusChanges::new(NonZeroUsize::new(3).unwrap()),
+            ping: Arc::new(RwLock::new(None)),
+            spawner,
         }
     }
 
-    /// Sets the number of seconds before the status is considered stale.
-    ///
-    /// The status is initialized to `Online`.
-    /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-    ///
     #[cfg(feature = "mocks")]
     pub fn set_up_to_date(&mut self, up_to_date: Duration) {
         let stale_instant = Instant::now()
@@ -184,10 +86,7 @@ impl StatusObserver {
         self.config.up_to_date = up_to_date;
     }
 
-    /// Get the current status of the connection.
-    /// If the status is stale, it will ping the server to get the current status.
-    /// If the status is `Offline`, it will start a background check.
-    ///
+    #[instrument(skip_all)]
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
         self.status_fresher_than(api, self.config.up_to_date, false)
             .await
@@ -209,13 +108,13 @@ impl StatusObserver {
     /// of network trafic, so if you are uncertain which method to use, default
     /// to [`status`] method instead.
     ///
+    #[instrument(skip_all)]
     pub async fn low_latency_status(&self, api: Proton) -> ConnectionStatus {
         self.status_fresher_than(api, LOW_LATENCY_UP_TO_DATE_DURATION, true)
             .await
     }
 
-    /// Underlying logic behind [`status`] methods.
-    ///
+    #[instrument(skip_all)]
     async fn status_fresher_than(
         &self,
         api: Proton,
@@ -245,17 +144,16 @@ impl StatusObserver {
         self.get_cached_status()
     }
 
-    /// Subscribes to changes of the connection status.
-    ///
     #[must_use]
     pub fn subscribe(&self) -> watch::Receiver<ConnectionStatus> {
-        self.status_tx.subscribe()
+        self.status.subscribe()
     }
 
+    #[instrument(skip_all)]
     fn update(&self, new: ConnectionStatus) {
         let mut cache = self.cache.write();
 
-        self.status_tx.send_if_modified(|old| {
+        self.status.send_if_modified(|old| {
             if new == *old {
                 false
             } else {
@@ -272,9 +170,8 @@ impl StatusObserver {
         trace!("Status has been updated to {:?}", new);
     }
 
+    #[instrument(skip_all)]
     async fn ping(self, api: Proton, timeout: Duration, retry: RetryPolicy) {
-        // TIMEOUT is never passed through the layer, which means
-        // we need to make the assertion here to detect it.
         match api.get_tests_ping(Some(timeout), Some(retry)).await {
             Err(e) if e.is_server_unreachable() => self.update(ConnectionStatus::ServerUnreachable),
             Err(e) if e.is_network_failure() => self.update(ConnectionStatus::Offline),
@@ -282,10 +179,10 @@ impl StatusObserver {
         }
     }
 
+    #[instrument(skip_all)]
     fn spawn_ping(&self, api: Proton) {
         let mut ping = self.ping.write();
 
-        // If a ping is already pending, don't spawn another one
         if let Some(ping) = &mut *ping {
             if !ping.is_finished() {
                 return;
@@ -293,8 +190,13 @@ impl StatusObserver {
         }
 
         let this = self.clone();
+
         *ping = Some(BackgroundPing {
-            request: tokio::spawn(this.ping(api, self.config.bg_timeout, self.config.bg_retry)),
+            request: self.spawner.spawn_boxed_task(Box::pin(this.ping(
+                api,
+                self.config.bg_timeout,
+                self.config.bg_retry,
+            ))),
         });
     }
 
@@ -310,14 +212,77 @@ impl StatusObserver {
     }
 }
 
-impl Default for StatusObserver {
+#[derive(Clone, Debug)]
+struct StatusObserverConfig {
+    fg_retry: RetryPolicy,
+    fg_timeout: Duration,
+    bg_retry: RetryPolicy,
+    bg_timeout: Duration,
+    up_to_date: Duration,
+}
+
+impl StatusObserverConfig {
+    fn new() -> Self {
+        Self {
+            up_to_date: UP_TO_DATE_DURATION,
+            fg_retry: RetryPolicy::default().never(),
+            fg_timeout: Timeouts::TWO_SECONDS,
+            bg_retry: RetryPolicy::default()
+                .max_count(2)
+                .max_delay(5.s())
+                .iter_mul(1.0),
+            bg_timeout: Timeouts::QUARTER_MINUTE,
+        }
+    }
+
+    #[cfg(feature = "mocks")]
+    fn test() -> Self {
+        let never = RetryPolicy::default().never();
+        let fg_timeout = Timeouts::ONE_SECOND;
+        let bg_timeout = Timeouts::ONE_SECOND * 2;
+        let up_to_date = Duration::from_secs(2);
+
+        Self {
+            up_to_date,
+            fg_retry: never,
+            fg_timeout,
+            bg_retry: never,
+            bg_timeout,
+        }
+    }
+}
+
+impl Default for StatusObserverConfig {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// A type that wraps a [`StatusObserver`] and to implement the [`SenderLayer`] trait.
-#[derive(Debug, Deref)]
+#[derive(Clone, Debug)]
+struct CachedStatus {
+    status: ConnectionStatus,
+    checked_at: Option<Instant>,
+}
+
+impl Deref for CachedStatus {
+    type Target = ConnectionStatus;
+
+    fn deref(&self) -> &Self::Target {
+        &self.status
+    }
+}
+
+struct BackgroundPing {
+    request: JoinHandle<()>,
+}
+
+impl BackgroundPing {
+    fn is_finished(&self) -> bool {
+        self.request.is_finished()
+    }
+}
+
+#[derive(Debug)]
 pub struct StatusObserverLayer(StatusObserver);
 
 impl StatusObserverLayer {
@@ -348,11 +313,11 @@ impl StatusObserverLayer {
 
         match error.kind() {
             Tls | Resolve | Dial | Send => {
-                self.update(ConnectionStatus::Offline);
+                self.0.update(ConnectionStatus::Offline);
             }
 
             Connect => {
-                self.update(ConnectionStatus::ServerUnreachable);
+                self.0.update(ConnectionStatus::ServerUnreachable);
             }
 
             _ => {}
@@ -361,9 +326,9 @@ impl StatusObserverLayer {
 
     fn on_recv_ok(&self, resp: &ProtonResponse) {
         if resp.is(429) || resp.status().is_server_error() {
-            self.update(ConnectionStatus::ServerUnreachable);
+            self.0.update(ConnectionStatus::ServerUnreachable);
         } else {
-            self.update(ConnectionStatus::Online);
+            self.0.update(ConnectionStatus::Online);
         }
     }
 }

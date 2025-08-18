@@ -1,8 +1,8 @@
 #!/bin/bash
 
-set -eu
+set -euo pipefail
 
-uv run --project ./scripts/changelog changelog \
+uv run --project ./scripts/changelog changelog "$@" \
 	--only mail-uniffi \
 	--init mail-uniffi-v0.68.2 \
 	> mail/mail-uniffi/CHANGELOG.md

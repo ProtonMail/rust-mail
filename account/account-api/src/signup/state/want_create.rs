@@ -24,13 +24,14 @@ use proton_core_api::services::observability::{
     ApiServiceObservabilityResponse, ObservabilityRecorder,
 };
 use proton_core_api::services::proton::SessionId;
-use proton_core_api::services::proton::UserId;
 use proton_core_api::store::AuthInfo;
 use proton_core_api::store::DynStore;
-use proton_core_api::store::MbpMode;
 use proton_core_api::store::TfaMode;
 use proton_core_api::store::UserData;
 use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use proton_core_common::post_login_check::PostLoginValidator;
+use proton_core_common::post_login_check::UserCheckResult;
+use proton_core_common::post_login_check::UserCheckStatus;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::proton_crypto::{new_pgp_provider, new_srp_provider};
@@ -70,7 +71,11 @@ impl WantCreate {
     }
 
     #[allow(deprecated)]
-    pub async fn create(self, store: DynStore) -> StateResult {
+    pub async fn create(
+        self,
+        store: DynStore,
+        post_login_validator: &dyn PostLoginValidator,
+    ) -> StateResult {
         let srp = new_srp_provider();
         let pgp = new_pgp_provider();
 
@@ -98,15 +103,14 @@ impl WantCreate {
             )
             .await;
 
-        let client = match flow {
+        let (client, password_mode) = match flow {
             LoginFlow::Ok(client, data) => {
                 info!("Login successful after signup");
 
                 let info = AuthInfo {
-                    user_id: UserId::from(user.id.clone()),
+                    user_id: user.id.clone(),
                     session_id: SessionId::from(data.session_id),
                     tfa_mode: TfaMode::none(),
-                    mbp_mode: MbpMode::from(data.password_mode),
                 };
 
                 store
@@ -116,7 +120,7 @@ impl WantCreate {
                     .map_err(SignupError::SetAuthInfoFailed)
                     .await?;
 
-                client
+                (client, data.password_mode)
             }
 
             LoginFlow::TwoFactor(..) => {
@@ -149,6 +153,7 @@ impl WantCreate {
             username: user.name.clone().unwrap_or_default(),
             display_name: user.display_name.clone().unwrap_or_default(),
             primary_addr: addr.email.clone(),
+            password_mode: password_mode.into(),
             key_secret: UserKeySecret(key_secret),
         };
 
@@ -158,6 +163,19 @@ impl WantCreate {
             .set_user_data(data)
             .await
             .map_err(SignupError::SetUserDataFailed)?;
+
+        let recorder = ObservabilityRecorder::default();
+        // Validations are run after `set_user_data` is called, se even if the login flow is stopped and login is prevented for now,
+        // the account itself remains in a "ready to use" state (e.g. is_ready flag is set) for later, when login rules are not violated anymore (e.g. logged-in free account count)
+        match post_login_validator.validate(&user.clone().into()).await {
+            Ok(()) => {
+                recorder.record(UserCheckResult::new(UserCheckStatus::Success));
+            }
+            Err(err) => {
+                recorder.record(UserCheckResult::new(UserCheckStatus::Failure));
+                return Err(err.into());
+            }
+        }
 
         Ok(Complete::new(client, user, addr).into())
     }

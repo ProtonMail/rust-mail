@@ -89,13 +89,15 @@ fn insert_links_text() {
             See also:
             * https://127.0.0.1
             * https://ads.com?utm_source=tracker
+            * httpssp://ads.com?utm_source=tracker
+            * httpsp://ads.com?utm_source=tracker
             * mailto:foo@bar
 
             Outro
 
         "#;
 
-    let mut html = Transformer::new(html);
+    let mut html = Transformer::new_text_plain(html);
     html.insert_links(InsertLinkToken(()));
     insta::assert_snapshot!(html.to_string());
 }

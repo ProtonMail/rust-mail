@@ -12,7 +12,7 @@
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
-    AllBottomBarMessageActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
+    AllListActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
     ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction, SnoozeActions,
     Undo,
 };
@@ -151,7 +151,7 @@ pub async fn watch_available_label_as_actions_for_conversations(
         )
         .await?;
         let actions = actions.into_iter().map_into().collect_vec();
-        let handle = watch_channel(ctx, handle, callback);
+        let handle = watch_channel(&*ctx, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(WatchedLabelAs { actions, handle })
     })
@@ -269,21 +269,21 @@ pub async fn unsnooze_conversations(
     .map_err(SnoozeError::from)
 }
 
-/// Returns available actions for conversation bottom bar.
+/// Returns available actions for conversation list toolbar.
 ///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
-pub async fn all_available_bottom_bar_actions_for_conversations(
+pub async fn all_available_list_actions_for_conversations(
     mailbox: Arc<Mailbox>,
     conversation_ids: Vec<Id>,
-) -> Result<AllBottomBarMessageActions, ActionError> {
+) -> Result<AllListActions, ActionError> {
     let stash = mailbox.stash()?;
     uniffi_async(async move {
         let tether = stash.connection();
-        let actions = ContextualConversation::all_available_bottom_bar_actions_for_conversations(
+        let actions = ContextualConversation::all_available_list_actions_for_conversations(
             mailbox.label_id().into(),
             conversation_ids.map_vec(),
             &tether,
@@ -660,7 +660,7 @@ pub async fn watch_conversation(
         };
 
         let receiver = ContextualConversation::watch(&stash)?;
-        let watcher = watch_channel(ctx, receiver, callback);
+        let watcher = watch_channel(&*ctx, receiver, callback);
 
         Result::<_, RealProtonMailError>::Ok(Some(WatchedConversation {
             conversation: conv_and_msgs.conversation.into(),
@@ -704,7 +704,7 @@ pub async fn watch_conversations_for_label(
         let tether = stash.connection();
         let conversations = RealConversation::in_label(label_id.into(), &tether).await?;
         let receiver = ContextualConversation::watch(&stash)?;
-        let watcher = watch_channel(user_context, receiver, callback);
+        let watcher = watch_channel(&*user_context, receiver, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedConversations {
             conversations: conversations
                 .into_iter()
@@ -773,7 +773,7 @@ pub async fn watch_available_move_to_actions(
     let stash = mailbox.stash()?;
     uniffi_async(async move {
         let handle = RealLabel::watch(&stash)?;
-        let handle = watch_channel(ctx, handle, callback);
+        let handle = watch_channel(&*ctx, handle, callback);
         Result::<_, RealProtonMailError>::Ok(handle)
     })
     .await

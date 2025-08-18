@@ -60,6 +60,7 @@ function_name = { workspace = true, optional = true }
 tempdir = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 jiff = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

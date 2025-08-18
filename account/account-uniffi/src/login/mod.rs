@@ -4,7 +4,7 @@ use proton_account_api::login as login_api;
 use proton_account_api::login::state::want_qr_confirmation::ProcessTargetDeviceQrError as RealProcessTargetDeviceQrError;
 use proton_account_api::responses as responses_api;
 use proton_core_api::{consts::CoreBundle, service::ApiServiceError};
-use proton_core_common::post_login_check::PostLoginValidationError;
+use proton_core_common::post_login_check::PostLoginValidationError as RealPostLoginValidationError;
 use std::sync::Arc;
 use tokio::{sync::Mutex, task::JoinError};
 use tracing::warn;
@@ -122,10 +122,10 @@ impl LoginFlow {
                 .inspect_err(|err| warn!("{err:?}"))
                 .map_err(|_| LoginError::Other("Couldn't process migration data".into()))?;
 
-            let (user, data, refresh_token) = data.into_parts();
+            let (user_id, session_id, user_data, refresh_token) = data.into_parts();
 
             guard
-                .migrate(user, data, refresh_token)
+                .migrate(user_id.into(), session_id.into(), user_data, refresh_token)
                 .await
                 .map_err(LoginError::from)
         })
@@ -404,13 +404,19 @@ pub enum LoginError {
     // Failed to encode QR login payload
     QRLoginEncoding,
 
+    // Post login validation failed
+    PostLoginValidationFailed(PostLoginValidationError),
+
+    Other(String),
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum PostLoginValidationError {
     /// Returned when login is aborted due to a delinquent user
     DelinquentUser,
 
     /// Returned when login is aborted when the limit of free accounts is exceeded. Contains the max number of free accounts allowed.
     FreeAccountLimitExceeded(u64),
-
-    Other(String),
 }
 
 impl From<login_api::LoginError> for LoginError {
@@ -469,15 +475,18 @@ impl From<login_api::LoginError> for LoginError {
             }
 
             login_api::LoginError::QRLoginEncoding => Self::QRLoginEncoding,
+
             login_api::LoginError::PostLoginCheckFailed(
-                PostLoginValidationError::DelinquentUser,
-            ) => Self::DelinquentUser,
+                RealPostLoginValidationError::DelinquentUser,
+            ) => Self::PostLoginValidationFailed(PostLoginValidationError::DelinquentUser),
             login_api::LoginError::PostLoginCheckFailed(
+                RealPostLoginValidationError::FreeAccountLimitExceeded(limit),
+            ) => Self::PostLoginValidationFailed(
                 PostLoginValidationError::FreeAccountLimitExceeded(limit),
-            ) => Self::FreeAccountLimitExceeded(limit),
-            login_api::LoginError::PostLoginCheckFailed(PostLoginValidationError::Other(error)) => {
-                Self::Other(error.to_string())
-            }
+            ),
+            login_api::LoginError::PostLoginCheckFailed(RealPostLoginValidationError::Other(
+                error,
+            )) => Self::Other(error.to_string()),
         }
     }
 }

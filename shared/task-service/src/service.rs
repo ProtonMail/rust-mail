@@ -1,4 +1,3 @@
-use crate::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use anyhow::anyhow;
 use parking_lot::Mutex;
 use pin_project::pin_project;
@@ -9,10 +8,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::task::{Context, Poll, Waker};
-use std::thread;
 use std::time::Duration;
+use std::{io, thread};
+use tokio::runtime;
 use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
+use tokio::task::{AbortHandle, JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace};
 
@@ -24,6 +24,7 @@ thread_local! {
 pub struct TaskService {
     active: Arc<AtomicBool>,
     sender: mpsc::Sender<Command>,
+    runtime: runtime::Handle,
 }
 
 impl TaskService {
@@ -32,7 +33,7 @@ impl TaskService {
     /// # Errors
     ///
     /// Returns error if we can't spawn the background thread.
-    pub fn new() -> std::io::Result<Self> {
+    pub fn new(runtime: runtime::Handle) -> io::Result<Self> {
         let (sender, receiver) = mpsc::channel();
 
         thread::Builder::new()
@@ -44,6 +45,7 @@ impl TaskService {
         Ok(Self {
             active: Arc::new(AtomicBool::new(true)),
             sender,
+            runtime,
         })
     }
 
@@ -196,39 +198,34 @@ impl TaskService {
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn_with::<DefaultTaskSpawner, _>(future)
-    }
-
-    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
-    pub fn spawn_with<S, F>(&self, future: F) -> JoinHandle<F::Output>
-    where
-        S: TaskSpawner,
-        F: Future<Output: Send> + Send + 'static,
-    {
-        S::spawn(self.guard(future))
+        self.runtime.spawn(self.guard(future))
     }
 
     /// Spawns a new task that races with given cancellation token.
     ///
-    /// If the task wins, this function returns [`AsyncTaskResult::Completed`],
-    /// otherwise this function returns [`AsyncTaskResult::Cancelled`].
-    ///
     /// Spawned task can have its execution paused with [`Self::pause()`].
-    pub fn spawn_cancellable_with<S, F>(
-        &self,
-        token: CancellationToken,
-        future: F,
-    ) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn_cancellable<F>(&self, token: CancellationToken, future: F) -> JoinHandle<F::Output>
     where
-        S: TaskSpawner,
         F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn_with::<S, _>(async move {
-            tokio::select! {
-                () = token.cancelled() => AsyncTaskResult::Cancelled,
-                r = future => AsyncTaskResult::Completed(r),
+        let (tx, rx) = oneshot::channel::<AbortHandle>();
+
+        let handle = self.spawn(async move {
+            if let Some(value) = token.run_until_cancelled(future).await {
+                value
+            } else {
+                // If `token` got cancelled, abort our task
+                rx.await.unwrap().abort();
+
+                // Soft-unreachable - once the called awaits the `JoinHandle`,
+                // it will return a `JoinError(Cancelled)`
+                std::future::pending().await
             }
-        })
+        });
+
+        _ = tx.send(handle.abort_handle());
+
+        handle
     }
 
     fn guard<F>(&self, future: F) -> Pin<Box<GuardedFuture<F>>>
@@ -421,31 +418,14 @@ impl BackgroundAwareTaskService {
         self.service.spawn(future)
     }
 
-    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
-    pub fn spawn_with<S, F>(&self, future: F) -> JoinHandle<F::Output>
-    where
-        S: TaskSpawner,
-        F: Future<Output: Send> + Send + 'static,
-    {
-        self.service.spawn_with::<S, _>(future)
-    }
-
     /// Spawns a new task that races with given cancellation token.
     ///
-    /// If the task wins, this function returns [`AsyncTaskResult::Completed`],
-    /// otherwise this function returns [`AsyncTaskResult::Cancelled`].
-    ///
     /// Spawned task can have its execution paused with [`Self::pause()`].
-    pub fn spawn_cancellable_with<S, F>(
-        &self,
-        token: CancellationToken,
-        future: F,
-    ) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn_cancellable<F>(&self, token: CancellationToken, future: F) -> JoinHandle<F::Output>
     where
-        S: TaskSpawner,
         F: Future<Output: Send> + Send + 'static,
     {
-        self.service.spawn_cancellable_with::<S, _>(token, future)
+        self.service.spawn_cancellable(token, future)
     }
 
     pub fn task_service(&self) -> &TaskService {
@@ -612,9 +592,13 @@ mod tests {
     use tokio::{sync::RwLock, task, time};
     use tracing::{Instrument, trace_span};
 
+    fn service() -> TaskService {
+        TaskService::new(runtime::Handle::current()).unwrap()
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn overwrite_pause_state() {
-        let service = TaskService::new().unwrap();
+        let service = service();
         let (sender1, mut receiver1) = tokio::sync::mpsc::channel(1);
         let (sender2, mut receiver2) = tokio::sync::mpsc::channel(1);
         let (main_sender, mut main_receiver) = tokio::sync::mpsc::channel(2);
@@ -682,7 +666,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn pause_and_wait() {
-        let service = TaskService::new().unwrap();
+        let service = service();
         let (sender1, mut receiver1) = tokio::sync::mpsc::channel(1);
         let (sender2, mut receiver2) = tokio::sync::mpsc::channel(1);
         let (main_sender, mut main_receiver) = tokio::sync::mpsc::channel(2);
@@ -794,7 +778,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn non_pausable_with_multiple_yield_points() {
-        let service = Arc::new(TaskService::new().unwrap());
+        let service = Arc::new(service());
 
         let value = service.spawn({
             let service = service.clone();
@@ -818,7 +802,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn pause_and_wait_does_not_bock() {
-        let service = Arc::new(TaskService::new().unwrap());
+        let service = Arc::new(service());
 
         service
             .pause_and_wait(Duration::from_millis(100))

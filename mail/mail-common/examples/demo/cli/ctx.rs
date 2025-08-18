@@ -13,6 +13,7 @@ use proton_mail_common::context::ShouldInitializeMailUserContext as Init;
 use proton_mail_common::{MailContext, MailUserContext};
 use std::path::Path;
 use std::sync::Arc;
+use tokio::runtime;
 
 pub async fn new_mail_ctx<K, N>(
     dir: &Path,
@@ -33,6 +34,7 @@ where
 
     Ok(MailContext::new(
         Origin::App,
+        runtime::Handle::current(),
         dir.join("session"),
         dir.join("user"),
         dir.join("cache").join("core"),

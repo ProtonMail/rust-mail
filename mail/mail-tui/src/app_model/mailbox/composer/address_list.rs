@@ -58,7 +58,7 @@ impl Popup for AddressListPopup {
                             Command::message(Messages::DismissPopup),
                             Command::message(
                                 ComposerMessage::StartChangeAddress((
-                                    self.addresses[0].email.clone(),
+                                    self.addresses[index].email.clone(),
                                     self.addresses[index]
                                         .remote_id
                                         .clone()

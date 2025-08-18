@@ -41,6 +41,7 @@ use std::panic::{set_hook, take_hook};
 use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
+use tokio::runtime;
 use tracing::error;
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking;
@@ -158,10 +159,13 @@ impl AppModel {
         let log_guard = init_log(&log_service)?;
 
         tracing::info!("Creating Async Runtime...");
+
         let mut keychain = AppKeyChain::new()?;
         keychain.init()?;
+
         let context = MailContext::new(
             Origin::App,
+            runtime::Handle::current(),
             data_dir,
             user_db_path,
             core_cache_dir,
@@ -177,6 +181,7 @@ impl AppModel {
         .await?;
 
         let sessions_model = SessionSelectModel::new(&context).await?;
+
         Ok(Self {
             context,
             state: AppState::SessionSelect(sessions_model),

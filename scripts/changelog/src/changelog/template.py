@@ -29,10 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 """
 
 
-def render(commits: Commits, only: re.Pattern | None) -> str:
+def render(commits: Commits, only: re.Pattern | None, name: str | None) -> str:
     env = Environment()
     tmp = env.from_string(TEMPLATE)
-    ctx = build_context(commits, only)
+    ctx = build_context(commits, only, name)
 
     return tmp.render(asdict(ctx)).strip()
 
@@ -55,25 +55,35 @@ class Context:
     releases: list[Release]
 
 
-def build_context(cmts: Commits, only: re.Pattern | None) -> Context:
+def build_context(cmts: Commits, only: re.Pattern | None, name: str | None) -> Context:
     releases = list()
 
     for tag, commits in cmts.items():
         if tag and only and not only.match(tag.name):
             continue
 
-        if (release := build_release(tag, commits)) and release.sections:
+        if (release := build_release(tag, commits, name)) and release.sections:
             releases.append(release)
 
     return Context(sorted(releases, key=lambda r: r.date or date.max, reverse=True))
 
 
-def build_release(tag: Tag | None, commits: list[Commit]) -> Release:
-    name = tag.name if tag else "Unreleased"
-    date = tag.commit.committed_datetime.date() if tag else None
-    sections = build_sections(commits)
+def build_release(tag: Tag | None, commits: list[Commit], name: str | None) -> Release:
+    if tag:
+        release_name = tag.name
+        release_date = tag.commit.committed_datetime.date()
+    elif name:
+        release_name = name
+        release_date = date.today()
+    else:
+        release_name = "Unreleased"
+        release_date = None
 
-    return Release(name, date, sections)
+    return Release(
+        release_name,
+        release_date,
+        build_sections(commits),
+    )
 
 
 def build_sections(commits: list[Commit]) -> list[Section]:

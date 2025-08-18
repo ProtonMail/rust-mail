@@ -168,8 +168,12 @@ impl PasswordFlow {
     pub async fn submit_pass(&self, pass: String) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
 
-        uniffi_async::<_, PasswordError, _>(async move {
-            Ok(flow.lock().await.submit_pass(pass).await?)
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .submit_pass(pass)
+                .await
+                .map_err(PasswordError::from)
         })
         .await?;
 
@@ -180,8 +184,12 @@ impl PasswordFlow {
     pub async fn submit_totp(&self, code: String) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
 
-        uniffi_async::<_, PasswordError, _>(async move {
-            Ok(flow.lock().await.submit_totp(code).await?)
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .submit_totp(code)
+                .await
+                .map_err(PasswordError::from)
         })
         .await?;
 
@@ -195,8 +203,12 @@ impl PasswordFlow {
     ) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
 
-        uniffi_async::<_, PasswordError, _>(async move {
-            Ok(flow.lock().await.submit_fido(fido_data.into()).await?)
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .submit_fido(fido_data.into())
+                .await
+                .map_err(PasswordError::from)
         })
         .await?;
 
@@ -214,8 +226,12 @@ impl PasswordFlow {
 
         let flow = self.flow.clone();
 
-        uniffi_async::<_, PasswordError, _>(async move {
-            Ok(flow.lock().await.change_pass(new_pass).await?)
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .change_pass(new_pass)
+                .await
+                .map_err(PasswordError::from)
         })
         .await?;
 
@@ -238,8 +254,12 @@ impl PasswordFlow {
 
         let flow = self.flow.clone();
 
-        uniffi_async::<_, PasswordError, _>(async move {
-            Ok(flow.lock().await.change_mbox_pass(new_mbox_pass).await?)
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .change_mbox_pass(new_mbox_pass)
+                .await
+                .map_err(PasswordError::from)
         })
         .await?;
 
@@ -251,10 +271,12 @@ impl PasswordFlow {
     pub async fn password_validator(&self) -> Option<Arc<PasswordValidatorService>> {
         let flow = self.flow.clone();
 
-        uniffi_async::<_, PasswordError, _>(async move {
-            Ok(Arc::new(PasswordValidatorService::setup(
-                flow.lock().await.api()?,
-            )))
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .api()
+                .map(|api| Arc::new(PasswordValidatorService::setup(api)))
+                .map_err(PasswordError::from)
         })
         .await
         .ok()
@@ -270,16 +292,17 @@ impl PasswordFlow {
         async_runtime().block_on(async { Ok(self.flow.lock().await.has_fido()?) })
     }
 
-    /// Get fresh FIDO2 details for authentication.
-    ///
-    /// This method calls the `/auth/info` endpoint to get current FIDO2 challenge details.
+    /// Get the FIDO2 details for authentication.
     pub async fn get_fido_details(&self) -> Result<Option<Fido2ResponseFfi>, PasswordError> {
         let flow = self.flow.clone();
 
-        uniffi_async::<_, PasswordError, _>(async move {
-            let guard = flow.lock().await;
-            let fido_details = guard.fetch_fresh_fido_details().await?;
-            Ok(fido_details.map(Fido2ResponseFfi::from))
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .fetch_fresh_fido_details()
+                .await
+                .map(|res| res.map(Fido2ResponseFfi::from))
+                .map_err(PasswordError::from)
         })
         .await
     }

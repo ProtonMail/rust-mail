@@ -49,8 +49,9 @@ pub enum State {
 /// Public actions that can be taken on the state.
 impl State {
     /// Create a new state machine with current password.
+    #[must_use]
     #[allow(clippy::too_many_arguments)]
-    pub async fn new(
+    pub fn new(
         client: Client,
         parts: SessionParts,
         username: String,
@@ -58,16 +59,7 @@ impl State {
         key_secret: KeySecret,
         tfa_mode: TfaStatus,
         mbp_mode: PasswordMode,
-    ) -> Result<Self, PasswordError> {
-        let request = PostAuthInfoRequest {
-            username: username.clone(),
-        };
-
-        let auth_info = client
-            .post_auth_info(request)
-            .map_err(PasswordError::ApiService)
-            .await?;
-
+    ) -> Self {
         let data = StateData {
             client,
             parts,
@@ -76,10 +68,10 @@ impl State {
             key_secret,
             tfa_mode,
             mbp_mode,
-            auth_info,
+            auth_info: None,
         };
 
-        Ok(WantPass::new(data).into())
+        WantPass::new(data).into()
     }
 
     /// Submit current password.
@@ -137,32 +129,17 @@ impl State {
 
     /// Get whether the account has TOTP enabled.
     pub fn has_totp(&self) -> Result<bool, PasswordError> {
-        match self {
-            Self::WantPass(state) => Ok(state.tfa_mode.has_totp()),
-            Self::WantTfa(state) => Ok(state.tfa_mode.has_totp()),
-            Self::WantChange(state) => Ok(state.tfa_mode.has_totp()),
-            _ => Err(PasswordError::InvalidState),
-        }
+        Ok(self.data_ref()?.tfa_mode.has_totp())
     }
 
     /// Get whether the account has a mailbox password.
     pub fn has_mbp(&self) -> Result<bool, PasswordError> {
-        match self {
-            Self::WantPass(state) => Ok(state.mbp_mode.has_mbp()),
-            Self::WantTfa(state) => Ok(state.mbp_mode.has_mbp()),
-            Self::WantChange(state) => Ok(state.mbp_mode.has_mbp()),
-            _ => Err(PasswordError::InvalidState),
-        }
+        Ok(self.data_ref()?.mbp_mode.has_mbp())
     }
 
     /// Get whether the account has FIDO2 enabled.
     pub fn has_fido(&self) -> Result<bool, PasswordError> {
-        match self {
-            Self::WantPass(state) => Ok(state.tfa_mode.has_fido()),
-            Self::WantTfa(state) => Ok(state.tfa_mode.has_fido()),
-            Self::WantChange(state) => Ok(state.tfa_mode.has_fido()),
-            _ => Err(PasswordError::InvalidState),
-        }
+        Ok(self.data_ref()?.tfa_mode.has_fido())
     }
 
     /// Get the FIDO2 details for authentication.
@@ -171,18 +148,18 @@ impl State {
     /// This returns potentially stale FIDO2 details from the initial auth info.
     /// For actual authentication, use `fetch_fresh_fido_details` instead.
     /// This method should only be used for UI purposes to show available auth methods.
-    pub fn cached_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
-        let info = match self {
-            Self::WantPass(state) => &state.auth_info,
-            Self::WantTfa(state) => &state.auth_info,
-            Self::WantChange(state) => &state.auth_info,
-            _ => return Err(PasswordError::InvalidState),
+    pub async fn cached_fido_details(&mut self) -> Result<Option<fido2::Response>, PasswordError> {
+        let data = self.data_mut()?;
+
+        if data.auth_info.is_none() {
+            data.auth_info = Some(get_auth_info(&data.client, &data.username).await?);
+        }
+
+        let Some(info) = &data.auth_info else {
+            unreachable!()
         };
 
-        match &info.tfa {
-            Some(tfa) => Ok(tfa.fido_details()),
-            None => Ok(None),
-        }
+        Ok(info.fido_details())
     }
 
     /// Fetch fresh FIDO2 details for authentication.
@@ -214,12 +191,32 @@ impl State {
 
     /// Get the API client for external operations.
     pub fn api(&self) -> Result<&Client, PasswordError> {
+        if let Ok(data) = self.data_ref() {
+            return Ok(&data.client);
+        }
+
+        if let Self::Complete(state) = self {
+            return Ok(state.client());
+        }
+
+        Err(PasswordError::InvalidState)
+    }
+
+    fn data_ref(&self) -> Result<&StateData, PasswordError> {
         match self {
-            Self::WantPass(state) => Ok(&state.client),
-            Self::WantTfa(state) => Ok(&state.client),
-            Self::WantChange(state) => Ok(&state.client),
-            Self::Complete(state) => Ok(state.client()),
-            Self::Invalid => Err(PasswordError::InvalidState),
+            Self::WantPass(state) => Ok(state),
+            Self::WantTfa(state) => Ok(state),
+            Self::WantChange(state) => Ok(state),
+            _ => Err(PasswordError::InvalidState),
+        }
+    }
+
+    fn data_mut(&mut self) -> Result<&mut StateData, PasswordError> {
+        match self {
+            Self::WantPass(state) => Ok(state),
+            Self::WantTfa(state) => Ok(state),
+            Self::WantChange(state) => Ok(state),
+            _ => Err(PasswordError::InvalidState),
         }
     }
 }
@@ -261,18 +258,24 @@ pub struct StateData {
     key_secret: KeySecret,
     tfa_mode: TfaStatus,
     mbp_mode: PasswordMode,
-    auth_info: PostAuthInfoResponse,
+    auth_info: Option<PostAuthInfoResponse>,
 }
 
 async fn acquire_password_scope(
     srp: &impl SRPProvider,
     client: &Client,
-    auth_info: &PostAuthInfoResponse,
     username: &str,
     password: &SecureString,
-    totp: Option<String>,
-    fido2_data: Option<fido2::Request>,
+    auth_info: Option<PostAuthInfoResponse>,
+    two_factor_code: Option<String>,
+    fido2: Option<fido2::Request>,
 ) -> Result<PutUsersPasswordResponse, PasswordError> {
+    let auth_info = match (auth_info, fido2.is_some()) {
+        (Some(info), _) => info,
+        (None, true) => return Err(PasswordError::InvalidState),
+        (None, false) => get_auth_info(client, username).await?,
+    };
+
     let client_proof = srp.generate_client_proof(
         username,
         password,
@@ -286,9 +289,8 @@ async fn acquire_password_scope(
         client_ephemeral: client_proof.ephemeral,
         client_proof: client_proof.proof,
         srp_session: auth_info.session.clone(),
-        two_factor_code: totp,
-        fido2: fido2_data,
-        sso_reauth_token: None,
+        two_factor_code,
+        fido2,
     };
 
     let response = client.put_users_password(request).await?;
@@ -298,4 +300,20 @@ async fn acquire_password_scope(
     } else {
         Err(PasswordError::ServerProof)
     }
+}
+
+async fn get_auth_info(
+    client: &Client,
+    username: &str,
+) -> Result<PostAuthInfoResponse, PasswordError> {
+    let request = PostAuthInfoRequest {
+        username: username.to_owned(),
+    };
+
+    let auth_info = client
+        .post_auth_info(request)
+        .map_err(PasswordError::ApiService)
+        .await?;
+
+    Ok(auth_info)
 }

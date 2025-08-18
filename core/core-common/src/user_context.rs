@@ -15,7 +15,6 @@ use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use stash::watcher::TableWatcher;
@@ -295,24 +294,13 @@ impl UserContext {
     ///
     /// Spawned task is bound to this context, i.e. it will get cancelled if
     /// this context gets cancelled as well.
-    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<F::Output>
     where
-        F: Future<Output: Send> + Send + 'static,
-    {
-        self.spawn_with::<DefaultTaskSpawner, _>(task)
-    }
-
-    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
-    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        S: TaskSpawner,
         F: Future<Output: Send> + Send + 'static,
     {
         let token = self.cancellation_token.clone();
 
-        self.context
-            .task_service()
-            .spawn_cancellable_with::<S, _>(token, task)
+        self.context.task_service().spawn_cancellable(token, task)
     }
 
     #[must_use]

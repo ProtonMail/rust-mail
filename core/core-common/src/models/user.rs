@@ -167,6 +167,11 @@ impl User {
     pub fn is_deliquent(&self) -> bool {
         self.delinquent != DelinquentState::Paid
     }
+
+    #[must_use]
+    pub fn is_paying_for_mail(&self) -> bool {
+        self.subscribed.contains(PaidSubscription::MAIL) && !self.is_deliquent()
+    }
 }
 
 #[must_use]

@@ -11,9 +11,11 @@ use crate::models::{Attachment, MailSettings};
 use anyhow::Context;
 use proton_calendar_common as cal;
 use proton_core_api::services::proton::{PrivateEmailRef, PrivateString};
+use proton_crypto_account::keys::EmailMimeType;
 use proton_crypto_account::keys::PrimaryUnlockedAddressKey;
 use proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_inbox::attachment::{EncryptableAttachment, EncryptedAttachment};
+use proton_crypto_inbox::keys::ComposerPreference;
 use proton_crypto_inbox::message::EncryptableDraft;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_mail_api::services::proton::ProtonMail;
@@ -203,7 +205,7 @@ where
             self.tether,
             slice::from_ref(&to),
             crypto,
-            false,
+            ComposerPreference::new(EmailMimeType::Text),
         )
         .await?;
 

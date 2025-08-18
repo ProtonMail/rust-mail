@@ -10,7 +10,7 @@ use proton_core_common::models::{
 
 use proton_core_common::services::{EventLoopService, InitializationService};
 use proton_event_loop::EventLoopError;
-use proton_task_service::{AsyncTaskResult, TaskService};
+use proton_task_service::TaskService;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
@@ -73,7 +73,7 @@ impl MailUserContext {
     #[tracing::instrument(skip(handle))]
     async fn initial_sync_for<E>(
         stage: MailUserContextLoadingStage,
-        handle: JoinHandle<AsyncTaskResult<Result<(), InitializationError<E>>>>,
+        handle: JoinHandle<Result<(), InitializationError<E>>>,
     ) -> Result<(), MailContextError>
     where
         E: std::fmt::Debug + Send + Sync + 'static,
@@ -91,8 +91,8 @@ impl MailUserContext {
         }
 
         match result {
-            Ok(AsyncTaskResult::Completed(Ok(()))) => Ok(()),
-            Ok(AsyncTaskResult::Completed(Err(e))) => match e {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => match e {
                 InitializationError::InitializationFailed(e) => {
                     let e = e.into();
                     error!("Failed to sync {e:?}");
@@ -104,14 +104,15 @@ impl MailUserContext {
                     Err(e)
                 }
             },
-            Ok(AsyncTaskResult::Cancelled) => {
-                error!("Called while syncing {stage:?}");
-                Err(MailContextError::TaskCancelled)
-            }
             Err(e) => {
-                let e = e.into();
-                error!("Panicked while syncing {stage:?}: {e:?}");
-                Err(e)
+                if e.is_cancelled() {
+                    error!("Called while syncing {stage:?}");
+                    Err(MailContextError::TaskCancelled)
+                } else {
+                    let e = e.into();
+                    error!("Panicked while syncing {stage:?}: {e:?}");
+                    Err(e)
+                }
             }
         }
     }
@@ -120,7 +121,7 @@ impl MailUserContext {
         self: &'a Arc<Self>,
         watcher: &'a Arc<InitializationWatcher>,
         f: F,
-    ) -> JoinHandle<AsyncTaskResult<T>>
+    ) -> JoinHandle<T>
     where
         T: Send + 'static,
         F: FnOnce(Arc<Self>, Arc<InitializationWatcher>) -> Fut,

@@ -37,17 +37,19 @@ use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, TaskSpawner};
+use proton_task_service::Spawner;
 use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
+use tokio::runtime;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::error;
 
+pub const MAIL_ALLOWED_FREE_USER_COUNT: u64 = 2;
 /// Whether we should initialize MailUserContext on creation
 #[derive(Debug, Clone, Copy)]
 pub enum ShouldInitializeMailUserContext {
@@ -248,6 +250,7 @@ impl MailContext {
     #[tracing::instrument("MailContextNew", skip_all)]
     pub async fn new(
         origin: Origin,
+        runtime: runtime::Handle,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         core_cache_path: impl Into<PathBuf>,
@@ -265,6 +268,7 @@ impl MailContext {
 
         let core_context = Context::new(
             origin,
+            runtime,
             session_db_path,
             user_db_path,
             key_chain,
@@ -349,7 +353,7 @@ impl MailContext {
         let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
 
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
-            Some(2),
+            Some(MAIL_ALLOWED_FREE_USER_COUNT),
             Arc::clone(&self.core_context),
         ));
 
@@ -397,7 +401,7 @@ impl MailContext {
         let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
 
         let post_login_validator = Box::new(DefaultPostLoginValidator::new(
-            Some(2),
+            Some(MAIL_ALLOWED_FREE_USER_COUNT),
             Arc::clone(&self.core_context),
         ));
 
@@ -431,17 +435,11 @@ impl MailContext {
                     .map(|p| p.expose_secret().to_owned())
                     .ok_or(MailContextError::Other(anyhow!("password not found")))?;
 
-                let mbp_mode = account
-                    .password_mode
-                    .map(|p| p.into())
-                    .ok_or(MailContextError::Other(anyhow!("password mode not found")))?;
-
                 Ok(LoginFlow::new_from_tfa(
                     api_session,
                     user_id,
                     session_id,
                     password,
-                    mbp_mode,
                     None, // Don't use persisted FIDO2 details - they are single-use
                     migration_snooper,
                     post_login_validator,
@@ -492,10 +490,16 @@ impl MailContext {
             username_behavior: None,
         };
 
+        let post_login_validator = Box::new(DefaultPostLoginValidator::new(
+            Some(MAIL_ALLOWED_FREE_USER_COUNT),
+            Arc::clone(&self.core_context),
+        ));
         // Create a new signup flow
-        Ok(SignupFlow::new(client, store, challenge_info)
-            .await
-            .map_err(|api_err| anyhow!(api_err.to_string()))?)
+        Ok(
+            SignupFlow::new(client, store, challenge_info, post_login_validator)
+                .await
+                .map_err(|api_err| anyhow!(api_err.to_string()))?,
+        )
     }
 
     /// Verify the PIN code.
@@ -963,20 +967,11 @@ impl MailContext {
     }
 
     /// See [`Context::spawn()`].
-    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {
         self.core_context.spawn(task)
-    }
-
-    /// See [`Context::spawn_with()`].
-    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        S: TaskSpawner,
-        F: Future<Output: Send> + Send + 'static,
-    {
-        self.core_context.spawn_with::<S, _>(task)
     }
 
     /// Get all the logged in user context that are active and initialized.
@@ -1003,6 +998,15 @@ impl MailContext {
         }
 
         Ok(ctxs)
+    }
+}
+
+impl Spawner for MailContext {
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
+    where
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(f)
     }
 }
 

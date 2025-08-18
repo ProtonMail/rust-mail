@@ -1,11 +1,9 @@
-use crate::async_runtime;
 use crate::errors::{OtherErrorReason, ProtonError, VoidActionResult};
 use crate::mail::MailSession;
 use crate::{core::datatypes::DeviceEnvironment, errors::ActionError};
 use proton_core_common::datatypes::RegisteredDevice as RealRegisteredDevice;
 use proton_core_common::device_registration::spawn_registered_device_task;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_task_service::AsyncTaskResult;
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -33,7 +31,7 @@ pub struct RegisteredDevice {
 pub struct RegisterDeviceTaskHandle {
     // None is used ONLY in the initial task state.
     sender: watch::Sender<Option<RealRegisteredDevice>>,
-    handle: JoinHandle<AsyncTaskResult<()>>,
+    handle: JoinHandle<()>,
 }
 
 impl Drop for RegisterDeviceTaskHandle {
@@ -76,11 +74,6 @@ impl MailSession {
     pub fn register_device_task(&self) -> Result<Arc<RegisterDeviceTaskHandle>, ActionError> {
         let ctx = self.ctx().core_context().clone();
         let (tx, rx) = watch::channel(None);
-
-        // Even though this function is synchronous, we need async runtime for spawning background task.
-        //
-        let rt = async_runtime();
-        let _guard = rt.enter();
         let handle = spawn_registered_device_task(ctx, rx).map_err(RealProtonMailError::from)?;
 
         Ok(Arc::new(RegisterDeviceTaskHandle { sender: tx, handle }))

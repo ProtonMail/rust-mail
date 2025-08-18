@@ -2,6 +2,7 @@
 
 //! Implements the sign-up flow.
 
+use crate::login::PostLoginValidationError;
 use crate::password_validator::PasswordType;
 use crate::password_validator::PasswordValidatorService;
 use crate::user_behavior::UserBehavior;
@@ -10,6 +11,7 @@ use proton_account_api::countries::Country as RealCountry;
 use proton_account_api::signup::SignupError as RealSignupError;
 use proton_account_api::signup::SignupFlow as RealSignupFlow;
 use proton_account_api::signup::state::StateKind;
+use proton_core_common::post_login_check::PostLoginValidationError as RealPostLoginValidationError;
 use std::fmt::Debug;
 use std::sync::Arc;
 use thiserror::Error;
@@ -76,6 +78,10 @@ pub enum SignupError {
     /// The recovery phone number format is invalid
     #[error("Recovery phone number format is invalid")]
     RecoveryPhoneNumberInvalid,
+
+    /// The recovery phone number format is invalid
+    #[error("Post login check failed: {0:?}")]
+    PostLoginValidationError(PostLoginValidationError),
 }
 
 impl From<RealSignupError> for SignupError {
@@ -93,6 +99,17 @@ impl From<RealSignupError> for SignupError {
             RealSignupError::InvalidState => Self::Internal,
             RealSignupError::RecoveryEmailInvalid => Self::RecoveryEmailInvalid,
             RealSignupError::RecoveryPhoneNumberInvalid => Self::RecoveryPhoneNumberInvalid,
+            RealSignupError::PostLoginCheckFailed(RealPostLoginValidationError::DelinquentUser) => {
+                Self::PostLoginValidationError(PostLoginValidationError::DelinquentUser)
+            }
+            RealSignupError::PostLoginCheckFailed(
+                RealPostLoginValidationError::FreeAccountLimitExceeded(limit),
+            ) => Self::PostLoginValidationError(
+                PostLoginValidationError::FreeAccountLimitExceeded(limit),
+            ),
+            RealSignupError::PostLoginCheckFailed(RealPostLoginValidationError::Other(_err)) => {
+                Self::Internal
+            }
         }
     }
 }
@@ -315,7 +332,10 @@ impl SignupFlow {
         async_runtime()
             .block_on(async { self.flow.lock().await.complete().map_err(SignupError::from) })
             .map(|(_, user, addr)| (user.id, addr.id))
-            .map(|(user_id, addr_id)| UserAddrId { user_id, addr_id })
+            .map(|(user_id, addr_id)| UserAddrId {
+                user_id: user_id.to_string(),
+                addr_id,
+            })
     }
 
     /// Get the current state of the SignupFlow

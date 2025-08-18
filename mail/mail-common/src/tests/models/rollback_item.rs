@@ -16,6 +16,7 @@ use proton_mail_common::{
     api_conversation, api_label, api_message_meta, conversation, label, message,
     test_utils::utils::create_address,
 };
+use proton_task_service::Tokio;
 use test_case::test_case;
 #[allow(unused_imports)]
 use wiremock::{
@@ -248,16 +249,23 @@ async fn labels(tether: &Tether) -> Vec<Label> {
 async fn start_server(tether: &Tether, batch_size: usize) -> (MockServer, Session) {
     let mock_server = MockServer::start().await;
     mock_auth_endpoints(&mock_server).await;
-    let api_config = Config {
-        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
-        ..Default::default()
+
+    let api = {
+        let config = Config {
+            env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
+            ..Default::default()
+        };
+
+        let status = StatusWatcher::with_observer(StatusObserver::test(Tokio::spawner()));
+
+        Session::builder()
+            .with_config(config)
+            .with_status(status)
+            .build(Tokio::spawner())
+            .await
+            .unwrap()
     };
-    let api = Session::builder()
-        .with_config(api_config)
-        .with_status(StatusWatcher::with_observer(StatusObserver::test()))
-        .build()
-        .await
-        .unwrap();
+
     let kinds = vec![
         RollbackItemType::Conversation,
         RollbackItemType::Message,
@@ -270,8 +278,10 @@ async fn start_server(tether: &Tether, batch_size: usize) -> (MockServer, Sessio
         if items.is_empty() {
             continue;
         }
+
         for chunks in items.chunks(batch_size) {
             let items = chunks.to_vec();
+
             match kind {
                 RollbackItemType::Conversation => mock_get_conversation(&mock_server, items).await,
                 RollbackItemType::Message => mock_get_message(&mock_server, items, tether).await,

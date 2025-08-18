@@ -1159,9 +1159,11 @@ impl Draft {
     pub fn finalize_sender_address_change_request(&mut self, output: DraftAddressChangeOutput) {
         match output {
             DraftAddressChangeOutput::SenderOnly(sender) => {
+                tracing::info!("Updating sender address only to {sender}");
                 self.sender = sender;
             }
             DraftAddressChangeOutput::Full(output) => {
+                tracing::info!("Updating sender address to {} and signature", output.sender);
                 self.address_id = output.address_id;
                 self.sender = output.sender;
                 // we can only replace the signature if it wasn't empty and the original signature

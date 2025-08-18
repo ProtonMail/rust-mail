@@ -1,7 +1,5 @@
 #![allow(clippy::print_stdout)]
 
-use std::sync::Arc;
-
 use muon::env::EnvId;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
@@ -15,8 +13,10 @@ use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
 use proton_core_common::{Context, Origin};
 use proton_log_service::LogService;
+use std::sync::Arc;
 use tempdir::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::runtime;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -42,13 +42,13 @@ async fn main() {
     let app_product = std::env::var("PAPI_APP_PRODUCT").unwrap();
     let app_version = std::env::var("PAPI_APP_VERSION").unwrap();
 
+    let context = create_context().await;
+
     let session = Session::builder()
         .with_app_version(app_platform, app_product, app_version)
-        .build()
+        .build(context.spawner())
         .await
         .unwrap();
-
-    let context = create_context().await;
 
     let mut login_flow = LoginFlow::new(
         session.clone(),
@@ -139,11 +139,14 @@ async fn create_context() -> Arc<Context> {
         .name("log".into())
         .directory(tmp_dir.path().into())
         .build();
+
     keychain
         .store(key.clone())
         .expect("failed to store in keychain");
+
     Context::new(
         Origin::App,
+        runtime::Handle::current(),
         tmp_dir.path(),
         tmp_dir.path(),
         Arc::new(InMemoryKeyChain::default()).clone(),

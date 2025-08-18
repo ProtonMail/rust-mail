@@ -35,9 +35,6 @@ pub struct CryptoMailSettings {
     /// The default PGP scheme to use.
     pub pgp_scheme: PGPScheme,
 
-    /// The default content mime type to use.
-    pub mime_type: EmailMimeType,
-
     /// If mails should be signed by default.
     pub sign: bool,
 }
@@ -51,6 +48,19 @@ pub struct ComposerPreference {
     /// The Encrypt to outside (EO) mode encrypts email with a password.
     /// See [web](https://proton.me/support/password-protected-emails).
     pub encrypt_to_outside: bool,
+
+    /// The mime type of the message in the composer.
+    pub composer_body_mime_type: EmailMimeType,
+}
+
+impl ComposerPreference {
+    #[must_use]
+    pub fn new(composer_body_mime_type: EmailMimeType) -> Self {
+        Self {
+            encrypt_to_outside: false,
+            composer_body_mime_type,
+        }
+    }
 }
 
 /// All possible encryption types as requested by the Proton API.
@@ -173,8 +183,8 @@ pub struct EncryptionPreferences<Pub: PublicKey> {
     /// The `OpenPGP` scheme to use when encrypting the email to an external recipient.
     pub pgp_scheme: PGPScheme,
 
-    /// The MIME type of the email, specifying the format of the email body.
-    pub mime_type: EmailMimeType,
+    /// An optional preference for the MIME type of the body.
+    pub mime_type: Option<EmailMimeType>,
 
     /// Optionally stores the selected public key for encryption.
     ///
@@ -226,9 +236,7 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
         let scheme = recipient_key_model
             .pgp_scheme
             .unwrap_or(crypto_mail_settings.pgp_scheme);
-        let mime_type = recipient_key_model
-            .mime_type
-            .unwrap_or(crypto_mail_settings.mime_type);
+        let mime_type = recipient_key_model.mime_type;
         let mut encryption_disabled_mail = false;
 
         // Select the `OpenPGP` public key based on the recipient type.
@@ -306,7 +314,7 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
             sign: true,
             contact_type: ContactType::Internal,
             pgp_scheme: mail_settings.pgp_scheme,
-            mime_type: mail_settings.mime_type,
+            mime_type: None,
             selected_key: Some(selected_key.clone()),
             is_selected_key_pinned: false,
             encryption_disabled_mail: false,
@@ -491,7 +499,23 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
         let mime_type = match pgp_scheme {
             PackageCryptoType::PgpInline => PackageMimeType::Text,
             PackageCryptoType::PgpMime | PackageCryptoType::ClearMime => PackageMimeType::Multipart,
-            _ => encryption_preferences.mime_type.into(),
+            // If sending EO, respect the MIME type of the composer, since it will be what the API returns when retrieving the message.
+            PackageCryptoType::EncryptedOutside => {
+                composer_preferences.composer_body_mime_type.into()
+            }
+            PackageCryptoType::Cleartext | PackageCryptoType::ProtonMail => {
+                // composer html -> contact text = text
+                // composer text -> contact html = text
+                // composer html -> contact auto/none = html
+                // composer text -> contact auto/none = text
+                match composer_preferences.composer_body_mime_type {
+                    EmailMimeType::Text => composer_preferences.composer_body_mime_type.into(), // Prefer composer preference if message body is text/plain
+                    EmailMimeType::Html => encryption_preferences
+                        .mime_type
+                        .unwrap_or(composer_preferences.composer_body_mime_type)
+                        .into(),
+                }
+            }
         };
 
         Self {
@@ -559,6 +583,7 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
         address_keys: &[DecryptedAddressKey<Priv, Pub>],
         encryption_time: UnixTimestamp,
         crypto_mail_settings: CryptoMailSettings,
+        composer_preferences: ComposerPreference,
     ) -> Result<Self, EncryptionPreferencesError> {
         let encryption_preferences =
             EncryptionPreferences::from_unlocked_address_keys_and_settings(
@@ -569,7 +594,7 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
 
         Ok(SendPreferences::from_preferences(
             encryption_preferences,
-            ComposerPreference::default(),
+            composer_preferences,
         ))
     }
 }

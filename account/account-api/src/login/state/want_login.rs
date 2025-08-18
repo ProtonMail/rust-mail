@@ -17,7 +17,7 @@ use proton_core_api::services::observability::{
 };
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::SessionParts;
-use proton_core_api::store::{AuthInfo, MbpMode, TfaMode, UserData};
+use proton_core_api::store::{AuthInfo, TfaMode, UserData};
 use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_crypto_account::proton_crypto::generate_secure_random_bytes;
 use secrecy::{ExposeSecret, SecretString};
@@ -135,11 +135,12 @@ impl WantLogin {
     pub async fn migrate(
         self,
         client: muon::Client,
-        user: UserData,
-        data: LoginFlowData,
+        user_id: UserId,
+        session_id: SessionId,
+        user_data: UserData,
         refresh_token: SecretString,
     ) -> Result<State, (State, LoginError)> {
-        self.try_migrate(client, user, data, refresh_token)
+        self.try_migrate(client, user_id, session_id, user_data, refresh_token)
             .map_err(|err| (State::LoginRetry, err))
             .await
     }
@@ -147,16 +148,17 @@ impl WantLogin {
     async fn try_migrate(
         self,
         client: muon::Client,
-        user: UserData,
-        data: LoginFlowData,
+        user_id: UserId,
+        session_id: SessionId,
+        user_data: UserData,
         refresh_token: SecretString,
     ) -> Result<State, LoginError> {
         self.parts
             .store
             .write()
             .await
-            .set_name_or_addr(&user.username);
-        let info = get_auth_info(&data, false, false);
+            .set_name_or_addr(&user_data.username);
+        let info = get_auth_info(&user_id, &session_id, false, false);
         self.parts
             .store
             .write()
@@ -171,9 +173,9 @@ impl WantLogin {
             })
             .await?;
         self.parts.store.write().await.set_auth_info(info).await?;
-        let data = get_state_data(&data, self.parts);
+        let data = get_state_data(&user_id, &session_id, self.parts);
 
-        State::finalize_migration(client, data, user).await
+        State::finalize_migration(client, data, user_data).await
     }
 
     #[allow(deprecated)]
@@ -185,50 +187,72 @@ impl WantLogin {
         post_login_validator: &dyn PostLoginValidator,
     ) -> Result<State, LoginError> {
         match self.flow.login_with_extra(user, pass.as_str(), info).await {
-            LoginFlow::Ok(client, flow_data) => {
-                check_store_auth(&self.parts, &flow_data.user_id).await?;
+            LoginFlow::Ok(client, data) => {
+                check_store_auth(&self.parts, &data.user_id).await?;
 
                 info!("Login flow does not require 2FA");
                 self.observability.record(AuthV4RequestMetric::new(
                     ApiServiceObservabilityResponse::Success,
                 ));
 
-                let info = get_auth_info(&flow_data, false, false);
-                self.parts.store.write().await.set_auth_info(info).await?;
-                let data = get_state_data(&flow_data, self.parts);
+                let LoginFlowData {
+                    user_id,
+                    session_id,
+                    ..
+                } = data;
 
-                // Always inspect the user regardless of password mode from auth call
-                // The password mode from auth is unreliable for temporary password users
+                self.parts
+                    .store
+                    .write()
+                    .await
+                    .set_auth_info(get_auth_info(&user_id, &session_id, false, false))
+                    .await?;
+
                 State::inspect_user(
                     client,
-                    data,
+                    get_state_data(&user_id, &session_id, self.parts),
                     pass,
-                    flow_data.password_mode.into(),
                     post_login_validator,
                 )
                 .await
             }
 
-            LoginFlow::TwoFactor(flow, flow_data) => {
-                check_store_auth(&self.parts, &flow_data.user_id).await?;
+            LoginFlow::TwoFactor(flow, data) => {
+                check_store_auth(&self.parts, &data.user_id).await?;
 
                 info!("Login flow requires 2FA");
                 self.observability.record(AuthV4RequestMetric::new(
                     ApiServiceObservabilityResponse::Success,
                 ));
 
-                // Always cache the password temporarily - we'll determine later if we need it
+                let LoginFlowData {
+                    user_id,
+                    session_id,
+                    ..
+                } = data;
+
                 self.parts.store.write().await.set_pass(&pass).await?;
 
-                let info =
-                    get_auth_info(&flow_data, flow.has_totp(), flow.fido_details().is_some());
-                let mode = flow_data.password_mode.into();
-                self.parts.store.write().await.set_auth_info(info).await?;
-                let data = get_state_data(&flow_data, self.parts);
+                self.parts
+                    .store
+                    .write()
+                    .await
+                    .set_auth_info(get_auth_info(
+                        &user_id,
+                        &session_id,
+                        flow.has_totp(),
+                        flow.fido_details().is_some(),
+                    ))
+                    .await?;
+
                 let fido_details = flow.fido_details().cloned();
 
-                // Always pass the password to TFA state - password mode from auth is unreliable
-                Ok(State::want_tfa(flow.into(), data, pass, mode, fido_details))
+                Ok(State::want_tfa(
+                    flow.into(),
+                    get_state_data(&user_id, &session_id, self.parts),
+                    pass,
+                    fido_details,
+                ))
             }
 
             LoginFlow::Failed { reason, .. } => {
@@ -289,20 +313,22 @@ async fn check_store_auth(parts: &SessionParts, user_id: &str) -> Result<(), Log
     Err(LoginError::MissingSession)
 }
 
-fn get_auth_info(data: &LoginFlowData, totp: bool, has_fido: bool) -> AuthInfo {
+fn get_auth_info(
+    user_id: &str,
+    session_id: &str, totp: bool, has_fido: bool
+) -> AuthInfo {
     AuthInfo {
-        user_id: UserId::from(data.user_id.clone()),
-        session_id: SessionId::from(data.session_id.clone()),
+        user_id: UserId::from(user_id.to_owned()),
+        session_id: SessionId::from(session_id.to_owned()),
         tfa_mode: TfaMode::new(totp, has_fido),
-        mbp_mode: MbpMode::from(data.password_mode),
     }
 }
 
-fn get_state_data(data: &LoginFlowData, parts: SessionParts) -> StateData {
+fn get_state_data(user_id: &str, session_id: &str, parts: SessionParts) -> StateData {
     StateData {
         parts,
-        user_id: UserId::from(data.user_id.clone()),
-        session_id: SessionId::from(data.session_id.clone()),
+        user_id: UserId::from(user_id.to_owned()),
+        session_id: SessionId::from(session_id.to_owned()),
         observability: ObservabilityRecorder::default(),
     }
 }

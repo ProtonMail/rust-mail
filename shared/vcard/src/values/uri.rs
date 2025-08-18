@@ -36,7 +36,7 @@ impl Display for MaybeUri {
 }
 
 /// A Uri as defined in RFC3986
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq)]
 pub struct Uri(pub Url);
 
 impl Uri {

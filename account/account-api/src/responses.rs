@@ -1,4 +1,8 @@
-use proton_core_api::services::proton::DelinquentState as CoreDelinquentState;
+use proton_core_api::services::proton::{
+    DelinquentState as CoreDelinquentState, Flags as CoreFlags,
+    ProductUsedSpace as CoreProductUsedSpace, UserId, UserMnemonicStatus as CoreUserMnemonicStatus,
+    UserType as CoreUserType,
+};
 use proton_crypto_account::keys::{AddressKeys, UserKeys};
 use serde::Deserialize;
 use serde_aux::field_attributes::deserialize_default_from_null;
@@ -151,6 +155,60 @@ impl From<CoreDelinquentState> for DelinquentState {
             CoreDelinquentState::Overdue => DelinquentState::Overdue,
             CoreDelinquentState::Delinquent => DelinquentState::Delinquent,
             CoreDelinquentState::NotReceived => DelinquentState::NotReceived,
+        }
+    }
+}
+
+impl From<DelinquentState> for CoreDelinquentState {
+    fn from(value: DelinquentState) -> Self {
+        match value {
+            DelinquentState::Paid => CoreDelinquentState::Paid,
+            DelinquentState::Available => CoreDelinquentState::Available,
+            DelinquentState::Overdue => CoreDelinquentState::Overdue,
+            DelinquentState::Delinquent => CoreDelinquentState::Delinquent,
+            DelinquentState::NotReceived => CoreDelinquentState::NotReceived,
+        }
+    }
+}
+
+impl From<UserMnemonicStatus> for CoreUserMnemonicStatus {
+    fn from(value: UserMnemonicStatus) -> Self {
+        match value {
+            UserMnemonicStatus::Disabled => CoreUserMnemonicStatus::Disabled,
+            UserMnemonicStatus::EnabledButNotSet => CoreUserMnemonicStatus::EnabledButNotSet,
+            UserMnemonicStatus::EnabledNeedsReactivation => {
+                CoreUserMnemonicStatus::EnabledNeedsReactivation
+            }
+            UserMnemonicStatus::EnabledAndSet => CoreUserMnemonicStatus::EnabledAndSet,
+            UserMnemonicStatus::Unknown => CoreUserMnemonicStatus::Unknown,
+        }
+    }
+}
+
+impl From<ProductUsedSpace> for CoreProductUsedSpace {
+    fn from(val: ProductUsedSpace) -> Self {
+        Self {
+            calendar: val.calendar,
+            contact: val.contact,
+            drive: val.drive,
+            mail: val.mail,
+            pass: val.pass,
+        }
+    }
+}
+
+impl From<Flags> for CoreFlags {
+    fn from(flags: Flags) -> Self {
+        Self {
+            has_temporary_password: flags.has_temporary_password,
+            no_login: flags.no_login,
+            no_proton_address: flags.no_proton_address,
+            onboard_checklist_storage_granted: flags.onboard_checklist_storage_granted,
+            protected: flags.protected,
+            recovery_attempt: flags.recovery_attempt,
+            sso: flags.sso,
+            test_account: flags.test_account,
+            has_a_byoe_address: flags.has_a_byoe_address,
         }
     }
 }
@@ -367,12 +425,8 @@ pub struct CreateUserResponse {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct User {
-    // TODO(ET-3061): this type should be `UserId`
-    // (see `core/core-api/src/services/proton/core/common.rs`),
-    // but those types should be put into a slimmer common crate,
-    // which defines only common types and DTO-s.
     #[serde(rename = "ID")]
-    pub id: String,
+    pub id: UserId,
 
     pub create_time: u64,
 
@@ -417,6 +471,34 @@ pub struct User {
     #[serde(rename = "Type")]
     #[serde_as(as = "FromInto<u8>")]
     pub user_type: UserType,
+}
+
+impl From<User> for proton_core_api::services::proton::User {
+    fn from(val: User) -> Self {
+        Self {
+            id: val.id,
+            create_time: val.create_time,
+            credit: val.credit,
+            currency: val.currency,
+            delinquent: val.delinquent.into(),
+            display_name: val.display_name,
+            email: val.email,
+            flags: val.flags.into(),
+            keys: val.keys,
+            max_space: val.max_space,
+            max_upload: val.max_upload,
+            mnemonic_status: val.mnemonic_status.into(),
+            name: val.name,
+            private: val.private != 0,
+            product_used_space: val.product_used_space.into(),
+            role: val.role,
+            services: val.services,
+            subscribed: val.subscribed,
+            to_migrate: val.to_migrate,
+            used_space: val.used_space,
+            user_type: CoreUserType::from(Into::<u8>::into(val.user_type)),
+        }
+    }
 }
 
 /// TODO: Document this enum.
@@ -553,6 +635,11 @@ pub struct Flags {
     /// TODO: Document this field.
     #[serde(rename = "has-temporary-password")]
     pub has_temporary_password: bool,
+
+    /// Whether the user has a BYOE address.
+    #[serde(rename = "has-a-byoe-address")]
+    #[serde(default)]
+    pub has_a_byoe_address: bool,
 
     /// TODO: Document this field.
     #[serde(rename = "no-login")]
@@ -810,7 +897,7 @@ mod tests {
         let expected = SetupKeysResponse {
             code: ResponseCode(1000),
             user: User {
-                id: String::from("user_id"),
+                id: UserId::from("user_id"),
                 role: 1,
                 name: Some("username".to_string()),
                 display_name: Some("User Name".to_string()),
@@ -858,6 +945,7 @@ mod tests {
                     recovery_attempt: false,
                     sso: false,
                     no_proton_address: false,
+                    has_a_byoe_address: false,
                 },
             },
         };

@@ -1,15 +1,12 @@
 use crate::status_observer::StatusObserver;
 use crate::{connection_status::ConnectionStatus, services::proton::Proton};
+use proton_task_service::SpawnerRef;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::{sync::watch, time};
 use tokio_util::task::AbortOnDropHandle;
 
-/// A `StatusWatcher` keeps track of the connection status and provides an interface to observe the changes.
-///
-/// It will watch `StatusObserver` updates and periodically request current status.
-///
 #[derive(Debug, Clone)]
 pub struct StatusWatcher {
     status_tx: watch::Sender<ConnectionStatus>,
@@ -32,20 +29,12 @@ impl DerefMut for StatusWatcher {
     }
 }
 
-impl Default for StatusWatcher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl StatusWatcher {
-    /// Construct new `StatusWatcher` with default shared state Observer.
     #[must_use]
-    pub fn new() -> Self {
-        Self::with_observer(StatusObserver::new())
+    pub fn new(spawner: SpawnerRef) -> Self {
+        Self::with_observer(StatusObserver::new(spawner))
     }
 
-    /// Construct new `StatusWatcher` with custom observer, useful when running tests.
     #[must_use]
     pub fn with_observer(observer: StatusObserver) -> Self {
         let (status_tx, _) = watch::channel(ConnectionStatus::Online);
@@ -59,25 +48,20 @@ impl StatusWatcher {
         }
     }
 
-    /// Clone underlying observer
     pub fn observer(&self) -> StatusObserver {
         self.observer.clone()
     }
 
-    /// Returns a channel that observes the network connection status.
     #[must_use]
     pub fn subscribe(&self) -> watch::Receiver<ConnectionStatus> {
         self.status_tx.subscribe()
     }
 
-    /// Returns a channel that observes the network connection status, but
-    /// simplified only to the "are we online" state.
     #[must_use]
     pub fn subscribe_to_online(&self) -> watch::Receiver<bool> {
         self.online_tx.subscribe()
     }
 
-    /// Initialize background task for notifying subscribers
     pub fn initialize(&mut self, api: Proton) {
         let status_tx = self.status_tx.clone();
         let online_tx = self.online_tx.clone();

@@ -13,6 +13,7 @@ use crate::{
 };
 use proton_core_api::auth::{Tokens, UserKeySecret};
 use proton_core_api::services::proton::{SessionId, UserId};
+use proton_core_api::session::{AppVersion, Env, Server, TlsPinSet};
 use proton_core_api::session::{Endpoint, EnvId};
 use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
@@ -20,49 +21,42 @@ use proton_event_loop::subscriber::SubscriberError;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
-use std::io::stdout;
 use std::sync::{Arc, Weak};
 use tempdir::TempDir;
+use tokio::runtime;
+use tracing::info;
 use tracing::subscriber::set_global_default;
-use tracing::{Level, info};
 use tracing_subscriber::fmt::layer;
-use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, registry};
 use wiremock::MockServer;
 
 pub trait BaseTestContext {
-    /// Generate a test UID.
     #[must_use]
     fn test_uid() -> SessionId {
         SessionId::from("TEST_UID")
     }
 
-    /// Generate a test user ID.
     #[must_use]
     fn test_user_id() -> UserId {
         UserId::from(TEST_USER_ID)
     }
 
-    /// Generate a test user name or address.
     #[must_use]
     fn test_user_mail() -> String {
         TEST_USER_MAIL.to_owned()
     }
 
-    /// Generate a test access token.
     #[must_use]
     fn test_acctok() -> String {
         String::from("ACCESSTOKEN")
     }
 
-    /// Generate a test refresh token.
     #[must_use]
     fn test_reftok() -> String {
         String::from("REFRESHTOKEN")
     }
 
-    /// Generate test scopes.
     #[must_use]
     fn test_scopes() -> Vec<String> {
         vec!["foo".to_owned(), "bar".to_owned()]
@@ -129,12 +123,10 @@ impl TestContext {
         &self.mock_web_server
     }
 
-    /// Create and initialize test context.
     pub async fn new() -> Arc<Self> {
         Self::_new(None, None, None).await
     }
 
-    /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
     pub async fn with_user_secret_and_user_id(
         user_key_secret: UserKeySecret,
         user_id: UserId,
@@ -143,7 +135,6 @@ impl TestContext {
         Self::_new(Some(user_key_secret), Some(user_id), initializers).await
     }
 
-    /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
     pub async fn with_initializers(
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
     ) -> Arc<Self> {
@@ -155,16 +146,17 @@ impl TestContext {
         user_id: Option<UserId>,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
     ) -> Arc<Self> {
-        drop(set_global_default(
+        _ = set_global_default(
             registry()
                 .with(EnvFilter::new("debug,stash=info"))
-                .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
-        ));
+                .with(layer().with_test_writer()),
+        );
 
         let mock_web_server = Arc::new(MockServer::start().await);
         mock_auth_endpoints(&mock_web_server).await;
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
         info!("CORE TMP DIR = {:?}", tmp_dir.path());
+
         let keychain = Self::keychain();
         let api_config = Self::api_config(&mock_web_server);
         let key = Self::encryption_key();
@@ -190,9 +182,9 @@ impl TestContext {
             .name("log".into())
             .build();
 
-        // Create core test context
         let context = Context::new(
             Origin::App,
+            runtime::Handle::current(),
             tmp_dir.path(),
             tmp_dir.path(),
             keychain.clone(),
@@ -207,7 +199,6 @@ impl TestContext {
         .await
         .expect("failed to create core context");
 
-        // Generate a fake session and write it to the database
         let (core_account, core_session) = Self::new_account_impl(
             &context,
             user_id.clone(),
@@ -228,8 +219,6 @@ impl TestContext {
         })
     }
 
-    /// Creates a new account and a fake session.
-    ///
     pub async fn new_account(
         &self,
         user_id: UserId,
@@ -282,20 +271,15 @@ impl TestContext {
         (core_account, core_session)
     }
 
-    /// Get the test user context.
-    ///
     pub async fn user_context(&self) -> Arc<UserContext> {
+        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
+
         self.context
-            .user_context_from_session(
-                &self.core_session,
-                Some(StatusWatcher::with_observer(StatusObserver::test())),
-            )
+            .user_context_from_session(&self.core_session, Some(status))
             .await
             .expect("failed to create user context")
     }
 
-    /// Get the core context
-    ///
     #[must_use]
     pub fn core_context(&self) -> &Arc<Context> {
         &self.context
@@ -337,8 +321,6 @@ pub struct MockApiEnv {
 }
 
 impl MockApiEnv {
-    /// Create a new `MockApiEnv` with the given host.
-    ///
     pub fn new(host: impl AsRef<str>) -> Self {
         Self {
             host: host.as_ref().parse().expect("URL must be valid"),
@@ -353,16 +335,12 @@ impl MockApiEnv {
     }
 }
 
-const _: () = {
-    use proton_core_api::session::{AppVersion, Env, Server, TlsPinSet};
-
-    impl Env for MockApiEnv {
-        fn servers(&self, _: &AppVersion) -> Vec<Server> {
-            vec![Server::new(self.host.clone(), self.path.clone())]
-        }
-
-        fn pins(&self, _: &Server) -> Option<TlsPinSet> {
-            None
-        }
+impl Env for MockApiEnv {
+    fn servers(&self, _: &AppVersion) -> Vec<Server> {
+        vec![Server::new(self.host.clone(), self.path.clone())]
     }
-};
+
+    fn pins(&self, _: &Server) -> Option<TlsPinSet> {
+        None
+    }
+}

@@ -1,14 +1,12 @@
 use anyhow::bail;
 use async_trait::async_trait;
-use muon::client::PasswordMode;
-
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::auth::{Auth, UserKeySecret};
-use crate::services::proton::{SessionId, UserId};
+use crate::services::proton::{PasswordMode, SessionId, UserId};
 
 pub type BoxStore = Box<dyn Store>;
 pub type DynStore = Arc<RwLock<Box<dyn Store>>>;
@@ -19,8 +17,6 @@ pub struct AuthInfo {
     pub user_id: UserId,
     pub session_id: SessionId,
     pub tfa_mode: TfaMode,
-    pub mbp_mode: MbpMode,
-    // FIDO2 details removed - they are single-use and should not be persisted
 }
 
 #[derive(Debug, Clone)]
@@ -28,6 +24,7 @@ pub struct UserData {
     pub username: String,
     pub display_name: String,
     pub primary_addr: String,
+    pub password_mode: MbpMode,
     pub key_secret: UserKeySecret,
 }
 
@@ -62,6 +59,15 @@ pub enum MbpMode {
 
     /// The user has two passwords.
     Two = 2,
+}
+
+impl From<muon::client::PasswordMode> for MbpMode {
+    fn from(mode: muon::client::PasswordMode) -> Self {
+        match mode {
+            muon::client::PasswordMode::One => Self::One,
+            muon::client::PasswordMode::Two => Self::Two,
+        }
+    }
 }
 
 impl From<PasswordMode> for MbpMode {

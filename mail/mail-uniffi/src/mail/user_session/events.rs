@@ -1,7 +1,7 @@
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{EventError, EventErrorReason, ProtonError, VoidEventResult};
 use crate::mail::MailUserSession;
-use crate::{spawn_async, uniffi_async};
+use crate::uniffi_async;
 use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_core_common::actions::event_poll::{ActionEventLoopError, EventPoll};
@@ -72,7 +72,7 @@ impl MailUserSession {
         callback: Arc<dyn EventLoopErrorObserver>,
     ) -> Result<Arc<EventLoopErrorObserverHandle>, EventError> {
         let mut observer = ActionFailureObserver::<EventPoll>::new(self.ctx()?.action_queue());
-        let handle = spawn_async(self.ctx()?, async move {
+        let handle = self.ctx()?.spawn(async move {
             while let Ok(v) = observer.next().await {
                 if let ActionFailureReason::Error(err, _) = v {
                     let err = if let Some(details) = err.as_action_error::<EventPoll>() {

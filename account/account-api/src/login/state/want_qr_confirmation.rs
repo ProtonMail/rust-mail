@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose};
+use futures::TryFutureExt;
 use muon::client::flow::{ForkFlowResult, WithCodeFlow, WithCodePollFlow};
 use proton_core_api::{
     auth::{KeySecret, UserKeySecret},
@@ -92,7 +93,13 @@ impl WantQrConfirmation {
             })
             .map(|res| res.user)
             .map_err(LoginError::UserFetch)?;
-        info!("Validate passphrarse");
+        let settings = client
+            .get_settings()
+            .map_ok(|res| res.user_settings)
+            .map_err(LoginError::SettingsFetch)
+            .await?;
+
+        info!("Validate passpharse");
         let pgp = proton_crypto::new_pgp_provider();
         let passphrase = KeySecret::new(passphrase);
         let key_secret = if user.keys.unlock(&pgp, &passphrase).unlocked_keys.is_empty() {
@@ -103,12 +110,15 @@ impl WantQrConfirmation {
         } else {
             UserKeySecret(passphrase)
         };
+
         let user_data = UserData {
             username: user.name.clone().unwrap_or_default(),
             display_name: user.display_name.clone().unwrap_or_default(),
             primary_addr: user.email.clone(),
+            password_mode: settings.password.mode.into(),
             key_secret,
         };
+
         self.parts
             .store
             .write()

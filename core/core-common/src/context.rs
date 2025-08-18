@@ -5,6 +5,7 @@ mod registry;
 pub mod services;
 use registry::ServiceRegistry;
 use services::logging_service::LoggingService;
+use tokio::runtime;
 
 use crate::action_queue::CoreActionError;
 use crate::auth_store::{AuthStore, DecryptExt};
@@ -41,7 +42,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Config as RealApiConfig;
 use proton_core_api::session::Session as ApiSession;
 use proton_core_api::status_watcher::StatusWatcher;
-use proton_core_api::store::{Store, TempStore, UserData};
+use proton_core_api::store::{MbpMode, Store, TempStore, UserData};
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
@@ -49,8 +50,8 @@ use proton_event_loop::EventLoopError;
 use proton_event_service::EventService;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
+use proton_task_service::{Spawner, SpawnerRef};
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretVec};
 use serde_json::json;
@@ -294,6 +295,7 @@ impl Context {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         origin: Origin,
+        runtime: runtime::Handle,
         account_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
@@ -349,7 +351,7 @@ impl Context {
             }
         }
 
-        let task_service = TaskService::new()?;
+        let task_service = TaskService::new(runtime)?;
         let background_task_service = BackgroundAwareTaskService::new(task_service);
 
         let mut builder = ContextBuilder::new()
@@ -393,6 +395,11 @@ impl Context {
     #[must_use]
     pub fn as_weak(&self) -> Weak<Self> {
         Weak::clone(&self.this)
+    }
+
+    #[must_use]
+    pub fn spawner(&self) -> SpawnerRef {
+        SpawnerRef::new(self.as_weak())
     }
 
     #[must_use]
@@ -942,7 +949,7 @@ impl Context {
             }));
         }
 
-        Ok(builder.build().await?)
+        Ok(builder.build(self.spawner()).await?)
     }
 
     async fn new_api_session_ext(
@@ -997,17 +1004,18 @@ impl Context {
             .await
             .context("Missing key secret")?;
         let store = {
-            let mut store = TempStore::boxed();
             let account = self
                 .get_account(user_id)
                 .await?
                 .context("Missing account")?;
 
+            let mut store = TempStore::boxed();
             store
                 .set_user_data(UserData {
                     username: account.username.context("Missing username")?,
                     display_name: account.display_name.context("Missing display name")?,
                     primary_addr: account.primary_addr.context("Missing primary address")?,
+                    password_mode: account.password_mode.map_or(MbpMode::One, Into::into),
                     key_secret,
                 })
                 .await?;
@@ -1032,7 +1040,7 @@ impl Context {
             builder = builder.with_status(status);
         }
 
-        let primary_session = builder.build().await?;
+        let primary_session = builder.build(self.spawner()).await?;
 
         let forked_session = primary_session
             .downgrade_to_fork(
@@ -1129,23 +1137,13 @@ impl Context {
     ///
     /// Spawned task is bound to this context, i.e. it will get cancelled if
     /// this context gets cancelled as well.
-    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<F::Output>
     where
-        F: Future<Output: Send> + Send + 'static,
-    {
-        self.spawn_with::<DefaultTaskSpawner, _>(task)
-    }
-
-    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
-    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        S: TaskSpawner,
         F: Future<Output: Send> + Send + 'static,
     {
         let token = self.cancellation_token.clone();
 
-        self.task_service
-            .spawn_cancellable_with::<S, _>(token, task)
+        self.task_service.spawn_cancellable(token, task)
     }
 
     /// Returns a cancellation token that is a child of the the one owned by the context.
@@ -1207,6 +1205,15 @@ impl Context {
             .remote_id
             .clone();
         Ok(session_id)
+    }
+}
+
+impl Spawner for Context {
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
+    where
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(f)
     }
 }
 

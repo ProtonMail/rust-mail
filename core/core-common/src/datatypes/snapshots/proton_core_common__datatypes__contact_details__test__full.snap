@@ -1,6 +1,7 @@
 ---
 source: core/core-common/src/datatypes/contact_details.rs
 expression: get_vcard(full)
+snapshot_kind: text
 ---
 VCARD:
 BEGIN:VCARD
@@ -21,6 +22,7 @@ TZ:I use  btw
 TZ:UTC + 1
 ORG:Proton
 LOGO:data:image/jpeg;base64\somelogo
+LOGO:file://somelogo.jpeg
 TITLE:🦀 Engineer
 TITLE:🧜‍♀️🧜‍♀️
 ANNIVERSARY:20250429
@@ -45,8 +47,8 @@ Gender(String("Male"))
 Languages(["esperanto"])
 TimeZones(["I use \u{f345} btw", "UTC + 1"])
 Titles(["🦀 Engineer", "🧜\u{200d}♀\u{fe0f}🧜\u{200d}♀\u{fe0f}"])
-Logos(["data:image/jpeg;base64\\somelogo"])
-Photos(["data:image/svg+xml;base64\\,some_photo", "https://my_site.me/cool_photo_link.png"])
+Logos([Url { scheme: "data", cannot_be_a_base: true, username: "", password: None, host: None, port: None, path: "image/jpeg;base64\\somelogo", query: None, fragment: None }])
+Photos([Url { scheme: "data", cannot_be_a_base: true, username: "", password: None, host: None, port: None, path: "image/svg+xml;base64\\,some_photo", query: None, fragment: None }, Url { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("my_site.me")), port: None, path: "/cool_photo_link.png", query: None, fragment: None }])
 Organizations(["Proton"])
 Members(["big"])
-Urls([VCardUrl { url: "mail.proton.me", url_type: [] }, VCardUrl { url: "not a url", url_type: [] }])
+Urls([VCardUrl { url: Text("mail.proton.me"), url_type: [] }, VCardUrl { url: Text("not a url"), url_type: [] }])

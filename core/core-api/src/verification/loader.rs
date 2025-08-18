@@ -7,7 +7,7 @@ use futures::TryFutureExt;
 use muon::ProtonRequest;
 use muon::common::Server;
 use muon::{Method, ProtonResponse};
-use tracing::info;
+use proton_task_service::SpawnerRef;
 
 /// The type of a challenge loader result.
 pub type ChallengeLoaderResult<E = ApiServiceError> = Result<ChallengeLoaderResponse, E>;
@@ -80,9 +80,9 @@ pub struct ChallengeLoader {
 
 impl ChallengeLoader {
     /// Create a new `ChallengeLoader`.
-    pub async fn new(cfg: Config) -> Result<Self, BuildError> {
+    pub async fn new(cfg: Config, spawner: SpawnerRef) -> Result<Self, BuildError> {
         Ok(Self {
-            inner: Session::builder().with_config(cfg).build().await?,
+            inner: Session::builder().with_config(cfg).build(spawner).await?,
         })
     }
 
@@ -94,16 +94,58 @@ impl ChallengeLoader {
         query: impl IntoIterator<Item = (String, Option<String>)>,
         header: impl IntoIterator<Item = (String, String)>,
     ) -> Result<ChallengeLoaderResponse, ApiServiceError> {
-        let base = base.as_ref();
-        let path = path.as_ref();
-        let query = query.into_iter().collect::<Vec<_>>();
-        let header = header.into_iter().collect::<Vec<_>>();
+        self.send(
+            Method::GET,
+            base.as_ref().parse()?,
+            path,
+            query,
+            header,
+            None,
+        )
+        .ok_into()
+        .await
+    }
 
-        info!(?base, ?path, ?query);
+    /// Make a `POST` request to the given base/path.
+    pub async fn post(
+        &self,
+        base: impl AsRef<str>,
+        path: impl AsRef<str>,
+        query: impl IntoIterator<Item = (String, Option<String>)>,
+        header: impl IntoIterator<Item = (String, String)>,
+        body: impl Into<Vec<u8>>,
+    ) -> Result<ChallengeLoaderResponse, ApiServiceError> {
+        self.send(
+            Method::POST,
+            base.as_ref().parse()?,
+            path,
+            query,
+            header,
+            Some(body.into()),
+        )
+        .ok_into()
+        .await
+    }
 
-        self.send(Method::GET, base.parse()?, path, query, header)
-            .ok_into()
-            .await
+    /// Make a `PUT` request to the given base/path.
+    pub async fn put(
+        &self,
+        base: impl AsRef<str>,
+        path: impl AsRef<str>,
+        query: impl IntoIterator<Item = (String, Option<String>)>,
+        header: impl IntoIterator<Item = (String, String)>,
+        body: impl Into<Vec<u8>>,
+    ) -> Result<ChallengeLoaderResponse, ApiServiceError> {
+        self.send(
+            Method::PUT,
+            base.as_ref().parse()?,
+            path,
+            query,
+            header,
+            Some(body.into()),
+        )
+        .ok_into()
+        .await
     }
 
     async fn send(
@@ -113,6 +155,7 @@ impl ChallengeLoader {
         path: impl AsRef<str>,
         query: impl IntoIterator<Item = (String, Option<String>)>,
         header: impl IntoIterator<Item = (String, String)>,
+        body: Option<Vec<u8>>,
     ) -> Result<ProtonResponse, ApiServiceError> {
         let mut req = ProtonRequest::new(method, path);
 
@@ -126,6 +169,10 @@ impl ChallengeLoader {
 
         for (k, v) in header {
             req = req.header((k, v));
+        }
+
+        if let Some(body) = body {
+            req = req.body(body);
         }
 
         Ok(self.inner.send(req.server(server)).await?)

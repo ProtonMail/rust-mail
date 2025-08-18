@@ -19,7 +19,6 @@ use anyhow::anyhow;
 use attachment_cache::AttachmentCacheState;
 use builder::MailUserContextBuilder;
 use events::subscriber::MailEventSubscriber;
-use futures::TryFutureExt;
 use initialization::InitializationMediator;
 use proton_account_api::password::PasswordFlow;
 use proton_action_queue::action::ActionGroup;
@@ -41,7 +40,7 @@ use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::Subscriber;
-use proton_task_service::{AsyncTaskResult, TaskSpawner};
+use proton_task_service::Spawner;
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
 use std::any::{Any, TypeId};
@@ -510,9 +509,13 @@ impl MailUserContext {
                 .await
                 .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
 
-            let send_preferences =
-                SendPreferences::new_for_self(&address_keys, encryption_time, settings)
-                    .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
+            let send_preferences = SendPreferences::new_for_self(
+                &address_keys,
+                encryption_time,
+                settings,
+                composer_preference,
+            )
+            .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
 
             return Ok(send_preferences);
         }
@@ -568,18 +571,14 @@ impl MailUserContext {
             .ok_or(KeyHandlingError::NoUserSecret)
             .map_err(CoreContextError::PGPKeyAccess)?;
 
-        PasswordFlow::new(
+        Ok(PasswordFlow::new(
             session,
             user.email,
             user.keys.into(),
             key_secret,
             tfa_mode,
             mbp_mode,
-        )
-        .map_err(|e| {
-            MailContextError::Other(anyhow!("Failed to create password change flow: {e:?}"))
-        })
-        .await
+        ))
     }
 
     pub async fn logout(&self) -> MailContextResult<()> {
@@ -718,20 +717,11 @@ impl MailUserContext {
     }
 
     /// See [`UserContext::spawn()`].
-    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
     {
         self.user_context.spawn(task)
-    }
-
-    /// See [`UserContext::spawn_with()`].
-    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
-    where
-        S: TaskSpawner,
-        F: Future<Output: Send> + Send + 'static,
-    {
-        self.user_context.spawn_with::<S, _>(task)
     }
 
     pub async fn has_unsent_messages(&self) -> Result<bool, MailContextError> {
@@ -740,5 +730,14 @@ impl MailUserContext {
             .typed_actions_count::<crate::actions::draft::Send>()
             .await?
             != 0)
+    }
+}
+
+impl Spawner for MailUserContext {
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
+    where
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(f)
     }
 }

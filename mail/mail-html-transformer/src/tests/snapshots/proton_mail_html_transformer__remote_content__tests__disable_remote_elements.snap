@@ -1,8 +1,20 @@
 ---
 source: mail/mail-html-transformer/src/tests/remote_content.rs
 expression: transformer.to_string()
+snapshot_kind: text
 ---
-<html><head></head><body><section>
+<html><head>
+    <style>body {
+  background: #00d url("") no-repeat fixed;
+}
+
+ul {
+  list-style: url("cid:223232");
+}
+</style>
+</head>
+<body>
+<section>
     <svg id="svigi" width="5cm" height="4cm" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
         <image x="0" y="0" height="50px" width="50px" xlink:href=""></image>
         <image x="0" y="0" height="50px" width="50px" xlink:href=""></image>
@@ -52,5 +64,8 @@ expression: transformer.to_string()
     ZmlsZQAASImVVwdYU8kWnltSSWiBUKSE3kQp0qWE0CIISBVshCSQUGJMCCJ2FlkF
     1y4ioK7oqoiLrgWQtaKudVHs/aGIysq6WLCh8iYF1tXvvfe9831z758z5/ynZO69
     MwDo1PKk0jxUF4B8SYEsITKUNTEtnUXqAgSgD1AwGozk8eVSdnx8DIAydP+nvLkO">
+    <div style="background:url(cid:1234)">css_background_style_embedded</div>
+    <div style="background: url(&quot;&quot;)">css_background_style_remote</div>
 </section>
+
 </body></html>
