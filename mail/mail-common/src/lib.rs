@@ -8,6 +8,7 @@ pub mod ios_share_ext;
 mod mailbox;
 pub mod migration_snooper;
 pub mod models;
+#[cfg(feature = "prefetch")]
 pub mod prefetch;
 pub mod sidebar;
 pub mod snooze;

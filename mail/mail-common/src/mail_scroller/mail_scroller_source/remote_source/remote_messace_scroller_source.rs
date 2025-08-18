@@ -1,12 +1,14 @@
 use super::{MailPaginatorJoinHandle, RemoteSource};
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
+#[cfg(feature = "prefetch")]
+use crate::prefetch::PrefetchJob;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::ReadFilter,
     models::{Message, MessageScrollData},
 };
-use crate::{datatypes::labels::ScrollOrderDir, prefetch::PrefetchJob};
 use anyhow::anyhow;
 use proton_core_api::services::proton::Proton;
 use proton_core_api::{
@@ -40,8 +42,10 @@ impl RemoteSource for MessageScrollData {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let stash = ctx.user_stash().clone();
+        #[cfg(feature = "prefetch")]
         let arc_ctx = ctx.as_arc();
         let handle = ctx.spawn(async move {
+            #[allow(unused_variables)]
             let items = RemoteMessageScrollerSource::sync_first_page(
                 &session,
                 stash,
@@ -54,12 +58,15 @@ impl RemoteSource for MessageScrollData {
             )
             .await?;
 
-            let prefetch_jobs = items
-                .into_iter()
-                .filter_map(|item| Some(PrefetchJob::Message(item.local_id?)))
-                .collect();
+            #[cfg(feature = "prefetch")]
+            {
+                let prefetch_jobs = items
+                    .into_iter()
+                    .filter_map(|item| Some(PrefetchJob::Message(item.local_id?)))
+                    .collect();
 
-            arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
+                arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
+            }
 
             Ok(())
         });

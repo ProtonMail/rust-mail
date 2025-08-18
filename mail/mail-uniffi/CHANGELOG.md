@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- [ET-4328] Ensure labelas and move work correctly offline
+- [ET-4260] Improve alternative routing for human verification
+- Correct resolved host for challenge server
+
+
+## [mail-uniffi-v0.125.6] - 2025-08-18
+
+### Fixes
+
+- [ET-4260] Improve alternative routing for human verification
+
+
+## [mail-uniffi-v0.125.5] - 2025-08-18
+
+### Changed
+
+- [ET-4272] Disable prefetching
+
+### Fixes
+
+- [ET-4273] Avoid `tokio::spawn()`
+- Do not use tx to inspect db migration state
+
+
 ## [mail-uniffi-v0.131.0] - 2025-08-18
 
 ### Fixes
@@ -57,19 +85,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use deref to access boxed data
 
 
-## [mail-uniffi-v0.128.1] - 2025-08-14
-
-### Fixes
-
-- Make sure tokio is in scope
-
-
 ## [mail-uniffi-v0.125.1] - 2025-08-14
 
 ### Fixes
 
 - Address signature not updating
 - Missing body update in `html_for_composer`
+
+
+## [mail-uniffi-v0.128.1] - 2025-08-14
+
+### Fixes
+
+- Make sure tokio is in scope
 
 
 ## [mail-uniffi-v0.128.0] - 2025-08-14
