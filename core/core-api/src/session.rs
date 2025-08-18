@@ -2,7 +2,6 @@ use derive_more::{Debug, Deref};
 use muon::client::InfoProvider;
 use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
 use muon::common::ParseEndpointErr;
-use muon::env::DynEnv;
 use proton_task_service::SpawnerRef;
 use std::borrow::Borrow;
 use std::fmt::Formatter;
@@ -56,10 +55,6 @@ impl EnvIdExt for EnvId {
         impl Env for CustomEnv {
             fn servers(&self, _: &AppVersion) -> Vec<Server> {
                 vec![self.0.clone()]
-            }
-
-            fn pins(&self, _: &Server) -> Option<TlsPinSet> {
-                None
             }
         }
 
@@ -123,40 +118,6 @@ impl Config {
         }
     }
 
-    pub fn without_alternative_routing(mut self) -> Result<Self, BuildError> {
-        struct CustomDirectEnv {
-            servers: Vec<Server>,
-            env: DynEnv,
-        }
-
-        impl CustomDirectEnv {
-            fn new(config: &Config) -> Result<Self, BuildError> {
-                let env = config.env_id.clone().build();
-                let version = config.app_version.parse()?;
-                let servers = env
-                    .servers(&version)
-                    .into_iter()
-                    .filter(|server| server.host().is_direct())
-                    .collect();
-
-                Ok(Self { servers, env })
-            }
-        }
-
-        impl Env for CustomDirectEnv {
-            fn servers(&self, _: &AppVersion) -> Vec<Server> {
-                self.servers.clone()
-            }
-
-            fn pins(&self, server: &Server) -> Option<TlsPinSet> {
-                self.env.pins(server)
-            }
-        }
-
-        self.env_id = EnvId::new_custom(CustomDirectEnv::new(&self)?);
-        Ok(self)
-    }
-
     /// Extracts the client id from the app version, which usually looks like "platform-app@version", eg.: android-mail@10.9
     #[must_use]
     pub fn get_client_id(&self) -> &str {
@@ -176,13 +137,26 @@ impl Default for Config {
 }
 
 #[must_use]
-#[derive(Default)]
 pub struct Builder {
     config: Config,
     store: Option<BoxStore>,
     status: Option<StatusWatcher>,
     notifier: Option<DynChallengeNotifier>,
     info_provider: Option<Arc<dyn InfoProvider>>,
+    allow_doh: bool,
+}
+
+impl Default for Builder {
+    fn default() -> Self {
+        Self {
+            config: Config::default(),
+            store: None,
+            status: None,
+            notifier: None,
+            info_provider: None,
+            allow_doh: true,
+        }
+    }
 }
 
 impl Builder {
@@ -226,11 +200,6 @@ impl Builder {
         self
     }
 
-    pub fn with_custom_env(mut self, env: impl Env) -> Self {
-        self.config.env_id = EnvId::new_custom(env);
-        self
-    }
-
     pub fn with_store(mut self, store: impl Store) -> Self {
         self.store = Some(Box::new(store));
         self
@@ -251,6 +220,11 @@ impl Builder {
         self
     }
 
+    pub fn with_allow_doh(mut self, value: bool) -> Self {
+        self.allow_doh = value;
+        self
+    }
+
     pub async fn build(self, spawner: SpawnerRef) -> Result<Session, BuildError> {
         init_server_crypto_clock();
 
@@ -259,7 +233,16 @@ impl Builder {
         let notifier = self.notifier.unwrap_or_else(FailNotifier::arced);
         let config = Arc::new(self.config);
         let store = Arc::new(RwLock::new(store));
-        let client = proton::build(&config, &store, &status, notifier, self.info_provider).await?;
+
+        let client = proton::build(
+            &config,
+            &store,
+            &status,
+            notifier,
+            self.info_provider,
+            self.allow_doh,
+        )
+        .await?;
 
         status.initialize(client.clone());
 
