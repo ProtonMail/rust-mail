@@ -83,3 +83,16 @@ impl Prefetch {
         Ok(())
     }
 }
+
+/// App origin only
+pub struct PrefetchService {
+    pub notify: PrefetchNotify,
+}
+
+impl PrefetchService {
+    pub fn new() -> Self {
+        Self {
+            notify: OnceLock::new(),
+        }
+    }
+}

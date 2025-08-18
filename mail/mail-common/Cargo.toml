@@ -26,6 +26,7 @@ sql = [
   "proton-mail-api/mocks",
 ]
 proton_mail_error_log = []
+prefetch = []
 
 [dependencies]
 anyhow = { workspace = true }

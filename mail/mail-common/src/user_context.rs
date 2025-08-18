@@ -12,6 +12,7 @@ use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
+#[cfg(feature = "prefetch")]
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
 use crate::rsvp::RsvpService;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
@@ -49,7 +50,7 @@ use std::future::Future;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use std::sync::{Arc, OnceLock, Weak};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::join;
 use tokio::task::JoinHandle;
@@ -60,6 +61,8 @@ const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 2;
 
 const DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE: usize = 2;
 const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
+
+#[cfg(feature = "prefetch")]
 const DEFAULT_PREFETCH_BOUND: usize = 10;
 
 /// App origin only
@@ -150,19 +153,6 @@ impl QueuesService {
     }
 }
 
-/// App origin only
-pub struct PrefetchService {
-    pub notify: PrefetchNotify,
-}
-
-impl PrefetchService {
-    pub fn new() -> Self {
-        Self {
-            notify: OnceLock::new(),
-        }
-    }
-}
-
 pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
@@ -186,41 +176,47 @@ impl MailUserContext {
             .subscribe_to_online();
 
         builder = match origin {
-            Origin::App => builder
-                .with_service(SendQueueExecutorPool {
-                    pool: QueueAutoExecutorPool::new(
-                        user_context.queue(),
-                        &SEND_ACTION_GROUP,
-                        NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
-                        online.clone(),
-                        true,
-                        user_context.as_ref(),
-                    ),
-                })
-                .with_service(DefaultQueueExecutor {
-                    default: QueueAutoExecutorPool::new(
-                        user_context.queue(),
-                        &ActionGroup::default(),
-                        NonZeroUsize::new(DEFAULT_DEFAULT_QUEUE_POOL_SIZE).unwrap(),
-                        online.clone(),
-                        true,
-                        user_context.as_ref(),
-                    ),
-                    prefetch_rollback: QueueAutoExecutorPool::new(
-                        user_context.queue(),
-                        &PREFETCH_ROLLBACK_ACTION_GROUP,
-                        NonZeroUsize::new(DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE).unwrap(),
-                        online.clone(),
-                        true,
-                        user_context.as_ref(),
-                    ),
-                })
-                .with_cyclic_service(QueuesService::new)
-                .with_service(InitializationMediator::new(
-                    mail_context.core_context().task_service().task_service(),
-                ))
-                .with_service(PrefetchService::new())
-                .with_service(RsvpService::new(user_context.stash())),
+            Origin::App => {
+                let builder = builder
+                    .with_service(SendQueueExecutorPool {
+                        pool: QueueAutoExecutorPool::new(
+                            user_context.queue(),
+                            &SEND_ACTION_GROUP,
+                            NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
+                            online.clone(),
+                            true,
+                            user_context.as_ref(),
+                        ),
+                    })
+                    .with_service(DefaultQueueExecutor {
+                        default: QueueAutoExecutorPool::new(
+                            user_context.queue(),
+                            &ActionGroup::default(),
+                            NonZeroUsize::new(DEFAULT_DEFAULT_QUEUE_POOL_SIZE).unwrap(),
+                            online.clone(),
+                            true,
+                            user_context.as_ref(),
+                        ),
+                        prefetch_rollback: QueueAutoExecutorPool::new(
+                            user_context.queue(),
+                            &PREFETCH_ROLLBACK_ACTION_GROUP,
+                            NonZeroUsize::new(DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE).unwrap(),
+                            online.clone(),
+                            true,
+                            user_context.as_ref(),
+                        ),
+                    })
+                    .with_cyclic_service(QueuesService::new)
+                    .with_service(InitializationMediator::new(
+                        mail_context.core_context().task_service().task_service(),
+                    ))
+                    .with_service(RsvpService::new(user_context.stash()));
+
+                #[cfg(feature = "prefetch")]
+                let builder = { builder.with_service(PrefetchService::new()) };
+
+                builder
+            }
 
             Origin::ShareExt => builder
                 .with_service(SendQueueExecutorPool {
@@ -663,6 +659,7 @@ impl MailUserContext {
         MailEventSubscriber::new(Weak::clone(&self.this))
     }
 
+    #[cfg(feature = "prefetch")]
     pub async fn queue_prefetch_jobs(
         self: &Arc<Self>,
         jobs: Vec<PrefetchJob>,
