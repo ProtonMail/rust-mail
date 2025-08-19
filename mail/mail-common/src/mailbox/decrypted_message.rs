@@ -4,9 +4,10 @@
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::theme::MailTheme;
-use crate::datatypes::{Disposition, LocalAttachmentId, MimeType, ParsedHeaderValue};
+use crate::datatypes::{Disposition, LocalAttachmentId, ParsedHeaderValue};
 use crate::models::{
     Attachment, AttachmentData, AttachmentType, MailSettings, Message, MessageBodyMetadata,
+    MessageMimeType,
 };
 use crate::rsvp::RsvpEventId;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
@@ -160,10 +161,10 @@ impl From<TransformOptsResolved> for TransformOpts {
 
 type InFlightAttachments = HashMap<LocalAttachmentId, JoinHandle<MailContextResult<Vec<u8>>>>;
 
-/// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessageBody {
     pub body: String,
     pub metadata: MessageBodyMetadata,
+    pub mime_type: MessageMimeType,
     pub pgp_subject: Option<String>,
     pub address_id: AddressId,
     pub decryption_error: Option<String>,
@@ -180,11 +181,10 @@ pub struct DecryptedMessageBody {
 }
 
 impl DecryptedMessageBody {
-    /// Create a new instance that immediately starts to pre-download all inline attachments for this
-    /// message.
     pub fn new_prefetching(
         body: String,
         metadata: MessageBodyMetadata,
+        mime_type: MessageMimeType,
         pgp_subject: Option<String>,
         address_id: AddressId,
         decryption_error: Option<String>,
@@ -215,6 +215,7 @@ impl DecryptedMessageBody {
         Self {
             body,
             metadata,
+            mime_type,
             pgp_subject,
             address_id,
             in_flight: Mutex::new(in_flight),
@@ -222,11 +223,10 @@ impl DecryptedMessageBody {
         }
     }
 
-    /// Create a new instance which does not start to pre-download all attachments for this
-    /// message.
     pub fn new_without_prefetching(
         body: String,
         metadata: MessageBodyMetadata,
+        mime_type: MessageMimeType,
         pgp_subject: Option<String>,
         address_id: AddressId,
         decryption_error: Option<String>,
@@ -234,6 +234,7 @@ impl DecryptedMessageBody {
         Self {
             body,
             metadata,
+            mime_type,
             pgp_subject,
             address_id,
             in_flight: Default::default(),
@@ -244,10 +245,11 @@ impl DecryptedMessageBody {
     pub fn not_decryptable(
         body: String,
         metadata: MessageBodyMetadata,
+        mime_type: MessageMimeType,
         address_id: AddressId,
         error: String,
     ) -> Self {
-        Self::new_without_prefetching(body, metadata, None, address_id, Some(error))
+        Self::new_without_prefetching(body, metadata, mime_type, None, address_id, Some(error))
     }
 
     /// Load a remote image (potentially proxied) or embedded attachment in the email body.
@@ -408,7 +410,7 @@ impl DecryptedMessageBody {
             &[],
             &self.body,
             resolved,
-            self.metadata.mime_type,
+            self.mime_type,
             banners,
         )
     }
@@ -523,7 +525,7 @@ pub fn transform_html(
     trusted_senders: &[&str],
     html: &str,
     opts: TransformOptsResolved,
-    mime_type: MimeType,
+    mime_type: MessageMimeType,
 ) -> BodyOutput {
     transform_html_with_banners(sender, trusted_senders, html, opts, mime_type, vec![])
 }
@@ -537,7 +539,7 @@ pub fn transform_html_with_banners(
     trusted_senders: &[&str],
     html: &str,
     opts: TransformOptsResolved,
-    mime_type: MimeType,
+    mime_type: MessageMimeType,
     mut banners: Vec<MessageBanner>,
 ) -> BodyOutput {
     trace!(
@@ -558,7 +560,7 @@ mime_type: {mime_type:?}"
 
     // If the message is text/plain we need to apply some extra transforms to it like
     // preserving whitespaces and adding links.
-    let mut transformer = if mime_type == MimeType::TextPlain {
+    let mut transformer = if mime_type == MessageMimeType::TextPlain {
         let mut transformer = Transformer::new_text_plain(html);
         let tok = transformer.add_noreferrer();
         transformer.insert_links(tok);

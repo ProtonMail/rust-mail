@@ -27,7 +27,8 @@ use proton_mail_common::draft::{
 };
 use proton_mail_common::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
-    DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata, RollbackItem,
+    DraftSendResult, DraftSendResultOrigin, Message, MessageBody, MessageBodyMetadata,
+    RollbackItem,
 };
 use proton_mail_common::test_utils::message_body::*;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
@@ -1566,7 +1567,9 @@ async fn open_draft_detects_sender_alias() {
         .tx(async |tx| {
             message.save(tx).await.unwrap();
             message_body_metadata.save(tx).await.unwrap();
-            Message::store_decrypted_message_body(message.id(), "Hello world".into(), None, tx)
+
+            MessageBody::html("Hello world")
+                .store(message.id(), tx)
                 .await
         })
         .await

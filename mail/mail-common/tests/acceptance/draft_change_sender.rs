@@ -7,7 +7,7 @@ use proton_mail_common::actions::draft::AttachmentRemove;
 use proton_mail_common::datatypes::{MessageFlags, ParsedHeaders};
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::models::{
-    DraftAttachmentMetadata, DraftAttachmentUploadState, Message, MessageBodyMetadata,
+    DraftAttachmentMetadata, DraftAttachmentUploadState, Message, MessageBody, MessageBodyMetadata,
 };
 use proton_mail_common::test_utils::message_body::{
     TEST_USER_ID, generate_new_api_address, message_body_test_user_secret,
@@ -201,7 +201,9 @@ async fn change_sender_address_with_alias() {
         .tx(async |tx| {
             message.save(tx).await.unwrap();
             message_body_metadata.save(tx).await.unwrap();
-            Message::store_decrypted_message_body(message.id(), "Hello world".into(), None, tx)
+
+            MessageBody::html("Hello world")
+                .store(message.id(), tx)
                 .await
         })
         .await

@@ -4,16 +4,14 @@ use crate::actions::draft::{
     Save, UndoSend,
 };
 use crate::datatypes::attachment::ContentId;
-use crate::datatypes::{
-    Disposition, LocalAttachmentId, LocalConversationId, LocalMessageId, MimeType,
-};
+use crate::datatypes::{Disposition, LocalAttachmentId, LocalConversationId, LocalMessageId};
 use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
 use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
 use crate::draft::compose::{
     DraftAddressChangeOutput, DraftAddressChangeRequest, DraftAddressValidationResult,
     PM_SIGNATURE_DIV_CLASS, draft_sender_addresses, encrypt_draft_body,
     find_default_sender_address, get_alias_component, get_full_signature, inject_dark_mode,
-    maybe_sanitize, patch_draft_with_reply_mode, prepare_html_reply, prepare_plain_text_reply,
+    maybe_sanitize, patch_draft_with_reply_mode, prepare_html_reply, prepare_text_reply,
     resolve_sender_alias, validate_sender_address,
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
@@ -25,7 +23,7 @@ use crate::draft::{
 use crate::models::{
     Attachment, AttachmentData, AttachmentType, CustomSettings, DraftAttachmentMetadata,
     DraftAttachmentUploadState, DraftMetadata, DraftSendResult, DraftSendResultOrigin,
-    MailSettings, Message, MetadataId,
+    MailSettings, Message, MessageMimeType, MetadataId,
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::Context;
@@ -79,7 +77,7 @@ pub struct Draft {
     pub send_result: Option<DraftSendResult>,
     #[debug(skip)]
     body: String,
-    mime_type: MimeType,
+    mime_type: MessageMimeType,
 
     /// This is only present when we detect the choice of address in the draft
     /// does not satisfy some requirements that would prevent the message from being sent.
@@ -270,7 +268,7 @@ impl Draft {
             subject: message.subject,
             send_result,
             body: decrypted.body,
-            mime_type: decrypted.metadata.mime_type,
+            mime_type: decrypted.mime_type,
             address_validation_result: None,
             sender_alias,
         };
@@ -378,11 +376,15 @@ impl Draft {
         mail_settings: &MailSettings,
         custom_settings: &CustomSettings,
     ) -> Self {
+        let mime_type = MessageMimeType::from_api(mail_settings.draft_mime_type, || {
+            unreachable!("draftMimeType cannot be set to multipart/mixed")
+        });
+
         let body = compose::get_full_signature(
             address,
             mail_settings,
             custom_settings,
-            mail_settings.draft_mime_type,
+            mime_type,
             Platform::current(),
         );
 
@@ -395,7 +397,7 @@ impl Draft {
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
             send_result: None,
-            mime_type: mail_settings.draft_mime_type,
+            mime_type,
             body,
             address_validation_result: None,
             sender_alias: None,
@@ -581,13 +583,7 @@ impl Draft {
         use_utc: bool,
         address_validation_result: Option<DraftAddressValidationResult>,
     ) -> (Self, Vec<Attachment>) {
-        let mime_type = if mail_settings.draft_mime_type == MimeType::TextHtml
-            || source_message_body.metadata.mime_type == MimeType::TextHtml
-        {
-            MimeType::TextHtml
-        } else {
-            MimeType::TextPlain
-        };
+        let mime_type = source_message_body.mime_type;
 
         let mut body = get_full_signature(
             address,
@@ -597,24 +593,24 @@ impl Draft {
             Platform::current(),
         );
 
-        // If the message we are replying to is HTML we should also generate an HTML body for
-        // replying even if the user has selected plain text as the default editing mode.
-        if mime_type == MimeType::TextHtml {
-            prepare_html_reply(
-                &mut body,
-                source_message,
-                &source_message_body.body,
-                use_utc,
-            );
-        } else {
-            prepare_plain_text_reply(
-                &mut body,
-                source_message,
-                &source_message_body.body,
-                source_message_body.metadata.mime_type,
-                use_utc,
-            );
-        };
+        match mime_type {
+            MessageMimeType::TextHtml => {
+                prepare_html_reply(
+                    &mut body,
+                    source_message,
+                    &source_message_body.body,
+                    use_utc,
+                );
+            }
+            MessageMimeType::TextPlain => {
+                prepare_text_reply(
+                    &mut body,
+                    source_message,
+                    &source_message_body.body,
+                    use_utc,
+                );
+            }
+        }
 
         let mut attachments = std::mem::take(&mut source_message_body.metadata.attachments);
 
@@ -1080,7 +1076,6 @@ impl Draft {
         editor_id: String,
     ) -> String {
         let color_mode = theme_opts.color_mode();
-
         let mime_type = self.mime_type();
 
         let injection = inject_dark_mode(
@@ -1113,11 +1108,11 @@ impl Draft {
         DraftAttachmentMetadata::attachment_for_draft(self.metadata_id, tether).await
     }
 
-    pub fn mime_type(&self) -> MimeType {
+    pub fn mime_type(&self) -> MessageMimeType {
         self.mime_type
     }
 
-    pub fn set_mime_type(&mut self, mime_type: MimeType) {
+    pub fn set_mime_type(&mut self, mime_type: MessageMimeType) {
         self.mime_type = mime_type;
     }
 
@@ -1163,7 +1158,7 @@ impl Draft {
                 self.sender = output.sender;
                 // we can only replace the signature if it wasn't empty and the original signature
                 // remains intact.
-                if self.mime_type == MimeType::TextHtml {
+                if self.mime_type == MessageMimeType::TextHtml {
                     let transformer = Transformer::new(self.body());
                     if let Err(e) =
                         transformer.replace_inner_div(PM_SIGNATURE_DIV_CLASS, &output.new_signature)

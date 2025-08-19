@@ -1,4 +1,4 @@
-use crate::datatypes::{MessageRecipient, MessageSender, MimeType, ParsedHeaderValue};
+use crate::datatypes::{MessageRecipient, MessageSender, ParsedHeaderValue};
 use crate::draft::recipients::{ContactGroupResolver, MaybeEmptyString, RecipientList};
 use crate::draft::{
     Error, ReplyMode, SaveError, SenderAddressChangeError, draft_v1, draft_v1::AttachmentRemovalId,
@@ -6,7 +6,7 @@ use crate::draft::{
 };
 use crate::models::{
     Attachment, CustomSettings, DraftAttachmentMetadata, MailSettings, Message,
-    MessageBodyMetadata, MetadataId,
+    MessageBodyMetadata, MessageMimeType, MetadataId,
 };
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::DateTime;
@@ -27,7 +27,6 @@ use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use stash::orm::Model as _;
 use stash::params;
 use stash::stash::{StashError, Tether};
-use std::borrow::Cow;
 use std::fmt::Display;
 use std::fmt::Write as _;
 use tracing::error;
@@ -126,13 +125,12 @@ pub(super) fn get_full_signature(
     address: &Address,
     mail_settings: &MailSettings,
     custom_settings: &CustomSettings,
-    mime_type: MimeType,
+    mime_type: MessageMimeType,
     platform: Platform,
 ) -> String {
-    let line_break = if mime_type == MimeType::TextHtml {
-        HTML_LINE_BREAK
-    } else {
-        "\n"
+    let line_break = match mime_type {
+        MessageMimeType::TextHtml => HTML_LINE_BREAK,
+        MessageMimeType::TextPlain => TEXT_LINE_BREAK,
     };
 
     let mut signature = String::new();
@@ -161,7 +159,7 @@ pub(super) fn get_full_signature(
             prepare_signature(&address.signature, mime_type)
         );
 
-        if mime_type == MimeType::TextHtml {
+        if mime_type == MessageMimeType::TextHtml {
             // Wrap signature in a special `div` block so that we can replace
             // the signature if user changes the `from` address
             signature = format!("<div class=\"{PM_SIGNATURE_DIV_CLASS}\">{signature}</div>");
@@ -193,8 +191,8 @@ pub(super) fn get_full_signature(
     }
 }
 
-fn prepare_signature(signature: &str, mime_type: MimeType) -> String {
-    if mime_type == MimeType::TextPlain {
+fn prepare_signature(signature: &str, mime_type: MessageMimeType) -> String {
+    if mime_type == MessageMimeType::TextPlain {
         let sign = Transformer::new(signature)
             .to_plain_text(Html2TextOptions {
                 decorate_links: false,
@@ -316,20 +314,12 @@ pub(super) fn prepare_html_reply(
     output.push_str(CLOSE_QUOTE);
 }
 
-pub(super) fn prepare_plain_text_reply(
+pub(super) fn prepare_text_reply(
     output: &mut String,
     message: &Message,
     original_body: &str,
-    original_body_mime_type: MimeType,
     use_utc: bool,
 ) {
-    let mut original_body = Cow::Borrowed(original_body);
-
-    // Convert body to text if source is html
-    if original_body_mime_type == MimeType::TextHtml {
-        original_body = Cow::Owned(html_to_text(original_body.as_ref()));
-    }
-
     let sender_reply = generate_sender_reply(
         &message.sender,
         format_date_from_timestamp(message.time, use_utc),
@@ -343,7 +333,7 @@ pub(super) fn prepare_plain_text_reply(
     output.push('\n');
     output.push_str(&sender_reply);
     output.push('\n');
-    output.push_str(&original_body);
+    output.push_str(original_body);
 }
 
 /// Converts htm to plain text. If an error occurs the original messages
@@ -386,13 +376,13 @@ pub struct DarkModeInjection {
 ///   In case of composer, it is ID pointing to custom editor that wraps the message.
 ///   Used to create a selector with bigger specificity than any provided by the sender.
 pub fn inject_dark_mode(
-    mime_type: MimeType,
+    mime_type: MessageMimeType,
     body: &str,
     color_mode: ColorMode,
     capabilities: BrowserCapabilities,
     root_selector: String,
 ) -> DarkModeInjection {
-    if mime_type == MimeType::TextPlain {
+    if mime_type == MessageMimeType::TextPlain {
         return DarkModeInjection {
             head: dark_mode_for_plaintext(color_mode, capabilities, IncludeFullStaticCss::Yes)
                 .to_owned(),
@@ -417,19 +407,20 @@ pub fn inject_dark_mode(
     }
 }
 
-/// Only html content is sanitized, plain text is ignored.
-pub fn maybe_sanitize(mime_type: MimeType, body: &str) -> String {
-    // There is no point in sanitizing content that is not HTML.
-    if mime_type != MimeType::TextHtml {
-        return body.to_owned();
-    }
-    let mut transformer = Transformer::new(body);
-    transformer.add_noreferrer();
-    transformer.strip_utm();
-    transformer.strip_whitelist();
-    transformer.revert_dark_mode_in_inline_attributes();
+pub fn maybe_sanitize(mime_type: MessageMimeType, body: &str) -> String {
+    match mime_type {
+        MessageMimeType::TextHtml => {
+            let mut transformer = Transformer::new(body);
 
-    transformer.to_string()
+            transformer.add_noreferrer();
+            transformer.strip_utm();
+            transformer.strip_whitelist();
+            transformer.revert_dark_mode_in_inline_attributes();
+            transformer.to_string()
+        }
+
+        MessageMimeType::TextPlain => body.to_owned(),
+    }
 }
 
 /// Used only when creating a draft from existing message.
@@ -497,6 +488,7 @@ pub const BEGIN_BLOCKQUOTE: &str = "<blockquote class=\"protonmail_quote\">";
 pub const CLOSE_QUOTE: &str = "</div>";
 pub const CLOSE_BLOCKQUOTE: &str = "</blockquote>";
 pub const HTML_LINE_BREAK: &str = "<br>";
+pub const TEXT_LINE_BREAK: &str = "\n";
 
 pub const PM_SIGNATURE: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
 
@@ -516,7 +508,7 @@ pub struct DraftAddressChangeRequest {
     current_sender_email: String,
     current_address_id: AddressId,
     metadata_id: MetadataId,
-    mime_type: MimeType,
+    mime_type: MessageMimeType,
 }
 
 // Note: this type is currently separate from the draft implementation so that it can be executed
@@ -539,7 +531,7 @@ impl DraftAddressChangeRequest {
         metadata_id: MetadataId,
         sender_email: String,
         current_address_id: AddressId,
-        mime_type: MimeType,
+        mime_type: MessageMimeType,
     ) -> Self {
         Self {
             current_sender_email: sender_email,

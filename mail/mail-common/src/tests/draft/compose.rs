@@ -2,6 +2,7 @@ pub use super::*;
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::MessageFlags;
+use crate::datatypes::MimeType;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
@@ -81,7 +82,13 @@ async fn reply_all_draft_message_creation() {
 
 #[tokio::test]
 async fn check_reply_signature_html() {
-    let (draft, _, _) = create_reply_with(ReplyMode::All, MimeType::TextHtml).await;
+    let (draft, _, _) = create_reply_with(
+        ReplyMode::All,
+        MimeType::TextHtml,
+        MessageMimeType::TextHtml,
+    )
+    .await;
+
     assert_snapshot!(draft.body());
 }
 
@@ -90,21 +97,30 @@ async fn check_reply_signature_text() {
     let mut source_body_metadata = existing_message_body_metadata();
     source_body_metadata.mime_type = MimeType::TextPlain;
     let source_body = "Hello World".to_owned();
+
     let (draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::All,
         MimeType::TextPlain,
-        source_body_metadata,
         source_body,
+        source_body_metadata,
+        MessageMimeType::TextPlain,
     )
     .await;
+
     assert_snapshot!(draft.body());
 }
 
 #[tokio::test]
 async fn check_reply_from_html_with_text_as_default() {
-    let (draft, _, _) = create_reply_with(ReplyMode::All, MimeType::TextPlain).await;
+    let (draft, _, _) = create_reply_with(
+        ReplyMode::All,
+        MimeType::TextPlain,
+        MessageMimeType::TextHtml,
+    )
+    .await;
+
     assert_snapshot!(draft.body());
-    assert_eq!(draft.mime_type(), MimeType::TextHtml);
+    assert_eq!(draft.mime_type(), MessageMimeType::TextHtml);
 }
 
 #[tokio::test]
@@ -116,13 +132,16 @@ async fn check_reply_simple_login_alias() {
     source_body_metadata.reply_to.address = expected_email.clone().into();
     let source_body = "Hello World".to_owned();
     let expected_email = source_body_metadata.reply_to.address.clone();
+
     let (draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::Sender,
         MimeType::TextPlain,
-        source_body_metadata,
         source_body,
+        source_body_metadata,
+        MessageMimeType::TextPlain,
     )
     .await;
+
     assert!(draft.to_list.contains_email(expected_email.as_ref()));
     assert!(
         !draft
@@ -140,13 +159,16 @@ async fn check_reply_all_simple_login_alias() {
     source_body_metadata.reply_tos[0].address = expected_email.clone().into();
     let source_body = "Hello World".to_owned();
     let expected_email = source_body_metadata.reply_tos[0].address.clone();
+
     let (draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::All,
         MimeType::TextPlain,
-        source_body_metadata,
         source_body,
+        source_body_metadata,
+        MessageMimeType::TextPlain,
     )
     .await;
+
     assert!(draft.to_list.contains_email(expected_email.as_ref()));
     assert!(
         !draft
@@ -158,26 +180,32 @@ async fn check_reply_all_simple_login_alias() {
 #[tokio::test]
 async fn reply_to_email_alias() {
     let mut source_body_metadata = existing_message_body_metadata();
+
     source_body_metadata
         .parsed_headers
         .headers
         .insert("X-Original-To".to_owned(), TEST_EMAIL_ALIAS.into());
+
     let source_body = "Hello World".to_owned();
     let mut source_message = existing_message();
+
     source_message.to_list.push(MessageRecipient {
         address: TEST_EMAIL_ALIAS.to_owned().into(),
         is_proton: false,
         name: TEST_EMAIL_DISPLAY_NAME.to_owned().into(),
         group: Default::default(),
     });
+
     let (draft, _, _) = create_reply_with_mime_and_body_and_message(
         ReplyMode::Sender,
         MimeType::TextPlain,
-        source_body_metadata,
         source_body,
+        source_body_metadata,
+        MessageMimeType::TextPlain,
         source_message,
     )
     .await;
+
     assert!(!draft.to_list.contains_email(TEST_EMAIL_ALIAS));
     assert_eq!(draft.sender, TEST_EMAIL_ALIAS);
 }
@@ -211,8 +239,9 @@ async fn reply_strips_duplicate_sender_emails_and_aliases() {
     let (draft, _, _) = create_reply_with_mime_and_body_and_message(
         ReplyMode::All,
         MimeType::TextPlain,
-        source_body_metadata,
         source_body,
+        source_body_metadata,
+        MessageMimeType::TextPlain,
         source_message,
     )
     .await;
@@ -247,7 +276,7 @@ mod signatures {
         given_address: fn() -> Address,
         given_mail_settings: fn() -> MailSettings,
         given_custom_settings: fn() -> CustomSettings,
-        given_mime_type: MimeType,
+        given_mime_type: MessageMimeType,
         expected_desktop: &'static str,
         expected_mobile: &'static str,
     }
@@ -260,7 +289,7 @@ mod signatures {
                 .with_address_signature_enabled(false)
                 .with_mobile_signature_enabled(false)
         },
-        given_mime_type: MimeType::TextPlain,
+        given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "",
         expected_mobile: "",
     };
@@ -270,7 +299,7 @@ mod signatures {
         given_address: address,
         given_mail_settings: mail_settings,
         given_custom_settings: custom_settings,
-        given_mime_type: MimeType::TextPlain,
+        given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "",
         expected_mobile: "\n\nSent with Proton Mail secure email.",
     };
@@ -283,7 +312,7 @@ mod signatures {
                 .with_address_signature_enabled(true)
                 .with_mobile_signature_enabled(false)
         },
-        given_mime_type: MimeType::TextPlain,
+        given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "\n\ncheers, jerry",
         expected_mobile: "\n\ncheers, jerry",
     };
@@ -307,7 +336,7 @@ mod signatures {
                 .with_mobile_signature("sent from my iandroid")
                 .with_mobile_signature_enabled(true)
         },
-        given_mime_type: MimeType::TextPlain,
+        given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "",
         expected_mobile: "\n\nsent from my iandroid",
     };
@@ -332,7 +361,7 @@ mod signatures {
                 .with_mobile_signature("sent from my iandroid")
                 .with_mobile_signature_enabled(true)
         },
-        given_mime_type: MimeType::TextPlain,
+        given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "\n\ncheers, jerry",
         expected_mobile: "\n\ncheers, jerry\n\nsent from my iandroid",
     };
@@ -353,7 +382,7 @@ mod signatures {
                 .with_mobile_signature("sent from <i>my</i> iandroid")
                 .with_mobile_signature_enabled(true)
         },
-        given_mime_type: MimeType::TextHtml,
+        given_mime_type: MessageMimeType::TextHtml,
         expected_desktop: "<br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div>",
         expected_mobile: "<br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div><br><br>sent from <i>my</i> iandroid",
     };
@@ -367,7 +396,7 @@ mod signatures {
                 .with_mobile_signature("sent from <i>my</i> iandroid")
                 .with_mobile_signature_enabled(true)
         },
-        given_mime_type: MimeType::TextPlain,
+        given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "\n\ncheers, jerry",
         expected_mobile: "\n\ncheers, jerry\n\nsent from my iandroid",
     };
@@ -381,7 +410,7 @@ mod signatures {
                 .with_address_signature_enabled(false)
                 .with_mobile_signature_enabled(false)
         },
-        given_mime_type: MimeType::TextPlain,
+        given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "",
         expected_mobile: "",
     };
@@ -429,7 +458,7 @@ fn html_signature_converted_to_plain_text() {
         &address,
         &mail_settings,
         &custom_settings,
-        MimeType::TextPlain,
+        MessageMimeType::TextPlain,
         Platform::Desktop,
     );
 
@@ -438,12 +467,12 @@ fn html_signature_converted_to_plain_text() {
 
 #[tokio::test]
 async fn sanitize_draft_reply_html() {
-    // Draft replies need to be sanitized.
     let (mut draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::All,
         MimeType::TextHtml,
-        sanitize_message_body_metadata(MimeType::TextHtml),
         DRAFT_BODY_HTML.to_owned(),
+        sanitize_message_body_metadata(MimeType::TextHtml),
+        MessageMimeType::TextHtml,
     )
     .await;
 
@@ -452,9 +481,8 @@ async fn sanitize_draft_reply_html() {
     let sanitized = draft.body().to_owned();
 
     draft.sanitize_body();
-    assert_snapshot!(draft.body());
 
-    // This should be identical before the save.
+    assert_snapshot!(draft.body());
     assert_eq!(sanitized, draft.body());
 }
 
@@ -475,11 +503,13 @@ async fn reply_to_sent_message_should_use_to_list_rather_than_sender(reply_mode:
         group: Default::default(),
     });
     let source_body = "Hello World".to_owned();
+
     let (draft, _, _) = create_reply_with_mime_and_body_and_message(
         reply_mode,
         MimeType::TextPlain,
-        source_body_metadata,
         source_body,
+        source_body_metadata,
+        MessageMimeType::TextHtml,
         message,
     )
     .await;
@@ -588,32 +618,42 @@ MwDo1PKk0jxUF4B8SYEsITKUNTEtnUXqAgSgD1AwGozk8eVSdnx8DIAydP+nvLkO"
 "##;
 
 async fn create_reply(reply_mode: ReplyMode) -> (Draft, Message, Vec<Attachment>) {
-    create_reply_with(reply_mode, MimeType::default()).await
+    create_reply_with(reply_mode, MimeType::TextHtml, MessageMimeType::TextHtml).await
 }
 
 async fn create_reply_with(
     reply_mode: ReplyMode,
-    mime_type: MimeType,
+    draft_mime_type: MimeType,
+    source_body_mime_type: MessageMimeType,
 ) -> (Draft, Message, Vec<Attachment>) {
     let source_body_metadata = existing_message_body_metadata();
     let source_body = "Hello World".to_owned();
 
-    create_reply_with_mime_and_body(reply_mode, mime_type, source_body_metadata, source_body).await
+    create_reply_with_mime_and_body(
+        reply_mode,
+        draft_mime_type,
+        source_body,
+        source_body_metadata,
+        source_body_mime_type,
+    )
+    .await
 }
 
 async fn create_reply_with_mime_and_body(
     reply_mode: ReplyMode,
-    mime_type: MimeType,
-    source_body_metadata: MessageBodyMetadata,
+    draft_mime_type: MimeType,
     source_body: String,
+    source_body_metadata: MessageBodyMetadata,
+    source_body_mime_type: MessageMimeType,
 ) -> (Draft, Message, Vec<Attachment>) {
     let source_message = existing_message();
 
     create_reply_with_mime_and_body_and_message(
         reply_mode,
-        mime_type,
-        source_body_metadata,
+        draft_mime_type,
         source_body,
+        source_body_metadata,
+        source_body_mime_type,
         source_message,
     )
     .await
@@ -621,15 +661,16 @@ async fn create_reply_with_mime_and_body(
 
 async fn create_reply_with_mime_and_body_and_message(
     reply_mode: ReplyMode,
-    mime_type: MimeType,
-    source_body_metadata: MessageBodyMetadata,
+    draft_mime_type: MimeType,
     source_body: String,
+    source_body_metadata: MessageBodyMetadata,
+    source_body_mime_type: MessageMimeType,
     source_message: Message,
 ) -> (Draft, Message, Vec<Attachment>) {
     let address = address();
 
     let mail_settings = MailSettings {
-        draft_mime_type: mime_type,
+        draft_mime_type,
         ..MailSettings::default()
     };
 
@@ -638,6 +679,7 @@ async fn create_reply_with_mime_and_body_and_message(
     let source_body = DecryptedMessageBody {
         body: source_body,
         metadata: source_body_metadata,
+        mime_type: source_body_mime_type,
         pgp_subject: None,
         address_id: address.remote_id.clone().unwrap(),
         in_flight: Default::default(),

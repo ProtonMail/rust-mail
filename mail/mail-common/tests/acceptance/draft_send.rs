@@ -40,7 +40,7 @@ use proton_mail_common::draft::recipients::RecipientEntry;
 use proton_mail_common::draft::{Draft, DraftExpirationTime, RecipientGroupId};
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendFailureSend, DraftSendResult, DraftSendResultOrigin, MailSettings,
-    Message, MessageBodyMetadata,
+    Message, MessageBodyMetadata, MessageMimeType,
 };
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::message_body::*;
@@ -1293,7 +1293,10 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
 
     // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
-    draft.set_mime_type(MimeType::TextPlain).await.unwrap();
+    draft
+        .set_mime_type(MessageMimeType::TextPlain)
+        .await
+        .unwrap();
     draft
         .set_body(String::from("Nobody expects"))
         .await

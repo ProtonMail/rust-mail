@@ -17,14 +17,14 @@ use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use crossterm::event::{KeyCode, KeyModifiers};
 use futures::FutureExt;
-use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
+use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, LocalMessageId};
 use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentState};
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::draft::recipients::RecipientList;
 use proton_mail_common::draft::{
     Draft, DraftExpirationTime, DraftSyncStatus, ReplyMode, recipients,
 };
-use proton_mail_common::models::{Attachment, MetadataId};
+use proton_mail_common::models::{Attachment, MessageMimeType, MetadataId};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
 use proton_mail_common::{MailContextError, MailUserContext, Mailbox};
 use proton_mail_html_transformer::Html2TextOptions;
@@ -265,20 +265,22 @@ impl Composer {
         let cc_list = recipient_list_to_display_value(&state.cc_list);
         let bcc_list = recipient_list_to_display_value(&state.bcc_list);
 
-        let text_area = if state.mime_type == MimeType::TextHtml {
-            let text = proton_mail_html_transformer::Transformer::html2text_str(
-                &state.body,
-                Html2TextOptions {
-                    decorate_links: true,
-                },
-            )
-            .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
+        let text_area = match state.mime_type {
+            MessageMimeType::TextHtml => {
+                let text = proton_mail_html_transformer::Transformer::html2text_str(
+                    &state.body,
+                    Html2TextOptions {
+                        decorate_links: true,
+                    },
+                )
+                .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
 
-            TextArea::new(text.split('\n').map(str::to_owned).collect())
-        } else if state.mime_type == MimeType::TextPlain {
-            TextArea::new(state.body.split('\n').map(str::to_owned).collect())
-        } else {
-            TextArea::new(vec!["Unknown mime type".to_owned()])
+                TextArea::new(text.split('\n').map(str::to_owned).collect())
+            }
+
+            MessageMimeType::TextPlain => {
+                TextArea::new(state.body.split('\n').map(str::to_owned).collect())
+            }
         };
 
         let tether = stash.connection();
@@ -963,7 +965,7 @@ struct ComposerDraftState {
 impl ComposerDraftState {
     async fn apply(self, draft: &Draft) -> Result<(), MailContextError> {
         // We are TUI, what else can we do?
-        draft.set_mime_type(MimeType::TextPlain).await?;
+        draft.set_mime_type(MessageMimeType::TextPlain).await?;
         draft.set_subject(self.subject).await?;
         draft.set_body(self.body).await?;
         draft.set_recipients(self.to, self.cc, self.bcc).await?;

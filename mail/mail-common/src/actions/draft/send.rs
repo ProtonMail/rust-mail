@@ -2,7 +2,7 @@ use crate::actions::draft::{
     SEND_ACTION_GROUP, local_all_draft_label_id, local_all_scheduled_label_id,
     local_draft_label_id, local_outbox_label_id, local_sent_label_id,
 };
-use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
+use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType};
 use crate::draft::send::{EoData, MailType, build_packages, load_prefs};
 use crate::draft::{
     MIN_EXPIRATION_TIME_SECONDS, ReplyMode, SendError, draft_v1,
@@ -10,8 +10,8 @@ use crate::draft::{
 };
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
-    DraftSendResultOrigin, MailSettings, Message, MessageBodyMetadata, MessageCounters, MetadataId,
-    RollbackItem,
+    DraftSendResultOrigin, MailSettings, Message, MessageBody, MessageCounters, MessageMimeType,
+    MetadataId, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use chrono::{DateTime, Local};
@@ -42,7 +42,7 @@ pub struct Send {
     address_id: AddressId,
     local_message_id: Option<LocalMessageId>,
     recipients: Vec<PrivateEmail>,
-    mime_type: MimeType,
+    mime_type: MessageMimeType,
     #[serde(default)]
     delivery_time: Option<UnixTimestamp>,
 }
@@ -383,16 +383,9 @@ impl Send {
             .inspect_err(|e| error!("Failed to load mail settings: {e:?}"))?
             .unwrap_or_default();
 
-        // Load body metadata
-        let Some(stored_message_body_metadata) =
-            MessageBodyMetadata::for_message(message_metadata.id(), guard.tether()).await?
-        else {
-            return Err(SendError::MessageBodyMetadataMissing(message_metadata.id()).into());
-        };
-
         // Load body - it is not encrypted.
-        let Some((stored_message_body, _)) =
-            Message::load_decrypted_message_body(message_metadata.id(), guard.tether()).await?
+        let Some(stored_message_body) =
+            MessageBody::load(message_metadata.id(), guard.tether()).await?
         else {
             return Err(SendError::MessageBodyMissing(message_metadata.id()).into());
         };
@@ -415,7 +408,7 @@ impl Send {
         // Composer preference to compute the recipent send preference from.
         let composer_preference = ComposerPreference {
             encrypt_to_outside: eo_data.is_some(),
-            composer_body_mime_type: stored_message_body_metadata.mime_type.into(),
+            composer_body_mime_type: stored_message_body.mime_type.into(),
         };
 
         // Load send preferences for each recipient of the message.
@@ -447,8 +440,8 @@ impl Send {
             &pgp,
             &address_keys,
             send_preferences,
-            action.mime_type,
-            &stored_message_body,
+            action.mime_type.into(),
+            &stored_message_body.body,
             &attachments,
             eo_data,
             guard,

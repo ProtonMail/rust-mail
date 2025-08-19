@@ -444,7 +444,7 @@ async fn removing_uploaded_attachment() {
 
 #[tokio::test]
 async fn draft_reply_or_forward_creates_new_attachments() {
-    let mime_type = MimeType::TextHtml;
+    let mime_type = MimeType::TextPlain;
     let reply_mode = ReplyMode::Forward;
 
     // Set up a user and initialise the inbox
@@ -471,6 +471,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await

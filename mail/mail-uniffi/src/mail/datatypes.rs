@@ -98,7 +98,7 @@ use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::errors::ProtonMailError;
 use proton_mail_common::models::{
     Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
-    MessageReplyTo as RealMessageReplyTo,
+    MessageMimeType, MessageReplyTo as RealMessageReplyTo,
 };
 use smart_default::SmartDefault;
 pub use snooze::*;
@@ -418,30 +418,16 @@ impl From<RealMessageMetadataSortMode> for MessageMetadataSortMode {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum MimeType {
-    /// TODO: Document this variant.
     ApplicationJson = 1,
-
-    /// TODO: Document this variant.
     ApplicationPdf = 2,
-
-    /// TODO: Document this variant.
     MessageRfc822 = 3,
-
-    /// TODO: Document this variant.
     MultipartMixed = 4,
-
-    /// TODO: Document this variant.
     MultipartRelated = 5,
-
-    /// TODO: Document this variant.
     #[default]
     TextHtml = 6,
-
-    /// TODO: Document this variant.
     TextPlain = 7,
 }
 
@@ -470,6 +456,12 @@ impl From<RealMimeType> for MimeType {
             RealMimeType::TextHtml => MimeType::TextHtml,
             RealMimeType::TextPlain => MimeType::TextPlain,
         }
+    }
+}
+
+impl From<MessageMimeType> for MimeType {
+    fn from(value: MessageMimeType) -> Self {
+        RealMimeType::from(value).into()
     }
 }
 

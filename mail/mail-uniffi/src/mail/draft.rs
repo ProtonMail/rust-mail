@@ -31,8 +31,8 @@ use proton_mail_common::draft::{
     compose::DraftAddressValidationResult as RealDraftAddressValidationResult,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::models::DraftSendResult as RealDraftSendResult;
+use proton_mail_common::models::{DraftMetadata, MessageMimeType};
 use proton_mail_common::{MailContextError, MailUserContext};
 use recipients::ComposerRecipientList;
 use secrecy::{ExposeSecret, SecretString};
@@ -130,7 +130,7 @@ impl From<EoData> for DraftPassword {
 struct CachedDraftData {
     subject: String,
     body: String,
-    mime_type: MimeType,
+    mime_type: MessageMimeType,
     send_result: Option<RealDraftSendResult>,
     to_list: Vec<ComposerRecipient>,
     to_list_cb: Option<Arc<dyn ComposerRecipientValidationCallback>>,
@@ -139,6 +139,7 @@ struct CachedDraftData {
     bcc_list: Vec<ComposerRecipient>,
     bcc_list_cb: Option<Arc<dyn ComposerRecipientValidationCallback>>,
 }
+
 /// Represents a draft message which can be crafted as empty or as a reply/forward
 /// to an existing message.
 #[derive(uniffi::Object)]
@@ -156,10 +157,11 @@ impl Draft {
     ) -> Result<Arc<Self>, MailContextError> {
         let state = draft.state().await?;
         let staging_path = draft.attachment_staging_path(real_ctx);
+
         let cached = Arc::new(RwLock::new(CachedDraftData {
             subject: state.subject,
             body: state.body,
-            mime_type: state.mime_type.into(),
+            mime_type: state.mime_type,
             send_result: state.send_result,
             to_list: state
                 .to_list
@@ -186,11 +188,14 @@ impl Draft {
             cc_list_cb: None,
             bcc_list_cb: None,
         }));
+
         let cached_cloned = Arc::downgrade(&cached);
         let event_received = draft.subscribe();
+
         real_ctx.spawn(async move {
             Self::handle_draft_event(cached_cloned, event_received).await;
         });
+
         Ok(Arc::new_cyclic(|_| Self {
             ctx: ctx.clone(),
             cached,
@@ -489,7 +494,7 @@ impl Draft {
 
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
-        async_runtime().block_on(async { self.cached.read().await.mime_type })
+        async_runtime().block_on(async { self.cached.read().await.mime_type.into() })
     }
 
     /// Get the Draft's message id .

@@ -12,8 +12,8 @@ use crate::draft::recipients::RecipientList;
 use crate::draft::{Draft, ReplyMode, SaveError, compose, draft_v1};
 use crate::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
-    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata,
-    MetadataId, RollbackItem,
+    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBody,
+    MessageBodyMetadata, MessageMimeType, MetadataId, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use indoc::indoc;
@@ -45,48 +45,37 @@ use tracing::{debug, error, info, warn};
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Save {
     metadata_id: MetadataId,
-    /// To Recipients - only email to preserve display name privacy
     to_list: RecipientList,
-    /// CC Recipients - only email to preserve display name privacy
     cc_list: RecipientList,
-    /// BCC recipients - only email to preserve display name privacy
     bcc_list: RecipientList,
-    /// Local id of the message this conversation belongs to
     message_id: Option<LocalMessageId>,
-    /// Local id of the conversation this message belongs to
     conversation_id: Option<LocalConversationId>,
-    /// Address used to send the message
     address_id: AddressId,
-    /// Draft subject
+
+    /// Unencrypted subject
     subject: String,
-    /// Unencrypted body of the draft
+
+    /// Unencrypted body
     body: String,
-    /// Draft's mime type
-    mime_type: MimeType,
-    /// Parent message id, used with forward and update only.
+
+    mime_type: MessageMimeType,
     parent_id: Option<LocalMessageId>,
-    /// Reply mode used.
     reply_mode: Option<ReplyMode>,
-    /// For error reporting when action fails
     save_origin: DraftSendResultOrigin,
-    /// Attachments associated with this message.
     attachment_ids: Vec<LocalAttachmentId>,
-    /// Message's external id.
     external_id: Option<ExternalId>,
-    /// Whether the draft is unread or not.
     unread: Option<bool>,
-    /// Draft Sender
     sender: Option<MessageSender>,
-    /// The sender email can be different from the address email when using aliases.
+
+    // can be different from the address email when using aliases
     #[serde(default)]
     sender_email: Option<String>,
 }
 
 impl Save {
-    /// Create a new empty draft.
     pub fn new(draft: &draft_v1::Draft, save_origin: DraftSendResultOrigin) -> Self {
-        // Undo all transformations to the body
         let transformed = maybe_sanitize(draft.mime_type(), draft.body());
+
         Self {
             metadata_id: draft.metadata_id,
             to_list: draft.to_list.clone(),
@@ -113,7 +102,6 @@ impl Save {
         }
     }
 
-    /// Convert the existing action state into a [`DraftParams`].
     pub fn crate_draft_params(&self, encrypted_draft: EncryptedDraft) -> DraftParams {
         DraftParams {
             subject: self.subject.clone(),
@@ -134,7 +122,7 @@ impl Save {
             external_id: self.external_id.clone().map(|id| id.to_string()),
             draft_flags: 0,
             body: encrypted_draft,
-            mime_type: self.mime_type.into(),
+            mime_type: MimeType::from(self.mime_type).into(),
         }
     }
 }
@@ -297,7 +285,7 @@ impl Handler for SaveHandler {
             };
 
             body_metadata.attachments = attachments;
-            body_metadata.mime_type = action.mime_type;
+            body_metadata.mime_type = action.mime_type.into();
 
             body_metadata.save(bond).await.inspect_err(|e| {
                 error!("Failed to update draft body metadata: {e:?}");
@@ -332,7 +320,7 @@ impl Handler for SaveHandler {
                 local_message_id: Some(message.id()),
                 remote_message_id: None,
                 header: "".to_string(),
-                mime_type: action.mime_type,
+                mime_type: action.mime_type.into(),
                 parsed_headers: Default::default(),
                 attachments,
                 reply_to: Default::default(),
@@ -365,7 +353,8 @@ impl Handler for SaveHandler {
             message
         };
 
-        Message::store_decrypted_message_body(message.id(), action.body.clone(), None, bond)
+        MessageBody::ok(&action.body, action.mime_type)
+            .store(message.id(), bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to store draft body in cache :{e:?}");
