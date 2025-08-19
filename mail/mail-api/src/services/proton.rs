@@ -176,6 +176,17 @@ pub trait ProtonMail {
     ///
     async fn get_mail_settings(&self) -> ApiServiceResult<GetMailSettingsResponse>;
 
+    /// Update mobile settings configuration.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn put_mobile_settings(
+        &self,
+        mobile_settings: MobileSettings,
+    ) -> ApiServiceResult<PutMobileSettingsResponse>;
+
     /// TODO: Document this method.
     ///
     /// # Errors

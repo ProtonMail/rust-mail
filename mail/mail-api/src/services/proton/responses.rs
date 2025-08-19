@@ -31,7 +31,7 @@ use crate::services::proton::common::{ConversationId, MessageId};
 use crate::services::proton::prelude::NewAttachmentResponse;
 use crate::services::proton::response_data::{
     Attachment, Conversation, ConversationCount, MailSettings, Message, MessageCount,
-    MessageMetadata, OperationResult, UndoToken,
+    MessageMetadata, MobileSettings, OperationResult, UndoToken,
 };
 use serde::Deserialize;
 #[cfg(feature = "mocks")]
@@ -342,4 +342,11 @@ pub struct PostIncomingDefaultResponse {
 #[serde(rename_all = "camelCase")]
 pub struct GetUnleashFeaturesResponse {
     pub toggles: Vec<UnleashToggle>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMobileSettingsResponse {
+    pub code: i64,
 }

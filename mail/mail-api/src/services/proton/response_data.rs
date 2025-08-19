@@ -1248,8 +1248,7 @@ pub struct MessageRecipient {
 pub type MessageReplyTo = MessageSender;
 
 /// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct MobileSetting {
     /// TODO: Document this field.
@@ -1261,8 +1260,7 @@ pub struct MobileSetting {
 }
 
 /// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct MobileSettings {
     /// TODO: Document this field.

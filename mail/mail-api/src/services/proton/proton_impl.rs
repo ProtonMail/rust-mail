@@ -209,6 +209,18 @@ impl ProtonMail for Proton {
             .into_body_json()?)
     }
 
+    async fn put_mobile_settings(
+        &self,
+        mobile_settings: MobileSettings,
+    ) -> ApiServiceResult<PutMobileSettingsResponse> {
+        Ok(PUT!("{MAIL_V4}/settings/mobilesettings")
+            .body_json(mobile_settings)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn put_conversations_delete(
         &self,
         ids: Vec<ConversationId>,
