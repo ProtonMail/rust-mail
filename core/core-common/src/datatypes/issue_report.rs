@@ -10,13 +10,15 @@ use futures::io::AsyncWriteExt;
 use proton_core_api::services::proton::PostReportBug;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::session::CoreSession;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::io::Cursor;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt},
 };
-use tokio_util::compat::TokioAsyncWriteCompatExt;
+use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 use tracing::info;
 
 #[cfg(test)]
@@ -107,14 +109,18 @@ pub struct IssueReport {
     /// User gave permission to share the logs with bug report
     /// by selecting an option in the client app.
     pub logs: bool,
+
+    pub additional_files: Vec<PathBuf>,
 }
 
 pub enum ClientType {
     Email = 1,
 }
 
-/// Maximum number of bytes accepted - 50Mb
-const MAX_LOG_BYTES: usize = 1024 * 1024 * 50;
+const MAX_LOG_FILE_SIZE: usize = 1024 * 1024 * 20; // 20 MB
+
+const MAX_ADDITIONAL_FILE_SIZE: usize = 1024 * 1024 * 5; // 5MB
+
 type ZippedFile = (String, Vec<u8>);
 
 /// Report an issue functionality.
@@ -144,7 +150,8 @@ pub async fn report_an_issue(
         acc_details.name
     };
 
-    let logs: Option<ZippedFile> = if report.logs {
+    let mut zip = ReportFileZipper::new();
+    if report.logs {
         let log_file_name = user_ctx.log_service().default_log_file_name();
         let ctx_arc = user_ctx.as_arc();
         let content =
@@ -152,18 +159,24 @@ pub async fn report_an_issue(
                 .await??;
         if content.is_empty() {
             tracing::error!("Could not attach logs to bug report, empty or missing");
-            None
         } else {
-            let content = if content.len() > MAX_LOG_BYTES {
-                &content[(content.len() - MAX_LOG_BYTES)..]
+            let content = if content.len() > MAX_LOG_FILE_SIZE {
+                &content[(content.len() - MAX_LOG_FILE_SIZE)..]
             } else {
                 content.as_slice()
             };
-            Some(zip_contents_into_memory(content, &log_file_name, Utc::now()).await?)
+            zip.add_from_memory(log_file_name, content, Utc::now())
+                .await?;
         }
-    } else {
-        None
-    };
+    }
+
+    for path in &report.additional_files {
+        tracing::debug!("Attaching extra file: {}", path.display());
+        zip.add_from_path(&path, MAX_ADDITIONAL_FILE_SIZE, Utc::now())
+            .await?;
+    }
+
+    let logs = zip.finalize().await?;
 
     let payload = create_bug_report_payload(report, username, email, logs);
 
@@ -216,102 +229,134 @@ fn create_bug_report_payload(
     }
 }
 
-/// Zip file in memory
-///
-/// This function is meant to read & zip single file returning bytes ready to send.
-///
-/// # Parameters
-///
-/// * `max_bytes` - how many bytes should be written to the zip if the file size exceeds the `max_byte` value.
-///   Value is not verified but it is not recomended exceeding `MAX_LOG_BYTES` value as 50 Mb.
-///
-/// # Returns
-///
-/// Tuple of `FileName` (String) & `ZipBytes` (Vec<u8>)
-///
-/// # Errors
-///
-/// When IO fails. Most probable issue to encounter is by misusage of `path` parameter as it accepts single file paths only.
-///
-#[allow(clippy::cast_possible_truncation)]
-#[allow(dead_code)]
-async fn zip_file_in_memory(
-    path: impl AsRef<Path>,
-    now: DateTime<Utc>,
-    max_bytes: u64,
-) -> Result<ZippedFile, CoreContextError> {
-    let mut file = File::open(&path).await?;
-    let metadata = file.metadata().await?;
+struct ReportFileZipper {
+    zip: ZipFileWriter<Compat<Cursor<Vec<u8>>>>,
+    file_names: HashMap<String, usize>,
+    num_entries: usize,
+}
 
-    if !metadata.is_file() {
-        return Err(CoreContextError::Other(anyhow!(
-            "Provided path is not a file, method `zip_file_in_memory` requires a path which points to a single file"
-        )));
+impl ReportFileZipper {
+    fn new() -> Self {
+        let cursor = Cursor::new(Vec::new());
+        let compat_cursor = cursor.compat_write(); // Make it compatible with futures-io
+        Self {
+            zip: ZipFileWriter::new(compat_cursor),
+            file_names: HashMap::new(),
+            num_entries: 0,
+        }
     }
 
-    let log_bytes = metadata.len();
-    let mut data_buf: Vec<u8>;
-
-    if log_bytes > max_bytes {
-        let offset = log_bytes - max_bytes;
-        file.seek(std::io::SeekFrom::Start(offset)).await?;
-        data_buf = Vec::with_capacity(max_bytes as usize);
-    } else {
-        data_buf = Vec::with_capacity(log_bytes as usize);
+    fn transform_file_name(&mut self, file_name: String) -> String {
+        match self.file_names.entry(file_name) {
+            Entry::Occupied(mut o) => {
+                *o.get_mut() += 1;
+                format!("{}_{}", o.key(), o.get())
+            }
+            Entry::Vacant(v) => {
+                let file_name = v.key().clone();
+                v.insert(0);
+                file_name
+            }
+        }
     }
 
-    file.read_to_end(&mut data_buf).await?;
+    async fn add_from_memory(
+        &mut self,
+        file_name: String,
+        content: &[u8],
+        dt: DateTime<Utc>,
+    ) -> Result<(), CoreContextError> {
+        let file_name = self.transform_file_name(file_name);
+        self.add_from_memory_impl(file_name, content, dt).await
+    }
 
-    let file_name = path
-        .as_ref()
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| {
+    async fn add_from_memory_impl(
+        &mut self,
+        file_name: String,
+        content: &[u8],
+        dt: DateTime<Utc>,
+    ) -> Result<(), CoreContextError> {
+        let entry = ZipEntryBuilder::new(file_name.into(), Compression::Deflate)
+            .last_modification_date(ZipDateTime::from_chrono(&dt))
+            .unix_permissions(0o644);
+        let mut entry_writer = self.zip.write_entry_stream(entry).await.map_err(|e| {
             CoreContextError::Other(anyhow!(
-                "Path is a file and file should have a name, impossible"
+                "Could not create stream zip writer, details: `{e}`"
             ))
         })?;
 
-    zip_contents_into_memory(&data_buf, file_name, now).await
-}
+        entry_writer.write_all(content).await.map_err(|e| {
+            CoreContextError::Other(anyhow!("Could not write bytes to the zip, details: {e}"))
+        })?;
+        entry_writer.close().await.map_err(|e| {
+            CoreContextError::Other(anyhow!("Could not close stream zip writer, details: `{e}`"))
+        })?;
 
-#[allow(clippy::cast_possible_truncation)]
-async fn zip_contents_into_memory(
-    data: &[u8],
-    file_name: &str,
-    now: DateTime<Utc>,
-) -> Result<ZippedFile, CoreContextError> {
-    let out_name = format!("{}_{file_name}", now.format("%Y%m%dT%H%M%S_%f"));
-    let cursor = Cursor::new(Vec::new());
-    let compat_cursor = cursor.compat_write(); // Make it compatible with futures-io
-    let mut zip_writer = ZipFileWriter::new(compat_cursor);
-    let entry = ZipEntryBuilder::new(out_name.as_str().into(), Compression::Deflate)
-        .last_modification_date(ZipDateTime::from_chrono(&now))
-        .unix_permissions(0o644);
-    let mut entry_writer = zip_writer.write_entry_stream(entry).await.map_err(|e| {
-        CoreContextError::Other(anyhow!(
-            "Could not create stream zip writer, details: `{e}`"
-        ))
-    })?;
+        self.num_entries += 1;
+        Ok(())
+    }
 
-    entry_writer.write_all(data).await.map_err(|e| {
-        CoreContextError::Other(anyhow!("Could not write bytes to the zip, details: {e}"))
-    })?;
-    entry_writer.close().await.map_err(|e| {
-        CoreContextError::Other(anyhow!("Could not close stream zip writer, details: `{e}`"))
-    })?;
+    async fn add_from_path(
+        &mut self,
+        path: impl AsRef<Path>,
+        max_bytes: usize,
+        dt: DateTime<Utc>,
+    ) -> Result<(), CoreContextError> {
+        let mut file = File::open(&path).await?;
+        let metadata = file.metadata().await?;
 
-    let out_name = format!("{out_name}.zip");
-    let zipped_bytes = zip_writer
-        .close()
-        .await
-        .map_err(|e| {
-            CoreContextError::Other(anyhow!(
-                "Could not get written bytes from a writer, details: `{e}`"
-            ))
-        })?
-        .into_inner()
-        .into_inner();
+        if !metadata.is_file() {
+            return Err(CoreContextError::Other(anyhow!(
+                "Provided path is not a file, method `zip_file_in_memory` requires a path which points to a single file"
+            )));
+        }
 
-    Ok((out_name, zipped_bytes))
+        let log_bytes = metadata.len();
+        let mut data_buf: Vec<u8>;
+
+        #[allow(clippy::cast_possible_truncation)] // we validate the max value
+        if log_bytes > max_bytes as u64 {
+            let offset = log_bytes - max_bytes as u64;
+            file.seek(std::io::SeekFrom::Start(offset)).await?;
+            data_buf = Vec::with_capacity(max_bytes);
+        } else {
+            data_buf = Vec::with_capacity(log_bytes as usize);
+        }
+
+        file.read_to_end(&mut data_buf).await?;
+
+        let file_name = self.transform_file_name(
+            path.as_ref()
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| {
+                    CoreContextError::Other(anyhow!(
+                        "Path is a file and file should have a name, impossible"
+                    ))
+                })?
+                .to_owned(),
+        );
+
+        self.add_from_memory_impl(file_name, &data_buf, dt).await
+    }
+
+    async fn finalize(self) -> Result<Option<(String, Vec<u8>)>, CoreContextError> {
+        if self.num_entries == 0 {
+            return Ok(None);
+        }
+        let now = Utc::now();
+        let out_name = format!("{}_issue_report.zip", now.format("%Y%m%dT%H%M%S_%f"));
+        let zipped_bytes = self
+            .zip
+            .close()
+            .await
+            .map_err(|e| {
+                CoreContextError::Other(anyhow!(
+                    "Could not get written bytes from a writer, details: `{e}`"
+                ))
+            })?
+            .into_inner()
+            .into_inner();
+        Ok(Some((out_name, zipped_bytes)))
+    }
 }
