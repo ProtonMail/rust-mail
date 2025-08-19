@@ -102,7 +102,7 @@ impl Composer {
                         Err(e) => {
                             error!("Failed to open message in composer: {e:?}");
                             Command::batch([
-                                Command::message(Message::CloseComposer.into()),
+                                Command::message(Message::CloseComposer),
                                 Command::message(Messages::DisplayError(None, e.into())),
                             ])
                         }
@@ -131,7 +131,7 @@ impl Composer {
                         Err(e) => {
                             error!("Failed to open message in composer: {e:?}");
                             Command::batch([
-                                Command::message(Message::CloseComposer.into()),
+                                Command::message(Message::CloseComposer),
                                 Command::message(Messages::from(e)),
                             ])
                         }
@@ -164,7 +164,7 @@ impl Composer {
                         Ok(()) => Command::none(),
                         Err(e) => {
                             error!("Failed to save draft: {e:?}");
-                            Command::message(e.into())
+                            Command::message(e)
                         }
                     },
                 ])
@@ -204,17 +204,17 @@ impl Composer {
                     Command::message(Messages::DismissBackgroundProgress),
                     if let Err(e) = composer_state.apply(&draft).await {
                         error!("Failed to save draft: {e:?}");
-                        Command::message(e.into())
+                        Command::message(e)
                     } else {
                         match if let Some(scheduled_time) = scheduled_time {
                             draft.schedule_send(scheduled_time).await
                         } else {
                             draft.send().await
                         } {
-                            Ok(_) => Command::message(Message::CloseComposer.into()),
+                            Ok(_) => Command::message(Message::CloseComposer),
                             Err(e) => {
                                 error!("Failed to send draft: {e:?}");
-                                Command::message(e.into())
+                                Command::message(e)
                             }
                         }
                     },
@@ -243,7 +243,7 @@ impl Composer {
                     })
                     .unwrap_or(Command::none());
                 Command::batch([
-                    Command::message(Message::OpenComposer(composer).into()),
+                    Command::message(Message::OpenComposer(composer)),
                     error_msg,
                     background_cmd,
                 ])
@@ -300,7 +300,7 @@ impl Composer {
                 r = observer.next() =>
                       match r {
                           Ok(()) => {
-                              let _ = sender.send_async(Command::message(ComposerMessage::RefreshAttachmentList.into())).await;
+                              let _ = sender.send_async(Command::message(ComposerMessage::RefreshAttachmentList)).await;
                            }
                           Err(e) => {
                              let _= sender.send_async(Command::message(Messages::DisplayError(Some("Draft Attachment Observer Error".to_owned()),anyhow::Error::new(e)))).await;
@@ -350,7 +350,7 @@ impl Composer {
             "Are you sure you wish to discard the current draft?",
         )
         .on_accept(Command::batch([
-            Command::message(Message::CloseComposer.into()),
+            Command::message(Message::CloseComposer),
             Command::message(Messages::DisplayBackgroundProgress(
                 "Discarding Draft".to_owned(),
             )),
@@ -398,10 +398,10 @@ impl Composer {
                 )
                 .await
                 {
-                    Ok(attachment) => Command::message(
-                        ComposerMessage::AddAttachment(Box::new(attachment)).into(),
-                    ),
-                    Err(e) => Command::message(anyhow::Error::new(e).into()),
+                    Ok(attachment) => {
+                        Command::message(ComposerMessage::AddAttachment(Box::new(attachment)))
+                    }
+                    Err(e) => Command::message(e),
                 };
 
                 Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
@@ -420,9 +420,9 @@ impl Composer {
             )),
             Command::task(async move {
                 let cmd = if let Err(e) = draft.add_attachment(&attachment).await {
-                    Command::message(anyhow::Error::new(e).into())
+                    e.into()
                 } else {
-                    Command::message(ComposerMessage::RefreshAttachmentList.into())
+                    Command::message(ComposerMessage::RefreshAttachmentList)
                 };
 
                 Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
@@ -439,9 +439,9 @@ impl Composer {
             )),
             Command::task(async move {
                 let cmd = if let Err(e) = draft.remove_attachment(id).await {
-                    Command::message(anyhow::Error::new(e).into())
+                    Command::message(e)
                 } else {
-                    Command::message(ComposerMessage::RefreshAttachmentList.into())
+                    Command::message(ComposerMessage::RefreshAttachmentList)
                 };
 
                 Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
@@ -455,8 +455,8 @@ impl Composer {
         Command::task(async move {
             let tether = context.user_stash().connection();
             match DraftAttachment::build_list(metadata_id, &tether).await {
-                Ok(list) => Command::message(ComposerMessage::AttachmentListRefreshed(list).into()),
-                Err(e) => Command::message(anyhow::Error::new(e).into()),
+                Ok(list) => Command::message(ComposerMessage::AttachmentListRefreshed(list)),
+                Err(e) => Command::message(anyhow!(e)),
             }
         })
     }
@@ -469,9 +469,9 @@ impl Composer {
         let task = Command::task(async move {
             let cmd = match draft.change_sender_address(email).await {
                 Ok(_) => match (draft.sender().await, draft.body().await) {
-                    (Ok(sender), Ok(body)) => Command::message(
-                        ComposerMessage::FinishChangeAddress { sender, body }.into(),
-                    ),
+                    (Ok(sender), Ok(body)) => {
+                        Command::message(ComposerMessage::FinishChangeAddress { sender, body })
+                    }
                     (Err(e), _) | (_, Err(e)) => {
                         Command::message(Messages::DisplayError(None, anyhow::Error::new(e)))
                     }
@@ -749,7 +749,7 @@ impl Composer {
     ) -> Command<Messages> {
         if let Event::Key(key) = &event {
             match key.code {
-                KeyCode::Esc => return Command::message(Message::CloseComposer.into()),
+                KeyCode::Esc => return Command::message(Message::CloseComposer),
                 KeyCode::Tab => {
                     match self.selected_input {
                         SelectedInput::To => {
@@ -785,12 +785,12 @@ impl Composer {
                 }
                 KeyCode::Char('s') => {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
-                        return Command::message(ComposerMessage::Save.into());
+                        return Command::message(ComposerMessage::Save);
                     }
                 }
                 KeyCode::Char('t') => {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
-                        return Command::message(ComposerMessage::Send.into());
+                        return Command::message(ComposerMessage::Send);
                     }
                 }
                 KeyCode::Char('j') => {
@@ -812,22 +812,19 @@ impl Composer {
                 KeyCode::Char('a') => {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
                         return Command::message(Messages::select_file_path(|path| {
-                            Command::message(
-                                ComposerMessage::CreateAttachment(path.to_path_buf()).into(),
-                            )
+                            Command::message(ComposerMessage::CreateAttachment(path.to_path_buf()))
                         }));
                     }
                 }
                 KeyCode::Char('d') => {
                     if self.selected_input == SelectedInput::Attachments {
                         if let Some(index) = self.attachment_list_state.selected() {
-                            return Command::message(
-                                ComposerMessage::RemoveAttachment(self.attachment_infos[index].id)
-                                    .into(),
-                            );
+                            return Command::message(ComposerMessage::RemoveAttachment(
+                                self.attachment_infos[index].id,
+                            ));
                         }
                     } else if key.modifiers.contains(KeyModifiers::CONTROL) {
-                        return Command::message(ComposerMessage::Discard.into());
+                        return Command::message(ComposerMessage::Discard);
                     }
                 }
                 KeyCode::Char('k') => {

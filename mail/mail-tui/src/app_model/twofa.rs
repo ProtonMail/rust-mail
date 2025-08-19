@@ -38,8 +38,8 @@ impl AppStateHandler for TwoFaModel {
             return Command::None;
         };
         match k.code {
-            KeyCode::Esc => Command::message(Message::Abort.into()),
-            KeyCode::Enter => Command::message(Message::Submit.into()),
+            KeyCode::Esc => Command::message(Message::Abort),
+            KeyCode::Enter => Command::message(Message::Submit),
             _ => {
                 self.input_state.handle_event(&event);
                 Command::None
@@ -81,7 +81,7 @@ impl AppStateHandler for TwoFaModel {
                     )),
                     Command::task(async move {
                         let message = if let Err(e) = flow.submit_totp(code).await {
-                            Message::TwoFAFailed(flow, e).into()
+                            Message::TwoFAFailed(flow, e)
                         } else {
                             Message::TwoFASuccess(flow).into()
                         };

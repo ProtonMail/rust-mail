@@ -41,7 +41,7 @@ impl Popup for ExpirationTimePopup {
                     Ok(date_time) => {
                         return Command::batch([
                             Command::message(Messages::DismissPopup),
-                            Command::message(ComposerMessage::SetExpirationTime(date_time).into()),
+                            Command::message(ComposerMessage::SetExpirationTime(date_time)),
                         ]);
                     }
                     Err(e) => {

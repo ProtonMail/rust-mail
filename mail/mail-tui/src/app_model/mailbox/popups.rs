@@ -65,11 +65,11 @@ impl crate::app_model::Popup for MoveItemPopup {
                 .map(|id| match self.item.clone() {
                     Items::Conversation(item_id) => Command::batch([
                         Command::message(Messages::DismissPopup),
-                        Command::message(ConversationMessage::MoveTo(item_id, id).into()),
+                        Command::message(ConversationMessage::MoveTo(item_id, id)),
                     ]),
                     Items::Message(item_id) => Command::batch([
                         Command::message(Messages::DismissPopup),
-                        Command::message(MessageMessage::MoveTo(item_id, id).into()),
+                        Command::message(MessageMessage::MoveTo(item_id, id)),
                     ]),
                 })
                 .unwrap_or_default(),
@@ -184,7 +184,7 @@ impl crate::app_model::Popup for LabelItemPopup {
                         });
                         Command::batch([
                             Command::message(Messages::DismissPopup),
-                            Command::message(ConversationMessage::LabelAs(label_as).into()),
+                            Command::message(ConversationMessage::LabelAs(label_as)),
                         ])
                     }
                     Items::Message(item_ids) => {
@@ -197,7 +197,7 @@ impl crate::app_model::Popup for LabelItemPopup {
                         });
                         Command::batch([
                             Command::message(Messages::DismissPopup),
-                            Command::message(MessageMessage::LabelAs(label_as).into()),
+                            Command::message(MessageMessage::LabelAs(label_as)),
                         ])
                     }
                 }
@@ -356,7 +356,7 @@ impl crate::app_model::Popup for LabelSelectPopup {
 
                 Command::batch([
                     Command::message(Messages::DismissPopup),
-                    Command::message(Message::SelectLabel(label.label().id()).into()),
+                    Command::message(Message::SelectLabel(label.label().id())),
                 ])
             }
 

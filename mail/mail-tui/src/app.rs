@@ -182,12 +182,18 @@ pub enum Command<Message> {
 
 impl Command<Messages> {
     pub fn from_future(f: impl Future<Output = anyhow::Result<()>> + Send + 'static) -> Self {
+        Self::command_from_future(async move { f.await.map(|_| Command::None) })
+    }
+
+    pub fn command_from_future(
+        f: impl Future<Output = anyhow::Result<Command<Messages>>> + Send + 'static,
+    ) -> Self {
         Command::task(async move {
             match f.await {
-                Ok(()) => Command::None,
+                Ok(out) => out,
                 Err(e) => {
                     tracing::error!("{e:?}");
-                    Command::message(e.into())
+                    Command::message(e)
                 }
             }
         })
@@ -217,8 +223,8 @@ impl<Message> Command<Message> {
     }
 
     /// This command sends the `message` to the model.
-    pub fn message(message: Message) -> Self {
-        Self::Message(message)
+    pub fn message(message: impl Into<Message>) -> Self {
+        Self::Message(message.into())
     }
 
     /// This command spawns `task` in a new async task and then sends the result back to

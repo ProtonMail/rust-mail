@@ -56,16 +56,13 @@ impl Popup for AddressListPopup {
                     .map_or(Command::none(), |index| {
                         Command::batch([
                             Command::message(Messages::DismissPopup),
-                            Command::message(
-                                ComposerMessage::StartChangeAddress((
-                                    self.addresses[index].email.clone(),
-                                    self.addresses[index]
-                                        .remote_id
-                                        .clone()
-                                        .expect("should be set"),
-                                ))
-                                .into(),
-                            ),
+                            Command::message(ComposerMessage::StartChangeAddress((
+                                self.addresses[index].email.clone(),
+                                self.addresses[index]
+                                    .remote_id
+                                    .clone()
+                                    .expect("should be set"),
+                            ))),
                         ])
                     })
             }

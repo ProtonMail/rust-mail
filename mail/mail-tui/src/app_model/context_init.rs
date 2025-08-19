@@ -34,7 +34,7 @@ impl ContextInitModel {
 
 impl AppStateHandler for ContextInitModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
-        Command::message(Message::Init.into())
+        Command::message(Message::Init)
     }
     fn handle_event(&mut self, _: Event) -> Command<Messages> {
         Command::none()
@@ -52,9 +52,9 @@ impl AppStateHandler for ContextInitModel {
                     tracing::info!("Initializing user account");
                     let msg = if let Err(e) = MailUserContext::initialize_async(user_ctx).await {
                         tracing::error!("Failed to initialize account {e:?}");
-                        Message::InitFailed(e).into()
+                        Message::InitFailed(e)
                     } else {
-                        Message::InitComplete.into()
+                        Message::InitComplete
                     };
 
                     Command::message(msg)
@@ -65,7 +65,7 @@ impl AppStateHandler for ContextInitModel {
                 Command::task(async move {
                     match mailbox::MailboxModel::new(ctx).await {
                         Ok(model) => Command::message(Messages::SwitchAppState(model.into())),
-                        Err(e) => Command::message(e.into()),
+                        Err(e) => Command::message(e),
                     }
                 })
             }
