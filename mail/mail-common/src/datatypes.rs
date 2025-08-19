@@ -1150,14 +1150,14 @@ impl EncryptedMessageBody {
                 //   true,
                 //
                 // - incorrect for mime-encrypted messages - we'll default to
-                //   text/html then.
+                //   text/plain then.
                 //
                 // Guessing incorrectly is not harmful, because users can't do
                 // anything with non-decryptable messages anyway - i.e. the mime
                 // type we use here is effectively left unread, it's just very
                 // awkward to properly model this constraint in the type system.
                 let mime_type = MessageMimeType::from_api(self.metadata.mime_type, || {
-                    MessageMimeType::TextHtml
+                    MessageMimeType::TextPlain
                 });
 
                 Ok(DecryptedMessageBody::not_decryptable(

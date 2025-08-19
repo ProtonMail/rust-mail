@@ -24,7 +24,7 @@ impl MessageMimeType {
                 panic!("Unexpected mime type: {api:?}");
 
                 #[cfg(not(debug_assertions))]
-                Self::TextHtml
+                Self::TextPlain
             }
         }
     }
