@@ -54,13 +54,11 @@ use tracing::warn;
 #[derive(uniffi::Object)]
 pub struct DecryptedMessage {
     pub(crate) ctx: MailUserContextPtr,
-    /// The email address of the sender. Example: `test@pm.me`
     pub(crate) sender: PrivateEmail,
     pub(crate) body: DecryptedMessageBody,
 }
 
 impl DecryptedMessage {
-    /// Get a strong reference to the inner user context.
     pub(crate) fn ctx(&self) -> Result<Arc<MailUserContext>, RealProtonMailError> {
         self.ctx
             .upgrade()
@@ -95,8 +93,6 @@ impl DecryptedMessage {
     }
 
     #[must_use]
-    /// Retrieve a parsed header value for a given `key`.
-    /// Returns a (possibly empty) array of header values.
     pub fn parsed_header_value(&self, key: &str) -> Vec<String> {
         match self.body.parsed_header_value(key) {
             Some(proton_mail_common::datatypes::ParsedHeaderValue::Array(arr)) => arr,
@@ -106,13 +102,11 @@ impl DecryptedMessage {
     }
 
     #[must_use]
-    /// Get the mime type from this message
     pub fn mime_type(&self) -> MimeType {
         self.body.metadata.mime_type.into()
     }
 
     #[must_use]
-    /// This is `Some` if the message is multipart and has a subject.
     pub fn get_pgp_subject(&self) -> Option<String> {
         self.body.pgp_subject.clone()
     }

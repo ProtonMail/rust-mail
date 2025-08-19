@@ -45,48 +45,32 @@ use tracing::{debug, error, info, warn};
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Save {
     metadata_id: MetadataId,
-    /// To Recipients - only email to preserve display name privacy
     to_list: RecipientList,
-    /// CC Recipients - only email to preserve display name privacy
     cc_list: RecipientList,
-    /// BCC recipients - only email to preserve display name privacy
     bcc_list: RecipientList,
-    /// Local id of the message this conversation belongs to
     message_id: Option<LocalMessageId>,
-    /// Local id of the conversation this message belongs to
     conversation_id: Option<LocalConversationId>,
-    /// Address used to send the message
     address_id: AddressId,
-    /// Draft subject
     subject: String,
-    /// Unencrypted body of the draft
     body: String,
-    /// Draft's mime type
     mime_type: MimeType,
-    /// Parent message id, used with forward and update only.
     parent_id: Option<LocalMessageId>,
-    /// Reply mode used.
     reply_mode: Option<ReplyMode>,
-    /// For error reporting when action fails
     save_origin: DraftSendResultOrigin,
-    /// Attachments associated with this message.
     attachment_ids: Vec<LocalAttachmentId>,
-    /// Message's external id.
     external_id: Option<ExternalId>,
-    /// Whether the draft is unread or not.
     unread: Option<bool>,
-    /// Draft Sender
     sender: Option<MessageSender>,
-    /// The sender email can be different from the address email when using aliases.
+
+    // can be different from the address email when using aliases
     #[serde(default)]
     sender_email: Option<String>,
 }
 
 impl Save {
-    /// Create a new empty draft.
     pub fn new(draft: &draft_v1::Draft, save_origin: DraftSendResultOrigin) -> Self {
-        // Undo all transformations to the body
         let transformed = maybe_sanitize(draft.mime_type(), draft.body());
+
         Self {
             metadata_id: draft.metadata_id,
             to_list: draft.to_list.clone(),
@@ -113,7 +97,6 @@ impl Save {
         }
     }
 
-    /// Convert the existing action state into a [`DraftParams`].
     pub fn crate_draft_params(&self, encrypted_draft: EncryptedDraft) -> DraftParams {
         DraftParams {
             subject: self.subject.clone(),

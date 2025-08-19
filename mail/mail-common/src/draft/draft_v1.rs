@@ -1080,7 +1080,6 @@ impl Draft {
         editor_id: String,
     ) -> String {
         let color_mode = theme_opts.color_mode();
-
         let mime_type = self.mime_type();
 
         let injection = inject_dark_mode(

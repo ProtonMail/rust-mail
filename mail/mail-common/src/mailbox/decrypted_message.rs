@@ -160,7 +160,6 @@ impl From<TransformOptsResolved> for TransformOpts {
 
 type InFlightAttachments = HashMap<LocalAttachmentId, JoinHandle<MailContextResult<Vec<u8>>>>;
 
-/// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessageBody {
     pub body: String,
     pub metadata: MessageBodyMetadata,
@@ -180,8 +179,6 @@ pub struct DecryptedMessageBody {
 }
 
 impl DecryptedMessageBody {
-    /// Create a new instance that immediately starts to pre-download all inline attachments for this
-    /// message.
     pub fn new_prefetching(
         body: String,
         metadata: MessageBodyMetadata,
@@ -222,8 +219,6 @@ impl DecryptedMessageBody {
         }
     }
 
-    /// Create a new instance which does not start to pre-download all attachments for this
-    /// message.
     pub fn new_without_prefetching(
         body: String,
         metadata: MessageBodyMetadata,

@@ -1269,16 +1269,6 @@ impl Message {
         Ok((sender, body))
     }
 
-    /// Get the message's body.
-    ///
-    /// This will attempt to fetch the message data from the servers if it has
-    /// not yet been downloaded before.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the message failed to download, the db query failed or
-    /// the message body could not be written to the cache.
-    ///
     #[tracing::instrument(skip_all, fields(message_id=%self.id()))]
     pub async fn fetch_message_body(
         &self,
@@ -1327,7 +1317,6 @@ impl Message {
             Self::sync_message_and_body(remote_id, ctx.api(), &mut tx).await?;
         trace!("Message successfully downloaded. Decrypting...");
 
-        // Some(PGPKeyAccess(NoUserSecret))
         let decrypted = Self::decrypt_message_body(
             ctx,
             &self.remote_address_id,
