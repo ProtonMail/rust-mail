@@ -13,7 +13,7 @@ use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
 #[cfg(feature = "prefetch")]
-use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
+use crate::prefetch::{Prefetch, PrefetchJob, PrefetchService};
 use crate::rsvp::RsvpService;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
