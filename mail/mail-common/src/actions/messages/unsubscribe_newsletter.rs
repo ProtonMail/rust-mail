@@ -8,7 +8,7 @@ use proton_core_api::service::ApiServiceError;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use tracing::warn;
+use tracing::{debug, warn};
 use url::Url;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -117,6 +117,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         if let Some(url) = &action.request {
+            debug!("sending unsubscribe request to {url}");
             // A GET request to the url should be enough
             _ = self
                 .http_client

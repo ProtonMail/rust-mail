@@ -33,12 +33,7 @@ use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::PrivateEmail;
-<<<<<<< HEAD
 use proton_mail_common::datatypes::attachment::ContentId;
-||||||| parent of f5321f02f (f)
-use proton_mail_common::datatypes::LocalConversationId;
-=======
->>>>>>> f5321f02f (f)
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{LocalConversationId, ParsedHeaderValue};

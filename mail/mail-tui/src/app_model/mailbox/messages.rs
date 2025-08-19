@@ -277,13 +277,19 @@ impl MessagesState {
         ))
     }
 
-    pub fn open_message_body(&mut self, ctx: Arc<MailUserContext>) -> Command<Messages> {
+    pub fn open_message_body(
+        &mut self,
+        ctx: Arc<MailUserContext>,
+        show_loading: bool,
+    ) -> Command<Messages> {
         let Some(metadata) = self.selected_message() else {
             tracing::warn!("No message selected");
             return Command::None;
         };
 
-        self.open_message = DecryptedMessageStatus::Loading(ThrobberState::default());
+        if show_loading {
+            self.open_message = DecryptedMessageStatus::Loading(ThrobberState::default());
+        }
 
         Command::task(async {
             #[allow(clippy::redundant_closure_call)] // Poor's man try blocks
@@ -411,13 +417,17 @@ impl MessagesState {
                         Ok(headers)
                     });
                 }
-                KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyCode::Char('U') => {
+                    tracing::info!("foobar");
                     let ctx = ctx.clone();
                     match state.body.unsubscribe_from_newsletter() {
                         Ok(action) => {
                             return Command::command_from_future(async move {
                                 ctx.queue_action(action).await?;
-                                Ok(MessageMessage::OpenBody.into())
+                                Ok(MessageMessage::OpenBody {
+                                    show_loading: false,
+                                }
+                                .into())
                             });
                         }
                         Err(e) => {
@@ -520,7 +530,9 @@ impl MessagesState {
 
             KeyCode::Char('h') => MessageMessage::HasMore.into(),
 
-            KeyCode::Enter => self.selected_id_and(|_| MessageMessage::OpenBody.into()),
+            KeyCode::Enter => {
+                self.selected_id_and(|_| MessageMessage::OpenBody { show_loading: true }.into())
+            }
 
             KeyCode::Char('z') => {
                 self.selected_id_and(|id| MessageMessage::CancelScheduleSend(id).into())
@@ -673,8 +685,8 @@ impl MessagesState {
         };
 
         match message {
-            MessageMessage::OpenBody => {
-                return self.open_message_body(user_ctx.to_owned());
+            MessageMessage::OpenBody { show_loading } => {
+                return self.open_message_body(user_ctx.to_owned(), show_loading);
             }
             MessageMessage::OpenBodyResult(r) => {
                 self.display_message(r);
@@ -795,7 +807,7 @@ impl MessagesState {
                 ("Shift + ▲ ", "Scroll up in a message"),
                 ("Shift + ▼ ", "Scroll down in a message"),
                 ("Shift + h ", "View message headers"),
-                ("Ctrl  + u ", "Unsubscribe from newsletter"),
+                ("Shift + u ", "Unsubscribe from newsletter"),
             ]);
         }
         vec.extend_from_slice(&[
@@ -1092,7 +1104,9 @@ impl DecryptedMessage {
                 )),
                 MessageBanner::UnsubscribeNewsletter {
                     already_unsubscribed: false,
-                } => ListItem::from("> This message is a newsletter. Press Ctrl-u to unsubscribe."),
+                } => ListItem::from(
+                    "> This message is a newsletter. Press Shift + u to unsubscribe.",
+                ),
 
                 MessageBanner::UnsubscribeNewsletter {
                     already_unsubscribed: true,

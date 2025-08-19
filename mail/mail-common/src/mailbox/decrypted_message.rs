@@ -61,7 +61,7 @@ pub struct ThemeOpts {
     /// While using the dark mode, some bodies of messages might be hard to read.
     /// User has an option to override the theme inside of the message (without changing the overall theme).
     ///
-    /// Default: No override provided
+    /// Default: No override provided.
     ///
     pub theme_override: Option<MailTheme>,
 
