@@ -11,8 +11,7 @@ use crate::action_queue::CoreActionError;
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::core_clock::CoreClock;
 use crate::datatypes::{
-    ApiConfig, LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey,
-    TfaStatus,
+    ApiConfig, LocalContactId, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
 };
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::{migrate_account_db, verify_account_db};
@@ -212,9 +211,11 @@ impl CoreAccountState {
 
         // Does the account have any sessions that are awaiting a mailbox password?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedKey) {
-            if account.password_mode.is_some_and(PasswordMode::has_mbp) {
-                return CoreAccountState::NeedMbp(sessions);
-            }
+            // Now that the password_mode is set in a later step with the /settings call
+            // We can't rely anymore on this check since it will always be false
+            // if account.password_mode.is_some_and(PasswordMode::has_mbp) {
+            return CoreAccountState::NeedMbp(sessions);
+            // }
         }
 
         // Does the account have any sessions that are awaiting a second factor?
