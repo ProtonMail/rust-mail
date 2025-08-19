@@ -1,4 +1,3 @@
-use crate::actions::ListAction;
 use crate::datatypes::{MobileSetting, MobileSettings, MovableSystemFolder, SystemLabelId};
 use crate::models::{Conversation, MailSettings, Message};
 use proton_core_api::services::proton::LabelId;
@@ -9,78 +8,8 @@ use stash::orm::Model;
 use std::borrow::ToOwned;
 use std::sync::LazyLock;
 
-struct TestCase<T> {
-    current_local: LabelId,
-    items: Vec<T>,
-    is_custom: bool,
-    toolbar_actions: Vec<String>,
-    expected_visible: Vec<TestActions>,
-    expected_hidden: Vec<TestActions>,
-}
-
-impl<T> Default for TestCase<T> {
-    fn default() -> Self {
-        Self {
-            current_local: LabelId::inbox(),
-            items: vec![],
-            is_custom: false,
-            toolbar_actions: vec![],
-            expected_visible: vec![],
-            expected_hidden: vec![],
-        }
-    }
-}
-
-#[derive(Debug)]
-enum TestActions {
-    LabelAs,
-    MarkRead,
-    MarkUnread,
-    More,
-    MoveTo,
-    MoveToSystemFolder(MovableSystemFolder),
-    NotSpam(MovableSystemFolder),
-    PermanentDelete,
-    Star,
-    Unstar,
-    Snooze,
-}
-
-impl PartialEq<ListAction> for TestActions {
-    fn eq(&self, other: &ListAction) -> bool {
-        match self {
-            Self::LabelAs => matches!(other, ListAction::LabelAs),
-            Self::MarkRead => matches!(other, ListAction::MarkRead),
-            Self::MarkUnread => matches!(other, ListAction::MarkUnread),
-            Self::More => matches!(other, ListAction::More),
-            Self::MoveTo => matches!(other, ListAction::MoveTo),
-            Self::MoveToSystemFolder(label) => {
-                if let ListAction::MoveToSystemFolder(other) = other {
-                    *label == other.name
-                } else {
-                    false
-                }
-            }
-            Self::NotSpam(label) => {
-                if let ListAction::NotSpam(other) = other {
-                    *label == other.name
-                } else {
-                    false
-                }
-            }
-            Self::PermanentDelete => matches!(other, ListAction::PermanentDelete),
-            Self::Star => matches!(other, ListAction::Star),
-            Self::Unstar => matches!(other, ListAction::Unstar),
-            Self::Snooze => matches!(other, ListAction::Snooze),
-        }
-    }
-}
-
-impl PartialEq<TestActions> for ListAction {
-    fn eq(&self, other: &TestActions) -> bool {
-        other == self
-    }
-}
+// Import shared test infrastructure
+use crate::test_utils::toolbar_actions::{TestActions, TestCase, create_default_list_test_case};
 
 mod message {
     use super::*;
@@ -88,7 +17,7 @@ mod message {
     use stash::stash::StashError;
     use test_case::test_case;
 
-    static DEFAULT_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    static DEFAULT_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         expected_visible: vec![
             TestActions::MarkUnread,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
@@ -100,10 +29,10 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static ALL_UNREAD_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static ALL_UNREAD_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Message {
                 unread: true,
                 ..Message::test_default()
@@ -125,10 +54,10 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static ALL_READ_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static ALL_READ_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Message {
                 unread: false,
                 ..Message::test_default()
@@ -150,10 +79,10 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static MIX_READ_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static MIX_READ_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Message {
                 unread: false,
                 ..Message::test_default()
@@ -176,10 +105,10 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static ALL_STARRED_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static ALL_STARRED_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Message {
                 label_ids: vec![LabelId::starred()],
                 ..Message::test_default()
@@ -200,10 +129,10 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static NONE_STARRED_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
-        items: vec![Message::test_default(), Message::test_default()],
+    static NONE_STARRED_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
+        test_item: vec![Message::test_default(), Message::test_default()],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
         expected_visible: vec![TestActions::Star, TestActions::More],
@@ -215,10 +144,10 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static CUSTOM_MIX_STARRED_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static CUSTOM_MIX_STARRED_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Message {
                 label_ids: vec![LabelId::starred()],
                 ..Message::test_default()
@@ -237,10 +166,10 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static MIX_STARRED_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static MIX_STARRED_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Message {
                 label_ids: vec![LabelId::starred()],
                 ..Message::test_default()
@@ -260,9 +189,9 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static EMPTY_CUSTOM_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    static EMPTY_CUSTOM_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         is_custom: true,
         expected_visible: vec![TestActions::More],
         expected_hidden: vec![
@@ -272,9 +201,9 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static CUSTOM_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    static CUSTOM_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         toolbar_actions: vec![
             "archive".to_owned(),
             "label".to_owned(),
@@ -290,9 +219,9 @@ mod message {
             TestActions::More,
         ],
         expected_hidden: vec![TestActions::MoveToSystemFolder(MovableSystemFolder::Trash)],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static TOO_MANY_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    static TOO_MANY_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         toolbar_actions: vec![
             "archive".to_owned(),
             "label".to_owned(),
@@ -312,9 +241,9 @@ mod message {
             TestActions::More,
         ],
         expected_hidden: vec![],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static ARCHIVE_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    static ARCHIVE_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         current_local: LabelId::archive(),
         expected_visible: vec![
             TestActions::MarkUnread,
@@ -327,9 +256,9 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static TRASH_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    static TRASH_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         current_local: LabelId::trash(),
         expected_visible: vec![
             TestActions::MarkUnread,
@@ -342,9 +271,9 @@ mod message {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static SPAM_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    static SPAM_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         current_local: LabelId::spam(),
         expected_visible: vec![
             TestActions::MarkUnread,
@@ -357,7 +286,7 @@ mod message {
             TestActions::NotSpam(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
 
     #[test_case(&DEFAULT_CASE; "default")]
@@ -375,7 +304,7 @@ mod message {
     #[test_case(&SPAM_CASE; "spam")]
     #[test_case(&TOO_MANY_CASE; "too_many")]
     #[tokio::test]
-    async fn bottom_bar_actions(test_case: &TestCase<Message>) {
+    async fn bottom_bar_actions(test_case: &TestCase<Vec<Message>>) {
         // Setup
         let mut tether = new_test_connection().await.connection();
         let address = create_address(&mut tether).await;
@@ -394,7 +323,7 @@ mod message {
                 let mut conversation = Conversation::test_default();
                 conversation.save(tx).await.unwrap();
 
-                let mut messages = test_case.items.clone();
+                let mut messages = test_case.test_item.clone();
                 for message in &mut messages {
                     message.local_address_id = address.id();
                     message.local_conversation_id = conversation.local_id;
@@ -454,7 +383,7 @@ mod conversation {
         ..ConversationLabel::test_default()
     });
 
-    static DEFAULT_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
+    static DEFAULT_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
         expected_visible: vec![
             TestActions::MarkUnread,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
@@ -462,15 +391,15 @@ mod conversation {
             TestActions::More,
         ],
         expected_hidden: vec![
-            TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static ALL_UNREAD_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static ALL_UNREAD_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Conversation {
                 num_unread: 1,
                 num_messages: 1,
@@ -492,15 +421,15 @@ mod conversation {
         ],
         expected_hidden: vec![
             TestActions::Star,
-            TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static ALL_READ_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static ALL_READ_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Conversation {
                 num_unread: 0,
                 num_messages: 1,
@@ -522,15 +451,15 @@ mod conversation {
         ],
         expected_hidden: vec![
             TestActions::Star,
-            TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static MIX_READ_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static MIX_READ_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Conversation {
                 num_unread: 0,
                 num_messages: 1,
@@ -553,15 +482,15 @@ mod conversation {
         expected_hidden: vec![
             TestActions::MarkUnread,
             TestActions::Star,
-            TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static ALL_STARRED_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static ALL_STARRED_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Conversation {
                 labels: vec![STARRED_LABEL.clone()],
                 ..Conversation::test_default()
@@ -576,16 +505,16 @@ mod conversation {
         expected_visible: vec![TestActions::Unstar, TestActions::More],
         expected_hidden: vec![
             TestActions::MoveTo,
-            TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static NONE_STARRED_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static NONE_STARRED_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone()],
                 ..Conversation::test_default()
@@ -601,42 +530,43 @@ mod conversation {
         expected_hidden: vec![
             TestActions::MarkUnread,
             TestActions::MoveTo,
-            TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static CUSTOM_MIX_STARRED_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
-        items: vec![
-            Conversation {
-                labels: vec![INBOX_LABEL_READ.clone(), STARRED_LABEL.clone()],
-                ..Conversation::test_default()
-            },
-            Conversation {
-                labels: vec![INBOX_LABEL_READ.clone()],
-                ..Conversation::test_default()
-            },
-        ],
-        toolbar_actions: vec!["toggle_star".to_owned()],
-        is_custom: true,
-        expected_visible: vec![TestActions::Star, TestActions::More],
-        expected_hidden: vec![
-            TestActions::MarkUnread,
-            TestActions::Unstar,
-            TestActions::MoveTo,
-            TestActions::LabelAs,
-            TestActions::Snooze,
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-        ],
-        ..Default::default()
-    });
-    static MIX_STARRED_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static CUSTOM_MIX_STARRED_CASE: LazyLock<TestCase<Vec<Conversation>>> =
+        LazyLock::new(|| TestCase {
+            test_item: vec![
+                Conversation {
+                    labels: vec![INBOX_LABEL_READ.clone(), STARRED_LABEL.clone()],
+                    ..Conversation::test_default()
+                },
+                Conversation {
+                    labels: vec![INBOX_LABEL_READ.clone()],
+                    ..Conversation::test_default()
+                },
+            ],
+            toolbar_actions: vec!["toggle_star".to_owned()],
+            is_custom: true,
+            expected_visible: vec![TestActions::Star, TestActions::More],
+            expected_hidden: vec![
+                TestActions::MarkUnread,
+                TestActions::Unstar,
+                TestActions::MoveTo,
+                TestActions::Snooze,
+                TestActions::LabelAs,
+                TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+                TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+                TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            ],
+            ..create_default_list_test_case()
+        });
+    static MIX_STARRED_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone(), STARRED_LABEL.clone()],
                 ..Conversation::test_default()
@@ -655,15 +585,15 @@ mod conversation {
         expected_hidden: vec![
             TestActions::Star,
             TestActions::Unstar,
-            TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static MIX_MAILBOX_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
-        items: vec![
+    static MIX_MAILBOX_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
+        test_item: vec![
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone()],
                 num_unread: 0,
@@ -683,27 +613,27 @@ mod conversation {
         ],
         expected_hidden: vec![
             TestActions::Star,
-            TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static EMPTY_CUSTOM_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
+    static EMPTY_CUSTOM_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
         is_custom: true,
         expected_visible: vec![TestActions::More],
         expected_hidden: vec![
             TestActions::MoveTo,
-            TestActions::LabelAs,
             TestActions::Snooze,
+            TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static CUSTOM_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
+    static CUSTOM_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
         toolbar_actions: vec![
             "archive".to_owned(),
             "label".to_owned(),
@@ -722,9 +652,9 @@ mod conversation {
             TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static TOO_MANY_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
+    static TOO_MANY_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
         toolbar_actions: vec![
             "archive".to_owned(),
             "label".to_owned(),
@@ -745,9 +675,9 @@ mod conversation {
             TestActions::More,
         ],
         expected_hidden: vec![TestActions::Snooze],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static ARCHIVE_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
+    static ARCHIVE_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
         current_local: LabelId::archive(),
         expected_visible: vec![
             TestActions::MarkUnread,
@@ -760,9 +690,9 @@ mod conversation {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static TRASH_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
+    static TRASH_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
         current_local: LabelId::trash(),
         expected_visible: vec![
             TestActions::MarkUnread,
@@ -775,9 +705,9 @@ mod conversation {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static SPAM_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
+    static SPAM_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
         current_local: LabelId::spam(),
         expected_visible: vec![
             TestActions::MarkUnread,
@@ -790,9 +720,9 @@ mod conversation {
             TestActions::NotSpam(MovableSystemFolder::Inbox),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
         ],
-        ..Default::default()
+        ..create_default_list_test_case()
     });
-    static CUSTOM_SNOOZE_AT_THE_BOTTOM_CASE: LazyLock<TestCase<Conversation>> =
+    static CUSTOM_SNOOZE_AT_THE_BOTTOM_CASE: LazyLock<TestCase<Vec<Conversation>>> =
         LazyLock::new(|| TestCase {
             toolbar_actions: vec![
                 "archive".to_owned(),
@@ -812,9 +742,9 @@ mod conversation {
                 TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
                 TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             ],
-            ..Default::default()
+            ..create_default_list_test_case()
         });
-    static CUSTOM_SNOOZE_AT_THE_TOP_CASE: LazyLock<TestCase<Conversation>> =
+    static CUSTOM_SNOOZE_AT_THE_TOP_CASE: LazyLock<TestCase<Vec<Conversation>>> =
         LazyLock::new(|| TestCase {
             toolbar_actions: vec![
                 "snooze".to_owned(),
@@ -834,7 +764,7 @@ mod conversation {
                 TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
                 TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             ],
-            ..Default::default()
+            ..create_default_list_test_case()
         });
 
     #[test_case(&DEFAULT_CASE; "default")]
@@ -855,7 +785,7 @@ mod conversation {
     #[test_case(&CUSTOM_SNOOZE_AT_THE_BOTTOM_CASE; "custom_snooze_at_the_bottom")]
     #[test_case(&CUSTOM_SNOOZE_AT_THE_TOP_CASE; "custom_snooze_at_the_top")]
     #[tokio::test]
-    async fn bottom_bar_actions(test_case: &TestCase<Conversation>) {
+    async fn bottom_bar_actions(test_case: &TestCase<Vec<Conversation>>) {
         // Setup
         let mut tether = new_test_connection().await.connection();
 
@@ -871,7 +801,7 @@ mod conversation {
             .tx::<_, _, StashError>(async |tx| {
                 settings.save(tx).await.unwrap();
 
-                let mut conversations = test_case.items.clone();
+                let mut conversations = test_case.test_item.clone();
                 for conversation in &mut conversations {
                     conversation.save(tx).await.unwrap();
                 }

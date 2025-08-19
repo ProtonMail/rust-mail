@@ -11,4 +11,5 @@ pub mod messages;
 pub mod scroller;
 pub mod search;
 pub mod test_context;
+pub mod toolbar_actions;
 pub mod utils;

@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use super::SystemLabelId as _;
 use super::folder_banner::{AutoDeleteBanner, AutoDeleteState, SpamOrTrash};
-use crate::actions::{AllListActions, ListAction, MovableSystemFolderAction};
+use crate::actions::{AllListActions, MovableSystemFolderAction};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
@@ -25,7 +25,7 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
 /// in a [`Label`].
@@ -339,97 +339,28 @@ impl ContextualConversation {
             conversations_fut
         )?;
 
-        let visible_list_actions = ContextualConversation::visible_list_actions(
-            &current_label,
-            &conversations,
-            &bottom_bar_actions,
-            &inbox,
-            &archive,
-            &trash,
-            &spam,
-        )?;
-        let hidden_list_actions = ContextualConversation::hidden_list_actions(
-            current_label,
-            &conversations,
-            &visible_list_actions,
-            &inbox,
-            &archive,
-            &trash,
-            &spam,
-        );
-
-        let actions = AllListActions {
-            hidden_list_actions,
-            visible_list_actions,
-        };
-        debug!("All available bottombar actions: {actions:?}");
-        Ok(actions)
-    }
-
-    /// Get actions to display in bottom_bar when selecting messages
-    pub(crate) fn visible_list_actions(
-        current_label: &LabelId,
-        conversations: &[Self],
-        bottom_bar_actions: &[MobileAction],
-        inbox: &MovableSystemFolderAction,
-        archive: &MovableSystemFolderAction,
-        trash: &MovableSystemFolderAction,
-        spam: &MovableSystemFolderAction,
-    ) -> Result<Vec<ListAction>, AppError> {
+        // Calculate state flags for the new builder
         let any_unread = conversations.iter().any(|c| c.num_unread > 0);
+        let any_read = conversations.iter().any(|c| c.num_unread == 0);
+        let any_starred = conversations.iter().any(|c| c.is_starred);
         let all_starred = conversations.iter().all(|c| c.is_starred);
 
-        let mut result: Vec<_> = bottom_bar_actions
-            .iter()
-            .filter_map(|a| {
-                ListAction::from_mobile_actions(
-                    a,
-                    any_unread,
-                    all_starred,
-                    current_label,
-                    inbox,
-                    archive,
-                    trash,
-                    spam,
-                )
-            })
-            .collect();
-        if result.len() > 5 {
-            warn!("Too many actions to put in Bottom Bar, truncating to 5: {result:?}");
-            result.truncate(5);
-        }
-        result.push(ListAction::More);
-        Ok(result)
-    }
-
-    /// Get actions not displayed in bottom_bar when selecting messages
-    pub(crate) fn hidden_list_actions(
-        current_label: LabelId,
-        conversations: &[Self],
-        visible_actions: &[ListAction],
-        inbox: &MovableSystemFolderAction,
-        archive: &MovableSystemFolderAction,
-        trash: &MovableSystemFolderAction,
-        spam: &MovableSystemFolderAction,
-    ) -> Vec<ListAction> {
-        let any_unread = conversations.iter().any(|m| m.num_unread > 0);
-        let any_read = conversations.iter().any(|m| m.num_unread < m.num_messages);
-        let any_starred = conversations.iter().any(|m| m.is_starred);
-        let any_unstarred = conversations.iter().any(|m| !m.is_starred);
-
-        ListAction::hidden_list_actions(
-            true,
+        // Use the new unified from_context approach
+        let actions = AllListActions::from_context(
+            true, // is_conversation = true for conversations
             current_label,
             any_unread,
             any_read,
-            any_unstarred,
             any_starred,
-            visible_actions,
+            all_starred,
+            &bottom_bar_actions,
             inbox,
             archive,
             trash,
             spam,
-        )
+        );
+        debug!("All available bottombar actions: {actions:?}");
+        Ok(actions)
     }
 
     /// Gets the banner for folder autodelete.
