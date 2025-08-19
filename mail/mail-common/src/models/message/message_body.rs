@@ -37,43 +37,61 @@ impl MessageBody {
         Self::ok(body, MessageMimeType::TextPlain)
     }
 
-    #[instrument(skip_all, fields(local_id=%local_id))]
+    #[instrument(skip_all, fields(id=%id))]
     pub async fn load(
-        local_id: LocalMessageId,
+        id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Option<MessageBody>, StashError> {
         let rows = tether
             .query(
-                indoc! { "
+                indoc! {"
                     SELECT body, mime_type, decryption_error
                     FROM message_body
-                    WHERE message_id = ?"
-                },
-                params![local_id],
+                    WHERE message_id = ?
+                "},
+                params![id],
             )
             .await?;
 
         Ok(rows.into_iter().next())
     }
 
-    #[instrument(skip_all, fields(local_id=%local_id))]
-    pub async fn store(&self, local_id: LocalMessageId, bond: &Bond<'_>) -> Result<(), StashError> {
+    #[instrument(skip_all, fields(id=%id))]
+    pub async fn store(&self, id: LocalMessageId, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.execute(
-            "INSERT OR REPLACE INTO message_body (message_id, body, mime_type, decryption_error) VALUES (?, ?, ?, ?)",
-            params![local_id, self.body.clone(), self.mime_type, self.decryption_error.clone()],
+            indoc! {"
+                INSERT INTO message_body (
+                    message_id,
+                    body,
+                    mime_type,
+                    decryption_error
+                )
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (message_id)
+                DO UPDATE SET
+                    body = ?,
+                    mime_type = ?,
+                    decryption_error = ?
+                "},
+            params![
+                id,
+                self.body.clone(),
+                self.mime_type,
+                self.decryption_error.clone(),
+                self.body.clone(),
+                self.mime_type,
+                self.decryption_error.clone()
+            ],
         )
         .await?;
 
         Ok(())
     }
 
-    #[instrument(skip_all, fields(local_id=%local_id))]
-    pub async fn delete(local_id: LocalMessageId, bond: &Bond<'_>) -> Result<(), StashError> {
-        bond.execute(
-            "DELETE FROM message_body WHERE message_id = ?",
-            params![local_id],
-        )
-        .await?;
+    #[instrument(skip_all, fields(id=%id))]
+    pub async fn delete(id: LocalMessageId, bond: &Bond<'_>) -> Result<(), StashError> {
+        bond.execute("DELETE FROM message_body WHERE message_id = ?", params![id])
+            .await?;
 
         Ok(())
     }
