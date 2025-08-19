@@ -37,10 +37,10 @@ impl MessageBody {
         Self::ok(body, MessageMimeType::TextPlain)
     }
 
-    pub fn err(decryption_error: impl Into<String>) -> Self {
+    pub fn err(decryption_error: impl Into<String>, mime_type: MessageMimeType) -> Self {
         Self {
             body: String::new(),
-            mime_type: MessageMimeType::TextHtml,
+            mime_type,
             decryption_error: Some(decryption_error.into()),
         }
     }
