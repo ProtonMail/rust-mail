@@ -51,8 +51,13 @@ pub struct Save {
     message_id: Option<LocalMessageId>,
     conversation_id: Option<LocalConversationId>,
     address_id: AddressId,
+
+    /// Unencrypted subject
     subject: String,
-    body: String, // unencrypted
+
+    /// Unencrypted body
+    body: String,
+
     mime_type: MessageMimeType,
     parent_id: Option<LocalMessageId>,
     reply_mode: Option<ReplyMode>,
