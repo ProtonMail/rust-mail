@@ -3,6 +3,7 @@ use crate::{UniffiEnum, UniffiRecord};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::actions::{
     AllMessageActions as RealAllMessageActions, MessageAction as RealMessageAction,
+    MessageActionSheet as RealMessageActionSheet,
 };
 
 /// All actions on message selection.
@@ -20,6 +21,33 @@ impl From<RealAllMessageActions> for AllMessageActions {
         Self {
             hidden_message_actions: value.hidden_message_actions.map_vec(),
             visible_message_actions: value.visible_message_actions.map_vec(),
+        }
+    }
+}
+
+/// Message action sheet grouped by categories for UI display.
+#[derive(Debug, Clone, PartialEq, UniffiRecord)]
+pub struct MessageActionSheet {
+    /// Actions for replying (Reply, ReplyAll, Forward)
+    pub reply_actions: Vec<MessageAction>,
+
+    /// Core message actions (Mark Read/Unread, Star/Unstar, etc.)
+    pub message_actions: Vec<MessageAction>,
+
+    /// Movement-related actions (Archive, Trash, Move, etc.)
+    pub move_actions: Vec<MessageAction>,
+
+    /// General utility actions (Print, Save PDF, View Headers, etc.)
+    pub general_actions: Vec<MessageAction>,
+}
+
+impl From<RealMessageActionSheet> for MessageActionSheet {
+    fn from(value: RealMessageActionSheet) -> Self {
+        Self {
+            reply_actions: value.reply_actions.map_vec(),
+            message_actions: value.message_actions.map_vec(),
+            move_actions: value.move_actions.map_vec(),
+            general_actions: value.general_actions.map_vec(),
         }
     }
 }

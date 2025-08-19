@@ -1,5 +1,5 @@
 use super::GeneralActions;
-use crate::actions::MoveItemAction;
+use crate::actions::{AllListActions, MoveItemAction};
 use typed_builder::TypedBuilder;
 
 /// Struct to reflect what kind of actions
@@ -28,3 +28,8 @@ pub enum ConversationAction {
     Delete,
     Snooze,
 }
+
+/// As for this moment the conversation actions are exactly the same as the list actions.
+///
+/// I introduce type alias as a means if that ever changes in the future.
+pub type AllConversationActions = AllListActions;

@@ -2,24 +2,42 @@
 #[path = "../../tests/actions/available_actions/all_message_actions.rs"]
 mod tests;
 
-use super::{GeneralActions, ReplyAction};
+use crate::actions::MovableSystemFolderAction;
 use crate::actions::{ActionContext, GenericAction, GenericMobileActions};
-use crate::actions::{MovableSystemFolderAction, MoveItemAction};
 use crate::datatypes::{MobileAction, theme::MailTheme};
 use crate::decrypted_message::ThemeOpts;
 use proton_core_api::services::proton::LabelId;
-use typed_builder::TypedBuilder;
 
 /// Struct to reflect what kind of actions
 /// could be taken upon the message.
 ///
-#[derive(Debug, Clone, PartialEq, TypedBuilder)]
-pub struct MessageAvailableActions {
-    #[builder(default = ReplyAction::single_address())]
-    pub reply_actions: Vec<ReplyAction>, // TODO: check reply_all field
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MessageActionSheet {
+    pub reply_actions: Vec<MessageAction>,
     pub message_actions: Vec<MessageAction>,
-    pub move_actions: Vec<MoveItemAction>,
-    pub general_actions: Vec<GeneralActions>,
+    pub move_actions: Vec<MessageAction>,
+    pub general_actions: Vec<MessageAction>,
+}
+
+impl From<AllMessageActions> for MessageActionSheet {
+    fn from(value: AllMessageActions) -> Self {
+        let mut this = Self::default();
+        let all_actions = [value.visible_message_actions, value.hidden_message_actions].concat();
+
+        all_actions.iter().for_each(|action| {
+            if action.is_reply_action() {
+                this.reply_actions.push(*action);
+            } else if action.is_move_action() {
+                this.move_actions.push(*action);
+            } else if action.is_general_action() {
+                this.general_actions.push(*action);
+            } else if action.is_message_action() {
+                this.message_actions.push(*action);
+            }
+        });
+
+        this
+    }
 }
 
 /// All actions on message selection for Phase 2 dynamic actions.
@@ -88,7 +106,7 @@ impl AllMessageActions {
 /// Each of the options is meant to display a button.
 /// This is the comprehensive Phase 2 message action system.
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MessageAction {
     // Read state
     MarkRead,
@@ -129,6 +147,47 @@ impl MessageAction {
             Some(MailTheme::DarkMode) => Self::ViewInLightMode,
             _ => Self::ViewInDarkMode,
         }
+    }
+
+    fn is_reply_action(&self) -> bool {
+        matches!(
+            self,
+            MessageAction::Reply | MessageAction::ReplyAll | MessageAction::Forward
+        )
+    }
+
+    fn is_move_action(&self) -> bool {
+        matches!(
+            self,
+            MessageAction::MoveTo
+                | MessageAction::MoveToSystemFolder(_)
+                | MessageAction::NotSpam(_)
+                | MessageAction::PermanentDelete
+        )
+    }
+
+    fn is_general_action(&self) -> bool {
+        matches!(
+            self,
+            MessageAction::SavePDF
+                | MessageAction::Print
+                | MessageAction::ViewHeaders
+                | MessageAction::ViewHTML
+                | MessageAction::ViewInLightMode
+                | MessageAction::ViewInDarkMode
+                | MessageAction::ReportPhishing
+        )
+    }
+
+    fn is_message_action(&self) -> bool {
+        matches!(
+            self,
+            MessageAction::Star
+                | MessageAction::Unstar
+                | MessageAction::LabelAs
+                | MessageAction::MarkRead
+                | MessageAction::MarkUnread
+        )
     }
 }
 

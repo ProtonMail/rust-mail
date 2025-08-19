@@ -77,9 +77,9 @@ impl GenericAction {
         archive: &MovableSystemFolderAction,
     ) -> Self {
         if current_label == &LabelId::archive() {
-            Self::MoveToSystemFolder(inbox.clone())
+            Self::MoveToSystemFolder(*inbox)
         } else {
-            Self::MoveToSystemFolder(archive.clone())
+            Self::MoveToSystemFolder(*archive)
         }
     }
 
@@ -88,7 +88,7 @@ impl GenericAction {
         if [LabelId::trash(), LabelId::spam()].contains(current_label) {
             Self::PermanentDelete
         } else {
-            Self::MoveToSystemFolder(trash.clone())
+            Self::MoveToSystemFolder(*trash)
         }
     }
 
@@ -99,11 +99,11 @@ impl GenericAction {
         spam: &MovableSystemFolderAction,
     ) -> Self {
         if current_label == &LabelId::spam() {
-            Self::NotSpam(inbox.clone())
+            Self::NotSpam(*inbox)
         } else if current_label == &LabelId::trash() {
-            Self::MoveToSystemFolder(inbox.clone())
+            Self::MoveToSystemFolder(*inbox)
         } else {
-            Self::MoveToSystemFolder(spam.clone())
+            Self::MoveToSystemFolder(*spam)
         }
     }
 }

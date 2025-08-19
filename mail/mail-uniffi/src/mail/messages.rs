@@ -8,7 +8,7 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllListActions, AllMessageActions, Message};
+use super::datatypes::{AllListActions, AllMessageActions, Message, MessageActionSheet};
 use super::datatypes::{LabelAsAction, MimeType, MoveAction};
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
@@ -801,6 +801,39 @@ pub async fn all_available_message_actions_for_message(
         .into();
 
         Ok::<_, RealProtonMailError>(actions)
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Returns available message actions grouped by categories for action sheet display.
+///
+/// Actions are organized into reply_actions, message_actions, move_actions, and general_actions categories.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi_export]
+pub async fn available_message_action_sheet(
+    mailbox: Arc<Mailbox>,
+    theme: ThemeOpts,
+    message_id: Id,
+) -> Result<MessageActionSheet, ActionError> {
+    let stash = mailbox.stash()?;
+    let current_label_id = mailbox.label_id();
+    uniffi_async(async move {
+        let tether = stash.connection();
+        let action_sheet = RealMessage::available_actions(
+            current_label_id.into(),
+            message_id.into(),
+            theme.into(),
+            &tether,
+        )
+        .await?
+        .into();
+
+        Ok::<_, RealProtonMailError>(action_sheet)
     })
     .await
     .map_err(ActionError::from)
