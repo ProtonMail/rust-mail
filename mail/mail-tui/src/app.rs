@@ -182,7 +182,7 @@ pub enum Command<Message> {
 
 impl Command<Messages> {
     pub fn from_future(f: impl Future<Output = anyhow::Result<()>> + Send + 'static) -> Self {
-        Self::command_from_future(async move { f.await.map(|_| Command::None) })
+        Self::command_from_future(async move { f.await.map(|()| Command::None) })
     }
 
     pub fn command_from_future(

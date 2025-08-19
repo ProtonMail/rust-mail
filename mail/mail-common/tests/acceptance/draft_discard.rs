@@ -415,10 +415,6 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
     .await;
 
     let params = draft_test_params();
-    let mut message = message_body_test_message_simple();
-
-    message.metadata.label_ids.clear();
-    message.metadata.label_ids.push(LabelId::drafts());
 
     let mut remote_existing_message = draft_message();
 

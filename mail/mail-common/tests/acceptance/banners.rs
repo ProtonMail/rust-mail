@@ -5,8 +5,10 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::response_data::IncomingDefault;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use proton_mail_common::datatypes::MessageFlags;
+use proton_mail_common::datatypes::ParsedHeaders;
 use proton_mail_common::datatypes::SystemLabelId as _;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
+use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::models::Conversation;
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::models::MessageBody;
@@ -22,6 +24,7 @@ use proton_mail_common::models::Message;
 use proton_mail_common::test_utils::test_context::MailTestContext;
 use proton_mail_common::test_utils::test_context::MailUserContextTestExtension;
 use stash::stash::StashError;
+use velcro::hash_map;
 use wiremock::Mock;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::{method, path};
@@ -149,7 +152,7 @@ async fn banners() {
     let msg_schedule_send = Message {
         label_ids: vec![LabelId::all_scheduled()],
         time: scheduled_time,
-        ..Message::test_default()
+        ..msg_normal.clone()
     };
 
     let snooze_time = 123456_u64.into();
@@ -157,7 +160,7 @@ async fn banners() {
     let msg_snoozed = Message {
         snooze_time,
         label_ids: vec![LabelId::snoozed()],
-        ..Message::test_default()
+        ..msg_normal.clone()
     };
 
     assert_eq!(
@@ -457,4 +460,95 @@ async fn autodelete_and_expiry() {
     message.expiration_time = 0.into();
     let banners = message.get_banners(&tether).await;
     assert_eq!(banners, vec![MessageBanner::Spam { auto: true }]);
+}
+
+#[tokio::test]
+async fn banners_unsubscribe() {
+    let test_ctx = MailTestContext::new().await;
+    let mut params = Params::default_basic();
+
+    test_ctx.setup_user(params.clone()).await;
+    let ctx = test_ctx.mail_user_context().await;
+    let tether = &mut ctx.user_stash().connection();
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/tests/ping"))
+        .respond_with(ResponseTemplate::new(200))
+        .named("Mock pings")
+        .mount(test_ctx.mock_server())
+        .await;
+
+    test_ctx.catch_all().await;
+    // --
+
+    let headers = hash_map! {
+        "List-Unsubscribe".into(): "<https://foo.bar/subscribe>".into(),
+    };
+
+    let mut addr: Address = params.addresses.pop().unwrap().into();
+    let mut conv: Conversation = params.conversations.pop().unwrap().into();
+
+    let mut msg = Message {
+        label_ids: vec![LabelId::inbox()],
+        remote_conversation_id: conv.remote_id.clone(),
+        remote_address_id: addr.remote_id.clone().unwrap(),
+        remote_id: Some("".into()),
+        sender: proton_mail_common::datatypes::MessageSender {
+            address: "normal@email".into(),
+            ..Default::default()
+        },
+        ..Message::test_default()
+    };
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            addr.save(tx).await?;
+            conv.save(tx).await?;
+            msg.local_conversation_id = conv.local_id;
+            msg.local_address_id = addr.id();
+            msg.save(tx).await?;
+            msg.reload(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let d = DecryptedMessageBody::new_without_prefetching(
+        String::new(),
+        MessageBodyMetadata {
+            local_message_id: msg.local_id,
+            parsed_headers: ParsedHeaders { headers },
+            ..Default::default()
+        },
+        None,
+        "".into(),
+        None,
+    );
+
+    let banners = d
+        .transformed("", Default::default(), tether)
+        .await
+        .body_banners;
+
+    assert_eq!(
+        vec![MessageBanner::UnsubscribeNewsletter {
+            already_unsubscribed: false
+        }],
+        banners
+    );
+
+    d.action_unsubscribe_from_newsletter(&ctx).await.unwrap();
+
+    let banners = d
+        .transformed("", Default::default(), tether)
+        .await
+        .body_banners;
+
+    assert_eq!(
+        vec![MessageBanner::UnsubscribeNewsletter {
+            already_unsubscribed: true
+        }],
+        banners
+    );
+
+    assert_eq!(ctx.execute_all_actions().await.unwrap(), 1);
 }

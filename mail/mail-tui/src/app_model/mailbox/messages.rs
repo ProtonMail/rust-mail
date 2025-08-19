@@ -106,10 +106,10 @@ impl MessagesState {
         Command::task(async move {
             match Self::new_impl(ctx, label_id, filter, recipient_display_mode).await {
                 Ok((state, background_command)) => Command::batch([
-                    Command::message(Message::OpenMessageView(mbox, label, state).into()),
+                    Command::message(Message::OpenMessageView(mbox, label, state)),
                     background_command,
                 ]),
-                Err(e) => Command::message(e.into()),
+                Err(e) => Command::message(e),
             }
         })
     }
@@ -148,10 +148,10 @@ impl MessagesState {
         Command::task(async move {
             match Self::from_search_impl(ctx, search_phrase).await {
                 Ok((state, background_command)) => Command::batch([
-                    Command::message(Message::OpenSearchView(mbox, state).into()),
+                    Command::message(Message::OpenSearchView(mbox, state)),
                     background_command,
                 ]),
-                Err(e) => Command::message(e.into()),
+                Err(e) => Command::message(e),
             }
         })
     }
@@ -193,13 +193,10 @@ impl MessagesState {
                 fetching: AtomicBool::new(false),
             },
             Command::batch(vec![
-                Command::message(
-                    Message::SearchStatusBar(SearchStatusBar {
-                        search_phrase,
-                        total,
-                    })
-                    .into(),
-                ),
+                Command::message(Message::SearchStatusBar(SearchStatusBar {
+                    search_phrase,
+                    total,
+                })),
                 command,
             ]),
         ))
@@ -214,13 +211,13 @@ impl MessagesState {
         Command::task(async move {
             match Self::from_conversation_impl(ctx, label_id, conversation_id).await {
                 Ok((state, background_command)) => Command::batch([
-                    Command::message(ConversationMessage::OpenSuccess(Box::new(state)).into()),
+                    Command::message(ConversationMessage::OpenSuccess(Box::new(state))),
                     background_command,
                 ]),
                 Err(e) => {
                     let e = anyhow!("Failed to open conversation {conversation_id}: {e}");
                     tracing::error!("{e:?}");
-                    Command::message(ConversationMessage::OpenFailed(e).into())
+                    Command::message(ConversationMessage::OpenFailed(e))
                 }
             }
         })
@@ -305,7 +302,7 @@ impl MessagesState {
             })()
             .await;
 
-            Command::message(MessageMessage::OpenBodyResult(c).into())
+            Command::message(MessageMessage::OpenBodyResult(c))
         })
     }
 
@@ -374,9 +371,9 @@ impl MessagesState {
             && key.code == KeyCode::Esc
         {
             return Command::batch(vec![
-                Command::message(Message::ClearSearchStatusBar.into()),
+                Command::message(Message::ClearSearchStatusBar),
                 // TODO: For now its hard to go back in the previous state - fixme
-                Command::message(Message::Sync(mbox.clone()).into()),
+                Command::message(Message::Sync(mbox.clone())),
             ]);
         }
 
@@ -385,33 +382,51 @@ impl MessagesState {
             DecryptedMessageStatus::Success(_) | DecryptedMessageStatus::Error(_)
         ) && key.code == KeyCode::Esc
         {
-            return Command::message(MessageMessage::CloseBody.into());
+            return Command::message(MessageMessage::CloseBody);
         }
 
         if let DecryptedMessageStatus::Success(state) = &mut self.open_message {
             if state.content_scroll.handle_event(key.code) {
                 return Command::None;
             }
-            if let KeyCode::Char('H') = key.code {
-                let tether = ctx.user_stash().connection();
-                let id = state.msg.id();
-                return Command::popup_from_future("Message Headers", async move {
-                    let mdata = MessageBodyMetadata::find_first(
-                        "WHERE local_message_id = ?",
-                        params![id],
-                        &tether,
-                    )
-                    .await?
-                    .context("Error getting metadata")?;
+            match key.code {
+                KeyCode::Char('H') => {
+                    let tether = ctx.user_stash().connection();
+                    let id = state.msg.id();
+                    return Command::popup_from_future("Message Headers", async move {
+                        let mdata = MessageBodyMetadata::find_first(
+                            "WHERE local_message_id = ?",
+                            params![id],
+                            &tether,
+                        )
+                        .await?
+                        .context("Error getting metadata")?;
 
-                    let mut headers = String::new();
-                    for (k, v) in mdata.parsed_headers.headers {
-                        let v = v.to_string();
-                        writeln!(headers, r#"- "{k}": {v}"#)?;
+                        let mut headers = String::new();
+                        for (k, v) in mdata.parsed_headers.headers {
+                            let v = v.to_string();
+                            writeln!(headers, r#"- "{k}": {v}"#)?;
+                        }
+
+                        Ok(headers)
+                    });
+                }
+                KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    let ctx = ctx.clone();
+                    match state.body.unsubscribe_from_newsletter() {
+                        Ok(action) => {
+                            return Command::command_from_future(async move {
+                                ctx.queue_action(action).await?;
+                                Ok(MessageMessage::OpenBody.into())
+                            });
+                        }
+                        Err(e) => {
+                            tracing::error!("{e:?}");
+                            return Command::message(e);
+                        }
                     }
-
-                    Ok(headers)
-                });
+                }
+                _ => (),
             }
         }
 
@@ -780,6 +795,7 @@ impl MessagesState {
                 ("Shift + ▲ ", "Scroll up in a message"),
                 ("Shift + ▼ ", "Scroll down in a message"),
                 ("Shift + h ", "View message headers"),
+                ("Ctrl  + u ", "Unsubscribe from newsletter"),
             ]);
         }
         vec.extend_from_slice(&[
@@ -797,6 +813,7 @@ impl MessagesState {
 }
 
 pub struct DecryptedMessage {
+    body: DecryptedMessageBody,
     msg: MailMessage,
     content: String,
     content_scroll: ScrollableParagraphState,
@@ -970,6 +987,7 @@ impl DecryptedMessage {
         };
 
         Ok(Self {
+            body,
             msg,
             content,
             content_scroll,
@@ -1072,9 +1090,15 @@ impl DecryptedMessage {
                     "> This message is scheduled to be sent at {}.",
                     date_from_timestamp(*timestamp)
                 )),
-                MessageBanner::UnsubscribeNewsletter => {
-                    ListItem::from("> This message is a newsletter.")
-                }
+                MessageBanner::UnsubscribeNewsletter {
+                    already_unsubscribed: false,
+                } => ListItem::from("> This message is a newsletter. Press Ctrl-u to unsubscribe."),
+
+                MessageBanner::UnsubscribeNewsletter {
+                    already_unsubscribed: true,
+                } => ListItem::from(
+                    "> This message is a newsletter. You have already unsubscribed from it.",
+                ),
                 MessageBanner::Snoozed { timestamp } => ListItem::from(format!(
                     "> This message has been snoozed until {}",
                     date_from_timestamp(*timestamp)
@@ -1491,7 +1515,7 @@ fn label_message(
                             .await
                             .context("Error undoing message labelling")
                         {
-                            Command::message(e.into())
+                            Command::message(e)
                         } else {
                             Command::None
                         }
@@ -1502,7 +1526,7 @@ fn label_message(
             }
             Err(e) => {
                 tracing::error!("{e:?}");
-                Command::message(e.into())
+                Command::message(e)
             }
         }
     })
@@ -1534,7 +1558,7 @@ fn move_message(
                             .await
                             .context("Error undoing conversation labelling")
                         {
-                            Command::message(e.into())
+                            Command::message(e)
                         } else {
                             Command::None
                         }
@@ -1546,7 +1570,7 @@ fn move_message(
             Err(e) => {
                 let e = anyhow!("Failed to move conversation: {e}");
                 tracing::error!("{e:?}");
-                Command::message(e.into())
+                Command::message(e)
             }
         }
     })

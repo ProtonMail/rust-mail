@@ -83,7 +83,7 @@ impl AppStateHandler for TwoFaModel {
                         let message = if let Err(e) = flow.submit_totp(code).await {
                             Message::TwoFAFailed(flow, e)
                         } else {
-                            Message::TwoFASuccess(flow).into()
+                            Message::TwoFASuccess(flow)
                         };
 
                         Command::batch([

@@ -75,6 +75,7 @@ typed-builder = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
 sqlite-watcher = { workspace = true }
+reqwest = "0.12.23"
 
 # test-util option deps
 function_name = { workspace = true, optional = true }

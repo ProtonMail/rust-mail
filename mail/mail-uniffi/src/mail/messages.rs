@@ -152,6 +152,21 @@ impl DecryptedMessage {
         .map_err(ProtonError::from)
         .into()
     }
+    /// Unsubscribes from the newsletter
+    #[returns(VoidActionResult)]
+    pub async fn unsubscribe_from_newsletter(self: Arc<Self>) -> Result<(), ProtonError> {
+        uniffi_async(async move {
+            let u = self.body.unsubscribe_from_newsletter()?;
+            self.ctx()?
+                .queue_action(u)
+                .await
+                .map_err(RealProtonMailError::from)?;
+            Ok::<_, RealProtonMailError>(())
+        })
+        .await
+        .map_err(ProtonError::from)
+        .into()
+    }
 
     /// Load a remote image (potentially proxied) or embedded attachment in the email body.
     ///
@@ -389,7 +404,10 @@ pub enum MessageBanner {
     },
 
     /// The message provides an option to unsubscribe from a newsletter.
-    UnsubscribeNewsletter,
+    UnsubscribeNewsletter { already_unsubscribed: bool },
+
+    /// The user has already clicked on unsubscribe.
+    AlreadyUnsubscribed,
 
     /// The message is scheduled to be sent at a future time.
     ScheduledSend {
@@ -425,7 +443,11 @@ impl From<RealMessageBanner> for MessageBanner {
             RealMessageBanner::AutoDelete { timestamp } => Self::AutoDelete {
                 timestamp: timestamp.into(),
             },
-            RealMessageBanner::UnsubscribeNewsletter => Self::UnsubscribeNewsletter,
+            RealMessageBanner::UnsubscribeNewsletter {
+                already_unsubscribed,
+            } => Self::UnsubscribeNewsletter {
+                already_unsubscribed,
+            },
             RealMessageBanner::ScheduledSend { timestamp } => Self::ScheduledSend {
                 timestamp: timestamp.into(),
             },

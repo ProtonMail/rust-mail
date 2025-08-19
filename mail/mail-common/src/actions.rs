@@ -174,6 +174,7 @@ pub(crate) fn register_actions(
             reg(queue, messages::ReportPhishingHandler { ctx: ctx.clone() });
             reg(queue, messages::PrefetchHandler { ctx: ctx.clone() });
             reg(queue, messages::RefreshMetadataHandler { api: api.clone() });
+            reg(queue, messages::UnsubscribeNewsletterHandler);
             reg(queue, draft::SaveHandler { ctx: ctx.clone() });
             reg(queue, draft::SendHandler { ctx: ctx.clone() });
             reg(queue, labels::ExpandHandler { api: api.clone() });

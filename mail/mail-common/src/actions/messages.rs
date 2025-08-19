@@ -8,6 +8,7 @@ mod prefetch;
 mod read;
 mod refresh_metadata;
 mod unread;
+mod unsubscribe_newsletter;
 
 pub use self::delete::*;
 pub use self::delete_all::*;
@@ -19,3 +20,4 @@ pub use self::prefetch::*;
 pub use self::read::*;
 pub use self::refresh_metadata::*;
 pub use self::unread::*;
+pub use self::unsubscribe_newsletter::*;
