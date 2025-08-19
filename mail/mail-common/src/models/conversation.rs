@@ -8,9 +8,9 @@ use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::conversations::{LabelAs, Snooze};
 use crate::actions::conversations::{MarkRead, MarkUnread, Move, Unsnooze};
 use crate::actions::{
-    ActionMoveData, ConversationAction, ConversationAvailableActions, ConversationOrMessage,
-    LabelAsAction, LabelAsData, LabelAsOutput, LabelPair, MailActionError, MoveAction,
-    MoveItemAction, Undo, filter_responses,
+    ActionMoveData, ConversationAvailableActions, ConversationOrMessage, LabelAsAction,
+    LabelAsData, LabelAsOutput, LabelPair, MailActionError, MoveAction, MoveItemAction,
+    OldConversationAction, Undo, filter_responses,
 };
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
@@ -2064,24 +2064,24 @@ impl Conversation {
 
         let mut conversation_actions = Vec::new();
         if conversations.iter().any(|c| c.num_unread > 0) {
-            conversation_actions.push(ConversationAction::MarkRead);
+            conversation_actions.push(OldConversationAction::MarkRead);
         }
         if conversations.iter().any(|c| c.num_unread == 0) {
-            conversation_actions.push(ConversationAction::MarkUnread);
+            conversation_actions.push(OldConversationAction::MarkUnread);
         }
         if conversations.iter().any(|c| c.is_starred()) {
-            conversation_actions.push(ConversationAction::Unstar);
+            conversation_actions.push(OldConversationAction::Unstar);
         }
         if conversations.iter().any(|c| !c.is_starred()) {
-            conversation_actions.push(ConversationAction::Star);
+            conversation_actions.push(OldConversationAction::Star);
         }
         if SystemLabel::from_opt_rid(view.remote_id.as_ref())
             .filter(|label| label.is_snooze_location())
             .is_some()
         {
-            conversation_actions.push(ConversationAction::Snooze);
+            conversation_actions.push(OldConversationAction::Snooze);
         }
-        conversation_actions.push(ConversationAction::LabelAs);
+        conversation_actions.push(OldConversationAction::LabelAs);
 
         let move_actions = MoveItemAction::from_view(view, tether).await?;
 

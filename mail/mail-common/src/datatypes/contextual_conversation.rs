@@ -3,7 +3,9 @@ use std::time::Instant;
 
 use super::SystemLabelId as _;
 use super::folder_banner::{AutoDeleteBanner, AutoDeleteState, SpamOrTrash};
-use crate::actions::{AllListActions, MovableSystemFolderAction};
+use crate::actions::{
+    AllConversationActions, AllListActions, ConversationActionSheet, MovableSystemFolderAction,
+};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
@@ -25,7 +27,7 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
 /// in a [`Label`].
@@ -361,6 +363,91 @@ impl ContextualConversation {
         );
         debug!("All available bottombar actions: {actions:?}");
         Ok(actions)
+    }
+
+    /// Get the available conversation actions for a single conversation (similar to Message::all_available_message_actions_for_message)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail or conversation is not found.
+    ///
+    #[tracing::instrument(skip_all, fields(label_id=%current_label_id, conversation_id=conversation_id.as_u64()))]
+    pub async fn all_available_conversation_actions_for_conversation(
+        current_label_id: LocalLabelId,
+        conversation_id: LocalConversationId,
+        tether: &Tether,
+    ) -> Result<AllConversationActions, AppError> {
+        debug!("Getting conversation actions for conversation: {conversation_id:?}");
+
+        // Load the conversation to get its state
+        let conversation = Self::load(conversation_id, current_label_id, tether).await?;
+        if conversation.is_none() {
+            warn!("Conversation not found: {conversation_id:?}");
+            // Return empty actions for missing conversation
+            return Ok(AllConversationActions {
+                visible_list_actions: vec![],
+                hidden_list_actions: vec![],
+            });
+        }
+        let conversation = conversation.unwrap();
+
+        let (inbox, archive, trash, spam, conversation_toolbar_actions) = try_join!(
+            MovableSystemFolderAction::inbox(tether),
+            MovableSystemFolderAction::archive(tether),
+            MovableSystemFolderAction::trash(tether),
+            MovableSystemFolderAction::spam(tether),
+            MobileAction::conversation_toolbar_actions(tether)
+        )?;
+        let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
+
+        // Calculate state flags for the builder
+        let any_unread = conversation.num_unread > 0;
+        let any_read = conversation.num_unread == 0;
+        let any_starred = conversation.is_starred;
+        let all_starred = conversation.is_starred; // Single conversation, so any == all
+
+        // Use the unified builder-based approach (AllConversationActions = AllListActions)
+        let actions = AllListActions::from_context(
+            true, // is_conversation = true
+            current_label,
+            any_unread,
+            any_read,
+            any_starred,
+            all_starred,
+            &conversation_toolbar_actions,
+            inbox,
+            archive,
+            trash,
+            spam,
+        );
+
+        debug!("all available conversation actions for conversation: {actions:?}");
+        Ok(actions)
+    }
+
+    /// Get the available actions to populate the conversation action sheet.
+    ///
+    /// Conversation sheet contains context aware set of actions for given conversation.
+    /// It is split up into different categories to be easy to display in the UI.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
+    #[tracing::instrument(skip_all, fields(label_id=%current_label_id, conversation_id=conversation_id.as_u64()))]
+    pub async fn all_available_conversation_actions_for_action_sheet(
+        current_label_id: LocalLabelId,
+        conversation_id: LocalConversationId,
+        tether: &Tether,
+    ) -> Result<ConversationActionSheet, AppError> {
+        let actions = Self::all_available_conversation_actions_for_conversation(
+            current_label_id,
+            conversation_id,
+            tether,
+        )
+        .await?;
+
+        Ok(actions.into())
     }
 
     /// Gets the banner for folder autodelete.

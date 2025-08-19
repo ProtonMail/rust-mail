@@ -1,5 +1,5 @@
 use super::GeneralActions;
-use crate::actions::{AllListActions, MoveItemAction};
+use crate::actions::{AllListActions, ListAction, MoveItemAction};
 use typed_builder::TypedBuilder;
 
 /// Struct to reflect what kind of actions
@@ -7,7 +7,7 @@ use typed_builder::TypedBuilder;
 ///
 #[derive(Debug, Clone, PartialEq, TypedBuilder)]
 pub struct ConversationAvailableActions {
-    pub conversation_actions: Vec<ConversationAction>,
+    pub conversation_actions: Vec<OldConversationAction>,
     pub move_actions: Vec<MoveItemAction>,
     pub general_actions: Vec<GeneralActions>,
 }
@@ -17,7 +17,7 @@ pub struct ConversationAvailableActions {
 /// Each of the options is meant to display a button.
 ///
 #[derive(Debug, Clone, PartialEq)]
-pub enum ConversationAction {
+pub enum OldConversationAction {
     Star,
     Unstar,
     Pin,
@@ -33,3 +33,54 @@ pub enum ConversationAction {
 ///
 /// I introduce type alias as a means if that ever changes in the future.
 pub type AllConversationActions = AllListActions;
+pub type ConversationAction = ListAction;
+
+/// Struct to reflect what kind of actions
+/// could be taken upon the conversation.
+///
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ConversationActionSheet {
+    pub conversation_actions: Vec<ConversationAction>,
+    pub move_actions: Vec<ConversationAction>,
+}
+
+impl From<AllConversationActions> for ConversationActionSheet {
+    fn from(value: AllConversationActions) -> Self {
+        let mut this = Self::default();
+        let all_actions = [value.visible_list_actions, value.hidden_list_actions].concat();
+
+        all_actions.iter().for_each(|action| {
+            if action.is_move_action() {
+                this.move_actions.push(*action);
+            } else if action.is_conversation_action() {
+                this.conversation_actions.push(*action);
+            }
+        });
+
+        this
+    }
+}
+
+impl ConversationAction {
+    pub fn is_move_action(&self) -> bool {
+        matches!(
+            self,
+            ConversationAction::MoveTo
+                | ConversationAction::MoveToSystemFolder(_)
+                | ConversationAction::NotSpam(_)
+                | ConversationAction::PermanentDelete
+                | ConversationAction::Snooze
+        )
+    }
+
+    pub fn is_conversation_action(&self) -> bool {
+        matches!(
+            self,
+            ConversationAction::Star
+                | ConversationAction::Unstar
+                | ConversationAction::LabelAs
+                | ConversationAction::MarkRead
+                | ConversationAction::MarkUnread
+        )
+    }
+}

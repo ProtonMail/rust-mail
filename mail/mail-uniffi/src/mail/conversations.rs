@@ -12,9 +12,9 @@
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
-    AllListActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
-    ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction, SnoozeActions,
-    Undo,
+    AllConversationActions, AllListActions, AutoDeleteBanner, Conversation,
+    ConversationActionSheet, ConversationAvailableActions, ConversationSearchOptions,
+    LabelAsAction, LabelAsOutput, Message, MoveAction, SnoozeActions, Undo,
 };
 use crate::mail::mail_scroller::{
     ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
@@ -292,6 +292,68 @@ pub async fn all_available_list_actions_for_conversations(
         .into();
 
         Ok::<_, RealProtonMailError>(actions)
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Get the available actions to populate the conversation action sheet.
+///
+/// Conversation sheet contains context aware set of actions for given conversation.
+/// It is split up into different categories to be easy to display in the UI.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi_export]
+pub async fn all_available_conversation_actions_for_action_sheet(
+    mailbox: Arc<Mailbox>,
+    conversation_id: Id,
+) -> Result<ConversationActionSheet, ActionError> {
+    let stash = mailbox.stash()?;
+    let current_label_id = mailbox.label_id();
+    uniffi_async(async move {
+        let tether = stash.connection();
+        let action_sheet =
+            ContextualConversation::all_available_conversation_actions_for_action_sheet(
+                current_label_id.into(),
+                conversation_id.into(),
+                &tether,
+            )
+            .await?;
+        Ok::<_, RealProtonMailError>(action_sheet.into())
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Get the available conversation actions for a single conversation.
+///
+/// Returns all available actions split into visible and hidden categories,
+/// matching the toolbar structure used by the UI.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails or conversation is not found.
+///
+#[uniffi_export]
+pub async fn all_available_conversation_actions_for_conversation(
+    mailbox: Arc<Mailbox>,
+    conversation_id: Id,
+) -> Result<AllConversationActions, ActionError> {
+    let stash = mailbox.stash()?;
+    let current_label_id = mailbox.label_id();
+    uniffi_async(async move {
+        let tether = stash.connection();
+        let all_actions =
+            ContextualConversation::all_available_conversation_actions_for_conversation(
+                current_label_id.into(),
+                conversation_id.into(),
+                &tether,
+            )
+            .await?;
+        Ok::<_, RealProtonMailError>(all_actions.into())
     })
     .await
     .map_err(ActionError::from)

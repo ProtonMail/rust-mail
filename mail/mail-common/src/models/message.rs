@@ -1099,7 +1099,7 @@ impl Message {
     /// Returns error if the database request fail.
     ///
     #[tracing::instrument(skip_all, fields(label_id=%current_label_id, message_id=message_id.as_u64()))]
-    pub async fn available_actions(
+    pub async fn all_available_message_actions_for_action_sheet(
         current_label_id: LocalLabelId,
         message_id: LocalMessageId,
         theme: ThemeOpts,

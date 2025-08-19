@@ -383,10 +383,10 @@ mod available_actions {
                 MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
-                ConversationAction::MarkRead,
-                ConversationAction::Unstar,
-                ConversationAction::Snooze,
-                ConversationAction::LabelAs,
+                OldConversationAction::MarkRead,
+                OldConversationAction::Unstar,
+                OldConversationAction::Snooze,
+                OldConversationAction::LabelAs,
             ])
             .general_actions(vec![])
             .build()),
@@ -418,10 +418,10 @@ mod available_actions {
                 MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
-                ConversationAction::MarkRead,
-                ConversationAction::Unstar,
-                ConversationAction::Snooze,
-                ConversationAction::LabelAs,
+                OldConversationAction::MarkRead,
+                OldConversationAction::Unstar,
+                OldConversationAction::Snooze,
+                OldConversationAction::LabelAs,
             ])
             .general_actions(vec![])
             .build()),
@@ -453,9 +453,9 @@ mod available_actions {
                 MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
-                ConversationAction::MarkUnread,
-                ConversationAction::Star,
-                ConversationAction::LabelAs,
+                OldConversationAction::MarkUnread,
+                OldConversationAction::Star,
+                OldConversationAction::LabelAs,
             ])
             .general_actions(vec![])
             .build()),
@@ -482,9 +482,9 @@ mod available_actions {
                 MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
-                ConversationAction::MarkUnread,
-                ConversationAction::Star,
-                ConversationAction::LabelAs,
+                OldConversationAction::MarkUnread,
+                OldConversationAction::Star,
+                OldConversationAction::LabelAs,
             ])
             .general_actions(vec![])
             .build()),
@@ -522,12 +522,12 @@ mod available_actions {
                 MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
-                ConversationAction::MarkRead,
-                ConversationAction::MarkUnread,
-                ConversationAction::Unstar,
-                ConversationAction::Star,
-                ConversationAction::Snooze,
-                ConversationAction::LabelAs,
+                OldConversationAction::MarkRead,
+                OldConversationAction::MarkUnread,
+                OldConversationAction::Unstar,
+                OldConversationAction::Star,
+                OldConversationAction::Snooze,
+                OldConversationAction::LabelAs,
             ])
             .general_actions(vec![])
             .build()),
