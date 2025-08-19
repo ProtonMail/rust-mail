@@ -11,8 +11,8 @@ use crate::actions::messages::Unread;
 use crate::actions::messages::{LabelAs, UndoLabelAsMessages};
 use crate::actions::messages::{Move, UndoMoveToMessages};
 use crate::actions::{
-    ActionMoveData, AllListActions, AllMessageActions, GeneralActions, LabelAsData, LabelAsOutput,
-    LabelPair, MailActionError, MessageAction, MovableSystemFolderAction, Undo,
+    ActionMoveData, AllListActions, AllMessageActions, LabelAsData, LabelAsOutput, LabelPair,
+    MailActionError, MovableSystemFolderAction, Undo,
 };
 use crate::mail_scroller::ScrollerEq;
 use crate::models::*;
@@ -31,14 +31,13 @@ use stash::utils::{MapToSql, placeholders};
 
 use crate::MailContextResult;
 use crate::actions::{
-    ConversationOrMessage, LabelAsAction, MessageAvailableActions, MoveAction, MoveItemAction,
-    ReplyAction, filter_responses,
+    ConversationOrMessage, LabelAsAction, MessageActionSheet, MoveAction, filter_responses,
 };
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
     LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageSender, MimeType,
-    MobileAction, ParsedHeaders, ReadFilter, RollbackItemType, SystemLabelId, theme::MailTheme,
+    MobileAction, ParsedHeaders, ReadFilter, RollbackItemType, SystemLabelId,
 };
 use crate::datatypes::{LocalConversationId, ParsedHeaderValue};
 use crate::decrypted_message::ThemeOpts;
@@ -1084,71 +1083,31 @@ impl Message {
         Ok(())
     }
 
-    /// Get the available actions for message excluding move to the current view.
+    /// Get the available actions to populate the message action sheet.
+    ///
+    /// Message sheet contains context aware set of actions for given message.
+    /// It is split up into different categories to be easy to display in the UI.
     ///
     /// # Errors
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(skip_all, fields(label_id=%view.id(), message_id=message_id.as_u64()))]
+    #[tracing::instrument(skip_all, fields(label_id=%current_label_id, message_id=message_id.as_u64()))]
     pub async fn available_actions(
-        view: Label,
+        current_label_id: LocalLabelId,
         message_id: LocalMessageId,
         theme: ThemeOpts,
         tether: &Tether,
-    ) -> Result<MessageAvailableActions, AppError> {
-        let Some(message) = Message::find_by_id(message_id, tether).await? else {
-            return Err(AppError::MessageMissing(message_id));
-        };
+    ) -> Result<MessageActionSheet, AppError> {
+        let actions = Self::all_available_message_actions_for_message(
+            current_label_id,
+            message_id,
+            theme,
+            tether,
+        )
+        .await?;
 
-        let reply_actions = if !message.can_reply() {
-            vec![]
-        } else if message.to_list.len() + message.cc_list.len() > 1 {
-            ReplyAction::all()
-        } else {
-            ReplyAction::single_address()
-        };
-
-        let mut message_actions = Vec::new();
-        if message.unread {
-            message_actions.push(MessageAction::MarkRead);
-        } else {
-            message_actions.push(MessageAction::MarkUnread);
-        }
-        if message.is_starred() {
-            message_actions.push(MessageAction::Unstar);
-        } else {
-            message_actions.push(MessageAction::Star);
-        }
-        message_actions.push(MessageAction::LabelAs);
-
-        let move_actions = MoveItemAction::from_view(view, tether).await?;
-
-        let mut general_actions = vec![
-            // Those are geneal default actions available for every message
-            GeneralActions::Print,
-            GeneralActions::ReportPhishing,
-            GeneralActions::SaveAsPdf,
-            GeneralActions::ViewHeaders,
-            GeneralActions::ViewHtml,
-        ];
-
-        // In light theme we do not want to have any actions theme-related
-        if theme.current_theme == MailTheme::DarkMode {
-            match theme.theme() {
-                MailTheme::LightMode => general_actions.push(GeneralActions::ViewMessageInDarkMode),
-                MailTheme::DarkMode => general_actions.push(GeneralActions::ViewMessageInLightMode),
-            }
-        }
-
-        let res = MessageAvailableActions::builder()
-            .reply_actions(reply_actions)
-            .message_actions(message_actions)
-            .move_actions(move_actions)
-            .general_actions(general_actions)
-            .build();
-        debug!("available actions for messages: {res:?}");
-        Ok(res)
+        Ok(actions.into())
     }
 
     /// Get the available `label as` actions for conversations

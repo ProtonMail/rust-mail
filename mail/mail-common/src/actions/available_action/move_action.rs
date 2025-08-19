@@ -154,7 +154,7 @@ impl MoveAction {
 
 /// This struct represents a system folder that can be used as an action.
 ///
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub struct MovableSystemFolderAction {
     /// The database id of the label.
     pub local_id: LocalLabelId,

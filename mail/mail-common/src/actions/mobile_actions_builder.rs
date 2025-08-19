@@ -134,7 +134,7 @@ impl<T: GenericMobileActions + std::fmt::Debug> MobileActionsBuilder<T> {
         actions.push(T::label_as());
 
         if self.context.current_label == LabelId::spam() {
-            actions.push(T::not_spam(self.context.folders.inbox.clone()));
+            actions.push(T::not_spam(self.context.folders.inbox));
         }
 
         // System folder actions - consistent ordering: Inbox, Archive, Spam, Trash
@@ -142,24 +142,22 @@ impl<T: GenericMobileActions + std::fmt::Debug> MobileActionsBuilder<T> {
 
         // 1. Inbox (when in archive or trash)
         if [LabelId::archive(), LabelId::trash()].contains(&self.context.current_label) {
-            actions.push(T::move_to_system_folder(self.context.folders.inbox.clone()));
+            actions.push(T::move_to_system_folder(self.context.folders.inbox));
         }
 
         // 2. Archive (when not in archive)
         if self.context.current_label != LabelId::archive() {
-            actions.push(T::move_to_system_folder(
-                self.context.folders.archive.clone(),
-            ));
+            actions.push(T::move_to_system_folder(self.context.folders.archive));
         }
 
         // 3. Spam (when not in spam or trash)
         if ![LabelId::spam(), LabelId::trash()].contains(&self.context.current_label) {
-            actions.push(T::move_to_system_folder(self.context.folders.spam.clone()));
+            actions.push(T::move_to_system_folder(self.context.folders.spam));
         }
 
         // 4. Trash (when not in trash or spam)
         if ![LabelId::trash(), LabelId::spam()].contains(&self.context.current_label) {
-            actions.push(T::move_to_system_folder(self.context.folders.trash.clone()));
+            actions.push(T::move_to_system_folder(self.context.folders.trash));
         }
         if [LabelId::trash(), LabelId::spam()].contains(&self.context.current_label) {
             actions.push(T::permanent_delete());
