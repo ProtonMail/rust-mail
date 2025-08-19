@@ -1,6 +1,6 @@
 use crate::datatypes::MessageFlags;
 use crate::events::MessageEvent;
-use crate::models::{DraftMetadata, Message};
+use crate::models::{DraftMetadata, Message, MessageBody};
 use crate::{AppError, user_context::events::subscriber::PostEventSyncData};
 use proton_core_common::events::Action;
 use proton_core_common::models::ModelIdExtension;
@@ -97,7 +97,7 @@ pub async fn handle_message_events(
                     if let Some(local_id) =
                         Message::remote_id_counterpart(message.id.clone(), tx).await?
                     {
-                        _ = Message::delete_message_body(local_id, tx).await;
+                        _ = MessageBody::delete(local_id, tx).await;
                     }
                 }
 

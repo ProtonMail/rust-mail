@@ -5,6 +5,7 @@ use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::attachment::MimeType;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{AttachmentMetadata, SystemLabelId};
+use proton_mail_common::models::MessageMimeType;
 use proton_mail_common::models::{Attachment, Message};
 use proton_mail_common::test_utils::message_body::{
     TEST_MESSAGE_BODY_DECRYPTED, TEST_MESSAGE_BODY_MIME_DECRYPTED,
@@ -154,6 +155,7 @@ async fn mailbox_message_body_mime() {
 
     // Validation:
     assert_eq!(decrypted_message.body, TEST_MESSAGE_BODY_MIME_DECRYPTED);
+    assert_eq!(decrypted_message.mime_type, MessageMimeType::TextPlain);
 
     let pgp_attachments = decrypted_message
         .metadata
@@ -290,6 +292,7 @@ async fn mailbox_message_retains_pgp_attachments() {
 
     // Validation:
     assert_eq!(decrypted_message.body, TEST_MESSAGE_BODY_MIME_DECRYPTED);
+    assert_eq!(decrypted_message.mime_type, MessageMimeType::TextPlain);
 
     let pgp_attachments = decrypted_message.metadata.attachments.iter().collect_vec();
 
@@ -425,6 +428,7 @@ async fn message_body_failed_to_decrypt() {
         .unwrap();
 
     assert_eq!(decrypted_body.body, message.body.body);
+    assert_eq!(decrypted_body.mime_type, MessageMimeType::TextHtml);
     assert!(decrypted_body.failed_to_decrypt());
 
     let body_output = decrypted_body

@@ -31,8 +31,8 @@ use proton_mail_common::draft::{
     compose::DraftAddressValidationResult as RealDraftAddressValidationResult,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::models::DraftSendResult as RealDraftSendResult;
+use proton_mail_common::models::{DraftMetadata, MessageMimeType};
 use proton_mail_common::{MailContextError, MailUserContext};
 use recipients::ComposerRecipientList;
 use secrecy::{ExposeSecret, SecretString};
@@ -130,7 +130,7 @@ impl From<EoData> for DraftPassword {
 struct CachedDraftData {
     subject: String,
     body: String,
-    mime_type: MimeType,
+    mime_type: MessageMimeType,
     send_result: Option<RealDraftSendResult>,
     to_list: Vec<ComposerRecipient>,
     to_list_cb: Option<Arc<dyn ComposerRecipientValidationCallback>>,
@@ -161,7 +161,7 @@ impl Draft {
         let cached = Arc::new(RwLock::new(CachedDraftData {
             subject: state.subject,
             body: state.body,
-            mime_type: state.mime_type.into(),
+            mime_type: state.mime_type,
             send_result: state.send_result,
             to_list: state
                 .to_list
@@ -494,7 +494,7 @@ impl Draft {
 
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
-        async_runtime().block_on(async { self.cached.read().await.mime_type })
+        async_runtime().block_on(async { self.cached.read().await.mime_type.into() })
     }
 
     /// Get the Draft's message id .

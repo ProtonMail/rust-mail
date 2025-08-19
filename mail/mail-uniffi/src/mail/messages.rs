@@ -33,10 +33,10 @@ use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::PrivateEmail;
-use proton_mail_common::datatypes::LocalConversationId;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
+use proton_mail_common::datatypes::{LocalConversationId, ParsedHeaderValue};
 use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
     TransformOpts as RealTransformOpts,
@@ -46,7 +46,9 @@ use proton_mail_common::errors::{
 };
 use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
-use proton_mail_common::models::{self, Message as RealMessage, MessageBodyMetadata};
+use proton_mail_common::models::{
+    self, Message as RealMessage, MessageBodyMetadata, MessageMimeType,
+};
 use stash::orm::Model as _;
 use std::sync::Arc;
 use tracing::warn;
@@ -95,15 +97,15 @@ impl DecryptedMessage {
     #[must_use]
     pub fn parsed_header_value(&self, key: &str) -> Vec<String> {
         match self.body.parsed_header_value(key) {
-            Some(proton_mail_common::datatypes::ParsedHeaderValue::Array(arr)) => arr,
-            Some(proton_mail_common::datatypes::ParsedHeaderValue::String(s)) => vec![s],
+            Some(ParsedHeaderValue::Array(arr)) => arr,
+            Some(ParsedHeaderValue::String(s)) => vec![s],
             None => vec![],
         }
     }
 
     #[must_use]
     pub fn mime_type(&self) -> MimeType {
-        self.body.metadata.mime_type.into()
+        self.body.mime_type.into()
     }
 
     #[must_use]
@@ -852,6 +854,7 @@ pub fn test_stub_message_body(
                 mime_type: proton_mail_common::datatypes::MimeType::TextHtml,
                 ..Default::default()
             },
+            mime_type: MessageMimeType::TextHtml,
             pgp_subject: None,
             address_id: AddressId::from("Unknown"),
             in_flight: parking_lot::Mutex::default(),

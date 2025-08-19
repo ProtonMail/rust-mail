@@ -70,7 +70,9 @@ pub use system_folder::MovableSystemFolder;
 
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::MaybeEmptyString;
-use crate::models::{Attachment, AttachmentType, MailSettings, MessageBodyMetadata};
+use crate::models::{
+    Attachment, AttachmentType, MailSettings, MessageBodyMetadata, MessageMimeType,
+};
 use crate::{AppError, MailContextError, MailUserContext};
 use attachment::ContentId;
 use core::fmt;
@@ -88,7 +90,7 @@ use proton_crypto_inbox::attachment::{
 use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody, GettablePGPMessage};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_inbox_mime::{
-    Disposition as CryptoDisposition, ProcessedMessage,
+    Disposition as CryptoDisposition, ProcessedBodyType, ProcessedMessage,
 };
 use proton_mail_api::services::proton::common::AttachmentId;
 use proton_mail_api::services::proton::response_data::{
@@ -1024,12 +1026,24 @@ impl EncryptedMessageBody {
 
         match self.decrypt(&pgp, &address_keys) {
             Ok((decrypted_body, _)) => {
+                let mime_type =
+                    MessageMimeType::from_api(self.metadata.mime_type, || match &decrypted_body {
+                        DecryptedBody::Plain(_) => unreachable!(),
+                        DecryptedBody::Mime(msg) => match msg.mime_body_type {
+                            ProcessedBodyType::Text => MessageMimeType::TextPlain,
+                            ProcessedBodyType::Html | ProcessedBodyType::Empty => {
+                                MessageMimeType::TextHtml
+                            }
+                        },
+                    });
+
                 // TODO: Verify signature.
                 match decrypted_body {
                     DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
                         DecryptedMessageBody::new_prefetching(
                             body,
                             self.metadata,
+                            mime_type,
                             None,
                             address_id.clone(),
                             None,
@@ -1039,6 +1053,7 @@ impl EncryptedMessageBody {
                         DecryptedMessageBody::new_without_prefetching(
                             body,
                             self.metadata,
+                            mime_type,
                             None,
                             address_id.clone(),
                             None,
@@ -1098,6 +1113,7 @@ impl EncryptedMessageBody {
                             DecryptedMessageBody::new_prefetching(
                                 body,
                                 self.metadata,
+                                mime_type,
                                 encrypted_subject,
                                 address_id.clone(),
                                 None,
@@ -1107,6 +1123,7 @@ impl EncryptedMessageBody {
                             DecryptedMessageBody::new_without_prefetching(
                                 body,
                                 self.metadata,
+                                mime_type,
                                 encrypted_subject,
                                 address_id.clone(),
                                 None,
@@ -1122,9 +1139,31 @@ impl EncryptedMessageBody {
                     self.metadata.remote_message_id,
                 );
 
+                // In the `Ok` code path we extract message's mime type from the
+                // decrypted body - since in this case we've got no decrypted
+                // body to work with, let's take an educated guess.
+                //
+                // This guess is going to be:
+                //
+                // - correct for non-mime-encrypted messages, since the mime
+                //   type is then /not/ encrypted and whatever API told us is
+                //   true,
+                //
+                // - incorrect for mime-encrypted messages - we'll default to
+                //   text/html then.
+                //
+                // Guessing incorrectly is not harmful, because users can't do
+                // anything with non-decryptable messages anyway - i.e. the mime
+                // type we use here is effectively left unread, it's just very
+                // awkward to properly model this constraint in the type system.
+                let mime_type = MessageMimeType::from_api(self.metadata.mime_type, || {
+                    MessageMimeType::TextHtml
+                });
+
                 Ok(DecryptedMessageBody::not_decryptable(
                     self.encrypted_body,
                     self.metadata,
+                    mime_type,
                     address_id.clone(),
                     e.to_string(),
                 ))

@@ -1,5 +1,5 @@
 use crate::actions::MailActionError;
-use crate::datatypes::{LocalMessageId, MessageFlags};
+use crate::datatypes::{LocalMessageId, MessageFlags, MimeType};
 use crate::models::Message;
 use crate::{AppError, MailUserContext};
 use anyhow::Context as _;
@@ -95,10 +95,12 @@ impl Handler for ReportPhishingHandler {
             .await?
             .ok_or_else(|| AppError::MessageHasNoRemoteId(action.message_id))?;
 
+        let mime_type = MimeType::from(body.mime_type).into();
+
         info!("Reporting phishing for {remote_id:?}");
 
         ctx.api()
-            .report_phishing(remote_id, body.metadata.mime_type.into(), &body.body)
+            .report_phishing(remote_id, mime_type, &body.body)
             .await?;
 
         Ok(())

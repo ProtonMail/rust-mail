@@ -2,6 +2,11 @@
 #[path = "../tests/models/messages.rs"]
 mod messages;
 
+mod message_body;
+mod message_mime_type;
+
+pub use self::message_body::*;
+pub use self::message_mime_type::*;
 use crate::actions::messages::Delete;
 use crate::actions::messages::DeleteAllMessagesInLabel;
 use crate::actions::messages::Ham;
@@ -14,6 +19,7 @@ use crate::actions::{
     ActionMoveData, AllListActions, AllMessageActions, LabelAsData, LabelAsOutput, LabelPair,
     MailActionError, MovableSystemFolderAction, Undo,
 };
+use crate::datatypes::MimeType;
 use crate::mail_scroller::ScrollerEq;
 use crate::models::*;
 use crate::{MailContextError, find_in_query};
@@ -36,7 +42,7 @@ use crate::actions::{
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageSender, MimeType,
+    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageSender,
     MobileAction, ParsedHeaders, ReadFilter, RollbackItemType, SystemLabelId,
 };
 use crate::datatypes::{LocalConversationId, ParsedHeaderValue};
@@ -1278,6 +1284,7 @@ impl Message {
         self.fetch_message_body_impl(ctx, tx, true, true).await
     }
 
+    #[tracing::instrument(skip_all, fields(message_id=%self.id()))]
     pub async fn prefetch_message_body(
         &self,
         ctx: &MailUserContext,
@@ -1330,12 +1337,12 @@ impl Message {
         trace!("Message successfully decrypted. Caching...");
 
         tx.run_tx(async |tx| {
-            Self::store_decrypted_message_body(
-                self.id(),
-                decrypted.body.clone(),
-                decrypted.decryption_error.clone(),
-                tx,
-            )
+            MessageBody {
+                body: decrypted.body.clone(),
+                mime_type: decrypted.mime_type,
+                decryption_error: decrypted.decryption_error.clone(),
+            }
+            .store(self.id(), tx)
             .await?;
 
             Ok(())
@@ -2103,17 +2110,15 @@ impl Message {
         )
         .await?;
 
-        let body = decrypted.body.clone();
         tether
-            .tx::<_, _, StashError>(async |tx| {
-                Self::store_decrypted_message_body(
-                    message.id(),
-                    body,
-                    decrypted.decryption_error.clone(),
-                    tx,
-                )
-                .await?;
-                Ok(())
+            .tx(async |tx| {
+                MessageBody {
+                    body: decrypted.body.clone(),
+                    mime_type: decrypted.mime_type,
+                    decryption_error: decrypted.decryption_error.clone(),
+                }
+                .store(message.id(), tx)
+                .await
             })
             .await?;
 
@@ -2211,7 +2216,7 @@ impl Message {
             return Ok(None);
         };
 
-        let Some((body, decryption_error)) = Self::load_decrypted_message_body(local_id, tether)
+        let Some(msg) = MessageBody::load(local_id, tether)
             .await
             .context("Failed to retrieve decrypted message body from db")?
         else {
@@ -2219,76 +2224,13 @@ impl Message {
         };
 
         Ok(Some(DecryptedMessageBody::new_without_prefetching(
-            body,
+            msg.body,
             metadata,
+            msg.mime_type,
             None,
             address_id.clone(),
-            decryption_error,
+            msg.decryption_error,
         )))
-    }
-
-    /// Load the decrypted message body from the cache.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the message failed to load.
-    pub(crate) async fn load_decrypted_message_body(
-        local_id: LocalMessageId,
-        tether: &Tether,
-    ) -> Result<Option<(String, Option<String>)>, StashError> {
-        #[derive(DbRecord, Eq, PartialEq, Clone, Debug)]
-        struct DecryptedMessageData {
-            #[DbField]
-            pub body: String,
-            #[DbField]
-            pub decryption_error: Option<String>,
-        }
-
-        let results = tether
-            .query::<_, DecryptedMessageData>(
-                indoc! { "
-                    SELECT body, decryption_error
-                    FROM message_body
-                    WHERE message_id = ?"
-                },
-                params![local_id],
-            )
-            .await?;
-        if results.is_empty() {
-            return Ok(None);
-        };
-
-        Ok(results
-            .into_iter()
-            .next()
-            .map(|v| Some((v.body, v.decryption_error)))
-            .expect("Should be present"))
-    }
-
-    pub async fn store_decrypted_message_body(
-        local_id: LocalMessageId,
-        message: String,
-        decryption_error: Option<String>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        bond.execute(
-            "INSERT OR REPLACE INTO message_body (message_id, body, decryption_error) VALUES (?,?, ?)",
-            params![local_id, message, decryption_error],
-        )
-        .await?;
-        Ok(())
-    }
-
-    pub async fn delete_message_body(
-        local_id: LocalMessageId,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        bond.execute(
-            "DELETE FROM message_body WHERE message_id = ?",
-            params![local_id],
-        )
-        .await?;
-        Ok(())
     }
 
     /// Whether this message is a draft.
@@ -2830,6 +2772,13 @@ pub struct MessageBodyMetadata {
     #[DbField]
     pub header: String,
 
+    /// Raw mime type of the underlying message - usually that's going to be
+    /// either text/html or text/plain, but for mime-encrypted messages it's
+    /// going to say multipart/mixed, nevermind the mime of the decrypted body.
+    ///
+    /// Note that most of the time what you're *actually* looking for is
+    /// [`MessageBody`]'s mime type as that one accounts for mime-encrypted
+    /// messages.
     #[DbField]
     pub mime_type: MimeType,
 

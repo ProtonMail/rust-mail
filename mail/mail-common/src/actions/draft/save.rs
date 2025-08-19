@@ -12,8 +12,8 @@ use crate::draft::recipients::RecipientList;
 use crate::draft::{Draft, ReplyMode, SaveError, compose, draft_v1};
 use crate::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
-    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata,
-    MetadataId, RollbackItem,
+    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBody,
+    MessageBodyMetadata, MessageMimeType, MetadataId, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use indoc::indoc;
@@ -52,8 +52,8 @@ pub struct Save {
     conversation_id: Option<LocalConversationId>,
     address_id: AddressId,
     subject: String,
-    body: String,
-    mime_type: MimeType,
+    body: String, // unencrypted
+    mime_type: MessageMimeType,
     parent_id: Option<LocalMessageId>,
     reply_mode: Option<ReplyMode>,
     save_origin: DraftSendResultOrigin,
@@ -117,7 +117,7 @@ impl Save {
             external_id: self.external_id.clone().map(|id| id.to_string()),
             draft_flags: 0,
             body: encrypted_draft,
-            mime_type: self.mime_type.into(),
+            mime_type: MimeType::from(self.mime_type).into(),
         }
     }
 }
@@ -280,7 +280,7 @@ impl Handler for SaveHandler {
             };
 
             body_metadata.attachments = attachments;
-            body_metadata.mime_type = action.mime_type;
+            body_metadata.mime_type = action.mime_type.into();
 
             body_metadata.save(bond).await.inspect_err(|e| {
                 error!("Failed to update draft body metadata: {e:?}");
@@ -315,7 +315,7 @@ impl Handler for SaveHandler {
                 local_message_id: Some(message.id()),
                 remote_message_id: None,
                 header: "".to_string(),
-                mime_type: action.mime_type,
+                mime_type: action.mime_type.into(),
                 parsed_headers: Default::default(),
                 attachments,
                 reply_to: Default::default(),
@@ -348,7 +348,8 @@ impl Handler for SaveHandler {
             message
         };
 
-        Message::store_decrypted_message_body(message.id(), action.body.clone(), None, bond)
+        MessageBody::ok(&action.body, action.mime_type)
+            .store(message.id(), bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to store draft body in cache :{e:?}");

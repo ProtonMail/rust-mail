@@ -98,7 +98,7 @@ use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::errors::ProtonMailError;
 use proton_mail_common::models::{
     Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
-    MessageReplyTo as RealMessageReplyTo,
+    MessageMimeType, MessageReplyTo as RealMessageReplyTo,
 };
 use smart_default::SmartDefault;
 pub use snooze::*;
@@ -456,6 +456,12 @@ impl From<RealMimeType> for MimeType {
             RealMimeType::TextHtml => MimeType::TextHtml,
             RealMimeType::TextPlain => MimeType::TextPlain,
         }
+    }
+}
+
+impl From<MessageMimeType> for MimeType {
+    fn from(value: MessageMimeType) -> Self {
+        RealMimeType::from(value).into()
     }
 }
 

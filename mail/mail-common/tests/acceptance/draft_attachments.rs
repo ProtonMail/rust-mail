@@ -444,7 +444,7 @@ async fn removing_uploaded_attachment() {
 
 #[tokio::test]
 async fn draft_reply_or_forward_creates_new_attachments() {
-    let mime_type = MimeType::TextHtml;
+    let mime_type = MimeType::TextPlain;
     let reply_mode = ReplyMode::Forward;
 
     // Set up a user and initialise the inbox

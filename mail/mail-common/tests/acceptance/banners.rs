@@ -9,6 +9,7 @@ use proton_mail_common::datatypes::SystemLabelId as _;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::models::Conversation;
 use proton_mail_common::models::MailSettings;
+use proton_mail_common::models::MessageBody;
 use proton_mail_common::models::MessageBodyMetadata;
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::test_utils::init::Params;
@@ -223,14 +224,10 @@ async fn banners() {
             .await
             .unwrap();
 
-            Message::store_decrypted_message_body(
-                msg_normal.id(),
-                "im a nigerian prince, click this link".into(),
-                None,
-                tx,
-            )
-            .await
-            .unwrap();
+            MessageBody::html("im a nigerian prince, click this link")
+                .store(msg_normal.id(), tx)
+                .await
+                .unwrap();
 
             Ok(())
         })

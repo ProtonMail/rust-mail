@@ -1,9 +1,9 @@
 use crate::datatypes::attachment::ContentId;
-use crate::datatypes::{
-    Disposition, LocalAttachmentId, LocalConversationId, LocalMessageId, MimeType,
-};
+use crate::datatypes::{Disposition, LocalAttachmentId, LocalConversationId, LocalMessageId};
 use crate::ios_share_ext::IosShareExtension;
-use crate::models::{Attachment, AttachmentData, DraftSendResult, MailSettings, MetadataId};
+use crate::models::{
+    Attachment, AttachmentData, DraftSendResult, MailSettings, MessageMimeType, MetadataId,
+};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::{DateTime, Local};
 use compose::find_default_sender_address;
@@ -486,7 +486,7 @@ pub struct DraftState {
     pub subject: String,
     pub send_result: Option<DraftSendResult>,
     pub body: String,
-    pub mime_type: MimeType,
+    pub mime_type: MessageMimeType,
 }
 
 impl DraftState {
@@ -844,10 +844,12 @@ impl DraftActor {
         self.act(|sender| DraftActorMessage::SetBody { body, sender })
             .await?
     }
-    pub async fn mime_type(&self) -> Result<MimeType, MailContextError> {
+
+    pub async fn mime_type(&self) -> Result<MessageMimeType, MailContextError> {
         self.act(DraftActorMessage::GetMimeType).await
     }
-    pub async fn set_mime_type(&self, mime_type: MimeType) -> Result<(), MailContextError> {
+
+    pub async fn set_mime_type(&self, mime_type: MessageMimeType) -> Result<(), MailContextError> {
         self.act(|sender| DraftActorMessage::SetMimeType { sender, mime_type })
             .await
     }
@@ -1231,11 +1233,11 @@ enum DraftActorMessage {
     SanitizeBody(oneshot::Sender<Result<(), MailContextError>>),
     #[display("SetMimeType")]
     SetMimeType {
-        mime_type: MimeType,
+        mime_type: MessageMimeType,
         sender: oneshot::Sender<()>,
     },
     #[display("GetMimeType")]
-    GetMimeType(oneshot::Sender<MimeType>),
+    GetMimeType(oneshot::Sender<MessageMimeType>),
     #[display("SetBody")]
     SetBody {
         body: String,
