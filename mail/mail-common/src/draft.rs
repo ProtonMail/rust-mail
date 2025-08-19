@@ -749,15 +749,10 @@ impl DraftActor {
     pub async fn conversation_id(&self) -> Result<Option<LocalConversationId>, MailContextError> {
         self.act(DraftActorMessage::GetConversationId).await?
     }
-    pub async fn get_embedded_attachment(
-        &self,
-        cid: &ContentId,
-    ) -> MailContextResult<AttachmentData> {
-        self.act(|sender| DraftActorMessage::GetEmbeddedAttachment {
-            cid: cid.clone(),
-            sender,
-        })
-        .await?
+    pub async fn load_image(&self, url: String) -> MailContextResult<AttachmentData> {
+        let url = url::Url::parse(&url)?;
+        self.act(|sender| DraftActorMessage::LoadImage { url, sender })
+            .await?
     }
 
     pub async fn delete_attachment_if_in_staging_area(&self, ctx: &MailUserContext, path: &Path) {
@@ -1273,9 +1268,9 @@ enum DraftActorMessage {
         attachment_id: LocalAttachmentId,
         sender: oneshot::Sender<Result<ActionId, MailContextError>>,
     },
-    #[display("GetEmbeddedAttachment")]
-    GetEmbeddedAttachment {
-        cid: ContentId,
+    #[display("LoadImage")]
+    LoadImage {
+        url: url::Url,
         sender: oneshot::Sender<Result<AttachmentData, MailContextError>>,
     },
     #[display("GetMessageId")]
@@ -1591,12 +1586,12 @@ impl DraftActor {
                     let r = draft.add_attachment(&ctx, attachment_id).await;
                     let _ = sender.send(r);
                 }
-                DraftActorMessage::GetEmbeddedAttachment { cid, sender } => {
+                DraftActorMessage::LoadImage { url, sender } => {
                     // We don't wait to wait for this to finish so we can run in parallel
                     let ctx_cloned = ctx.clone();
                     let id = draft.metadata_id;
                     ctx_cloned.spawn(async move {
-                        let r = draft_v1::Draft::get_embedded_attachment(id, &ctx, &cid).await;
+                        let r = draft_v1::Draft::load_image(id, &ctx, url).await;
                         let _ = sender.send(r);
                     });
                 }

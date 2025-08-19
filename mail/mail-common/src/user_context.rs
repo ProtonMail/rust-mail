@@ -9,9 +9,10 @@ mod initialization;
 
 use crate::actions::PREFETCH_ROLLBACK_ACTION_GROUP;
 use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
+use crate::datatypes::attachment::ContentId;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
-use crate::models::{Conversation, Message};
+use crate::models::{AttachmentData, Conversation, MailSettings, Message};
 #[cfg(feature = "prefetch")]
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchService};
 use crate::rsvp::RsvpService;
@@ -26,6 +27,7 @@ use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
+use proton_core_api::service::{ApiServiceError, ApiServiceResult};
 use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
 use proton_core_api::services::proton::{Proton, ProtonCore};
 use proton_core_api::session::{CoreSession as _, Session};
@@ -42,6 +44,7 @@ use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::Subscriber;
 use proton_task_service::Spawner;
+use reqwest::Method;
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
 use std::any::{Any, TypeId};
@@ -49,6 +52,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use url::Url;
 
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -731,6 +735,67 @@ impl MailUserContext {
 
     pub fn http_client(&self) -> &reqwest::Client {
         self.mail_context().http_client()
+    }
+
+    pub async fn load_image_inner(
+        &self,
+        get_embedded_attachment: impl AsyncFnOnce(
+            &ContentId,
+            &MailUserContext,
+        ) -> MailContextResult<AttachmentData>,
+        mut url: Url,
+    ) -> MailContextResult<AttachmentData> {
+        let data = match url.scheme() {
+            "cid" => get_embedded_attachment(&url.path().into(), self).await?,
+            "http" => {
+                url.set_scheme("https").unwrap();
+                self.proxy_image(url).await?
+            }
+            "https" => self.proxy_image(url).await?,
+            _ => {
+                return Err(MailContextError::Other(anyhow::anyhow!(
+                    "invalid url scheme"
+                )));
+            }
+        };
+        Ok(data)
+    }
+
+    pub async fn proxy_image(&self, url: Url) -> ApiServiceResult<AttachmentData> {
+        let tether = self.user_stash().connection();
+        let is_proxy_enabled = MailSettings::get_or_default(&tether)
+            .await
+            .is_proxy_enabled();
+
+        let data = if is_proxy_enabled {
+            let api = self.api();
+            api.proxy_img(&url).await?
+        } else {
+            self.http_client()
+                .request(Method::GET, url)
+                .send()
+                .await
+                .map_err(|e| ApiServiceError::ConnectionError(e.to_string()))?
+                .error_for_status()
+                .map_err(|e| {
+                    ApiServiceError::UnknownError(format!(
+                        "Server returned error when getting image: {e:?}"
+                    ))
+                })?
+                .bytes()
+                .await
+                .map_err(|e| {
+                    ApiServiceError::UnknownError(format!(
+                        "error getting bytes from image request: {e:?}"
+                    ))
+                })?
+                .to_vec()
+        };
+
+        Ok(AttachmentData {
+            data,
+            mime: String::from("image/*"),
+        })
     }
 }
 
