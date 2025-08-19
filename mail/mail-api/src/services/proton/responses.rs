@@ -31,7 +31,7 @@ use crate::services::proton::common::{ConversationId, MessageId};
 use crate::services::proton::prelude::NewAttachmentResponse;
 use crate::services::proton::response_data::{
     Attachment, Conversation, ConversationCount, MailSettings, Message, MessageCount,
-    MessageMetadata, MobileSettings, OperationResult, UndoToken,
+    MessageMetadata, OperationResult, UndoToken,
 };
 use serde::Deserialize;
 #[cfg(feature = "mocks")]

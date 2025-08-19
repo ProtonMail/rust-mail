@@ -84,7 +84,7 @@ use proton_mail_common::datatypes::{
     LocalMessageId, MessageButtons as RealMessageButtons, MessageFlags as RealMessageFlags,
     MessageLabelsCount as RealMessageCount, MessageRecipient as RealMessageRecipient,
     MessageRecipientDisplayMode as RealMessageRecipientDisplayMode,
-    MessageSender as RealMessageSender, MimeType as RealMimeType,
+    MessageSender as RealMessageSender, MimeType as RealMimeType, MobileAction as RealMobileAction,
     MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
     NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
     PgpScheme as RealPgpScheme, PmSignature as RealPmSignature, ShowImages as RealShowImages,
@@ -1851,6 +1851,85 @@ impl MessageSearchOptions {
             to: self.to,
             unread: self.unread,
         })
+    }
+}
+
+/// Enumeration grouping all possible mobile toolbar actions.
+#[derive(Debug, Clone, PartialEq, UniffiEnum)]
+pub enum MobileAction {
+    Archive,
+    Forward,
+    Label,
+    Move,
+    Print,
+    Remind,
+    Reply,
+    ReportPhishing,
+    SaveAttachments,
+    SavePDF,
+    SenderEmails,
+    Snooze,
+    Spam,
+    ToggleLight,
+    ToggleRead,
+    ToggleStar,
+    Trash,
+    ViewHeaders,
+    ViewHTML,
+    Other(String),
+}
+
+impl From<RealMobileAction> for MobileAction {
+    fn from(value: RealMobileAction) -> Self {
+        match value {
+            RealMobileAction::Archive => Self::Archive,
+            RealMobileAction::Forward => Self::Forward,
+            RealMobileAction::Label => Self::Label,
+            RealMobileAction::Move => Self::Move,
+            RealMobileAction::Print => Self::Print,
+            RealMobileAction::Remind => Self::Remind,
+            RealMobileAction::Reply => Self::Reply,
+            RealMobileAction::ReportPhishing => Self::ReportPhishing,
+            RealMobileAction::SaveAttachments => Self::SaveAttachments,
+            RealMobileAction::SavePDF => Self::SavePDF,
+            RealMobileAction::SenderEmails => Self::SenderEmails,
+            RealMobileAction::Snooze => Self::Snooze,
+            RealMobileAction::Spam => Self::Spam,
+            RealMobileAction::ToggleLight => Self::ToggleLight,
+            RealMobileAction::ToggleRead => Self::ToggleRead,
+            RealMobileAction::ToggleStar => Self::ToggleStar,
+            RealMobileAction::Trash => Self::Trash,
+            RealMobileAction::ViewHeaders => Self::ViewHeaders,
+            RealMobileAction::ViewHTML => Self::ViewHTML,
+            RealMobileAction::Other(s) => Self::Other(s),
+        }
+    }
+}
+
+impl From<MobileAction> for RealMobileAction {
+    fn from(value: MobileAction) -> Self {
+        match value {
+            MobileAction::Archive => Self::Archive,
+            MobileAction::Forward => Self::Forward,
+            MobileAction::Label => Self::Label,
+            MobileAction::Move => Self::Move,
+            MobileAction::Print => Self::Print,
+            MobileAction::Remind => Self::Remind,
+            MobileAction::Reply => Self::Reply,
+            MobileAction::ReportPhishing => Self::ReportPhishing,
+            MobileAction::SaveAttachments => Self::SaveAttachments,
+            MobileAction::SavePDF => Self::SavePDF,
+            MobileAction::SenderEmails => Self::SenderEmails,
+            MobileAction::Snooze => Self::Snooze,
+            MobileAction::Spam => Self::Spam,
+            MobileAction::ToggleLight => Self::ToggleLight,
+            MobileAction::ToggleRead => Self::ToggleRead,
+            MobileAction::ToggleStar => Self::ToggleStar,
+            MobileAction::Trash => Self::Trash,
+            MobileAction::ViewHeaders => Self::ViewHeaders,
+            MobileAction::ViewHTML => Self::ViewHTML,
+            MobileAction::Other(s) => Self::Other(s),
+        }
     }
 }
 
