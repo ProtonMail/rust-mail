@@ -2,6 +2,8 @@
 #[path = "tests/utils.rs"]
 mod tests;
 
+use base64::{Engine, prelude::BASE64_STANDARD};
+use proton_crypto::generate_secure_random_bytes;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Returns the first grapheme of the string in uppercase.
@@ -65,4 +67,14 @@ where
     fn map_vec(self) -> Option<Vec<A>> {
         self.map(MapVec::map_vec)
     }
+}
+
+const NONCE_SIZE: usize = 32;
+
+/// Generate a random nonce for the sake of Content Security Policy.
+/// <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy#nonce-nonce_value/>
+#[must_use]
+pub fn generate_csp_nonce() -> String {
+    let bytes: [u8; NONCE_SIZE] = generate_secure_random_bytes();
+    BASE64_STANDARD.encode(bytes)
 }
