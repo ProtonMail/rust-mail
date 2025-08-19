@@ -16,6 +16,7 @@ use anyhow::Context;
 use parking_lot::Mutex;
 use proton_action_queue::action::ActionId;
 use proton_calendar_common::{self as cal, RsvpError};
+use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, ProtonCore};
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
@@ -282,16 +283,24 @@ impl DecryptedMessageBody {
             let data = if is_proxy_enabled {
                 api.proxy_img(&url).await?
             } else {
-                reqwest::Client::new()
+                ctx.http_client()
                     .request(Method::GET, url)
                     .send()
                     .await
-                    .context("error sending unsubscribe http request")?
+                    .map_err(|e| ApiServiceError::ConnectionError(e.to_string()))?
                     .error_for_status()
-                    .context("image request returned error")?
+                    .map_err(|e| {
+                        ApiServiceError::UnknownError(format!(
+                            "Server returned error when getting image: {e:?}"
+                        ))
+                    })?
                     .bytes()
                     .await
-                    .context("error getting bytes from image request")?
+                    .map_err(|e| {
+                        ApiServiceError::UnknownError(format!(
+                            "error getting bytes from image request: {e:?}"
+                        ))
+                    })?
                     .to_vec()
             };
 
@@ -359,9 +368,11 @@ impl DecryptedMessageBody {
     }
 
     pub fn unsubscribe_from_newsletter(&self) -> anyhow::Result<UnsubscribeNewsletter> {
-        let headers = &self.metadata.parsed_headers.clone();
-        let id = self.metadata.local_message_id.unwrap();
-        UnsubscribeNewsletter::new(headers, id).context("This action wouldn't do anything")
+        UnsubscribeNewsletter::new(
+            &self.metadata.parsed_headers,
+            self.metadata.local_message_id.unwrap(),
+        )
+        .context("This action wouldn't do anything")
     }
 
     pub async fn action_unsubscribe_from_newsletter(

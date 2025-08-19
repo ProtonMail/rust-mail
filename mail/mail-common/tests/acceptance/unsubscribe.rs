@@ -17,7 +17,8 @@ fn correct_header_parsing() {
 
     {
         add(headers, "<https://foo.bar/subscribe>");
-        UnsubscribeNewsletter::new(headers, id).unwrap();
+        let h = UnsubscribeNewsletter::new(headers, id).unwrap();
+        assert_eq!(h.request.unwrap().as_str(), "https://foo.bar/subscribe");
     }
 
     {
@@ -26,8 +27,14 @@ fn correct_header_parsing() {
             "<https://foo.bar/subscribe>, <mailto:unsubscribe@bar.com/subscribe>",
         );
         let u = UnsubscribeNewsletter::new(headers, id).unwrap();
-        assert!(u.request.is_some());
-        assert!(u.mail.is_some());
+        assert_eq!(
+            u.request.as_ref().unwrap().as_str(),
+            "https://foo.bar/subscribe"
+        );
+        assert_eq!(
+            u.mail.as_ref().unwrap().as_str(),
+            "mailto:unsubscribe@bar.com/subscribe"
+        );
 
         add(
             headers,

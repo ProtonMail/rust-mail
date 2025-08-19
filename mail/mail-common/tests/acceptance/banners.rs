@@ -13,6 +13,7 @@ use proton_mail_common::models::Conversation;
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::models::MessageBody;
 use proton_mail_common::models::MessageBodyMetadata;
+use proton_mail_common::models::MessageMimeType;
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::test_utils::init::Params;
 use stash::orm::Model;
@@ -26,6 +27,7 @@ use proton_mail_common::test_utils::test_context::MailUserContextTestExtension;
 use stash::stash::StashError;
 use velcro::hash_map;
 use wiremock::Mock;
+use wiremock::MockServer;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::{method, path};
 
@@ -471,18 +473,23 @@ async fn banners_unsubscribe() {
     let ctx = test_ctx.mail_user_context().await;
     let tether = &mut ctx.user_stash().connection();
 
+    let mock_server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/api/core/v4/tests/ping"))
+        .and(path("/subscribe"))
         .respond_with(ResponseTemplate::new(200))
-        .named("Mock pings")
-        .mount(test_ctx.mock_server())
+        .named("mock unsubscribe")
+        .expect(1)
+        .mount(&mock_server)
         .await;
 
     test_ctx.catch_all().await;
+
     // --
 
+    let path = mock_server.uri() + "/subscribe";
+
     let headers = hash_map! {
-        "List-Unsubscribe".into(): "<https://foo.bar/subscribe>".into(),
+        "List-Unsubscribe".into(): path.into()
     };
 
     let mut addr: Address = params.addresses.pop().unwrap().into();
@@ -519,6 +526,7 @@ async fn banners_unsubscribe() {
             parsed_headers: ParsedHeaders { headers },
             ..Default::default()
         },
+        MessageMimeType::TextPlain,
         None,
         "".into(),
         None,

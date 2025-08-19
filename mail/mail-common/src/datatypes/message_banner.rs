@@ -1,6 +1,6 @@
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::UnixTimestamp;
-use stash::{params, stash::Tether};
+use stash::stash::Tether;
 
 use crate::models::{MailSettings, Message, default_location::IncomingDefaultLocation};
 
@@ -148,15 +148,8 @@ impl Message {
         }
 
         if can_unsubscribe {
-            let already_unsubscribed = if let Some(id) = self.local_id && let Ok(Some(_)) =
-                tether
-                    .query_value_opt::<i64>(
-                        "SELECT local_message_id AS value FROM unsubscribe WHERE local_message_id = ?",
-                        params![id],
-                    )
-                    .await
-                {
-                    true
+            let already_unsubscribed = if let Some(id) = self.local_id {
+                Message::is_unsubscribed(id, tether).await
             } else {
                 false
             };

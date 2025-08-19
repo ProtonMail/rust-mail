@@ -1,11 +1,12 @@
 use crate::actions::MailActionError;
 use crate::datatypes::{LocalMessageId, ParsedHeaders};
-use anyhow::{Context, anyhow};
+use crate::models::Message;
+use anyhow::anyhow;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler};
+use proton_core_api::service::ApiServiceError;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
-use stash::params;
 use stash::stash::Bond;
 use tracing::warn;
 use url::Url;
@@ -82,7 +83,9 @@ impl Action for UnsubscribeNewsletter {
     type Error = MailActionError;
 }
 
-pub struct UnsubscribeNewsletterHandler;
+pub struct UnsubscribeNewsletterHandler {
+    pub http_client: reqwest::Client,
+}
 
 impl Handler for UnsubscribeNewsletterHandler {
     type Action = UnsubscribeNewsletter;
@@ -93,11 +96,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        tx.execute(
-            "INSERT OR IGNORE INTO unsubscribe (local_message_id) VALUES (?)",
-            params![action.id],
-        )
-        .await?;
+        Message::mark_unsubscribed(action.id, tx).await?;
         Ok(())
     }
 
@@ -107,11 +106,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        tx.execute(
-            "DELETE FROM unsubscribe WHERE local_message_id = ?",
-            params![action.id],
-        )
-        .await?;
+        Message::delete_mark_unsubscribed(action.id, tx).await?;
         Ok(())
     }
 
@@ -123,13 +118,18 @@ impl Handler for UnsubscribeNewsletterHandler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         if let Some(url) = &action.request {
             // A GET request to the url should be enough
-            _ = reqwest::Client::new()
+            _ = self
+                .http_client
                 .request(Method::GET, url.as_str())
                 .send()
                 .await
-                .context("error sending unsubscribe http request")?
+                .map_err(|e| ApiServiceError::ConnectionError(e.to_string()))?
                 .error_for_status()
-                .context("Server returned error when unsubscribing")?;
+                .map_err(|e| {
+                    ApiServiceError::UnknownError(format!(
+                        "Server returned error when unsubscribing: {e:?}"
+                    ))
+                })?;
 
             return Ok(());
         }

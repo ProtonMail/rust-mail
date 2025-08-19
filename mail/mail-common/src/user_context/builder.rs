@@ -63,6 +63,7 @@ impl MailUserContextBuilder {
                 origin,
                 this,
                 user_context.session().api(),
+                mail_context.http_client(),
             );
 
             let services = self
