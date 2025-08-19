@@ -139,6 +139,7 @@ struct CachedDraftData {
     bcc_list: Vec<ComposerRecipient>,
     bcc_list_cb: Option<Arc<dyn ComposerRecipientValidationCallback>>,
 }
+
 /// Represents a draft message which can be crafted as empty or as a reply/forward
 /// to an existing message.
 #[derive(uniffi::Object)]
@@ -156,6 +157,7 @@ impl Draft {
     ) -> Result<Arc<Self>, MailContextError> {
         let state = draft.state().await?;
         let staging_path = draft.attachment_staging_path(real_ctx);
+
         let cached = Arc::new(RwLock::new(CachedDraftData {
             subject: state.subject,
             body: state.body,
@@ -186,11 +188,14 @@ impl Draft {
             cc_list_cb: None,
             bcc_list_cb: None,
         }));
+
         let cached_cloned = Arc::downgrade(&cached);
         let event_received = draft.subscribe();
+
         real_ctx.spawn(async move {
             Self::handle_draft_event(cached_cloned, event_received).await;
         });
+
         Ok(Arc::new_cyclic(|_| Self {
             ctx: ctx.clone(),
             cached,

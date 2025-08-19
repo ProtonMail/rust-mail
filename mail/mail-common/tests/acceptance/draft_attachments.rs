@@ -471,6 +471,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await

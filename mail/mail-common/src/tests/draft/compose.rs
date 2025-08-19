@@ -90,6 +90,7 @@ async fn check_reply_signature_text() {
     let mut source_body_metadata = existing_message_body_metadata();
     source_body_metadata.mime_type = MimeType::TextPlain;
     let source_body = "Hello World".to_owned();
+
     let (draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::All,
         MimeType::TextPlain,
@@ -97,6 +98,7 @@ async fn check_reply_signature_text() {
         source_body,
     )
     .await;
+
     assert_snapshot!(draft.body());
 }
 
@@ -116,6 +118,7 @@ async fn check_reply_simple_login_alias() {
     source_body_metadata.reply_to.address = expected_email.clone().into();
     let source_body = "Hello World".to_owned();
     let expected_email = source_body_metadata.reply_to.address.clone();
+
     let (draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::Sender,
         MimeType::TextPlain,
@@ -123,6 +126,7 @@ async fn check_reply_simple_login_alias() {
         source_body,
     )
     .await;
+
     assert!(draft.to_list.contains_email(expected_email.as_ref()));
     assert!(
         !draft
@@ -140,6 +144,7 @@ async fn check_reply_all_simple_login_alias() {
     source_body_metadata.reply_tos[0].address = expected_email.clone().into();
     let source_body = "Hello World".to_owned();
     let expected_email = source_body_metadata.reply_tos[0].address.clone();
+
     let (draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::All,
         MimeType::TextPlain,
@@ -147,6 +152,7 @@ async fn check_reply_all_simple_login_alias() {
         source_body,
     )
     .await;
+
     assert!(draft.to_list.contains_email(expected_email.as_ref()));
     assert!(
         !draft
@@ -158,18 +164,22 @@ async fn check_reply_all_simple_login_alias() {
 #[tokio::test]
 async fn reply_to_email_alias() {
     let mut source_body_metadata = existing_message_body_metadata();
+
     source_body_metadata
         .parsed_headers
         .headers
         .insert("X-Original-To".to_owned(), TEST_EMAIL_ALIAS.into());
+
     let source_body = "Hello World".to_owned();
     let mut source_message = existing_message();
+
     source_message.to_list.push(MessageRecipient {
         address: TEST_EMAIL_ALIAS.to_owned().into(),
         is_proton: false,
         name: TEST_EMAIL_DISPLAY_NAME.to_owned().into(),
         group: Default::default(),
     });
+
     let (draft, _, _) = create_reply_with_mime_and_body_and_message(
         ReplyMode::Sender,
         MimeType::TextPlain,
@@ -178,6 +188,7 @@ async fn reply_to_email_alias() {
         source_message,
     )
     .await;
+
     assert!(!draft.to_list.contains_email(TEST_EMAIL_ALIAS));
     assert_eq!(draft.sender, TEST_EMAIL_ALIAS);
 }
@@ -438,7 +449,6 @@ fn html_signature_converted_to_plain_text() {
 
 #[tokio::test]
 async fn sanitize_draft_reply_html() {
-    // Draft replies need to be sanitized.
     let (mut draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::All,
         MimeType::TextHtml,
@@ -452,9 +462,8 @@ async fn sanitize_draft_reply_html() {
     let sanitized = draft.body().to_owned();
 
     draft.sanitize_body();
-    assert_snapshot!(draft.body());
 
-    // This should be identical before the save.
+    assert_snapshot!(draft.body());
     assert_eq!(sanitized, draft.body());
 }
 
@@ -475,6 +484,7 @@ async fn reply_to_sent_message_should_use_to_list_rather_than_sender(reply_mode:
         group: Default::default(),
     });
     let source_body = "Hello World".to_owned();
+
     let (draft, _, _) = create_reply_with_mime_and_body_and_message(
         reply_mode,
         MimeType::TextPlain,

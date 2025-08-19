@@ -1315,6 +1315,7 @@ impl Message {
 
         let (_, encrypted_body) =
             Self::sync_message_and_body(remote_id, ctx.api(), &mut tx).await?;
+
         trace!("Message successfully downloaded. Decrypting...");
 
         let decrypted = Self::decrypt_message_body(
@@ -1325,6 +1326,7 @@ impl Message {
             with_attachment_prefetching,
         )
         .await?;
+
         trace!("Message successfully decrypted. Caching...");
 
         tx.run_tx(async |tx| {
@@ -2088,6 +2090,7 @@ impl Message {
         tether: &mut Tether,
     ) -> MailContextResult<(Message, DecryptedMessageBody)> {
         tracing::info!("Force syncing");
+
         let (message, encrypted) =
             Self::sync_message_and_body(message_id, ctx.api(), tether).await?;
 
@@ -2834,9 +2837,7 @@ pub struct MessageBodyMetadata {
     pub parsed_headers: ParsedHeaders,
 
     pub attachments: Vec<Attachment>,
-
     pub reply_to: MessageReplyTo,
-
     pub reply_tos: Vec<MessageReplyTo>,
 }
 
@@ -2928,6 +2929,7 @@ impl MessageBodyMetadata {
         .await?;
         Ok(())
     }
+
     pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
         let value = self.parsed_headers.headers.get(key)?;
         match value {
@@ -3009,13 +3011,13 @@ impl ModelHooks for MessageBodyMetadata {
         }
         Ok(())
     }
+
     async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         self.attachments = Attachment::for_message(self.local_message_id.unwrap(), tether)
             .await
             .inspect_err(|e| error!("Failed to load attachments for body metadata: {e:?}"))?;
 
         self.reply_to = MessageReplyTo::load_reply_to(self.id(), tether).await?;
-
         self.reply_tos = MessageReplyTo::load_reply_tos(self.id(), tether).await?;
 
         Ok(())

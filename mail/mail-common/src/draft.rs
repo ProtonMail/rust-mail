@@ -851,6 +851,7 @@ impl DraftActor {
         self.act(|sender| DraftActorMessage::SetMimeType { sender, mime_type })
             .await
     }
+
     pub async fn sanitize_body(&self) -> Result<(), MailContextError> {
         self.act(DraftActorMessage::SanitizeBody).await?
     }

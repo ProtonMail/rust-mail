@@ -1115,6 +1115,7 @@ impl EncryptedMessageBody {
                     }
                 }
             }
+
             Err(e) => {
                 error!(
                     "Failed to decrypt message body ({:?}): {e:?}",
