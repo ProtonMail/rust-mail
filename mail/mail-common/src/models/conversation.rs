@@ -2131,47 +2131,6 @@ impl Conversation {
         if local_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
-
-        debug!("{local_ids:?}");
-
-        // If all messages of all conversations are labeled we show a full selection.
-        // If only some are labeled we show a partial selection.
-        // If none are labeled we show a non-selection.
-        //
-        // Thus we need all messages that belong to all conversations,
-        // then we find out which labels are in all of the messages and which are only in some.
-
-        let message_ids: Vec<LocalMessageId> = tether
-            .query_values(
-                format!(
-                    "SELECT local_id AS value
-                     FROM messages
-                     WHERE local_conversation_id in ({})",
-                    local_ids.iter().map(ToString::to_string).join(",")
-                ),
-                vec![],
-            )
-            .await?;
-        let res = Message::available_label_as_actions(message_ids, tether).await?;
-        debug!("Available label_as actions for conversations: {res:?}");
-        Ok(res)
-    }
-
-    /// Watches `label as` actions for conversations
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
-    ///
-    #[tracing::instrument(skip_all)]
-    pub async fn watch_available_label_as_actions(
-        local_ids: Vec<LocalConversationId>,
-        tether: &Tether,
-    ) -> Result<(Vec<LabelAsAction>, WatcherHandle), AppError> {
-        if local_ids.is_empty() {
-            return Err(AppError::EmptyListOfConversations);
-        }
-
         debug!("{local_ids:?}");
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
@@ -2188,6 +2147,23 @@ impl Conversation {
         });
 
         let res = LabelAsAction::finalize(all_label_as_actions);
+
+        debug!("Available label_as actions for conversations: {res:?}");
+        Ok(res)
+    }
+
+    /// Watches `label as` actions for conversations
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
+    #[tracing::instrument(skip_all)]
+    pub async fn watch_available_label_as_actions(
+        local_ids: Vec<LocalConversationId>,
+        tether: &Tether,
+    ) -> Result<(Vec<LabelAsAction>, WatcherHandle), AppError> {
+        let res = Self::available_label_as_actions(local_ids, tether).await?;
         let handle =
             tether.subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
         debug!("watch available label_as actions for conversations: {res:?}");

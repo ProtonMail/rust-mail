@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Introduce `generate_csp_nonce()`
+- Add messageactionsheet type build in the same way as message toolbars are
+
+### Fixes
+
+- [ET-4298] Fix mime type inference for replies
+
+
+## [mail-uniffi-v0.125.7] - 2025-08-19
+
+### Fixes
+
+- Correct conversation label_as available actions
+
+
+## [mail-uniffi-v0.132.0] - 2025-08-19
+
 ### Changed
 
 - [ET-4349] Extend reportissue with additional file paths
@@ -42,6 +61,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Do not use tx to inspect db migration state
 
 
+## [mail-uniffi-v0.131.0] - 2025-08-18
+
+### Fixes
+
+- [ET-4176] Remove fido details from db
+- Fixed documentation for the safety warnings and update fide_details function ref in doc.
+- Silence muon error logs
+- Applied post merge fmt.
+
+
 ## [mail-uniffi-v0.130.0] - 2025-08-18
 
 ### Features
@@ -51,13 +80,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.129.0] - 2025-08-18
 
-### Features
-
-- Enable pmsignature by default
-
-
-## [mail-uniffi-v0.131.0] - 2025-08-18
-
 ### Changed
 
 - Extend mobileactions implementation with methods allowing to access any toolbar settings available
@@ -66,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - [ET-4017] Run post login validations after signup too
+- Enable pmsignature by default
 
 ### Fixes
 
@@ -74,10 +97,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4235] Only convert http and https links to href
 - [ET-4235] Classify contact card urls [breaking change]
 - [ET-4235] Santize logo and photo urls
-- [ET-4176] Remove fido details from db
-- Fixed documentation for the safety warnings and update fide_details function ref in doc.
-- Silence muon error logs
-- Applied post merge fmt.
 
 
 ## [mail-uniffi-v0.125.4] - 2025-08-15
