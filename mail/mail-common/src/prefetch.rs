@@ -85,14 +85,13 @@ impl Prefetch {
 }
 
 /// App origin only
+#[derive(Default)]
 pub struct PrefetchService {
     pub notify: PrefetchNotify,
 }
 
 impl PrefetchService {
     pub fn new() -> Self {
-        Self {
-            notify: OnceLock::new(),
-        }
+        Self::default()
     }
 }
