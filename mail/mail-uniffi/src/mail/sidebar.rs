@@ -123,7 +123,6 @@ impl Sidebar {
 
     pub async fn watch_labels(
         &self,
-        label_type: LabelType,
         callback: Box<dyn LiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ActionError> {
         let ctx = self.ctx()?;
