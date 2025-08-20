@@ -98,7 +98,7 @@ def build_sections(commits: list[Commit]) -> list[Section]:
         except Exception:
             continue
         else:
-            lhs, msg = lhs.strip(), msg.strip().capitalize()
+            lhs, msg = lhs.strip(), msg.strip()
 
         if lhs.endswith("*"):
             continue

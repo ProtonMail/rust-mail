@@ -5,48 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-<<<<<<< HEAD
+## [Unreleased]
+
+### Features
+
+- [ET-1307] Introduce Unleash API endpoint to mail-api
+
+
+## [mail-uniffi-v0.125.8] - 2025-08-20
+
+### Fixes
+
+- ET-4378 Removed a deprecated check that was stalling the MBP workflow.
+
+
 ## [mail-uniffi-v0.133.0] - 2025-08-19
 
 ### Features
 
 - Introduce `generate_csp_nonce()`
-- Add messageactionsheet type build in the same way as message toolbars are
+- Add MessageActionSheet type build in the same way as message toolbars are
 
 ### Fixes
 
 - [ET-4298] Fix mime type inference for replies
-=======
-## [mail-uniffi-v0.125.8] - 2025-08-19
-
-### Fixes
-
-- Et-4378 removed a deprecated check that was stalling the mbp workflow.
->>>>>>> releases/mail-uniffi/0.125
 
 
 ## [mail-uniffi-v0.125.7] - 2025-08-19
 
 ### Fixes
 
-- Correct conversation label_as available actions
+- Correct Conversation label_as available actions
 
 
 ## [mail-uniffi-v0.132.0] - 2025-08-19
 
 ### Changed
 
-- [ET-4349] Extend reportissue with additional file paths
+- [ET-4349] Extend ReportIssue with additional file paths
 
 ### Features
 
-- Add `allmessageactions` mechanism based upon `alllistactions`
-- Uniffi: add resolve_system_label_id()
+- Add `AllMessageActions` mechanism based upon `AllListActions`
+- uniffi: Add resolve_system_label_id()
 
 ### Fixes
 
-- [ET-4328] Ensure labelas and move work correctly offline
-- [ET-4260] Improve alternative routing for human verification
+- [ET-4328] Ensure LabelAs and Move work correctly offline
+- [ET-4260] Improve alternative routing for Human Verification
 - Correct resolved host for challenge server
 
 
@@ -54,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- [ET-4260] Improve alternative routing for human verification
+- [ET-4260] Improve alternative routing for Human Verification
 
 
 ## [mail-uniffi-v0.125.5] - 2025-08-18
@@ -73,30 +79,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- [ET-4176] Remove fido details from db
+- [ET-4176] Remove FIDO details from db
 - Fixed documentation for the safety warnings and update fide_details function ref in doc.
 - Silence muon error logs
-- Applied post merge fmt.
+- Applied post merge FMT.
 
 
 ## [mail-uniffi-v0.130.0] - 2025-08-18
 
 ### Features
 
-- Expose hv server and resolved hostname
+- Expose HV server and resolved hostname
 
 
 ## [mail-uniffi-v0.129.0] - 2025-08-18
 
 ### Changed
 
-- Extend mobileactions implementation with methods allowing to access any toolbar settings available
-- (breaking) change `all_available_bottom_bar_actions_for_xyz` to `all_available_list_actions_for_xyz`
+- Extend MobileActions implementation with methods allowing to access any toolbar settings available
+- (breaking) Change `all_available_bottom_bar_actions_for_xyz` to `all_available_list_actions_for_xyz`
 
 ### Features
 
 - [ET-4017] Run post login validations after signup too
-- Enable pmsignature by default
+- Enable PmSignature by default
 
 ### Fixes
 
@@ -104,14 +110,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4235] Best attempt at sanitizing  css variables
 - [ET-4235] Only convert http and https links to href
 - [ET-4235] Classify contact card urls [breaking change]
-- [ET-4235] Santize logo and photo urls
+- [ET-4235] Santize Logo and Photo urls
 
 
 ## [mail-uniffi-v0.125.4] - 2025-08-15
 
 ### Fixes
 
-- Support eventpoll::register() being called multiple times
+- Support EventPoll::register() being called multiple times
 
 
 ## [mail-uniffi-v0.125.3] - 2025-08-14
@@ -125,7 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Address signature not updating
+- Address Signature not updating
 - Missing body update in `html_for_composer`
 
 
@@ -133,7 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Make sure tokio is in scope
+- Make sure Tokio is in scope
 
 
 ## [mail-uniffi-v0.128.0] - 2025-08-14
@@ -148,7 +154,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- Implement crud for custom settings (aka mobile signatures)
+- Implement CRUD for custom settings (aka mobile signatures)
 - Consider composer body mime type in sending
 
 ### Fixes
@@ -160,15 +166,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- Expose challengeloader::post
-- Expose challengeloader::put
-- Timeout pause/resume during hv challenge
+- Expose ChallengeLoader::post
+- Expose ChallengeLoader::put
+- Timeout pause/resume during HV challenge
 
 ### Fixes
 
 - [ET-4145] Missing conversions for draft attachment upload errors
 - [ET-4235] Strip cid links from all uri sources
-- [ET-4235] Strip invalid uri sources
+- [ET-4235] Strip invalid URI sources
 
 
 ## [mail-uniffi-v0.125.0] - 2025-08-13
@@ -179,10 +185,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Undo move now works when undoing a move out of inbox
+- undo move now works when undoing a move out of inbox
 - Scroller snooze-time ordering is now taking max value of time and snooze time instead of snooze time alone
 - Moving out of snooze folder will remove snoozed label
-- [ET-3948] Restore `draft.set_body` behavior
+- [ET-3948] Restore `Draft.set_body` behavior
 - [ET-3905] Marking messages read updates to conversation counters
 
 
@@ -192,8 +198,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Allow for optional behavior, when skipping recovery setup during the sign-up.
 - Implement share extension v2.0
-- Checking username availability: pass the error message from be to the client app.
-- Expose apiserviceerror::unknownerror string
+- Checking username availability: pass the error message from BE to the client app.
+- Expose ApiServiceError::UnknownError string
 
 ### Fixes
 
@@ -202,16 +208,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3948] Draft auto save
 - Fixed doc test builds due to removed dependency
 - [ET-4018] Skip subscribed user when doing free accounts post-login-check
-- [ET-4244] Handle neednewpass state
+- [ET-4244] Handle NeedNewPass state
 - [ET-2495] Validate total attachment size and count before upload
-- Label_as + also archive with no labels selected now behave like a normal move to archive
+- label_as + also archive with no labels selected now behave like a normal move to archive
 
 
 ## [mail-uniffi-v0.122.1] - 2025-08-13
 
 ### Fixes
 
-- [ET-4244] Handle neednewpass state
+- [ET-4244] Handle NeedNewPass state
 
 
 ## [mail-uniffi-v0.123.0] - 2025-08-11
@@ -232,9 +238,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4155] Always treat known proton domains as supported
 - [ET-4155] Revalidate recipients on draft open
 - Message.snoozed_until is read directly from converstation's label instead of `snooze_time` api field.
-- [ET-3992] Update the account data when receiving a user via event loop.
-- [et-4002] support multipart emails with local-only attachments
-- [et-3605] poll event loop after answering a notification
+- [ET-3992] Update the Account data when receiving a user via event loop.
+- [ET-4002] Support multipart emails with local-only attachments
+- [ET-3605] Poll event loop after answering a notification
 
 
 ## [mail-uniffi-v0.121.0] - 2025-08-08
@@ -254,36 +260,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Move marking as read for snooze reminder to the common library
-- (breaking) rename `mail_uniffi::message::snooze_time` into `snoozed_until` and make field optional
+- (breaking) Rename `mail_uniffi::Message::snooze_time` into `snoozed_until` and make field optional
 
 ### Fixes
 
-- [ET-4142] Handle expiration time too soon error [breaking change]
+- [ET-4142] Handle expiration time too soon error [Breaking Change]
 - [ET-4142] Expiration time should be between 15min and 28 days
-- Rsvp: support apple-style invites
+- rsvp: Support Apple-style invites
 - [ET-4124] Check expiration time still valid when sending
 - [ET-4142] Report missing send error reasons
-- Rsvp: discriminate between network failures and missing events
-- [ET-4142] Do not set expiration time on drafts before send
+- rsvp: Discriminate between network failures and missing events
+- [ET-4142] Do not set expiration time on Drafts before send
 
 
 ## [mail-uniffi-v0.119.0] - 2025-08-07
 
 ### Changed
 
-- Remove the following functions: `remove_label_from_conversations` `apply_label_to_conversations` `remove_label_from_messages` `apply_label_to_messages`
+- remove the following functions: `remove_label_from_conversations` `apply_label_to_conversations` `remove_label_from_messages` `apply_label_to_messages`
 
 ### Features
 
 - [ET-3094] Limit simultaneously logged in free account count
 - [ET-4106] Tidied up payment observability events.
-- Implement proxying and add load_image fn which proxies images. s/embeddedattachmentinfo/attachmentdata.
+- Implement proxying and add load_image fn which proxies images. s/EmbeddedAttachmentInfo/AttachmentData.
 
 ### Fixes
 
 - [ET-3926] Undo move and rollback correctly mark as unread and undoes the unlabelling
 - [ET-4100] Only fetch message metadata when resolving remote id
-- Move_conversations and move_messages no longer return voidactionresult
+- move_conversations and move_messages no longer return VoidActionResult
 - [ET-4124] Fetch event in "groups"
 - [ET-4125] Do not prefetch attachments when prefetching message body
 
@@ -292,24 +298,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- Parallel default action groups
-- Et-3917 sign-in: add observability
-- [ET-4083] Expiration time options
-- [ET-3911] Add record_human_verification_view_loading_result function
+- Parallel Default Action Groups
+- ET-3917 Sign-In: add Observability
+- [ET-4083] Expiration Time Options
+- [ET-3911] add record_human_verification_view_loading_result function
 - [ET-3955] Added payment specific observability events.
 
 ### Fixes
 
-- [ET-2416] Sort accounts by name
+- [ET-2416] sort accounts by name
 
 
 ## [mail-uniffi-v0.115.8] - 2025-08-06
 
 ### Fixes
 
-- Ordering conversation by snooze time in inbox
-- Correctly hide `snooze reminder` on `conversation::mark_read` and set uniffi conv time to snoozed when required
-- Shared_status test by using common shared instance of statuswatcher instead of production one
+- Ordering conversation by snooze time in Inbox
+- correctly hide `snooze reminder` on `Conversation::mark_read` and set uniffi conv time to snoozed when required
+- shared_status test by using common shared instance of StatusWatcher instead of production one
 - Show snoozed banner for all msgs inside snoozed conversation
 - Message ordering and banners
 
@@ -325,9 +331,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-3911] Add record_human_verification_screen_view
-- [ET-3911] Add record_human_verification_result
-- Action auto dependencies
+- [ET-3911] add record_human_verification_screen_view
+- [ET-3911] add record_human_verification_result
+- Action Auto dependencies
 
 ### Fixes
 
@@ -338,24 +344,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Rsvp/uniffi: support attendee-less reminders
+- rsvp/uniffi: Support attendee-less reminders
 
 
 ## [mail-uniffi-v0.115.5] - 2025-08-04
 
 ### Fixes
 
-- [ET-4056] Snooze as an action is only available in inbox label
-- [ET-4054] Include snooze on conversation action sheet
-- Rsvp: use `calendarevent.addressid`
+- [ET-4056] Snooze as an action is only available in Inbox label
+- [ET-4054] Include Snooze on conversation action sheet
+- rsvp: Use `CalendarEvent.AddressID`
 
 
 ## [mail-uniffi-v0.115.4] - 2025-08-04
 
 ### Fixes
 
-- [ET-4052] Snooze is not available as an action in allmail label
-- Rsvp: fetch address keys of the address that has created the calendar
+- [ET-4052] Snooze is not available as an action in AllMail label
+- rsvp: Fetch address keys of the address that has created the calendar
 - Disable free account count post login check
 
 
@@ -363,7 +369,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Rsvp: support attendee-less reminders
+- rsvp: Support attendee-less reminders
 
 
 ## [mail-uniffi-v0.115.3] - 2025-08-03
@@ -371,41 +377,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - Support sorting by snooze times
-- Mail-common: generate snooze banner
+- mail-common: Generate snooze banner
 - On unset display_snooze_reminder on mark_read for conversations and messages
 
 ### Fixes
 
-- Mail: fix the "is conversation snoozed?" flag (aka `display_snoozed_reminder`)
-- Snooze: bubble errors up
-- Core-common: fix-fix the edm migration
+- mail: Fix the "is conversation snoozed?" flag (aka `display_snoozed_reminder`)
+- snooze: Bubble errors up
+- core-common: Fix-Fix the EDM migration
 
 
 ## [mail-uniffi-v0.115.2] - 2025-08-01
 
 ### Fixes
 
-- Share extension uses correct client id to authenticate
+- Share extension uses correct client ID to authenticate
 - Remove account tables from user db
 - Share extension is loading user key secret
 - [ET-4103] Always encrypt outside regardless of encryption settings
-- Rsvp: support user keys
+- rsvp: Support user keys
 
 
 ## [mail-uniffi-v0.115.0] - 2025-07-31
 
 ### Features
 
-- [ET-3914] Add observability for /domains/available endpoint
-- [ET-3914] Delete dead code
-- [ET-3914] Fix wrong test name
-- [ET-3914] Add observability for unlocking user keys
-- [ET-3914] Add observability for post login user checks
+- [ET-3914] add observability for /domains/available endpoint
+- [ET-3914] delete dead code
+- [ET-3914] fix wrong test name
+- [ET-3914] add observability for unlocking user keys
+- [ET-3914] add observability for post login user checks
 - [ET-3864] Connect actuall snooze implementation with uniffi layer
 
 ### Fixes
 
-- Standardize fido2 observability events
+- Standardize FIDO2 observability events
 - [ET-3503] Allow email address with long local parts
 
 
@@ -418,15 +424,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - Support share extension
-- Introduce appdetails structure
-- Guard against invalid mailsession usage
+- Introduce AppDetails structure
+- Guard against invalid MailSession usage
 - [ET-3864] Add unsnooze action
-- Breaking change - rename `*context` -> `*session` in `mailsession`
-- Rsvp: support organizer pov
+- Breaking change - Rename `*context` -> `*session` in `MailSession`
+- rsvp: Support organizer POV
 
 ### Fixes
 
-- [ET-1802] Do not retry 2fa in case of receiving auth error.
+- [ET-1802] Do not retry 2FA in case of receiving auth error.
 - User settings migration
 
 
@@ -434,14 +440,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-3971] Expose watcher functionalities for user tables for uniffi clients
+- [ET-3971] Expose watcher functionalities for User tables for uniffi clients
 
 
 ## [mail-uniffi-v0.111.0] - 2025-07-30
 
 ### Features
 
-- [ET-3943] Add fido2 support to the password change flow
+- [ET-3943] Add FIDO2 support to the password change flow
 
 
 ## [mail-uniffi-v0.112.0] - 2025-07-30
@@ -450,18 +456,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-3094] Post login check for free account count
 - [ET-3956] Add uniffi bindings for snooze actions
-- [ET-3538] Check for user delinquent flag during post login verifications
+- [ET-3538] check for user delinquent flag during post login verifications
 - [ET-3956] Adjust bindings to discussion
-- Add observability api for fido screen views needed for clients.
-- [ET-3864] Add snooze action
+- Add observability API for FIDO screen views needed for clients.
+- [ET-3864] Add Snooze action
 - [ET-3865] Calculate snooze options
-- Mail-uniffi: expose rsvps
+- mail-uniffi: Expose RSVPs
 
 ### Fixes
 
-- [ET-3787] Vanishing pgp attachments
-- Clippy.
-- [ET-3630] Add missing get_password method to `draft`
+- [ET-3787] Vanishing PGP attachments
+- clippy.
+- [ET-3630] Add missing get_password method to `Draft`
 
 
 ## [mail-uniffi-v0.110.0] - 2025-07-29
@@ -474,15 +480,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-3324] Do not allow replies with invalid addresses
-- [ET-3932] Handle invalid address on `draft::open`
-- Add format to with_context
+- [ET-3932] Handle invalid address on `Draft::open`
+- add format to with_context
 
 
 ## [mail-uniffi-v0.109.0] - 2025-07-28
 
 ### Changed
 
-- Contactemailitem::id -> contactemailitem::contact_id
+- ContactEmailItem::id -> ContactEmailItem::contact_id
 
 ### Features
 
@@ -490,10 +496,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Fully rework how move_to works + several move_to bugfixes
+- Fully rework how move_to works + Several move_to bugfixes
 - `contact_group_by_id` now returns all emails, and emails are always properly sorted in groups in the list.
 - Use muon for demo hv webview
-- Better hv
+- Better HV
 
 
 ## [mail-uniffi-v0.108.0] - 2025-07-25
@@ -515,8 +521,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Mail-common: drop `saveaspdf` and `print` actions
-- [ET-3920] Sync missing dependencies in mail scrollers
+- mail-common: Drop `SaveAsPdf` and `Print` actions
+- [ET-3920] Sync missing dependencies in Mail Scrollers
 
 
 ## [mail-uniffi-v0.105.7] - 2025-07-24
@@ -524,7 +530,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Marking conversations unread
-- [ET-2992] Open pgp attachments via `get_attachment`
+- [ET-2992] Open PGP attachments via `get_attachment`
 
 
 ## [mail-uniffi-v0.107.0] - 2025-07-24
@@ -532,20 +538,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - [ET-3120] Fido2 support
-- [ET-463] Add api call for snooze action
+- [ET-463] Add API call for snooze action
 - [ET-3627] Change temporary password during login flow
 - Add 'addresses' command to proton-mail-common demo
-- [ET-1450] Derive debug for observabilityrecorder
-- [ET-1450] Map apierror to apiserviceobservabilityresponse
-- [ET-1450] Record observability metrics for users/available endpoint
-- [ET-1450] Record observability metrics for users endpoint
+- [ET-1450] derive Debug for ObservabilityRecorder
+- [ET-1450] map ApiError to ApiServiceObservabilityResponse
+- [ET-1450] record observability metrics for users/available endpoint
+- [ET-1450] record observability metrics for users endpoint
 
 ### Fixes
 
 - Fix migration filename
-- Present a clear fork api
-- Make observabilityrecorder.record sync
-- Correct error mapping for duplicatecontext variant
+- Present a clear fork API
+- Make ObservabilityRecorder.record sync
+- Correct error mapping for DuplicateContext variant
 - [ET-3706] Prevent duplicate account login
 - Fix implementation of first_graphem_uppercase to support emoji.
 - Fix snapshot tests.
@@ -584,13 +590,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - [ET-3677] Rework label_as and add the undo action to its return type
-- [ET-3176] Qr login observability
+- [ET-3176] QR Login observability
 
 ### Fixes
 
-- Send client id from qr code
-- [ET-1450] Use camelcase for observability enums
-- [ET-3760] Create_or_get_local to preserve api conversation data over unknown data
+- Send Client Id from QR code
+- [ET-1450] use camelcase for observability enums
+- [ET-3760] create_or_get_local to preserve API conversation data over unknown data
 
 
 ## [mail-uniffi-v0.105.1] - 2025-07-16
@@ -604,7 +610,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-2973] Password change
+- [ET-2973] Password Change
 - [ET-2974] Support changing mailbox password
 
 ### Fixes
@@ -616,7 +622,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- [ET-3758] Use legacy encryption for qr login payload
+- [ET-3758] Use legacy encryption for QR login payload
 
 
 ## [mail-uniffi-v0.99.3] - 2025-07-15
@@ -631,20 +637,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- [ET-3550] Fetch more returns `scrollerupdate::none` when requested by client
+- [ET-3550] Fetch more returns `ScrollerUpdate::None` when requested by client
 
 ### Features
 
-- [ET-3609] Add encrypt-to-outside (eo) crypto logic
-- [ET-3630] Send password protected messages
+- [ET-3609] Add encrypt-to-outside (EO) crypto logic
+- [ET-3630] Send Password Protected Messages
 - [ET-2588] Extend contact suggestions to expose contacts in groups
 
 ### Fixes
 
 - [ET-3630] Reset password and expiration time on draft open
-- [ET-3550] Fix cursor storage, and underlying races, while switching filters in mailscroller
+- [ET-3550] Fix cursor storage, and underlying races, while switching filters in MailScroller
 - [ET-3757] Handle muon fork confirmation result
-- [ET-3758] Qr login should use legacy decryption first then fallback to non-legacy
+- [ET-3758] QR login should use legacy decryption first then fallback to non-legacy
 
 
 ## [mail-uniffi-v0.99.2] - 2025-07-11
@@ -669,7 +675,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Sqlite performance tweaks
+- Sqlite Performance Tweaks
 
 
 ## [mail-uniffi-v0.101.0] - 2025-07-09
@@ -692,30 +698,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `newinboxmailbox` is now sync
-- [ET-3550] (breaking) reimplement scroller from pull to push model, new api
-- New_inbox_mailbox and new_all_mail_mailbox are now sync
+- `newInboxMailbox` is now sync
+- [ET-3550] (Breaking) Reimplement scroller from pull to push model, new API
+- new_inbox_mailbox and new_all_mail_mailbox are now sync
 
 ### Features
 
-- Et-1970 update muon reference
-- Et-1970 pass in the info provider to muon. adapt the device info provider to get the data.
-- Et-1970 format code
+- ET-1970 Update muon reference
+- ET-1970 Pass in the info provider to muon. Adapt the device info provider to get the data.
+- ET-1970 format code
 
 ### Fixes
 
-- Breaking change: fix rust handling of keychain errors
+- Breaking change: Fix Rust handling of keychain errors
 
 
 ## [mail-uniffi-v0.99.0] - 2025-07-03
 
 ### Features
 
-- [ET-3592] Add incorrect2facode error variant to loginerror
+- [ET-3592] Add Incorrect2FACode error variant to LoginError
 
 ### Fixes
 
-- Ios 0xdead10cc
+- iOS 0xdead10cc
 
 
 ## [mail-uniffi-v0.98.0] - 2025-07-02
@@ -735,8 +741,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Update forwarded messages prefix to 'fw: '
-- Reverse css for misaligned content, reverse style sanitization
+- update forwarded messages prefix to 'Fw: '
+- Reverse CSS for misaligned content, reverse style sanitization
 - Cancel action queue workers
 - [ET-3321] Improve move_message and move_conversation queries
 
@@ -754,32 +760,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-3404] Error message localization
-- Correct formatting of userapiserviceerror
+- Correct formatting of UserApiServiceError
 
 
 ## [mail-uniffi-v0.93.19] - 2025-06-27
 
 ### Changed
 
-- Suppress context missing error in event loop subscriber
+- Suppress Context missing error in event loop subscriber
 
 ### Features
 
 - [ET-3025] Add size based log rotator
-- [ET-3025] Add `mailsession::export_logs`
+- [ET-3025] Add `MailSession::export_logs`
 
 
 ## [mail-uniffi-v0.96.0] - 2025-06-26
 
 ### Features
 
-- Et-3175 add edmoptout flag
-- Et-3175 add migration code
-- Et-3175 fix failing test
-- Et-3175 connect to the correct db
-- Contact_group_by_id for android
-- [ET-3413] Use crypto crate for qr login encryption functionalities
-- [ET-3497] Provide uniffi bindings for passwordpolicy
+- ET-3175 Add EdmOptOut flag
+- ET-3175 Add migration code
+- ET-3175 Fix failing test
+- ET-3175 Connect to the correct db
+- contact_group_by_id for android
+- [ET-3413] Use crypto crate for QR Login encryption functionalities
+- [ET-3497] Provide uniffi bindings for PasswordPolicy
 
 ### Fixes
 
@@ -791,9 +797,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Make sure our tracing logger is not crashing the app if fails
-- [ET-2322] Update draft conversation subject
-- [ET-2909] Handle already sent via event update
-- [ET-3518] Hide reply message actions
+- [ET-2322] Update Draft Conversation subject
+- [ET-2909] Handle Already Sent via event update
+- [ET-3518] Hide Reply Message Actions
 - [ET-3310] Handle missing user context on logout
 
 
@@ -807,8 +813,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Images were stretched
 - Deserialization error for fetch label request
-- [ET-3422] Improve html address signature update
-- Incorrect mail settings pmsignature bitflag values
+- [ET-3422] Improve HTML address signature update
+- Incorrect Mail Settings PmSignature bitflag values
 
 
 ## [mail-uniffi-v0.93.15] - 2025-06-25
@@ -817,7 +823,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-3312] Remove tear down step from sign_out_all
 - [ET-3085] Remove address_forwarding_id to fix address key generation
-- [ET-2815] Conversation label update when messages deleted
+- [ET-2815] Conversation Label Update when messages deleted
 - Do not generate keys for non-private users
 
 
@@ -834,18 +840,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-3312] Don't remove log messages at sign-out
-- [ET-3477] Mailsetting pmsignature value
+- [ET-3477] MailSetting PmSignature value
 
 
 ## [mail-uniffi-v0.93.14] - 2025-06-24
 
 ### Features
 
-- Sanitize <style> from html
+- Sanitize <style> from HTML
 
 ### Fixes
 
-- [ET-3024] Log protonmailerror conversion
+- [ET-3024] Log ProtonMailError Conversion
 
 
 ## [mail-uniffi-v0.93.13] - 2025-06-24
@@ -861,8 +867,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Submit user behavior data when creating external users.
 - [ET-3141] Download password policies
-- [ET-3166] Sign-in with qr code
-- [ET-1969] Move login challenge payload logic to rust
+- [ET-3166] Sign-in with QR code
+- [ET-1969] Move login challenge payload logic to Rust
 
 ### Fixes
 
@@ -874,17 +880,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Make sure the emails are not overflowing the width of the screen
-- [ET-3416] (breaking) add `start_auto_lock_countdown` mailsession method to be used by clients just b4 putting app to background
+- [ET-3416] (breaking) Add `start_auto_lock_countdown` MailSession method to be used by clients just b4 putting app to background
 - [ET-3308] Schedule send now properly update if edited on another session (other edge cases)
-- Incorrect db migration
+- Incorrect DB Migration
 
 
 ## [mail-uniffi-v0.93.10] - 2025-06-23
 
 ### Fixes
 
-- [ET-3428] Reply to simple login alias
-- Sync_conversation_messages are using graceful_status method
+- [ET-3428] Reply to Simple Login Alias
+- sync_conversation_messages are using graceful_status method
 
 
 ## [mail-uniffi-v0.93.9] - 2025-06-20
@@ -901,8 +907,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-3378] Do not upload deleted attachments
-- [ET-3395] Attachment key packets order
-- [ET-3342] Draft signature update on address change
+- [ET-3395] Attachment Key Packets Order
+- [ET-3342] Draft Signature Update on Address Change
 
 
 ## [mail-uniffi-v0.93.5] - 2025-06-17
@@ -921,13 +927,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-1969] Add payload version
 - [ET-1969] Use different payload for username and recovery frames
 - [ET-1969] Make clippy happy again
-- [ET-1969] Encapsulate challenge info in statedata object
+- [ET-1969] Encapsulate challenge info in StateData object
 - [ET-1969] Use tagged enums
-- [ET-1969] Convert nested type to payloadframe idiomatically
+- [ET-1969] Convert nested type to PayloadFrame idiomatically
 - [ET-1969] Avoid behaviour type duplication
 - [ET-1969] Clarify field purpose
 - [ET-1969] Attach user behaviour to submit_internal_username
-- [ET-1969] Provide challenge version from rust
+- [ET-1969] Provide challenge version from Rust
 - [ET-3192] Basic password validator.
 
 ### Fixes
@@ -941,8 +947,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Do not sync conversation on load without messages
 - Disable fixed location prefetcher
-- [ET-3243] Mark conversation unread
-- Conversation message selection
+- [ET-3243] Mark Conversation Unread
+- Conversation Message selection
 
 
 ## [mail-uniffi-v0.93.3] - 2025-06-17
@@ -969,7 +975,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-3307] Disable wal checkpoint on close
-- [ET-3351] Out of bounds access in draft::save
+- [ET-3351] Out of bounds access in Draft::save
 
 
 ## [mail-uniffi-v0.93.0] - 2025-06-13
@@ -984,12 +990,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-3083] Post-login account setup
+- [ET-3083] Post-Login Account Setup
 
 ### Fixes
 
-- Change scroller error type from `contexterror` to `mailscrollererror`
-- Fix background crash on ios
+- Change scroller error type from `ContextError` to `MailScrollerError`
+- Fix background crash on iOS
 
 
 ## [mail-uniffi-v0.92.0] - 2025-06-13
@@ -1003,8 +1009,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3313] Fix draft stuck in sent folder after send externally
 - [ET-3247] Can reply message property
 - Label events not applied before contact events
-- Add missing email field to contact details and change email.name: string to email.email_type: vec<vcardproptype>
-- [ET-3329] Fix save send dependencies
+- Add missing email field to contact details and change email.name: String to email.email_type: Vec<VcardPropType>
+- [ET-3329] Fix Save Send dependencies
 - [ET-3329] Allow draft to save if attachment upload fails
 
 
@@ -1012,15 +1018,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Move time validation of pin and autolock out of the database and utilize `instant`
+- Move time validation of Pin and AutoLock out of the database and utilize `Instant`
 
 ### Fixes
 
 - [ET-3300] Dissallow manipiulation of time
 - [ET-3301] Start counting time for autolock when going to background
-- [ET-3212] Mail scroller prevents double pages by marking itself as a dirty
+- [ET-3212] Mail Scroller prevents double pages by marking itself as a dirty
 - [ET-3325] Correctly handle save when already sent
-- [ET-3212] Add `mailscrollerdirty` error reason on fetch_more when scroller is dirty
+- [ET-3212] Add `MailScrollerDirty` error reason on fetch_more when scroller is dirty
 
 
 ## [mail-uniffi-v0.89.0] - 2025-06-12
@@ -1030,28 +1036,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3247] Message `is_scheduled` and `can_reply` properties
 - [ET-3101] Breaking change - replace `html_head_content_for_composer()` with `html_for_composer()`
 - [ET-3101] Introduce list of **trusted** senders
-- [ET-3101] Lower tracing level when transforming hsl, add support for light-dark
+- [ET-3101] lower tracing level when transforming HSL, add support for light-dark
 
 ### Fixes
 
 - [ET-3126] Check if online before attempting to cancel scheduled msg
 - [ET-3125] Only allow up to 100 scheduled send messages
-- [ET-3212] Event loop should be requested with option to get counters back
-- [ET-3178] Fix editor id in composer
+- [ET-3212] Event Loop should be requested with option to get counters back
+- [ET-3178] Fix editor ID in composer
 - [ET-3169] Replace path separators from attachment file name
-- Save draft after address change
+- Save Draft after address change
 - [ET-3211] Scheduled send messages should be sorted ascending
-- Signatures are always stored in html
+- Signatures are always stored in HTML
 
 
 ## [mail-uniffi-v0.87.0] - 2025-06-09
 
 ### Fixes
 
-- [ET-3092] Add new non-crashing `sign_out_all` method on `mailsession`
+- [ET-3092] Add new non-crashing `sign_out_all` method on `MailSession`
 - [ET-3092] Remove old standalone `sign_out_all` function
 - [ET-3092] Clear rust logfiles on `sign_out_all`
-- [ET-3261] Make sure light mode on android works as expected
+- [ET-3261] Make sure light mode on Android works as expected
 
 
 ## [mail-uniffi-v0.86.0] - 2025-06-09
@@ -1059,18 +1065,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - [ET-3178] List of untrusted_senders
-- Action queue auto dependency keys
-- Added deviceinfoprovider foreign trait.
+- Action Queue auto dependency keys
+- Added DeviceInfoProvider foreign trait.
 
 ### Fixes
 
 - [ET-3178] Fix some ugly colors by also taking lightness into the consideration when calculating achromatic colors
 - [ET-3178] Support for -webkit-text-fill-color
-- [ET-3178] Fix a case where color is not recognized by css parser
+- [ET-3178] Fix a case where color is not recognized by CSS parser
 - Obey remaining attempts on pin validation
 - [ET-3093] Sign out all accounts on delete pin when max attempts is reached
 - [ET-3096] Clear app protection on last account log out
-- [ET-3259] Remove innerhtml on certain tags
+- [ET-3259] Remove innerHTML on certain tags
 
 
 ## [mail-uniffi-v0.85.0] - 2025-06-06
@@ -1079,27 +1085,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-2568] Attach public key to messages
 - [ET-2568] Removing public keys is considered an error
-- Et-3080 add email and phone validation
-- Et-3080 fix build errors
-- Et-3080 fixes
-- Et-3080 run cargo fmt
-- Et-3080 fix clippy issues
-- [ET-3178] Sanitize deprecated html attributes for dark mode
+- ET-3080 Add email and phone validation
+- ET-3080 Fix build errors
+- ET-3080 Fixes
+- ET-3080 Run cargo fmt
+- ET-3080 Fix clippy issues
+- [ET-3178] Sanitize deprecated HTML attributes for dark mode
 - [ET-3090] Autolock defaults to 15 minutes and is respected on first lock
-- [ET-1410] Sender address change
+- [ET-1410] Sender Address Change
 
 ### Fixes
 
 - [ET-2066] Do not use sender when replying to a sent message
 - [ET-3021] Update list of proton colors used for avatars
-- Convert html signature to plain text
-- Report phishing moves the conversation too
+- Convert HTML signature to plain text
+- report phishing moves the conversation too
 - Several bugfixes to move-to and label-as.
-- [ET-3178] Use different selector for ids that works with spaces
+- [ET-3178] Use different selector for IDs that works with spaces
 - [ET-2568] Removing public keys is not considered an error
 - [ET-3178] Multiple tags do not duplicate style overrides
 - [ET-3178] Fix a case where there are multiple classes in one tag
-- Remove attachment should not be cancelled if upload failed
+- Remove Attachment should not be cancelled if upload failed
 
 
 ## [mail-uniffi-v0.84.0] - 2025-06-04
@@ -1107,7 +1113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - [ET-3101] Do not remove !important flag from stylesheets
-- [ET-3101] Insert extra id to the html root
+- [ET-3101] Insert extra id to the HTML root
 - [ET-3101] Expose `html_head_content_for_composer()` method in drafts
 - [ET-3101] Removing !important from style attributes is reversible
 - [ET-3101] Revert dark mode before saving a draft
@@ -1117,15 +1123,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-2140] Resync event for mail eventloop
-- Move loginflow to account crate
+- [ET-2140] Resync event for Mail EventLoop
+- move LoginFlow to account crate
 - Contact email type now has name and avatar information, and groups now use contact emails instead of contacts
 
 ### Fixes
 
-- Revert renaming coresession
-- Ios fixes: conflicting named enums
-- Draftsendresultwatcher not triggering after send
+- Revert renaming CoreSession
+- ios fixes: conflicting named enums
+- DraftSendResultWatcher not triggering after send
 
 
 ## [mail-uniffi-v0.82.0] - 2025-05-27
@@ -1134,11 +1140,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-3101] Move styles to body
 - [ET-3101] Move styles to body in draft reply
-- Expose delivery time in draftsendresult
+- Expose delivery time in DraftSendResult
 
 ### Fixes
 
-- [ET-2742] Replies to html messages should always be in html
+- [ET-2742] Replies to html messages should always be in HTML
 - [ET-3021] Add default implementation for avatar information (e.g. draft)
 
 
@@ -1153,8 +1159,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registering push notification waits for the network in the offline mode
 - Correct cached status for conversations created by a draft
 - Attachments get downloaded again if they're deleted from disk
-- Conversation create race condition
-- [ET-2328] Move draft to sent folder on already sent error
+- Conversation Create race condition
+- [ET-2328] Move Draft to Sent folder on Already Sent Error
 - Update watcher create order to avoid races
 
 
@@ -1162,51 +1168,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-735] Account sign-up flow
+- [ET-735] Account Sign-Up Flow
 
 
 ## [mail-uniffi-v0.79.0] - 2025-05-19
 
 ### Changed
 
-- [ET-2814] Remove decryptedmessage::body_with_defaults
-- [ET-2814] Make themeopts optional
+- [ET-2814] Remove DecryptedMessage::body_with_defaults
+- [ET-2814] Make ThemeOpts optional
 
 ### Features
 
-- Add `never` option for `autolock` app setting
+- Add `Never` option for `AutoLock` App Setting
 - [ET-2814] Dark mode in older devices that do not support media query
-- [ET-621] Cancel schedule send
-- [ET-619] Enable schedule send banner
+- [ET-621] Cancel Schedule Send
+- [ET-619] Enable Schedule Send Banner
 
 
 ## [mail-uniffi-v0.78.0] - 2025-05-16
 
 ### Changed
 
-- Add rawevent data structure to unbound event_loop::provider from generic
+- Add RawEvent data structure to unbound event_loop::Provider from generic
 
 ### Features
 
-- [ET-2814] Support dark mode in messages
-- [ET-2814] Add default properties for transformopts
-- [ET-2814] Parse css in order to dynamically inject supplement
-- [ET-642] Mailsettings::should_auto_lock method for keeping track if autolock setting allows for app protection invokation
+- [ET-2814] Support Dark Mode in messages
+- [ET-2814] Add default properties for TransformOpts
+- [ET-2814] Parse CSS in order to dynamically inject supplement
+- [ET-642] MailSettings::should_auto_lock method for keeping track if autolock setting allows for app protection invokation
 - [ET-2814] Dark mode handles also inline styles
-- [ET-574] Allow to disable alternative routing in appsettings
+- [ET-574] Allow to disable alternative routing in AppSettings
 - Draft::get_embedded_attachment_sync
 
 ### Fixes
 
-- [ET-2814] Use html namespace for inserting links
-- Lower priority of prefetch actions
+- [ET-2814] Use HTML namespace for inserting links
+- Lower priority of Prefetch actions
 
 
 ## [mail-uniffi-v0.77.0] - 2025-05-14
 
 ### Changed
 
-- Tui: remove unused dependencies
+- tui: Remove unused dependencies
 
 ### Features
 
@@ -1216,7 +1222,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Outbox should have message view mode.
-- Injecting style should not escape gt and lt signs
+- Injecting style should not escape GT and LT signs
 
 
 ## [mail-uniffi-v0.76.1] - 2025-05-08
@@ -1224,7 +1230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Spam banner only shown for messages marked as such by the backend
-- [ET-2895] Do not remove inner html when sanitizing content
+- [ET-2895] Do not remove inner HTML when sanitizing content
 
 
 ## [mail-uniffi-v0.76.0] - 2025-05-07
@@ -1267,9 +1273,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- [ET-2763] Mailscroller will not send data requests when offline
-- [ET-2754] Draft now holds weak handle to `mailusercontext`.
-- [ET-2754] Decrypted message now hold s weak handle to the `mailusercontext`
+- [ET-2763] MailScroller will not send data requests when offline
+- [ET-2754] Draft now holds weak handle to `MailUserContext`.
+- [ET-2754] Decrypted message now hold s weak handle to the `MailUserContext`
 - Do not sync mailbox, fix of b8a6329bb0fe62a7cc3acc8676ea6553d3f2eeca
 
 
@@ -1305,10 +1311,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- Attchmenlist::add_inline
+- AttchmenList::add_inline
 - [ET-2719] Delete all folder banner, uniffi + tui
 - Support /payments/resources/icons
-- Googlerecurring paymentreceipt (post_payments_tokens).
+- GoogleRecurring PaymentReceipt (post_payments_tokens).
 
 ### Fixes
 
@@ -1316,7 +1322,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Leaking tracing spans in async code
 - Return cached data from mail scroller immediately
 - Don't hang if transaction never ends
-- Don't send rollback again
+- don't send rollback again
 
 
 ## [mail-uniffi-v0.72.9] - 2025-04-17
@@ -1327,7 +1333,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Restore stash debug filter for ios logs
+- Restore stash debug filter for iOS logs
 - Network requests in send preferences tx
 
 
@@ -1349,7 +1355,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Mailusercontext polls events in the background
+- MailUserContext polls events in the background
 
 ### Features
 
@@ -1358,8 +1364,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-2326] Sanatize the conent-id in the mime-buidler
-- Disable async logger for ios
-- Wake taskservice awaiters on resume
+- Disable async logger for iOS
+- Wake TaskService awaiters on resume
 
 
 ## [mail-uniffi-v0.72.4] - 2025-04-14
@@ -1387,21 +1393,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Action-queue: simplify the online-check
+- action-queue: Simplify the online-check
 
 ### Features
 
 - [ET-2698] Registered device background task
 - [ET-2698] Registering devices tests
-- [ET-2698] Make the register_device_task a method of the mailsession
+- [ET-2698] Make the register_device_task a method of the MailSession
 - [ET-2698] More logs
 - [ET-2698] Make register_device_task synchronous
 - [ET-2698] Make sure that registration task can handle network errors
-- [ET-559] Signup network requests
+- [ET-559] signup network requests
 
 ### Fixes
 
-- Core: fix status watcher's shared state
+- core: Fix status watcher's shared state
 - [ET-2601] Improve initialization by waiting when failure of dependency happen
 
 
@@ -1409,35 +1415,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- [ET-2699] Blocked banner now properly gets updated on the event loop and block_address now takes a string instead of an id
+- [ET-2699] Blocked banner now properly gets updated on the event loop and block_address now takes a String instead of an id
 
 
 ## [mail-uniffi-v0.70.9] - 2025-04-09
 
 ### Changed
 
-- Change pin type from vec<u8> to vec<u32>
+- Change pin type from Vec<u8> to Vec<u32>
 
 
 ## [mail-uniffi-v0.70.8] - 2025-04-07
 
 ### Fixes
 
-- Allow to specify if abort for bg execution was called from foreground
+- Allow to specify if abort for Bg execution was called from foreground
 
 
 ## [mail-uniffi-v0.70.7] - 2025-04-07
 
 ### Fixes
 
-- Add action's pausable associated const which force executors to finish apply_remote b4 pausing
+- Add Action's PAUSABLE associated const which force Executors to finish apply_remote b4 pausing
 
 
 ## [mail-uniffi-v0.70.6] - 2025-04-07
 
 ### Fixes
 
-- Make `draft::save` & `draft::send` action's `apply_remote` non pausable futures
+- Make `Draft::save` & `Draft::send` action's `apply_remote` non pausable futures
 
 
 ## [mail-uniffi-v0.71.0] - 2025-04-07
@@ -1447,7 +1453,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-2592] Terminating action queue auto executor
 - Add banners to the tui client
 - [ET-2592] Background execution terminates when queue is empty
-- Support local api server
+- Support local API server
 
 
 ## [mail-uniffi-v0.70.5] - 2025-04-07
@@ -1483,17 +1489,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- [ET-2592] Update background execution api
+- [ET-2592] Update background execution API
 
 ### Features
 
-- [ET-2552] Use combine contacts appsetting for `contact_suggestions`
+- [ET-2552] Use combine contacts AppSetting for `contact_suggestions`
 - Mark as phising implementation
-- [ET-2640] Add `mailsession::remaining_pin_attempts` method
+- [ET-2640] Add `MailSession::remaining_pin_attempts` method
 
 ### Fixes
 
-- [ET-2613] Fill `username` field in bug report request
+- [ET-2613] Fill `Username` field in bug report request
 - [ET-2614] Correctly format bug report description to include all provided fields
 - [ET-2592] Replace r2d2 with basic replacement
 - Missing pinned and blocked system label migration
@@ -1503,18 +1509,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-2552] Clear application data on 10th incorrect pin validation attempt
+- [ET-2552] Clear application data on 10th incorrect PIN validation attempt
 - [ET-2552] Add functionality to set/unset biometrics
-- [ET-2552] Cancel all tasks spawned in userctx
+- [ET-2552] Cancel all tasks spawned in UserCtx
 - [ET-2552] Archive database files
 
 ### Fixes
 
-- Task-service: improve pausable futures
-- Task-service: add another test
+- task-service: Improve pausable futures
+- task-service: Add another test
 - [ET-2551] Make status observer more resilient in poor connection environment
-- Task-service: refactoring, improve docs
-- Task-service: address comments
+- task-service: Refactoring, improve docs
+- task-service: Address comments
 - [ET-2358] Correct reported error after draft deleted
 ## [0.68.2] - 2025-04-02
 
