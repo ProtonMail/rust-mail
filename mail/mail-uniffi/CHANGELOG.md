@@ -7,9 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- uniffi: Remove unused `label_type` argument for `watch_labels()`
+
 ### Features
 
 - [ET-1307] Introduce Unleash API endpoint to mail-api
+- Unsubscribe to newsletter via HTTP request
+- [breaking change] Use load_image instead of load_embedded_attachment and force remote images to use https
+- Add AllConversationActions and ConversationActionSheet types & methods analogical to the message features
+- Add API integration for changing API settings
+- Add UpdateMobileActions action and all uniffi bindings required to customize toolbar feature to work
+
+### Fixes
+
+- [ET-4298] Parse X-PM-MIMETYPE
+- labels: Watch `MailSettings` as well
+- [ET-4297] Fix invalid order_field scroller records
+- [ET-4297] Fix missing message snooze notifications
+- Ensure fresh auth info is cached
+- Validate queue action state
 
 
 ## [mail-uniffi-v0.125.8] - 2025-08-20
@@ -17,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - ET-4378 Removed a deprecated check that was stalling the MBP workflow.
+
+
+## [mail-uniffi-v0.125.7] - 2025-08-19
+
+### Fixes
+
+- Correct Conversation label_as available actions
 
 
 ## [mail-uniffi-v0.133.0] - 2025-08-19
@@ -29,13 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-4298] Fix mime type inference for replies
-
-
-## [mail-uniffi-v0.125.7] - 2025-08-19
-
-### Fixes
-
-- Correct Conversation label_as available actions
 
 
 ## [mail-uniffi-v0.132.0] - 2025-08-19
