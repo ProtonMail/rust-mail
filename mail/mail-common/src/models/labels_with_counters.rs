@@ -4,9 +4,8 @@
 #[path = "../tests/models/labels_with_counters.rs"]
 mod labels_with_counters;
 
-use std::collections::BTreeSet;
-use std::sync::Arc;
-
+use super::{ConversationCounters, MessageCounters};
+use crate::models::MailSettings;
 use indoc::formatdoc;
 use proton_core_api::services::proton::{LabelId, ProtonCore};
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
@@ -24,8 +23,8 @@ use stash::{
     params,
     stash::{StashError, Tether},
 };
-
-use super::{ConversationCounters, MessageCounters};
+use std::collections::BTreeSet;
+use std::sync::Arc;
 
 /// Helper data structure until we move from Stash to existing, mature ORM.
 ///
@@ -295,6 +294,7 @@ impl TableObserver for LabelWithCountersWatcher {
             ConversationCounters::table_name().to_string(),
             MessageCounters::table_name().to_string(),
             Label::table_name().to_string(),
+            MailSettings::table_name().to_string(),
         ]
     }
 
