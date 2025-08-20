@@ -129,7 +129,6 @@ pub enum MessageAction {
     Forward,
 
     // Export/View
-    SavePDF,
     Print,
     ViewHeaders,
     ViewHTML,
@@ -169,8 +168,7 @@ impl MessageAction {
     fn is_general_action(&self) -> bool {
         matches!(
             self,
-            MessageAction::SavePDF
-                | MessageAction::Print
+            MessageAction::Print
                 | MessageAction::ViewHeaders
                 | MessageAction::ViewHTML
                 | MessageAction::ViewInLightMode
@@ -251,7 +249,6 @@ impl GenericMobileActions for MessageAction {
                 }
             }
             Print => Some(Self::Print),
-            SavePDF => Some(Self::SavePDF),
             ViewHeaders => Some(Self::ViewHeaders),
             ViewHTML => Some(Self::ViewHTML),
             ToggleLight => Some(Self::toggle_view_mode(context.theme.as_ref())),
@@ -263,12 +260,7 @@ impl GenericMobileActions for MessageAction {
 
     /// Message-specific actions: Only communication actions that should be treated generically
     fn get_low_priority_actions(context: &ActionContext) -> Vec<Self> {
-        let mut actions = vec![
-            Self::SavePDF,
-            Self::Print,
-            Self::ViewHeaders,
-            Self::ViewHTML,
-        ];
+        let mut actions = vec![Self::Print, Self::ViewHeaders, Self::ViewHTML];
 
         actions.push(Self::toggle_view_mode(context.theme.as_ref()));
         actions.push(Self::ReportPhishing);

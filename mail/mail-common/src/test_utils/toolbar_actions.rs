@@ -82,7 +82,6 @@ pub enum TestActions {
     Forward,
 
     // Export/View actions (message only)
-    SavePDF,
     Print,
     ViewHeaders,
     ViewHTML,
@@ -143,7 +142,6 @@ impl PartialEq<MessageAction> for TestActions {
             (TestActions::Reply, MessageAction::Reply) => true,
             (TestActions::ReplyAll, MessageAction::ReplyAll) => true,
             (TestActions::Forward, MessageAction::Forward) => true,
-            (TestActions::SavePDF, MessageAction::SavePDF) => true,
             (TestActions::Print, MessageAction::Print) => true,
             (TestActions::ViewHeaders, MessageAction::ViewHeaders) => true,
             (TestActions::ViewHTML, MessageAction::ViewHTML) => true,

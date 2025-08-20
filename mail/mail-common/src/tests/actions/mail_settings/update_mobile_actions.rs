@@ -32,7 +32,6 @@ fn test_update_mobile_actions_invalid(toolbar_type: ToolbarType, actions: Vec<Mo
 #[test_case(MobileAction::Reply, "reply")]
 #[test_case(MobileAction::Forward, "forward")]
 #[test_case(MobileAction::Print, "print")]
-#[test_case(MobileAction::SavePDF, "save_pdf")]
 #[test_case(MobileAction::SaveAttachments, "save_attachments")]
 #[test_case(MobileAction::ViewHeaders, "view_headers")]
 #[test_case(MobileAction::ViewHTML, "view_html")]
