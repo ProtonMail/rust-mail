@@ -1,3 +1,4 @@
+mod all_conversation_actions;
 mod all_list_actions;
 mod all_message_actions;
 mod conversation;
@@ -7,6 +8,7 @@ mod label_as_action;
 mod move_action;
 mod reply_action;
 
+pub use self::all_conversation_actions::*;
 pub use self::all_list_actions::*;
 pub use self::all_message_actions::*;
 pub use self::conversation::*;

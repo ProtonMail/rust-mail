@@ -811,7 +811,7 @@ pub async fn all_available_message_actions_for_message(
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
-pub async fn available_message_action_sheet(
+pub async fn all_available_message_actions_for_action_sheet(
     mailbox: Arc<Mailbox>,
     theme: ThemeOpts,
     message_id: Id,
@@ -820,7 +820,7 @@ pub async fn available_message_action_sheet(
     let current_label_id = mailbox.label_id();
     uniffi_async(async move {
         let tether = stash.connection();
-        let action_sheet = RealMessage::available_actions(
+        let action_sheet = RealMessage::all_available_message_actions_for_action_sheet(
             current_label_id.into(),
             message_id.into(),
             theme.into(),

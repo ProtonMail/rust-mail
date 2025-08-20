@@ -2,15 +2,15 @@ use super::GeneralActions;
 use crate::mail::datatypes::MoveItemAction;
 use crate::{UniffiEnum, UniffiRecord};
 use proton_core_common::utils::MapVec as _;
-use proton_mail_common::actions::ConversationAction as RealConversationAction;
 use proton_mail_common::actions::ConversationAvailableActions as RealConversationAvailableActions;
+use proton_mail_common::actions::OldConversationAction as RealConversationAction;
 
 /// Struct to reflect the view what kind of actions
 /// could be taken upon the conversation.
 ///
 #[derive(Debug, Clone, PartialEq, UniffiRecord)]
 pub struct ConversationAvailableActions {
-    pub conversation_actions: Vec<ConversationAction>,
+    pub conversation_actions: Vec<OldConversationAction>,
     pub move_actions: Vec<MoveItemAction>,
     pub general_actions: Vec<GeneralActions>,
 }
@@ -30,7 +30,7 @@ impl From<RealConversationAvailableActions> for ConversationAvailableActions {
 /// Each of the options is meant to display a button.
 ///
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
-pub enum ConversationAction {
+pub enum OldConversationAction {
     Star,
     Unstar,
     Pin,
@@ -42,18 +42,18 @@ pub enum ConversationAction {
     Snooze,
 }
 
-impl From<RealConversationAction> for ConversationAction {
+impl From<RealConversationAction> for OldConversationAction {
     fn from(value: RealConversationAction) -> Self {
         match value {
-            RealConversationAction::Star => ConversationAction::Star,
-            RealConversationAction::Unstar => ConversationAction::Unstar,
-            RealConversationAction::Pin => ConversationAction::Pin,
-            RealConversationAction::Unpin => ConversationAction::Unpin,
-            RealConversationAction::LabelAs => ConversationAction::LabelAs,
-            RealConversationAction::MarkRead => ConversationAction::MarkRead,
-            RealConversationAction::MarkUnread => ConversationAction::MarkUnread,
-            RealConversationAction::Delete => ConversationAction::Delete,
-            RealConversationAction::Snooze => ConversationAction::Snooze,
+            RealConversationAction::Star => OldConversationAction::Star,
+            RealConversationAction::Unstar => OldConversationAction::Unstar,
+            RealConversationAction::Pin => OldConversationAction::Pin,
+            RealConversationAction::Unpin => OldConversationAction::Unpin,
+            RealConversationAction::LabelAs => OldConversationAction::LabelAs,
+            RealConversationAction::MarkRead => OldConversationAction::MarkRead,
+            RealConversationAction::MarkUnread => OldConversationAction::MarkUnread,
+            RealConversationAction::Delete => OldConversationAction::Delete,
+            RealConversationAction::Snooze => OldConversationAction::Snooze,
         }
     }
 }

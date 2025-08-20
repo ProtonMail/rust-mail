@@ -66,7 +66,7 @@ impl AllListActions {
 
 /// Actions available from list toolbar for messages
 ///
-#[derive(Clone, Eq, Hash, PartialEq, derive_more::derive::Debug)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq, derive_more::derive::Debug)]
 pub enum ListAction {
     LabelAs,
     MarkRead,
