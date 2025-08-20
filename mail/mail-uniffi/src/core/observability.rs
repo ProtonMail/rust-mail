@@ -380,7 +380,7 @@ pub enum FidoLaunchResultStatus {
 }
 
 metric! {
-    #[name = "signin_secondFactor_fido_launchResult_total"]
+    #[name = "core_signin_secondFactor_fido_launchResult_total"]
     #[version = 1]
     pub struct SecondFactorFidoLaunchResultTotal {
         pub screen_id: FidoLaunchResultStatus
@@ -416,7 +416,7 @@ pub enum FidoSignResultStatus {
 }
 
 metric! {
-    #[name = "signin_secondFactor_fido_signResult_total"]
+    #[name = "core_signin_secondFactor_fido_signResult_total"]
     #[version = 1]
     pub struct SecondFactorFidoSignResultTotal {
         pub screen_id: FidoSignResultStatus
