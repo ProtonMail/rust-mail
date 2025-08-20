@@ -1,15 +1,14 @@
 use base64::{DecodeError, Engine as _, prelude::BASE64_STANDARD as BASE_64};
 use itertools::Itertools as _;
-use proton_vcard::{parameters::preference::Preference, vcard::VCard};
-
 use proton_core_api::services::proton::PrivateEmailRef;
 use proton_crypto_account::{
-    keys::{PGPScheme, PinnedPublicKeys},
+    keys::{EmailMimeType, PGPScheme, PinnedPublicKeys},
     proton_crypto::{
         CryptoError,
         crypto::{DataEncoding, PGPProviderSync, PublicKey},
     },
 };
+use proton_vcard::{parameters::preference::Preference, vcard::VCard};
 use thiserror::Error;
 use tracing::error;
 
@@ -23,10 +22,11 @@ pub enum PGPKeyImportError {
     PGPError(#[from] CryptoError),
 }
 
-pub const X_PM_ENCRYPT: &str = "X-PM-ENCRYPT";
-pub const X_PM_ENCRYPT_UNTRUSTED: &str = "X-PM-ENCRYPT-UNTRUSTED";
-pub const X_PM_SCHEME: &str = "X-PM-SCHEME";
-pub const X_PM_SIGN: &str = "X-PM-SIGN";
+const X_PM_ENCRYPT: &str = "X-PM-ENCRYPT";
+const X_PM_ENCRYPT_UNTRUSTED: &str = "X-PM-ENCRYPT-UNTRUSTED";
+const X_PM_SCHEME: &str = "X-PM-SCHEME";
+const X_PM_SIGN: &str = "X-PM-SIGN";
+const X_PM_MIMETYPE: &str = "X-PM-MIMETYPE";
 
 /// Returns all pinned keys for this v-card contact matching the provided email address.
 ///
@@ -110,24 +110,29 @@ fn update_pinned_keys_with_extended_preferences<Pub: PublicKey>(
                 None
             }
         })
-        .for_each(
-            |extended_property| match extended_property.name.0.as_str() {
+        .for_each(|extended_property| {
+            let name = extended_property.name.0.as_str();
+            let value = extended_property.value.as_deref();
+
+            match name {
                 X_PM_ENCRYPT => {
-                    pinned_keys.encrypt_to_pinned = parse_bool(extended_property.value.as_deref());
+                    pinned_keys.encrypt_to_pinned = parse_bool(value);
                 }
                 X_PM_ENCRYPT_UNTRUSTED => {
-                    pinned_keys.encrypt_to_untrusted =
-                        parse_bool(extended_property.value.as_deref());
-                }
-                X_PM_SCHEME => {
-                    pinned_keys.scheme = parse_pgp_scheme(extended_property.value.as_deref());
+                    pinned_keys.encrypt_to_untrusted = parse_bool(value);
                 }
                 X_PM_SIGN => {
-                    pinned_keys.sign = parse_bool(extended_property.value.as_deref());
+                    pinned_keys.sign = parse_bool(value);
+                }
+                X_PM_SCHEME => {
+                    pinned_keys.scheme = parse_pgp_scheme(value);
+                }
+                X_PM_MIMETYPE => {
+                    pinned_keys.mime_type = parse_mime_type(value);
                 }
                 _ => (),
-            },
-        );
+            }
+        });
 }
 
 fn unwrap_preference(preference: Option<Preference>) -> Preference {
@@ -142,25 +147,20 @@ fn unwrap_preference(preference: Option<Preference>) -> Preference {
     }
 }
 
-/// Helper function to parse a  from a property value.
-///
-/// Returns [`None`] if parsing fails.
 fn parse_bool(value: Option<&str>) -> Option<bool> {
     value
         .as_ref()
         .and_then(|str| str.to_lowercase().parse::<bool>().ok())
 }
 
-/// Helper function to parse a [`PGPScheme`] from a property value.
-///
-/// Returns [`None`] if parsing fails.
 fn parse_pgp_scheme(value: Option<&str>) -> Option<PGPScheme> {
-    value.as_ref().and_then(|str| str.parse::<PGPScheme>().ok())
+    value.as_ref().and_then(|str| str.parse().ok())
 }
 
-/// Helper function to parse and import a PGP key from a property value.
-///
-/// Returns [`None`] if parsing or input fails.
+fn parse_mime_type(value: Option<&str>) -> Option<EmailMimeType> {
+    value.as_ref().and_then(|str| str.parse().ok())
+}
+
 fn parse_and_import_pgp_key<P>(
     pgp: &P,
     value: &str,
@@ -178,4 +178,194 @@ where
     Ok(Some(
         pgp.public_key_import(binary_key, DataEncoding::Bytes)?,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proton_crypto::crypto::{
+        AccessKeyInfo, AsPublicKeyRef, OpenPGPFingerprint, OpenPGPKeyID, SHA256Fingerprint,
+        UnixTimestamp,
+    };
+
+    #[derive(Clone, Copy, Debug, Default)]
+    struct FakePublicKey;
+
+    impl PublicKey for FakePublicKey {
+        //
+    }
+
+    impl AccessKeyInfo for FakePublicKey {
+        fn version(&self) -> u8 {
+            todo!()
+        }
+
+        fn key_id(&self) -> OpenPGPKeyID {
+            todo!()
+        }
+
+        fn key_fingerprint(&self) -> OpenPGPFingerprint {
+            todo!()
+        }
+
+        fn sha256_key_fingerprints(&self) -> Vec<SHA256Fingerprint> {
+            todo!()
+        }
+
+        fn can_encrypt(&self, _: UnixTimestamp) -> bool {
+            todo!()
+        }
+
+        fn can_verify(&self, _: UnixTimestamp) -> bool {
+            todo!()
+        }
+
+        fn is_expired(&self, _: UnixTimestamp) -> bool {
+            todo!()
+        }
+
+        fn is_revoked(&self, _: UnixTimestamp) -> bool {
+            todo!()
+        }
+    }
+
+    impl AsPublicKeyRef<FakePublicKey> for FakePublicKey {
+        fn as_public_key(&self) -> &FakePublicKey {
+            self
+        }
+    }
+
+    mod extended_preferences {
+        use super::*;
+        use pretty_assertions as pa;
+        use proton_vcard::{parameters::Parameters, xtended::Xtended};
+        use test_case::test_case;
+
+        struct TestCase {
+            given_prefs: &'static [(&'static str, &'static str)],
+            expected: fn() -> PinnedPublicKeys<FakePublicKey>,
+        }
+
+        const TEST_X_PM_ENCRYPT_FALSE: TestCase = TestCase {
+            given_prefs: &[(X_PM_ENCRYPT, "false")],
+            expected: || PinnedPublicKeys {
+                encrypt_to_pinned: Some(false),
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        const TEST_X_PM_ENCRYPT_TRUE: TestCase = TestCase {
+            given_prefs: &[(X_PM_ENCRYPT, "true")],
+            expected: || PinnedPublicKeys {
+                encrypt_to_pinned: Some(true),
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        const TEST_X_PM_ENCRYPT_UNTRUSTED_FALSE: TestCase = TestCase {
+            given_prefs: &[(X_PM_ENCRYPT_UNTRUSTED, "false")],
+            expected: || PinnedPublicKeys {
+                encrypt_to_untrusted: Some(false),
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        const TEST_X_PM_ENCRYPT_UNTRUSTED_TRUE: TestCase = TestCase {
+            given_prefs: &[(X_PM_ENCRYPT_UNTRUSTED, "true")],
+            expected: || PinnedPublicKeys {
+                encrypt_to_untrusted: Some(true),
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        const TEST_X_PM_SIGN_TRUE: TestCase = TestCase {
+            given_prefs: &[(X_PM_SIGN, "true")],
+            expected: || PinnedPublicKeys {
+                sign: Some(true),
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        const TEST_X_PM_SIGN_FALSE: TestCase = TestCase {
+            given_prefs: &[(X_PM_SIGN, "false")],
+            expected: || PinnedPublicKeys {
+                sign: Some(false),
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        const TEST_X_PM_SCHEME_INLINE: TestCase = TestCase {
+            given_prefs: &[(X_PM_SCHEME, "pgp-inline")],
+            expected: || PinnedPublicKeys {
+                scheme: Some(PGPScheme::PGPInline),
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        const TEST_X_PM_SCHEME_MIME: TestCase = TestCase {
+            given_prefs: &[(X_PM_SCHEME, "pgp-mime")],
+            expected: || PinnedPublicKeys {
+                scheme: Some(PGPScheme::PGPMime),
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        const TEST_X_PM_MIMETYPE_EMPTY: TestCase = TestCase {
+            given_prefs: &[(X_PM_MIMETYPE, "")],
+            expected: || PinnedPublicKeys {
+                mime_type: None,
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        const TEST_X_PM_MIMETYPE_TEXT_PLAIN: TestCase = TestCase {
+            given_prefs: &[(X_PM_MIMETYPE, "text/plain")],
+            expected: || PinnedPublicKeys {
+                mime_type: Some(EmailMimeType::Text),
+                ..PinnedPublicKeys::default()
+            },
+        };
+
+        #[allow(clippy::needless_pass_by_value)]
+        #[test_case(TEST_X_PM_ENCRYPT_FALSE)]
+        #[test_case(TEST_X_PM_ENCRYPT_TRUE)]
+        #[test_case(TEST_X_PM_ENCRYPT_UNTRUSTED_FALSE)]
+        #[test_case(TEST_X_PM_ENCRYPT_UNTRUSTED_TRUE)]
+        #[test_case(TEST_X_PM_SIGN_FALSE)]
+        #[test_case(TEST_X_PM_SIGN_TRUE)]
+        #[test_case(TEST_X_PM_SCHEME_INLINE)]
+        #[test_case(TEST_X_PM_SCHEME_MIME)]
+        #[test_case(TEST_X_PM_MIMETYPE_EMPTY)]
+        #[test_case(TEST_X_PM_MIMETYPE_TEXT_PLAIN)]
+        fn test(case: TestCase) {
+            let vcard = {
+                let mut vcard = VCard::default();
+
+                for &(name, value) in case.given_prefs {
+                    vcard
+                        .add_xtended(Xtended {
+                            name: name.try_into().unwrap(),
+                            value: Some(value.into()),
+                            parameters: Parameters::default(),
+                            group: Some("group".into()),
+                        })
+                        .unwrap();
+                }
+
+                vcard
+            };
+
+            let mut target = PinnedPublicKeys::default();
+
+            update_pinned_keys_with_extended_preferences::<FakePublicKey>(
+                &vcard,
+                "group",
+                &mut target,
+            );
+
+            // PinnedPublicKeys are `!PartialEq`, so comparing them via the
+            // debug impl is the best we can do
+            pa::assert_eq!(format!("{:#?}", (case.expected)()), format!("{target:#?}"));
+        }
+    }
 }
