@@ -75,7 +75,9 @@ typed-builder = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
 sqlite-watcher = { workspace = true }
-reqwest = "0.12.23"
+reqwest = { version = "0.12.23", features = [
+  "rustls-tls",
+], default-features = false }
 
 # test-util option deps
 function_name = { workspace = true, optional = true }
