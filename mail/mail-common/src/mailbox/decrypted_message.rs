@@ -16,12 +16,10 @@ use anyhow::Context;
 use parking_lot::Mutex;
 use proton_action_queue::action::ActionId;
 use proton_calendar_common::{self as cal, RsvpError};
-use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::{AddressId, ProtonCore};
+use proton_core_api::services::proton::AddressId;
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
-use reqwest::Method;
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::HashMap;
@@ -270,46 +268,10 @@ impl DecryptedMessageBody {
         ctx: &MailUserContext,
         url: Url,
     ) -> MailContextResult<AttachmentData> {
-        let data = if url.scheme() == "cid" {
-            self.get_embedded_attachment(ctx, &url.path().into())
-                .await?
-        } else {
-            let tether = ctx.user_stash().connection();
-            let api = ctx.api();
-            let is_proxy_enabled = MailSettings::get_or_default(&tether)
-                .await
-                .is_proxy_enabled();
-
-            let data = if is_proxy_enabled {
-                api.proxy_img(&url).await?
-            } else {
-                ctx.http_client()
-                    .request(Method::GET, url)
-                    .send()
-                    .await
-                    .map_err(|e| ApiServiceError::ConnectionError(e.to_string()))?
-                    .error_for_status()
-                    .map_err(|e| {
-                        ApiServiceError::UnknownError(format!(
-                            "Server returned error when getting image: {e:?}"
-                        ))
-                    })?
-                    .bytes()
-                    .await
-                    .map_err(|e| {
-                        ApiServiceError::UnknownError(format!(
-                            "error getting bytes from image request: {e:?}"
-                        ))
-                    })?
-                    .to_vec()
-            };
-
-            AttachmentData {
-                data,
-                mime: String::from("image/*"),
-            }
+        let f = async |cid: &ContentId, ctx: &MailUserContext| {
+            self.get_embedded_attachment(ctx, cid).await
         };
-        Ok(data)
+        ctx.load_image_inner(f, url).await
     }
 
     /// Load or fetch an embedded attachment with `cid` for this message.

@@ -33,7 +33,6 @@ use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::PrivateEmail;
-use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{LocalConversationId, ParsedHeaderValue};
@@ -121,37 +120,6 @@ impl DecryptedMessage {
 
 #[uniffi_export]
 impl DecryptedMessage {
-    /// Load or fetch an embedded attachment with `cid` for this message.
-    ///
-    /// If the attachment is not in the cache it will be downloaded from the server.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the attachments can't be fetched from the server, retrieved
-    /// from the cache or the attachment with `cid` does not exist.
-    //NOTE: iOS request we share the same result types between
-    // this function and the Draft equivalent.
-    #[returns(AttachmentDataResult)]
-    pub async fn get_embedded_attachment(
-        self: Arc<Self>,
-        cid: String,
-    ) -> Result<AttachmentData, ProtonError> {
-        uniffi_async(async move {
-            let ctx = self.ctx()?;
-            let att = self
-                .body
-                .get_embedded_attachment(&ctx, &ContentId::from(cid))
-                .await
-                .map_err(RealProtonMailError::from)?;
-            Ok::<_, RealProtonMailError>(AttachmentData {
-                data: att.data,
-                mime: att.mime,
-            })
-        })
-        .await
-        .map_err(ProtonError::from)
-        .into()
-    }
     /// Unsubscribes from the newsletter
     #[returns(VoidActionResult)]
     pub async fn unsubscribe_from_newsletter(self: Arc<Self>) -> Result<(), ProtonError> {
@@ -173,8 +141,8 @@ impl DecryptedMessage {
     /// This will not resolve images in the fs.
     #[returns(AttachmentDataResult)]
     pub async fn load_image(self: Arc<Self>, url: String) -> Result<AttachmentData, ProtonError> {
+        let ctx = self.ctx()?;
         uniffi_async(async move {
-            let ctx = self.ctx()?;
             let att = self
                 .body
                 .load_image_from_str(&ctx, &url)
@@ -1166,10 +1134,10 @@ pub async fn report_phishing(mailbox: Arc<Mailbox>, message_id: Id) -> Result<()
     .into()
 }
 
-/// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.
+/// Struct returned by [`load_image`] representing the data of an image (or attachment!).
 #[derive(Clone, uniffi::Record)]
 pub struct AttachmentData {
-    /// The bytes of the attachment
+    /// The bytes of the image
     pub data: Vec<u8>,
     pub mime: String,
 }

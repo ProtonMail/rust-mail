@@ -21,7 +21,6 @@ use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
 use chrono::Local;
 use proton_core_api::services::proton::PrivateEmail;
-use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::draft::recipients::ExpirationFeatureSupportReport;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftActorOptions, DraftEvent,
@@ -527,22 +526,19 @@ impl Draft {
 
     /// Load an embedded attachment in this draft message.
     ///
-    /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
+    /// See [`DecryptedMessageBody::load_image`] for more details.
     ///
     /// # Errors
     ///
-    /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
+    /// See [`DecryptedMessageBody::load_image`] for more details.
     //NOTE: iOS request we share the same result types between
     // this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
-    pub async fn get_embedded_attachment(
-        self: Arc<Self>,
-        cid: String,
-    ) -> Result<AttachmentData, ProtonError> {
+    pub async fn load_image(self: Arc<Self>, url: String) -> Result<AttachmentData, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
-        uniffi_async(async move { self.get_embedded_attachment_impl(&ctx, cid).await })
+        uniffi_async(async move { self.load_image_impl(&ctx, url).await })
             .await
             .map_err(ProtonError::from)
             .into()
@@ -552,15 +548,12 @@ impl Draft {
     //NOTE: iOS request we share the same result types between
     // this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
-    pub fn get_embedded_attachment_sync(
-        self: Arc<Self>,
-        cid: String,
-    ) -> Result<AttachmentData, ProtonError> {
+    pub fn load_image_sync(self: Arc<Self>, cid: String) -> Result<AttachmentData, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
         async_runtime()
-            .block_on(self.get_embedded_attachment_impl(&ctx, cid))
+            .block_on(self.load_image_impl(&ctx, cid))
             .map_err(ProtonError::from)
             .into()
     }
@@ -828,14 +821,14 @@ impl Draft {
 }
 
 impl Draft {
-    async fn get_embedded_attachment_impl(
+    async fn load_image_impl(
         &self,
         _: &MailUserContext,
-        cid: String,
+        url: String,
     ) -> Result<AttachmentData, RealProtonMailError> {
         let att = self
             .instance
-            .get_embedded_attachment(&ContentId::from(cid))
+            .load_image(url)
             .await
             .map_err(RealProtonMailError::from)?;
         Ok::<_, RealProtonMailError>(AttachmentData {

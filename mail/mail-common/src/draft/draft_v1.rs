@@ -52,6 +52,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs;
 use tracing::{debug, error, info, warn};
+use url::Url;
 
 /// Represent a new message that is being drafted.
 ///
@@ -871,6 +872,18 @@ impl Draft {
         message_id: LocalMessageId,
     ) -> Result<QueuedActionOutput<UndoSend>, ActionError<UndoSend>> {
         queue.queue_action(UndoSend::new(message_id)).await
+    }
+
+    pub async fn load_image(
+        metadata_id: MetadataId,
+        ctx: &MailUserContext,
+        url: Url,
+    ) -> MailContextResult<AttachmentData> {
+        let f = async move |cid: &ContentId, ctx: &MailUserContext| {
+            Self::get_embedded_attachment(metadata_id, ctx, cid).await
+        };
+
+        ctx.load_image_inner(f, url).await
     }
 
     pub async fn get_embedded_attachment(
