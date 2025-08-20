@@ -2,11 +2,13 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use crate::AppError;
+use crate::actions::mail_settings::{ToolbarType, UpdateMobileActions};
 use crate::datatypes::{
     AlmostAllMail, ComposerDirection, ComposerMode, MailSettingsId, MessageButtons, MimeType,
-    MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved, SpamAction,
-    SwipeAction, ViewLayout, ViewMode,
+    MobileAction, MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved,
+    SpamAction, SwipeAction, ViewLayout, ViewMode,
 };
+use proton_action_queue::queue::Queue;
 use proton_core_common::datatypes::{ImageProxy, InitializationKey};
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent,
@@ -225,6 +227,60 @@ impl MailSettings {
             pgp_scheme: self.pgp_scheme.into(),
             sign: self.sign,
         }
+    }
+
+    /// Update mobile settings via API
+    ///
+    /// This method calls the API to sync mobile settings changes.
+    /// It follows the same pattern as Message and Conversation API methods.
+    pub async fn update_mobile_settings<PM: ProtonMail>(
+        api: &PM,
+        mobile_settings: MobileSettings,
+    ) -> Result<(), AppError> {
+        // Convert common MobileSettings to API MobileSettings
+        let api_mobile_settings = mobile_settings.into();
+        let _response = api.put_mobile_settings(api_mobile_settings).await?;
+        // API call successful - settings are synced
+        Ok(())
+    }
+
+    /// Update list toolbar actions
+    pub async fn action_update_list_toolbar(
+        queue: &Queue,
+        actions: Vec<MobileAction>,
+    ) -> Result<(), AppError> {
+        let action = UpdateMobileActions::new(ToolbarType::List, actions)?;
+        queue
+            .queue_action(action)
+            .await
+            .map_err(|e| AppError::Other(e.into()))?;
+        Ok(())
+    }
+
+    /// Update message toolbar actions
+    pub async fn action_update_message_toolbar(
+        queue: &Queue,
+        actions: Vec<MobileAction>,
+    ) -> Result<(), AppError> {
+        let action = UpdateMobileActions::new(ToolbarType::Message, actions)?;
+        queue
+            .queue_action(action)
+            .await
+            .map_err(|e| AppError::Other(e.into()))?;
+        Ok(())
+    }
+
+    /// Update conversation toolbar actions
+    pub async fn action_update_conversation_toolbar(
+        queue: &Queue,
+        actions: Vec<MobileAction>,
+    ) -> Result<(), AppError> {
+        let action = UpdateMobileActions::new(ToolbarType::Conversation, actions)?;
+        queue
+            .queue_action(action)
+            .await
+            .map_err(|e| AppError::Other(e.into()))?;
+        Ok(())
     }
 
     pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {

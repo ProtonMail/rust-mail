@@ -1827,6 +1827,15 @@ impl From<ApiMobileSetting> for MobileSetting {
     }
 }
 
+impl From<MobileSetting> for ApiMobileSetting {
+    fn from(value: MobileSetting) -> Self {
+        Self {
+            actions: value.actions,
+            is_custom: value.is_custom,
+        }
+    }
+}
+
 /// All possible actions sent by API GET settings request
 ///
 /// Found in MailSettings::MobileSettings::MessageToolbar::Actions /
@@ -1854,6 +1863,7 @@ pub enum MobileAction {
     Trash,
     ViewHeaders,
     ViewHTML,
+    Other(String),
 }
 
 impl MobileAction {
@@ -2000,8 +2010,36 @@ impl FromStr for MobileAction {
             "trash" => Ok(Self::Trash),
             "view_headers" => Ok(Self::ViewHeaders),
             "view_html" => Ok(Self::ViewHTML),
-            s => Err(AppError::InvalidMobileActions(s.to_owned())),
+            s => Ok(Self::Other(s.to_owned())),
         }
+    }
+}
+
+impl std::fmt::Display for MobileAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Archive => "archive",
+            Self::Forward => "forward",
+            Self::Label => "label",
+            Self::Move => "move",
+            Self::Print => "print",
+            Self::Remind => "remind",
+            Self::Reply => "reply",
+            Self::ReportPhishing => "report_phishing",
+            Self::SaveAttachments => "save_attachments",
+            Self::SavePDF => "save_pdf",
+            Self::SenderEmails => "sender_emails",
+            Self::Snooze => "snooze",
+            Self::Spam => "spam",
+            Self::ToggleLight => "toggle_light",
+            Self::ToggleRead => "toggle_read",
+            Self::ToggleStar => "toggle_star",
+            Self::Trash => "trash",
+            Self::ViewHeaders => "view_headers",
+            Self::ViewHTML => "view_html",
+            Self::Other(s) => s,
+        };
+        write!(f, "{s}")
     }
 }
 
@@ -2020,6 +2058,16 @@ pub struct MobileSettings {
 
 impl From<ApiMobileSettings> for MobileSettings {
     fn from(value: ApiMobileSettings) -> Self {
+        Self {
+            conversation_toolbar: value.conversation_toolbar.into(),
+            list_toolbar: value.list_toolbar.into(),
+            message_toolbar: value.message_toolbar.into(),
+        }
+    }
+}
+
+impl From<MobileSettings> for ApiMobileSettings {
+    fn from(value: MobileSettings) -> Self {
         Self {
             conversation_toolbar: value.conversation_toolbar.into(),
             list_toolbar: value.list_toolbar.into(),

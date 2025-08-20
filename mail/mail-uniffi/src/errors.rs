@@ -106,4 +106,5 @@ export_typed_result! {
     AttachmentDataResult(AttachmentData, ProtonError),
     BodyOutputResult(BodyOutput, ProtonError),
     RsvpEventGetResult(RsvpEvent, ProtonError),
+    MobileActionsResult(Vec<crate::mail::datatypes::MobileAction>, ActionError),
 }

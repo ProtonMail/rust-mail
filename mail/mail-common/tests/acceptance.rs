@@ -26,6 +26,8 @@ mod acceptance {
     mod message_mail_scroller;
     mod message_move;
     mod message_read_unread;
+    mod mobile_settings_actions;
+
     mod mock;
     mod pin_code;
     mod refersh;

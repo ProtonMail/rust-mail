@@ -8,14 +8,17 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllListActions, AllMessageActions, Message, MessageActionSheet};
+use super::datatypes::{
+    AllListActions, AllMessageActions, Message, MessageActionSheet, MobileAction,
+};
 use super::datatypes::{LabelAsAction, MimeType, MoveAction};
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::PaginatorSearchOptions;
 use crate::core::datatypes::{Id, RemoteId, UnixTimestamp};
 use crate::errors::{
-    ActionError, AttachmentDataResult, BodyOutputResult, ProtonError, VoidActionResult,
+    ActionError, AttachmentDataResult, BodyOutputResult, MobileActionsResult, ProtonError,
+    VoidActionResult,
 };
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::mail::datatypes::{LabelAsOutput, Undo};
@@ -35,7 +38,9 @@ use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
-use proton_mail_common::datatypes::{LocalConversationId, ParsedHeaderValue};
+use proton_mail_common::datatypes::{
+    LocalConversationId, MobileAction as RealMobileAction, ParsedHeaderValue,
+};
 use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
     TransformOpts as RealTransformOpts,
@@ -1269,4 +1274,116 @@ pub async fn delete_all_messages_in_label(
     .await
     .map_err(ActionError::from)
     .into()
+}
+
+/// Updates the mobile list toolbar actions for the user.
+///
+/// This function allows updating the actions displayed in the list toolbar
+/// when viewing email lists on mobile devices.
+///
+/// # Errors
+///
+/// Returns an error if the action queue operation fails or if the actions
+/// are invalid for the list toolbar.
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn update_mobile_list_toolbar_actions(
+    session: Arc<MailUserSession>,
+    actions: Vec<MobileAction>,
+) -> Result<(), ActionError> {
+    let ctx = session.ctx()?;
+
+    uniffi_async(async move {
+        proton_mail_common::models::MailSettings::action_update_list_toolbar(
+            ctx.action_queue(),
+            actions.map_vec(),
+        )
+        .await
+        .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Updates the mobile message toolbar actions for the user.
+///
+/// This function allows updating the actions displayed in the message toolbar
+/// when viewing individual messages on mobile devices.
+///
+/// # Errors
+///
+/// Returns an error if the action queue operation fails or if the actions
+/// are invalid for the message toolbar.
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn update_mobile_message_toolbar_actions(
+    session: Arc<MailUserSession>,
+    actions: Vec<MobileAction>,
+) -> Result<(), ActionError> {
+    let ctx = session.ctx()?;
+
+    uniffi_async(async move {
+        proton_mail_common::models::MailSettings::action_update_message_toolbar(
+            ctx.action_queue(),
+            actions.map_vec(),
+        )
+        .await
+        .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Get the currently configured mobile list toolbar actions.
+#[uniffi_export]
+#[returns(MobileActionsResult)]
+pub async fn get_mobile_list_toolbar_actions(
+    session: Arc<MailUserSession>,
+) -> Result<Vec<MobileAction>, ActionError> {
+    let ctx = session.ctx()?;
+
+    uniffi_async(async move {
+        let tether = ctx.user_stash().connection();
+        let actions = RealMobileAction::list_toolbar_actions(&tether).await?;
+        Result::<_, RealProtonMailError>::Ok(actions.map_vec())
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Get the currently configured mobile message toolbar actions.
+#[uniffi_export]
+#[returns(MobileActionsResult)]
+pub async fn get_mobile_message_toolbar_actions(
+    session: Arc<MailUserSession>,
+) -> Result<Vec<MobileAction>, ActionError> {
+    let ctx = session.ctx()?;
+
+    uniffi_async(async move {
+        let tether = ctx.user_stash().connection();
+        let actions = RealMobileAction::message_toolbar_actions(&tether).await?;
+        Result::<_, RealProtonMailError>::Ok(actions.map_vec())
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Get all available mobile list toolbar actions.
+///
+/// Returns the complete set of actions that can be configured for the list toolbar.
+#[uniffi_export]
+#[must_use]
+pub fn get_all_mobile_list_actions() -> Vec<MobileAction> {
+    let actions = RealMobileAction::all_list_actions();
+    actions.map_vec()
+}
+
+/// Get all available mobile message toolbar actions.
+///
+/// Returns the complete set of actions that can be configured for the message toolbar.
+#[uniffi_export]
+#[must_use]
+pub fn get_all_mobile_message_actions() -> Vec<MobileAction> {
+    let actions = RealMobileAction::all_message_actions();
+    actions.map_vec()
 }

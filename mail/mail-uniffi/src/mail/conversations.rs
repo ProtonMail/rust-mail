@@ -10,11 +10,11 @@
 //!
 
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
-use crate::errors::{ActionError, SnoozeError, VoidActionResult};
+use crate::errors::{ActionError, MobileActionsResult, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
     AllConversationActions, AllListActions, AutoDeleteBanner, Conversation,
     ConversationActionSheet, ConversationAvailableActions, ConversationSearchOptions,
-    LabelAsAction, LabelAsOutput, Message, MoveAction, SnoozeActions, Undo,
+    LabelAsAction, LabelAsOutput, Message, MobileAction, MoveAction, SnoozeActions, Undo,
 };
 use crate::mail::mail_scroller::{
     ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
@@ -29,6 +29,7 @@ use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::datatypes::{
     ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
+    MobileAction as RealMobileAction,
 };
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
@@ -861,4 +862,60 @@ pub async fn get_auto_delete_banner(
     })
     .await
     .map_err(ActionError::from)
+}
+
+/// Updates the mobile conversation toolbar actions for the user.
+///
+/// This function allows updating the actions displayed in the conversation toolbar
+/// when viewing conversations on mobile devices.
+///
+/// # Errors
+///
+/// Returns an error if the action queue operation fails or if the actions
+/// are invalid for the conversation toolbar.
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn update_mobile_conversation_toolbar_actions(
+    session: Arc<MailUserSession>,
+    actions: Vec<MobileAction>,
+) -> Result<(), ActionError> {
+    let ctx = session.ctx()?;
+
+    uniffi_async(async move {
+        proton_mail_common::models::MailSettings::action_update_conversation_toolbar(
+            ctx.action_queue(),
+            actions.map_vec(),
+        )
+        .await
+        .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Get the currently configured mobile conversation toolbar actions.
+#[uniffi_export]
+#[returns(MobileActionsResult)]
+pub async fn get_mobile_conversation_toolbar_actions(
+    session: Arc<MailUserSession>,
+) -> Result<Vec<MobileAction>, ActionError> {
+    let ctx = session.ctx()?;
+
+    uniffi_async(async move {
+        let tether = ctx.user_stash().connection();
+        let actions = RealMobileAction::conversation_toolbar_actions(&tether).await?;
+        Result::<_, RealProtonMailError>::Ok(actions.map_vec())
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Get all available mobile conversation toolbar actions.
+///
+/// Returns the complete set of actions that can be configured for the conversation toolbar.
+#[uniffi_export]
+#[must_use]
+pub fn get_all_mobile_conversation_actions() -> Vec<MobileAction> {
+    let actions = RealMobileAction::all_conversation_actions();
+    actions.map_vec()
 }

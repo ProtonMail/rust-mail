@@ -4,6 +4,7 @@ pub mod conversations;
 pub mod draft;
 pub mod generic_mobile_actions;
 pub mod labels;
+pub mod mail_settings;
 pub mod messages;
 pub mod mobile_actions_builder;
 pub mod notifications_quick_actions;
@@ -192,6 +193,10 @@ pub(crate) fn register_actions(
             reg(queue, draft::AttachmentRemoveHandler { api: api.clone() });
             reg(queue, refresh::ActionRefreshHandler { ctx: ctx.clone() });
             reg(queue, rollback::RollbackActionHandler { api: api.clone() });
+            reg(
+                queue,
+                mail_settings::UpdateMobileActionsHandler { api: api.clone() },
+            );
         }
 
         Origin::ShareExt => {

@@ -1,0 +1,398 @@
+use proton_mail_api::services::proton::response_data::{
+    MobileSetting as ApiMobileSetting, MobileSettings as ApiMobileSettings,
+};
+use proton_mail_api::services::proton::responses::PutMobileSettingsResponse;
+use proton_mail_common::datatypes::MobileAction;
+use proton_mail_common::models::MailSettings;
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use wiremock::ResponseTemplate;
+
+fn test_init_params() -> TestParams {
+    TestParams {
+        ..Default::default()
+    }
+}
+
+fn success_response() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(PutMobileSettingsResponse { code: 1000 })
+}
+
+fn error_response() -> ResponseTemplate {
+    ResponseTemplate::new(500).set_body_json(serde_json::json!({
+        "error": "Internal server error"
+    }))
+}
+
+/// Validates that mobile toolbar actions can be updated via the action queue system.
+/// This is a comprehensive acceptance test that follows the full action execution flow:
+/// 1. Sets up a user context with mocked APIs
+/// 2. Enqueues an UpdateMobileActions action via convenience method
+/// 3. Executes the action through the queue
+/// 4. Verifies the action updates the local database correctly
+/// 5. Verifies the action syncs with the API (mocked)
+#[tokio::test]
+async fn test_update_list_toolbar_actions() {
+    // General setup
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    let params = test_init_params();
+
+    // Set up mocks
+    ctx.setup_user(params.clone()).await;
+
+    // Mock the mobile settings API endpoint
+    let expected_api_mobile_settings = ApiMobileSettings {
+        list_toolbar: ApiMobileSetting {
+            actions: vec![
+                "toggle_read".to_string(),
+                "toggle_star".to_string(),
+                "archive".to_string(),
+                "trash".to_string(),
+            ],
+            is_custom: true,
+        },
+        message_toolbar: ApiMobileSetting {
+            actions: vec![],
+            is_custom: false,
+        },
+        conversation_toolbar: ApiMobileSetting {
+            actions: vec![],
+            is_custom: false,
+        },
+    };
+
+    ctx.mock_put_mobile_settings(success_response(), expected_api_mobile_settings, 1)
+        .await;
+
+    ctx.catch_all().await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
+
+    // Get initial mail settings to verify baseline
+    let initial_settings = MailSettings::get_or_default(&tether).await;
+    assert!(
+        initial_settings.mobile_settings.is_none(),
+        "Should start with no mobile settings"
+    );
+
+    // Test: Update list toolbar actions using convenience method
+    let list_actions = vec![
+        MobileAction::ToggleRead,
+        MobileAction::ToggleStar,
+        MobileAction::Archive,
+        MobileAction::Trash,
+    ];
+
+    // Enqueue the action using the convenience method
+    MailSettings::action_update_list_toolbar(user_ctx.action_queue(), list_actions.clone())
+        .await
+        .expect("Should successfully enqueue action");
+
+    // Execute the action through the queue
+    user_ctx.execute_single_action().await.unwrap();
+
+    // Verify the action updated the local database
+    let updated_settings = MailSettings::get_or_default(&tether).await;
+
+    assert!(
+        updated_settings.mobile_settings.is_some(),
+        "Mobile settings should be set"
+    );
+    let mobile_settings = updated_settings.mobile_settings.unwrap();
+
+    // Verify is_custom was set to true for list toolbar
+    assert!(
+        mobile_settings.list_toolbar.is_custom,
+        "List toolbar should be marked as custom"
+    );
+
+    // Verify list toolbar actions were updated
+    let stored_actions = &mobile_settings.list_toolbar.actions;
+    assert_eq!(stored_actions.len(), 4, "Should have 4 list actions");
+
+    // Convert stored strings back to MobileAction for comparison
+    let stored_mobile_actions: Vec<MobileAction> = stored_actions
+        .iter()
+        .map(|s| {
+            use std::str::FromStr;
+            MobileAction::from_str(s).expect("Should parse stored action")
+        })
+        .collect();
+
+    assert_eq!(
+        stored_mobile_actions, list_actions,
+        "Stored actions should match input actions"
+    );
+
+    // Verify other toolbars remain unchanged (default)
+    assert!(
+        !mobile_settings.message_toolbar.is_custom,
+        "Message toolbar should remain default"
+    );
+    assert!(
+        !mobile_settings.conversation_toolbar.is_custom,
+        "Conversation toolbar should remain default"
+    );
+    assert!(
+        mobile_settings.message_toolbar.actions.is_empty(),
+        "Message toolbar should have empty actions"
+    );
+    assert!(
+        mobile_settings.conversation_toolbar.actions.is_empty(),
+        "Conversation toolbar should have empty actions"
+    );
+}
+
+/// Test updating message toolbar actions specifically
+#[tokio::test]
+async fn test_update_message_toolbar_actions() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    let params = test_init_params();
+    ctx.setup_user(params.clone()).await;
+
+    let message_actions = vec![
+        MobileAction::Reply,
+        MobileAction::Forward,
+        MobileAction::Print,
+    ];
+
+    // Mock the API call for message toolbar update
+    let expected_api_mobile_settings = ApiMobileSettings {
+        list_toolbar: ApiMobileSetting {
+            actions: vec![],
+            is_custom: false,
+        },
+        message_toolbar: ApiMobileSetting {
+            actions: vec![
+                "reply".to_string(),
+                "forward".to_string(),
+                "print".to_string(),
+            ],
+            is_custom: true,
+        },
+        conversation_toolbar: ApiMobileSetting {
+            actions: vec![],
+            is_custom: false,
+        },
+    };
+
+    ctx.mock_put_mobile_settings(success_response(), expected_api_mobile_settings, 1)
+        .await;
+
+    ctx.catch_all().await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
+
+    // Enqueue and execute the action
+    MailSettings::action_update_message_toolbar(user_ctx.action_queue(), message_actions.clone())
+        .await
+        .expect("Should successfully enqueue action");
+
+    user_ctx.execute_single_action().await.unwrap();
+
+    // Verify the action updated the database correctly
+    let updated_settings = MailSettings::get_or_default(&tether).await;
+    let mobile_settings = updated_settings.mobile_settings.unwrap();
+
+    assert!(
+        mobile_settings.message_toolbar.is_custom,
+        "Message toolbar should be marked as custom"
+    );
+
+    let stored_actions = &mobile_settings.message_toolbar.actions;
+    assert_eq!(stored_actions.len(), 3, "Should have 3 message actions");
+    assert!(stored_actions.contains(&"reply".to_string()));
+    assert!(stored_actions.contains(&"forward".to_string()));
+    assert!(stored_actions.contains(&"print".to_string()));
+
+    // Verify other toolbars remain default
+    assert!(
+        !mobile_settings.list_toolbar.is_custom,
+        "List toolbar should remain default"
+    );
+    assert!(
+        !mobile_settings.conversation_toolbar.is_custom,
+        "Conversation toolbar should remain default"
+    );
+}
+
+/// Tests updating conversation toolbar actions through the mobile actions system.
+/// This test validates conversation-specific actions and API interaction.
+#[tokio::test]
+async fn test_update_conversation_toolbar_actions() {
+    // General setup
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    let params = test_init_params();
+
+    // Set up mocks
+    ctx.setup_user(params.clone()).await;
+
+    let conversation_actions = vec![
+        MobileAction::ToggleRead,
+        MobileAction::ToggleStar,
+        MobileAction::Archive,
+        MobileAction::Label,
+        MobileAction::Move,
+    ];
+
+    // Mock the API call for conversation toolbar update
+    let expected_api_mobile_settings = ApiMobileSettings {
+        list_toolbar: ApiMobileSetting {
+            actions: vec![],
+            is_custom: false,
+        },
+        message_toolbar: ApiMobileSetting {
+            actions: vec![],
+            is_custom: false,
+        },
+        conversation_toolbar: ApiMobileSetting {
+            actions: vec![
+                "toggle_read".to_string(),
+                "toggle_star".to_string(),
+                "archive".to_string(),
+                "label".to_string(),
+                "move".to_string(),
+            ],
+            is_custom: true,
+        },
+    };
+
+    ctx.mock_put_mobile_settings(success_response(), expected_api_mobile_settings, 1)
+        .await;
+
+    ctx.catch_all().await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
+
+    // Execute: Update conversation toolbar actions
+    MailSettings::action_update_conversation_toolbar(user_ctx.action_queue(), conversation_actions)
+        .await
+        .expect("Should queue conversation toolbar action");
+
+    // Execute the action and verify success
+    let result = user_ctx.execute_single_action().await;
+    assert!(result.is_ok(), "Action should succeed: {:?}", result.err());
+
+    // Verify the action updated the local database correctly
+    let updated_settings = MailSettings::get_or_default(&tether).await;
+    let mobile_settings = updated_settings.mobile_settings.unwrap();
+
+    assert!(
+        mobile_settings.conversation_toolbar.is_custom,
+        "Conversation toolbar should be marked as custom"
+    );
+
+    let stored_actions = &mobile_settings.conversation_toolbar.actions;
+    assert_eq!(
+        stored_actions.len(),
+        5,
+        "Should have 5 conversation actions"
+    );
+    assert!(stored_actions.contains(&"toggle_read".to_string()));
+    assert!(stored_actions.contains(&"toggle_star".to_string()));
+    assert!(stored_actions.contains(&"archive".to_string()));
+    assert!(stored_actions.contains(&"label".to_string()));
+    assert!(stored_actions.contains(&"move".to_string()));
+
+    // Verify other toolbars remain default
+    assert!(
+        !mobile_settings.list_toolbar.is_custom,
+        "List toolbar should remain default"
+    );
+    assert!(
+        !mobile_settings.message_toolbar.is_custom,
+        "Message toolbar should remain default"
+    );
+}
+
+/// Test error handling when API call fails
+#[tokio::test]
+async fn test_api_failure_handling() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    let params = test_init_params();
+    ctx.setup_user(params.clone()).await;
+
+    // Mock API failure - action queue retries, so expect multiple calls
+    // The mock needs to expect the API payload that would be sent for list toolbar update
+    let expected_api_mobile_settings = ApiMobileSettings {
+        list_toolbar: ApiMobileSetting {
+            actions: vec!["toggle_read".to_string(), "archive".to_string()],
+            is_custom: true,
+        },
+        message_toolbar: ApiMobileSetting {
+            actions: vec![],
+            is_custom: false,
+        },
+        conversation_toolbar: ApiMobileSetting {
+            actions: vec![],
+            is_custom: false,
+        },
+    };
+
+    ctx.mock_put_mobile_settings(error_response(), expected_api_mobile_settings, 4)
+        .await;
+
+    ctx.catch_all().await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
+
+    let actions = vec![MobileAction::ToggleRead, MobileAction::Archive];
+
+    // Enqueue the action
+    MailSettings::action_update_list_toolbar(user_ctx.action_queue(), actions.clone())
+        .await
+        .expect("Should successfully enqueue action");
+
+    // Execute the action - should fail during remote sync and revert local changes
+    let result = user_ctx.execute_single_action().await;
+
+    // The action should fail during remote execution
+    assert!(result.is_err(), "Action should fail due to API error");
+
+    // Local changes should be reverted due to API failure (consistency model)
+    let updated_settings = MailSettings::get_or_default(&tether).await;
+
+    // After revert, mobile settings should be back to initial state (empty/default)
+    let mobile_settings = updated_settings
+        .mobile_settings
+        .expect("Mobile settings should exist after revert");
+
+    // Verify that all toolbars are reverted to default state
+    assert!(
+        !mobile_settings.list_toolbar.is_custom,
+        "List toolbar should not be marked as custom after revert"
+    );
+    assert!(
+        mobile_settings.list_toolbar.actions.is_empty(),
+        "List toolbar should have no actions after revert"
+    );
+    assert!(
+        !mobile_settings.message_toolbar.is_custom,
+        "Message toolbar should not be marked as custom after revert"
+    );
+    assert!(
+        mobile_settings.message_toolbar.actions.is_empty(),
+        "Message toolbar should have no actions after revert"
+    );
+    assert!(
+        !mobile_settings.conversation_toolbar.is_custom,
+        "Conversation toolbar should not be marked as custom after revert"
+    );
+    assert!(
+        mobile_settings.conversation_toolbar.actions.is_empty(),
+        "Conversation toolbar should have no actions after revert"
+    );
+
+    // This demonstrates that the action queue maintains consistency:
+    // - Local changes are applied immediately
+    // - If remote sync fails, local changes are rolled back
+    // - This ensures the local state always matches what the server has
+}

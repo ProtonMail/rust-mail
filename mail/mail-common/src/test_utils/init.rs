@@ -16,8 +16,8 @@ use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     ConversationLabel as ApiConversationLabel, IncomingDefault, MailSettings as ApiMailSettings,
     MessageButtons, MessageCount as ApiMessageCount, MessageMetadata as ApiMessageMetadata,
-    MessageSender as ApiMessageSender, MimeType, PgpScheme, PmSignature, ShowImages, ShowMoved,
-    SwipeAction, ViewLayout, ViewMode,
+    MessageSender as ApiMessageSender, MimeType, MobileSettings as ApiMobileSettings, PgpScheme,
+    PmSignature, ShowImages, ShowMoved, SwipeAction, ViewLayout, ViewMode,
 };
 
 use crate::datatypes::SystemLabelId;
@@ -36,7 +36,7 @@ use proton_mail_api::services::proton::responses::{
 use std::collections::{BTreeMap, HashMap};
 use std::sync::LazyLock;
 use velcro::hash_map;
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate, Times};
 
 /// Initialization parameters.
@@ -568,6 +568,24 @@ impl MailTestContext {
                     incoming_defaults,
                 }),
             )
+            .expect(expect)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Helper function to create and mount mobile settings API mock
+    #[function_name::named]
+    pub async fn mock_put_mobile_settings(
+        &self,
+        response: ResponseTemplate,
+        expected_payload: ApiMobileSettings,
+        expect: impl Into<Times>,
+    ) {
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/settings/mobilesettings"))
+            .and(body_json(&expected_payload))
+            .respond_with(response)
             .expect(expect)
             .named(function_name!())
             .mount(self.mock_server())
