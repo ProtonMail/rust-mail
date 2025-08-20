@@ -1539,8 +1539,6 @@ async fn open_draft_detects_sender_alias() {
         },
         size: 0,
         snooze_time: Default::default(),
-        snoozed_until: None,
-        display_snooze_reminder: false,
         subject: "".to_string(),
         time: Default::default(),
         to_list: Default::default(),

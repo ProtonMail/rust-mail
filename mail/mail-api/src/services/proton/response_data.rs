@@ -1059,6 +1059,9 @@ bitflags::bitflags! {
         /// Message is a reply to an Encrypted-Outside message
         const FLAG_EO_REPLY = 1 << 36;
 
+        /// Snooze reminder should be displayed to the user
+        const DISPLAY_SNOOZE_REMINDER = 1 << 37;
+
         // Safeguard against unknown values
         const _ = !0;
     }
@@ -1139,10 +1142,6 @@ pub struct MessageMetadata {
     pub snooze_time: u64,
 
     /// TODO: Document this field.
-    #[serde(default)]
-    pub display_snoozed_reminder: bool,
-
-    /// TODO: Document this field.
     pub subject: String,
 
     /// TODO: Document this field.
@@ -1180,7 +1179,6 @@ impl MessageMetadata {
             sender: MessageSender::default(),
             size: 0,
             snooze_time: 0,
-            display_snoozed_reminder: false,
             subject: String::default(),
             time: 0,
             to_list: Vec::default(),

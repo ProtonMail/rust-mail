@@ -157,16 +157,8 @@ pub struct Message {
     #[DbField]
     pub size: u64,
 
-    /// Field managed by the api which notoriously gets wrong values.
     #[DbField]
     pub snooze_time: UnixTimestamp,
-
-    /// The unix timestamp at which this message is snoozed until.
-    /// `None` means that the message is not snoozed.
-    pub snoozed_until: Option<UnixTimestamp>,
-
-    #[DbField]
-    pub display_snooze_reminder: bool,
 
     #[DbField]
     pub subject: String,
@@ -208,6 +200,8 @@ impl ScrollerEq for Message {
             && self.time == other.time
             && self.subject == other.subject
             && self.custom_labels == other.custom_labels
+            && self.snooze_time == other.snooze_time
+            && self.flags == other.flags
             && self.attachments_metadata == other.attachments_metadata
             && self.to_list == other.to_list
             && self.cc_list == other.cc_list
@@ -231,7 +225,7 @@ impl Message {
     ) -> Result<Option<Message>, AppError> {
         let tether = ctx.user_stash().connection();
         if let Some(message) = Message::load(local_message_id, &tether).await? {
-            if message.display_snooze_reminder {
+            if message.display_snooze_reminder() {
                 let queue = ctx.action_queue();
                 if let Err(e) = Message::action_mark_read(queue, vec![message.id()]).await {
                     tracing::error!("Failed to mark reminded message as read: {:?}", e);
@@ -705,26 +699,6 @@ impl Message {
                     conversation.save(bond).await?;
                     self.local_conversation_id = conversation.local_id;
                 }
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn set_snooze_time_before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.label_ids.contains(&LabelId::snoozed()) {
-            let local_label_id = SystemLabel::Snoozed
-                .local_id(bond)
-                .await?
-                .expect("Snoozed should be set");
-            if let Some(snooze_time) = Conversation::context_snooze_time(
-                self.local_conversation_id.unwrap(),
-                local_label_id,
-                bond,
-            )
-            .await?
-            {
-                self.snooze_time = snooze_time;
             }
         }
 
@@ -1409,7 +1383,8 @@ impl Message {
             );
             msg.unread = !mark_read;
             if mark_read {
-                msg.display_snooze_reminder = false;
+                // Reset snooze state
+                msg.set_display_snooze_reminder(false);
             }
             msg.save(bond).await?;
             updated.push(IdPair {
@@ -1586,8 +1561,6 @@ impl Message {
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),
-            snoozed_until: None,
-            display_snooze_reminder: value.display_snoozed_reminder,
             subject: value.subject,
             time: value.time.into(),
             to_list: MessageRecipients {
@@ -2454,6 +2427,22 @@ impl Message {
 
         matches!(q, Ok(Some(_)))
     }
+
+    pub fn display_snooze_reminder(&self) -> bool {
+        self.flags.display_snooze_reminder()
+    }
+
+    pub fn set_display_snooze_reminder(&mut self, value: bool) {
+        self.flags.set(MessageFlags::DISPLAY_SNOOZE_REMINDER, value);
+    }
+
+    pub fn snoozed_until(&self) -> Option<UnixTimestamp> {
+        // This should only be returned if the message is in the snooze label.
+        self.label_ids
+            .iter()
+            .find(|&label_id| *label_id == LabelId::snoozed())
+            .map(|_| self.snooze_time)
+    }
 }
 
 impl ConversationOrMessage for Message {
@@ -2547,20 +2536,6 @@ impl ModelHooks for Message {
             .iter()
             .map(|l| l.remote_id.clone().unwrap())
             .collect();
-        // Snooze time is stored either in the snoozed label or in the inbox label.
-        // Depending on the state of the snooze action. If it is reminded its in inbox,
-        // if it is snoozed its in snoozed label.
-        if let Some(label) = labels
-            .iter()
-            .find(|l| l.remote_id == Some(LabelId::snoozed()))
-        {
-            self.snoozed_until = Conversation::context_snooze_time(
-                self.local_conversation_id.expect("Should be set"),
-                label.id(),
-                tether,
-            )
-            .await?;
-        }
 
         self.custom_labels = labels
             .into_iter()
@@ -2677,7 +2652,6 @@ impl ModelHooks for Message {
         }
 
         self.set_coversation_before_save(bond).await?;
-        self.set_snooze_time_before_save(bond).await?;
         Ok(())
     }
 }
@@ -2772,8 +2746,6 @@ impl Message {
             sender: Default::default(),
             size: Default::default(),
             snooze_time: UnixTimestamp::new(0),
-            snoozed_until: None,
-            display_snooze_reminder: false,
             subject: Default::default(),
             time: UnixTimestamp::new(0),
             to_list: Default::default(),

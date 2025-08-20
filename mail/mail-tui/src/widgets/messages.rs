@@ -20,9 +20,15 @@ pub fn message_as_table(
 ) -> IntoTable<'_> {
     let rows = messages.iter().map(|msg| {
         let flags = format_flags(msg.is_starred(), msg.is_rsvp(), msg.expiration_time);
-        let date = date_from_timestamp(msg.time);
         let num_attachments = msg.num_attachments;
         let num_labels = msg.custom_labels.len();
+
+        let date = if msg.display_snooze_reminder() {
+            date_from_timestamp(msg.snooze_time).fg(Color::Yellow)
+        } else {
+            let date = date_from_timestamp(msg.time);
+            Span::raw(date)
+        };
 
         let sender = match recipient_display_mode {
             MessageRecipientDisplayMode::Sender => sender_name(&msg.sender).to_owned(),

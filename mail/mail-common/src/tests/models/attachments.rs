@@ -168,7 +168,6 @@ async fn create_attachment_dependencies(
                     is_forwarded: false,
                     expiration_time: 0,
                     snooze_time: 0,
-                    display_snoozed_reminder: false,
                     num_attachments: 0,
                     attachments_metadata: metadata.clone(),
                 }],
