@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+<<<<<<< HEAD
 ## [mail-uniffi-v0.133.0] - 2025-08-19
 
 ### Features
@@ -15,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-4298] Fix mime type inference for replies
+=======
+## [mail-uniffi-v0.125.8] - 2025-08-19
+
+### Fixes
+
+- Et-4378 removed a deprecated check that was stalling the mbp workflow.
+>>>>>>> releases/mail-uniffi/0.125
 
 
 ## [mail-uniffi-v0.125.7] - 2025-08-19
