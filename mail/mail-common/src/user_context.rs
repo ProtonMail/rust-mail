@@ -249,6 +249,12 @@ impl MailUserContext {
 
         let this = builder.build(mail_context, user_context).await?;
 
+        // Catch invalid actions at this stage to interrupt the context creation
+        // and avoid infinite error loops.
+        if let Err(e) = this.user_context.queue().validate_queued_actions().await {
+            return Err(MailContextError::NonProcessableActions(e));
+        }
+
         match origin {
             Origin::App => {
                 DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;

@@ -281,6 +281,17 @@ async fn check_action_only_executed_without_dependencies() {
     assert!(next_action.is_none());
 }
 
+#[tokio::test]
+async fn validation() {
+    // Check that an actions are popped from the queue ordered by priority and time.
+    let queue = new_queue().await;
+    let action = TestAction { v: 10 };
+    queue.queue_action(action).await.unwrap();
+    *queue.shared.factory.write() = Factory::default();
+    let err = queue.validate_queued_actions().await.unwrap_err();
+    assert!(matches!(err, QueuedError::Factory(_, _)));
+}
+
 async fn new_queue() -> Queue {
     let mut factory = Factory::default();
     factory

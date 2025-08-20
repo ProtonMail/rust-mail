@@ -142,6 +142,8 @@ pub enum MailContextError {
     Rsvp(#[from] RsvpError),
     #[error("Error parsing url: {0:?}")]
     UrlParseError(#[from] url::ParseError),
+    #[error("One or many pending actions are not processable")]
+    NonProcessableActions(QueuedError),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
