@@ -31,6 +31,9 @@ mod proton_impl;
 /// The Proton Mail API base path (v4).
 pub const MAIL_V4: &str = "/mail/v4";
 
+/// The Unleash API base path (v2).
+pub const UNLEASH_V2: &str = "/feature/v2";
+
 pub trait ProtonMail {
     /// GETs a single attachment.
     ///
@@ -431,4 +434,8 @@ pub trait ProtonMail {
     ///
     /// Returns error if the request fails
     async fn delete_all_messages_in_label(&self, label_id: LabelId) -> ApiServiceResult<()>;
+
+    /// Gets feature flags defined in Unleash service.
+    /// See: <https://docs.getunleash.io/reference/api/unleash/get-frontend-features/>
+    async fn get_unleash_feature_flags(&self) -> ApiServiceResult<GetUnleashFeaturesResponse>;
 }
