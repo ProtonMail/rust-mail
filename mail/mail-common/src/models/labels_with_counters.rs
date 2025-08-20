@@ -4,8 +4,8 @@
 #[path = "../tests/models/labels_with_counters.rs"]
 mod labels_with_counters;
 
-use std::sync::Arc;
-
+use super::{ConversationCounters, MessageCounters};
+use crate::models::MailSettings;
 use indoc::formatdoc;
 use proton_core_api::services::proton::{LabelId, ProtonCore};
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
@@ -23,8 +23,8 @@ use stash::{
     params,
     stash::{StashError, Tether},
 };
-
-use super::{ConversationCounters, MessageCounters};
+use std::collections::BTreeSet;
+use std::sync::Arc;
 
 /// Helper data structure until we move from Stash to existing, mature ORM.
 ///
@@ -34,77 +34,54 @@ use super::{ConversationCounters, MessageCounters};
 /// Note: It duplicates fields from [`Label`] since Stash does not support nested structures.
 #[derive(DbRecord, PartialEq, Debug, Clone)]
 pub struct LabelWithCounters {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[DbField]
     pub local_id: Option<LocalLabelId>,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
     #[DbField]
     pub remote_id: Option<LabelId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub local_parent_id: Option<LocalLabelId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub remote_parent_id: Option<LabelId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub color: LabelColor,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub expanded: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub label_type: LabelType,
 
-    /// TODO: Document this field.
     #[DbField]
     pub name: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub notify: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display_order: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     pub path: Option<String>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub sticky: bool,
 
-    /// Number of total messages related to one particular label
     #[DbField]
     pub total_msg: u64,
 
-    /// Number of unread messages related to one particular label
     #[DbField]
     pub unread_msg: u64,
 
-    /// Number of total conversations related to one particular label
     #[DbField]
     pub total_conv: u64,
 
-    /// Number of unread conversations related to one particular label
     #[DbField]
     pub unread_conv: u64,
 }
@@ -144,13 +121,6 @@ impl LabelWithCounters {
         .await
     }
 
-    /// Performs INNER JOIN to load both resources at the same time.
-    ///
-    /// # Returns
-    /// Maximum one row is returned. `Ok(None)` is returned if the database has no entry.
-    ///
-    /// # Errors
-    /// It might return an error if the query fail
     pub async fn find_first(
         query: impl Into<String>,
         params: Vec<Box<dyn ToSql + Send>>,
@@ -184,13 +154,6 @@ impl LabelWithCounters {
         Ok(values.into_iter().next())
     }
 
-    /// Performs INNER JOIN to load both resources at the same time.
-    ///
-    /// # Returns
-    /// Maximum one row is returned. `Ok(None)` is returned if the database has no entry.
-    ///
-    /// # Errors
-    /// It might return an error if the query fail
     pub async fn load(label_id: LocalLabelId, tether: &Tether) -> Result<Option<Self>, StashError> {
         Self::find_first(
             formatdoc!("WHERE {}.local_id = ?", Label::table_name()),
@@ -199,14 +162,7 @@ impl LabelWithCounters {
         )
         .await
     }
-    /// Performs INNER JOIN to load both resources at the same time.
-    /// Filters by the [`LabelType`].
-    ///
-    /// # Returns
-    /// Return Zero-Or-More values
-    ///
-    /// # Errors
-    /// It might return an error if the query fail
+
     pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
         let values = tether
             .query(
@@ -238,16 +194,15 @@ impl LabelWithCounters {
         Ok(values)
     }
 
-    /// Gets all system labels that are displayable
     pub async fn from_remote_ids(
         tether: &Tether,
         ids: impl IntoIterator<Item = LabelId>,
     ) -> anyhow::Result<Vec<Self>> {
         let ids = Label::remote_ids_counterpart(Vec::from_iter(ids), tether).await?;
+
         Self::from_ids(tether, ids).await
     }
 
-    /// Gets all system labels that are displayable
     pub async fn from_ids(
         tether: &Tether,
         ids: impl IntoIterator<Item = LocalLabelId>,
@@ -306,6 +261,7 @@ impl LabelWithCounters {
             total_conv: _,
             unread_conv: _,
         } = self.clone();
+
         Label {
             local_id,
             remote_id,
@@ -323,14 +279,6 @@ impl LabelWithCounters {
         }
     }
 
-    /// Watch labels with counters for changes.
-    ///
-    /// When a change occurs a message is produced in the returned receiver.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed
-    ///
     pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash.subscribe_to(|sender| Box::new(LabelWithCountersWatcher { sender }))
     }
@@ -346,10 +294,11 @@ impl TableObserver for LabelWithCountersWatcher {
             ConversationCounters::table_name().to_string(),
             MessageCounters::table_name().to_string(),
             Label::table_name().to_string(),
+            MailSettings::table_name().to_string(),
         ]
     }
 
-    fn on_tables_changed(&self, _tables: &std::collections::BTreeSet<String>) {
+    fn on_tables_changed(&self, _tables: &BTreeSet<String>) {
         self.sender
             .send(())
             .inspect_err(|e| {
