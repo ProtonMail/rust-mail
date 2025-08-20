@@ -76,7 +76,6 @@ pub enum MessageAction {
     Forward,
 
     // Export/View
-    SavePDF,
     Print,
     ViewHeaders,
     ViewHTML,
@@ -102,7 +101,6 @@ impl From<RealMessageAction> for MessageAction {
             RealMessageAction::Reply => Self::Reply,
             RealMessageAction::ReplyAll => Self::ReplyAll,
             RealMessageAction::Forward => Self::Forward,
-            RealMessageAction::SavePDF => Self::SavePDF,
             RealMessageAction::Print => Self::Print,
             RealMessageAction::ViewHeaders => Self::ViewHeaders,
             RealMessageAction::ViewHTML => Self::ViewHTML,

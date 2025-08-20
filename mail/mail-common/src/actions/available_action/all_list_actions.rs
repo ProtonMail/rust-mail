@@ -137,8 +137,8 @@ impl GenericMobileActions for ListAction {
             Label => Some(Self::LabelAs),
             Snooze => Self::toggle_snooze(&context.current_label),
             // Unsupported actions for lists
-            Reply | Forward | Print | SavePDF | ViewHeaders | ViewHTML | ToggleLight
-            | ReportPhishing | SaveAttachments | SenderEmails | Remind | Other(_) => None,
+            Reply | Forward | Print | ViewHeaders | ViewHTML | ToggleLight | ReportPhishing
+            | SaveAttachments | SenderEmails | Remind | Other(_) => None,
         }
     }
 

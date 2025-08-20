@@ -163,7 +163,7 @@ impl<T: GenericMobileActions + std::fmt::Debug> MobileActionsBuilder<T> {
             actions.push(T::permanent_delete());
         }
 
-        // Type-specific actions (e.g., SavePDF from message) come after system folders
+        // Type-specific actions come after system folders
         actions.extend(T::get_low_priority_actions(&self.context));
 
         actions
