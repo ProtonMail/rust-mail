@@ -293,13 +293,13 @@ impl PasswordFlow {
     }
 
     /// Get the FIDO2 details for authentication.
-    pub async fn get_fido_details(&self) -> Result<Option<Fido2ResponseFfi>, PasswordError> {
+    pub async fn fido_details(&self) -> Result<Option<Fido2ResponseFfi>, PasswordError> {
         let flow = self.flow.clone();
 
         uniffi_async(async move {
             flow.lock()
                 .await
-                .fetch_fresh_fido_details()
+                .fido_details()
                 .await
                 .map(|res| res.map(Fido2ResponseFfi::from))
                 .map_err(PasswordError::from)

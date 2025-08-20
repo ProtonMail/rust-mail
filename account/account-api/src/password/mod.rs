@@ -160,6 +160,11 @@ impl PasswordFlow {
         }
     }
 
+    /// Get the kind of the current state.
+    pub fn kind(&self) -> Result<StateKind, PasswordError> {
+        Ok(self.state()?.kind())
+    }
+
     /// Submit current password.
     ///
     /// # Errors
@@ -254,9 +259,9 @@ impl PasswordFlow {
         Ok(())
     }
 
-    /// Get the kind of the current state.
-    pub fn kind(&self) -> Result<StateKind, PasswordError> {
-        Ok(self.state()?.kind())
+    /// Get the FIDO2 details for authentication.
+    pub async fn fido_details(&mut self) -> Result<Option<fido2::Response>, PasswordError> {
+        self.state_mut()?.fido_details().await
     }
 
     /// Get whether the account has TOTP enabled.
@@ -267,23 +272,6 @@ impl PasswordFlow {
     /// Get whether the account has FIDO2 enabled.
     pub fn has_fido(&self) -> Result<bool, PasswordError> {
         self.state()?.has_fido()
-    }
-
-    /// Get the FIDO2 details for authentication.
-    ///
-    /// # Warning
-    /// This returns potentially stale FIDO2 details from the initial auth info.
-    /// For actual authentication, use `fetch_fresh_fido_details` instead.
-    pub async fn get_cached_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
-        self.state()?.cached_fido_details().await
-    }
-
-    /// Fetch fresh FIDO2 details for authentication.
-    ///
-    /// This method calls the `/auth/info` endpoint to get current FIDO2 challenge details.
-    /// Use this instead of `get_cached_fido_details` for actual authentication flows.
-    pub async fn fetch_fresh_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
-        self.state()?.fetch_fresh_fido_details().await
     }
 
     /// Get whether the account has a mailbox password.
@@ -312,5 +300,9 @@ impl PasswordFlow {
             .last()
             .cloned()
             .ok_or(PasswordError::InvalidState)
+    }
+
+    fn state_mut(&mut self) -> Result<&mut State, PasswordError> {
+        self.state.last_mut().ok_or(PasswordError::InvalidState)
     }
 }
