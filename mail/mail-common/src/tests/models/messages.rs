@@ -2736,7 +2736,6 @@ fn test_message_metadata(
         num_attachments: 24,
         attachments_metadata: attachments.into_iter().collect(),
         snooze_time: 5000,
-        display_snoozed_reminder: false,
     }
 }
 
@@ -2784,7 +2783,6 @@ fn test_message_with_metadata(
             num_attachments: 24,
             attachments_metadata: attachments.into_iter().collect(),
             snooze_time: 5000,
-            display_snoozed_reminder: false,
         },
     }
 }
@@ -2953,7 +2951,6 @@ async fn message_save_updates_local_ids_for_attachment_metadata() {
             sender: Default::default(),
             size: 0,
             snooze_time: 0,
-            display_snoozed_reminder: false,
             subject: "".to_string(),
             time: 0,
             to_list: vec![],

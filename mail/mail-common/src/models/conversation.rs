@@ -1781,8 +1781,10 @@ impl Conversation {
         for id in ids {
             let message_ids = Message::ids_in_conversation_unordered(*id, bond).await?;
             let removed_ids = Message::remove_label(local_inbox_id, message_ids, bond).await?;
-            Message::apply_label(local_snoozed_id, removed_ids.iter().copied(), bond).await?;
+            Message::update_snooze_time(removed_ids.clone(), snooze_until, bond).await?;
+            Message::apply_label(local_snoozed_id, removed_ids, bond).await?;
 
+            //TODO: Check snooze update propagation
             if let Some(mut label) =
                 ConversationLabel::find_by_conversation_and_label_id(*id, local_snoozed_id, bond)
                     .await?
@@ -1790,8 +1792,6 @@ impl Conversation {
                 label.context_snooze_time = snooze_until;
                 label.save(bond).await?;
             }
-
-            Message::update_snooze_time(removed_ids, snooze_until, bond).await?;
         }
 
         Ok(())
@@ -1814,10 +1814,12 @@ impl Conversation {
             .expect("Inbox should be set");
 
         for id in ids {
+            //TODO: remove snooze before removing label?
             let message_ids = Message::ids_in_conversation_unordered(*id, bond).await?;
             let removed_ids = Message::remove_label(local_snoozed_id, message_ids, bond).await?;
             Message::apply_label(local_inbox_id, removed_ids.iter().copied(), bond).await?;
 
+            //TODO: Check snooze update propagation
             // Reset the snooze time for the conversation
             if let Some(mut label) =
                 ConversationLabel::find_by_conversation_and_label_id(*id, local_inbox_id, bond)

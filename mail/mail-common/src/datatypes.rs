@@ -1750,6 +1750,9 @@ bitflags::bitflags! {
         /// Message is a reply to an Encrypted-Outside message
         const FLAG_EO_REPLY = 1 << 36;
 
+        /// Snooze reminder should be displayed to the user
+        const DISPLAY_SNOOZE_REMINDER = 1 << 37;
+
         // Safeguard against unknown values
         const _ = !0;
     }
@@ -1780,6 +1783,10 @@ impl MessageFlags {
     #[must_use]
     pub fn is_sent(&self) -> bool {
         self.intersects(MessageFlags::SENT)
+    }
+
+    pub fn display_snooze_reminder(&self) -> bool {
+        self.intersects(MessageFlags::DISPLAY_SNOOZE_REMINDER)
     }
 }
 
