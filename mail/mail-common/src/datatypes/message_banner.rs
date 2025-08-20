@@ -42,7 +42,7 @@ pub enum MessageBanner {
     },
 
     /// The message provides an option to unsubscribe from a newsletter.
-    UnsubscribeNewsletter,
+    UnsubscribeNewsletter { already_unsubscribed: bool },
 
     /// The message is scheduled to be sent at a future time.
     ScheduledSend {
@@ -68,6 +68,14 @@ pub enum MessageBanner {
 
 impl Message {
     pub async fn get_banners(&self, tether: &Tether) -> Vec<MessageBanner> {
+        self.get_banners_inner(tether, false).await
+    }
+
+    pub async fn get_banners_inner(
+        &self,
+        tether: &Tether,
+        can_unsubscribe: bool,
+    ) -> Vec<MessageBanner> {
         let mut banners = vec![];
         let flags = self.flags;
         let settings = &MailSettings::get_or_default(tether).await;
@@ -136,6 +144,18 @@ impl Message {
         if self.label_ids.contains(&LabelId::snoozed()) {
             banners.push(MessageBanner::Snoozed {
                 timestamp: self.snooze_time,
+            });
+        }
+
+        if can_unsubscribe {
+            let already_unsubscribed = if let Some(id) = self.local_id {
+                Message::is_unsubscribed(id, tether).await
+            } else {
+                false
+            };
+
+            banners.push(MessageBanner::UnsubscribeNewsletter {
+                already_unsubscribed,
             });
         }
 

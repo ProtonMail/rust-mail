@@ -48,7 +48,7 @@ impl Popup for PathSelectPopup {
         }
 
         if let Err(e) = self.state.handle(&event) {
-            return Command::message(anyhow!(e).into());
+            return Command::message(anyhow!(e));
         }
 
         Command::None

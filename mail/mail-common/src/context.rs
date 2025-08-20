@@ -43,7 +43,7 @@ use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 use tokio::runtime;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
@@ -243,6 +243,7 @@ pub struct MailContext {
     mail_cache_path: PathBuf,
     pub attachment_cache_size: u64,
     active_user_contexts: Mutex<HashMap<UserId, Weak<MailUserContext>>>,
+    http_client: OnceLock<reqwest::Client>,
 }
 
 impl MailContext {
@@ -287,6 +288,7 @@ impl MailContext {
             mail_cache_path: mail_cache_path.into(),
             attachment_cache_size: cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
+            http_client: OnceLock::new(),
         });
 
         let ctx_weak = Arc::downgrade(&ctx);
@@ -321,6 +323,7 @@ impl MailContext {
             mail_cache_path,
             attachment_cache_size: mail_cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
+            http_client: OnceLock::new(),
         }))
     }
 
@@ -998,6 +1001,10 @@ impl MailContext {
         }
 
         Ok(ctxs)
+    }
+
+    pub fn http_client(&self) -> &reqwest::Client {
+        self.http_client.get_or_init(reqwest::Client::new)
     }
 }
 

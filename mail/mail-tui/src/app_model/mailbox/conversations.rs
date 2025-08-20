@@ -45,10 +45,10 @@ impl ConversationsState {
         Command::task(async move {
             match Self::new_impl(ctx, label_id, filter).await {
                 Ok((state, background_command)) => Command::batch([
-                    Command::message(Message::OpenConversationView(mbox, label, state).into()),
+                    Command::message(Message::OpenConversationView(mbox, label, state)),
                     background_command,
                 ]),
-                Err(e) => Command::message(e.into()),
+                Err(e) => Command::message(e),
             }
         })
     }
@@ -190,7 +190,7 @@ impl ConversationsState {
                 let is_esc = key.code == KeyCode::Esc;
                 let msg = message_state.handle_event(ctx, mbox, event);
                 return if msg.is_none() && is_esc {
-                    Command::message(ConversationMessage::Close.into())
+                    Command::message(ConversationMessage::Close)
                 } else {
                     msg
                 };
@@ -407,7 +407,7 @@ fn mark_conversation_read(
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
                 tracing::error!("{e:?}");
-                Command::message(e.into())
+                Command::message(e)
             }
         }
     })
@@ -425,7 +425,7 @@ fn mark_conversation_unread(
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
                 tracing::error!("{e:?}");
-                Command::message(e.into())
+                Command::message(e)
             }
         }
     })
@@ -449,7 +449,7 @@ fn delete_conversation(
                 Err(e) => {
                     let e = anyhow!("Failed to delete conversation: {e}");
                     tracing::error!("{e:?}");
-                    Command::message(e.into())
+                    Command::message(e)
                 }
             }
         })),
@@ -482,7 +482,7 @@ fn move_conversation(
                             .await
                             .context("Error undoing conversation labelling")
                         {
-                            Command::message(e.into())
+                            Command::message(e)
                         } else {
                             Command::None
                         }
@@ -494,7 +494,7 @@ fn move_conversation(
             Err(e) => {
                 let e = anyhow!("Failed to move conversation: {e}");
                 tracing::error!("{e:?}");
-                Command::message(e.into())
+                e.into()
             }
         }
     })
@@ -510,7 +510,7 @@ fn star_conversation(
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
                 tracing::error!("{e:?}");
-                Command::message(e.into())
+                Command::message(e)
             }
         }
     })
@@ -526,7 +526,7 @@ fn unstar_conversation(
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
                 tracing::error!("{e:?}");
-                Command::message(e.into())
+                Command::message(e)
             }
         }
     })
@@ -578,7 +578,7 @@ fn label_conversation(
                             .await
                             .context("Error undoing conversation labelling")
                         {
-                            Command::message(e.into())
+                            Command::message(e)
                         } else {
                             Command::None
                         }
@@ -589,7 +589,7 @@ fn label_conversation(
             }
             Err(e) => {
                 tracing::error!("{e:?}");
-                Command::message(e.into())
+                Command::message(e)
             }
         }
     })
@@ -613,7 +613,7 @@ fn delete_all(ctx: Arc<MailUserContext>, id: LocalLabelId) -> Command<Messages> 
                 Err(e) => {
                     let e = anyhow!("Failed to delete all in label: {e}");
                     tracing::error!("{e:?}");
-                    Command::message(e.into())
+                    Command::message(e)
                 }
             }
         })),

@@ -62,7 +62,7 @@ impl SessionSelectModel {
 
 impl AppStateHandler for SessionSelectModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
-        Command::message(Message::Init.into())
+        Command::message(Message::Init)
     }
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(key) = event else {
@@ -73,10 +73,10 @@ impl AppStateHandler for SessionSelectModel {
         }
 
         match key.code {
-            KeyCode::Char('n') => Command::message(Message::NewAccount.into()),
-            KeyCode::Char('d') => Command::message(Message::Delete.into()),
-            KeyCode::Char('l') => Command::message(Message::Logout.into()),
-            KeyCode::Enter => Command::message(Message::Submit.into()),
+            KeyCode::Char('n') => Command::message(Message::NewAccount),
+            KeyCode::Char('d') => Command::message(Message::Delete),
+            KeyCode::Char('l') => Command::message(Message::Logout),
+            KeyCode::Enter => Command::message(Message::Submit),
             _ => Command::None,
         }
     }
@@ -165,7 +165,7 @@ impl AppStateHandler for SessionSelectModel {
                                 error!("{e:?}");
                                 Command::message(Messages::DisplayError(None, e))
                             } else {
-                                Command::message(Message::DeleteSuccess(account_email).into())
+                                Command::message(Message::DeleteSuccess(account_email))
                             };
                             Command::batch([
                                 Command::message(Messages::DismissBackgroundProgress),

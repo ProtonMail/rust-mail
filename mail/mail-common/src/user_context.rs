@@ -728,6 +728,10 @@ impl MailUserContext {
             .await?
             != 0)
     }
+
+    pub fn http_client(&self) -> &reqwest::Client {
+        self.mail_context().http_client()
+    }
 }
 
 impl Spawner for MailUserContext {

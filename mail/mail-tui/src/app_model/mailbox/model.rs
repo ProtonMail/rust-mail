@@ -177,16 +177,14 @@ impl MailboxModel {
                                 .boxed()
                             });
                         Command::batch([
-                            Command::message(Message::NewLabelWatcher(watcher).into()),
+                            Command::message(Message::NewLabelWatcher(watcher)),
                             background_command,
                         ])
                     } else {
-                        Command::message(
-                            MailContextError::from(AppError::LabelNotFound(label_id)).into(),
-                        )
+                        Command::message(MailContextError::from(AppError::LabelNotFound(label_id)))
                     }
                 }
-                Err(e) => Command::message(MailContextError::from(e).into()),
+                Err(e) => Command::message(MailContextError::from(e)),
             }
         })
     }
@@ -250,7 +248,7 @@ impl MailboxModel {
                 Err(e) => {
                     let e = anyhow!("Failed to load folders: {e}");
                     tracing::error!("{e:?}");
-                    Command::message(e.into())
+                    Command::message(e)
                 }
             }
         })
@@ -268,7 +266,7 @@ impl MailboxModel {
                 Err(e) => {
                     let e = anyhow!("Failed to load labels: {e}");
                     tracing::error!("{e:?}");
-                    Command::message(e.into())
+                    Command::message(e)
                 }
             }
         })
@@ -322,7 +320,7 @@ impl AppStateHandler for MailboxModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
         Command::batch([
             self.create_background_worker(),
-            Command::message(Message::Sync(self.mailbox.clone()).into()),
+            Command::message(Message::Sync(self.mailbox.clone())),
             Command::background_task({
                 let ctx = Arc::clone(&self.ctx);
                 let tok = self.cancel_token.clone();
@@ -347,7 +345,7 @@ impl AppStateHandler for MailboxModel {
                     return Composer::empty(Arc::clone(&self.ctx));
                 }
                 KeyCode::Char('c') => {
-                    return Command::message(Message::OpenContacts.into());
+                    return Command::message(Message::OpenContacts);
                 }
                 KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.change_filter(ReadFilter::Unread);

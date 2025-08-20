@@ -41,4 +41,5 @@ mod acceptance {
     mod sidebar_system_labels;
     mod sign_out_all;
     mod snooze;
+    mod unsubscribe;
 }

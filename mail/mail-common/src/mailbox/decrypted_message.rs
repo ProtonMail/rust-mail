@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 //! Everything related to processing a decrypted message.
+use crate::actions::messages::UnsubscribeNewsletter;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::theme::MailTheme;
@@ -11,15 +12,16 @@ use crate::models::{
 };
 use crate::rsvp::RsvpEventId;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
+use anyhow::Context;
 use parking_lot::Mutex;
+use proton_action_queue::action::ActionId;
 use proton_calendar_common::{self as cal, RsvpError};
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::muon::GET;
-use proton_core_api::services::proton::muon::http::HttpReqExt;
 use proton_core_api::services::proton::{AddressId, ProtonCore};
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
+use reqwest::Method;
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::HashMap;
@@ -59,7 +61,7 @@ pub struct ThemeOpts {
     /// While using the dark mode, some bodies of messages might be hard to read.
     /// User has an option to override the theme inside of the message (without changing the overall theme).
     ///
-    /// Default: No override provided
+    /// Default: No override provided.
     ///
     pub theme_override: Option<MailTheme>,
 
@@ -281,13 +283,25 @@ impl DecryptedMessageBody {
             let data = if is_proxy_enabled {
                 api.proxy_img(&url).await?
             } else {
-                GET!("{url}")
-                    .send_with(api)
+                ctx.http_client()
+                    .request(Method::GET, url)
+                    .send()
                     .await
-                    .map_err(ApiServiceError::from)?
-                    .ok()
-                    .map_err(ApiServiceError::from)?
-                    .into_body()
+                    .map_err(|e| ApiServiceError::ConnectionError(e.to_string()))?
+                    .error_for_status()
+                    .map_err(|e| {
+                        ApiServiceError::UnknownError(format!(
+                            "Server returned error when getting image: {e:?}"
+                        ))
+                    })?
+                    .bytes()
+                    .await
+                    .map_err(|e| {
+                        ApiServiceError::UnknownError(format!(
+                            "error getting bytes from image request: {e:?}"
+                        ))
+                    })?
+                    .to_vec()
             };
 
             AttachmentData {
@@ -353,6 +367,28 @@ impl DecryptedMessageBody {
         })
     }
 
+    pub fn unsubscribe_from_newsletter(&self) -> anyhow::Result<UnsubscribeNewsletter> {
+        UnsubscribeNewsletter::new(
+            &self.metadata.parsed_headers,
+            self.metadata.local_message_id.unwrap(),
+        )
+        .context("This action wouldn't do anything")
+    }
+
+    pub async fn action_unsubscribe_from_newsletter(
+        &self,
+        ctx: &MailUserContext,
+    ) -> Result<ActionId, anyhow::Error> {
+        let headers = &self.metadata.parsed_headers;
+        let id = self.metadata.local_message_id.unwrap();
+        let queue = ctx.action_queue();
+
+        let action =
+            UnsubscribeNewsletter::new(headers, id).context("This action wouldn't do anything")?;
+
+        Ok(queue.queue_action(action).await?.id)
+    }
+
     /// Retrieve a parsed header value for a given `key`.
     pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
         self.metadata.parsed_header_value(key)
@@ -376,15 +412,13 @@ impl DecryptedMessageBody {
         opts: TransformOpts,
         tether: &Tether,
     ) -> BodyOutput {
-        // FIXME:(perf) settings get loaded twice.
         let resolved = opts.resolve(tether).await;
 
-        let mut banners = if let Some(id) = self.metadata.local_message_id {
-            if let Ok(Some(message)) = Message::load(id, tether).await {
-                message.get_banners(tether).await
-            } else {
-                vec![]
-            }
+        let mut banners = if let Some(id) = self.metadata.local_message_id
+            && let Ok(Some(message)) = Message::load(id, tether).await
+        {
+            let can_unsubscribe = self.metadata.parsed_headers.can_unsubscribe();
+            message.get_banners_inner(tether, can_unsubscribe).await
         } else {
             vec![]
         };

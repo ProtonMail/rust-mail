@@ -41,11 +41,11 @@ impl Search {
     pub fn handle_event(&mut self, event: &Event) -> Command<Messages> {
         if let Event::Key(key) = &event {
             match key.code {
-                KeyCode::Esc => return Command::message(Message::CloseSearchPopup.into()),
+                KeyCode::Esc => return Command::message(Message::CloseSearchPopup),
                 KeyCode::Enter => {
-                    return Command::message(
-                        Message::SearchSubmit(self.search.value().trim().to_string()).into(),
-                    );
+                    return Command::message(Message::SearchSubmit(
+                        self.search.value().trim().to_string(),
+                    ));
                 }
                 _ => self.search.handle_event(event),
             };
@@ -61,7 +61,7 @@ impl Search {
     ) -> Command<Messages> {
         match message {
             Message::SearchSubmit(search_phrase) => Command::batch(vec![
-                Command::message(Message::CloseSearchPopup.into()),
+                Command::message(Message::CloseSearchPopup),
                 MessagesState::from_search(user_ctx.to_owned(), mbox.to_owned(), search_phrase),
             ]),
             _ => Command::none(),

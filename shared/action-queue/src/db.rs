@@ -203,7 +203,7 @@ impl StoredAction {
             self.version,
             self.created,
             self.scheduled,
-            self.debug_string.as_deref().unwrap_or("")
+            self.debug_string.as_deref().unwrap_or(""),
         )
     }
 

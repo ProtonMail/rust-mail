@@ -58,19 +58,14 @@ impl Popup for PasswordProtectPopup {
                     let cmd = if self.password_text_input_state.value().is_empty() {
                         Command::message(Messages::DisplayError(None, anyhow!("Password is empty")))
                     } else {
-                        Command::message(
-                            ComposerMessage::SetPasswordProtection(
-                                SecretString::new(String::from(
-                                    self.password_text_input_state.value(),
-                                )),
-                                if self.hint_text_input_state.value().is_empty() {
-                                    None
-                                } else {
-                                    Some(self.hint_text_input_state.value().to_owned())
-                                },
-                            )
-                            .into(),
-                        )
+                        Command::message(ComposerMessage::SetPasswordProtection(
+                            SecretString::new(String::from(self.password_text_input_state.value())),
+                            if self.hint_text_input_state.value().is_empty() {
+                                None
+                            } else {
+                                Some(self.hint_text_input_state.value().to_owned())
+                            },
+                        ))
                     };
 
                     return Command::batch([Command::message(Messages::DismissPopup), cmd]);

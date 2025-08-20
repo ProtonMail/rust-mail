@@ -68,6 +68,7 @@ pub use search_options::SearchOptions;
 use stash::stash::{Bond, StashError, Tether};
 pub use system_folder::MovableSystemFolder;
 
+use crate::actions::messages::UnsubscribeNewsletter;
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::MaybeEmptyString;
 use crate::models::{
@@ -2028,6 +2029,15 @@ pub struct ParsedHeaders {
 }
 
 sql_using_serde!(ParsedHeaders);
+
+impl ParsedHeaders {
+    pub fn can_unsubscribe(&self) -> bool {
+        // TODO: implement unsubscribe via email
+        // self.headers.get("List-Unsubscribe").is_some()
+        // HACK: This is only necessary until it's implemented.
+        UnsubscribeNewsletter::new(self, LocalMessageId::from(0)).is_some()
+    }
+}
 
 /// An error during SQL deserialization.
 /// It means we expected [`MAGIC_ID`] but got {0}

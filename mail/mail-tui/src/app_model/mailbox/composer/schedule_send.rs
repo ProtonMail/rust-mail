@@ -98,20 +98,18 @@ impl DefaultOptions {
                         SEND_TOMORROW_OPTION_INDEX => (
                             Command::batch([
                                 Command::message(Messages::DismissPopup),
-                                Command::message(
-                                    ComposerMessage::ScheduleSend(self.options.time_tomorrow)
-                                        .into(),
-                                ),
+                                Command::message(ComposerMessage::ScheduleSend(
+                                    self.options.time_tomorrow,
+                                )),
                             ]),
                             false,
                         ),
                         SEND_NEXT_MONDAY_OPTION_INDEX => (
                             Command::batch([
                                 Command::message(Messages::DismissPopup),
-                                Command::message(
-                                    ComposerMessage::ScheduleSend(self.options.time_next_monday)
-                                        .into(),
-                                ),
+                                Command::message(ComposerMessage::ScheduleSend(
+                                    self.options.time_next_monday,
+                                )),
                             ]),
                             false,
                         ),
@@ -176,7 +174,7 @@ impl CustomOptions {
                     Ok(date_time) => {
                         return Command::batch([
                             Command::message(Messages::DismissPopup),
-                            Command::message(ComposerMessage::ScheduleSend(date_time).into()),
+                            Command::message(ComposerMessage::ScheduleSend(date_time)),
                         ]);
                     }
                     Err(e) => {

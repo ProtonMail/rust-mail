@@ -125,6 +125,7 @@ pub(crate) fn register_actions(
     origin: Origin,
     ctx: &Weak<MailUserContext>,
     api: &Proton,
+    http_client: &reqwest::Client,
 ) {
     fn reg<T>(queue: &Queue, handler: T)
     where
@@ -174,6 +175,12 @@ pub(crate) fn register_actions(
             reg(queue, messages::ReportPhishingHandler { ctx: ctx.clone() });
             reg(queue, messages::PrefetchHandler { ctx: ctx.clone() });
             reg(queue, messages::RefreshMetadataHandler { api: api.clone() });
+            reg(
+                queue,
+                messages::UnsubscribeNewsletterHandler {
+                    http_client: http_client.clone(),
+                },
+            );
             reg(queue, draft::SaveHandler { ctx: ctx.clone() });
             reg(queue, draft::SendHandler { ctx: ctx.clone() });
             reg(queue, labels::ExpandHandler { api: api.clone() });

@@ -94,7 +94,7 @@ impl From<ConversationMessage> for Messages {
 
 /// Messages related to message actions.
 pub enum MessageMessage {
-    OpenBody,
+    OpenBody { show_loading: bool },
     OpenBodyResult(anyhow::Result<Box<DecryptedMessage>>),
     CloseBody,
     ReplaceFrom(usize, Vec<MailMessage>),

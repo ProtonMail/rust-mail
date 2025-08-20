@@ -112,9 +112,9 @@ impl LoginModel {
                                     }
                                 }
                                 let msg = if let Some(err) = err {
-                                    Message::LoginFailed(err).into()
+                                    Message::LoginFailed(err)
                                 } else {
-                                    Message::LoginSuccess(flow).into()
+                                    Message::LoginSuccess(flow)
                                 };
                                 Command::batch([
                                     Command::Message(Messages::DismissPopup),
@@ -123,7 +123,7 @@ impl LoginModel {
                             }),
                         ])
                     }
-                    Err(e) => Command::message(Message::LoginFailed(e).into()),
+                    Err(e) => Command::message(Message::LoginFailed(e)),
                 }
             }),
         ])
@@ -140,10 +140,10 @@ impl AppStateHandler for LoginModel {
                 //TODO: return to previous state?
                 Command::none()
             }
-            KeyCode::Enter => Command::message(Message::Submit.into()),
-            KeyCode::Tab => Command::message(Message::ToggleInput.into()),
+            KeyCode::Enter => Command::message(Message::Submit),
+            KeyCode::Tab => Command::message(Message::ToggleInput),
             KeyCode::Char('q') if k.modifiers.contains(KeyModifiers::CONTROL) => {
-                Command::message(Message::QRLogin.into())
+                Command::message(Message::QRLogin)
             }
             _ => {
                 self.active_text_input_state_mut().handle_event(&event);
@@ -188,7 +188,7 @@ impl AppStateHandler for LoginModel {
                         let mut flow = match ctx.new_login_flow().await {
                             Ok(f) => f,
                             Err(e) => {
-                                return Command::message(anyhow!(e.to_string()).into());
+                                return Command::message(anyhow!(e));
                             }
                         };
                         let message = if let Err(e) = flow
@@ -199,9 +199,9 @@ impl AppStateHandler for LoginModel {
                             )
                             .await
                         {
-                            Message::LoginFailed(e).into()
+                            Message::LoginFailed(e)
                         } else {
-                            Message::LoginSuccess(flow).into()
+                            Message::LoginSuccess(flow)
                         };
                         Command::batch([
                             Command::Message(Messages::DismissBackgroundProgress),

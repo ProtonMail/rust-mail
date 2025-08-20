@@ -360,7 +360,7 @@ impl ContactsModel {
                 Ok(details) => Command::Message(Message::LoadContactDetails(details).into()),
                 Err(e) => {
                     tracing::error!("{e:?}");
-                    Command::message(e.into())
+                    Command::message(e)
                 }
             }
         })
@@ -445,7 +445,7 @@ impl ContactsModel {
         let list = Self::load_contacts(&tether).await?;
         Ok(Command::batch([
             Command::Message(Messages::DismissBackgroundProgress),
-            Command::message(Message::LoadContacts(list).into()),
+            Command::message(Message::LoadContacts(list)),
             background_command,
         ]))
     }
@@ -453,7 +453,7 @@ impl ContactsModel {
 
 impl AppStateHandler for ContactsModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
-        Command::message(Message::Init.into())
+        Command::message(Message::Init)
     }
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(key) = event else {
@@ -464,7 +464,7 @@ impl AppStateHandler for ContactsModel {
         }
 
         match key.code {
-            KeyCode::Enter => Command::message(Message::OpenContactPopup.into()),
+            KeyCode::Enter => Command::message(Message::OpenContactPopup),
             KeyCode::Esc => {
                 if self.open_contact.is_open() {
                     self.open_contact = OpenedContactState::None;
