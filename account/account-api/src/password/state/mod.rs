@@ -74,6 +74,11 @@ impl State {
         WantPass::new(data).into()
     }
 
+    #[must_use]
+    pub fn kind(&self) -> StateKind {
+        StateKind::of(self)
+    }
+
     /// Submit current password.
     pub async fn submit_pass(self, pass: SecureString) -> Result<Self, PasswordError> {
         if let Self::WantPass(state) = self {
@@ -122,11 +127,6 @@ impl State {
         }
     }
 
-    #[must_use]
-    pub fn kind(&self) -> StateKind {
-        StateKind::of(self)
-    }
-
     /// Get whether the account has TOTP enabled.
     pub fn has_totp(&self) -> Result<bool, PasswordError> {
         Ok(self.data_ref()?.tfa_mode.has_totp())
@@ -143,12 +143,7 @@ impl State {
     }
 
     /// Get the FIDO2 details for authentication.
-    ///
-    /// # Warning
-    /// This returns potentially stale FIDO2 details from the initial auth info.
-    /// For actual authentication, use `fetch_fresh_fido_details` instead.
-    /// This method should only be used for UI purposes to show available auth methods.
-    pub async fn cached_fido_details(&mut self) -> Result<Option<fido2::Response>, PasswordError> {
+    pub async fn fido_details(&mut self) -> Result<Option<fido2::Response>, PasswordError> {
         let data = self.data_mut()?;
 
         if data.auth_info.is_none() {
@@ -160,33 +155,6 @@ impl State {
         };
 
         Ok(info.fido_details())
-    }
-
-    /// Fetch fresh FIDO2 details for authentication.
-    ///
-    /// This method calls the `/auth/info` endpoint to get current FIDO2 challenge details.
-    /// Use this instead of `cached_fido_details` for actual authentication flows.
-    pub async fn fetch_fresh_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
-        let (client, username) = match self {
-            Self::WantPass(state) => (&state.client, &state.username),
-            Self::WantTfa(state) => (&state.client, &state.username),
-            Self::WantChange(state) => (&state.client, &state.username),
-            _ => return Err(PasswordError::InvalidState),
-        };
-
-        let request = PostAuthInfoRequest {
-            username: username.clone(),
-        };
-
-        let fresh_auth_info = client
-            .post_auth_info(request)
-            .map_err(PasswordError::ApiService)
-            .await?;
-
-        match &fresh_auth_info.tfa {
-            Some(tfa) => Ok(tfa.fido_details()),
-            None => Ok(None),
-        }
     }
 
     /// Get the API client for external operations.
