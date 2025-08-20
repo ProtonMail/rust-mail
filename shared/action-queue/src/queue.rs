@@ -648,6 +648,17 @@ impl Queue {
     pub fn new_executor(&self) -> QueueExecutor {
         self.new_executor_with_group(ActionGroup::default())
     }
+
+    /// Validate all pending actions can be loaded and deserialized to prevent
+    /// infinite execution loops.
+    pub async fn validate_queued_actions(&self) -> QueuedResult<()> {
+        let tether = self.shared.stash.connection();
+        let actions = StoredAction::find("", vec![], &tether).await?;
+        for action in actions {
+            decode_action(&self.shared.factory, action)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -13,6 +13,7 @@ pub enum ProtonError {
     ServerError(UserApiServiceError),
     Network,
     Unexpected(UnexpectedError),
+    NonProcessableActions,
 }
 
 impl From<RealProtonMailError> for ProtonError {
@@ -24,6 +25,7 @@ impl From<RealProtonMailError> for ProtonError {
             RealProtonMailError::Network => ProtonError::Network,
             RealProtonMailError::Unexpected(err) => ProtonError::Unexpected(err.into()),
             RealProtonMailError::Reason(reason) => ProtonError::from(reason),
+            RealProtonMailError::NonProcessableActions => ProtonError::NonProcessableActions,
         }
     }
 }

@@ -37,6 +37,8 @@ pub enum ProtonMailError {
     Network,
     /// Something unexpected happened
     Unexpected(Unexpected),
+    /// One or more actions can not be processed.
+    NonProcessableActions,
 }
 
 /// When `proton_mail_error_log` feature is enabled, this guard is used to prevent
@@ -269,6 +271,7 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::Rsvp(_) => Self::Unexpected(Unexpected::Unknown),
             MailContextError::MailScroller(mail_scroller_error) => Self::from(mail_scroller_error),
             MailContextError::UrlParseError(_) => Self::Unexpected(Unexpected::Internal),
+            MailContextError::NonProcessableActions(_) => Self::NonProcessableActions,
         }
     }
 }
