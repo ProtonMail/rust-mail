@@ -279,6 +279,18 @@ impl MailScroller {
         Ok(())
     }
 
+    pub fn get_items(&self) -> Result<(), MailContextError> {
+        let uuid = Uuid::new_v4();
+        tracing::trace!("Sending `GetItems` command with uuid: {uuid}");
+        self.ordered_command
+            .send(ScrollerOrderedCommand::GetItems(
+                ScrollerSource::ScrollEvent(uuid),
+            ))
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to send get items command")))?;
+
+        Ok(())
+    }
+
     pub fn change_filter(&self, filter: ReadFilter) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
         tracing::trace!("Sending `ChangeFilter` command with uuid: {uuid}");
@@ -517,6 +529,14 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send force refresh update: {e:?}"))?;
                 }
             }
+            ScrollerOrderedCommand::GetItems(src) => {
+                let items_update = self.get_items(src.clone());
+
+                self.update
+                    .send_async(items_update)
+                    .await
+                    .map_err(|e| anyhow!("Failed to send get items update: {e:?}"))?;
+            }
             ScrollerOrderedCommand::ChangeFilter { src, filter } => {
                 let result = self
                     .change_filter(src.clone(), filter)
@@ -684,6 +704,11 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         };
 
         Ok(update)
+    }
+
+    fn get_items(&self, src: ScrollerSource) -> ScrollerUpdate<T::Item> {
+        let items = self.items.clone();
+        ScrollerUpdate::ReplaceFrom { src, idx: 0, items }
     }
 
     #[tracing::instrument(skip_all, fields(src=%src))]
@@ -861,6 +886,7 @@ enum ScrollerOrderedCommand {
     FetchMore(ScrollerSource),
     Refresh(ScrollerSource),
     ForceRefresh(ScrollerSource),
+    GetItems(ScrollerSource),
     ChangeFilter {
         src: ScrollerSource,
         filter: ReadFilter,
