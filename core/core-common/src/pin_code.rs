@@ -58,6 +58,7 @@ impl PinCode {
 
     // Note that this method does not verify old PIN if existed - it is up to
     // client to make that verification.
+    #[instrument(skip_all)]
     pub async fn set(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
         info!("Setting pin");
 
@@ -107,6 +108,7 @@ impl PinCode {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     pub async fn verify(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
         info!("Verifying pin");
 
@@ -168,6 +170,7 @@ impl PinCode {
         }
     }
 
+    #[instrument(skip_all)]
     pub async fn delete(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
         info!("Deleting pin");
 
@@ -175,6 +178,7 @@ impl PinCode {
         Self::force_delete(ctx).await
     }
 
+    #[instrument(skip_all)]
     pub(crate) async fn force_delete(ctx: Arc<Context>) -> Result<(), PinError> {
         let mut tether = ctx.account_stash().connection();
         let mut app_settings = AppSettings::get_or_default(&tether).await;

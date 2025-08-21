@@ -507,30 +507,24 @@ impl MailContext {
         )
     }
 
-    /// Verify the PIN code.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the PIN code is incorrect.
     pub async fn verify_pin_code(self: &Arc<Self>, pin: Vec<u32>) -> MailContextResult<()> {
         self.handle_pin_code_action(pin, PinCode::verify).await
     }
 
-    /// Delete the PIN code.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the PIN code is incorrect.
     pub async fn delete_pin_code(self: &Arc<Self>, pin: Vec<u32>) -> MailContextResult<()> {
         self.handle_pin_code_action(pin, PinCode::delete).await
     }
 
-    async fn handle_pin_code_action<F: Future<Output = Result<(), PinError>>>(
+    async fn handle_pin_code_action<F>(
         self: &Arc<Self>,
         pin: Vec<u32>,
         action: impl FnOnce(Arc<Context>, Vec<u32>) -> F,
-    ) -> MailContextResult<()> {
+    ) -> MailContextResult<()>
+    where
+        F: Future<Output = Result<(), PinError>>,
+    {
         let ctx = self.core_context.clone();
+
         match action(ctx, pin).await {
             Err(PinError::TooManyAttempts) => {
                 let mut user_ctxs = self.get_all_logged_in_user_ctx().await?;

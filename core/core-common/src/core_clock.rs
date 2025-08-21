@@ -7,6 +7,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
+use tracing::{debug, instrument};
 
 #[derive(Debug, Default)]
 pub struct CoreClock {
@@ -36,17 +37,20 @@ impl CoreClock {
         self.pin_code.elapsed()
     }
 
+    #[instrument(skip_all)]
     pub fn auto_lock_tick(&self) {
         self.auto_lock.tick();
     }
 
+    #[instrument(skip_all)]
     pub fn pin_code_tick(&self) {
         self.pin_code.tick();
-        self.pin_code.accessed.store(true, Ordering::Release);
+        self.pin_code.mark();
     }
 
+    #[instrument(skip_all)]
     pub fn auto_lock_accessed(&self) {
-        self.auto_lock.accessed.store(true, Ordering::Release);
+        self.auto_lock.mark();
     }
 }
 
@@ -62,19 +66,30 @@ impl CoreClock {
 }
 
 #[derive(Debug, Default)]
-pub struct ActivityClock {
+struct ActivityClock {
     last_activity: Mutex<Option<Instant>>,
     accessed: AtomicBool,
 }
 
 impl ActivityClock {
-    pub fn tick(&self) {
-        if self.accessed.swap(false, Ordering::Acquire) {
+    fn tick(&self) {
+        let updated = if self.accessed.swap(false, Ordering::Acquire) {
             *self.last_activity.lock() = Some(Instant::now());
-        }
+            true
+        } else {
+            false
+        };
+
+        debug!(?updated, "tick()");
     }
 
-    pub fn elapsed(&self) -> Option<Duration> {
+    fn mark(&self) {
+        debug!("mark()");
+
+        self.accessed.store(true, Ordering::Release);
+    }
+
+    fn elapsed(&self) -> Option<Duration> {
         self.last_activity.lock().map(|time| time.elapsed())
     }
 

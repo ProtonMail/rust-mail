@@ -7,6 +7,7 @@ use stash::exports::{
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, StashError, Tether};
+use tracing::{debug, instrument};
 
 use crate::Context;
 use crate::pin_code::PinCode;
@@ -63,12 +64,17 @@ impl AppSettings {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn should_auto_lock(&self, ctx: &Context) -> bool {
+        debug!(protection=?self.protection, "Checking auto-lock");
+
         if self.protection.is_unset() {
             false
         } else {
             let lock_elapsed = ctx.clock().auto_lock_elapsed();
             let should_lock = self.auto_lock.should_autolock(lock_elapsed);
+
+            debug!(?should_lock);
 
             // If the app is not supposed to lock, we need to mark that the auto lock has been accessed
             // so that the timer is reset. So that the next time the app is opened, it will not lock.
