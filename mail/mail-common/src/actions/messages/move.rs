@@ -5,7 +5,7 @@ use crate::models::Message;
 use anyhow::Context;
 use itertools::Itertools;
 use proton_action_queue::action::{
-    Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
+    Action, ActionDependencyKeys, Type, VersionConverter, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
 use proton_action_queue::enqueue;
@@ -17,10 +17,22 @@ use stash::stash::{Bond, Tether};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Move(pub ActionMoveData<Message>);
 
+impl VersionConverter for Move {
+    type Output = Self;
+
+    fn convert(
+        old_version: u32,
+        _: u32,
+        data: &[u8],
+    ) -> proton_action_queue::action::FactoryResult<Self::Output> {
+        ActionMoveData::convert(old_version, data).map(Move)
+    }
+}
+
 impl Action for Move {
     const TYPE: Type = Type("move_messages");
-    const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
+    const VERSION: u32 = 2;
+    type VersionConverter = Self;
     type Handler = MoveHandler;
     type RemoteOutput = ();
     type LocalOutput = Self;
