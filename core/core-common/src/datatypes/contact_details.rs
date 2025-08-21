@@ -19,7 +19,7 @@ use crate::UserContext;
 use crate::datatypes::{AvatarInformation, LocalContactId};
 use crate::models::Contact;
 use crate::utils::MapVec as _;
-use proton_core_api::services::proton::PrivateEmail;
+use proton_core_api::services::proton::{ContactId, PrivateEmail};
 use proton_crypto::new_pgp_provider;
 use url::Url;
 
@@ -33,6 +33,7 @@ use proton_vcard::values::uri::MaybeUri;
 pub struct InspectableContactDetails {
     /// Clients want this for consistency
     pub id: LocalContactId,
+    pub remote_id: Option<ContactId>,
     pub avatar_information: AvatarInformation,
     pub extended_name: ExtendedName,
     /// These are sorted per display order
@@ -84,6 +85,7 @@ impl InspectableContactDetails {
 
     fn get_from_contact_basic(contact: Contact) -> Self {
         let id = contact.id();
+        let remote_id = contact.remote_id;
         let emails = contact
             .contact_emails
             .into_iter()
@@ -95,6 +97,7 @@ impl InspectableContactDetails {
 
         Self {
             id,
+            remote_id,
             avatar_information: AvatarInformation::from(&contact.name),
             extended_name: ExtendedName {
                 first: Some(contact.name),
@@ -442,6 +445,7 @@ pub(crate) mod test {
     use bytes::Buf as _;
     use ical::VcardParser;
     use insta::assert_snapshot;
+    use proton_core_api::services::proton::ContactId;
     use proton_vcard::vcard::VCard;
 
     use super::*;
@@ -472,6 +476,7 @@ pub(crate) mod test {
         let vcard = VCard::from_ical_contact(c).unwrap();
         let contact = Contact {
             local_id: Some(LocalContactId(42)),
+            remote_id: Some(ContactId::new("remote_id_42".to_string())),
             ..Contact::test_default()
         };
         Snapshot {
