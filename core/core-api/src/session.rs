@@ -2,6 +2,7 @@ use derive_more::{Debug, Deref};
 use muon::client::InfoProvider;
 use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
 use muon::common::ParseEndpointErr;
+use muon::rt::DynResolver;
 use proton_task_service::SpawnerRef;
 use std::borrow::Borrow;
 use std::fmt::Formatter;
@@ -88,6 +89,9 @@ pub struct Config {
 
     /// A proxy to use.
     pub proxy: Option<String>,
+
+    /// A resolver to use.
+    pub resolver: Option<DynResolver>,
 }
 
 impl Config {
@@ -132,6 +136,7 @@ impl Default for Config {
             user_agent: None,
             env_id: EnvId::new_prod(),
             proxy: None,
+            resolver: None,
         }
     }
 }

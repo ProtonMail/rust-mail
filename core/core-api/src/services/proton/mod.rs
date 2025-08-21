@@ -135,6 +135,10 @@ pub async fn build<S: Store>(
         .layer_back(DisplayLogger::debug())
         .spawner(Tokio::spawner());
 
+    if let Some(resolver) = config.resolver.clone() {
+        builder = builder.resolver(resolver);
+    }
+
     if let Some(proxy) = &config.proxy {
         builder = builder.proxy(ConstProxy::new(proxy.parse()?));
     }

@@ -52,6 +52,9 @@ mod contact_list;
 mod issue_report;
 mod timestamp;
 
+use crate::core::resolver::Resolver;
+use crate::core::resolver::ResolverImpl;
+
 pub use self::account_details::*;
 pub use self::app_settings::*;
 pub use self::avatar::*;
@@ -60,6 +63,7 @@ pub use self::contact_list::*;
 pub use self::issue_report::*;
 pub use self::timestamp::*;
 use itertools::Itertools;
+use muon::common::IntoDyn;
 use muon::common::ParseEndpointErr;
 use muon::env::EnvId;
 use proton_core_api::session::EnvIdExt;
@@ -95,6 +99,7 @@ use proton_mail_common::datatypes::{LocalAttachmentId, LocalConversationId, Loca
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
+use std::sync::Arc;
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 //  ENUMS
 //==============================================================================
@@ -826,7 +831,7 @@ pub enum ApiEnvId {
 }
 
 /// The configuration for the Proton API service.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+#[derive(Clone, Debug, UniffiRecord)]
 pub struct ApiConfig {
     /// TODO: Document this field.
     pub user_agent: String,
@@ -836,6 +841,9 @@ pub struct ApiConfig {
 
     /// Proxy to use.
     pub proxy: Option<String>,
+
+    /// A resolver to use.
+    pub resolver: Option<Arc<dyn Resolver>>,
 }
 
 impl Default for ApiConfig {
@@ -844,6 +852,7 @@ impl Default for ApiConfig {
             user_agent: String::from("NoClient/0.1.0"),
             env_id: ApiEnvId::Prod,
             proxy: None,
+            resolver: None,
         }
     }
 }
@@ -860,12 +869,11 @@ impl ApiConfig {
             ApiEnvId::Custom(server) => EnvId::new_custom_url(server)?,
         };
 
-        let details = RealAppDetails::from(details);
-
         Ok(RealApiConfig {
-            app_details: details,
+            app_details: RealAppDetails::from(details),
             user_agent: Some(self.user_agent),
             proxy: self.proxy,
+            resolver: self.resolver.map(|r| ResolverImpl::new(r).into_dyn()),
             env_id,
         })
     }

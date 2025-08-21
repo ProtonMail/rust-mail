@@ -4,6 +4,7 @@ pub mod device;
 mod keychain;
 pub mod observability;
 mod report_an_issue;
+pub mod resolver;
 mod session;
 pub mod validation;
 pub mod verification;
