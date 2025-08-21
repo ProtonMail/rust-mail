@@ -1225,6 +1225,16 @@ impl MailSession {
             })
             .map(|v| v as u64)
     }
+
+    /// Is the Unleash feature enabled.
+    /// Currently:
+    /// * Returns None if feature is not found
+    /// * Returns Some(true) if feature is present
+    ///
+    /// NOTE: It never returns Some(false) as in this stage of the implementation.
+    pub async fn is_feature_enabled(&self, feature_id: String) -> Option<bool> {
+        self.mail_ctx.feature_flags().get(&feature_id).await
+    }
 }
 
 impl MailSession {

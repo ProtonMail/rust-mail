@@ -1,11 +1,14 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use derive_more::derive::TryFrom;
+use serde::{Deserialize, Serialize};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
+use stash::sql_using_serde;
 use stash::stash::{Bond, StashError, Tether};
 
 use crate::Context;
@@ -38,6 +41,9 @@ pub struct AppSettings {
     #[DbField]
     #[default = true]
     pub use_alternative_routing: bool,
+
+    #[DbField]
+    pub app_features: AppFeatures,
 }
 
 impl ModelHooks for AppSettings {
@@ -306,6 +312,13 @@ impl ToSql for SingleEntryId {
         ))))
     }
 }
+
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AppFeatures {
+    pub features: BTreeMap<String, bool>,
+}
+
+sql_using_serde!(AppFeatures);
 
 #[cfg(test)]
 mod tests {

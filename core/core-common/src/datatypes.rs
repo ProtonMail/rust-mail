@@ -1746,7 +1746,7 @@ mod tests {
             Self {
                 platform: "ios".to_string(),
                 product: "mail".to_string(),
-                version: "0.0.1".to_string(),
+                version: "7.0.1".to_string(),
             }
         }
     }
