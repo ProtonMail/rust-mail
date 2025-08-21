@@ -60,7 +60,7 @@ use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{MapToSql as _, placeholders, placeholders_n};
 use std::collections::hash_map::Entry as HmEntry;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::ops::AddAssign;
 use std::sync::Arc;
@@ -543,8 +543,24 @@ impl Conversation {
     ///
     pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
+            if let Some(mut existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 if existing.is_known && !existing.labels.is_empty() {
+                    let existing_labels = existing
+                        .labels
+                        .iter()
+                        .map(|l| l.remote_label_id.clone())
+                        .collect::<HashSet<_>>();
+
+                    for label in self.labels.iter() {
+                        if !existing_labels.contains(&label.remote_label_id) {
+                            debug!(
+                                "Adding missing label {:?} to conversation {:?}",
+                                label.remote_label_id, existing.local_id
+                            );
+                            existing.labels.push(label.clone());
+                        }
+                    }
+
                     *self = existing;
 
                     tracing::trace!(
