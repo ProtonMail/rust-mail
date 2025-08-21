@@ -534,8 +534,10 @@ impl Conversation {
     /// is required due to multiprocess nature of mail application and the possibility to
     /// view mailboxes without interfering with processes triggered by the user.
     ///
-    /// However it will replace existing conversation with API data if
-    /// existing conversation is not fully known yet.
+    /// If the conversation is known and has new labels, it will update the conversation
+    /// by adding the new labels to the existing labels.
+    ///
+    /// If the conversation is not known, it will replace existing conversation with API data.
     ///
     /// # Errors
     ///
@@ -544,38 +546,38 @@ impl Conversation {
     pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(mut existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                if existing.is_known && !existing.labels.is_empty() {
-                    let existing_labels = existing
-                        .labels
-                        .iter()
-                        .map(|l| l.remote_label_id.clone())
-                        .collect::<HashSet<_>>();
+                let existing_labels = existing
+                    .labels
+                    .iter()
+                    .map(|l| l.remote_label_id.clone())
+                    .collect::<HashSet<_>>();
+                let new_labels = self
+                    .labels
+                    .iter()
+                    .filter(|l| !existing_labels.contains(&l.remote_label_id))
+                    .cloned()
+                    .collect_vec();
+                let no_new_labels = new_labels.is_empty();
+                existing.labels.extend(new_labels);
 
-                    for label in self.labels.iter() {
-                        if !existing_labels.contains(&label.remote_label_id) {
-                            debug!(
-                                "Adding missing label {:?} to conversation {:?}",
-                                label.remote_label_id, existing.local_id
-                            );
-                            existing.labels.push(label.clone());
-                        }
-                    }
-
+                if existing.is_known {
                     *self = existing;
 
-                    tracing::trace!(
+                    if no_new_labels {
+                        tracing::trace!(
+                            remote_id = ?self.remote_id,
+                            "Skipping saving conversation, we already have it in the local DB"
+                        );
+                        return Ok(());
+                    }
+                } else {
+                    // Otherwise, update the unknown conversation with API data
+                    self.local_id = existing.local_id;
+                    tracing::debug!(
                         remote_id = ?self.remote_id,
-                        "Skipping saving conversation, we already have it in the local DB"
+                        "Updating unknown conversation with API data"
                     );
-                    return Ok(());
                 }
-
-                // Otherwise, update the unknown conversation with API data
-                self.local_id = existing.local_id;
-                tracing::debug!(
-                    remote_id = ?self.remote_id,
-                    "Updating unknown conversation with API data"
-                );
             }
         }
 

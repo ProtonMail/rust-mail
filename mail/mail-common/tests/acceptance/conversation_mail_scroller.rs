@@ -27,7 +27,9 @@ use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter},
     models::{Conversation, ConversationCounters, ConversationScrollData},
 };
-use proton_mail_common::{conv_id, lbl_id, test_utils::test_context::MailTestContext};
+use proton_mail_common::{
+    api_conversation, conv_id, conversation, lbl_id, test_utils::test_context::MailTestContext,
+};
 use stash::orm::Model;
 use stash::stash::StashError;
 use std::{collections::HashMap, time::Duration};
@@ -1335,6 +1337,72 @@ pub async fn mock_not_responsive_api(ctx: &MailTestContext) {
         .respond_with(ResponseTemplate::new(500))
         .mount(ctx.mock_server())
         .await;
+}
+
+#[tokio::test]
+async fn test_conversation_mail_scroller_handles_create_or_get_local_missing_labels() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    // Create initial conversation in inbox only
+    const INBOX_LABEL_ID: &str = "0";
+    const CONVERSATION_REMOTE_ID: &str = "test_conv_123";
+
+    // Create initial conversation in inbox only
+    let mut inbox_data = hash_map! {
+        vec![INBOX_LABEL_ID]: vec![conversation!(
+            remote_id: conv_id!(CONVERSATION_REMOTE_ID),
+            is_known: true
+        )]
+    };
+    inbox_data.save_to_database(&mut tether).await;
+
+    // Create API conversation with both labels
+    let mut conv = api_conversation!(id: CONVERSATION_REMOTE_ID.into());
+    let inbox_label = ApiConversationLabel {
+        id: LabelId::inbox(),
+        ..ApiConversationLabel::test_default()
+    };
+    let archive_label = ApiConversationLabel {
+        id: LabelId::archive(),
+        ..ApiConversationLabel::test_default()
+    };
+    conv.labels = vec![inbox_label, archive_label];
+    // 1 is first page
+    // then on fetch_more we will request next page
+    ctx.mock_get_conversations(vec![conv], 5).await;
+    ctx.catch_all().await;
+
+    // Set up scroller for inbox
+    let page_size = 5;
+    let unread = ReadFilter::All;
+    let inbox_local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut inbox_scroller =
+        TestScroller::conversations(&user_ctx, inbox_local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    // Verify conversation appears in inbox after fetching from API
+    let initial_items = inbox_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(initial_items.len(), 0);
+    // Wait for the automatic refresh to update conversation labels
+    let items = inbox_scroller.wait_for_update().await.unwrap().unwrap();
+    // Check that the conversation is now in the scroller
+    assert_eq!(items.len(), 1);
+    assert_eq!(
+        items[0].remote_id.as_ref().unwrap().to_string(),
+        CONVERSATION_REMOTE_ID
+    );
+    // Check that the conversation has now both labels
+    let conv =
+        Conversation::find_by_remote_id(ConversationId::from(CONVERSATION_REMOTE_ID), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(conv.labels.len(), 2);
+    assert_eq!(conv.labels[0].remote_label_id, Some(LabelId::inbox()));
+    assert_eq!(conv.labels[1].remote_label_id, Some(LabelId::archive()));
 }
 
 #[function_name::named]
