@@ -7,7 +7,7 @@ use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::{Conversation, ConversationCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, Handler, Type, VersionConverter, WriterGuard,
 };
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
@@ -19,10 +19,21 @@ use stash::stash::{Bond, Tether};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LabelAs(pub LabelAsData<Conversation>);
 
+impl VersionConverter for LabelAs {
+    type Output = Self;
+
+    fn convert(
+        old_version: u32,
+        _: u32,
+        data: &[u8],
+    ) -> proton_action_queue::action::FactoryResult<Self::Output> {
+        LabelAsData::convert(old_version, data).map(LabelAs)
+    }
+}
 impl Action for LabelAs {
     const TYPE: Type = Type("label_conversation_as");
-    const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
+    const VERSION: u32 = 2;
+    type VersionConverter = Self;
     type Handler = LabelAsHandler;
     type RemoteOutput = ();
     type LocalOutput = bool;

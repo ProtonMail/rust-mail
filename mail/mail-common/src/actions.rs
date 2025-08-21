@@ -614,6 +614,33 @@ where
 
         keys.build()
     }
+
+    pub fn convert(old_version: u32, data: &[u8]) -> action::FactoryResult<Self> {
+        #[allow(dead_code)]
+        #[derive(Deserialize)]
+        struct OldAction<T: ConversationOrMessage> {
+            source_label_id: LocalLabelId,
+            destination_label_id: LocalLabelId,
+            target_ids: Vec<T::IdType>,
+        }
+
+        match old_version {
+            1 => {
+                let data = proton_action_queue::action::deserialize::<OldAction<T>>(data)?;
+
+                let mut sources = HashMap::new();
+                sources.insert(data.source_label_id, data.target_ids);
+                Ok(Self {
+                    destination: data.destination_label_id,
+                    sources,
+                    marked_read: vec![],
+                    removed_labels: vec![],
+                })
+            }
+            2 => Ok(proton_action_queue::action::deserialize::<Self>(data)?),
+            other_version => Err(FactoryError::InvalidVersion(other_version)),
+        }
+    }
 }
 
 #[allow(async_fn_in_trait, reason = "not used across threads")]
@@ -917,6 +944,46 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
 
     pub fn is_empty(&self) -> bool {
         self.add.is_empty() && self.remove.is_empty()
+    }
+
+    pub fn convert(old_version: u32, data: &[u8]) -> action::FactoryResult<Self> {
+        #[allow(dead_code)]
+        #[derive(Deserialize)]
+        struct OldAction<T: ConversationOrMessage> {
+            target_ids: Vec<T::IdType>,
+            added_labels: HashMap<T::IdType, HashSet<LocalLabelId>>,
+            removed_labels: HashMap<T::IdType, HashSet<LocalLabelId>>,
+            source_label_id: LocalLabelId,
+        }
+
+        match old_version {
+            1 => {
+                let data = proton_action_queue::action::deserialize::<OldAction<T>>(data)?;
+
+                let add = data
+                    .added_labels
+                    .into_iter()
+                    .flat_map(|(id, labels)| {
+                        labels.into_iter().map(move |label| LabelPair { label, id })
+                    })
+                    .collect();
+                let remove = data
+                    .removed_labels
+                    .into_iter()
+                    .flat_map(|(id, labels)| {
+                        labels.into_iter().map(move |label| LabelPair { label, id })
+                    })
+                    .collect();
+
+                Ok(Self {
+                    source_label_id: data.source_label_id,
+                    add,
+                    remove,
+                })
+            }
+            2 => Ok(proton_action_queue::action::deserialize::<Self>(data)?),
+            other_version => Err(FactoryError::InvalidVersion(other_version)),
+        }
     }
 }
 
