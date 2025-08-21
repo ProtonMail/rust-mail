@@ -3,7 +3,7 @@ use datatypes::{Fido2RequestFfi, Fido2ResponseFfi, MigrationData};
 use proton_account_api::login as login_api;
 use proton_account_api::login::state::want_qr_confirmation::ProcessTargetDeviceQrError as RealProcessTargetDeviceQrError;
 use proton_account_api::responses as responses_api;
-use proton_core_api::{consts::CoreBundle, service::ApiServiceError};
+use proton_core_api::service::ApiServiceError;
 use proton_core_common::post_login_check::PostLoginValidationError as RealPostLoginValidationError;
 use std::sync::Arc;
 use tokio::{sync::Mutex, task::JoinError};
@@ -431,12 +431,7 @@ impl From<login_api::LoginError> for LoginError {
             | login_api::LoginError::ServerProof(..)
             | login_api::LoginError::SrpProof(..) => LoginError::InvalidCredentials,
 
-            login_api::LoginError::FlowTotp(ApiServiceError::UnprocessableEntity(
-                _,
-                Some(info),
-            )) if info.code == CoreBundle::Auth2faInputInvalid as u32
-                || info.code == CoreBundle::Auth2faTokenInvalid as u32 =>
-            {
+            login_api::LoginError::FlowTotp(ApiServiceError::UnprocessableEntity(..)) => {
                 LoginError::Incorrect2FACode
             }
 
