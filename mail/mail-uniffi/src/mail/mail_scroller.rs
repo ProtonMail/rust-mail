@@ -294,6 +294,17 @@ impl ConversationScroller {
             .map_err(Into::into)
     }
 
+    /// Retrieves the current items in the scroller, the items will be returned
+    /// in the callback with the `ReplaceFrom { idx: 0, items }` update.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn get_items(self: Arc<Self>) -> Result<(), MailScrollerError> {
+        self.scroller
+            .get_items()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     /// Changes the filter of the scroller.
     ///
     /// The call is non-blocking and returns immediately.
@@ -389,6 +400,17 @@ impl MessageScroller {
     pub fn change_filter(self: Arc<Self>, filter: ReadFilter) -> Result<(), MailScrollerError> {
         self.scroller
             .change_filter(filter.into())
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
+    /// Retrieves the current items in the scroller, the items will be returned
+    /// in the callback with the `ReplaceFrom { idx: 0, items }` update.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn get_items(self: Arc<Self>) -> Result<(), MailScrollerError> {
+        self.scroller
+            .get_items()
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
