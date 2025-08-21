@@ -2,7 +2,6 @@ use proton_core_common::utils::MapVec as _;
 use proton_mail_common::actions::{
     CustomFolderAction as RealCustomFolderAction,
     MovableSystemFolderAction as RealMovableSystemFolderAction, MoveAction as RealMoveAction,
-    MoveItemAction as RealMoveItemAction,
 };
 
 use crate::mail::datatypes::system_folder::MovableSystemFolder;
@@ -69,30 +68,6 @@ impl From<RealCustomFolderAction> for CustomFolderAction {
             name: value.name.clone(),
             color: value.color.map(Into::into),
             children: value.children.map_vec(),
-        }
-    }
-}
-
-/// Represent all the actions to move a message.
-/// Either move to a system folder or open a dialog to choose a custom folder.
-///
-#[derive(Debug, Clone, PartialEq, UniffiEnum)]
-pub enum MoveItemAction {
-    MoveToSystemFolder(MovableSystemFolderAction),
-    MoveTo,
-    NotSpam(MovableSystemFolderAction),
-    PermanentDelete,
-}
-
-impl From<RealMoveItemAction> for MoveItemAction {
-    fn from(value: RealMoveItemAction) -> Self {
-        match value {
-            RealMoveItemAction::MoveToSystemFolder(action) => {
-                Self::MoveToSystemFolder(action.into())
-            }
-            RealMoveItemAction::MoveTo => Self::MoveTo,
-            RealMoveItemAction::NotSpam(action) => Self::NotSpam(action.into()),
-            RealMoveItemAction::PermanentDelete => Self::PermanentDelete,
         }
     }
 }

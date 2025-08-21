@@ -13,8 +13,8 @@ use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, MobileActionsResult, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
     AllConversationActions, AllListActions, AutoDeleteBanner, Conversation,
-    ConversationActionSheet, ConversationAvailableActions, ConversationSearchOptions,
-    LabelAsAction, LabelAsOutput, Message, MobileAction, MoveAction, SnoozeActions, Undo,
+    ConversationActionSheet, ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message,
+    MobileAction, MoveAction, SnoozeActions, Undo,
 };
 use crate::mail::mail_scroller::{
     ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
@@ -70,38 +70,6 @@ pub async fn delete_conversations(
     .await
     .map_err(ActionError::from)
     .into()
-}
-
-/// Returns available actions for conversations.
-/// Any action returned here should reflect the display needs.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
-#[uniffi_export]
-pub async fn available_actions_for_conversations(
-    mailbox: Arc<Mailbox>,
-    ids: Vec<Id>,
-) -> Result<ConversationAvailableActions, ActionError> {
-    let stash = mailbox.stash()?;
-    uniffi_async(async move {
-        let view = mailbox.mbox().label_id();
-        let tether = stash.connection();
-        let view = RealLabel::load(view, &tether)
-            .await?
-            .ok_or_else(|| RealProtonMailError::reason(RealActionErrorReason::UnknownLabel))?;
-        let actions = RealConversation::available_actions(
-            view,
-            ids.into_iter().map_into().collect(),
-            &tether,
-        )
-        .await?;
-
-        Result::<_, RealProtonMailError>::Ok(ConversationAvailableActions::from(actions))
-    })
-    .await
-    .map_err(ActionError::from)
 }
 
 /// Returns available label_as actions for conversations.

@@ -103,7 +103,7 @@ use proton_mail_api::services::proton::response_data::{
     MessageAttachmentInfo as ApiMessageAttachmentInfo, MessageButtons as ApiMessageButtons,
     MessageCount as ApiMessageCount, MessageFlags as ApiMessageFlags,
     MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
-    MimeType as ApiMimeType, MobileSetting as ApiMobileSetting,
+    MimeType as ApiMimeType, MobileAction as ApiMobileAction, MobileSetting as ApiMobileSetting,
     MobileSettings as ApiMobileSettings, NextMessageOnMove as ApiNextMessageOnMove,
     PgpScheme as ApiPgpScheme, PmSignature as ApiPmSignature, ShowImages as ApiShowImages,
     ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
@@ -1812,7 +1812,7 @@ impl ToSql for MessageFlags {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MobileSetting {
     /// TODO: Document this field.
-    pub actions: Vec<String>,
+    pub actions: Vec<MobileAction>,
 
     /// TODO: Document this field.
     pub is_custom: bool,
@@ -1821,7 +1821,7 @@ pub struct MobileSetting {
 impl From<ApiMobileSetting> for MobileSetting {
     fn from(value: ApiMobileSetting) -> Self {
         Self {
-            actions: value.actions,
+            actions: value.actions.into_iter().map(Into::into).collect(),
             is_custom: value.is_custom,
         }
     }
@@ -1830,7 +1830,7 @@ impl From<ApiMobileSetting> for MobileSetting {
 impl From<MobileSetting> for ApiMobileSetting {
     fn from(value: MobileSetting) -> Self {
         Self {
-            actions: value.actions,
+            actions: value.actions.into_iter().map(Into::into).collect(),
             is_custom: value.is_custom,
         }
     }
@@ -1853,6 +1853,7 @@ pub enum MobileAction {
     Reply,
     ReportPhishing,
     SaveAttachments,
+    SavePDF,
     SenderEmails,
     Snooze,
     Spam,
@@ -1862,7 +1863,62 @@ pub enum MobileAction {
     Trash,
     ViewHeaders,
     ViewHTML,
+    #[serde(untagged)]
     Other(String),
+}
+
+impl From<ApiMobileAction> for MobileAction {
+    fn from(value: ApiMobileAction) -> Self {
+        match value {
+            ApiMobileAction::Archive => Self::Archive,
+            ApiMobileAction::Forward => Self::Forward,
+            ApiMobileAction::Label => Self::Label,
+            ApiMobileAction::Move => Self::Move,
+            ApiMobileAction::Print => Self::Print,
+            ApiMobileAction::Remind => Self::Remind,
+            ApiMobileAction::Reply => Self::Reply,
+            ApiMobileAction::ReportPhishing => Self::ReportPhishing,
+            ApiMobileAction::SaveAttachments => Self::SaveAttachments,
+            ApiMobileAction::SavePDF => Self::SavePDF,
+            ApiMobileAction::SenderEmails => Self::SenderEmails,
+            ApiMobileAction::Snooze => Self::Snooze,
+            ApiMobileAction::Spam => Self::Spam,
+            ApiMobileAction::ToggleLight => Self::ToggleLight,
+            ApiMobileAction::ToggleRead => Self::ToggleRead,
+            ApiMobileAction::ToggleStar => Self::ToggleStar,
+            ApiMobileAction::Trash => Self::Trash,
+            ApiMobileAction::ViewHeaders => Self::ViewHeaders,
+            ApiMobileAction::ViewHTML => Self::ViewHTML,
+            ApiMobileAction::Unknown => Self::Other("unknown".to_string()),
+        }
+    }
+}
+
+impl From<MobileAction> for ApiMobileAction {
+    fn from(value: MobileAction) -> Self {
+        match value {
+            MobileAction::Archive => Self::Archive,
+            MobileAction::Forward => Self::Forward,
+            MobileAction::Label => Self::Label,
+            MobileAction::Move => Self::Move,
+            MobileAction::Print => Self::Print,
+            MobileAction::Remind => Self::Remind,
+            MobileAction::Reply => Self::Reply,
+            MobileAction::ReportPhishing => Self::ReportPhishing,
+            MobileAction::SaveAttachments => Self::SaveAttachments,
+            MobileAction::SavePDF => Self::SavePDF,
+            MobileAction::SenderEmails => Self::SenderEmails,
+            MobileAction::Snooze => Self::Snooze,
+            MobileAction::Spam => Self::Spam,
+            MobileAction::ToggleLight => Self::ToggleLight,
+            MobileAction::ToggleRead => Self::ToggleRead,
+            MobileAction::ToggleStar => Self::ToggleStar,
+            MobileAction::Trash => Self::Trash,
+            MobileAction::ViewHeaders => Self::ViewHeaders,
+            MobileAction::ViewHTML => Self::ViewHTML,
+            MobileAction::Other(_) => Self::Unknown, // Unknown actions become Unknown in API
+        }
+    }
 }
 
 impl MobileAction {
@@ -1952,6 +2008,7 @@ impl MobileAction {
             Spam,
             Reply,
             Forward,
+            SavePDF,
             Print,
             ReportPhishing,
             ViewHeaders,
@@ -1961,81 +2018,13 @@ impl MobileAction {
 
     fn toolbar_actions_from_setting(
         mobile_setting: &MobileSetting,
-        toolbar_name: &str,
+        _toolbar_name: &str,
     ) -> Vec<MobileAction> {
         if mobile_setting.is_custom {
-            match Self::actions_from_strings(&mobile_setting.actions) {
-                Ok(actions) => actions,
-                Err(error) => {
-                    error!("Error parsing custom {} actions: {:?}", toolbar_name, error);
-                    Self::default_chosen_actions()
-                }
-            }
+            mobile_setting.actions.clone()
         } else {
             Self::default_chosen_actions()
         }
-    }
-
-    fn actions_from_strings(actions: &[String]) -> Result<Vec<MobileAction>, AppError> {
-        actions
-            .iter()
-            .map(|a| MobileAction::from_str(a))
-            .collect::<Result<Vec<_>, _>>()
-    }
-}
-
-impl FromStr for MobileAction {
-    type Err = AppError;
-
-    fn from_str(value: &str) -> Result<Self, AppError> {
-        match value {
-            "archive" => Ok(Self::Archive),
-            "forward" => Ok(Self::Forward),
-            "label" => Ok(Self::Label),
-            "move" => Ok(Self::Move),
-            "print" => Ok(Self::Print),
-            "remind" => Ok(Self::Remind),
-            "reply" => Ok(Self::Reply),
-            "report_phishing" => Ok(Self::ReportPhishing),
-            "save_attachments" => Ok(Self::SaveAttachments),
-            "snooze" => Ok(Self::Snooze),
-            "sender_emails" => Ok(Self::SenderEmails),
-            "spam" => Ok(Self::Spam),
-            "toggle_light" => Ok(Self::ToggleLight),
-            "toggle_read" => Ok(Self::ToggleRead),
-            "toggle_star" => Ok(Self::ToggleStar),
-            "trash" => Ok(Self::Trash),
-            "view_headers" => Ok(Self::ViewHeaders),
-            "view_html" => Ok(Self::ViewHTML),
-            s => Ok(Self::Other(s.to_owned())),
-        }
-    }
-}
-
-impl std::fmt::Display for MobileAction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Self::Archive => "archive",
-            Self::Forward => "forward",
-            Self::Label => "label",
-            Self::Move => "move",
-            Self::Print => "print",
-            Self::Remind => "remind",
-            Self::Reply => "reply",
-            Self::ReportPhishing => "report_phishing",
-            Self::SaveAttachments => "save_attachments",
-            Self::SenderEmails => "sender_emails",
-            Self::Snooze => "snooze",
-            Self::Spam => "spam",
-            Self::ToggleLight => "toggle_light",
-            Self::ToggleRead => "toggle_read",
-            Self::ToggleStar => "toggle_star",
-            Self::Trash => "trash",
-            Self::ViewHeaders => "view_headers",
-            Self::ViewHTML => "view_html",
-            Self::Other(s) => s,
-        };
-        write!(f, "{s}")
     }
 }
 

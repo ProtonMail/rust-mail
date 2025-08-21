@@ -1,5 +1,6 @@
 use proton_mail_api::services::proton::response_data::{
-    MobileSetting as ApiMobileSetting, MobileSettings as ApiMobileSettings,
+    MobileAction as ApiMobileAction, MobileSetting as ApiMobileSetting,
+    MobileSettings as ApiMobileSettings,
 };
 use proton_mail_api::services::proton::responses::PutMobileSettingsResponse;
 use proton_mail_common::datatypes::MobileAction;
@@ -47,10 +48,10 @@ async fn test_update_list_toolbar_actions() {
     let expected_api_mobile_settings = ApiMobileSettings {
         list_toolbar: ApiMobileSetting {
             actions: vec![
-                "toggle_read".to_string(),
-                "toggle_star".to_string(),
-                "archive".to_string(),
-                "trash".to_string(),
+                ApiMobileAction::ToggleRead,
+                ApiMobileAction::ToggleStar,
+                ApiMobileAction::Archive,
+                ApiMobileAction::Trash,
             ],
             is_custom: true,
         },

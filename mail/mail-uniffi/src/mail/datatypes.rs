@@ -1857,7 +1857,7 @@ impl MessageSearchOptions {
 }
 
 /// Enumeration grouping all possible mobile toolbar actions.
-#[derive(Debug, Clone, PartialEq, UniffiEnum)]
+#[derive(Debug, Clone, Eq, PartialEq, UniffiEnum)]
 pub enum MobileAction {
     Archive,
     Forward,
@@ -1901,6 +1901,7 @@ impl From<RealMobileAction> for MobileAction {
             RealMobileAction::Trash => Self::Trash,
             RealMobileAction::ViewHeaders => Self::ViewHeaders,
             RealMobileAction::ViewHTML => Self::ViewHTML,
+            RealMobileAction::SavePDF => Self::Other("save_pdf".to_string()),
             RealMobileAction::Other(s) => Self::Other(s),
         }
     }
@@ -1936,7 +1937,7 @@ impl From<MobileAction> for RealMobileAction {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MobileSetting {
     /// TODO: Document this field.
-    pub actions: Vec<String>,
+    pub actions: Vec<MobileAction>,
 
     /// TODO: Document this field.
     pub is_custom: bool,
@@ -1945,7 +1946,7 @@ pub struct MobileSetting {
 impl From<MobileSetting> for RealMobileSetting {
     fn from(value: MobileSetting) -> Self {
         RealMobileSetting {
-            actions: value.actions,
+            actions: value.actions.map_vec(),
             is_custom: value.is_custom,
         }
     }
@@ -1954,7 +1955,7 @@ impl From<MobileSetting> for RealMobileSetting {
 impl From<RealMobileSetting> for MobileSetting {
     fn from(value: RealMobileSetting) -> Self {
         MobileSetting {
-            actions: value.actions,
+            actions: value.actions.map_vec(),
             is_custom: value.is_custom,
         }
     }

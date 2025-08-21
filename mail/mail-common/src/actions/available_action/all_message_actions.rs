@@ -254,7 +254,7 @@ impl GenericMobileActions for MessageAction {
             ToggleLight => Some(Self::toggle_view_mode(context.theme.as_ref())),
             ReportPhishing => Some(Self::ReportPhishing),
             // Unsupported actions for messages
-            Snooze | SaveAttachments | SenderEmails | Remind | Other(_) => None,
+            Snooze | SaveAttachments | SavePDF | SenderEmails | Remind | Other(_) => None,
         }
     }
 

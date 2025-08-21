@@ -102,14 +102,8 @@ impl Handler for UpdateMobileActionsHandler {
 
         action.old_mobile_settings = Some(mobile_settings.clone());
 
-        let action_strings: Vec<String> = action
-            .actions
-            .iter()
-            .map(|action| action.to_string())
-            .collect();
-
         let mobile_setting = MobileSetting {
-            actions: action_strings,
+            actions: action.actions.clone(),
             is_custom: true,
         };
 
