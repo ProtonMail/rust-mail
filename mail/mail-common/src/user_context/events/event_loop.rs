@@ -1,10 +1,12 @@
 use crate::MailUserContext;
 use crate::actions::rollback::RollbackAction;
+use crate::models::RollbackItem;
 use proton_action_queue::queue::ActionError;
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::services::EventLoopService;
 use proton_core_common::services::InitializationService;
 use proton_event_loop::EventLoopError;
+use stash::orm::Model;
 use std::time::Duration;
 use tokio::time;
 use tracing::{Instrument, error};
@@ -95,6 +97,12 @@ impl MailUserContext {
     }
 
     async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction>> {
+        // Only queue rollback if there is actually anything to rollback.
+        let tether = self.user_stash().connection();
+        if RollbackItem::count("", vec![], &tether).await? == 0 {
+            return Ok(());
+        }
+        drop(tether);
         let mut last_action_ids = self
             .user_context()
             .event_loop_service()
