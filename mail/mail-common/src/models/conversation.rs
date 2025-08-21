@@ -8,9 +8,8 @@ use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::conversations::{LabelAs, Snooze};
 use crate::actions::conversations::{MarkRead, MarkUnread, Move, Unsnooze};
 use crate::actions::{
-    ActionMoveData, ConversationAvailableActions, ConversationOrMessage, LabelAsAction,
-    LabelAsData, LabelAsOutput, LabelPair, MailActionError, MoveAction, MoveItemAction,
-    OldConversationAction, Undo, filter_responses,
+    ActionMoveData, ConversationOrMessage, LabelAsAction, LabelAsData, LabelAsOutput, LabelPair,
+    MailActionError, MoveAction, Undo, filter_responses,
 };
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
@@ -2045,64 +2044,6 @@ impl Conversation {
             }
         };
         Conversation::split_request(ids, request).await
-    }
-
-    /// Get the available actions for conversations depending on current view and stats of the given
-    /// conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if
-    ///
-    /// * the database request fail,
-    /// * empty list of conversations is provided
-    /// * conversation is not in the view
-    ///
-    #[tracing::instrument(skip_all, fields(label_id=view.id().as_u64()))]
-    pub async fn available_actions(
-        view: Label,
-        conversation_ids: Vec<LocalConversationId>,
-        tether: &Tether,
-    ) -> Result<ConversationAvailableActions, AppError> {
-        debug!("{conversation_ids:?}");
-        if conversation_ids.is_empty() {
-            return Err(AppError::EmptyListOfConversations);
-        }
-
-        let conversations = Conversation::find_by_ids(conversation_ids, tether).await?;
-
-        let mut conversation_actions = Vec::new();
-        if conversations.iter().any(|c| c.num_unread > 0) {
-            conversation_actions.push(OldConversationAction::MarkRead);
-        }
-        if conversations.iter().any(|c| c.num_unread == 0) {
-            conversation_actions.push(OldConversationAction::MarkUnread);
-        }
-        if conversations.iter().any(|c| c.is_starred()) {
-            conversation_actions.push(OldConversationAction::Unstar);
-        }
-        if conversations.iter().any(|c| !c.is_starred()) {
-            conversation_actions.push(OldConversationAction::Star);
-        }
-        if SystemLabel::from_opt_rid(view.remote_id.as_ref())
-            .filter(|label| label.is_snooze_location())
-            .is_some()
-        {
-            conversation_actions.push(OldConversationAction::Snooze);
-        }
-        conversation_actions.push(OldConversationAction::LabelAs);
-
-        let move_actions = MoveItemAction::from_view(view, tether).await?;
-
-        let res = ConversationAvailableActions::builder()
-            .conversation_actions(conversation_actions)
-            .move_actions(move_actions)
-            .general_actions(Vec::new())
-            .build();
-
-        debug!("available actions for conversations: {res:?}");
-
-        Ok(res)
     }
 
     pub async fn available_snooze_actions(

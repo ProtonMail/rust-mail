@@ -4,7 +4,7 @@
 //! across both list action and message action tests to maximize code reuse.
 
 use crate::actions::{ListAction, MessageAction};
-use crate::datatypes::{MovableSystemFolder, SystemLabelId, theme::MailTheme};
+use crate::datatypes::{MobileAction, MovableSystemFolder, SystemLabelId, theme::MailTheme};
 use crate::decrypted_message::ThemeOpts;
 use crate::models::Message;
 use proton_core_api::services::proton::LabelId;
@@ -24,8 +24,8 @@ pub struct TestCase<T> {
     /// Whether the toolbar is using custom actions
     pub is_custom: bool,
 
-    /// List of toolbar action strings
-    pub toolbar_actions: Vec<String>,
+    /// List of toolbar actions
+    pub toolbar_actions: Vec<MobileAction>,
 
     /// Expected visible actions in the result
     pub expected_visible: Vec<TestActions>,

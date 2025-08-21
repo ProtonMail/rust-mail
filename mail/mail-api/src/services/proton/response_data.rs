@@ -1245,13 +1245,48 @@ pub struct MessageRecipient {
 // There is a lot of overlap with this type.
 pub type MessageReplyTo = MessageSender;
 
+/// All possible actions sent by API GET settings request
+///
+/// Found in `MailSettings::MobileSettings::MessageToolbar::Actions` /
+///          `MailSettings::MobileSettings::ConversationToolbar::Actions` /
+///          `MailSettings::MobileSettings::ListToolbar::Actions`
+///
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MobileAction {
+    Archive,
+    Forward,
+    Label,
+    Move,
+    Print,
+    Remind,
+    Reply,
+    ReportPhishing,
+    SaveAttachments,
+    #[serde(rename = "save_pdf")]
+    SavePDF,
+    SenderEmails,
+    Snooze,
+    Spam,
+    ToggleLight,
+    ToggleRead,
+    ToggleStar,
+    Trash,
+    ViewHeaders,
+    #[serde(rename = "view_html")]
+    ViewHTML,
+    /// For forward compatibility with unknown actions
+    #[serde(untagged)]
+    Other(String),
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct MobileSetting {
     /// TODO: Document this field.
     #[serde(default)]
-    pub actions: Vec<String>,
+    pub actions: Vec<MobileAction>,
 
     /// TODO: Document this field.
     pub is_custom: bool,
