@@ -1889,7 +1889,7 @@ impl From<ApiMobileAction> for MobileAction {
             ApiMobileAction::Trash => Self::Trash,
             ApiMobileAction::ViewHeaders => Self::ViewHeaders,
             ApiMobileAction::ViewHTML => Self::ViewHTML,
-            ApiMobileAction::Unknown => Self::Other("unknown".to_string()),
+            ApiMobileAction::Other(s) => Self::Other(s),
         }
     }
 }
@@ -1916,7 +1916,7 @@ impl From<MobileAction> for ApiMobileAction {
             MobileAction::Trash => Self::Trash,
             MobileAction::ViewHeaders => Self::ViewHeaders,
             MobileAction::ViewHTML => Self::ViewHTML,
-            MobileAction::Other(_) => Self::Unknown, // Unknown actions become Unknown in API
+            MobileAction::Other(s) => Self::Other(s),
         }
     }
 }
@@ -1928,7 +1928,7 @@ impl MobileAction {
 
         let actions = match settings.mobile_settings {
             Some(mobile_settings) => {
-                Self::toolbar_actions_from_setting(&mobile_settings.list_toolbar, "list_toolbar")
+                Self::toolbar_actions_from_setting(&mobile_settings.list_toolbar)
             }
             None => {
                 trace!("No mobile_settings defined in MailSettings");
@@ -1946,10 +1946,9 @@ impl MobileAction {
         let settings = MailSettings::get_or_default(tether).await;
 
         let actions = match settings.mobile_settings {
-            Some(mobile_settings) => Self::toolbar_actions_from_setting(
-                &mobile_settings.conversation_toolbar,
-                "conversation_toolbar",
-            ),
+            Some(mobile_settings) => {
+                Self::toolbar_actions_from_setting(&mobile_settings.conversation_toolbar)
+            }
             None => {
                 trace!("No mobile_settings defined in MailSettings");
                 Self::default_chosen_actions()
@@ -1964,10 +1963,9 @@ impl MobileAction {
         let settings = MailSettings::get_or_default(tether).await;
 
         let actions = match settings.mobile_settings {
-            Some(mobile_settings) => Self::toolbar_actions_from_setting(
-                &mobile_settings.message_toolbar,
-                "message_toolbar",
-            ),
+            Some(mobile_settings) => {
+                Self::toolbar_actions_from_setting(&mobile_settings.message_toolbar)
+            }
             None => {
                 trace!("No mobile_settings defined in MailSettings");
                 Self::default_chosen_actions()
@@ -2016,10 +2014,7 @@ impl MobileAction {
         ]
     }
 
-    fn toolbar_actions_from_setting(
-        mobile_setting: &MobileSetting,
-        _toolbar_name: &str,
-    ) -> Vec<MobileAction> {
+    fn toolbar_actions_from_setting(mobile_setting: &MobileSetting) -> Vec<MobileAction> {
         if mobile_setting.is_custom {
             mobile_setting.actions.clone()
         } else {

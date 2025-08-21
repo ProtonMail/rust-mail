@@ -1247,9 +1247,9 @@ pub type MessageReplyTo = MessageSender;
 
 /// All possible actions sent by API GET settings request
 ///
-/// Found in MailSettings::MobileSettings::MessageToolbar::Actions /
-///          MailSettings::MobileSettings::ConversationToolbar::Actions /
-///          MailSettings::MobileSettings::ListToolbar::Actions
+/// Found in `MailSettings::MobileSettings::MessageToolbar::Actions` /
+///          `MailSettings::MobileSettings::ConversationToolbar::Actions` /
+///          `MailSettings::MobileSettings::ListToolbar::Actions`
 ///
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -1276,8 +1276,8 @@ pub enum MobileAction {
     #[serde(rename = "view_html")]
     ViewHTML,
     /// For forward compatibility with unknown actions
-    #[serde(other)]
-    Unknown,
+    #[serde(untagged)]
+    Other(String),
 }
 
 /// TODO: Document this struct.

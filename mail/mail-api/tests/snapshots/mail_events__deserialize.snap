@@ -1,7 +1,6 @@
 ---
 source: mail/mail-api/tests/mail_events.rs
 expression: mail_event
-snapshot_kind: text
 ---
 MailEvent {
     event_id: EventId(
@@ -160,19 +159,25 @@ MailEvent {
                 MobileSettings {
                     conversation_toolbar: MobileSetting {
                         actions: [
-                            "string",
+                            Other(
+                                "string",
+                            ),
                         ],
                         is_custom: true,
                     },
                     list_toolbar: MobileSetting {
                         actions: [
-                            "string",
+                            Other(
+                                "string",
+                            ),
                         ],
                         is_custom: true,
                     },
                     message_toolbar: MobileSetting {
                         actions: [
-                            "string",
+                            Other(
+                                "string",
+                            ),
                         ],
                         is_custom: true,
                     },

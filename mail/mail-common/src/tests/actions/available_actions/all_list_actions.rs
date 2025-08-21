@@ -1,11 +1,12 @@
-use crate::datatypes::{MobileSetting, MobileSettings, MovableSystemFolder, SystemLabelId};
+use crate::datatypes::{
+    MobileAction, MobileSetting, MobileSettings, MovableSystemFolder, SystemLabelId,
+};
 use crate::models::{Conversation, MailSettings, Message};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::{Label, ModelIdExtension};
 use proton_mail_common::test_utils::db::new_test_connection;
 use proton_mail_common::test_utils::utils::create_address;
 use stash::orm::Model;
-use std::borrow::ToOwned;
 use std::sync::LazyLock;
 
 // Import shared test infrastructure
@@ -118,7 +119,7 @@ mod message {
                 ..Message::test_default()
             },
         ],
-        toolbar_actions: vec!["toggle_star".to_owned()],
+        toolbar_actions: vec![MobileAction::ToggleStar],
         is_custom: true,
         expected_visible: vec![TestActions::Unstar, TestActions::More],
         expected_hidden: vec![
@@ -133,7 +134,7 @@ mod message {
     });
     static NONE_STARRED_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         test_item: vec![Message::test_default(), Message::test_default()],
-        toolbar_actions: vec!["toggle_star".to_owned()],
+        toolbar_actions: vec![MobileAction::ToggleStar],
         is_custom: true,
         expected_visible: vec![TestActions::Star, TestActions::More],
         expected_hidden: vec![
@@ -154,7 +155,7 @@ mod message {
             },
             Message::test_default(),
         ],
-        toolbar_actions: vec!["toggle_star".to_owned()],
+        toolbar_actions: vec![MobileAction::ToggleStar],
         is_custom: true,
         expected_visible: vec![TestActions::Star, TestActions::More],
         expected_hidden: vec![
@@ -205,10 +206,10 @@ mod message {
     });
     static CUSTOM_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         toolbar_actions: vec![
-            "archive".to_owned(),
-            "label".to_owned(),
-            "move".to_owned(),
-            "spam".to_owned(),
+            MobileAction::Archive,
+            MobileAction::Label,
+            MobileAction::Move,
+            MobileAction::Spam,
         ],
         is_custom: true,
         expected_visible: vec![
@@ -223,13 +224,13 @@ mod message {
     });
     static TOO_MANY_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
         toolbar_actions: vec![
-            "archive".to_owned(),
-            "label".to_owned(),
-            "move".to_owned(),
-            "spam".to_owned(),
-            "trash".to_owned(),
-            "toggle_read".to_owned(),
-            "toggle_star".to_owned(),
+            MobileAction::Archive,
+            MobileAction::Label,
+            MobileAction::Move,
+            MobileAction::Spam,
+            MobileAction::Trash,
+            MobileAction::ToggleRead,
+            MobileAction::ToggleStar,
         ],
         is_custom: true,
         expected_visible: vec![
@@ -500,7 +501,7 @@ mod conversation {
                 ..Conversation::test_default()
             },
         ],
-        toolbar_actions: vec!["toggle_star".to_owned()],
+        toolbar_actions: vec![MobileAction::ToggleStar],
         is_custom: true,
         expected_visible: vec![TestActions::Unstar, TestActions::More],
         expected_hidden: vec![
@@ -524,7 +525,7 @@ mod conversation {
                 ..Conversation::test_default()
             },
         ],
-        toolbar_actions: vec!["toggle_star".to_owned()],
+        toolbar_actions: vec![MobileAction::ToggleStar],
         is_custom: true,
         expected_visible: vec![TestActions::Star, TestActions::More],
         expected_hidden: vec![
@@ -550,7 +551,7 @@ mod conversation {
                     ..Conversation::test_default()
                 },
             ],
-            toolbar_actions: vec!["toggle_star".to_owned()],
+            toolbar_actions: vec![MobileAction::ToggleStar],
             is_custom: true,
             expected_visible: vec![TestActions::Star, TestActions::More],
             expected_hidden: vec![
@@ -635,10 +636,10 @@ mod conversation {
     });
     static CUSTOM_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
         toolbar_actions: vec![
-            "archive".to_owned(),
-            "label".to_owned(),
-            "move".to_owned(),
-            "spam".to_owned(),
+            MobileAction::Archive,
+            MobileAction::Label,
+            MobileAction::Move,
+            MobileAction::Spam,
         ],
         is_custom: true,
         expected_visible: vec![
@@ -656,14 +657,14 @@ mod conversation {
     });
     static TOO_MANY_CASE: LazyLock<TestCase<Vec<Conversation>>> = LazyLock::new(|| TestCase {
         toolbar_actions: vec![
-            "archive".to_owned(),
-            "label".to_owned(),
-            "move".to_owned(),
-            "spam".to_owned(),
-            "trash".to_owned(),
-            "toggle_read".to_owned(),
-            "toggle_star".to_owned(),
-            "snooze".to_owned(),
+            MobileAction::Archive,
+            MobileAction::Label,
+            MobileAction::Move,
+            MobileAction::Spam,
+            MobileAction::Trash,
+            MobileAction::ToggleRead,
+            MobileAction::ToggleStar,
+            MobileAction::Snooze,
         ],
         is_custom: true,
         expected_visible: vec![
@@ -725,10 +726,10 @@ mod conversation {
     static CUSTOM_SNOOZE_AT_THE_BOTTOM_CASE: LazyLock<TestCase<Vec<Conversation>>> =
         LazyLock::new(|| TestCase {
             toolbar_actions: vec![
-                "archive".to_owned(),
-                "label".to_owned(),
-                "move".to_owned(),
-                "snooze".to_owned(),
+                MobileAction::Archive,
+                MobileAction::Label,
+                MobileAction::Move,
+                MobileAction::Snooze,
             ],
             is_custom: true,
             expected_visible: vec![
@@ -747,10 +748,10 @@ mod conversation {
     static CUSTOM_SNOOZE_AT_THE_TOP_CASE: LazyLock<TestCase<Vec<Conversation>>> =
         LazyLock::new(|| TestCase {
             toolbar_actions: vec![
-                "snooze".to_owned(),
-                "archive".to_owned(),
-                "label".to_owned(),
-                "move".to_owned(),
+                MobileAction::Snooze,
+                MobileAction::Archive,
+                MobileAction::Label,
+                MobileAction::Move,
             ],
             is_custom: true,
             expected_visible: vec![

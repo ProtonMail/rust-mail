@@ -113,14 +113,8 @@ async fn test_update_list_toolbar_actions() {
     let stored_actions = &mobile_settings.list_toolbar.actions;
     assert_eq!(stored_actions.len(), 4, "Should have 4 list actions");
 
-    // Convert stored strings back to MobileAction for comparison
-    let stored_mobile_actions: Vec<MobileAction> = stored_actions
-        .iter()
-        .map(|s| {
-            use std::str::FromStr;
-            MobileAction::from_str(s).expect("Should parse stored action")
-        })
-        .collect();
+    // Actions are now stored as enums directly, no conversion needed
+    let stored_mobile_actions = stored_actions.clone();
 
     assert_eq!(
         stored_mobile_actions, list_actions,
@@ -170,9 +164,9 @@ async fn test_update_message_toolbar_actions() {
         },
         message_toolbar: ApiMobileSetting {
             actions: vec![
-                "reply".to_string(),
-                "forward".to_string(),
-                "print".to_string(),
+                ApiMobileAction::Reply,
+                ApiMobileAction::Forward,
+                ApiMobileAction::Print,
             ],
             is_custom: true,
         },
@@ -206,9 +200,9 @@ async fn test_update_message_toolbar_actions() {
 
     let stored_actions = &mobile_settings.message_toolbar.actions;
     assert_eq!(stored_actions.len(), 3, "Should have 3 message actions");
-    assert!(stored_actions.contains(&"reply".to_string()));
-    assert!(stored_actions.contains(&"forward".to_string()));
-    assert!(stored_actions.contains(&"print".to_string()));
+    assert!(stored_actions.contains(&MobileAction::Reply));
+    assert!(stored_actions.contains(&MobileAction::Forward));
+    assert!(stored_actions.contains(&MobileAction::Print));
 
     // Verify other toolbars remain default
     assert!(
@@ -255,11 +249,11 @@ async fn test_update_conversation_toolbar_actions() {
         },
         conversation_toolbar: ApiMobileSetting {
             actions: vec![
-                "toggle_read".to_string(),
-                "toggle_star".to_string(),
-                "archive".to_string(),
-                "label".to_string(),
-                "move".to_string(),
+                ApiMobileAction::ToggleRead,
+                ApiMobileAction::ToggleStar,
+                ApiMobileAction::Archive,
+                ApiMobileAction::Label,
+                ApiMobileAction::Move,
             ],
             is_custom: true,
         },
@@ -295,11 +289,11 @@ async fn test_update_conversation_toolbar_actions() {
         5,
         "Should have 5 conversation actions"
     );
-    assert!(stored_actions.contains(&"toggle_read".to_string()));
-    assert!(stored_actions.contains(&"toggle_star".to_string()));
-    assert!(stored_actions.contains(&"archive".to_string()));
-    assert!(stored_actions.contains(&"label".to_string()));
-    assert!(stored_actions.contains(&"move".to_string()));
+    assert!(stored_actions.contains(&MobileAction::ToggleRead));
+    assert!(stored_actions.contains(&MobileAction::ToggleStar));
+    assert!(stored_actions.contains(&MobileAction::Archive));
+    assert!(stored_actions.contains(&MobileAction::Label));
+    assert!(stored_actions.contains(&MobileAction::Move));
 
     // Verify other toolbars remain default
     assert!(
@@ -326,7 +320,7 @@ async fn test_api_failure_handling() {
     // The mock needs to expect the API payload that would be sent for list toolbar update
     let expected_api_mobile_settings = ApiMobileSettings {
         list_toolbar: ApiMobileSetting {
-            actions: vec!["toggle_read".to_string(), "archive".to_string()],
+            actions: vec![ApiMobileAction::ToggleRead, ApiMobileAction::Archive],
             is_custom: true,
         },
         message_toolbar: ApiMobileSetting {

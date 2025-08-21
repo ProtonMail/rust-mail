@@ -25,44 +25,6 @@ fn test_update_mobile_actions_invalid(toolbar_type: ToolbarType, actions: Vec<Mo
     );
 }
 
-#[test_case(MobileAction::ToggleRead, "toggle_read")]
-#[test_case(MobileAction::ToggleStar, "toggle_star")]
-#[test_case(MobileAction::Archive, "archive")]
-#[test_case(MobileAction::Trash, "trash")]
-#[test_case(MobileAction::Reply, "reply")]
-#[test_case(MobileAction::Forward, "forward")]
-#[test_case(MobileAction::Print, "print")]
-#[test_case(MobileAction::SaveAttachments, "save_attachments")]
-#[test_case(MobileAction::ViewHeaders, "view_headers")]
-#[test_case(MobileAction::ViewHTML, "view_html")]
-#[test_case(MobileAction::Remind, "remind")]
-#[test_case(MobileAction::Snooze, "snooze")]
-#[test_case(MobileAction::SenderEmails, "sender_emails")]
-#[test_case(MobileAction::ReportPhishing, "report_phishing")]
-#[test_case(MobileAction::ToggleLight, "toggle_light")]
-#[test_case(MobileAction::Move, "move")]
-#[test_case(MobileAction::Label, "label")]
-#[test_case(MobileAction::Spam, "spam")]
-fn test_mobile_action_display(action: MobileAction, expected_string: &str) {
-    assert_eq!(
-        action.to_string(),
-        expected_string,
-        "Display implementation should match expected string"
-    );
-
-    use std::str::FromStr;
-    let parsed_back = MobileAction::from_str(expected_string).expect("Should parse back");
-    assert_eq!(
-        action, parsed_back,
-        "Action should round-trip through string conversion"
-    );
-    assert_eq!(
-        parsed_back.to_string(),
-        expected_string,
-        "Roundtrip should preserve string representation"
-    );
-}
-
 #[test]
 fn test_list_toolbar_validation() {
     let all_list_actions = MobileAction::all_list_actions();

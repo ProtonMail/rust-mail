@@ -1,6 +1,6 @@
 use crate::datatypes::{
-    MessageRecipient, MobileSetting, MobileSettings, MovableSystemFolder, SystemLabelId,
-    theme::MailTheme,
+    MessageRecipient, MobileAction, MobileSetting, MobileSettings, MovableSystemFolder,
+    SystemLabelId, theme::MailTheme,
 };
 use crate::decrypted_message::ThemeOpts;
 use crate::models::{Conversation, MailSettings, Message};
@@ -98,7 +98,7 @@ static ALL_STARRED_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase
         label_ids: vec![LabelId::starred()],
         ..Message::test_default()
     },
-    toolbar_actions: vec!["toggle_star".to_owned()],
+    toolbar_actions: vec![MobileAction::ToggleStar],
     is_custom: true,
     expected_visible: vec![TestActions::Unstar, TestActions::More],
     expected_hidden: vec![
@@ -121,7 +121,7 @@ static ALL_STARRED_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase
 
 static NONE_STARRED_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
     test_item: Message::test_default(),
-    toolbar_actions: vec!["toggle_star".to_owned()],
+    toolbar_actions: vec![MobileAction::ToggleStar],
     is_custom: true,
     expected_visible: vec![TestActions::Star, TestActions::More],
     expected_hidden: vec![
@@ -169,10 +169,10 @@ static EMPTY_CUSTOM_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCas
 static CUSTOM_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
     test_item: Message::test_default(),
     toolbar_actions: vec![
-        "reply".to_owned(),
-        "label".to_owned(),
-        "move".to_owned(),
-        "forward".to_owned(),
+        MobileAction::Reply,
+        MobileAction::Label,
+        MobileAction::Move,
+        MobileAction::Forward,
     ],
     is_custom: true,
     expected_visible: vec![
@@ -199,13 +199,13 @@ static CUSTOM_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
 
 static TOO_MANY_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
     toolbar_actions: vec![
-        "reply".to_owned(),
-        "label".to_owned(),
-        "move".to_owned(),
-        "forward".to_owned(),
-        "toggle_read".to_owned(),
-        "toggle_star".to_owned(),
-        "save_pdf".to_owned(),
+        MobileAction::Reply,
+        MobileAction::Label,
+        MobileAction::Move,
+        MobileAction::Forward,
+        MobileAction::ToggleRead,
+        MobileAction::ToggleStar,
+        MobileAction::SavePDF,
     ],
     is_custom: true,
     expected_visible: vec![
