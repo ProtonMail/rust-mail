@@ -7,6 +7,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
+use tracing::{debug, instrument};
 
 #[derive(Debug, Default)]
 pub struct CoreClock {
@@ -28,78 +29,73 @@ impl CoreClock {
         *self.now.write() = Some(now);
     }
 
-    pub fn auto_lock_elapsed(&self) -> Duration {
-        if self.auto_lock.just_created.load(Ordering::Acquire) {
-            Duration::ZERO
-        } else {
-            self.auto_lock.elapsed()
-        }
+    pub fn auto_lock_elapsed(&self) -> Option<Duration> {
+        self.auto_lock.elapsed()
     }
 
-    pub fn pin_code_elapsed(&self) -> Duration {
+    pub fn pin_code_elapsed(&self) -> Option<Duration> {
         self.pin_code.elapsed()
     }
 
+    #[instrument(skip_all)]
     pub fn auto_lock_tick(&self) {
         self.auto_lock.tick();
     }
 
+    #[instrument(skip_all)]
     pub fn pin_code_tick(&self) {
         self.pin_code.tick();
-        self.pin_code.accessed.store(true, Ordering::Release);
+        self.pin_code.mark();
     }
 
+    #[instrument(skip_all)]
     pub fn auto_lock_accessed(&self) {
-        self.auto_lock.accessed.store(true, Ordering::Release);
+        self.auto_lock.mark();
     }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
 impl CoreClock {
-    pub fn pin_code_duration_sub(&self, duration: Duration) {
-        self.pin_code.sub(duration);
+    pub fn auto_lock_reset(&self) {
+        self.auto_lock.reset();
     }
 
-    pub fn auto_lock_duration_sub(&self, duration: Duration) {
-        self.auto_lock.sub(duration);
+    pub fn pin_code_reset(&self) {
+        self.pin_code.reset();
     }
 }
 
-#[derive(Debug)]
-pub struct ActivityClock {
-    last_activity: Mutex<Instant>,
+#[derive(Debug, Default)]
+struct ActivityClock {
+    last_activity: Mutex<Option<Instant>>,
     accessed: AtomicBool,
-    just_created: AtomicBool,
 }
 
 impl ActivityClock {
-    pub fn tick(&self) {
-        if self.accessed.swap(false, Ordering::Acquire) {
-            *self.last_activity.lock() = Instant::now();
-            self.just_created.store(false, Ordering::Release);
-        }
+    fn tick(&self) {
+        let updated = if self.accessed.swap(false, Ordering::Acquire) {
+            *self.last_activity.lock() = Some(Instant::now());
+            true
+        } else {
+            false
+        };
+
+        debug!(?updated, "tick()");
     }
 
-    pub fn elapsed(&self) -> Duration {
-        self.last_activity.lock().elapsed()
+    fn mark(&self) {
+        debug!("mark()");
+
+        self.accessed.store(true, Ordering::Release);
     }
 
-    pub fn sub(&self, duration: Duration) {
-        let mut last_activity = self.last_activity.lock();
-
-        *last_activity = last_activity
-            .checked_sub(duration)
-            .unwrap_or(*last_activity);
+    fn elapsed(&self) -> Option<Duration> {
+        self.last_activity.lock().map(|time| time.elapsed())
     }
-}
 
-impl Default for ActivityClock {
-    fn default() -> Self {
-        Self {
-            last_activity: Mutex::new(Instant::now()),
-            accessed: AtomicBool::new(false),
-            just_created: AtomicBool::new(true),
-        }
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn reset(&self) {
+        *self.last_activity.lock() = None;
     }
 }
 

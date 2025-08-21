@@ -7,6 +7,7 @@ use stash::exports::{
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, StashError, Tether};
+use tracing::{debug, instrument};
 
 use crate::Context;
 use crate::pin_code::PinCode;
@@ -63,12 +64,17 @@ impl AppSettings {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn should_auto_lock(&self, ctx: &Context) -> bool {
+        debug!(protection=?self.protection, "Checking auto-lock");
+
         if self.protection.is_unset() {
             false
         } else {
             let lock_elapsed = ctx.clock().auto_lock_elapsed();
             let should_lock = self.auto_lock.should_autolock(lock_elapsed);
+
+            debug!(?should_lock);
 
             // If the app is not supposed to lock, we need to mark that the auto lock has been accessed
             // so that the timer is reset. So that the next time the app is opened, it will not lock.
@@ -172,13 +178,15 @@ impl Default for ProtectionAutoLock {
 
 impl ProtectionAutoLock {
     #[must_use]
-    pub fn should_autolock(&self, last_lock: Duration) -> bool {
+    pub(crate) fn should_autolock(self, locked_for: Option<Duration>) -> bool {
         match self {
             Self::Always => true,
-            Self::Minutes(minutes) => {
-                let seconds = u64::from(*minutes) * 60;
-                last_lock.as_secs() > seconds || last_lock == Duration::ZERO
-            }
+
+            Self::Minutes(minutes) => match locked_for {
+                Some(locked_for) => locked_for.as_secs() > u64::from(minutes) * 60,
+                None => true,
+            },
+
             Self::Never => false,
         }
     }
@@ -354,21 +362,27 @@ mod tests {
         pinpro.remaining_attempts()
     }
 
-    const ONE_HOUR: u64 = 3600;
     const ONE_MINUTE: u64 = 60;
+    const ONE_HOUR: u64 = 60 * ONE_MINUTE;
 
-    #[test_case(ProtectionAutoLock::Always, 0 => true; "TEST 0 AutoLock::Always returns true")]
-    #[test_case(ProtectionAutoLock::Always, ONE_HOUR => true; "TEST 1 AutoLock::Always returns true")]
-    #[test_case(ProtectionAutoLock::Minutes(1), 1 => false; "TEST 2 When minutes passed are equal to allowed")]
-    #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE => false; "TEST 3 When minutes passed are equal to allowed")]
-    #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE + 1 => true; "TEST 4 When minutes passed from lock are more than allowed")]
-    #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR => false; "TEST 6 When 60 minutes equal")]
-    #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR + 1 => true; "TEST 6 When 60 minutes passed")]
-    #[test_case(ProtectionAutoLock::Never,  0 => false; "TEST 7 AutoLock::Never returns false")]
-    #[test_case(ProtectionAutoLock::Never, ONE_HOUR => false; "TEST 8 AutoLock::Never returns false")]
-    fn should_autolock(autolock: ProtectionAutoLock, last_lock: u64) -> bool {
-        let last_lock = Duration::from_secs(last_lock);
-        autolock.should_autolock(last_lock)
+    #[test_case(ProtectionAutoLock::Always, None => true)]
+    #[test_case(ProtectionAutoLock::Always, Some(0) => true)]
+    #[test_case(ProtectionAutoLock::Always, Some(ONE_HOUR) => true)]
+    // --
+    #[test_case(ProtectionAutoLock::Minutes(1), None => true)]
+    #[test_case(ProtectionAutoLock::Minutes(1), Some(1) => false)]
+    #[test_case(ProtectionAutoLock::Minutes(1), Some(ONE_MINUTE) => false)]
+    #[test_case(ProtectionAutoLock::Minutes(1), Some(ONE_MINUTE + 1) => true)]
+    #[test_case(ProtectionAutoLock::Minutes(60), Some(ONE_HOUR) => false)]
+    #[test_case(ProtectionAutoLock::Minutes(60), Some(ONE_HOUR + 1) => true)]
+    // --
+    #[test_case(ProtectionAutoLock::Never, None => false)]
+    #[test_case(ProtectionAutoLock::Never, Some(0) => false)]
+    #[test_case(ProtectionAutoLock::Never, Some(ONE_HOUR) => false)]
+    fn should_autolock(autolock: ProtectionAutoLock, locked_for_s: Option<u64>) -> bool {
+        let locked_for = locked_for_s.map(Duration::from_secs);
+
+        autolock.should_autolock(locked_for)
     }
 
     #[tokio::test]
@@ -384,13 +398,16 @@ mod tests {
         // First calls to should_auto_lock will return true
         assert!(app_settings.should_auto_lock(core_ctx));
         assert!(app_settings.should_auto_lock(core_ctx));
+
         // Ticking the clock will not change the result
         core_ctx.clock().auto_lock_tick();
         assert!(app_settings.should_auto_lock(core_ctx));
+
         // We need to mark that the auto lock has been accessed
         // in order to reset the timer
         core_ctx.clock().auto_lock_accessed();
         core_ctx.clock().auto_lock_tick();
+
         // Now the app is unlocked for the next 10 minutes
         let last_lock_1 = core_ctx.clock().auto_lock_elapsed();
         assert!(!app_settings.should_auto_lock(core_ctx));
@@ -399,17 +416,11 @@ mod tests {
 
         assert!(last_lock_1 < last_lock_2);
 
-        let ten_minutes_one_second = Duration::from_secs(10 * 60 + 1);
+        core_ctx.clock().auto_lock_reset();
 
-        // After 10 minutes, it will return `true`
-        // We need to subtract 10 minutes from the last lock time
-        // as we cannot move time backwards
-        core_ctx
-            .clock()
-            .auto_lock_duration_sub(ten_minutes_one_second);
-
-        // After 10 minutes, it will return `true`
+        // After reset, it will return `true`
         assert!(app_settings.should_auto_lock(core_ctx));
+
         // Till the auto lock is not accessed it will return `true`
         assert!(app_settings.should_auto_lock(core_ctx));
 

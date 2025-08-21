@@ -798,7 +798,7 @@ impl MailSession {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {
-            PinCode::set_pin(ctx, pin).await?;
+            PinCode::set(ctx, pin).await?;
 
             Result::<_, RealProtonMailError>::Ok(())
         })

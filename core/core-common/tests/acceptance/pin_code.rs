@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use proton_core_common::Context;
 use proton_core_common::test_utils::test_context::TestContext;
 use proton_core_common::{
@@ -14,9 +12,7 @@ async fn create_and_delete_pin() {
     let core_ctx = test_ctx.core_context();
     let pin = vec![1, 2, 3, 4];
 
-    PinCode::set_pin(core_ctx.clone(), pin.clone())
-        .await
-        .unwrap();
+    PinCode::set(core_ctx.clone(), pin.clone()).await.unwrap();
 
     let tether = core_ctx.account_stash().connection();
     let app_settings = AppSettings::get_or_default(&tether).await;
@@ -30,7 +26,7 @@ async fn create_and_delete_pin() {
 
     let incorrect_pin = vec![0, 0, 0, 0];
 
-    let error = PinCode::delete_pin(core_ctx.clone(), incorrect_pin)
+    let error = PinCode::delete(core_ctx.clone(), incorrect_pin)
         .await
         .unwrap_err();
 
@@ -41,7 +37,7 @@ async fn create_and_delete_pin() {
 
     core_ctx.last_access_reset();
 
-    PinCode::delete_pin(core_ctx.clone(), pin).await.unwrap();
+    PinCode::delete(core_ctx.clone(), pin).await.unwrap();
 
     assert!(PinProtection::get(&tether).await.unwrap().is_none());
     assert_eq!(
@@ -56,9 +52,7 @@ async fn modify_pin() {
     let core_ctx = test_ctx.core_context();
     let pin = vec![1, 2, 3, 4];
 
-    PinCode::set_pin(core_ctx.clone(), pin.clone())
-        .await
-        .unwrap();
+    PinCode::set(core_ctx.clone(), pin.clone()).await.unwrap();
 
     let tether = core_ctx.account_stash().connection();
     let app_settings = AppSettings::get_or_default(&tether).await;
@@ -70,7 +64,7 @@ async fn modify_pin() {
 
     core_ctx.last_access_reset();
 
-    PinCode::validate_pin(core_ctx.clone(), pin.clone())
+    PinCode::verify(core_ctx.clone(), pin.clone())
         .await
         .unwrap();
 
@@ -78,22 +72,20 @@ async fn modify_pin() {
     let old_pin = pin;
 
     // Lets create new pin
-    PinCode::set_pin(core_ctx.clone(), new_pin.clone())
+    PinCode::set(core_ctx.clone(), new_pin.clone())
         .await
         .unwrap();
 
     core_ctx.last_access_reset();
 
-    let error = PinCode::validate_pin(core_ctx.clone(), old_pin)
+    let error = PinCode::verify(core_ctx.clone(), old_pin)
         .await
         .unwrap_err();
     assert!(matches!(error, PinError::IncorrectPin));
 
     core_ctx.last_access_reset();
 
-    PinCode::validate_pin(core_ctx.clone(), new_pin)
-        .await
-        .unwrap();
+    PinCode::verify(core_ctx.clone(), new_pin).await.unwrap();
 
     let count = PinProtection::count("", vec![], &tether).await.unwrap();
     assert_eq!(count, 1);
@@ -106,7 +98,7 @@ async fn validation_max_attempts() {
     let pin = vec![1, 2, 3, 4];
     let incorrect_pin = vec![0, 0, 0, 0];
 
-    PinCode::set_pin(core_ctx.clone(), pin).await.unwrap();
+    PinCode::set(core_ctx.clone(), pin).await.unwrap();
 
     let mut tether = core_ctx.account_stash().connection();
     let app_settings = AppSettings::get_or_default(&tether).await;
@@ -126,7 +118,7 @@ async fn validation_max_attempts() {
         .await
         .unwrap();
 
-    let error = PinCode::validate_pin(core_ctx.clone(), incorrect_pin.clone())
+    let error = PinCode::verify(core_ctx.clone(), incorrect_pin.clone())
         .await
         .unwrap_err();
 
@@ -141,7 +133,7 @@ async fn validation_max_attempts() {
     // Pin code is not responsible to do anything regarding `TooManyAttempts`
     // error. In production flow there is catch on this error
     // which nukes databases and caches.
-    let error = PinCode::validate_pin(core_ctx.clone(), incorrect_pin)
+    let error = PinCode::verify(core_ctx.clone(), incorrect_pin)
         .await
         .unwrap_err();
 
@@ -171,9 +163,9 @@ async fn deleting_not_existing_pin_multiple_times_should_succeed() {
         AppProtection::Biometrics
     );
 
-    assert!(PinCode::delete_pin(core_ctx.clone(), vec![]).await.is_ok());
-    assert!(PinCode::delete_pin(core_ctx.clone(), vec![]).await.is_ok());
-    assert!(PinCode::delete_pin(core_ctx.clone(), vec![]).await.is_ok());
+    assert!(PinCode::delete(core_ctx.clone(), vec![]).await.is_ok());
+    assert!(PinCode::delete(core_ctx.clone(), vec![]).await.is_ok());
+    assert!(PinCode::delete(core_ctx.clone(), vec![]).await.is_ok());
 
     assert!(PinProtection::get(&tether).await.unwrap().is_none());
     assert_eq!(
@@ -188,6 +180,6 @@ trait PinContextExt {
 
 impl PinContextExt for Context {
     fn last_access_reset(&self) {
-        self.clock().pin_code_duration_sub(Duration::from_secs(2));
+        self.clock().pin_code_reset();
     }
 }

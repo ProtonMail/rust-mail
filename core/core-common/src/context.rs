@@ -739,7 +739,7 @@ impl Context {
 
         if let Ok(false) = self.any_logged_in_account().await {
             tracing::debug!("Remove any remaining app protection settings");
-            PinCode::delete_app_protection(self.as_arc())
+            PinCode::force_delete(self.as_arc())
                 .await
                 .map_err(|e| anyhow!("Could not remove PIN, details: `{e}`"))?;
         }
