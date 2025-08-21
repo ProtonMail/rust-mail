@@ -27,7 +27,7 @@ use crate::pin_code::PinCode;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Context as _, Error as AnyhowError, anyhow};
 use async_trait::async_trait;
-use builder::ContextBuilder;
+pub use builder::ContextBuilder;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::{self, Action, WriterGuardError};
@@ -294,6 +294,7 @@ const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
 impl Context {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
+        mut builder: ContextBuilder,
         origin: Origin,
         runtime: runtime::Handle,
         account_db_path: impl Into<PathBuf>,
@@ -354,7 +355,7 @@ impl Context {
         let task_service = TaskService::new(runtime)?;
         let background_task_service = BackgroundAwareTaskService::new(task_service);
 
-        let mut builder = ContextBuilder::new()
+        builder = builder
             .with_service(CoreClock::default())
             .with_service(LoggingService::new(log_service));
 

@@ -39,7 +39,4 @@ impl EventPollConfigService {
 #[async_trait]
 impl Service for EventPollConfigService {
     type Error = CoreContextError;
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }

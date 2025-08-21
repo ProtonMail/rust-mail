@@ -23,7 +23,4 @@ impl LoggingService {
 #[async_trait]
 impl Service for LoggingService {
     type Error = CoreContextError;
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
