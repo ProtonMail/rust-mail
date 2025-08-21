@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- Only issue rollback if there are things to rollback
+
+
+## [mail-uniffi-v0.133.1] - 2025-08-21
+
+### Features
+
+- Support custom mobile-side resolver
+
+
+## [mail-uniffi-v0.136.0] - 2025-08-21
+
 ### Features
 
 - Expose context builder when building context in mail app
@@ -38,6 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- Introduce `generate_csp_nonce()`
+- Add `AllMessageActions` mechanism based upon `AllListActions`
+- Add MessageActionSheet type build in the same way as message toolbars are
 - [ET-1307] Introduce Unleash API endpoint to mail-api
 - Unsubscribe to newsletter via HTTP request
 - [breaking change] Use load_image instead of load_embedded_attachment and force remote images to use https
@@ -47,6 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-4328] Ensure LabelAs and Move work correctly offline
+- [ET-4298] Fix mime type inference for replies
+- [ET-4260] Improve alternative routing for Human Verification
+- Correct resolved host for challenge server
 - [ET-4298] Parse X-PM-MIMETYPE
 - labels: Watch `MailSettings` as well
 - [ET-4297] Fix invalid order_field scroller records
@@ -78,22 +99,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - uniffi: Add resolve_system_label_id()
-
-
-## [mail-uniffi-v0.133.0] - 2025-08-19
-
-### Features
-
-- Introduce `generate_csp_nonce()`
-- Add `AllMessageActions` mechanism based upon `AllListActions`
-- Add MessageActionSheet type build in the same way as message toolbars are
-
-### Fixes
-
-- [ET-4328] Ensure LabelAs and Move work correctly offline
-- [ET-4298] Fix mime type inference for replies
-- [ET-4260] Improve alternative routing for Human Verification
-- Correct resolved host for challenge server
 
 
 ## [mail-uniffi-v0.125.6] - 2025-08-18

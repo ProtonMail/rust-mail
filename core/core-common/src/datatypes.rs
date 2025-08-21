@@ -58,6 +58,7 @@ use derive_more::Into;
 use derive_more::derive::TryFrom;
 use itertools::Itertools;
 use jiff::civil::Weekday;
+use proton_core_api::services::proton::muon::rt::DynResolver;
 use proton_core_api::services::proton::{
     AddressId, ContactEmailId, ContactId, DeviceEnvironment as ApiDeviceEnvironment, LabelId,
     LabelType as ApiLabelType, LightOrDarkMode as ApiLightOrDarkMode,
@@ -993,12 +994,10 @@ pub struct AppDetails {
 #[derive(Clone)]
 pub struct ApiConfig {
     pub app_details: AppDetails,
-
     pub user_agent: Option<String>,
-
     pub env_id: EnvId,
-
     pub proxy: Option<String>,
+    pub resolver: Option<DynResolver>,
 }
 
 impl ApiConfig {
@@ -1023,6 +1022,7 @@ impl From<ApiConfig> for RealApiConfig {
             user_agent: config.user_agent,
             env_id: config.env_id,
             proxy: config.proxy,
+            resolver: config.resolver,
         }
     }
 }
@@ -1758,6 +1758,7 @@ mod tests {
                 user_agent: None,
                 env_id: EnvId::new_prod(),
                 proxy: None,
+                resolver: None,
             }
         }
     }
