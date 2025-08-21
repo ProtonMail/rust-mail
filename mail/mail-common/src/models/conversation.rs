@@ -544,7 +544,7 @@ impl Conversation {
     pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                if existing.is_known {
+                if existing.is_known && !existing.labels.is_empty() {
                     *self = existing;
 
                     tracing::trace!(
