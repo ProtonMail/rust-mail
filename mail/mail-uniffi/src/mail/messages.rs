@@ -1345,7 +1345,12 @@ pub async fn get_mobile_list_toolbar_actions(
     uniffi_async(async move {
         let tether = ctx.user_stash().connection();
         let actions = RealMobileAction::list_toolbar_actions(&tether).await?;
-        Result::<_, RealProtonMailError>::Ok(actions.map_vec())
+        Result::<_, RealProtonMailError>::Ok(
+            actions
+                .iter()
+                .filter_map(MobileAction::from_real)
+                .collect_vec(),
+        )
     })
     .await
     .map_err(ActionError::from)
@@ -1362,7 +1367,12 @@ pub async fn get_mobile_message_toolbar_actions(
     uniffi_async(async move {
         let tether = ctx.user_stash().connection();
         let actions = RealMobileAction::message_toolbar_actions(&tether).await?;
-        Result::<_, RealProtonMailError>::Ok(actions.map_vec())
+        Result::<_, RealProtonMailError>::Ok(
+            actions
+                .iter()
+                .filter_map(MobileAction::from_real)
+                .collect_vec(),
+        )
     })
     .await
     .map_err(ActionError::from)
@@ -1375,7 +1385,10 @@ pub async fn get_mobile_message_toolbar_actions(
 #[must_use]
 pub fn get_all_mobile_list_actions() -> Vec<MobileAction> {
     let actions = RealMobileAction::all_list_actions();
-    actions.map_vec()
+    actions
+        .iter()
+        .filter_map(MobileAction::from_real)
+        .collect_vec()
 }
 
 /// Get all available mobile message toolbar actions.
@@ -1385,5 +1398,8 @@ pub fn get_all_mobile_list_actions() -> Vec<MobileAction> {
 #[must_use]
 pub fn get_all_mobile_message_actions() -> Vec<MobileAction> {
     let actions = RealMobileAction::all_message_actions();
-    actions.map_vec()
+    actions
+        .iter()
+        .filter_map(MobileAction::from_real)
+        .collect_vec()
 }
