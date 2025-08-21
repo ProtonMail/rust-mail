@@ -121,10 +121,11 @@ impl PinCode {
             let Some(mut pin_protection) = PinProtection::get(&tether).await? else {
                 return Err(PinError::MissingPinMetadata);
             };
-            let last_access = ctx.clock().pin_code_elapsed().as_secs();
 
-            if last_access <= Self::PIN_CODE_ACCESS_INTERVAL {
-                return Err(PinError::TooFrequentAttempts);
+            if let Some(last_access) = ctx.clock().pin_code_elapsed() {
+                if last_access.as_secs() <= Self::PIN_CODE_ACCESS_INTERVAL {
+                    return Err(PinError::TooFrequentAttempts);
+                }
             }
 
             // We have no guarantees that hashing function will not block whole runtime

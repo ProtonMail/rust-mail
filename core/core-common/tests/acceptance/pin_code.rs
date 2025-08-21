@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use proton_core_common::Context;
 use proton_core_common::test_utils::test_context::TestContext;
 use proton_core_common::{
@@ -188,6 +186,6 @@ trait PinContextExt {
 
 impl PinContextExt for Context {
     fn last_access_reset(&self) {
-        self.clock().pin_code_duration_sub(Duration::from_secs(2));
+        self.clock().pin_code_reset();
     }
 }

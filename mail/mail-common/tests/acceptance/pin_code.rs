@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use proton_core_common::models::{AppProtection, AppSettings, PinProtection};
 use proton_core_common::pin_code::{PinCode, PinError};
@@ -126,17 +124,17 @@ async fn sign_out_all_on_too_many_attempts_of_pin_code_action(
 
 async fn set_default_pin_code(user_ctx: &MailUserContext) {
     let mut tether = user_ctx.core_context().account_stash().connection();
+
     // Set PIN code
     PinCode::set_pin(user_ctx.core_context().clone(), vec![1, 2, 3, 4])
         .await
         .unwrap();
+
     // Make this attempt a last one
     let mut pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
     pin_metadata.attempts = PinCode::MAX_ATTEMPTS - 1;
-    user_ctx
-        .core_context()
-        .clock()
-        .pin_code_duration_sub(Duration::from_secs(2));
+    user_ctx.core_context().clock().pin_code_reset();
+
     tether
         .tx(async |bond| pin_metadata.save(bond).await)
         .await
