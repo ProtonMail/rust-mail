@@ -1,16 +1,18 @@
 use stash::orm::Model;
+use std::error::Error;
 use std::io::Error as IoError;
 use std::ops::Deref;
 use std::sync::Arc;
+use tracing::{info, instrument};
 
 use proton_crypto_pin_hash::argon2::{Argon2HashingError, ProtonArgon2Hash};
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::StashError;
 use thiserror::Error;
-use tokio::task::JoinError;
+use tokio::task::{self, JoinError};
 
 use crate::models::{AppProtection, AppSettings, ModelExtension, PinProtection};
-use crate::os::{KeyChainError, StoreInKeyChain};
+use crate::os::{KeyChainEntryKind, KeyChainError, StoreInKeyChain};
 use crate::{Context, CoreContextError};
 
 #[derive(Debug, Error)]
@@ -45,8 +47,6 @@ pub enum PinError {
     IoError(#[from] IoError),
 }
 
-/// Struct to group PIN code functionality
-///
 pub struct PinCode;
 
 impl PinCode {
@@ -56,15 +56,11 @@ impl PinCode {
     const HIGHEST_SINGLE_DIGIT: u32 = 9;
     const PIN_CODE_ACCESS_INTERVAL: u64 = 1;
 
-    /// Creates new PIN
-    ///
-    /// Stores `PinProtection` in account database and PIN hash in keychain
-    ///
-    /// Method does not verify old PIN if existed it is up to client to make that
-    /// verification.
-    ///
-    pub async fn set_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
-        tracing::info!("Setting pin code");
+    // Note that this method does not verify old PIN if existed - it is up to
+    // client to make that verification.
+    pub async fn set(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
+        info!("Setting pin");
+
         let pin_len = pin.len();
 
         if pin_len < Self::MIN_PASSWD_LEN {
@@ -75,16 +71,19 @@ impl PinCode {
             return Err(PinError::TooLong);
         }
 
-        let pin = Self::sanitize_pin(pin)?;
+        let pin = Self::sanitize(pin)?;
 
         // We have no guarantees that hashing function will not block whole runtime
         // Better be safe than sorry.
-        let ctx_clone = ctx.clone();
-        tokio::task::spawn_blocking(move || {
-            let secret = ProtonArgon2Hash::hash(pin).map(PinHash)?;
-            ctx_clone.store_secret(secret)?;
+        task::spawn_blocking({
+            let ctx = ctx.clone();
 
-            Result::<(), PinError>::Ok(())
+            move || {
+                let secret = ProtonArgon2Hash::hash(pin).map(PinHash)?;
+                ctx.store_secret(secret)?;
+
+                Result::<(), PinError>::Ok(())
+            }
         })
         .await??;
 
@@ -108,12 +107,10 @@ impl PinCode {
         Ok(())
     }
 
-    /// Validate PIN value
-    /// This method will be utilized to verify user if he is eligible person to access the app.
-    ///
-    pub async fn validate_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
-        tracing::info!("Validating pin");
-        let pin = Self::sanitize_pin(pin)?;
+    pub async fn verify(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
+        info!("Verifying pin");
+
+        let pin = Self::sanitize(pin)?;
         let mut tether = ctx.account_stash().connection();
         let app_settings = AppSettings::get_or_default(&tether).await;
 
@@ -131,7 +128,7 @@ impl PinCode {
             // We have no guarantees that hashing function will not block whole runtime
             // Better be safe than sorry.
             let ctx_clone = ctx.clone();
-            let success = tokio::task::spawn_blocking(move || {
+            let success = task::spawn_blocking(move || {
                 let Some(secret) = ctx_clone.load_secret::<PinHash>()? else {
                     return Err(PinError::MissingPinHash);
                 };
@@ -171,19 +168,14 @@ impl PinCode {
         }
     }
 
-    /// Delete PIN
-    ///
-    /// This method validates correctness of the PIN code so it proceed when presented with proper value.
-    ///
-    /// Chosen order of the removal is to minimalize possibility of ending up in incorrect state
-    /// Firstly the database is updated and when successful the `PinHash` is removed from the `KeyChain`.
-    ///
-    pub async fn delete_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
-        Self::validate_pin(ctx.clone(), pin).await?;
-        Self::delete_app_protection(ctx).await
+    pub async fn delete(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
+        info!("Deleting pin");
+
+        Self::verify(ctx.clone(), pin).await?;
+        Self::force_delete(ctx).await
     }
 
-    pub(crate) async fn delete_app_protection(ctx: Arc<Context>) -> Result<(), PinError> {
+    pub(crate) async fn force_delete(ctx: Arc<Context>) -> Result<(), PinError> {
         let mut tether = ctx.account_stash().connection();
         let mut app_settings = AppSettings::get_or_default(&tether).await;
         let pin_protection = PinProtection::get(&tether).await?;
@@ -202,13 +194,13 @@ impl PinCode {
             })
             .await?;
 
-        tokio::task::spawn_blocking(move || ctx.delete_secret::<PinHash>()).await??;
+        task::spawn_blocking(move || ctx.delete_secret::<PinHash>()).await??;
 
         Ok(())
     }
 
     #[allow(clippy::result_large_err)]
-    fn sanitize_pin(pin: Vec<u32>) -> Result<Vec<u8>, PinError> {
+    fn sanitize(pin: Vec<u32>) -> Result<Vec<u8>, PinError> {
         pin.into_iter()
             .map(|num| {
                 if num <= Self::HIGHEST_SINGLE_DIGIT {
@@ -232,12 +224,11 @@ impl Deref for PinHash {
 }
 
 impl StoreInKeyChain for PinHash {
-    fn kind() -> crate::os::KeyChainEntryKind {
-        crate::os::KeyChainEntryKind::PinHash
+    fn kind() -> KeyChainEntryKind {
+        KeyChainEntryKind::PinHash
     }
-    fn from_stored_string(
-        s: SecretString,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+
+    fn from_stored_string(s: SecretString) -> Result<Self, Box<dyn Error + Send + Sync>> {
         // unwrap safety: ProtonArgon2Hash::from_str returns `Infallible`
         Ok(s.expose_secret().parse().map(PinHash).unwrap())
     }
@@ -257,8 +248,9 @@ mod tests {
     #[test_case(vec![1], Ok(vec![1]))]
     #[test_case(vec![9], Ok(vec![9]))]
     #[test_case(vec![10], Err(PinError::Malformed))]
-    fn test_standarize_pin(pin: Vec<u32>, expected: Result<Vec<u8>, PinError>) {
-        let actual = PinCode::sanitize_pin(pin);
+    fn test_sanitize_pin(pin: Vec<u32>, expected: Result<Vec<u8>, PinError>) {
+        let actual = PinCode::sanitize(pin);
+
         if expected.is_err() {
             assert_eq!(
                 actual.unwrap_err().to_string(),

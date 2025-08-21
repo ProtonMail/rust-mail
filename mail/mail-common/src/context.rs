@@ -513,8 +513,7 @@ impl MailContext {
     ///
     /// Returns an error if the PIN code is incorrect.
     pub async fn verify_pin_code(self: &Arc<Self>, pin: Vec<u32>) -> MailContextResult<()> {
-        self.handle_pin_code_action(pin, PinCode::validate_pin)
-            .await
+        self.handle_pin_code_action(pin, PinCode::verify).await
     }
 
     /// Delete the PIN code.
@@ -523,7 +522,7 @@ impl MailContext {
     ///
     /// Returns an error if the PIN code is incorrect.
     pub async fn delete_pin_code(self: &Arc<Self>, pin: Vec<u32>) -> MailContextResult<()> {
-        self.handle_pin_code_action(pin, PinCode::delete_pin).await
+        self.handle_pin_code_action(pin, PinCode::delete).await
     }
 
     async fn handle_pin_code_action<F: Future<Output = Result<(), PinError>>>(

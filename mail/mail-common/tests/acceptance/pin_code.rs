@@ -126,7 +126,7 @@ async fn set_default_pin_code(user_ctx: &MailUserContext) {
     let mut tether = user_ctx.core_context().account_stash().connection();
 
     // Set PIN code
-    PinCode::set_pin(user_ctx.core_context().clone(), vec![1, 2, 3, 4])
+    PinCode::set(user_ctx.core_context().clone(), vec![1, 2, 3, 4])
         .await
         .unwrap();
 
