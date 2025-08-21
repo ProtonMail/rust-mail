@@ -9,7 +9,7 @@ use crate::label;
 use crate::models::{Attachment, Conversation, ConversationLabel, MailSettings, Message};
 use crate::test_utils::db::new_test_connection_file;
 use crate::test_utils::db_states::{
-    new_test_delete_db_state, new_test_label_db_state,
+    new_conversation_snooze_db_state, new_test_delete_db_state, new_test_label_db_state,
     new_test_label_db_state_label_with_existing_labels, new_test_unread_db_state,
     new_test_unread_db_state_unread_label_in_folder,
 };
@@ -3150,4 +3150,252 @@ async fn conversation_save_updates_local_ids_for_attachment_metadata() {
         })
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn conversation_snooze_without_message_metadata() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
+    let initial_time = UnixTimestamp::new(4096);
+    let snooze_time = UnixTimestamp::now().saturating_add(8096);
+    let api_conversation = ApiConversation {
+        id: ConversationId::from("My-Conv"),
+        attachment_info: Default::default(),
+        attachments_metadata: vec![],
+        display_snoozed_reminder: false,
+        expiration_time: 0,
+        labels: vec![
+            ApiConversationLabel {
+                id: LabelId::inbox(),
+                context_expiration_time: 0,
+                context_num_attachments: 0,
+                context_num_messages: 2,
+                context_num_unread: 0,
+                context_size: 1025,
+                context_snooze_time: initial_time.as_u64(),
+                context_time: initial_time.as_u64(),
+            },
+            ApiConversationLabel {
+                id: LabelId::all_mail(),
+                context_expiration_time: 0,
+                context_num_attachments: 0,
+                context_num_messages: 2,
+                context_num_unread: 0,
+                context_size: 1025,
+                context_snooze_time: initial_time.as_u64(),
+                context_time: initial_time.as_u64(),
+            },
+        ],
+        num_attachments: 0,
+        num_messages: 0,
+        num_unread: 0,
+        order: 0,
+        recipients: vec![],
+        senders: vec![],
+        size: 0,
+        subject: "".to_string(),
+        context_time: None,
+    };
+    let inbox_label_id = Label::remote_id_counterpart(LabelId::inbox(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let snooze_label_id = Label::remote_id_counterpart(LabelId::snoozed(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut local_conv: Conversation = tether
+        .tx::<_, _, MailContextError>(async |tx| {
+            let mut conv = Conversation::from(api_conversation);
+            conv.save(tx).await?;
+            Conversation::snooze(inbox_label_id, &[conv.id()], snooze_time, tx).await?;
+            Ok(conv)
+        })
+        .await
+        .unwrap();
+
+    local_conv.reload(&tether).await.unwrap();
+
+    assert_eq!(local_conv.snoozed_until, Some(snooze_time));
+    let snooze_label = local_conv
+        .labels
+        .iter()
+        .find(|v| v.local_label_id.unwrap() == snooze_label_id)
+        .unwrap();
+    assert_eq!(snooze_label.context_snooze_time, snooze_time);
+    assert_eq!(snooze_label.context_time, initial_time);
+    assert!(
+        !local_conv
+            .labels
+            .iter()
+            .any(|v| v.local_label_id.unwrap() == inbox_label_id)
+    );
+
+    // undo snooze
+    tether
+        .tx::<_, _, MailContextError>(async |tx| {
+            Conversation::unsnooze(snooze_label_id, &[local_conv.id()], tx).await?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    local_conv.reload(&tether).await.unwrap();
+
+    assert!(local_conv.snoozed_until.is_none());
+    let inbox_label = local_conv
+        .labels
+        .iter()
+        .find(|v| v.local_label_id.unwrap() == inbox_label_id)
+        .unwrap();
+    assert_eq!(inbox_label.context_snooze_time, initial_time);
+    assert_eq!(inbox_label.context_time, initial_time);
+    assert!(
+        !local_conv
+            .labels
+            .iter()
+            .any(|v| v.local_label_id.unwrap() == snooze_label_id)
+    );
+}
+
+#[tokio::test]
+async fn conversation_snooze_only_snoozes_received_messages_in_inbox() {
+    // 1 conversation with the following messages:
+    // * Inbox + Custom Label - received
+    // * Sent - sent/replied
+    // * Custom folder - received
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut conn = stash.connection();
+    let mut state = new_conversation_snooze_db_state();
+    let snooze_time = UnixTimestamp::now().saturating_add(8096);
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
+
+    let inbox_label_id = Label::remote_id_counterpart(LabelId::inbox(), &conn)
+        .await
+        .unwrap()
+        .unwrap();
+    let snooze_label_id = Label::remote_id_counterpart(LabelId::snoozed(), &conn)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+
+    let local_msg_id_1 = *state_map
+        .messages
+        .get(state.messages[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id_2 = *state_map
+        .messages
+        .get(state.messages[1].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id_3 = *state_map
+        .messages
+        .get(state.messages[2].remote_id.as_ref().unwrap())
+        .unwrap();
+
+    conn.tx(async |tx| {
+        Conversation::snooze(inbox_label_id, &[local_conv_id], snooze_time, tx).await
+    })
+    .await
+    .unwrap();
+
+    let mut conv = Conversation::find_by_id(local_conv_id, &conn)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut msg_1 = Message::find_by_id(local_msg_id_1, &conn)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut msg_2 = Message::find_by_id(local_msg_id_2, &conn)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut msg_3 = Message::find_by_id(local_msg_id_3, &conn)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(conv.snoozed_until, Some(snooze_time));
+    let snooze_label = conv
+        .labels
+        .iter()
+        .find(|v| v.local_label_id.unwrap() == snooze_label_id)
+        .unwrap();
+    assert_eq!(snooze_label.context_snooze_time, snooze_time);
+    assert!(
+        !conv
+            .labels
+            .iter()
+            .any(|v| v.local_label_id.unwrap() == inbox_label_id)
+    );
+
+    // Message 1 should be snoozed
+    assert_eq!(msg_1.snooze_time, snooze_time);
+    assert_eq!(msg_1.snoozed_until(), Some(snooze_time));
+    assert!(msg_1.label_ids.contains(&LabelId::snoozed()));
+    assert!(msg_1.label_ids.contains(&MY_LABEL_ID1));
+    assert!(!msg_1.label_ids.contains(&LabelId::inbox()));
+
+    // Message 2 and 3 remain unaffected.
+    assert_eq!(msg_2.snooze_time, 0.into());
+    assert!(msg_2.snoozed_until().is_none());
+    assert!(!msg_2.label_ids.contains(&LabelId::snoozed()));
+    assert!(!msg_2.label_ids.contains(&LabelId::inbox()));
+    assert!(msg_2.label_ids.contains(&LabelId::sent()));
+
+    assert_eq!(msg_3.snooze_time, 0.into());
+    assert!(msg_3.snoozed_until().is_none());
+    assert!(!msg_3.label_ids.contains(&LabelId::snoozed()));
+    assert!(!msg_3.label_ids.contains(&LabelId::inbox()));
+    assert!(msg_3.label_ids.contains(&MY_LABEL_ID2));
+
+    // unsooze the conversation
+
+    conn.tx(async |tx| Conversation::unsnooze(snooze_label_id, &[local_conv_id], tx).await)
+        .await
+        .unwrap();
+    conv.reload(&conn).await.unwrap();
+    msg_1.reload(&conn).await.unwrap();
+    msg_2.reload(&conn).await.unwrap();
+    msg_3.reload(&conn).await.unwrap();
+
+    assert!(conv.snoozed_until.is_none());
+    let inbox_label = conv
+        .labels
+        .iter()
+        .find(|v| v.local_label_id.unwrap() == inbox_label_id)
+        .unwrap();
+    assert_eq!(inbox_label.context_snooze_time, state.messages[0].time);
+    assert!(
+        !conv
+            .labels
+            .iter()
+            .any(|v| v.local_label_id.unwrap() == snooze_label_id)
+    );
+
+    // Message 1 should be returned to inbox
+    assert_eq!(msg_1.snooze_time, state.messages[0].time);
+    assert!(msg_1.snoozed_until().is_none());
+    assert!(!msg_1.label_ids.contains(&LabelId::snoozed()));
+    assert!(msg_1.label_ids.contains(&MY_LABEL_ID1));
+    assert!(msg_1.label_ids.contains(&LabelId::inbox()));
+
+    // Message 2 and 3 remain unaffected.
+    assert_eq!(msg_2.snooze_time, 0.into());
+    assert!(msg_2.snoozed_until().is_none());
+    assert!(!msg_2.label_ids.contains(&LabelId::snoozed()));
+    assert!(!msg_2.label_ids.contains(&LabelId::inbox()));
+    assert!(msg_2.label_ids.contains(&LabelId::sent()));
+
+    assert_eq!(msg_3.snooze_time, 0.into());
+    assert!(msg_3.snoozed_until().is_none());
+    assert!(!msg_3.label_ids.contains(&LabelId::snoozed()));
+    assert!(!msg_3.label_ids.contains(&LabelId::inbox()));
+    assert!(msg_3.label_ids.contains(&MY_LABEL_ID2));
 }

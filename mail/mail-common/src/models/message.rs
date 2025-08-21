@@ -1934,6 +1934,30 @@ impl Message {
         split_request(ids, 150, endpoint).await
     }
 
+    pub async fn update_snooze_time_with_conv_id(
+        conversation_id: LocalConversationId,
+        label_id: LocalLabelId,
+        snooze_time: UnixTimestamp,
+        bond: &Bond<'_>,
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        bond.query_values::<_, LocalMessageId>(
+            indoc! {
+            "UPDATE messages SET snooze_time = MAX(time, ?)
+                WHERE flags & ? AND local_conversation_id =? AND local_id IN (
+                    SELECT local_message_id FROM message_labels WHERE local_label_id =?
+                )
+                RETURNING local_id AS value"
+                },
+            params![
+                snooze_time,
+                MessageFlags::RECEIVED,
+                conversation_id,
+                label_id
+            ],
+        )
+        .await
+    }
+
     pub async fn update_snooze_time(
         ids: Vec<LocalMessageId>,
         snooze_time: UnixTimestamp,

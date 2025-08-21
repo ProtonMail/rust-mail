@@ -3,7 +3,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel, UnixTimestamp};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_common::actions::conversations::Snooze;
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::{MessageFlags, SystemLabelId};
 use proton_mail_common::models::{Conversation, ConversationCounters, ConversationLabel, Message};
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::scroller::StoreLabeledModelMap as _;
@@ -42,14 +42,16 @@ async fn setup_test_label(label_id: LocalLabelId, tether: &mut Tether) -> TestDa
         local_conversation_id: conv.local_id,
         remote_conversation_id: conv.remote_id.clone(),
         local_address_id: address.local_id.unwrap(),
-        remote_address_id: address.remote_id.clone().unwrap()
+        remote_address_id: address.remote_id.clone().unwrap(),
+        flags: MessageFlags::RECEIVED
     );
     let mut sent_message = message!(
         remote_id: msg_id!("sent_msg"),
         local_conversation_id: conv.local_id,
         remote_conversation_id: conv.remote_id.clone(),
         local_address_id: address.local_id.unwrap(),
-        remote_address_id: address.remote_id.unwrap()
+        remote_address_id: address.remote_id.unwrap(),
+        flags: MessageFlags::SENT
     );
 
     // Set up counters for inbox

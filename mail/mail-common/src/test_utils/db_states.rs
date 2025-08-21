@@ -2,7 +2,8 @@ use std::convert::Into;
 use std::sync::LazyLock;
 
 use crate::datatypes::{
-    AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _, attachment,
+    AttachmentMetadata, Disposition, MessageFlags, MessageRecipients, SystemLabelId as _,
+    attachment,
 };
 use crate::models::{AttachmentType, Conversation, ConversationLabel, Message};
 use crate::test_utils::search::{
@@ -10,7 +11,7 @@ use crate::test_utils::search::{
 };
 use crate::test_utils::utils::{TestDBState, test_address};
 use proton_core_api::services::proton::LabelId;
-use proton_core_common::datatypes::UnixTimestamp;
+use proton_core_common::datatypes::{LabelType, UnixTimestamp};
 use proton_core_common::models::Label;
 use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
 
@@ -459,5 +460,81 @@ pub fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
             ..Conversation::test_default()
         }],
         messages: vec![CONV1_MSG1.to_owned()],
+    }
+}
+
+pub fn new_conversation_snooze_db_state() -> TestDBState {
+    TestDBState {
+        addresses: vec![test_address()],
+        labels: vec![
+            Label {
+                remote_id: Some(LabelId::inbox()),
+                label_type: LabelType::System,
+                ..Label::test_default()
+            },
+            Label {
+                remote_id: Some(LabelId::sent()),
+                label_type: LabelType::System,
+                ..Label::test_default()
+            },
+            Label {
+                remote_id: Some(LabelId::snoozed()),
+                label_type: LabelType::System,
+                ..Label::test_default()
+            },
+            Label {
+                remote_id: Some(LabelId::all_mail()),
+                label_type: LabelType::System,
+                ..Label::test_default()
+            },
+            test_label1(),
+            test_label2(),
+        ],
+        conversations: vec![Conversation {
+            remote_id: Some(DELETE_DB_CONV1.clone()),
+            labels: vec![
+                ConversationLabel {
+                    remote_label_id: Some(LabelId::inbox()),
+                    ..ConversationLabel::test_default()
+                },
+                ConversationLabel {
+                    remote_label_id: Some(LabelId::sent()),
+                    ..ConversationLabel::test_default()
+                },
+                ConversationLabel {
+                    remote_label_id: Some(MY_LABEL_ID1.clone()),
+                    ..ConversationLabel::test_default()
+                },
+                ConversationLabel {
+                    remote_label_id: Some(MY_LABEL_ID2.clone()),
+                    ..ConversationLabel::test_default()
+                },
+            ],
+            expiration_time: UnixTimestamp::new(0),
+            ..Conversation::test_default()
+        }],
+        messages: vec![
+            Message {
+                // Received message with custom label
+                label_ids: vec![LabelId::inbox(), MY_LABEL_ID1.clone()],
+                flags: MessageFlags::RECEIVED,
+                snooze_time: UnixTimestamp::new(0),
+                ..CONV1_MSG1.to_owned()
+            },
+            Message {
+                // Sent message
+                label_ids: vec![LabelId::sent()],
+                flags: MessageFlags::SENT,
+                snooze_time: UnixTimestamp::new(0),
+                ..CONV1_MSG2.to_owned()
+            },
+            Message {
+                // Received message in custom folder.
+                label_ids: vec![MY_LABEL_ID2.clone()],
+                flags: MessageFlags::RECEIVED,
+                snooze_time: UnixTimestamp::new(0),
+                ..CONV1_MSG3.to_owned()
+            },
+        ],
     }
 }

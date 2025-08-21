@@ -1779,18 +1779,28 @@ impl Conversation {
             .expect("Snoozed should be set");
 
         for id in ids {
-            let message_ids = Message::ids_in_conversation_unordered(*id, bond).await?;
-            let removed_ids = Message::remove_label(local_inbox_id, message_ids, bond).await?;
-            Message::update_snooze_time(removed_ids.clone(), snooze_until, bond).await?;
-            Message::apply_label(local_snoozed_id, removed_ids, bond).await?;
+            let message_ids =
+                Message::update_snooze_time_with_conv_id(*id, local_inbox_id, snooze_until, bond)
+                    .await?;
+            Self::remove_label(local_inbox_id, [*id], bond).await?;
 
-            //TODO: Check snooze update propagation
-            if let Some(mut label) =
-                ConversationLabel::find_by_conversation_and_label_id(*id, local_snoozed_id, bond)
-                    .await?
-            {
-                label.context_snooze_time = snooze_until;
-                label.save(bond).await?;
+            if message_ids.is_empty() {
+                // we don't have any messages available to us, apply the label and manually modify the time.
+                // apply_label will create an initial state for the `ConversationLabel`
+                Self::apply_label(local_snoozed_id, [*id], bond).await?;
+                if let Some(mut label) = ConversationLabel::find_by_conversation_and_label_id(
+                    *id,
+                    local_snoozed_id,
+                    bond,
+                )
+                .await?
+                {
+                    label.context_snooze_time = snooze_until;
+                    label.save(bond).await?;
+                }
+            } else {
+                // Apply snooze label directly to the know messages.
+                Message::apply_label(local_snoozed_id, message_ids, bond).await?;
             }
         }
 
@@ -1814,23 +1824,20 @@ impl Conversation {
             .expect("Inbox should be set");
 
         for id in ids {
-            //TODO: remove snooze before removing label?
-            let message_ids = Message::ids_in_conversation_unordered(*id, bond).await?;
-            let removed_ids = Message::remove_label(local_snoozed_id, message_ids, bond).await?;
-            Message::apply_label(local_inbox_id, removed_ids.iter().copied(), bond).await?;
+            let message_ids = Message::update_snooze_time_with_conv_id(
+                *id,
+                local_snoozed_id,
+                UnixTimestamp::new(0),
+                bond,
+            )
+            .await?;
 
-            //TODO: Check snooze update propagation
-            // Reset the snooze time for the conversation
-            if let Some(mut label) =
-                ConversationLabel::find_by_conversation_and_label_id(*id, local_inbox_id, bond)
-                    .await?
-            {
-                label.context_snooze_time = label.context_time;
-                label.save(bond).await?;
+            Self::remove_label(local_snoozed_id, [*id], bond).await?;
+            if message_ids.is_empty() {
+                Self::apply_label(local_inbox_id, [*id], bond).await?;
+            } else {
+                Message::apply_label(local_inbox_id, message_ids, bond).await?;
             }
-
-            // Reset the message's snooze time to recieve time
-            Message::update_snooze_time(removed_ids, UnixTimestamp::new(0), bond).await?;
         }
 
         Ok(())
