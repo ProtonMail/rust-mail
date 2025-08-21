@@ -23,7 +23,7 @@ pub fn message_as_table(
         let num_attachments = msg.num_attachments;
         let num_labels = msg.custom_labels.len();
 
-        let date = if msg.display_snooze_reminder() {
+        let date = if msg.display_snooze_reminder() || msg.snoozed_until().is_some() {
             date_from_timestamp(msg.snooze_time).fg(Color::Yellow)
         } else {
             let date = date_from_timestamp(msg.time);

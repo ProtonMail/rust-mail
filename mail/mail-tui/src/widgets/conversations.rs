@@ -11,16 +11,11 @@ impl AsIntoTable for Vec<ContextualConversation> {
         let rows = self.iter().map(|conv| {
             let flags = format_flags(conv.is_starred, false, conv.expiration_time);
 
-            let date = if let Some(time) = conv.snoozed_until {
-                date_from_timestamp(time).fg(Color::Yellow)
+            let date = if conv.display_snooze_reminder || conv.snoozed_until.is_some() {
+                date_from_timestamp(conv.snooze_time).fg(Color::Yellow)
             } else {
                 let date = date_from_timestamp(conv.time);
-
-                if conv.display_snooze_reminder {
-                    date.fg(Color::Yellow)
-                } else {
-                    Span::raw(date)
-                }
+                Span::raw(date)
             };
 
             let num_attachments = conv.num_attachments;
