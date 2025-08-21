@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Features
+
+- Expose context builder when building context in mail app
+- [ET-3702] auto-lock: Add more logs
+
+### Fixes
+
+- Snooze/Unsooze should work with partial data
+- provide migrations for old label_as and move_to
+
+
 ## [mail-uniffi-v0.135.0] - 2025-08-21
 
 ### Features
@@ -56,18 +69,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correct Conversation label_as available actions
 
 
-## [mail-uniffi-v0.133.0] - 2025-08-19
-
-### Features
-
-- Introduce `generate_csp_nonce()`
-- Add MessageActionSheet type build in the same way as message toolbars are
-
-### Fixes
-
-- [ET-4298] Fix mime type inference for replies
-
-
 ## [mail-uniffi-v0.132.0] - 2025-08-19
 
 ### Changed
@@ -76,12 +77,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- Add `AllMessageActions` mechanism based upon `AllListActions`
 - uniffi: Add resolve_system_label_id()
+
+
+## [mail-uniffi-v0.133.0] - 2025-08-19
+
+### Features
+
+- Introduce `generate_csp_nonce()`
+- Add `AllMessageActions` mechanism based upon `AllListActions`
+- Add MessageActionSheet type build in the same way as message toolbars are
 
 ### Fixes
 
 - [ET-4328] Ensure LabelAs and Move work correctly offline
+- [ET-4298] Fix mime type inference for replies
 - [ET-4260] Improve alternative routing for Human Verification
 - Correct resolved host for challenge server
 
