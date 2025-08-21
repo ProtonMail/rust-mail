@@ -87,6 +87,8 @@ pub struct Draft {
     /// This is only set when creating a reply and is only valid while the instance
     /// of the draft is open after it has been opened or a rew reply has been created.
     sender_alias: Option<String>,
+
+    last_draft_save_action_id: Option<ActionId>,
 }
 
 impl Draft {
@@ -272,6 +274,7 @@ impl Draft {
             mime_type: decrypted.mime_type,
             address_validation_result: None,
             sender_alias,
+            last_draft_save_action_id: metadata.save_action_id,
         };
         draft.sanitize_body();
 
@@ -402,6 +405,7 @@ impl Draft {
             body,
             address_validation_result: None,
             sender_alias: None,
+            last_draft_save_action_id: None,
         }
     }
 
@@ -646,6 +650,7 @@ impl Draft {
             mime_type,
             address_validation_result,
             sender_alias,
+            last_draft_save_action_id: None,
         };
 
         patch_draft_with_reply_mode(
@@ -733,21 +738,27 @@ impl Draft {
     }
 
     pub async fn save(
-        &self,
+        &mut self,
         queue: &Queue,
         tether: &Tether,
         origin: Origin,
     ) -> Result<QueuedActionOutput<Save>, MailContextError> {
-        self.to_save_action().queue(queue, tether, origin).await
+        let r = self.to_save_action().queue(queue, tether, origin).await;
+        if let Ok(output) = &r {
+            self.last_draft_save_action_id = Some(output.id)
+        }
+        r
     }
 
     pub async fn send(
-        &self,
+        &mut self,
         queue: &Queue,
         tether: &Tether,
         origin: Origin,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
-        self.to_send_action()?.queue(queue, tether, origin).await
+        self.to_send_action()?
+            .queue(queue, tether, origin, &mut self.last_draft_save_action_id)
+            .await
     }
 
     /// Apply an action which will schedule a send this draft at the given `delivery_time`.
@@ -762,7 +773,7 @@ impl Draft {
         origin: Origin,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
         self.to_schedule_send_action(delivery_time)?
-            .queue(queue, tether, origin)
+            .queue(queue, tether, origin, &mut self.last_draft_save_action_id)
             .await
     }
 
@@ -800,6 +811,7 @@ impl Draft {
             self.metadata_id,
             self.address_id.clone(),
             Save::new(self, DraftSendResultOrigin::Save),
+            self.last_draft_save_action_id,
         )
     }
 
@@ -826,6 +838,7 @@ impl Draft {
             self.metadata_id,
             self.address_id.clone(),
             Save::new(self, DraftSendResultOrigin::SaveBeforeSend),
+            self.last_draft_save_action_id,
         );
 
         let send_action = if let Some(delivery_time) = delivery_time {
@@ -1395,14 +1408,21 @@ struct DraftSaveActionQueuer {
     id: MetadataId,
     address_id: AddressId,
     action: Save,
+    last_save_action_id: Option<ActionId>,
 }
 
 impl DraftSaveActionQueuer {
-    fn new(id: MetadataId, address_id: AddressId, action: Save) -> Self {
+    fn new(
+        id: MetadataId,
+        address_id: AddressId,
+        action: Save,
+        last_save_action_id: Option<ActionId>,
+    ) -> Self {
         Self {
             id,
             address_id,
             action,
+            last_save_action_id,
         }
     }
 
@@ -1419,7 +1439,7 @@ impl DraftSaveActionQueuer {
 
         // We need to be aware of the last save action id to try and replace the existing one.
         // On failure, we only execute after the previous one has finished,
-        let last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
+        let last_draft_save_action_id = self.last_save_action_id;
 
         // If we have attachments that are still uploading we need to schedule a save after that
         // again to update the draft status.
@@ -1503,8 +1523,11 @@ impl DraftSendActionQueuer {
         queue: &Queue,
         tether: &Tether,
         origin: Origin,
+        last_draft_save_action_id: &mut Option<ActionId>,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
         let save_output = self.save_action.queue(queue, tether, origin).await?;
+
+        *last_draft_save_action_id = Some(save_output.id);
 
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)

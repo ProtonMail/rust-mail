@@ -1519,12 +1519,12 @@ impl DraftActor {
                         .change_sender_address(&ctx, email)
                         .await
                         .map(|_| draft.body().to_owned());
-                    let r = auto_saver.map_save(r, &ctx, &draft, &options).await;
+                    let r = auto_saver.map_save(r, &ctx, &mut draft, &options).await;
                     let _ = sender.send(r);
                 }
                 DraftActorMessage::SanitizeBody(sender) => {
                     draft.sanitize_body();
-                    let r = auto_saver.periodic_save(&ctx, &draft, &options).await;
+                    let r = auto_saver.periodic_save(&ctx, &mut draft, &options).await;
                     let _ = sender.send(r);
                 }
                 DraftActorMessage::SetMimeType { mime_type, sender } => {
@@ -1537,7 +1537,7 @@ impl DraftActor {
                 DraftActorMessage::SetBody { body, sender } => {
                     let r = if body != draft.body() {
                         draft.set_body(body);
-                        auto_saver.periodic_save(&ctx, &draft, &options).await
+                        auto_saver.periodic_save(&ctx, &mut draft, &options).await
                     } else {
                         Ok(())
                     };
@@ -1685,7 +1685,7 @@ impl DraftActor {
                         let _ = sender.send(r.map_err(Into::into));
                         continue;
                     }
-                    let r = auto_saver.map_save(r, &ctx, &draft, &options).await;
+                    let r = auto_saver.map_save(r, &ctx, &mut draft, &options).await;
                     let list = recipient_group_from_draft(&mut draft, group);
                     if r.is_ok() {
                         publish_event(DraftEvent::RecipientListUpdated {
@@ -1720,7 +1720,7 @@ impl DraftActor {
                         }
                     };
                     let r = auto_saver
-                        .save(&ctx, &draft, &options)
+                        .save(&ctx, &mut draft, &options)
                         .await
                         .map(|_| duplicates);
                     let list = recipient_group_from_draft(&mut draft, group);
@@ -1757,7 +1757,7 @@ impl DraftActor {
                                 .check_all(&ctx);
                         }
                     }
-                    let r = auto_saver.save(&ctx, &draft, &options).await;
+                    let r = auto_saver.save(&ctx, &mut draft, &options).await;
                     let _ = sender.send(r);
                     publish_event(DraftEvent::RecipientListsUpdated {
                         to: draft.to_list.clone(),
@@ -1772,7 +1772,7 @@ impl DraftActor {
                 } => {
                     recipient_group_from_draft(&mut draft, group)
                         .remove_single(email.as_clear_text_str());
-                    let r = auto_saver.save(&ctx, &draft, &options).await;
+                    let r = auto_saver.save(&ctx, &mut draft, &options).await;
                     let _ = sender.send(r);
                     let list = recipient_group_from_draft(&mut draft, group);
                     publish_event(DraftEvent::RecipientListUpdated {
@@ -1788,7 +1788,7 @@ impl DraftActor {
                 } => {
                     recipient_group_from_draft(&mut draft, group)
                         .remove_group_recipient(&group_name, email.as_clear_text_str());
-                    let r = auto_saver.save(&ctx, &draft, &options).await;
+                    let r = auto_saver.save(&ctx, &mut draft, &options).await;
                     let _ = sender.send(r);
                     let list = recipient_group_from_draft(&mut draft, group);
                     publish_event(DraftEvent::RecipientListUpdated {
@@ -1806,7 +1806,7 @@ impl DraftActor {
                         &group_name,
                         emails.into_iter().map(|v| v.into_clear_text_string()),
                     );
-                    let r = auto_saver.save(&ctx, &draft, &options).await;
+                    let r = auto_saver.save(&ctx, &mut draft, &options).await;
                     let _ = sender.send(r);
                     let list = recipient_group_from_draft(&mut draft, group);
                     publish_event(DraftEvent::RecipientListUpdated {
@@ -1820,7 +1820,7 @@ impl DraftActor {
                     sender,
                 } => {
                     recipient_group_from_draft(&mut draft, group).remove_group(&group_name);
-                    let r = auto_saver.save(&ctx, &draft, &options).await;
+                    let r = auto_saver.save(&ctx, &mut draft, &options).await;
                     let _ = sender.send(r);
                     let list = recipient_group_from_draft(&mut draft, group);
                     publish_event(DraftEvent::RecipientListUpdated {
@@ -1846,7 +1846,7 @@ impl DraftActor {
                 DraftActorMessage::SetSubject { subject, sender } => {
                     let r = if draft.subject != subject {
                         draft.subject = subject;
-                        auto_saver.save(&ctx, &draft, &options).await
+                        auto_saver.save(&ctx, &mut draft, &options).await
                     } else {
                         Ok(())
                     };
@@ -1873,7 +1873,7 @@ impl DraftActor {
                                 .check_all(&ctx);
                         }
                     }
-                    let r = auto_saver.save(&ctx, &draft, &options).await;
+                    let r = auto_saver.save(&ctx, &mut draft, &options).await;
                     let list = recipient_group_from_draft(&mut draft, group);
                     if r.is_ok() {
                         publish_event(DraftEvent::RecipientListUpdated {
@@ -1979,7 +1979,7 @@ impl DraftAutoSaver {
         &mut self,
         result: Result<T, E>,
         ctx: &MailUserContext,
-        draft: &draft_v1::Draft,
+        draft: &mut draft_v1::Draft,
         options: &DraftActorOptions,
     ) -> Result<T, MailContextError> {
         let v = result.map_err(Into::into)?;
@@ -1990,7 +1990,7 @@ impl DraftAutoSaver {
     async fn save(
         &mut self,
         ctx: &MailUserContext,
-        draft: &draft_v1::Draft,
+        draft: &mut draft_v1::Draft,
         options: &DraftActorOptions,
     ) -> Result<(), MailContextError> {
         if !options.auto_save_enabled() {
@@ -2002,7 +2002,7 @@ impl DraftAutoSaver {
     async fn periodic_save(
         &mut self,
         ctx: &MailUserContext,
-        draft: &draft_v1::Draft,
+        draft: &mut draft_v1::Draft,
         options: &DraftActorOptions,
     ) -> Result<(), MailContextError> {
         let Some(periodic_save_interval) = options.auto_save_every else {
@@ -2020,7 +2020,7 @@ impl DraftAutoSaver {
     async fn do_save(
         &mut self,
         ctx: &MailUserContext,
-        draft: &draft_v1::Draft,
+        draft: &mut draft_v1::Draft,
     ) -> Result<(), MailContextError> {
         let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
