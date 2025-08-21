@@ -9,6 +9,9 @@ pub enum UserApiServiceError {
     /// 401: The request was rejected due to authentication failure.
     Unauthorized(String),
 
+    /// 403: The request was refused due to insufficient permissions.
+    Forbidden(String),
+
     /// 404: The URL requested on the external API was not found.
     NotFound(String),
 
@@ -46,6 +49,7 @@ impl TryFrom<ApiServiceError> for UserApiServiceError {
         match error {
             BadRequest(_, info) => Ok(Self::BadRequest(format!("{info:?}"))),
             Unauthorized(_, info) => Ok(Self::Unauthorized(format!("{info:?}"))),
+            Forbidden(_, info) => Ok(Self::Forbidden(format!("{info:?}"))),
             NotFound(_, info) => Ok(Self::NotFound(format!("{info:?}"))),
             UnprocessableEntity(_, info) => Ok(Self::UnprocessableEntity(format!("{info:?}"))),
             TooManyRequests(_, info) => Ok(Self::TooManyRequests(format!("{info:?}"))),
