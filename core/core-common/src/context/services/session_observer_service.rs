@@ -139,7 +139,4 @@ impl Service for SessionObserverService {
         });
         Ok(())
     }
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }

@@ -7,6 +7,4 @@ pub trait Service: Any + Send + Sync + 'static {
     async fn init(&self) -> Result<(), Self::Error> {
         Ok(())
     }
-
-    fn as_any(&self) -> &dyn Any;
 }

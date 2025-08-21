@@ -31,7 +31,7 @@ impl<Err: Send + Sync + 'static> ServiceRegistry<Err> {
         let type_id = TypeId::of::<T>();
         tracing::trace!("Retrieving {}. type ID: {:?}", type_name::<T>(), type_id);
         self.services.get(&type_id).map(|service| {
-            service.as_any().downcast_ref::<T>().unwrap_or_else(|| {
+            <dyn std::any::Any>::downcast_ref(&**service).unwrap_or_else(|| {
                 panic!(
                     "Could not downcast_ref. Service {} - type ID {:?}",
                     type_name::<T>(),
@@ -50,9 +50,6 @@ mod tests {
     #[async_trait::async_trait]
     impl Service for TestService {
         type Error = ();
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
     }
 
     #[test]

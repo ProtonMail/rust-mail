@@ -28,9 +28,7 @@ pub struct ContextBuilder {
 impl ContextBuilder {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            services: IndexMap::new(),
-        }
+        Self::default()
     }
 
     #[must_use]

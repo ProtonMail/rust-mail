@@ -7,7 +7,7 @@ use crate::models::ModelExtension;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::test_utils::utils::{catch_all, mock_auth_endpoints};
 use crate::{
-    Context, UserContext, UserDatabaseInitializer,
+    Context, ContextBuilder, UserContext, UserDatabaseInitializer,
     db::account::SessionEncryptionKey,
     os::{InMemoryKeyChain, KeyChain, KeyChainExt},
 };
@@ -183,6 +183,7 @@ impl TestContext {
             .build();
 
         let context = Context::new(
+            ContextBuilder::new(),
             Origin::App,
             runtime::Handle::current(),
             tmp_dir.path(),
