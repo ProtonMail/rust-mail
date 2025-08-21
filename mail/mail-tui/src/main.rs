@@ -93,6 +93,7 @@ impl CliArgs {
             env_id,
             user_agent: None,
             proxy: None,
+            resolver: None,
         }
     }
 
