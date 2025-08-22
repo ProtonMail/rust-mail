@@ -72,7 +72,21 @@ impl TryFrom<DateTime<AnyForm>> for JiffZoned {
         match value.form {
             AnyForm::Local => Ok(dt.to_zoned(JiffTimeZone::unknown())?),
             AnyForm::Utc => Ok(dt.to_zoned(JiffTimeZone::UTC)?),
-            AnyForm::Tz(tz) => Ok(dt.in_tz(tz.value.as_str())?),
+
+            AnyForm::Tz(tz) => {
+                let result = dt.in_tz(tz.value.as_str());
+
+                // TODO use let-chains once we bump php-ical to a newer toolchain
+                if result.is_err() {
+                    if let Some(tz) = proton_ical_tz::windows_to_tzdb(tz.value.as_str()) {
+                        if let Ok(this) = dt.in_tz(tz) {
+                            return Ok(this);
+                        }
+                    }
+                }
+
+                result.map_err(Into::into)
+            }
         }
     }
 }

@@ -18,6 +18,7 @@ php = ["ext-php-rs"]
 ext-php-rs = { workspace = true, optional = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
+proton-ical-tz = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tynm = { workspace = true }

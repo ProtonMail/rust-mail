@@ -12,8 +12,9 @@ members = [
   "core/core-common",
   "core/event-loop",
   "shared/ical",
-  "shared/ical-fuzz",
   "shared/ical-cli",
+  "shared/ical-fuzz",
+  "shared/ical-tz",
   "shared/log-service",
   "shared/proton-canonical-email",
   "shared/sqlite3",
@@ -133,6 +134,7 @@ wiremock-multipart = "1.0.1"
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 libfuzzer-sys = "0.4"
 mockall = "0.13.1"
+quick-xml = "0.38.2"
 
 [workspace.dependencies.email_address]
 version = "0.2.9"
@@ -190,6 +192,9 @@ path = "shared/ical"
 
 [workspace.dependencies.proton-ical-cli]
 path = "shared/ical-cli"
+
+[workspace.dependencies.proton-ical-tz]
+path = "shared/ical-tz"
 
 [workspace.dependencies.proton-vcard]
 version = "0.2"

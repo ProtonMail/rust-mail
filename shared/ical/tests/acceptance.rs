@@ -1,4 +1,5 @@
 use insta::assert_snapshot;
+use jiff::Zoned;
 use pretty_assertions as pa;
 use proton_ical::*;
 use std::fmt::Write;
@@ -87,14 +88,13 @@ fn with_method() {
 
 #[test]
 fn without_calscale() {
-    let str = ics! {"
+    let out = VCalendar::from_str(&ics! {"
         BEGIN:VCALENDAR
         PRODID:-//Proton AG//iCal//EN
         VERSION:2.0
         END:VCALENDAR
-    "};
-
-    let out = VCalendar::from_str(&str).unwrap();
+    "})
+    .unwrap();
 
     assert_eq!(CalScale::Gregorian, out.cal.calscale);
     assert!(out.msgs.is_empty());
@@ -144,6 +144,56 @@ fn vtimezone() {
 
     assert_eq!(1, actual.len());
     assert_eq!("missing time zone", actual[0].body);
+}
+
+#[test]
+fn with_microsoft_timezone() {
+    let out = VCalendar::from_str(&ics! {"
+        BEGIN:VCALENDAR
+        METHOD:REQUEST
+        PRODID:Microsoft Exchange Server 2010
+        VERSION:2.0
+        BEGIN:VTIMEZONE
+        TZID:Central European Standard Time
+        BEGIN:STANDARD
+        DTSTART:16010101T030000
+        TZOFFSETFROM:+0200
+        TZOFFSETTO:+0100
+        RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=10
+        END:STANDARD
+        BEGIN:DAYLIGHT
+        DTSTART:16010101T020000
+        TZOFFSETFROM:+0100
+        TZOFFSETTO:+0200
+        RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=3
+        END:DAYLIGHT
+        END:VTIMEZONE
+        BEGIN:VEVENT
+        UID:1234
+        SUMMARY:outlook
+        DTSTAMP;TZID=Central European Standard Time:20180101T123000
+        DTSTART;TZID=Central European Standard Time:20180101T123000
+        DTEND;TZID=Central European Standard Time:20180101T130000
+        END:VEVENT
+        END:VCALENDAR
+    "})
+    .unwrap();
+
+    assert!(out.msgs.is_empty());
+    assert!(out.viols.is_empty());
+
+    let dtstart: Zoned = out.cal.events[0]
+        .dtstart
+        .clone()
+        .unwrap()
+        .value
+        .try_into()
+        .unwrap();
+
+    assert_eq!(
+        "2018-01-01T12:30:00+01:00[Europe/Warsaw]",
+        dtstart.to_string()
+    );
 }
 
 /// Make sure we can parse various atypical and funny cases.
