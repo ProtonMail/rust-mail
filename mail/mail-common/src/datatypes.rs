@@ -840,25 +840,11 @@ sql_using_serde!(AttachmentEncryptedSignature);
 ///
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentMetadata {
-    /// Local attachment id.
     pub local_id: Option<LocalAttachmentId>,
-
-    /// The attachment type of this attachment.
-    /// It can be a pgp attachment (local only, kept around for caching purposes)
-    /// Or a remote attachment, a real attachment, that has a RemoteId.
-    /// If you're looking for the AttachmentId, look here.
     pub attachment_type: AttachmentType,
-
-    /// Whether attachment is inlined or not.
     pub disposition: Disposition,
-
-    /// Attachment mime type.
     pub mime_type: attachment::MimeType,
-
-    /// Attachment file name.
     pub filename: String,
-
-    /// Attachment size in bytes.
     pub size: u64,
 }
 

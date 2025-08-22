@@ -811,24 +811,12 @@ impl From<RealMessageRecipientDisplayMode> for MessageRecipientDisplayMode {
 //  STRUCTS
 //==============================================================================
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct AttachmentMetadata {
-    /// Local attachment id
     pub id: Id,
-
-    /// TODO: Document this field.
     pub disposition: Disposition,
-
-    /// Attachment mime type is a flexible type that can be used to categorize
-    /// media types. It allows any media type to be used, but also has a
-    /// category field to allow to pick aprpopriate icons for the media type.
     pub mime_type: AttachmentMimeType,
-
-    /// TODO: Document this field.
     pub name: String,
-
-    /// TODO: Document this field.
     pub size: u64,
 }
 

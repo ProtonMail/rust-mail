@@ -1,12 +1,10 @@
+use crate::AppError;
 use mime::Mime;
 use stash::sql_using_serde;
-
 use std::fmt;
 use std::iter::repeat;
 use std::sync::LazyLock;
 use std::{collections::HashMap, str::FromStr};
-
-use crate::AppError;
 
 pub type MimeName = &'static str;
 
@@ -71,21 +69,6 @@ impl MimeTypeCategory {
     }
 }
 
-/// MimeType is a struct that represents a mime type of an attachment.
-/// It is parsed from a string and may fail if the string is not a valid
-/// MIME type.
-///
-/// ## Purpose
-///
-/// Design around this focus on extracting only one important piece of information
-/// Which is the category of the mime type. This is done to simplify the process
-/// of choosing an icon for the attachment.
-///
-/// ## Usage
-///
-/// This struct in production flow should be only created by `FromStr::parse` method.
-/// Such flow ensures that the mime type is always valid and can be used safely.
-///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MimeType {
     mime: Mime,
@@ -106,29 +89,8 @@ impl FromStr for MimeType {
 }
 
 impl Default for MimeType {
-    /// According to this RFC: https://www.rfc-editor.org/rfc/rfc2046.txt
-    /// 4.5.1 Octet-Stream Subtype is described as arbitrary stream of bytes
-    /// which exact type is unknown. This Mime type is the best choice for
-    /// not know media type,  although it should be dealt with care since
-    /// it might contain malicious content.
-    ///
-    ///
-    /// As additional prove there is RFC https://www.rfc-editor.org/rfc/rfc7231.txt
-    /// regarding dealing with mime types in HTTP, where it is stated that
-    /// unknown Content-Type should be defined as application/octet-stream.
-    ///
-    /// ## RFC 7231
-    ///
-    /// If a Content-Type header field is not present, the recipient
-    /// MAY either assume a media type of "application/octet-stream"
-    /// ([RFC2046], Section 4.5.1) or examine the data to determine its type.
-    ///
-    /// # Usage
-    /// Default should be used only for belivable source of data such as
-    /// Proton API. Client should not allow user to upload files with
-    /// unknown mime type.
-    ///
     fn default() -> Self {
+        // Best fit according to https://www.rfc-editor.org/rfc/rfc2046.txt
         MimeType {
             mime: mime::APPLICATION_OCTET_STREAM,
             category: MimeTypeCategory::Default,
