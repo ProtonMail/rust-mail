@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::env;
 use std::fmt::Write;
 use std::fs;
@@ -17,7 +17,7 @@ fn main() {
     let zones = fs::read_to_string("data/windowsZones.xml").unwrap();
     let zones: SupplementalData = quick_xml::de::from_str(&zones).unwrap();
 
-    let zones: BTreeMap<_, _> = zones
+    let zones: HashMap<_, _> = zones
         .windows_zones
         .map_timezones
         .map_zone
@@ -43,11 +43,11 @@ fn main() {
         &out,
         format!(
             "
-            use std::collections::BTreeMap;
+            use std::collections::HashMap;
             use std::sync::LazyLock;
 
-            pub static MAP: LazyLock<BTreeMap<&'static str, &'static str>> = LazyLock::new(|| {{
-                BTreeMap::from_iter(vec![{zones}])
+            pub static MAP: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {{
+                HashMap::from_iter(vec![{zones}])
             }});
         "
         ),
