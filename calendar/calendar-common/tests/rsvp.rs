@@ -13,7 +13,7 @@ use proton_calendar_api::{
 };
 use proton_calendar_common::{
     RsvpAttendee, RsvpCache, RsvpCalendar, RsvpContacts, RsvpEvent, RsvpEventId, RsvpFetchApiError,
-    RsvpIntent, RsvpKeys, RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency,
+    RsvpIntent, RsvpKeys, RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency, RsvpRelation,
 };
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::session::{Config, Session};
@@ -544,7 +544,7 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
                 role: ical::Role::OptParticipant,
             },
         ],
-        user_attendee_idx: Some(0),
+        relation: RsvpRelation::Attendee { attendee_idx: 0 },
         calendar: Some(RsvpCalendar {
             id: "HzNtbT1J".into(),
             name: "My calendar".into(),
@@ -597,7 +597,7 @@ fn expected_offline_event(err: RsvpFetchApiError) -> RsvpEvent {
                 role: ical::Role::OptParticipant,
             },
         ],
-        user_attendee_idx: Some(0),
+        relation: RsvpRelation::Attendee { attendee_idx: 0 },
         calendar: None,
         progress: RsvpProgress::Pending,
         recency: RsvpRecency::Unknown(err),

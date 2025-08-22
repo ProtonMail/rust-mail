@@ -9,7 +9,7 @@ use pretty_assertions as pa;
 use proton_calendar_api::{CalendarAttendee, CalendarAttendeeStatus, ProtonCalendarMock};
 use proton_calendar_common::{
     RsvpAttendee, RsvpError, RsvpEventId, RsvpFetchApiError, RsvpFetchError, RsvpIntent,
-    RsvpOrganizer, RsvpProgress, RsvpRecency,
+    RsvpOrganizer, RsvpProgress, RsvpRecency, RsvpRelation,
 };
 use proton_core_api::{
     session::{Config, Session},
@@ -501,6 +501,7 @@ async fn user_is_organizer() {
 
     assert!(!actual.can_be_answered());
     assert_eq!(None, actual.user_attendee());
+    assert_eq!(RsvpRelation::Organizer, actual.relation);
 }
 
 #[tokio::test]
@@ -533,12 +534,12 @@ async fn user_is_party_crasher() {
             Weekday::Monday,
         )
         .await
-        .unwrap_err();
+        .unwrap()
+        .unwrap();
 
-    assert!(matches!(
-        actual,
-        RsvpFetchError::Rsvp(RsvpError::NotInvited)
-    ));
+    assert!(!actual.can_be_answered());
+    assert_eq!(None, actual.user_attendee());
+    assert_eq!(RsvpRelation::PartyCrasher, actual.relation);
 }
 
 /// Make sure we fall back to organizer's another email address if the one

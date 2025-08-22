@@ -168,7 +168,7 @@ pub struct RsvpEvent {
     pub occurrence: RsvpOccurrence,
     pub organizer: RsvpOrganizer,
     pub attendees: Vec<RsvpAttendee>,
-    pub user_attendee_idx: Option<usize>,
+    pub relation: RsvpRelation,
     pub calendar: Option<RsvpCalendar>,
     pub progress: RsvpProgress,
     pub recency: RsvpRecency,
@@ -208,7 +208,11 @@ impl RsvpEvent {
 
     #[must_use]
     pub fn user_attendee(&self) -> Option<&RsvpAttendee> {
-        self.user_attendee_idx.map(|idx| &self.attendees[idx])
+        if let RsvpRelation::Attendee { attendee_idx } = self.relation {
+            Some(&self.attendees[attendee_idx])
+        } else {
+            None
+        }
     }
 
     #[must_use]
@@ -222,7 +226,7 @@ impl RsvpEvent {
         self.intent == RsvpIntent::Invite
             && self.recency == RsvpRecency::Fresh
             && self.progress != RsvpProgress::Cancelled
-            && self.user_attendee_idx.is_some()
+            && self.user_attendee().is_some()
             && self.raw.is_some() // [1]
 
         // [1] `raw` can be missing only if there's no internet connection - but
@@ -448,16 +452,6 @@ pub enum RsvpOccurrence {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct RsvpAttendee {
-    pub id: Option<CalendarAttendeeId>,
-    pub token: Option<CalendarAttendeeToken>,
-    pub name: Option<String>,
-    pub email: String,
-    pub status: Option<CalendarAttendeeStatus>,
-    pub role: ical::Role,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct RsvpOrganizer {
     pub name: Option<String>,
 
@@ -470,6 +464,29 @@ pub struct RsvpOrganizer {
     /// Email address using which the organizer presents itself, e.g.
     /// `foo@pm.me`.
     pub display_email: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RsvpAttendee {
+    pub id: Option<CalendarAttendeeId>,
+    pub token: Option<CalendarAttendeeToken>,
+    pub name: Option<String>,
+    pub email: String,
+    pub status: Option<CalendarAttendeeStatus>,
+    pub role: ical::Role,
+}
+
+/// Relationship between the user and the invite they are looking at.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RsvpRelation {
+    /// User is the organizer of this event.
+    Organizer,
+
+    /// User is the attendee of this event.
+    Attendee { attendee_idx: usize },
+
+    /// User is neither the organizer nor the attendee of this event.
+    PartyCrasher,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -638,9 +655,6 @@ pub enum RsvpError {
 
     #[error("Invitation can't be answered")]
     NonAnswerable,
-
-    #[error("User has not been invited to this event")]
-    NotInvited,
 
     #[error("{0}")]
     Api(#[from] ApiServiceError),
