@@ -5,19 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.138.0] - 2025-08-22
+
+### Changed
+
+- Filter out unnecessary mobile actions in uniffi
+
+### Features
+
+- [ET-4397] Expose HTTP 403 Forbidden errors.
+- [ET-1307] Introduce Unleash feature flags service
+- [ET-4397] Fixed failing test, assert new Forbidden error.
+- [ET-4374] expose `remote_id` in UniFFI in `ContactDetailCard`
+
+### Fixes
+
+- vcard: Support empty `;TYPE=`
+- [ET-4439] Support Windows timezones
+- Remove ScrollerEq
+- Allow scroller to owerwrite local conversation when it has no labels
+- [ET-4426] Do not decorate images and links by default
+- Make a first page call in the scroller when total is empty and create missing labels in the conversation on scroller sync
+- [ET-4444] rsvp: Support party crashers (just reading)
+- Scroller will finish refresh update correctly
+- [ET-4412] Update text signatures generated from web
+- When scroller finds out on refresh that the label has items to display but they are not currently retivable it will queue `FetchMore` task
+
+
 ## [mail-uniffi-v0.137.0] - 2025-08-22
 
 ### Fixes
 
 - Only issue rollback if there are things to rollback
 - Less strict matching for TOTP error
-
-
-## [mail-uniffi-v0.133.1] - 2025-08-21
-
-### Features
-
-- Support custom mobile-side resolver
 
 
 ## [mail-uniffi-v0.136.0] - 2025-08-21
@@ -33,19 +53,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - provide migrations for old label_as and move_to
 
 
-## [mail-uniffi-v0.135.0] - 2025-08-21
+## [mail-uniffi-v0.133.1] - 2025-08-21
 
 ### Features
 
-- Bye Bye PDFs
-- Scroller now has `get_items` method returning the current state without reading database
-
-### Fixes
-
-- Fix typo on Fido2 observability events
+- Support custom mobile-side resolver
 
 
-## [mail-uniffi-v0.134.0] - 2025-08-20
+## [mail-uniffi-v0.135.0] - 2025-08-21
 
 ### Changed
 
@@ -62,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add AllConversationActions and ConversationActionSheet types & methods analogical to the message features
 - Add API integration for changing API settings
 - Add UpdateMobileActions action and all uniffi bindings required to customize toolbar feature to work
+- Bye Bye PDFs
+- Scroller now has `get_items` method returning the current state without reading database
 
 ### Fixes
 
@@ -75,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4297] Fix missing message snooze notifications
 - Ensure fresh auth info is cached
 - Validate queue action state
+- Fix typo on Fido2 observability events
 
 
 ## [mail-uniffi-v0.125.8] - 2025-08-20
