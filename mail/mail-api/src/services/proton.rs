@@ -449,4 +449,6 @@ pub trait ProtonMail {
     /// Gets feature flags defined in Unleash service.
     /// See: <https://docs.getunleash.io/reference/api/unleash/get-frontend-features/>
     async fn get_unleash_feature_flags(&self) -> ApiServiceResult<GetUnleashFeaturesResponse>;
+
+    async fn mark_unsubscribed(&self, id: Vec<MessageId>) -> ApiServiceResult<()>;
 }
