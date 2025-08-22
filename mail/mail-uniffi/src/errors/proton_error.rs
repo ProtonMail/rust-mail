@@ -50,6 +50,7 @@ fn into_uniffi_error(error: RealUserApiServiceError) -> UserApiServiceError {
     match error {
         RealUserApiServiceError::BadRequest(text) => UserApiServiceError::BadRequest(text),
         RealUserApiServiceError::Unauthorized(text) => UserApiServiceError::Unauthorized(text),
+        RealUserApiServiceError::Forbidden(text) => UserApiServiceError::Forbidden(text),
         RealUserApiServiceError::NotFound(text) => UserApiServiceError::NotFound(text),
         RealUserApiServiceError::UnprocessableEntity(text) => {
             UserApiServiceError::UnprocessableEntity(text)

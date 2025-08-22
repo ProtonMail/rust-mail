@@ -8,6 +8,9 @@ pub enum UserApiServiceError {
     /// 401: The request was rejected due to authentication failure.
     Unauthorized(String),
 
+    /// 403: The request was refused due to insufficient permissions.
+    Forbidden(String),
+
     /// 404: The URL requested on the external API was not found.
     NotFound(String),
 
@@ -45,10 +48,10 @@ pub enum UserApiServiceError {
 impl From<ApiServiceError> for UserApiServiceError {
     fn from(error: ApiServiceError) -> Self {
         use ApiServiceError::{
-            AuthStore, BadGateway, BadRequest, ConnectionError, InternalServerError, NetworkError,
-            NotFound, NotImplemented, OtherHttpError, ParseEndpoint, QueryStringError, Redirect,
-            RequestError, ResponseError, ServiceUnavailable, Timeout, TooManyRequests,
-            Unauthorized, UnknownError, UnprocessableEntity, Utf8DecodingError,
+            AuthStore, BadGateway, BadRequest, ConnectionError, Forbidden, InternalServerError,
+            NetworkError, NotFound, NotImplemented, OtherHttpError, ParseEndpoint,
+            QueryStringError, Redirect, RequestError, ResponseError, ServiceUnavailable, Timeout,
+            TooManyRequests, Unauthorized, UnknownError, UnprocessableEntity, Utf8DecodingError,
         };
 
         match error {
@@ -58,6 +61,10 @@ impl From<ApiServiceError> for UserApiServiceError {
 
             Unauthorized(_, info) => {
                 Self::Unauthorized(info.map(|info| format!("{info}")).unwrap_or_default())
+            }
+
+            Forbidden(_, info) => {
+                Self::Forbidden(info.map(|info| format!("{info}")).unwrap_or_default())
             }
 
             NotFound(_, info) => {

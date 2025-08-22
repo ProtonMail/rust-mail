@@ -126,6 +126,7 @@ impl From<&StatusErr> for ApiServiceError {
 
             (Status::BAD_REQUEST, e) => Self::BadRequest(e, err!(body)),
             (Status::UNAUTHORIZED, e) => Self::Unauthorized(e, err!(body)),
+            (Status::FORBIDDEN, e) => Self::Forbidden(e, err!(body)),
             (Status::NOT_FOUND, e) => Self::NotFound(e, err!(body)),
             (Status::UNPROCESSABLE_ENTITY, e) => Self::UnprocessableEntity(e, err!(body)),
             (Status::TOO_MANY_REQUESTS, e) => Self::TooManyRequests(e, err!(body)),

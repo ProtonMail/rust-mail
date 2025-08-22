@@ -304,7 +304,7 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     let actual = result.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: HTTP error 403 Forbidden: 403 Forbidden. None".to_string()
+        "API Error: Forbidden: 403 Forbidden. None".to_string()
     );
 
     assert_eq!(test_scroller.items().len(), 0);

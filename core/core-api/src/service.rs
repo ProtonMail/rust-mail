@@ -96,6 +96,10 @@ pub enum ApiServiceError {
     #[error("Unauthorized: {0}. {1:?}")]
     Unauthorized(String, Option<ApiErrorInfo>),
 
+    /// 403: The request was refused due to insufficient permissions.
+    #[error("Forbidden: {0}. {1:?}")]
+    Forbidden(String, Option<ApiErrorInfo>),
+
     /// 404: The URL requested on the external API was not found.
     #[error("Not found: {0}. {1:?}")]
     NotFound(String, Option<ApiErrorInfo>),
@@ -214,6 +218,7 @@ impl ApiServiceError {
         match self {
             BadRequest(_, Some(e))
             | Unauthorized(_, Some(e))
+            | Forbidden(_, Some(e))
             | NotFound(_, Some(e))
             | UnprocessableEntity(_, Some(e))
             | TooManyRequests(_, Some(e))

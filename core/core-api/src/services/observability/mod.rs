@@ -191,6 +191,7 @@ impl From<&ApiServiceError> for ApiServiceObservabilityResponse {
             ApiServiceError::Timeout(..)
             | ApiServiceError::BadRequest(..)
             | ApiServiceError::Unauthorized(..)
+            | ApiServiceError::Forbidden(..)
             | ApiServiceError::NotFound(..)
             | ApiServiceError::UnprocessableEntity(..)
             | ApiServiceError::TooManyRequests(..) => ApiServiceObservabilityResponse::Http4xx,
