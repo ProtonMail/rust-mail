@@ -3,13 +3,13 @@ source: mail/mail-html-transformer/src/html2text.rs
 expression: output
 snapshot_kind: text
 ---
- Alll Alll
+  Alll Alll
 Alll
 Alll
 
 Example style that caused regexps to crash
 
- Alll Alll
+  Alll Alll
 Alll
 Alll
 

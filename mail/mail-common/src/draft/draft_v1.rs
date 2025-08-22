@@ -1193,9 +1193,10 @@ impl Draft {
                     }
                     self.body = transformer.to_string();
                 } else if !output.old_signature.is_empty() {
-                    self.body = self
+                    let new_body = self
                         .body
-                        .replace(&output.old_signature, &output.new_signature)
+                        .replace(&output.old_signature, &output.new_signature);
+                    self.body = new_body;
                 }
             }
         }
