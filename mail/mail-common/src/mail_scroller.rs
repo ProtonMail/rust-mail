@@ -779,22 +779,20 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         src: ScrollerSource,
     ) -> Result<(), MailContextError> {
         let total = Self::total(&self.source, &self.ctx).await?;
+        let seen = Self::seen(&self.source, &self.ctx).await?;
         let page_size = self.page_size as u64;
-        let is_small_label = total > 0 && total < page_size;
+        let cant_see_first_page = total > 0 && seen < page_size && seen < total;
 
-        if is_small_label {
-            let seen = Self::seen(&self.source, &self.ctx).await?;
-            let should_fetch = seen < total;
-            if should_fetch {
-                tracing::info!("Fetch more for small ({is_small_label}) label");
-                if let Ok(result) = self.fetch_more(src).await
-                    && result.is_some()
-                {
-                    let _ =
-                        self.update.send_async(result).await.inspect_err(|e| {
-                            tracing::error!("Failed to send append update: {e:?}")
-                        });
-                }
+        if cant_see_first_page {
+            tracing::info!("Fetch more because we do cant see the first page");
+            if let Ok(result) = self.fetch_more(src).await
+                && result.is_some()
+            {
+                let _ = self
+                    .update
+                    .send_async(result)
+                    .await
+                    .inspect_err(|e| tracing::error!("Failed to send append update: {e:?}"));
             }
         }
 
@@ -827,7 +825,6 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         let is_online = ctx.session().status().await.is_online();
 
         if self.task.is_some() && is_online {
-            tracing::debug!("Awaiting for previous task");
             Self::await_task(&mut self.task).await
         } else {
             Ok(())

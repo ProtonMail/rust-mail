@@ -238,8 +238,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
 
     // Get next page - it will progress cursor to the next page
     // But there is no more data available, the request will return an empty page
-    test_scroller.fetch_more().unwrap();
-    let actual_page = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let actual_page = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual_page.len(), 5);
     assert_scroller_content!(
         &mut test_scroller,
