@@ -818,10 +818,13 @@ pub struct AttachmentMetadata {
     pub mime_type: AttachmentMimeType,
     pub name: String,
     pub size: u64,
+    pub is_listable: bool,
 }
 
 impl From<RealAttachmentMetadata> for AttachmentMetadata {
     fn from(value: RealAttachmentMetadata) -> Self {
+        let is_listable = value.is_listable();
+
         AttachmentMetadata {
             // FIXME: This will exist after the cache MR is merged
             id: value.local_id.unwrap_or(u64::MAX.into()).into(),
@@ -829,6 +832,7 @@ impl From<RealAttachmentMetadata> for AttachmentMetadata {
             mime_type: value.mime_type.into(),
             name: value.filename,
             size: value.size,
+            is_listable,
         }
     }
 }
@@ -1478,6 +1482,7 @@ impl From<RealMessage> for Message {
         let can_reply = value.can_reply();
         let display_snooze_reminder = value.display_snooze_reminder();
         let snoozed_until = value.snoozed_until();
+
         Message {
             id: value.id().into(),
             conversation_id: value.local_conversation_id.unwrap().into(),

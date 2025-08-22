@@ -75,7 +75,7 @@ use crate::models::{
     Attachment, AttachmentType, MailSettings, MessageBodyMetadata, MessageMimeType,
 };
 use crate::{AppError, MailContextError, MailUserContext};
-use attachment::ContentId;
+use attachment::{ContentId, MimeTypeCategory};
 use core::fmt;
 use proton_core_api::services::proton::{AddressId, LabelId, PrivateEmail, PrivateString};
 use proton_core_common::datatypes::{
@@ -854,6 +854,25 @@ impl AttachmentMetadata {
             AttachmentType::Remote(id) => id.clone(),
             _ => None,
         }
+    }
+
+    /// Some attachments (e.g. GPG keys) are "not interesting" - they should be
+    /// displayed when user _opens_ a message, but not as those small "pills" on
+    /// the message/conversation list itself, as not to clutter the view.
+    ///
+    /// This function determines whether an attachment should be visible on the
+    /// message/conversation list or not.
+    pub fn is_listable(&self) -> bool {
+        matches!(
+            self.mime_type.category(),
+            MimeTypeCategory::Audio
+                | MimeTypeCategory::Excel
+                | MimeTypeCategory::Image
+                | MimeTypeCategory::Pdf
+                | MimeTypeCategory::Powerpoint
+                | MimeTypeCategory::Video
+                | MimeTypeCategory::Word
+        )
     }
 }
 
