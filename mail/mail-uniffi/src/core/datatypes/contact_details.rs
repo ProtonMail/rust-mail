@@ -3,6 +3,7 @@ use crate::core::datatypes::AvatarInformation;
 use crate::errors::UserSessionError;
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
+use proton_core_api::services::proton::ContactId;
 use proton_core_common::datatypes::contact_details::ContactDetailAddress as RealAddress;
 use proton_core_common::datatypes::contact_details::ContactDetailsEmail as RealContactDetailsEmail;
 use proton_core_common::datatypes::contact_details::ContactField as RealContactField;
@@ -40,6 +41,7 @@ pub async fn get_contact_details(
 #[derive(uniffi::Record)]
 pub struct ContactDetailCard {
     pub id: Id,
+    pub remote_id: Option<String>,
     pub avatar_information: AvatarInformation,
     pub extended_name: ExtendedName,
     /// These are sorted per display order
@@ -50,6 +52,7 @@ impl From<RealContactDetails> for ContactDetailCard {
     fn from(value: RealContactDetails) -> Self {
         Self {
             id: value.id.into(),
+            remote_id: value.remote_id.map(ContactId::into_inner),
             avatar_information: value.avatar_information.into(),
             extended_name: value.extended_name.into(),
             fields: value.fields.map_vec(),
