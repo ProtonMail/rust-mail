@@ -31,7 +31,11 @@ impl GenericType {
     /// # Errors
     ///   * if at least one of the given values is not valid
     pub fn set_from_values(values: &[String]) -> VCardParameterResult<HashSet<Self>> {
-        values.iter().map(|v| Self::try_from(v.as_str())).collect()
+        values
+            .iter()
+            .filter(|value| !value.trim().is_empty())
+            .map(|v| Self::try_from(v.as_str()))
+            .collect()
     }
 }
 
