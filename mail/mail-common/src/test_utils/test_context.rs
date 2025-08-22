@@ -16,12 +16,13 @@ use proton_event_loop::subscriber::SubscriberError;
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::ops::Deref;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tempdir::TempDir;
 use tracing::info;
-use wiremock::MockServer;
 use wiremock::matchers::any;
-use wiremock::{Mock, Request};
+use wiremock::{Mock, Request, Respond};
+use wiremock::{MockServer, ResponseTemplate};
 
 /// Test context for mail tests.
 ///
@@ -327,5 +328,35 @@ impl MailUserContextTestExtension for MailUserContext {
 async fn wait_for_impl(user_ctx: &MailUserContext, fun: impl Fn(ConnectionStatus) -> bool) {
     while !fun(user_ctx.session().status().await) {
         tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// Whenever we need to test a specific response pattern.
+/// Example: Service is unavailable for the first 3 times.
+pub struct RespondNthTime {
+    count: AtomicUsize,
+    max: usize,
+    before: ResponseTemplate,
+    after: ResponseTemplate,
+}
+
+impl RespondNthTime {
+    pub fn new(max: usize, before: ResponseTemplate, after: ResponseTemplate) -> Self {
+        Self {
+            count: AtomicUsize::new(0),
+            max,
+            before,
+            after,
+        }
+    }
+}
+impl Respond for RespondNthTime {
+    fn respond(&self, _request: &wiremock::Request) -> ResponseTemplate {
+        let time = self.count.fetch_add(1, Ordering::SeqCst);
+        if time < self.max {
+            return self.before.clone();
+        }
+
+        self.after.clone()
     }
 }

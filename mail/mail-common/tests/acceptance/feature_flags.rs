@@ -5,34 +5,14 @@ use proton_core_common::services::Service;
 use proton_mail_api::services::proton::response_data::{UnleashToggle, UnleashToggleVariant};
 use proton_mail_api::services::proton::responses::GetUnleashFeaturesResponse;
 use proton_mail_common::feature_flags::FeatureFlagsService;
-use proton_mail_common::test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::test_context::{MailTestContext, RespondNthTime};
 use serde_json::json;
 use stash::orm::Model;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-async fn setup_feature_flags_service(ctx: &MailTestContext) -> FeatureFlagsService {
-    let core_context = ctx.core_context();
-    let weak_ctx = std::sync::Arc::downgrade(core_context);
-    let service = FeatureFlagsService::new(weak_ctx);
-
-    service
-        .init()
-        .await
-        .expect("Failed to initialize FeatureFlagsService");
-    service
-}
-
-fn test_unleash_variant() -> UnleashToggleVariant {
-    UnleashToggleVariant {
-        name: "enabled".to_string(),
-        feature_enabled: true,
-        payload: None,
-    }
-}
-
 #[tokio::test]
-async fn test_feature_flags_cold_start_blocks_on_fetch() {
+async fn test_feature_flags_cold_start_background_fetch() {
     let ctx = MailTestContext::new().await;
 
     let mock_response = GetUnleashFeaturesResponse {
@@ -62,6 +42,11 @@ async fn test_feature_flags_cold_start_blocks_on_fetch() {
 
     let feature_flags = setup_feature_flags_service(&ctx).await;
 
+    assert_eq!(feature_flags.get("TestFeatureA").await, None);
+    assert_eq!(feature_flags.get("TestFeatureB").await, None);
+
+    wait_for_flag(&feature_flags, "TestFeatureA", 4, 250).await;
+
     assert_eq!(feature_flags.get("TestFeatureA").await, Some(true));
     assert_eq!(feature_flags.get("TestFeatureB").await, Some(true));
     assert_eq!(feature_flags.get("NonExistentFeature").await, None);
@@ -69,8 +54,6 @@ async fn test_feature_flags_cold_start_blocks_on_fetch() {
 
 #[tokio::test]
 async fn test_feature_flags_warm_start_immediate_return() {
-    color_backtrace::install();
-
     let ctx = MailTestContext::new().await;
 
     {
@@ -169,15 +152,7 @@ async fn test_feature_flags_warm_start_background_refresh() {
     assert_eq!(feature_flags.get("ExistingFeature").await, Some(true));
     assert_eq!(feature_flags.get("NewFeatureFromRefresh").await, None);
 
-    let mut attempts = 4;
-
-    while attempts > 0 {
-        if feature_flags.get("NewFeatureFromRefresh").await.is_some() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-        attempts -= 1;
-    }
+    wait_for_flag(&feature_flags, "NewFeatureFromRefresh", 4, 250).await;
 
     assert_eq!(feature_flags.get("ExistingFeature").await, Some(true));
     assert_eq!(feature_flags.get("NewFeatureFromRefresh").await, Some(true));
@@ -233,28 +208,86 @@ async fn test_feature_flags_network_failure_preserves_cache() {
     assert_eq!(feature_flags.get("CachedFlag").await, Some(true));
     assert_eq!(feature_flags.get("NonExistentFlag").await, None);
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // To simulate that some time passed, we still get cached result.
+    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     assert_eq!(feature_flags.get("CachedFlag").await, Some(true));
 }
 
 #[tokio::test]
-async fn test_feature_flags_cold_start_network_failure() {
+async fn test_feature_flags_handle_network_failure() {
     let ctx = MailTestContext::new().await;
 
     Mock::given(method("GET"))
+        .and(path("/api/core/v4/tests/ping"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
         .and(path("/api/feature/v2/frontend"))
-        .respond_with(ResponseTemplate::new(500).set_body_json(json!({
-            "Code": 500,
-            "Error": "Internal server error"
-        })))
-        .expect(4) // HTTP client will retry on 500 errors
-        .named("Cold start network failure")
+        .respond_with(RespondNthTime::new(
+            2,
+            ResponseTemplate::new(500).set_body_json(json!({
+                "Code": 500,
+                "Error": "Internal server error"
+            })),
+            ResponseTemplate::new(200).set_body_json(GetUnleashFeaturesResponse {
+                toggles: vec![UnleashToggle {
+                    name: "TestFeatureRetry".to_string(),
+                    enabled: true,
+                    impression_data: false,
+                    variant: test_unleash_variant(),
+                }],
+            }),
+        ))
+        .expect(3)
+        .named("Cold start network failure then success")
         .mount(ctx.mock_server())
         .await;
 
     let feature_flags = setup_feature_flags_service(&ctx).await;
 
-    assert_eq!(feature_flags.get("AnyFlag").await, None);
-    assert_eq!(feature_flags.get("AnotherFlag").await, None);
+    wait_for_flag(&feature_flags, "TestFeatureRetry", 10, 1000).await;
+
+    assert_eq!(feature_flags.get("TestFeatureRetry").await, Some(true));
+    assert_eq!(feature_flags.get("NonExistentFeature").await, None);
+}
+
+async fn wait_for_flag(
+    service: &FeatureFlagsService,
+    key: &str,
+    mut attempts: usize,
+    sleep_ms: u64,
+) {
+    let initial = attempts;
+    while attempts > 0 {
+        if service.get(key).await.is_some() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+        attempts -= 1;
+    }
+
+    panic!("Flag {key} not found after {initial} attempts");
+}
+
+async fn setup_feature_flags_service(ctx: &MailTestContext) -> FeatureFlagsService {
+    let core_context = ctx.core_context();
+    let weak_ctx = std::sync::Arc::downgrade(core_context);
+    let service = FeatureFlagsService::new(weak_ctx);
+
+    service
+        .init()
+        .await
+        .expect("Failed to initialize FeatureFlagsService");
+    service
+}
+
+fn test_unleash_variant() -> UnleashToggleVariant {
+    UnleashToggleVariant {
+        name: "enabled".to_string(),
+        feature_enabled: true,
+        payload: None,
+    }
 }
