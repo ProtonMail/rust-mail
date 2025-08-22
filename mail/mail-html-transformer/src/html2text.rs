@@ -26,7 +26,13 @@ pub fn html2text(reader: impl Read, options: Html2TextOptions) -> Result<String,
             //TODO(ET-4282): Returning empty string does not introduce a new line. There seems to
             // no way to insert a new line at the time being. So we manually remove
             // our custom tags for the time being.
-            s.replace(PROTON_IMAGE_DECORATION, "")
+
+            // Web inserts this byte sequence where the image was supposed to be.
+            // Without it we can't correctly replace the signatures generated on web.
+            s.replace(
+                PROTON_IMAGE_DECORATION,
+                str::from_utf8(&[194, 160]).expect("should not fail"),
+            )
         }
     })
 }
