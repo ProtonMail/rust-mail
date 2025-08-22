@@ -1,10 +1,14 @@
+use crate::AppError;
 use crate::actions::MailActionError;
-use crate::datatypes::{LocalMessageId, ParsedHeaders};
+use crate::datatypes::{LocalMessageId, MessageFlags, ParsedHeaders};
 use crate::models::Message;
 use anyhow::anyhow;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::muon::Client;
+use proton_core_common::models::ModelIdExtension;
+use proton_mail_api::services::proton::ProtonMail;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -85,6 +89,7 @@ impl Action for UnsubscribeNewsletter {
 
 pub struct UnsubscribeNewsletterHandler {
     pub http_client: reqwest::Client,
+    pub api: Client,
 }
 
 impl Handler for UnsubscribeNewsletterHandler {
@@ -96,7 +101,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::mark_unsubscribed(action.id, tx).await?;
+        Message::set_flags(action.id, MessageFlags::UNSUBSCRIBED, tx).await?;
         Ok(())
     }
 
@@ -106,7 +111,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::delete_mark_unsubscribed(action.id, tx).await?;
+        Message::unset_flags(action.id, MessageFlags::UNSUBSCRIBED, tx).await?;
         Ok(())
     }
 
@@ -114,7 +119,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        _: WriterGuard<'_>,
+        g: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         if let Some(url) = &action.request {
             debug!("sending unsubscribe request to {url}");
@@ -131,6 +136,11 @@ impl Handler for UnsubscribeNewsletterHandler {
                         "Server returned error when unsubscribing: {e:?}"
                     ))
                 })?;
+
+            let remote_msg_id = Message::local_id_counterpart(action.id, g.tether())
+                .await?
+                .ok_or(AppError::MessageHasNoRemoteId(action.id))?;
+            self.api.mark_unsubscribed(vec![remote_msg_id]).await?;
 
             return Ok(());
         }

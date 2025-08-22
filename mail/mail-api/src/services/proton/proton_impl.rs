@@ -550,4 +550,17 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
             .ok()?
             .into_body_json()?)
     }
+
+    async fn mark_unsubscribed(&self, ids: Vec<MessageId>) -> ApiServiceResult<()> {
+        let body = json!({
+            "IDs": ids
+        });
+
+        PUT!("{MAIL_V4}/messages/mark/unsubscribed")
+            .body_json(body)?
+            .send_with(self)
+            .await?
+            .ok()?;
+        Ok(())
+    }
 }
