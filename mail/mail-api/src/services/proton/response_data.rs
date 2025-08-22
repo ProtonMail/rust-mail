@@ -1416,8 +1416,15 @@ pub struct UnleashToggle {
 #[serde(rename_all = "snake_case")]
 pub struct UnleashToggleVariant {
     pub name: String,
+    #[serde(default = "default_feature_enabled")]
     pub feature_enabled: bool,
-    pub payload: UnleashTogglePayload,
+    #[serde(default)]
+    pub payload: Option<UnleashTogglePayload>,
+}
+
+fn default_feature_enabled() -> bool {
+    // Educated guess: If `feature_enabled` is missing, it means the feature is enabled.
+    true
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

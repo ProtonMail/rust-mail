@@ -1,4 +1,5 @@
 use crate::actions::MailActionError;
+use crate::feature_flags::FeatureFlagsService;
 use crate::mail_scroller::MailScrollerError;
 use crate::migration_snooper::MailMigrationSnooper;
 use crate::{AppError, MailUserContext, draft};
@@ -269,7 +270,8 @@ impl MailContext {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
 
-        let core_context_builder = ContextBuilder::new();
+        let core_context_builder =
+            ContextBuilder::new().with_cyclic_service(FeatureFlagsService::new);
         let core_context = Context::new(
             core_context_builder,
             origin,
@@ -315,6 +317,10 @@ impl MailContext {
         }
 
         Ok(ctx)
+    }
+
+    pub fn feature_flags(&self) -> &FeatureFlagsService {
+        self.core_context.get_service::<FeatureFlagsService>()
     }
 
     pub async fn new_with_core_context(
