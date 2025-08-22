@@ -546,21 +546,21 @@ impl Conversation {
     pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(mut existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                let existing_labels = existing
-                    .labels
-                    .iter()
-                    .map(|l| l.remote_label_id.clone())
-                    .collect::<HashSet<_>>();
-                let new_labels = self
-                    .labels
-                    .iter()
-                    .filter(|l| !existing_labels.contains(&l.remote_label_id))
-                    .cloned()
-                    .collect_vec();
-                let no_new_labels = new_labels.is_empty();
-                existing.labels.extend(new_labels);
-
                 if existing.is_known {
+                    let existing_labels = existing
+                        .labels
+                        .iter()
+                        .map(|l| l.remote_label_id.clone())
+                        .collect::<HashSet<_>>();
+                    let new_labels = self
+                        .labels
+                        .iter()
+                        .filter(|l| !existing_labels.contains(&l.remote_label_id))
+                        .cloned()
+                        .collect_vec();
+                    let no_new_labels = new_labels.is_empty();
+                    existing.labels.extend(new_labels);
+
                     *self = existing;
 
                     if no_new_labels {

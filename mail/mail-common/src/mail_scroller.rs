@@ -781,16 +781,12 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         let total = Self::total(&self.source, &self.ctx).await?;
         let page_size = self.page_size as u64;
         let is_small_label = total > 0 && total < page_size;
-        let no_longer_empty = self.items.is_empty() && total > 0;
 
-        if is_small_label || no_longer_empty {
-            let synced = Self::synced(&self.source, &self.ctx).await?;
-            let should_fetch_more = synced < page_size && synced < total;
-
-            if should_fetch_more {
-                tracing::info!(
-                    "Fetch more for small ({is_small_label}) or no longer empty ({no_longer_empty}) label"
-                );
+        if is_small_label {
+            let seen = Self::seen(&self.source, &self.ctx).await?;
+            let should_fetch = seen < total;
+            if should_fetch {
+                tracing::info!("Fetch more for small ({is_small_label}) label");
                 if let Ok(result) = self.fetch_more(src).await
                     && result.is_some()
                 {
@@ -808,9 +804,9 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     async fn sync_next(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
 
-        let previous_result = self.wait_for_request().await.inspect_err(|e| {
-            tracing::error!("Error occurred while waiting for previous request: {e:?}")
-        });
+        if let Err(e) = self.wait_for_request().await {
+            tracing::error!("Error occurred while waiting for previous request: {e:?}");
+        }
 
         let (items, task) = {
             let mut source = self.source.write().await;
@@ -823,11 +819,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         tracing::debug!("Fetched next page, items number: {}", items.len());
         self.task = task;
 
-        if items.is_empty() {
-            previous_result.map(|_| items)
-        } else {
-            Ok(items)
-        }
+        Ok(items)
     }
 
     async fn wait_for_request(&mut self) -> Result<(), MailContextError> {
