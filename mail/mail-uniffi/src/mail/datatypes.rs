@@ -64,6 +64,7 @@ pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
 pub use folder_banner::*;
+use itertools::Itertools;
 use parking_lot::Mutex;
 use proton_core_common::datatypes::{
     AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
@@ -1864,11 +1865,8 @@ pub enum MobileAction {
     Label,
     Move,
     Print,
-    Remind,
     Reply,
     ReportPhishing,
-    SaveAttachments,
-    SenderEmails,
     Snooze,
     Spam,
     ToggleLight,
@@ -1877,32 +1875,32 @@ pub enum MobileAction {
     Trash,
     ViewHeaders,
     ViewHTML,
-    Other(String),
 }
 
-impl From<RealMobileAction> for MobileAction {
-    fn from(value: RealMobileAction) -> Self {
+impl MobileAction {
+    #[must_use]
+    pub fn from_real(value: &RealMobileAction) -> Option<Self> {
         match value {
-            RealMobileAction::Archive => Self::Archive,
-            RealMobileAction::Forward => Self::Forward,
-            RealMobileAction::Label => Self::Label,
-            RealMobileAction::Move => Self::Move,
-            RealMobileAction::Print => Self::Print,
-            RealMobileAction::Remind => Self::Remind,
-            RealMobileAction::Reply => Self::Reply,
-            RealMobileAction::ReportPhishing => Self::ReportPhishing,
-            RealMobileAction::SaveAttachments => Self::SaveAttachments,
-            RealMobileAction::SenderEmails => Self::SenderEmails,
-            RealMobileAction::Snooze => Self::Snooze,
-            RealMobileAction::Spam => Self::Spam,
-            RealMobileAction::ToggleLight => Self::ToggleLight,
-            RealMobileAction::ToggleRead => Self::ToggleRead,
-            RealMobileAction::ToggleStar => Self::ToggleStar,
-            RealMobileAction::Trash => Self::Trash,
-            RealMobileAction::ViewHeaders => Self::ViewHeaders,
-            RealMobileAction::ViewHTML => Self::ViewHTML,
-            RealMobileAction::SavePDF => Self::Other("save_pdf".to_string()),
-            RealMobileAction::Other(s) => Self::Other(s),
+            RealMobileAction::Archive => Some(Self::Archive),
+            RealMobileAction::Forward => Some(Self::Forward),
+            RealMobileAction::Label => Some(Self::Label),
+            RealMobileAction::Move => Some(Self::Move),
+            RealMobileAction::Print => Some(Self::Print),
+            RealMobileAction::Reply => Some(Self::Reply),
+            RealMobileAction::ReportPhishing => Some(Self::ReportPhishing),
+            RealMobileAction::Snooze => Some(Self::Snooze),
+            RealMobileAction::Spam => Some(Self::Spam),
+            RealMobileAction::ToggleLight => Some(Self::ToggleLight),
+            RealMobileAction::ToggleRead => Some(Self::ToggleRead),
+            RealMobileAction::ToggleStar => Some(Self::ToggleStar),
+            RealMobileAction::Trash => Some(Self::Trash),
+            RealMobileAction::ViewHeaders => Some(Self::ViewHeaders),
+            RealMobileAction::ViewHTML => Some(Self::ViewHTML),
+            RealMobileAction::Remind
+            | RealMobileAction::SaveAttachments
+            | RealMobileAction::SenderEmails
+            | RealMobileAction::SavePDF
+            | RealMobileAction::Other(_) => None,
         }
     }
 }
@@ -1915,11 +1913,8 @@ impl From<MobileAction> for RealMobileAction {
             MobileAction::Label => Self::Label,
             MobileAction::Move => Self::Move,
             MobileAction::Print => Self::Print,
-            MobileAction::Remind => Self::Remind,
             MobileAction::Reply => Self::Reply,
             MobileAction::ReportPhishing => Self::ReportPhishing,
-            MobileAction::SaveAttachments => Self::SaveAttachments,
-            MobileAction::SenderEmails => Self::SenderEmails,
             MobileAction::Snooze => Self::Snooze,
             MobileAction::Spam => Self::Spam,
             MobileAction::ToggleLight => Self::ToggleLight,
@@ -1928,7 +1923,6 @@ impl From<MobileAction> for RealMobileAction {
             MobileAction::Trash => Self::Trash,
             MobileAction::ViewHeaders => Self::ViewHeaders,
             MobileAction::ViewHTML => Self::ViewHTML,
-            MobileAction::Other(s) => Self::Other(s),
         }
     }
 }
@@ -1955,7 +1949,11 @@ impl From<MobileSetting> for RealMobileSetting {
 impl From<RealMobileSetting> for MobileSetting {
     fn from(value: RealMobileSetting) -> Self {
         MobileSetting {
-            actions: value.actions.map_vec(),
+            actions: value
+                .actions
+                .iter()
+                .filter_map(MobileAction::from_real)
+                .collect_vec(),
             is_custom: value.is_custom,
         }
     }
