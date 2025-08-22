@@ -1423,6 +1423,7 @@ fn html_to_text(message: &str) -> Result<String> {
         cursor,
         Html2TextOptions {
             decorate_links: true,
+            decorate_images: false,
         },
     )
     .map_err(|e| anyhow!("Failed to parse HTML: {e}"))

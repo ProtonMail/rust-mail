@@ -269,9 +269,7 @@ impl Composer {
             MessageMimeType::TextHtml => {
                 let text = proton_mail_html_transformer::Transformer::html2text_str(
                     &state.body,
-                    Html2TextOptions {
-                        decorate_links: true,
-                    },
+                    Html2TextOptions::default(),
                 )
                 .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
 

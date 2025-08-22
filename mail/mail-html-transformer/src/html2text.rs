@@ -3,31 +3,41 @@ use std::io::Read;
 
 const COLUMN_WIDTH: usize = 80;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Html2TextOptions {
     pub decorate_links: bool,
+    pub decorate_images: bool,
 }
 
 pub fn html2text(reader: impl Read, options: Html2TextOptions) -> Result<String, html2text::Error> {
     let mut config = html2text::config::with_decorator(Decorator {
         parent: PlainDecorator::new(),
         decorate_links: options.decorate_links,
+        decorate_images: options.decorate_images,
     })
     .do_decorate();
 
-    if options.decorate_links {
-        config = config.link_footnotes(true);
-    }
+    config = config.link_footnotes(options.decorate_links);
 
-    config.string_from_read(reader, COLUMN_WIDTH)
+    config.string_from_read(reader, COLUMN_WIDTH).map(|s| {
+        if options.decorate_images {
+            s
+        } else {
+            //TODO(ET-4282): Returning empty string does not introduce a new line. There seems to
+            // no way to insert a new line at the time being. So we manually remove
+            // our custom tags for the time being.
+            s.replace(PROTON_IMAGE_DECORATION, "")
+        }
+    })
 }
 
 #[derive(Clone, Debug)]
 struct Decorator {
     parent: PlainDecorator,
     decorate_links: bool,
+    decorate_images: bool,
 }
-
+const PROTON_IMAGE_DECORATION: &str = "[proton-image-replace]";
 #[allow(clippy::semicolon_if_nothing_returned)]
 impl TextDecorator for Decorator {
     type Annotation = <PlainDecorator as TextDecorator>::Annotation;
@@ -89,7 +99,11 @@ impl TextDecorator for Decorator {
     }
 
     fn decorate_image(&mut self, src: &str, title: &str) -> (String, Self::Annotation) {
-        self.parent.decorate_image(src, title)
+        if self.decorate_images {
+            self.parent.decorate_image(src, title)
+        } else {
+            (String::from(PROTON_IMAGE_DECORATION), ())
+        }
     }
 
     fn header_prefix(&self, level: usize) -> String {
@@ -120,12 +134,13 @@ mod test {
 
     #[test]
     fn with_decorate_links() {
-        let input = fs::read_to_string("src/tests/smoke.html").unwrap();
+        let input = fs::read_to_string("src/tests/html/smoke.html").unwrap();
 
         let output = html2text(
             Cursor::new(input),
             Html2TextOptions {
                 decorate_links: true,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -135,16 +150,45 @@ mod test {
 
     #[test]
     fn without_decorate_links() {
-        let input = fs::read_to_string("src/tests/smoke.html").unwrap();
+        let input = fs::read_to_string("src/tests/html/smoke.html").unwrap();
 
         let output = html2text(
             Cursor::new(input),
             Html2TextOptions {
                 decorate_links: false,
+                ..Default::default()
             },
         )
         .unwrap();
 
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn decorate_image_blocks_disabled() {
+        let input = fs::read_to_string("src/tests/html/signature.html").unwrap();
+        let output = html2text(
+            Cursor::new(input),
+            Html2TextOptions {
+                decorate_links: false,
+                decorate_images: false,
+            },
+        )
+        .unwrap();
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn decorate_image_blocks_enabled() {
+        let input = fs::read_to_string("src/tests/html/signature.html").unwrap();
+        let output = html2text(
+            Cursor::new(input),
+            Html2TextOptions {
+                decorate_links: false,
+                decorate_images: true,
+            },
+        )
+        .unwrap();
         insta::assert_snapshot!(output);
     }
 }
