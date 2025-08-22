@@ -60,7 +60,7 @@ use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{MapToSql as _, placeholders, placeholders_n};
 use std::collections::hash_map::Entry as HmEntry;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::ops::AddAssign;
 use std::sync::Arc;
@@ -534,8 +534,10 @@ impl Conversation {
     /// is required due to multiprocess nature of mail application and the possibility to
     /// view mailboxes without interfering with processes triggered by the user.
     ///
-    /// However it will replace existing conversation with API data if
-    /// existing conversation is not fully known yet.
+    /// If the conversation is known and has new labels, it will update the conversation
+    /// by adding the new labels to the existing labels.
+    ///
+    /// If the conversation is not known, it will replace existing conversation with API data.
     ///
     /// # Errors
     ///
@@ -543,23 +545,39 @@ impl Conversation {
     ///
     pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
+            if let Some(mut existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 if existing.is_known {
+                    let existing_labels = existing
+                        .labels
+                        .iter()
+                        .map(|l| l.remote_label_id.clone())
+                        .collect::<HashSet<_>>();
+                    let new_labels = self
+                        .labels
+                        .iter()
+                        .filter(|l| !existing_labels.contains(&l.remote_label_id))
+                        .cloned()
+                        .collect_vec();
+                    let no_new_labels = new_labels.is_empty();
+                    existing.labels.extend(new_labels);
+
                     *self = existing;
 
-                    tracing::trace!(
+                    if no_new_labels {
+                        tracing::trace!(
+                            remote_id = ?self.remote_id,
+                            "Skipping saving conversation, we already have it in the local DB"
+                        );
+                        return Ok(());
+                    }
+                } else {
+                    // Otherwise, update the unknown conversation with API data
+                    self.local_id = existing.local_id;
+                    tracing::debug!(
                         remote_id = ?self.remote_id,
-                        "Skipping saving conversation, we already have it in the local DB"
+                        "Updating unknown conversation with API data"
                     );
-                    return Ok(());
                 }
-
-                // Otherwise, update the unknown conversation with API data
-                self.local_id = existing.local_id;
-                tracing::debug!(
-                    remote_id = ?self.remote_id,
-                    "Updating unknown conversation with API data"
-                );
             }
         }
 

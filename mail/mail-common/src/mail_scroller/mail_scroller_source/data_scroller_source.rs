@@ -6,7 +6,7 @@ use proton_core_common::{
 };
 use stash::orm::Model;
 use stash::stash::Tether;
-use tracing::{debug, trace, warn};
+use tracing::{debug, warn};
 
 use super::{
     MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
@@ -239,26 +239,21 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let local_label_id = label.id();
         let remote_label_id = label.remote_id.clone().unwrap();
 
-        let task = if total > 0 {
-            if is_offline().await {
-                debug!("We are offline, return scroller without a task");
-                None
-            } else {
-                debug!("Syncing first page in a task");
-                Self::sync_first_page(
-                    ctx,
-                    local_label_id,
-                    remote_label_id,
-                    unread,
-                    self.page_size,
-                    self.order_dir,
-                    self.order_field,
-                )
-                .await?
-            }
-        } else {
-            debug!("No data to sync, return scroller without a task");
+        let task = if is_offline().await {
+            debug!("We are offline, return scroller without a task");
             None
+        } else {
+            debug!("Syncing first page in a task");
+            Self::sync_first_page(
+                ctx,
+                local_label_id,
+                remote_label_id,
+                unread,
+                self.page_size,
+                self.order_dir,
+                self.order_field,
+            )
+            .await?
         };
 
         Ok(task)
@@ -373,11 +368,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             }
         }
 
-        trace!(
-            "new_data_arrived: {}, connection_returned: {}, replace: {}",
-            new_data_arrived, connection_returned, replace
-        );
-
         let (items, task) = match &mut self.state {
             MailScrollerState::Online(scroller) => {
                 // This is the only place where cache progresses,
@@ -390,7 +380,8 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 let items = scroller.fetch_more(&tether).await?;
                 let items = if replace {
                     debug!(
-                        "Items displayed on the screen are unordered, notifying client to reload"
+                        "Items displayed on the screen are unordered, new_data: {}, connection_returned: {}, notifying client to reload",
+                        new_data_arrived, connection_returned
                     );
                     Self::notify_scroller_order_invalid(&self.invalidate).await?;
 
