@@ -138,11 +138,14 @@ impl TryFrom<&mail::RsvpEvent> for RsvpEvent {
     type Error = RealProtonMailError;
 
     fn try_from(event: &mail::RsvpEvent) -> Result<Self, RealProtonMailError> {
-        let user_attendee_idx = event.user_attendee_idx.map(|idx| {
+        let user_attendee_idx = if let cal::RsvpRelation::Attendee { attendee_idx } = event.relation
+        {
             // Unwrap-safety: 4 million attendees would make for quite a big
-            // party (uniffi doesn't support `usize`).
-            u32::try_from(idx).unwrap()
-        });
+            // party (and uniffi doesn't support `usize`).
+            Some(u32::try_from(attendee_idx).unwrap())
+        } else {
+            None
+        };
 
         let (starts_at, ends_at, occurrence) = match &event.occurrence {
             cal::RsvpOccurrence::Date { starts_at, ends_at } => {
@@ -329,11 +332,16 @@ impl From<&mail::RsvpEvent> for RsvpState {
             };
         }
 
-        if event.user_attendee_idx.is_none() {
+        if let cal::RsvpRelation::Organizer | cal::RsvpRelation::PartyCrasher = event.relation {
             return match event.intent {
                 cal::RsvpIntent::Invite => RsvpState::UnanswerableInvite {
-                    reason: RsvpUnanswerableReason::UserIsOrganizer,
+                    reason: match event.relation {
+                        cal::RsvpRelation::Organizer => RsvpUnanswerableReason::UserIsOrganizer,
+                        cal::RsvpRelation::PartyCrasher => RsvpUnanswerableReason::UserIsNotInvited,
+                        cal::RsvpRelation::Attendee { .. } => unreachable!(),
+                    },
                 },
+
                 cal::RsvpIntent::Reminder => progress
                     .map_or(RsvpState::CancelledReminder, |progress| {
                         RsvpState::Reminder { progress }
@@ -403,6 +411,9 @@ pub enum RsvpAttendance {
 pub enum RsvpUnanswerableReason {
     /// User is the organizer of this event.
     UserIsOrganizer,
+
+    /// User hasn't been actually invited to this event (aka "party crasher").
+    UserIsNotInvited,
 
     /// User is looking at a stale `invite.ics`.
     InviteIsOutdated,

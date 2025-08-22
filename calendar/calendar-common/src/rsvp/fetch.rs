@@ -2,7 +2,7 @@ use crate::{
     CalendarBootstrapExt, CalendarDecryptorKeys, CalendarEventPayloadExt, RsvpAttendee, RsvpCache,
     RsvpCalendar, RsvpContacts, RsvpError, RsvpEvent, RsvpEventId, RsvpFetchApiError,
     RsvpFetchError, RsvpFetchResult, RsvpIntent, RsvpKeys, RsvpOccurrence, RsvpOrganizer,
-    RsvpProgress, RsvpRecency, RsvpRecurrence, RsvpResult,
+    RsvpProgress, RsvpRecency, RsvpRecurrence, RsvpRelation, RsvpResult,
 };
 use itertools::{Either, Itertools};
 use jiff::{
@@ -348,29 +348,10 @@ where
     )
     .await?;
 
+    let relation = extract_relation(email, id, &organizer, &attendees);
     let calendar = extract_calendar(state.calendar, &state.source);
     let progress = extract_progress(now, &state.source, &occurrence);
     let recency = extract_recency(state.source.invite(), state.source.event());
-
-    let user_attendee_idx = attendees.iter().enumerate().find_map(|(idx, att)| {
-        if email::canonicalize_auto(&att.email) == *email {
-            Some(idx)
-        } else {
-            None
-        }
-    });
-
-    if user_attendee_idx.is_none()
-        && email::canonicalize_auto(&organizer.reply_email) != *email
-        && email::canonicalize_auto(&organizer.display_email) != *email
-        && matches!(id, RsvpEventId::Invite { .. })
-    //     ^ you cannot be not-invited to a reminder
-    {
-        // This can happen whan an attendee forwards their own invite to another
-        // user that hasn't been invited by the organizer; this is known as
-        // "party crasher" and it's not yet supported.
-        return Err(RsvpError::NotInvited);
-    }
 
     let intent = match id {
         RsvpEventId::Invite { .. } => RsvpIntent::Invite,
@@ -385,7 +366,7 @@ where
         occurrence,
         organizer,
         attendees,
-        user_attendee_idx,
+        relation,
         calendar,
         progress,
         recency,
@@ -1275,6 +1256,34 @@ fn extract_recency(
         RsvpRecency::Outdated
     } else {
         RsvpRecency::Fresh
+    }
+}
+
+fn extract_relation(
+    email: &CanonicalEmail,
+    id: &RsvpEventId,
+    organizer: &RsvpOrganizer,
+    attendees: &[RsvpAttendee],
+) -> RsvpRelation {
+    let attendee_idx = attendees.iter().enumerate().find_map(|(idx, att)| {
+        if email::canonicalize_auto(&att.email) == *email {
+            Some(idx)
+        } else {
+            None
+        }
+    });
+
+    if let Some(attendee_idx) = attendee_idx {
+        return RsvpRelation::Attendee { attendee_idx };
+    }
+
+    if email::canonicalize_auto(&organizer.reply_email) != *email
+        && email::canonicalize_auto(&organizer.display_email) != *email
+        && matches!(id, RsvpEventId::Invite { .. })
+    {
+        RsvpRelation::PartyCrasher
+    } else {
+        RsvpRelation::Organizer
     }
 }
 

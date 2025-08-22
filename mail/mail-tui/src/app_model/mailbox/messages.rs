@@ -20,7 +20,7 @@ use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
 use proton_calendar_api::CalendarAttendeeStatus;
-use proton_calendar_common::{RsvpAnswer, RsvpOccurrence, RsvpProgress, RsvpRecency};
+use proton_calendar_common::{RsvpAnswer, RsvpOccurrence, RsvpProgress, RsvpRecency, RsvpRelation};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
@@ -1143,6 +1143,11 @@ impl DecryptedMessage {
 
             Rsvp::Success(rsvp) => {
                 let header = {
+                    let relation = match rsvp.relation {
+                        RsvpRelation::Organizer | RsvpRelation::PartyCrasher => 1,
+                        RsvpRelation::Attendee { .. } => 0,
+                    };
+
                     let recency = match rsvp.recency {
                         RsvpRecency::Fresh | RsvpRecency::Unknown(_) => 0,
                         RsvpRecency::Outdated => 1,
@@ -1153,7 +1158,7 @@ impl DecryptedMessage {
                         RsvpProgress::Ongoing | RsvpProgress::Ended | RsvpProgress::Cancelled => 1,
                     };
 
-                    let height = recency + progress;
+                    let height = relation + recency + progress;
 
                     if height == 0 { 0 } else { height + 1 }
                 };
@@ -1227,6 +1232,12 @@ impl DecryptedMessage {
     #[allow(clippy::too_many_lines)]
     fn draw_rsvp_success(frame: &mut Frame, area: Rect, rsvp: &RsvpEvent) {
         let rsvp_header = {
+            let relation = match rsvp.relation {
+                RsvpRelation::Organizer => Some("~ You're the organizer of this event"),
+                RsvpRelation::PartyCrasher => Some("! You haven't been invited to this event"),
+                RsvpRelation::Attendee { .. } => None,
+            };
+
             let recency = match rsvp.recency {
                 RsvpRecency::Outdated => match rsvp.progress {
                     RsvpProgress::Pending | RsvpProgress::Ongoing | RsvpProgress::Ended => {
@@ -1245,12 +1256,14 @@ impl DecryptedMessage {
                 RsvpProgress::Cancelled => Some("! Event has been cancelled"),
             };
 
+            let relation = relation.map(|msg| Text::raw(msg).fg(Color::Yellow));
             let recency = recency.map(|msg| Text::raw(msg).fg(Color::Yellow));
             let progress = progress.map(|msg| Text::raw(msg).fg(Color::Yellow));
 
-            if recency.is_some() || progress.is_some() {
-                recency
+            if relation.is_some() || recency.is_some() || progress.is_some() {
+                relation
                     .into_iter()
+                    .chain(recency)
                     .chain(progress)
                     .chain(iter::once(Text::raw("")))
                     .collect()
