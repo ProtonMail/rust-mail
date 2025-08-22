@@ -72,7 +72,19 @@ impl TryFrom<DateTime<AnyForm>> for JiffZoned {
         match value.form {
             AnyForm::Local => Ok(dt.to_zoned(JiffTimeZone::unknown())?),
             AnyForm::Utc => Ok(dt.to_zoned(JiffTimeZone::UTC)?),
-            AnyForm::Tz(tz) => Ok(dt.in_tz(tz.value.as_str())?),
+
+            AnyForm::Tz(tz) => {
+                let result = dt.in_tz(tz.value.as_str());
+
+                if result.is_err()
+                    && let Some(tz) = proton_ical_tz::windows_to_tzdb(tz.value.as_str())
+                    && let Ok(this) = dt.in_tz(tz)
+                {
+                    return Ok(this);
+                }
+
+                result.map_err(Into::into)
+            }
         }
     }
 }

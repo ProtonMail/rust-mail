@@ -5940,6 +5940,7 @@ dependencies = [
  "itertools 0.13.0",
  "jiff",
  "pretty_assertions",
+ "proton-ical-tz",
  "strum",
  "test-case",
  "thiserror 1.0.69",
@@ -5962,6 +5963,15 @@ version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "proton-ical",
+]
+
+[[package]]
+name = "proton-ical-tz"
+version = "0.1.0"
+dependencies = [
+ "quick-xml 0.38.2",
+ "serde",
+ "test-case",
 ]
 
 [[package]]
@@ -6302,6 +6312,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "331e97a1af0bf59823e6eadffe373d7b27f485be8748f71471c662c1f269b7fb"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.38.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d200a41a7797e6461bd04e4e95c3347053a731c32c87f066f2f0dda22dbdbba8"
+dependencies = [
+ "memchr",
+ "serde",
 ]
 
 [[package]]
