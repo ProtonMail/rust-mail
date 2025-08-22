@@ -20,7 +20,6 @@ use crate::actions::{
     MailActionError, MovableSystemFolderAction, Undo,
 };
 use crate::datatypes::MimeType;
-use crate::mail_scroller::ScrollerEq;
 use crate::models::*;
 use crate::{MailContextError, find_in_query};
 use futures::try_join;
@@ -180,32 +179,6 @@ impl ModelIdExtension for Message {
 
     fn remote_id(&self) -> Option<&Self::RemoteId> {
         self.remote_id.as_ref()
-    }
-}
-
-impl ScrollerEq for Message {
-    fn s_eq(&self, other: &Self) -> bool {
-        self.local_id == other.local_id
-            && self.remote_id == other.remote_id
-            && self.local_conversation_id == other.local_conversation_id
-            && self.local_address_id == other.local_address_id
-            && self.label_ids == other.label_ids
-            && self.num_attachments == other.num_attachments
-            && self.snooze_time == other.snooze_time
-            && self.unread == other.unread
-            && self.expiration_time == other.expiration_time
-            && self.is_replied == other.is_replied
-            && self.is_replied_all == other.is_replied_all
-            && self.is_forwarded == other.is_forwarded
-            && self.time == other.time
-            && self.subject == other.subject
-            && self.custom_labels == other.custom_labels
-            && self.snooze_time == other.snooze_time
-            && self.flags == other.flags
-            && self.attachments_metadata == other.attachments_metadata
-            && self.to_list == other.to_list
-            && self.cc_list == other.cc_list
-            && self.bcc_list == other.bcc_list
     }
 }
 

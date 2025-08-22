@@ -11,7 +11,6 @@ use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
     MessageSenders, MobileAction,
 };
-use crate::mail_scroller::ScrollerEq;
 use crate::models::{
     Attachment, Conversation, ConversationLabel, MailSettings, Message, MessageLabel,
 };
@@ -108,27 +107,6 @@ pub struct ContextualConversation {
 
     /// Whether the conversation has messages downloaded.
     pub has_messages: bool,
-}
-
-impl ScrollerEq for ContextualConversation {
-    fn s_eq(&self, other: &Self) -> bool {
-        self.local_id == other.local_id
-            && self.remote_id == other.remote_id
-            && self.display_snooze_reminder == other.display_snooze_reminder
-            && self.is_starred == other.is_starred
-            && self.num_attachments == other.num_attachments
-            && self.expiration_time == other.expiration_time
-            && self.num_messages == other.num_messages
-            && self.num_unread == other.num_unread
-            && self.total_messages == other.total_messages
-            && self.total_unread == other.total_unread
-            && self.snooze_time == other.snooze_time
-            && self.snoozed_until == other.snoozed_until
-            && self.recipients == other.recipients
-            && self.senders == other.senders
-            && self.attachments_metadata == other.attachments_metadata
-            && self.custom_labels == other.custom_labels
-    }
 }
 
 impl ContextualConversation {
