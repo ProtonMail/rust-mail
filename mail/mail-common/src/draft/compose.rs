@@ -194,9 +194,7 @@ pub(super) fn get_full_signature(
 fn prepare_signature(signature: &str, mime_type: MessageMimeType) -> String {
     if mime_type == MessageMimeType::TextPlain {
         let sign = Transformer::new(signature)
-            .to_plain_text(Html2TextOptions {
-                decorate_links: false,
-            })
+            .to_plain_text(Html2TextOptions::default())
             .unwrap_or_else(|_| signature.to_owned());
 
         // html2text likes to insert "extra" whitelines, converting single-line
@@ -349,6 +347,7 @@ pub fn html_to_text(input: &str) -> String {
 
     match transformer.to_plain_text(Html2TextOptions {
         decorate_links: true,
+        decorate_images: false,
     }) {
         Ok(text_body) => text_body,
         Err(e) => {

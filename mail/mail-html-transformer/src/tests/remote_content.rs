@@ -1,6 +1,6 @@
 use crate::Transformer;
 
-const TEST_DOCUMENT: &str = include_str!("smoke.html");
+const TEST_DOCUMENT: &str = include_str!("html/smoke.html");
 
 #[test]
 fn disable_remote_elements() {
