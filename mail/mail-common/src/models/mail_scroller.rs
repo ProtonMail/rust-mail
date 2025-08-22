@@ -3,7 +3,6 @@ use crate::AppError;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::datatypes::{ContextualConversation, ReadFilter};
-use crate::mail_scroller::ScrollerEq;
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
 use anyhow::anyhow;
 use indoc::formatdoc;
@@ -22,7 +21,7 @@ use typed_builder::TypedBuilder;
 
 pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
     type Model: ModelExtension;
-    type Item: Send + Sync + ScrollerEq + Clone + Debug;
+    type Item: Send + Sync + Eq + Clone + Debug;
 
     fn find_with_key(
         local_label_id: LocalLabelId,

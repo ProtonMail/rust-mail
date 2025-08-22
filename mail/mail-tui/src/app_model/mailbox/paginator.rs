@@ -2,9 +2,7 @@ use crate::app::Command;
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::messages::Messages;
 use futures::FutureExt;
-use proton_mail_common::mail_scroller::{
-    MailScroller, MailScrollerHandle, ScrollerEq, ScrollerUpdate,
-};
+use proton_mail_common::mail_scroller::{MailScroller, MailScrollerHandle, ScrollerUpdate};
 use std::sync::Arc;
 
 /// Paginator adapter.
@@ -22,7 +20,7 @@ impl Paginator {
     ///   into a message.
     ///
     /// Creates a paginator and watcher.
-    pub fn new<T: Send + Sync + Clone + ScrollerEq + 'static>(
+    pub fn new<T: Send + Sync + Clone + Eq + 'static>(
         paginator: MailScroller,
         handle: MailScrollerHandle<T>,
         to_message: impl Fn(ScrollerUpdate<T>) -> Messages + Send + Sync + 'static,

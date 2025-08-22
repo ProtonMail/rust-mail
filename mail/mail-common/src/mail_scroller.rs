@@ -35,7 +35,7 @@ pub enum MailScrollerError {
 }
 
 #[derive(Debug)]
-pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
+pub enum ScrollerUpdate<T: Send + Sync + Clone + Eq + 'static> {
     None(ScrollerSource),
     Append {
         src: ScrollerSource,
@@ -57,7 +57,7 @@ pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
     },
 }
 
-impl<T: Send + Sync + Clone + ScrollerEq + 'static> ScrollerUpdate<T> {
+impl<T: Send + Sync + Clone + Eq + 'static> ScrollerUpdate<T> {
     pub fn is_none(&self) -> bool {
         matches!(self, ScrollerUpdate::None(_))
     }
@@ -102,16 +102,6 @@ impl PartialEq for ScrollerSource {
     }
 }
 
-pub trait ScrollerEq: PartialEq {
-    fn s_eq(&self, other: &Self) -> bool;
-}
-
-impl<T: ScrollerEq> ScrollerEq for Vec<T> {
-    fn s_eq(&self, other: &Self) -> bool {
-        self.len() == other.len() && self.iter().zip(other.iter()).all(|(a, b)| a.s_eq(b))
-    }
-}
-
 /// Paginate over mail related items which implement [`MailScrollerSource`].
 ///
 /// You should use [`has_more()`] to check if more data is available and [`fetch_more()`] to
@@ -142,7 +132,7 @@ impl Drop for MailScroller {
     }
 }
 
-pub struct MailScrollerHandle<T: Send + Sync + Clone + ScrollerEq + 'static> {
+pub struct MailScrollerHandle<T: Send + Sync + Clone + Eq + 'static> {
     pub updates: flume::Receiver<ScrollerUpdate<T>>,
     pub handle: DropRemoveTableObserverHandle,
 }
@@ -692,7 +682,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 idx: 0,
                 items: visible_items,
             }
-        } else if ScrollerEq::s_eq(&self.items, &visible_items) {
+        } else if self.items == visible_items {
             tracing::debug!("No update required");
             ScrollerUpdate::None(src)
         } else {
@@ -894,7 +884,7 @@ enum ScrollerOrderedCommand {
     ClearCursor(ScrollerSource),
 }
 
-fn calculate_scroller_update<T: ScrollerEq + Clone + Send + Sync + 'static>(
+fn calculate_scroller_update<T: Eq + Clone + Send + Sync + 'static>(
     old: &[T],
     new: &[T],
     src: ScrollerSource,
@@ -902,7 +892,7 @@ fn calculate_scroller_update<T: ScrollerEq + Clone + Send + Sync + 'static>(
     let prefix_count = || {
         old.iter()
             .zip(new.iter())
-            .take_while(|(a, b)| a.s_eq(b))
+            .take_while(|(a, b)| a == b)
             .count()
     };
 
@@ -921,7 +911,7 @@ fn calculate_scroller_update<T: ScrollerEq + Clone + Send + Sync + 'static>(
         .iter()
         .rev()
         .zip(new.iter().rev())
-        .take_while(|(a, b)| a.s_eq(b))
+        .take_while(|(a, b)| a == b)
         .count();
 
     tracing::debug!("Common count from the end: {suffix_common_count}");
@@ -968,12 +958,6 @@ fn calculate_scroller_update<T: ScrollerEq + Clone + Send + Sync + 'static>(
 mod tests {
     use super::*;
     use test_case::test_case;
-
-    impl ScrollerEq for i32 {
-        fn s_eq(&self, other: &Self) -> bool {
-            self == other
-        }
-    }
 
     // Helper function to create a test ScrollerSource
     fn test_source() -> ScrollerSource {
