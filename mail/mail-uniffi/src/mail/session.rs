@@ -41,7 +41,6 @@ use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::sleep;
 use tracing::{debug, error, warn};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
@@ -282,20 +281,13 @@ impl MailSession {
 
     /// Start new signup flow.
     pub async fn new_signup_flow(&self) -> Result<Arc<SignupFlow>, ProtonError> {
-        if true {
-            warn!("I hate clippy");
-            panic!("shit");
-        }
         let mail_ctx = self.mail_ctx.clone();
 
         uniffi_async::<_, CoreContextError, _>(async move {
-            let _orig_result = mail_ctx
+            mail_ctx
                 .new_signup_flow()
                 .await
-                .map(|flow| SignupFlow::new(flow));
-
-            sleep(Duration::from_secs(120)).await;
-            Err(CoreContextError::QueueWriterGuardExpired)
+                .map(|flow| SignupFlow::new(flow))
         })
         .await
         .map_err(|err| ProtonError::OtherReason(OtherErrorReason::Other(err.to_string())))

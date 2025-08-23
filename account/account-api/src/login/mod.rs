@@ -338,9 +338,8 @@ impl LoginFlow {
         .inspect_err(|_| self.try_recover())
     }
 
-    #[must_use]
     pub async fn get_fido_details(&mut self) -> Result<Option<fido2::Response>, LoginError> {
-        info!("Login flow wants 2FA, state: {:?}", &self.state);
+        debug!("get_fido_details, state: {:?}", &self.state);
         match &mut self.state {
             State::WantTfa(flow) => flow.fido_details(&self.session).await,
             _ => Err(LoginError::InvalidState),
