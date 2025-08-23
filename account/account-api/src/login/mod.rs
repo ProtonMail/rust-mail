@@ -198,20 +198,13 @@ impl LoginFlow {
         session: Session,
         user_id: UserId,
         session_id: SessionId,
+        username: String,
         pass: impl Into<SecureString>,
-        fido_details: Option<fido2::Response>,
         migration_snooper: Box<dyn MigrationSnooper>,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Self {
         let (client, parts) = session.to_parts();
-        let state = State::new_from_tfa(
-            client,
-            parts,
-            user_id,
-            session_id,
-            pass.into(),
-            fido_details,
-        );
+        let state = State::new_from_tfa(client, parts, user_id, session_id, username, pass.into());
 
         Self {
             session,
@@ -346,10 +339,11 @@ impl LoginFlow {
     }
 
     #[must_use]
-    pub fn get_fido_details(&self) -> Option<fido2::Response> {
-        match &self.state {
-            State::WantTfa(flow) => flow.fido_details().cloned(),
-            _ => None,
+    pub async fn get_fido_details(&mut self) -> Result<Option<fido2::Response>, LoginError> {
+        info!("Login flow wants 2FA, state: {:?}", &self.state);
+        match &mut self.state {
+            State::WantTfa(flow) => flow.fido_details(&self.session).await,
+            _ => Err(LoginError::InvalidState),
         }
     }
 
@@ -506,8 +500,9 @@ impl LoginFlow {
                 self.state = State::new(client, parts, None);
             }
 
-            State::TfaRetry(user_id, session_id, pass, fido) => {
-                self.state = State::new_from_tfa(client, parts, user_id, session_id, pass, fido);
+            State::TfaRetry(user_id, session_id, username, pass) => {
+                self.state =
+                    State::new_from_tfa(client, parts, user_id, session_id, username, pass);
             }
 
             State::MbpRetry(user_id, session_id) => {

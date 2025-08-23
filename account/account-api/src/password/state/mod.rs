@@ -4,6 +4,7 @@ use crate::password::state::want_change::WantChange;
 use crate::password::state::want_pass::WantPass;
 use crate::password::state::want_tfa::WantTfa;
 use crate::shared::SecureString;
+use crate::shared::challenge::get_auth_info;
 use crate::{AccountApi, prelude::*};
 use derive_more::{Debug, Display, From};
 use futures::TryFutureExt;
@@ -147,7 +148,11 @@ impl State {
         let data = self.data_mut()?;
 
         if data.auth_info.is_none() {
-            data.auth_info = Some(get_auth_info(&data.client, &data.username).await?);
+            data.auth_info = Some(
+                get_auth_info(&data.client, &data.username)
+                    .map_err(PasswordError::ApiService)
+                    .await?,
+            );
         }
 
         let Some(info) = &data.auth_info else {
@@ -241,7 +246,11 @@ async fn acquire_password_scope(
     let auth_info = match (auth_info, fido2.is_some()) {
         (Some(info), _) => info,
         (None, true) => return Err(PasswordError::InvalidState),
-        (None, false) => get_auth_info(client, username).await?,
+        (None, false) => {
+            get_auth_info(client, username)
+                .map_err(PasswordError::ApiService)
+                .await?
+        }
     };
 
     let client_proof = srp.generate_client_proof(
@@ -268,20 +277,4 @@ async fn acquire_password_scope(
     } else {
         Err(PasswordError::ServerProof)
     }
-}
-
-async fn get_auth_info(
-    client: &Client,
-    username: &str,
-) -> Result<PostAuthInfoResponse, PasswordError> {
-    let request = PostAuthInfoRequest {
-        username: username.to_owned(),
-    };
-
-    let auth_info = client
-        .post_auth_info(request)
-        .map_err(PasswordError::ApiService)
-        .await?;
-
-    Ok(auth_info)
 }

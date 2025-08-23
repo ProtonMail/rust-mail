@@ -1,11 +1,13 @@
 use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{LoginError, state::State};
 use crate::shared::SecureString;
+use crate::shared::challenge::get_auth_info;
 use derive_more::From;
 use futures::TryFutureExt;
-use muon::Client;
 use muon::client::flow::{AuthFlow, LoginTwoFactorFlow};
+use muon::common::Sender;
 use muon::rest::auth::v4::fido2;
+use muon::{Client, ProtonRequest, ProtonResponse};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::observability::metrics;
 use proton_core_api::services::proton::{SessionId, UserId};
@@ -16,6 +18,7 @@ use tracing::info;
 pub struct WantTfa {
     flow: TfaFlow,
     data: StateData,
+    username: String,
     pass: SecureString,
     fido_details: Option<fido2::Response>,
 }
@@ -24,6 +27,7 @@ impl WantTfa {
     pub(crate) fn new(
         flow: TfaFlow,
         data: StateData,
+        username: String,
         pass: SecureString,
         fido_details: Option<fido2::Response>,
     ) -> Self {
@@ -32,6 +36,7 @@ impl WantTfa {
         Self {
             flow,
             data,
+            username,
             pass,
             fido_details,
         }
@@ -45,8 +50,9 @@ impl WantTfa {
         let Self {
             flow,
             data,
+            username,
             pass,
-            fido_details,
+            fido_details: _,
         } = self;
 
         let result = flow.totp(&code).await;
@@ -68,7 +74,7 @@ impl WantTfa {
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.session_id, pass, fido_details),
+                State::TfaRetry(data.user_id, data.session_id, username, pass),
                 LoginError::FlowTotp(err),
             )),
         }
@@ -82,8 +88,9 @@ impl WantTfa {
         let Self {
             flow,
             data,
+            username,
             pass,
-            fido_details,
+            fido_details: _,
         } = self;
 
         let result = flow.fido(fido_request).await;
@@ -101,7 +108,7 @@ impl WantTfa {
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.session_id, pass, fido_details),
+                State::TfaRetry(data.user_id, data.session_id, username, pass),
                 LoginError::FlowFido(err),
             )),
         }
@@ -118,8 +125,20 @@ impl WantTfa {
         State::inspect_user(client, data, pass, post_login_validator).await
     }
 
-    pub fn fido_details(&self) -> Option<&fido2::Response> {
-        self.fido_details.as_ref()
+    pub async fn fido_details(
+        &mut self,
+        client: &impl Sender<ProtonRequest, ProtonResponse>,
+    ) -> Result<Option<fido2::Response>, LoginError> {
+        if self.fido_details.is_none() {
+            debug!("request new fido details");
+            self.fido_details = get_auth_info(client, &self.username)
+                .map_ok(|info| info.fido_details())
+                .map_err(LoginError::FlowFido)
+                .await?;
+        } else {
+            debug!("return cached fido details");
+        }
+        Ok(self.fido_details.clone())
     }
 }
 
