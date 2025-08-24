@@ -79,9 +79,6 @@ impl StatusWatcher {
             let mut interval = time::interval(Duration::from_secs(10));
             let mut on_update = observer.subscribe();
 
-            // Make first call lazy and wait for real data.
-            on_update.mark_unchanged();
-
             loop {
                 tokio::select! {
                     _ = interval.tick() => {}
