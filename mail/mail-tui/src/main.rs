@@ -112,6 +112,12 @@ impl CliArgs {
 static CLI_ARGS: LazyLock<CliArgs> = LazyLock::new(CliArgs::parse);
 
 fn main() -> anyhow::Result<()> {
+    // Trigger the global cli args message once so we can actually read the help string
+    // correctly.
+    let _ = &*CLI_ARGS;
+
+    initialize_panic_handler();
+
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
