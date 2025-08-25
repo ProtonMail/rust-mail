@@ -172,10 +172,34 @@ impl StatusObserver {
 
     #[instrument(skip_all)]
     async fn ping(self, api: Proton, timeout: Duration, retry: RetryPolicy) {
-        match api.get_tests_ping(Some(timeout), Some(retry)).await {
-            Err(e) if e.is_server_unreachable() => self.update(ConnectionStatus::ServerUnreachable),
-            Err(e) if e.is_network_failure() => self.update(ConnectionStatus::Offline),
-            _ => self.update(ConnectionStatus::Online),
+        let new_status = async {
+            let status = StatusObserver::do_ping(api.clone(), timeout).await;
+            if status.is_online() {
+                return status;
+            }
+
+            let mut last_status = status;
+            for timeout in retry {
+                tokio::time::sleep(timeout).await;
+                last_status = Self::do_ping(api.clone(), timeout).await;
+                if last_status.is_online() {
+                    return last_status;
+                }
+            }
+            last_status
+        }
+        .await;
+
+        self.update(new_status);
+    }
+    async fn do_ping(api: Proton, timeout: Duration) -> ConnectionStatus {
+        match api
+            .get_tests_ping(Some(timeout), Some(RetryPolicy::default().never()))
+            .await
+        {
+            Err(e) if e.is_server_unreachable() => ConnectionStatus::ServerUnreachable,
+            Err(e) if e.is_network_failure() => ConnectionStatus::Offline,
+            _ => ConnectionStatus::Online,
         }
     }
 
