@@ -106,12 +106,12 @@ pub trait MailScrollerSource: Send + Sync {
         &mut self,
         ctx: &MailUserContext,
         filter: ReadFilter,
-    ) -> impl Future<Output = Result<(), MailContextError>> + Send;
+    ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     fn clear_cursor(
         &mut self,
         ctx: &MailUserContext,
-    ) -> impl Future<Output = Result<(), MailContextError>> + Send;
+    ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     fn watched_tables(&self) -> Vec<String>;
 

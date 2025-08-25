@@ -1019,6 +1019,12 @@ pub struct ConversationSearchOptions {
     // TODO: Improve the documentation above, as it doesn't make total sense.
     pub end_id: Option<Id>,
 
+    /// Return only conversations with the specified anchor.
+    pub anchor: Option<UnixTimestamp>,
+
+    /// Return only conversations with the specified anchor ID.
+    pub anchor_id: Option<Id>,
+
     /// Filter on external ID.
     // TODO: Document this properly.
     pub external_id: Option<String>,
@@ -1109,6 +1115,14 @@ impl ConversationSearchOptions {
             desc: self.desc,
             end: self.end.map(|v| v.0),
             end_id: match self.end_id {
+                Some(id) => {
+                    RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
+                        .await?
+                }
+                None => None,
+            },
+            anchor: self.anchor.map(|v| v.0),
+            anchor_id: match self.anchor_id {
                 Some(id) => {
                     RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
                         .await?
@@ -1719,6 +1733,12 @@ pub struct MessageSearchOptions {
     /// specified message ID.
     pub end_id: Option<Id>,
 
+    /// Return only messages with the specified anchor.
+    pub anchor: Option<UnixTimestamp>,
+
+    /// Return only messages with the specified anchor ID.
+    pub anchor_id: Option<Id>,
+
     /// Filter on external ID.
     // TODO: Document this properly.
     pub external_id: Option<String>,
@@ -1828,6 +1848,13 @@ impl MessageSearchOptions {
             desc: self.desc,
             end: self.end.map(|v| v.0),
             end_id: match self.end_id {
+                Some(id) => {
+                    RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?
+                }
+                None => None,
+            },
+            anchor: self.anchor.map(|v| v.0),
+            anchor_id: match self.anchor_id {
                 Some(id) => {
                     RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?
                 }

@@ -401,9 +401,11 @@ impl MailScrollerSource for SearchScrollerSource {
         }
     }
 
-    async fn clear_cursor(&mut self, ctx: &MailUserContext) -> Result<(), MailContextError> {
-        self.initialize(ctx).await?;
-        Ok(())
+    async fn clear_cursor(
+        &mut self,
+        ctx: &MailUserContext,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        self.initialize(ctx).await
     }
 
     fn watched_tables(&self) -> Vec<String> {
@@ -418,8 +420,8 @@ impl MailScrollerSource for SearchScrollerSource {
         &mut self,
         _ctx: &MailUserContext,
         _filter: ReadFilter,
-    ) -> Result<(), MailContextError> {
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         // Noop for search scroller
-        Ok(())
+        Ok(None)
     }
 }

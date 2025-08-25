@@ -426,7 +426,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         &mut self,
         ctx: &MailUserContext,
         filter: ReadFilter,
-    ) -> Result<(), MailContextError> {
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let tether = ctx.user_stash().connection();
         self.unread = filter;
         self.state =
@@ -434,12 +434,15 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 .await?;
         debug!("Changed filter, new state: {}, initializing...", self.state);
 
-        self.initialize(ctx).await?;
+        let task = self.initialize(ctx).await?;
 
-        Ok(())
+        Ok(task)
     }
 
-    async fn clear_cursor(&mut self, ctx: &MailUserContext) -> Result<(), MailContextError> {
+    async fn clear_cursor(
+        &mut self,
+        ctx: &MailUserContext,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         if let Some(scroller) = self.state.online() {
             tracing::info!("Clearing cache for label {}", self.local_label_id);
             let mut tether = ctx.user_stash().connection();
@@ -453,9 +456,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             self.order_dir,
             self.order_field,
         );
-        self.initialize(ctx).await?;
+        let task = self.initialize(ctx).await?;
 
-        Ok(())
+        Ok(task)
     }
 
     fn watched_tables(&self) -> Vec<String> {
