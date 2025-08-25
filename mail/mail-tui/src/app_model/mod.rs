@@ -520,21 +520,20 @@ impl AppStateHandler for AppState {
     }
 }
 
-fn app_tracing_env_filter() -> EnvFilter {
+fn app_tracing_env_filter(trace: bool) -> EnvFilter {
+    let log_level = if trace { "trace" } else { "debug" };
     let directives = read_to_string("log_directives");
     let directives: String = directives
         .unwrap_or(format!(
             "info,
         proton_mail_tui=debug,
-        proton_core_api=debug,
-        proton_mail_db=trace,
-        proton_sqlite3=trace,
-        proton_core_db=trace,
-        proton_core_common=trace,
-        proton_mail_common=trace,
-        proton_event_loop=trace,
-        proton_action_queue=trace,
-        proton_calendar_common=debug,
+        proton_core_api={log_level},
+        proton_sqlite3={log_level},
+        proton_core_common={log_level},
+        proton_mail_common={log_level},
+        proton_event_loop={log_level},
+        proton_action_queue={log_level},
+        proton_calendar_common={log_level},
         {}",
             LogService::silence_muon_errors_evn_filter()
         ))
@@ -556,9 +555,9 @@ fn init_log(log_service: &LogService) -> anyhow::Result<WorkerGuard> {
         .with_writer(appender)
         .with_target(false)
         .with_ansi(false)
-        .with_filter(app_tracing_env_filter());
-    let tui_log_subscriber =
-        tui_logger::tracing_subscriber_layer().with_filter(app_tracing_env_filter());
+        .with_filter(app_tracing_env_filter(CLI_ARGS.trace_logs));
+    let tui_log_subscriber = tui_logger::tracing_subscriber_layer()
+        .with_filter(app_tracing_env_filter(CLI_ARGS.trace_logs));
     tui_logger::set_default_level(log::LevelFilter::Debug);
     tracing_subscriber::registry()
         .with(file_subscriber)
