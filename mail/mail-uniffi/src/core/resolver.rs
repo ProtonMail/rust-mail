@@ -20,6 +20,12 @@ pub enum ResolverError {
     Other(String),
 }
 
+impl From<uniffi::UnexpectedUniFFICallbackError> for ResolverError {
+    fn from(value: uniffi::UnexpectedUniFFICallbackError) -> Self {
+        Self::Other(value.to_string())
+    }
+}
+
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
 pub trait Resolver: Send + Sync {

@@ -13,6 +13,12 @@ pub enum OSKeyChainError {
     Other(String),
 }
 
+impl From<uniffi::UnexpectedUniFFICallbackError> for OSKeyChainError {
+    fn from(value: uniffi::UnexpectedUniFFICallbackError) -> Self {
+        Self::Other(value.to_string())
+    }
+}
+
 /// Interface for accessing the OS keychain.
 #[uniffi::export(callback_interface)]
 pub trait OSKeyChain: Send + Sync {
