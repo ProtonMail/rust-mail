@@ -659,6 +659,7 @@ pub enum DraftSendFailureAttachment {
     TooManyAttachments,
     AttachmentTooLarge,
     AttachmentAlreadyUploaded,
+    TotalAttachmentsTooLarge,
     MessageDoesNotExist,
     Other(String),
 }
@@ -744,6 +745,9 @@ impl DraftSendFailure {
                 }
                 AttachmentUploadError::AttachmentTooLarge => {
                     Self::Attachment(DraftSendFailureAttachment::AttachmentTooLarge)
+                }
+                AttachmentUploadError::TotalAttachmentSizeTooLarge => {
+                    Self::Attachment(DraftSendFailureAttachment::TotalAttachmentsTooLarge)
                 }
                 _ => Self::Internal,
             },
@@ -864,6 +868,11 @@ impl From<DraftSendFailure> for ProtonMailError {
                     ))
                 }
                 DraftSendFailureAttachment::Other(_) => Self::Unexpected(Unexpected::Draft),
+                DraftSendFailureAttachment::TotalAttachmentsTooLarge => {
+                    Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                        DraftAttachmentUploadErrorReason::TotalAttachmentSizeTooLarge,
+                    ))
+                }
             },
         }
     }
