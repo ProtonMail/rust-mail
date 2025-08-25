@@ -184,7 +184,7 @@ pub trait ProtonMail {
     ///
     async fn put_mobile_settings(
         &self,
-        mobile_settings: MobileSettings,
+        mobile_settings: PutMobileSettings,
     ) -> ApiServiceResult<PutMobileSettingsResponse>;
 
     /// TODO: Document this method.

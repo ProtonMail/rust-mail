@@ -1,7 +1,5 @@
-use proton_mail_api::services::proton::response_data::{
-    MobileAction as ApiMobileAction, MobileSetting as ApiMobileSetting,
-    MobileSettings as ApiMobileSettings,
-};
+use proton_mail_api::services::proton::request_data::PutMobileSettings;
+use proton_mail_api::services::proton::response_data::MobileAction as ApiMobileAction;
 use proton_mail_api::services::proton::responses::PutMobileSettingsResponse;
 use proton_mail_common::datatypes::MobileAction;
 use proton_mail_common::models::MailSettings;
@@ -45,27 +43,18 @@ async fn test_update_list_toolbar_actions() {
     ctx.setup_user(params.clone()).await;
 
     // Mock the mobile settings API endpoint
-    let expected_api_mobile_settings = ApiMobileSettings {
-        list_toolbar: ApiMobileSetting {
-            actions: vec![
-                ApiMobileAction::ToggleRead,
-                ApiMobileAction::ToggleStar,
-                ApiMobileAction::Archive,
-                ApiMobileAction::Trash,
-            ],
-            is_custom: true,
-        },
-        message_toolbar: ApiMobileSetting {
-            actions: vec![],
-            is_custom: false,
-        },
-        conversation_toolbar: ApiMobileSetting {
-            actions: vec![],
-            is_custom: false,
-        },
+    let expected_put_mobile_settings = PutMobileSettings {
+        list_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::ToggleStar,
+            ApiMobileAction::Archive,
+            ApiMobileAction::Trash,
+        ],
+        message_toolbar: vec![],
+        conversation_toolbar: vec![],
     };
 
-    ctx.mock_put_mobile_settings(success_response(), expected_api_mobile_settings, 1)
+    ctx.mock_put_mobile_settings(success_response(), expected_put_mobile_settings, 1)
         .await;
 
     ctx.catch_all().await;
@@ -157,26 +146,17 @@ async fn test_update_message_toolbar_actions() {
     ];
 
     // Mock the API call for message toolbar update
-    let expected_api_mobile_settings = ApiMobileSettings {
-        list_toolbar: ApiMobileSetting {
-            actions: vec![],
-            is_custom: false,
-        },
-        message_toolbar: ApiMobileSetting {
-            actions: vec![
-                ApiMobileAction::Reply,
-                ApiMobileAction::Forward,
-                ApiMobileAction::Print,
-            ],
-            is_custom: true,
-        },
-        conversation_toolbar: ApiMobileSetting {
-            actions: vec![],
-            is_custom: false,
-        },
+    let expected_put_mobile_settings = PutMobileSettings {
+        list_toolbar: vec![],
+        message_toolbar: vec![
+            ApiMobileAction::Reply,
+            ApiMobileAction::Forward,
+            ApiMobileAction::Print,
+        ],
+        conversation_toolbar: vec![],
     };
 
-    ctx.mock_put_mobile_settings(success_response(), expected_api_mobile_settings, 1)
+    ctx.mock_put_mobile_settings(success_response(), expected_put_mobile_settings, 1)
         .await;
 
     ctx.catch_all().await;
@@ -238,28 +218,19 @@ async fn test_update_conversation_toolbar_actions() {
     ];
 
     // Mock the API call for conversation toolbar update
-    let expected_api_mobile_settings = ApiMobileSettings {
-        list_toolbar: ApiMobileSetting {
-            actions: vec![],
-            is_custom: false,
-        },
-        message_toolbar: ApiMobileSetting {
-            actions: vec![],
-            is_custom: false,
-        },
-        conversation_toolbar: ApiMobileSetting {
-            actions: vec![
-                ApiMobileAction::ToggleRead,
-                ApiMobileAction::ToggleStar,
-                ApiMobileAction::Archive,
-                ApiMobileAction::Label,
-                ApiMobileAction::Move,
-            ],
-            is_custom: true,
-        },
+    let expected_put_mobile_settings = PutMobileSettings {
+        list_toolbar: vec![],
+        message_toolbar: vec![],
+        conversation_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::ToggleStar,
+            ApiMobileAction::Archive,
+            ApiMobileAction::Label,
+            ApiMobileAction::Move,
+        ],
     };
 
-    ctx.mock_put_mobile_settings(success_response(), expected_api_mobile_settings, 1)
+    ctx.mock_put_mobile_settings(success_response(), expected_put_mobile_settings, 1)
         .await;
 
     ctx.catch_all().await;
@@ -318,22 +289,13 @@ async fn test_api_failure_handling() {
 
     // Mock API failure - action queue retries, so expect multiple calls
     // The mock needs to expect the API payload that would be sent for list toolbar update
-    let expected_api_mobile_settings = ApiMobileSettings {
-        list_toolbar: ApiMobileSetting {
-            actions: vec![ApiMobileAction::ToggleRead, ApiMobileAction::Archive],
-            is_custom: true,
-        },
-        message_toolbar: ApiMobileSetting {
-            actions: vec![],
-            is_custom: false,
-        },
-        conversation_toolbar: ApiMobileSetting {
-            actions: vec![],
-            is_custom: false,
-        },
+    let expected_put_mobile_settings = PutMobileSettings {
+        list_toolbar: vec![ApiMobileAction::ToggleRead, ApiMobileAction::Archive],
+        message_toolbar: vec![],
+        conversation_toolbar: vec![],
     };
 
-    ctx.mock_put_mobile_settings(error_response(), expected_api_mobile_settings, 4)
+    ctx.mock_put_mobile_settings(error_response(), expected_put_mobile_settings, 4)
         .await;
 
     ctx.catch_all().await;

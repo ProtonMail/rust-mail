@@ -10,14 +10,15 @@ use proton_core_api::services::proton::{AddressId, EventId, LabelId, LabelType a
 use proton_core_api::services::proton::{GetEventsLatestResponse, GetKeysAllResponse};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::prelude::GetIncomingDefaultResponse;
+use proton_mail_api::services::proton::request_data::PutMobileSettings;
 use proton_mail_api::services::proton::response_data::MessageMetadata;
 use proton_mail_api::services::proton::response_data::{
     AlmostAllMail, Attachment as ApiAttachment, ComposerDirection, ComposerMode,
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     ConversationLabel as ApiConversationLabel, IncomingDefault, MailSettings as ApiMailSettings,
     MessageButtons, MessageCount as ApiMessageCount, MessageMetadata as ApiMessageMetadata,
-    MessageSender as ApiMessageSender, MimeType, MobileSettings as ApiMobileSettings, PgpScheme,
-    PmSignature, ShowImages, ShowMoved, SwipeAction, ViewLayout, ViewMode,
+    MessageSender as ApiMessageSender, MimeType, PgpScheme, PmSignature, ShowImages, ShowMoved,
+    SwipeAction, ViewLayout, ViewMode,
 };
 
 use crate::datatypes::SystemLabelId;
@@ -579,7 +580,7 @@ impl MailTestContext {
     pub async fn mock_put_mobile_settings(
         &self,
         response: ResponseTemplate,
-        expected_payload: ApiMobileSettings,
+        expected_payload: PutMobileSettings,
         expect: impl Into<Times>,
     ) {
         Mock::given(method("PUT"))

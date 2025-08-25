@@ -211,7 +211,7 @@ impl ProtonMail for Proton {
 
     async fn put_mobile_settings(
         &self,
-        mobile_settings: MobileSettings,
+        mobile_settings: PutMobileSettings,
     ) -> ApiServiceResult<PutMobileSettingsResponse> {
         Ok(PUT!("{MAIL_V4}/settings/mobilesettings")
             .body_json(mobile_settings)?

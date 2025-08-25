@@ -94,6 +94,7 @@ use proton_crypto_inbox::proton_crypto_inbox_mime::{
     Disposition as CryptoDisposition, ProcessedBodyType, ProcessedMessage,
 };
 use proton_mail_api::services::proton::common::AttachmentId;
+use proton_mail_api::services::proton::request_data::PutMobileSettings;
 use proton_mail_api::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
     ComposerDirection as ApiComposerDirection, ComposerMode as ApiComposerMode,
@@ -2046,12 +2047,27 @@ impl From<ApiMobileSettings> for MobileSettings {
     }
 }
 
-impl From<MobileSettings> for ApiMobileSettings {
+impl From<MobileSettings> for PutMobileSettings {
     fn from(value: MobileSettings) -> Self {
         Self {
-            conversation_toolbar: value.conversation_toolbar.into(),
-            list_toolbar: value.list_toolbar.into(),
-            message_toolbar: value.message_toolbar.into(),
+            conversation_toolbar: value
+                .conversation_toolbar
+                .actions
+                .into_iter()
+                .map(|a| a.into())
+                .collect(),
+            list_toolbar: value
+                .list_toolbar
+                .actions
+                .into_iter()
+                .map(|a| a.into())
+                .collect(),
+            message_toolbar: value
+                .message_toolbar
+                .actions
+                .into_iter()
+                .map(|a| a.into())
+                .collect(),
         }
     }
 }
