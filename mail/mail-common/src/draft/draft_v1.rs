@@ -1544,10 +1544,15 @@ impl DraftSendActionQueuer {
 
         *last_draft_save_action_id = Some(save_output.id);
 
+        // We can't send if until all attachments have finished uploading.
+        let pending_attachment_ids =
+            DraftAttachmentMetadata::find_attachment_upload_action_ids(self.id, tether).await?;
+
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail")
-            .with_dependency(save_output.id);
+            .with_dependency(save_output.id)
+            .with_dependencies(pending_attachment_ids);
 
         if let Origin::ShareExt = origin {
             metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
