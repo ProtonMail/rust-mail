@@ -1771,7 +1771,7 @@ impl DraftAttachmentRemovalQueuer {
                     e => return Err(e.into()),
                 }
             }
-            metadata = metadata.with_required_dependency(action_id);
+            metadata = metadata.with_optional_dependency(action_id);
         };
 
         Ok(queue
