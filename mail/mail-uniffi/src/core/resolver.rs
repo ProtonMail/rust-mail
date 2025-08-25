@@ -12,11 +12,19 @@ pub enum IpAddr {
     V6(String),
 }
 
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum ResolverError {
+    #[error("Failed to resolve due to lack of network")]
+    Network(String),
+    #[error("{0}")]
+    Other(String),
+}
+
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
 pub trait Resolver: Send + Sync {
     /// Resolve the given host to a set of IP addresses.
-    async fn resolve(&self, host: String) -> Option<Vec<IpAddr>>;
+    async fn resolve(&self, host: String) -> Result<Option<Vec<IpAddr>>, ResolverError>;
 }
 
 impl std::fmt::Debug for dyn Resolver {
@@ -36,8 +44,12 @@ impl ResolverImpl {
     async fn resolve_direct(&self, name: &Name) -> MuonResult<MuonResolveRes> {
         let mut res = Vec::new();
 
-        let Some(addrs) = self.0.resolve(name.to_string()).await else {
-            return Ok(MuonResolveRes::None);
+        let addrs = match self.0.resolve(name.to_string()).await {
+            Ok(None) => return Ok(MuonResolveRes::None),
+            Ok(Some(addrs)) => addrs,
+            Err(e) => {
+                return Err(muon::Error::other(Box::new(e)));
+            }
         };
 
         for addr in addrs {
