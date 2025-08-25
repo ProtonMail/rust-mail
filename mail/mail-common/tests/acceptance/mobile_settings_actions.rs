@@ -76,7 +76,7 @@ async fn test_update_list_toolbar_actions() {
     ];
 
     // Enqueue the action using the convenience method
-    MailSettings::action_update_list_toolbar(user_ctx.action_queue(), list_actions.clone())
+    MailSettings::action_update_list_toolbar(user_ctx.action_queue(), list_actions.clone(), false)
         .await
         .expect("Should successfully enqueue action");
 
@@ -163,9 +163,13 @@ async fn test_update_message_toolbar_actions() {
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Enqueue and execute the action
-    MailSettings::action_update_message_toolbar(user_ctx.action_queue(), message_actions.clone())
-        .await
-        .expect("Should successfully enqueue action");
+    MailSettings::action_update_message_toolbar(
+        user_ctx.action_queue(),
+        message_actions.clone(),
+        false,
+    )
+    .await
+    .expect("Should successfully enqueue action");
 
     user_ctx.execute_single_action().await.unwrap();
 
@@ -237,9 +241,13 @@ async fn test_update_conversation_toolbar_actions() {
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Execute: Update conversation toolbar actions
-    MailSettings::action_update_conversation_toolbar(user_ctx.action_queue(), conversation_actions)
-        .await
-        .expect("Should queue conversation toolbar action");
+    MailSettings::action_update_conversation_toolbar(
+        user_ctx.action_queue(),
+        conversation_actions.clone(),
+        false,
+    )
+    .await
+    .expect("Should queue conversation toolbar action");
 
     // Execute the action and verify success
     let result = user_ctx.execute_single_action().await;
@@ -304,7 +312,7 @@ async fn test_api_failure_handling() {
     let actions = vec![MobileAction::ToggleRead, MobileAction::Archive];
 
     // Enqueue the action
-    MailSettings::action_update_list_toolbar(user_ctx.action_queue(), actions.clone())
+    MailSettings::action_update_list_toolbar(user_ctx.action_queue(), actions.clone(), false)
         .await
         .expect("Should successfully enqueue action");
 

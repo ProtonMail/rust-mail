@@ -248,8 +248,9 @@ impl MailSettings {
     pub async fn action_update_list_toolbar(
         queue: &Queue,
         actions: Vec<MobileAction>,
+        is_default: bool,
     ) -> Result<(), AppError> {
-        let action = UpdateMobileActions::new(ToolbarType::List, actions)?;
+        let action = UpdateMobileActions::new(ToolbarType::List, actions, is_default)?;
         queue
             .queue_action(action)
             .await
@@ -261,8 +262,9 @@ impl MailSettings {
     pub async fn action_update_message_toolbar(
         queue: &Queue,
         actions: Vec<MobileAction>,
+        is_default: bool,
     ) -> Result<(), AppError> {
-        let action = UpdateMobileActions::new(ToolbarType::Message, actions)?;
+        let action = UpdateMobileActions::new(ToolbarType::Message, actions, is_default)?;
         queue
             .queue_action(action)
             .await
@@ -274,8 +276,9 @@ impl MailSettings {
     pub async fn action_update_conversation_toolbar(
         queue: &Queue,
         actions: Vec<MobileAction>,
+        is_default: bool,
     ) -> Result<(), AppError> {
-        let action = UpdateMobileActions::new(ToolbarType::Conversation, actions)?;
+        let action = UpdateMobileActions::new(ToolbarType::Conversation, actions, is_default)?;
         queue
             .queue_action(action)
             .await

@@ -1297,6 +1297,7 @@ pub async fn update_mobile_list_toolbar_actions(
         proton_mail_common::models::MailSettings::action_update_list_toolbar(
             ctx.action_queue(),
             actions.map_vec(),
+            false,
         )
         .await
         .map_err(RealProtonMailError::from)
@@ -1326,6 +1327,7 @@ pub async fn update_mobile_message_toolbar_actions(
         proton_mail_common::models::MailSettings::action_update_message_toolbar(
             ctx.action_queue(),
             actions.map_vec(),
+            false,
         )
         .await
         .map_err(RealProtonMailError::from)
@@ -1402,4 +1404,52 @@ pub fn get_all_mobile_message_actions() -> Vec<MobileAction> {
         .iter()
         .filter_map(MobileAction::from_real)
         .collect_vec()
+}
+
+/// Set the default mobile list toolbar actions for the user.
+///
+/// This function sets the default actions for the list toolbar when viewing lists on mobile devices.
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn set_default_mobile_list_toolbar_actions(
+    session: Arc<MailUserSession>,
+) -> Result<(), ActionError> {
+    let ctx = session.ctx()?;
+    let actions = RealMobileAction::default_chosen_actions();
+
+    uniffi_async(async move {
+        proton_mail_common::models::MailSettings::action_update_list_toolbar(
+            ctx.action_queue(),
+            actions.map_vec(),
+            true,
+        )
+        .await
+        .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Set the default mobile message toolbar actions for the user.
+///
+/// This function sets the default actions for the message toolbar when viewing individual messages on mobile devices.
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn set_default_mobile_message_toolbar_actions(
+    session: Arc<MailUserSession>,
+) -> Result<(), ActionError> {
+    let ctx = session.ctx()?;
+    let actions = RealMobileAction::default_chosen_actions();
+
+    uniffi_async(async move {
+        proton_mail_common::models::MailSettings::action_update_message_toolbar(
+            ctx.action_queue(),
+            actions.map_vec(),
+            true,
+        )
+        .await
+        .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
 }
