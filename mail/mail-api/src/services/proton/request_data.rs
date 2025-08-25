@@ -18,6 +18,7 @@
 //!
 
 use crate::services::proton::common::{AttachmentId, MessageId};
+use crate::services::proton::prelude::MobileAction;
 use crate::services::proton::response_data::MimeType;
 use indexmap::IndexMap;
 use proton_core_api::services::proton::{PrivateEmail, PrivateString};
@@ -312,6 +313,16 @@ pub struct NewAttachmentParams {
     pub enc_signature: Option<BinaryAttachmentEncryptedSignature>,
     /// Encrypted attachment payload.
     pub data_packet: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMobileSettings {
+    pub conversation_toolbar: Vec<MobileAction>,
+
+    pub list_toolbar: Vec<MobileAction>,
+
+    pub message_toolbar: Vec<MobileAction>,
 }
 
 // TODO rename DraftSender into Sender etc.

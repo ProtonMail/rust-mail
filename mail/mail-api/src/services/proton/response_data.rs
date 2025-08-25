@@ -1292,17 +1292,14 @@ pub struct MobileSetting {
     pub is_custom: bool,
 }
 
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MobileSettings {
-    /// TODO: Document this field.
     pub conversation_toolbar: MobileSetting,
 
-    /// TODO: Document this field.
     pub list_toolbar: MobileSetting,
 
-    /// TODO: Document this field.
     pub message_toolbar: MobileSetting,
 }
 
