@@ -74,6 +74,9 @@ struct CliArgs {
     /// The event loop poll time
     #[arg(long)]
     event_loop_time: Option<u64>,
+
+    #[arg(long, default_value = "false")]
+    trace_logs: bool,
 }
 
 impl CliArgs {
@@ -109,8 +112,6 @@ impl CliArgs {
 static CLI_ARGS: LazyLock<CliArgs> = LazyLock::new(CliArgs::parse);
 
 fn main() -> anyhow::Result<()> {
-    initialize_panic_handler();
-
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
