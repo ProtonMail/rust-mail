@@ -484,7 +484,7 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if action could not be executed locally.
-    #[tracing::instrument(skip(self, metadata, action), name = "QueueAction")]
+    #[tracing::instrument(skip(self, metadata, action), name = "queue::replace")]
     pub async fn replace_or_queue_action_with_metadata<T: Action>(
         &self,
         existing_id: ActionId,
