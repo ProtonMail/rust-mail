@@ -1978,7 +1978,7 @@ impl MobileAction {
 
     pub fn default_chosen_actions() -> Vec<MobileAction> {
         use self::MobileAction::*;
-        vec![ToggleRead, Trash, Move]
+        vec![ToggleRead, Trash, Move, Label]
     }
 
     pub fn all_list_actions() -> Vec<MobileAction> {
