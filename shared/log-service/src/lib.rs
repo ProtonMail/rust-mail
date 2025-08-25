@@ -137,6 +137,6 @@ impl LogService {
 
     #[must_use]
     pub fn silence_muon_errors_evn_filter() -> &'static str {
-        "muon::http=off,muon::dns=off,muon::rt=off,muon=info"
+        "muon::http=off,muon::dns=off,muon::rt=off,muon::client::middleware::auth=error,muon=info"
     }
 }
