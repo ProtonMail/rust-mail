@@ -196,7 +196,7 @@ async fn main() {
     };
 
     // Create and queue the action
-    let action = UpdateMobileActions::new(toolbar_type_enum, actions).unwrap();
+    let action = UpdateMobileActions::new(toolbar_type_enum, actions, false).unwrap();
     let queued_action = user_ctx.action_queue().queue_action(action).await.unwrap();
     let action_id = queued_action.id;
 

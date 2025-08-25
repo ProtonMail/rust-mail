@@ -25,10 +25,15 @@ pub struct UpdateMobileActions {
     pub actions: Vec<MobileAction>,
     pub new_mobile_settings: Option<MobileSettings>,
     pub old_mobile_settings: Option<MobileSettings>,
+    pub is_default: bool,
 }
 
 impl UpdateMobileActions {
-    pub fn new(toolbar_type: ToolbarType, actions: Vec<MobileAction>) -> Result<Self, AppError> {
+    pub fn new(
+        toolbar_type: ToolbarType,
+        actions: Vec<MobileAction>,
+        is_default: bool,
+    ) -> Result<Self, AppError> {
         if actions.len() > 5 {
             return Err(AppError::Other(anyhow::anyhow!(
                 "Maximum 5 toolbar actions allowed, got {}",
@@ -43,6 +48,7 @@ impl UpdateMobileActions {
             actions,
             new_mobile_settings: None,
             old_mobile_settings: None,
+            is_default,
         })
     }
 
@@ -104,7 +110,7 @@ impl Handler for UpdateMobileActionsHandler {
 
         let mobile_setting = MobileSetting {
             actions: action.actions.clone(),
-            is_custom: true,
+            is_custom: !action.is_default,
         };
 
         match action.toolbar_type {
