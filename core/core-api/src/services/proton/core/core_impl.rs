@@ -7,6 +7,7 @@ use muon::serde_to_query;
 use muon::util::ProtonRequestExt;
 use muon::{DELETE, GET, PATCH, POST, PUT};
 use proton_crypto_account::keys::APIPublicAddressKeys;
+use serde_json::json;
 
 use crate::service::ApiServiceResult;
 use crate::services::proton::Proton;
@@ -280,8 +281,12 @@ impl ProtonCore for Proton {
     }
 
     async fn proxy_img(&self, url: &url::Url) -> ApiServiceResult<Vec<u8>> {
-        let url: String = url::form_urlencoded::byte_serialize(url.as_str().as_bytes()).collect();
-        Ok(GET!("{CORE_V4}/images/{url}")
+        let query = json! ({
+            "Url": url
+        });
+
+        Ok(GET!("{CORE_V4}/images")
+            .query(serde_to_query(query)?)
             .send_with(self)
             .await?
             .ok()?
