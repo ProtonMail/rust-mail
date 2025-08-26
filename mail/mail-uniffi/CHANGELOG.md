@@ -5,28 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.140.0] - 2025-08-26
 
 ### Changed
 
-- Resolver trait now must return an error
+- Add Label as a 4th default action for all toolbars
 
 ### Features
 
-- Add uniffi bindings to restore default action lists
+- [ET-4432] Hide boring attachments™ on the msg/conv list
 
 ### Fixes
 
-- Correct expected input json for PUT /mobilesettings
-- remote images correctly get proxied
-- Excessive Ping
+- Implement UnexpectedUniFFICallbackError for foreign trait errors
 
 
-## [mail-uniffi-v0.138.0] - 2025-08-22
+## [mail-uniffi-v0.139.0] - 2025-08-25
 
 ### Changed
 
 - Filter out unnecessary mobile actions in uniffi
+- Resolver trait now must return an error
 
 ### Features
 
@@ -34,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-1307] Introduce Unleash feature flags service
 - [ET-4397] Fixed failing test, assert new Forbidden error.
 - [ET-4374] expose `remote_id` in UniFFI in `ContactDetailCard`
+- Add uniffi bindings to restore default action lists
 
 ### Fixes
 
@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scroller will finish refresh update correctly
 - [ET-4412] Update text signatures generated from web
 - When scroller finds out on refresh that the label has items to display but they are not currently retivable it will queue `FetchMore` task
+- Correct expected input json for PUT /mobilesettings
+- remote images correctly get proxied
+- Excessive Ping
 
 
 ## [mail-uniffi-v0.137.0] - 2025-08-22
