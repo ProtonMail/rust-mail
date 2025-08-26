@@ -11,11 +11,7 @@ use proton_calendar_common::{
     RsvpAttendee, RsvpError, RsvpEventId, RsvpFetchApiError, RsvpFetchError, RsvpIntent,
     RsvpOrganizer, RsvpProgress, RsvpRecency, RsvpRelation,
 };
-use proton_core_api::{
-    session::{Config, Session},
-    status_observer::StatusObserver,
-    status_watcher::StatusWatcher,
-};
+use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::MockApiEnv;
 use proton_ical as ical;
 use std::str::FromStr;
@@ -432,13 +428,10 @@ async fn network_failure() {
         let env = MockApiEnv::new("http://localhost:1");
         let cfg = Config::for_env(env);
 
-        let status =
-            StatusWatcher::with_observer(StatusObserver::test(world.ctx.context.spawner()));
-
         Session::builder()
             .with_config(&cfg)
-            .with_status(status)
-            .build(world.ctx.context.spawner())
+            .with_connection_monitor(world.connection_monitor.clone())
+            .build()
             .await
             .unwrap()
     };

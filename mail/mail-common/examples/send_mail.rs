@@ -95,6 +95,7 @@ async fn main() {
         None,
         LogService::new(config),
         EventPollMode::Manual,
+        Default::default(),
     )
     .await
     .unwrap();

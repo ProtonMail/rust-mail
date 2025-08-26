@@ -87,6 +87,7 @@ wiremock = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 velcro = { workspace = true, optional = true }
 wiremock-multipart = { workspace = true, optional = true }
+proton-network-monitor-service = { workspace = true }
 
 # Optional dependencies for the `demo` example
 wry = { version = "0.51", optional = true }

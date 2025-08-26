@@ -12,16 +12,16 @@ use crate::{
     os::{InMemoryKeyChain, KeyChain, KeyChainExt},
 };
 use proton_core_api::auth::{Tokens, UserKeySecret};
+use proton_core_api::exports::RetryPolicy;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{AppVersion, Env, Server};
 use proton_core_api::session::{Endpoint, EnvId};
-use proton_core_api::status_observer::StatusObserver;
-use proton_core_api::status_watcher::StatusWatcher;
 use proton_event_loop::subscriber::SubscriberError;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tempdir::TempDir;
 use tokio::runtime;
 use tracing::info;
@@ -112,6 +112,22 @@ pub struct TestContext {
 
 impl BaseTestContext for TestContext {}
 
+#[must_use]
+pub fn test_network_monitor_service_config() -> proton_network_monitor_service::Config {
+    let never = RetryPolicy::default().never();
+    proton_network_monitor_service::Config {
+        immediate: proton_network_monitor_service::ImmediateConfig {
+            retry_policy: never,
+            timeout: Duration::from_secs(1),
+            retry_interval: Duration::from_secs(0),
+        },
+        background: proton_network_monitor_service::BackgroundConfig {
+            retry_policy: never,
+            timeout: Duration::from_secs(2),
+            infinite_checks: false,
+        },
+    }
+}
 impl TestContext {
     #[must_use]
     pub fn context(&self) -> &Context {
@@ -196,6 +212,7 @@ impl TestContext {
             tmp_dir.path().join("core-cache"),
             LogService::new(log_config),
             EventPollMode::Manual,
+            test_network_monitor_service_config(),
         )
         .await
         .expect("failed to create core context");
@@ -273,10 +290,8 @@ impl TestContext {
     }
 
     pub async fn user_context(&self) -> Arc<UserContext> {
-        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
-
         self.context
-            .user_context_from_session(&self.core_session, Some(status))
+            .user_context_from_session(&self.core_session)
             .await
             .expect("failed to create user context")
     }

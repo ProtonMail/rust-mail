@@ -211,6 +211,7 @@ async fn create_mail_session_inner(
         device_info_provider,
         log_service,
         poll,
+        proton_network_monitor_service::Config::default(),
     )
     .await?;
 
@@ -304,7 +305,7 @@ impl MailSession {
 
         let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
-            ctx.initialized_user_context_from_session(session.session(), None)
+            ctx.initialized_user_context_from_session(session.session())
                 .map_err(RealProtonMailError::from)
                 .await
                 .map(|ctx| ctx.map(|ctx| user_ctx.insert(ctx)))
@@ -325,14 +326,10 @@ impl MailSession {
 
         let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
-            ctx.user_context_from_session(
-                session.session(),
-                None,
-                ShouldInitializeMailUserContext::Yes,
-            )
-            .map_err(RealProtonMailError::from)
-            .await
-            .map(|ctx| user_ctx.insert(ctx))
+            ctx.user_context_from_session(session.session(), ShouldInitializeMailUserContext::Yes)
+                .map_err(RealProtonMailError::from)
+                .await
+                .map(|ctx| user_ctx.insert(ctx))
         })
         .map_ok(MailUserSession::new)
         .await?;
@@ -1031,7 +1028,7 @@ impl MailSession {
             );
 
             let user_ctx = ctx
-                .initialized_user_context_from_session(&primary_session, None)
+                .initialized_user_context_from_session(&primary_session)
                 .await?;
 
             let Some(user_ctx) = user_ctx else {

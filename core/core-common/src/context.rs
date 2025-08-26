@@ -23,6 +23,7 @@ use crate::nuke_utils::{
 };
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::pin_code::PinCode;
+use crate::services::NetworkMonitorService;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Context as _, Error as AnyhowError, anyhow};
 use async_trait::async_trait;
@@ -40,7 +41,6 @@ use proton_core_api::services::proton::{BuildError, PrivateEmail};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Config as RealApiConfig;
 use proton_core_api::session::Session as ApiSession;
-use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::store::{MbpMode, Store, TempStore, UserData};
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
@@ -48,6 +48,7 @@ use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_event_loop::EventLoopError;
 use proton_event_service::EventService;
 use proton_log_service::LogService;
+use proton_network_monitor_service::{ConnectionMonitor, NetworkMonitorServiceError};
 use proton_sqlite3::MigratorError;
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_task_service::{Spawner, SpawnerRef};
@@ -108,6 +109,8 @@ pub enum CoreContextError {
     DuplicateContext(UserId),
     #[error("Queue Writer Guard Expired")]
     QueueWriterGuardExpired,
+    #[error(transparent)]
+    NetworkMonitorService(#[from] NetworkMonitorServiceError),
     #[error("{0}")]
     Other(#[from] AnyhowError),
 }
@@ -308,6 +311,7 @@ impl Context {
         cache_path: impl Into<PathBuf>,
         log_service: LogService,
         event_poll_mode: EventPollMode,
+        network_monitor_config: proton_network_monitor_service::Config,
     ) -> CoreContextResult<Arc<Self>> {
         let account_db_path = account_db_path.into();
         let user_db_path = user_db_path.into();
@@ -358,7 +362,8 @@ impl Context {
 
         builder = builder
             .with_service(CoreClock::default())
-            .with_service(LoggingService::new(log_service));
+            .with_service(LoggingService::new(log_service))
+            .with_cyclic_service(|ctx| NetworkMonitorService::new(ctx, network_monitor_config));
 
         if matches!(origin, Origin::App) {
             builder = builder
@@ -664,7 +669,6 @@ impl Context {
     pub async fn user_context_from_session(
         &self,
         session: &CoreSession,
-        status: Option<StatusWatcher>,
     ) -> CoreContextResult<Arc<UserContext>> {
         // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
@@ -686,7 +690,7 @@ impl Context {
         let user_id = session.account_id.clone();
         let session_id = session.remote_id.clone();
         let session = self
-            .new_api_session(Some(session), status)
+            .new_api_session(Some(session))
             .await
             .inspect_err(|e| tracing::error!("Could not create api session: {e:?}"))?;
 
@@ -701,7 +705,7 @@ impl Context {
     pub async fn logout_account(&self, user_id: UserId) -> CoreContextResult<()> {
         for session in self.get_account_sessions(user_id.clone()).await? {
             let Ok(api) = self
-                .new_api_session(Some(&session), None)
+                .new_api_session(Some(&session))
                 .inspect_err(|err| error!("failed to create API session: {err:?}"))
                 .await
             else {
@@ -776,7 +780,7 @@ impl Context {
 
         if let Some(session) = session {
             tracing::info!("Clear all user data from database");
-            if let Ok(user_ctx) = self.user_context_from_session(&session, None).await {
+            if let Ok(user_ctx) = self.user_context_from_session(&session).await {
                 let tether = user_ctx.stash().connection();
 
                 if let Err(e) = drop_all_tables_in_database(tether).await {
@@ -901,18 +905,16 @@ impl Context {
     pub async fn new_api_session(
         &self,
         session: Option<&CoreSession>,
-        status: Option<StatusWatcher>,
     ) -> CoreContextResult<ApiSession> {
         match self.origin {
-            Origin::App => self.new_api_session_app(session, status).await,
-            Origin::ShareExt => self.new_api_session_ext(session, status).await,
+            Origin::App => self.new_api_session_app(session).await,
+            Origin::ShareExt => self.new_api_session_ext(session).await,
         }
     }
 
     async fn new_api_session_app(
         &self,
         session: Option<&CoreSession>,
-        status: Option<StatusWatcher>,
     ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
@@ -922,14 +924,13 @@ impl Context {
         let api_config = RealApiConfig::from(self.api_config.clone());
         let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
 
+        let network_monitor_service = self.get_service::<NetworkMonitorService>();
+
         let mut builder = ApiSession::builder()
             .with_config(api_config)
             .with_store(store)
+            .with_connection_monitor(network_monitor_service.new_connection_monitor())
             .with_allow_doh(app_settings.use_alternative_routing);
-
-        if let Some(status) = status {
-            builder = builder.with_status(status);
-        }
 
         if let Some(hv_service) = self.get_service_opt::<HvNotifierService>()
             && let Some(notifier) = hv_service.notifier_arc()
@@ -946,13 +947,42 @@ impl Context {
             }));
         }
 
-        Ok(builder.build(self.spawner()).await?)
+        Ok(builder.build().await?)
+    }
+
+    async fn new_network_monitor_api_session(
+        &self,
+        connection_monitor: ConnectionMonitor,
+    ) -> CoreContextResult<ApiSession> {
+        let api_config = RealApiConfig::from(self.api_config.clone());
+        let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
+
+        let mut builder = ApiSession::builder()
+            .with_config(api_config)
+            .with_connection_monitor(connection_monitor)
+            .with_allow_doh(app_settings.use_alternative_routing);
+
+        if let Some(hv_service) = self.get_service_opt::<HvNotifierService>()
+            && let Some(notifier) = hv_service.notifier_arc()
+        {
+            builder = builder.with_notifier(notifier);
+        }
+
+        if let Some(device_service) = self.get_service_opt::<DeviceInfoService>()
+            && let Some(provider) = device_service.provider()
+        {
+            builder = builder.with_info_provider(Arc::new(MuonInfoProvider {
+                app_version: RealApiConfig::from(self.api_config.clone()).app_version,
+                device_info_provider: Arc::clone(provider),
+            }));
+        }
+
+        Ok(builder.build().await?)
     }
 
     async fn new_api_session_ext(
         &self,
         session: Option<&CoreSession>,
-        status: Option<StatusWatcher>,
     ) -> CoreContextResult<ApiSession> {
         let session = session.context("Missing core session")?;
         let user_id = session.account_id.clone();
@@ -1020,18 +1050,17 @@ impl Context {
             store
         };
 
+        let network_monitor_service = self.get_service::<NetworkMonitorService>();
+
         let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
 
-        let mut builder = ApiSession::builder()
+        let builder = ApiSession::builder()
             .with_config(RealApiConfig::from(self.api_config.clone()))
             .with_store(store)
+            .with_connection_monitor(network_monitor_service.new_connection_monitor())
             .with_allow_doh(app_settings.use_alternative_routing);
 
-        if let Some(status) = status {
-            builder = builder.with_status(status);
-        }
-
-        let primary_session = builder.build(self.spawner()).await?;
+        let primary_session = builder.build().await?;
 
         let forked_session = primary_session
             .downgrade_to_fork(
@@ -1122,6 +1151,10 @@ impl Context {
 
     pub fn log_service(&self) -> &LogService {
         self.get_service::<LoggingService>().service()
+    }
+
+    pub fn network_monitor_service(&self) -> &NetworkMonitorService {
+        self.get_service::<NetworkMonitorService>()
     }
 
     /// Spawns a new task.

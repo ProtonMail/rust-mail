@@ -353,7 +353,7 @@ impl MailUserSession {
     pub async fn connection_status(&self) -> Result<ConnectionStatus, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
-            let status = ctx.connection_status().await.into();
+            let status = ctx.connection_status().into();
             // unfortunatelly there is join error here which need to be handled
             Result::<ConnectionStatus, RealProtonMailError>::Ok(status)
         })
@@ -372,10 +372,13 @@ impl MailUserSession {
             return;
         };
 
-        let sess = ctx.session().clone();
-
+        let ctx_cloned = ctx.clone();
         ctx.spawn(async move {
-            sess.wait_for_online().await;
+            ctx_cloned
+                .network_monitor_service()
+                .network_status_observer()
+                .wait_until_online()
+                .await;
             let callback = move || callback.on_update();
             _ = async_runtime().spawn_blocking(callback).await;
         });

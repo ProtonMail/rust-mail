@@ -484,6 +484,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     ctx.mock_server().reset().await;
     ctx.mock_ping_success().await;
     setup_api_conversation_pages(&ctx, page_size, 200, 1).await;
+    user_ctx.network_monitor_service().check_now().await;
 
     let timeout = Some(Duration::from_secs(3));
     user_ctx
@@ -547,6 +548,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     ctx.mock_server().reset().await;
     mock_not_responsive_api(&ctx).await;
     ctx.catch_all().await;
+    user_ctx.network_monitor_service().check_now().await;
     user_ctx
         .wait_for(timeout, |status| status.is_offline())
         .await;

@@ -138,22 +138,33 @@ impl NetworkMonitorService {
     }
 
     pub async fn check_now(&self) -> RequestNetworkStatus {
-        let Some(sender) = &self.immediate_test_requester else {
-            tracing::warn!("Service has not started, immediate requests will respond with online");
-            return RequestNetworkStatus::Online;
-        };
-        let (oneshot_sender, oneshot_receiver) = oneshot::channel();
-        if sender.send(oneshot_sender).await.is_err() {
-            tracing::warn!("Failed to communicate with the network monitor service");
-            return RequestNetworkStatus::Online;
+        self.check_now_deferred().await
+    }
+
+    // This is a compatability method to work around the fact that the service initializer
+    // in core-common does not have mut access.
+    pub fn check_now_deferred(&self) -> impl Future<Output = RequestNetworkStatus> + 'static {
+        let requester = self.immediate_test_requester.clone();
+        async move {
+            let Some(sender) = requester else {
+                tracing::warn!(
+                    "Service has not started, immediate requests will respond with online"
+                );
+                return RequestNetworkStatus::Online;
+            };
+            let (oneshot_sender, oneshot_receiver) = oneshot::channel();
+            if sender.send(oneshot_sender).await.is_err() {
+                tracing::warn!("Failed to communicate with the network monitor service");
+                return RequestNetworkStatus::Online;
+            }
+
+            let Ok(status) = oneshot_receiver.await else {
+                tracing::warn!("Failed to communicate with the network monitor service");
+                return RequestNetworkStatus::Online;
+            };
+
+            status
         }
-
-        let Ok(status) = oneshot_receiver.await else {
-            tracing::warn!("Failed to communicate with the network monitor service");
-            return RequestNetworkStatus::Online;
-        };
-
-        status
     }
 }
 
@@ -207,6 +218,9 @@ impl NetworkMonitorBackgroundTask {
             immediate_request,
             request_watcher: monitor.request_watcher(),
         };
+        tracing::debug!(
+            "Current status os={os_network_status:?} request={request_network_status:?}"
+        );
         instance.update_subscriber_status();
 
         instance
@@ -249,11 +263,16 @@ impl NetworkMonitorBackgroundTask {
 
     fn update_os_network_status(&mut self) {
         self.os_network_status = *self.os_network_subscriber.borrow();
+        tracing::debug!("OS Network status updated: {:?}", self.os_network_status);
         self.update_subscriber_status();
     }
 
     fn update_request_network_status(&mut self) {
         self.request_network_status = *self.request_network_subscriber.borrow();
+        tracing::debug!(
+            "Network request status updated: {:?}",
+            self.request_network_status
+        );
         self.update_subscriber_status();
     }
 

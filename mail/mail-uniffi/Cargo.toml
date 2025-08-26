@@ -48,6 +48,7 @@ uniffi-macros = { workspace = true }
 uniffi-runtime = { workspace = true }
 sqlite-watcher = { workspace = true }
 non-empty-string = { workspace = true }
+proton-network-monitor-service = { workspace = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 tracing-oslog = "0.3.0"

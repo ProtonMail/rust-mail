@@ -83,9 +83,13 @@ impl Handler for PrefetchHandler {
 
         let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
 
-        let _ =
-            Conversation::sync_conversation_messages(action.local_id, &mut guard, ctx.session())
-                .await;
+        let _ = Conversation::sync_conversation_messages(
+            ctx.network_monitor_service(),
+            action.local_id,
+            &mut guard,
+            ctx.session(),
+        )
+        .await;
 
         let messages = Message::in_conversation(action.local_id, guard.tether()).await?;
 

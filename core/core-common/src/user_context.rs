@@ -9,7 +9,6 @@ use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::subscriber::CoreEventLoopContext;
 use proton_action_queue::queue::Queue;
-use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
@@ -27,6 +26,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
+use proton_core_api::connection_status::ConnectionStatus;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -255,8 +255,9 @@ impl UserContext {
         &self.session_id
     }
 
-    pub async fn connection_status(&self) -> ConnectionStatus {
-        self.session.status().await
+    #[must_use]
+    pub fn connection_status(&self) -> ConnectionStatus {
+        self.context.network_monitor_service().status()
     }
 
     async fn open_db(

@@ -41,6 +41,7 @@ use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent, Label, ModelExtension,
     ModelIdExtension, User,
 };
+use proton_core_common::services::NetworkMonitorService;
 use proton_core_common::utils::MapVec as _;
 use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
 use proton_mail_api::services::proton::ProtonMail;
@@ -2419,8 +2420,9 @@ impl Conversation {
     /// # Errors
     ///
     /// Returns error if the queries failed or if the server request failed.
-    #[tracing::instrument(skip(tx, session))]
+    #[tracing::instrument(skip(tx, session, network_monitor_service))]
     pub async fn sync_conversation_messages(
+        network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
         session: &Session,
@@ -2436,7 +2438,7 @@ impl Conversation {
             };
             info!("Syncing {rid:?}'s messages");
 
-            if session.graceful_status().await.is_offline() {
+            if network_monitor_service.check_now().await.is_offline() {
                 debug!("No connection, skipping sync");
                 return Err(AppError::API(ApiServiceError::NetworkError(
                     "No connection".to_owned(),

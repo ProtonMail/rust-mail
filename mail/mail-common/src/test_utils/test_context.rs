@@ -7,8 +7,6 @@ use proton_action_queue::queue::{QueuedActionState, QueuedResult};
 use proton_core_api::auth::UserKeySecret;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::UserId;
-use proton_core_api::status_observer::StatusObserver;
-use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
@@ -125,15 +123,9 @@ impl MailTestContext {
     /// it is programmers responsibility to initialize context manually afterwards.
     ///
     pub async fn uninitialized_mail_user_context(&self) -> Arc<MailUserContext> {
-        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
-
         let ctx = self
             .mail_context
-            .user_context_from_session(
-                &self.core_session,
-                Some(status),
-                ShouldInitializeMailUserContext::No,
-            )
+            .user_context_from_session(&self.core_session, ShouldInitializeMailUserContext::No)
             .await
             .expect("failed to create user context");
 
@@ -156,15 +148,9 @@ impl MailTestContext {
     /// Has to be called **AFTER** setting up the API mocks
     ///
     pub async fn mail_user_context(&self) -> Arc<MailUserContext> {
-        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
-
         let ctx = self
             .mail_context
-            .user_context_from_session(
-                &self.core_session,
-                Some(status),
-                ShouldInitializeMailUserContext::Yes,
-            )
+            .user_context_from_session(&self.core_session, ShouldInitializeMailUserContext::Yes)
             .await
             .expect("failed to create user context");
 
@@ -180,15 +166,9 @@ impl MailTestContext {
     ///
     /// Returns an error if context could not be initialized.
     pub async fn try_mail_user_context(&self) -> MailContextResult<Arc<MailUserContext>> {
-        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
-
         let ctx = self
             .mail_context
-            .user_context_from_session(
-                &self.core_session,
-                Some(status),
-                ShouldInitializeMailUserContext::Yes,
-            )
+            .user_context_from_session(&self.core_session, ShouldInitializeMailUserContext::Yes)
             .await?;
 
         // Disable auto queue executor as we don't want these to interfere with our test execution.
@@ -200,11 +180,9 @@ impl MailTestContext {
     /// Get the test user context but only if its initialized
     ///
     pub async fn initialized_mail_user_context(&self) -> Option<Arc<MailUserContext>> {
-        let status = StatusWatcher::with_observer(StatusObserver::test(self.context.spawner()));
-
         let ctx = self
             .mail_context
-            .initialized_user_context_from_session(&self.core_session, Some(status))
+            .initialized_user_context_from_session(&self.core_session)
             .await
             .unwrap()?;
 
@@ -326,7 +304,7 @@ impl MailUserContextTestExtension for MailUserContext {
 }
 
 async fn wait_for_impl(user_ctx: &MailUserContext, fun: impl Fn(ConnectionStatus) -> bool) {
-    while !fun(user_ctx.session().status().await) {
+    while !fun(user_ctx.network_monitor_service().status()) {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }

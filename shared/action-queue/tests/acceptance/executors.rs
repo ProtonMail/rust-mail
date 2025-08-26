@@ -10,7 +10,6 @@ use proton_action_queue::tests::common::DefaultError;
 use stash::stash::Bond;
 use std::num::NonZeroUsize;
 use std::time::Duration;
-use tokio::sync::watch;
 
 #[tokio::test]
 async fn auto_execute_until_empty() {

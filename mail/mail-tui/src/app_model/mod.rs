@@ -176,6 +176,7 @@ impl AppModel {
             None, // TODO: Add DeviceInfoProvider support for mail-tui.
             log_service,
             EventPollMode::Automatic(Duration::from_secs(CLI_ARGS.event_loop_time.unwrap_or(15))),
+            proton_network_monitor_service::Config::default(),
         )
         .await?;
 
@@ -533,6 +534,7 @@ fn app_tracing_env_filter(trace: bool) -> EnvFilter {
         proton_event_loop={log_level},
         proton_action_queue={log_level},
         proton_calendar_common={log_level},
+        proton_network_monitor_service=debug,\
         {}",
             LogService::silence_muon_errors_evn_filter()
         ))

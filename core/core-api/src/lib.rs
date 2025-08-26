@@ -11,8 +11,6 @@ pub mod crypto_clock;
 pub mod service;
 pub mod services;
 pub mod session;
-pub mod status_observer;
-pub mod status_watcher;
 pub mod store;
 pub mod verification;
 

@@ -10,7 +10,6 @@ use proton_action_queue::queue::{
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use std::time::Duration;
-use tokio::sync::watch;
 use tokio::time::sleep;
 
 #[tokio::test]

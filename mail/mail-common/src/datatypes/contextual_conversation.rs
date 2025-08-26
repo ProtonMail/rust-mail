@@ -21,6 +21,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::{Label, LabelError, ModelExtension, ModelIdExtension as _, User};
+use proton_core_common::services::NetworkMonitorService;
 use proton_mail_api::services::proton::common::ConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
@@ -204,9 +205,14 @@ impl ContextualConversation {
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let stash = ctx.user_stash();
         let api = ctx.session();
-        if let Some(conv_and_messages) =
-            Self::conversation_and_messages(local_conversation_id, local_label_id, stash, api)
-                .await?
+        if let Some(conv_and_messages) = Self::conversation_and_messages(
+            ctx.network_monitor_service(),
+            local_conversation_id,
+            local_label_id,
+            stash,
+            api,
+        )
+        .await?
         {
             if conv_and_messages.conversation.display_snooze_reminder {
                 let queue = ctx.action_queue();
@@ -237,8 +243,9 @@ impl ContextualConversation {
     ///
     /// Returns error if the query failed, syncing the data failed or
     /// the conversation has no messages.
-    #[tracing::instrument(skip(stash, api))]
+    #[tracing::instrument(skip(stash, api, network_monitor_service))]
     pub async fn conversation_and_messages(
+        network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         stash: &Stash,
@@ -249,7 +256,13 @@ impl ContextualConversation {
         let label = Label::find_by_id(local_label_id, &conn)
             .await?
             .ok_or(AppError::LabelNotFound(local_label_id))?;
-        Conversation::sync_conversation_messages(local_conversation_id, &mut conn, api).await?;
+        Conversation::sync_conversation_messages(
+            network_monitor_service,
+            local_conversation_id,
+            &mut conn,
+            api,
+        )
+        .await?;
         let Some(conversation) = Self::load(local_conversation_id, local_label_id, &conn).await?
         else {
             return Ok(None);

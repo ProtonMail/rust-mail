@@ -3,8 +3,6 @@ use crate::datatypes::LocalConversationId;
 use proton_core_api::services::proton::GetLabelsByIdsOptions;
 use proton_core_api::services::proton::GetLabelsResponse;
 use proton_core_api::session::{Config, EnvId, Session};
-use proton_core_api::status_observer::StatusObserver;
-use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::test_utils::test_context::MockApiEnv;
@@ -16,7 +14,6 @@ use proton_mail_common::{
     api_conversation, api_label, api_message_meta, conversation, label, message,
     test_utils::utils::create_address,
 };
-use proton_task_service::Tokio;
 use test_case::test_case;
 #[allow(unused_imports)]
 use wiremock::{
@@ -256,12 +253,9 @@ async fn start_server(tether: &Tether, batch_size: usize) -> (MockServer, Sessio
             ..Default::default()
         };
 
-        let status = StatusWatcher::with_observer(StatusObserver::test(Tokio::spawner()));
-
         Session::builder()
             .with_config(config)
-            .with_status(status)
-            .build(Tokio::spawner())
+            .build()
             .await
             .unwrap()
     };

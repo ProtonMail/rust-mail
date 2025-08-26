@@ -3,20 +3,17 @@ use muon::client::InfoProvider;
 use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
 use muon::common::ParseEndpointErr;
 use muon::rt::DynResolver;
-use proton_task_service::SpawnerRef;
 use std::borrow::Borrow;
 use std::fmt::Formatter;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{RwLock, watch};
+use tokio::sync::RwLock;
 
 use crate::auth::UserKeySecret;
-use crate::connection_status::ConnectionStatus;
 use crate::crypto_clock::init_server_crypto_clock;
 use crate::service::ApiServiceResult;
 use crate::services::observability::ObservabilityManager;
 use crate::services::proton::{self, BuildError, Proton};
-use crate::status_watcher::StatusWatcher;
 use crate::store::{BoxStore, DynStore, Store, TempStore};
 use crate::verification::{DynChallengeNotifier, FailNotifier};
 
@@ -24,6 +21,7 @@ pub use muon::app::AppVersion;
 pub use muon::common::{Endpoint, Name, Server};
 pub use muon::env::{Env, EnvId};
 pub use muon::tls::TlsPinSet;
+use proton_network_monitor_service::{ConnectionMonitor, NetworkStatusObserver};
 
 const OBSERVABILITY_BATCH_SIZE: usize = 500;
 
@@ -145,7 +143,7 @@ impl Default for Config {
 pub struct Builder {
     config: Config,
     store: Option<BoxStore>,
-    status: Option<StatusWatcher>,
+    connection_monitor: Option<ConnectionMonitor>,
     notifier: Option<DynChallengeNotifier>,
     info_provider: Option<Arc<dyn InfoProvider>>,
     allow_doh: bool,
@@ -156,7 +154,7 @@ impl Default for Builder {
         Self {
             config: Config::default(),
             store: None,
-            status: None,
+            connection_monitor: None,
             notifier: None,
             info_provider: None,
             allow_doh: true,
@@ -210,8 +208,8 @@ impl Builder {
         self
     }
 
-    pub fn with_status(mut self, status: StatusWatcher) -> Self {
-        self.status = Some(status);
+    pub fn with_connection_monitor(mut self, monitor: ConnectionMonitor) -> Self {
+        self.connection_monitor = Some(monitor);
         self
     }
 
@@ -230,11 +228,14 @@ impl Builder {
         self
     }
 
-    pub async fn build(self, spawner: SpawnerRef) -> Result<Session, BuildError> {
+    pub async fn build(self) -> Result<Session, BuildError> {
         init_server_crypto_clock();
 
         let store = self.store.unwrap_or_else(TempStore::boxed);
-        let mut status = self.status.unwrap_or_else(|| StatusWatcher::new(spawner));
+        let connection_monitor = self.connection_monitor.unwrap_or_else(|| {
+            tracing::warn!("Creating connection monitor in standalone mode");
+            ConnectionMonitor::standalone()
+        });
         let notifier = self.notifier.unwrap_or_else(FailNotifier::arced);
         let config = Arc::new(self.config);
         let store = Arc::new(RwLock::new(store));
@@ -242,17 +243,15 @@ impl Builder {
         let client = proton::build(
             &config,
             &store,
-            &status,
+            &connection_monitor,
             notifier,
             self.info_provider,
             self.allow_doh,
         )
         .await?;
 
-        status.initialize(client.clone());
-
         ObservabilityManager::start(
-            status.clone(),
+            connection_monitor.network_status_observer(),
             client.clone(),
             Duration::from_secs(60),
             OBSERVABILITY_BATCH_SIZE,
@@ -262,7 +261,7 @@ impl Builder {
             client,
             config,
             store,
-            status,
+            network_status_observer: connection_monitor.network_status_observer(),
         })
     }
 }
@@ -274,7 +273,7 @@ pub struct Session {
     client: Proton,
     config: Arc<Config>,
     store: DynStore,
-    status: StatusWatcher,
+    network_status_observer: NetworkStatusObserver,
 }
 
 impl std::fmt::Debug for Session {
@@ -288,8 +287,8 @@ impl std::fmt::Debug for Session {
 }
 
 impl Session {
-    pub async fn new(spawner: SpawnerRef) -> Result<Self, BuildError> {
-        Self::builder().build(spawner).await
+    pub async fn new() -> Result<Self, BuildError> {
+        Self::builder().build().await
     }
 
     pub fn builder() -> Builder {
@@ -348,7 +347,7 @@ impl Session {
                 client,
                 config: self.config.clone(),
                 store: self.store.clone(),
-                status: self.status.clone(),
+                network_status_observer: self.network_status_observer.clone(),
             }),
             WithSelectorFlow::Failed { reason, .. } => Err(muon::Error::from(reason).into()),
         }
@@ -376,44 +375,6 @@ impl Session {
         Ok(())
     }
 
-    /// Get the connection status of the current session.
-    ///
-    /// Underlying it will ping the Proton server with two seconds timeout when
-    /// the connection status is uncertain - to check if the connection can be
-    /// established. The method will return the current status if it is fresh
-    /// enough without making a new request.
-    ///
-    /// The connection status can be one of the following:
-    /// - `ConnectionStatus::Online`: The application is online and server is reachable.
-    /// - `ConnectionStatus::Offline`: The application is offline.
-    /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
-    ///
-    pub async fn status(&self) -> ConnectionStatus {
-        self.status.status(self.client.clone()).await
-    }
-
-    /// Get the connection status of the current session.
-    ///
-    /// It uses [`status`] method under the hood, but if it claims the connection
-    /// cannot be made it will allow grace period of two seconds. It will follow logic:
-    /// * If the connection is online, it will return `ConnectionStatus::Online` immediately.
-    /// * If the connection is offline, it will wait for 2 seconds and return the current status.
-    ///
-    /// This method is useful to avoid returning `ConnectionStatus::Offline`
-    /// when the connection status is uncertain.
-    ///
-    pub async fn graceful_status(&self) -> ConnectionStatus {
-        match self.status().await {
-            ConnectionStatus::Online => ConnectionStatus::Online,
-            status => {
-                match tokio::time::timeout(Duration::from_secs(2), self.wait_for_online()).await {
-                    Ok(()) => ConnectionStatus::Online,
-                    Err(_) => status,
-                }
-            }
-        }
-    }
-
     /// Returns a reference to the store.
     ///
     #[must_use]
@@ -424,46 +385,8 @@ impl Session {
     /// Returns status watcher
     ///
     #[must_use]
-    pub fn status_watcher(&self) -> StatusWatcher {
-        self.status.clone()
-    }
-
-    /// Observe changes on status via `Receiver`
-    ///
-    #[must_use]
-    pub fn status_changes(&self) -> watch::Receiver<ConnectionStatus> {
-        self.status.subscribe()
-    }
-
-    /// Waits until the connection is online; if that's the case at the moment,
-    /// returns immediately.
-    ///
-    pub async fn wait_for_online(&self) {
-        // `wait_for()` returns `Err` if the channel's tx has died - this
-        // shouldn't be the case here, because the channel is allowed to die
-        // only after the *last* instance of status watcher is dropped, and we
-        // know at least one instance must be alive as it's held within `self`.
-        //
-        // If this logic becomes violated, the worst that can happen is that
-        // this function returns even if the network connection is actually
-        // offline. This is alright, because listening on network status is
-        // advisory anyway - the caller is supposed to handle potential network
-        // problems on their side one way or another.
-
-        _ = self
-            .status_changes()
-            .wait_for(ConnectionStatus::is_online)
-            .await;
-    }
-
-    /// Waits until the connection is offline; if that's the case at the moment,
-    /// returns immediately.
-    ///
-    pub async fn wait_for_offline(&self) {
-        _ = self
-            .status_changes()
-            .wait_for(ConnectionStatus::is_offline)
-            .await;
+    pub fn network_status_observer(&self) -> NetworkStatusObserver {
+        self.network_status_observer.clone()
     }
 }
 
@@ -472,7 +395,7 @@ impl Session {
 pub struct SessionParts {
     pub config: Arc<Config>,
     pub store: DynStore,
-    pub status: StatusWatcher,
+    pub network_status_observer: NetworkStatusObserver,
 }
 
 impl Session {
@@ -486,7 +409,7 @@ impl Session {
         let parts = SessionParts {
             config: self.config,
             store: self.store,
-            status: self.status,
+            network_status_observer: self.network_status_observer,
         };
 
         (self.client, parts)
@@ -498,7 +421,7 @@ impl Session {
             client,
             config: parts.config,
             store: parts.store,
-            status: parts.status,
+            network_status_observer: parts.network_status_observer,
         }
     }
 }

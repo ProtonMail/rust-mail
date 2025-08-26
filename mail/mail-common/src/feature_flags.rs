@@ -76,7 +76,7 @@ impl FeatureFlagsService {
 
     pub async fn refresh(&self) -> CoreContextResult<()> {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
-        let session = ctx.new_api_session(None, None).await?;
+        let session = ctx.new_api_session(None).await?;
         let api = session.api();
         self.fetch_and_update(api).await
     }

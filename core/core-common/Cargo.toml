@@ -61,6 +61,7 @@ tempdir = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 jiff = { workspace = true }
 url = { workspace = true }
+proton-network-monitor-service = { workspace = true, features = ["muon"] }
 
 [dev-dependencies]
 futures = { workspace = true }

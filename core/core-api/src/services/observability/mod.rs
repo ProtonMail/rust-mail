@@ -1,7 +1,5 @@
 use super::proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement};
-use crate::{
-    service::ApiServiceError, services::proton::ProtonData, status_watcher::StatusWatcher,
-};
+use crate::{service::ApiServiceError, services::proton::ProtonData};
 use std::{
     sync::{Arc, LazyLock, Once},
     time::Duration,
@@ -10,6 +8,7 @@ use std::{
 use chrono::Utc;
 use muon::Client;
 use parking_lot::RwLock;
+use proton_network_monitor_service::NetworkStatusObserver;
 use serde::{Deserialize, Serialize};
 use store::InMemoryMetricStore;
 use tracing::{debug, error, info, trace};
@@ -47,7 +46,12 @@ impl ObservabilityManager {
     /// * `send_period` - The `Duration` between each metric-sending operation.
     /// * `batch_size` - The maximum number of metrics to send in each batch.
     ///
-    pub fn start(status: StatusWatcher, client: Client, send_period: Duration, batch_size: usize) {
+    pub fn start(
+        status: NetworkStatusObserver,
+        client: Client,
+        send_period: Duration,
+        batch_size: usize,
+    ) {
         START.call_once(|| {
             tokio::spawn(async move {
                 info!("Start ObservabilityManager task");
@@ -73,8 +77,8 @@ impl ObservabilityManager {
     ///
     /// * `count` - The maximum number of metrics to send.
     /// * `client` - The client used to send metrics.
-    async fn post_metrics(batch_size: usize, client: &Client, status: &StatusWatcher) {
-        if status.status(client.clone()).await.is_offline() {
+    async fn post_metrics(batch_size: usize, client: &Client, status: &NetworkStatusObserver) {
+        if !status.is_online() {
             trace!("Client is offline");
             return;
         }

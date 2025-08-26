@@ -57,6 +57,7 @@ async fn prepare_context(tmp_dir: &TempDir) -> (Arc<MailContext>, Arc<dyn KeyCha
         None,
         LogService::new(config),
         EventPollMode::Manual,
+        Default::default(),
     )
     .await
     .unwrap();
@@ -163,7 +164,7 @@ async fn main() {
     let session = et_context.get_session(session_id).await.unwrap().unwrap();
 
     let ctx = et_context
-        .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
+        .user_context_from_session(&session, ShouldInitializeMailUserContext::Yes)
         .await
         .unwrap();
 

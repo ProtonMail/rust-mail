@@ -1,3 +1,5 @@
+use proton_network_monitor_service::RequestNetworkStatus;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionStatus {
     /// The application is online,
@@ -19,5 +21,15 @@ impl ConnectionStatus {
     #[must_use]
     pub fn is_offline(&self) -> bool {
         !self.is_online()
+    }
+}
+
+impl From<RequestNetworkStatus> for ConnectionStatus {
+    fn from(status: RequestNetworkStatus) -> Self {
+        match status {
+            RequestNetworkStatus::Offline => ConnectionStatus::Offline,
+            RequestNetworkStatus::Online => ConnectionStatus::Online,
+            RequestNetworkStatus::ServerUnreachable => ConnectionStatus::ServerUnreachable,
+        }
     }
 }

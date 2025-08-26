@@ -184,6 +184,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let remote_label_id = label.remote_id.clone().unwrap();
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
         let unread = self.unread;
+        let network_monitor_service = ctx.network_monitor_service();
         // On the initialization of the scroller its vital to be able to
         // recognize the connection state with high precision due to the fact
         // it may impare how the whole application is behaving.
@@ -192,14 +193,8 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // only when we may be online but we have to confirm it, never for offline
         // as we will have a 2 sec downtime everytime we load location in offline.
         let is_offline = async || {
-            let is_offline = ctx.session().status().await.is_offline();
-            let is_offline = is_offline
-                || ctx
-                    .session()
-                    .status_watcher()
-                    .low_latency_status(ctx.api().clone())
-                    .await
-                    .is_offline();
+            let is_offline = ctx.network_monitor_service().status().is_offline();
+            let is_offline = is_offline || network_monitor_service.check_now().await.is_offline();
 
             debug!("Might be offline: {}", is_offline);
 
@@ -212,7 +207,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         if let Some(scroller) = self.state.online() {
             debug!("We have paginated here before, try to create cached scroller");
             if let Some(scroll_data) = scroller.scroll_data_begin(&tether).await? {
-                if ctx.session().status().await.is_online() {
+                if network_monitor_service.status().is_online() {
                     debug!("Syncing previous page in background");
                     self.sync_previous_page(ctx, &scroll_data, remote_label_id.clone())
                         .await?;
@@ -330,7 +325,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
-        let is_offline = ctx.session().status().await.is_offline();
+        let is_offline = ctx.network_monitor_service().status().is_offline();
         let is_online = !is_offline;
 
         // If we go back online, we need to replace

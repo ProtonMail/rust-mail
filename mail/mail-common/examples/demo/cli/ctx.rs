@@ -46,6 +46,7 @@ where
         None,
         LogService::new(config),
         EventPollMode::Automatic(30.s()),
+        Default::default(),
     )
     .await?)
 }
@@ -82,9 +83,7 @@ async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<Mail
             continue;
         };
 
-        return Ok(ctx
-            .user_context_from_session(&session, None, Init::Yes)
-            .await?);
+        return Ok(ctx.user_context_from_session(&session, Init::Yes).await?);
     }
 
     Err(anyhow!("account not found"))
