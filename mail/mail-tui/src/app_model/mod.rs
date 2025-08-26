@@ -29,6 +29,7 @@ use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::services::SessionObserverService;
 use proton_core_common::{OnSessionDeletedResponse, Origin};
 use proton_log_service::LogService;
+use proton_log_service::WorkerGuard;
 use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Flex};
@@ -44,8 +45,6 @@ use throbber_widgets_tui::ThrobberState;
 use tokio::runtime;
 use tracing::error;
 use tracing::level_filters::LevelFilter;
-use tracing_appender::non_blocking;
-use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -548,12 +547,10 @@ fn app_tracing_env_filter() -> EnvFilter {
 }
 
 fn init_log(log_service: &LogService) -> anyhow::Result<WorkerGuard> {
-    let log_file = log_service.create_logger()?;
-    let (appender, guard) = non_blocking(log_file);
-    let file_subscriber = tracing_subscriber::fmt::layer()
+    let (file_subscriber, guard) = log_service.create_non_blocking_layer()?;
+    let file_subscriber = file_subscriber
         .with_file(false)
         .with_line_number(false)
-        .with_writer(appender)
         .with_target(false)
         .with_ansi(false)
         .with_filter(app_tracing_env_filter());

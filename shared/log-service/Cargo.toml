@@ -5,9 +5,15 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+tracing = { workspace = true }
+tracing-appender = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true }
 parking_lot = { workspace = true }
 typed-builder = { workspace = true }
+chrono = { workspace = true }
+
+[features]
+non_blocking = ["tracing-appender"]
 
 [dev-dependencies]
 tempdir = { workspace = true }

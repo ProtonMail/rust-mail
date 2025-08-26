@@ -8,12 +8,10 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 pub(super) fn init_log(log_service: &LogService, debug: bool) -> std::io::Result<()> {
-    let log_file = log_service.create_logger()?;
-
-    let file_subscriber = tracing_subscriber::fmt::layer()
+    let file_subscriber = log_service
+        .create_layer()?
         .with_file(false)
         .with_line_number(false)
-        .with_writer(log_file)
         .with_target(false)
         .with_ansi(false)
         .with_filter(if debug {

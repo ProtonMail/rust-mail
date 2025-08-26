@@ -5978,8 +5978,11 @@ dependencies = [
 name = "proton-log-service"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "parking_lot",
  "tempdir",
+ "tracing",
+ "tracing-appender",
  "tracing-subscriber",
  "typed-builder",
 ]
