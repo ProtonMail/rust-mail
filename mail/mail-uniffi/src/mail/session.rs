@@ -35,6 +35,7 @@ use proton_mail_common::errors::{
     ContextErrorReason, MailErrorReason, ProtonMailError as RealProtonMailError,
 };
 use proton_mail_common::{MailContext, MailContextError};
+use proton_network_monitor_service::OsNetworkStatus as RealOsNetworkStatus;
 use stash::orm::Model;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
@@ -1232,6 +1233,12 @@ impl MailSession {
     pub async fn is_feature_enabled(&self, feature_id: String) -> Option<bool> {
         self.mail_ctx.feature_flags().get(&feature_id).await
     }
+
+    pub fn update_os_network_status(&self, os_network_status: OsNetworkStatus) {
+        self.mail_ctx
+            .network_monitor_service()
+            .update_os_network_status(os_network_status.into());
+    }
 }
 
 impl MailSession {
@@ -1285,6 +1292,21 @@ impl WatchedAccounts {
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> WatchedAccounts {
         WatchedAccounts::new(accounts, watch_channel_async(ctx, handle, callback))
+    }
+}
+
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OsNetworkStatus {
+    Online,
+    Offline,
+}
+
+impl From<OsNetworkStatus> for RealOsNetworkStatus {
+    fn from(status: OsNetworkStatus) -> Self {
+        match status {
+            OsNetworkStatus::Online => Self::Online,
+            OsNetworkStatus::Offline => Self::Offline,
+        }
     }
 }
 

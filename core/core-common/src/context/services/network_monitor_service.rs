@@ -10,7 +10,7 @@ use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::session::Session;
 use proton_network_monitor_service::{
     Config, ConnectionMonitor, NetworkMonitorService as ProtonNetworkMonitorService,
-    NetworkStatusObserver, OnlineTester, RequestNetworkStatus,
+    NetworkStatusObserver, OnlineTester, OsNetworkStatus, RequestNetworkStatus,
 };
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -49,6 +49,10 @@ impl NetworkMonitorService {
             .network_status_observer()
             .status()
             .into()
+    }
+
+    pub fn update_os_network_status(&self, status: OsNetworkStatus) {
+        self.service.read().update_os_network_status(status);
     }
 }
 
