@@ -75,7 +75,7 @@ use crate::models::{
     Attachment, AttachmentType, MailSettings, MessageBodyMetadata, MessageMimeType,
 };
 use crate::{AppError, MailContextError, MailUserContext};
-use attachment::ContentId;
+use attachment::{ContentId, MimeTypeCategory};
 use core::fmt;
 use proton_core_api::services::proton::{AddressId, LabelId, PrivateEmail, PrivateString};
 use proton_core_common::datatypes::{
@@ -841,25 +841,11 @@ sql_using_serde!(AttachmentEncryptedSignature);
 ///
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentMetadata {
-    /// Local attachment id.
     pub local_id: Option<LocalAttachmentId>,
-
-    /// The attachment type of this attachment.
-    /// It can be a pgp attachment (local only, kept around for caching purposes)
-    /// Or a remote attachment, a real attachment, that has a RemoteId.
-    /// If you're looking for the AttachmentId, look here.
     pub attachment_type: AttachmentType,
-
-    /// Whether attachment is inlined or not.
     pub disposition: Disposition,
-
-    /// Attachment mime type.
     pub mime_type: attachment::MimeType,
-
-    /// Attachment file name.
     pub filename: String,
-
-    /// Attachment size in bytes.
     pub size: u64,
 }
 
@@ -869,6 +855,25 @@ impl AttachmentMetadata {
             AttachmentType::Remote(id) => id.clone(),
             _ => None,
         }
+    }
+
+    /// Some attachments (e.g. GPG keys) are "not interesting" - they should be
+    /// displayed when user _opens_ a message, but not as those small "pills" on
+    /// the message/conversation list itself, as not to clutter the view.
+    ///
+    /// This function determines whether an attachment should be visible on the
+    /// message/conversation list or not.
+    pub fn is_listable(&self) -> bool {
+        matches!(
+            self.mime_type.category(),
+            MimeTypeCategory::Audio
+                | MimeTypeCategory::Excel
+                | MimeTypeCategory::Image
+                | MimeTypeCategory::Pdf
+                | MimeTypeCategory::Powerpoint
+                | MimeTypeCategory::Video
+                | MimeTypeCategory::Word
+        )
     }
 }
 
