@@ -1,0 +1,24 @@
+[package]
+name = "proton-network-monitor-service"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true }
+muon = { workspace = true, optional = true }
+proton-task-service = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+mockall = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[features]
+default = ["muon"]
+muon = ["dep:muon"]
+[lints]
+workspace = true

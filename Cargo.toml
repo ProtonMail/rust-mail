@@ -40,6 +40,7 @@ members = [
   "uniffi/uniffi-macros",
   "uniffi/uniffi-runtime",
   "shared/proton-event-service",
+  "shared/proton-network-monitor-service",
 ]
 
 [workspace.package]
@@ -313,6 +314,11 @@ registry = "proton"
 [workspace.dependencies.proton-event-service]
 version = "0.1.0"
 path = "shared/proton-event-service"
+registry = "proton"
+
+[workspace.dependencies.proton-network-monitor-service]
+version = "0.1.0"
+path = "shared/proton-network-monitor-service"
 registry = "proton"
 
 [workspace.lints.rust]
