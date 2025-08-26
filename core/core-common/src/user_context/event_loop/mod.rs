@@ -1,11 +1,9 @@
 use crate::UserContext;
 use crate::actions::event_poll::{self};
-use crate::services::EventPollConfigService;
 use proton_action_queue::action::{Metadata, Priority};
 use proton_action_queue::queue::Error;
 use proton_action_queue::{action::ActionId, queue::ActionError};
 use std::time::Duration;
-use tracing::warn;
 
 pub mod subscriber;
 
@@ -40,14 +38,7 @@ impl UserContext {
     /// Returns error if the action failed to be queued.
     ///
     pub async fn poll_event_loop(&self) -> Result<(), ActionError<event_poll::EventPoll>> {
-        let config_service = self.context.get_service::<EventPollConfigService>();
-
         let event_loop_service = self.event_loop_service();
-
-        if !config_service.is_manual() {
-            warn!("Event poll mode is not configured as manual");
-            return Ok(());
-        }
         self.queue_poll_event_loop(event_loop_service).await
     }
 
