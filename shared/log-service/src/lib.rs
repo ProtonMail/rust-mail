@@ -1,11 +1,52 @@
 mod size_rolling_appender;
 
 pub use size_rolling_appender::*;
+
+use chrono::Local;
+use std::fmt;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "non_blocking")]
+pub use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::Registry;
+use tracing_subscriber::fmt::time::FormatTime;
 use typed_builder::TypedBuilder;
+
+#[cfg(feature = "non_blocking")]
+use tracing_appender::non_blocking;
 
 const DEFAULT_MAX_LOG_SIZE: u64 = 5 * 1024 * 1024; // 5MB
 const DEFAULT_ROTATION_COUNT: usize = 2;
+
+pub type FileLayer = tracing_subscriber::fmt::Layer<
+    Registry,
+    tracing_subscriber::fmt::format::DefaultFields,
+    tracing_subscriber::fmt::format::Format<
+        tracing_subscriber::fmt::format::Full,
+        LocalTimeFormatter,
+    >,
+    SizeRollingAppender,
+>;
+
+#[cfg(feature = "non_blocking")]
+pub type NonBlockingLayer = tracing_subscriber::fmt::Layer<
+    Registry,
+    tracing_subscriber::fmt::format::DefaultFields,
+    tracing_subscriber::fmt::format::Format<
+        tracing_subscriber::fmt::format::Full,
+        LocalTimeFormatter,
+    >,
+    tracing_appender::non_blocking::NonBlocking,
+>;
+
+#[derive(Debug, Clone)]
+pub struct LocalTimeFormatter;
+
+impl FormatTime for LocalTimeFormatter {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> fmt::Result {
+        let now = Local::now();
+        write!(w, "{}", now.format("%Y-%m-%d %H:%M:%S%.3f %Z"))
+    }
+}
 
 pub type LogFileHeader = fn() -> String;
 #[derive(Debug, Clone, TypedBuilder)]
@@ -101,9 +142,21 @@ impl LogService {
         Self { config }
     }
 
-    //TODO: would be nicer to return an tracing fmt layer
-    pub fn create_logger(&self) -> std::io::Result<SizeRollingAppender> {
-        SizeRollingAppender::new(self.config.clone())
+    pub fn create_layer(&self) -> std::io::Result<FileLayer> {
+        let writer = SizeRollingAppender::new(self.config.clone())?;
+        Ok(tracing_subscriber::fmt::layer()
+            .with_writer(writer)
+            .with_timer(LocalTimeFormatter))
+    }
+
+    #[cfg(feature = "non_blocking")]
+    pub fn create_non_blocking_layer(&self) -> std::io::Result<(NonBlockingLayer, WorkerGuard)> {
+        let writer = SizeRollingAppender::new(self.config.clone())?;
+        let (non_blocking_writer, guard) = non_blocking(writer);
+        let layer = tracing_subscriber::fmt::layer()
+            .with_writer(non_blocking_writer)
+            .with_timer(LocalTimeFormatter);
+        Ok((layer, guard))
     }
 
     #[must_use]
