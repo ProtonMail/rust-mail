@@ -11,10 +11,22 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tracing::instrument;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub immediate: ImmediateConfig,
     pub background: BackgroundConfig,
+    /// When true will issue a request test once os reports the network is online.
+    pub verify_os_updates: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            immediate: ImmediateConfig::default(),
+            background: BackgroundConfig::default(),
+            verify_os_updates: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -238,7 +250,7 @@ impl NetworkMonitorBackgroundTask {
         loop {
             tokio::select! {
                 _ = self.os_network_subscriber.changed() => {
-                    self.update_os_network_status();
+                    self.update_os_network_status().await;
                 }
                 _= self.request_network_subscriber.changed() => {
                     self.update_request_network_status();
@@ -261,19 +273,33 @@ impl NetworkMonitorBackgroundTask {
         }
     }
 
-    fn update_os_network_status(&mut self) {
-        self.os_network_status = *self.os_network_subscriber.borrow();
-        tracing::debug!("OS Network status updated: {:?}", self.os_network_status);
-        self.update_subscriber_status();
+    async fn update_os_network_status(&mut self) {
+        let new_os_network_status = *self.os_network_subscriber.borrow();
+        if new_os_network_status != self.os_network_status {
+            self.os_network_status = new_os_network_status;
+            tracing::debug!("OS Network status updated: {:?}", self.os_network_status);
+            if self.config.verify_os_updates && self.os_network_status == OsNetworkStatus::Online {
+                tracing::debug!("Verifying OS update with one check");
+                // Double check we are actually "online" in case we have a
+                update_watcher_value(
+                    &self.request_watcher,
+                    self.tester.check(self.config.immediate.timeout).await,
+                );
+            }
+            self.update_subscriber_status();
+        }
     }
 
     fn update_request_network_status(&mut self) {
-        self.request_network_status = *self.request_network_subscriber.borrow();
-        tracing::debug!(
-            "Network request status updated: {:?}",
-            self.request_network_status
-        );
-        self.update_subscriber_status();
+        let new_request_network_status = *self.request_network_subscriber.borrow();
+        if new_request_network_status != self.request_network_status {
+            self.request_network_status = new_request_network_status;
+            tracing::debug!(
+                "Network request status updated: {:?}",
+                self.request_network_status
+            );
+            self.update_subscriber_status();
+        }
     }
 
     fn update_subscriber_status(&mut self) {
@@ -396,6 +422,46 @@ mod tests {
             .unwrap();
         assert_eq!(new_status, RequestNetworkStatus::Online);
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn os_updates_with_verification() {
+        let mut config = test_config();
+        config.verify_os_updates = true;
+        config.immediate.timeout = Duration::from_millis(5);
+        config.background.retry_policy = RetryPolicy::default()
+            .min_delay(Duration::from_secs(60))
+            .max_delay(Duration::from_secs(60))
+            .jitter(Duration::from_secs(0))
+            .iter_mul(1.0)
+            .iter_add(Duration::from_secs(0));
+
+        let mut tester = MockOnlineTester::new();
+        tester
+            .expect_check()
+            .with(eq(config.background.timeout))
+            .returning(|_| RequestNetworkStatus::Offline);
+
+        tester
+            .expect_check()
+            .once()
+            .with(eq(config.immediate.timeout))
+            .returning(|_| RequestNetworkStatus::Online);
+
+        let service = new_service(config, tester);
+        let mut observer = service.network_status_observer();
+
+        service.update_os_network_status(OsNetworkStatus::Offline);
+        let new_status = tokio::time::timeout(Duration::from_secs(1), observer.wait_for_change())
+            .await
+            .unwrap();
+        assert_eq!(new_status, RequestNetworkStatus::Offline);
+
+        service.update_os_network_status(OsNetworkStatus::Online);
+        let new_status = tokio::time::timeout(Duration::from_secs(1), observer.wait_for_change())
+            .await
+            .unwrap();
+        assert_eq!(new_status, RequestNetworkStatus::Online);
+    }
     #[tokio::test(flavor = "multi_thread")]
     async fn request_updates() {
         let value_to_report = Arc::new(RwLock::new(RequestNetworkStatus::Offline));
@@ -506,6 +572,7 @@ mod tests {
 
                 infinite_checks: true,
             },
+            verify_os_updates: false,
         }
     }
     fn new_service(config: Config, tester: MockOnlineTester) -> NetworkMonitorService {
