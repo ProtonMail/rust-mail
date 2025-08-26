@@ -6195,6 +6195,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-network-monitor-service"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "mockall",
+ "muon",
+ "proton-task-service",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "proton-payment-crux"
 version = "0.1.0"
 
