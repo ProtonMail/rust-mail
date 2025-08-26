@@ -157,7 +157,7 @@ impl RemoteMessageScrollerSource {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let stash = ctx.user_stash().clone();
         let remote_id = scroller.remote_message_id.clone();
-        let message_time = scroller.message_time;
+        let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
         let task = Some(ctx.spawn(async move {
@@ -167,7 +167,7 @@ impl RemoteMessageScrollerSource {
                 local_label_id,
                 remote_label_id,
                 remote_id,
-                message_time,
+                context_time,
                 unread,
                 page_size,
                 order_dir,
@@ -260,9 +260,8 @@ impl RemoteMessageScrollerSource {
         let mut response = session
             .api()
             .get_messages(GetMessagesOptions {
-                // time == 0 breaks the api query.
-                end: Some(last_element_time.as_u64()),
-                end_id: Some(last_element_id.clone()),
+                anchor: Some(last_element_time.as_u64()),
+                anchor_id: Some(last_element_id.clone()),
                 label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
@@ -411,11 +410,8 @@ impl RemoteMessageScrollerSource {
                 }
 
                 let last = messages.last().unwrap();
-                let time = if matches!(order_field, ScrollOrderField::SnoozeTime) {
-                    last.snooze_time
-                } else {
-                    last.time
-                };
+                let time = last.time;
+                let snooze_time = last.snooze_time;
 
                 // Unwrap safety: RemoteId is present as this method is called on message
                 // downloaded from API
@@ -428,6 +424,7 @@ impl RemoteMessageScrollerSource {
                         remote_id.clone(),
                         unread,
                         time,
+                        snooze_time,
                         display_order,
                         order_dir,
                         order_field,
@@ -435,11 +432,6 @@ impl RemoteMessageScrollerSource {
                     )
                     .await?;
                 }
-
-                debug!(
-                    "New last element id={:?}, time={}, order={}",
-                    remote_id, time, display_order
-                );
 
                 Ok(())
             })
@@ -452,16 +444,21 @@ impl RemoteMessageScrollerSource {
         remote_msg_id: MessageId,
         unread: ReadFilter,
         time: UnixTimestamp,
+        snooze_time: UnixTimestamp,
         display_order: u64,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
         bond: &Bond<'_>,
     ) -> Result<MessageScrollData, MailContextError> {
+        tracing::debug!(
+            "New message cursor {remote_msg_id} at time={time}, snooze_time={snooze_time}, order={display_order}"
+        );
         let mut msg_paginator = MessageScrollData::builder()
             .local_label_id(local_label_id)
             .unread(unread)
             .remote_message_id(remote_msg_id)
             .message_time(time)
+            .snooze_time(snooze_time)
             .display_order(display_order)
             .order_dir(order_dir)
             .order_field(order_field)

@@ -45,18 +45,23 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         tether: &Tether,
     ) -> impl Future<Output = Result<u64, AppError>> + Send;
 
+    #[allow(clippy::too_many_arguments)]
     fn query(
         filter: ReadFilter,
         limit: Option<usize>,
-        require_remote_id: bool,
         offset: Option<u64>,
+        require_remote_id: bool,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        time: UnixTimestamp,
+        snooze_time: UnixTimestamp,
     ) -> String;
 
     fn convert(local_id: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item>;
 
-    fn time(item: &Self::Item, order_field: ScrollOrderField) -> UnixTimestamp;
+    fn time(item: &Self::Item) -> UnixTimestamp;
+
+    fn snooze_time(item: &Self::Item, order_field: ScrollOrderField) -> UnixTimestamp;
 
     fn display_order(item: &Self::Item) -> u64;
 
@@ -91,6 +96,9 @@ pub struct MessageScrollData {
     pub message_time: UnixTimestamp,
 
     #[DbField]
+    pub snooze_time: UnixTimestamp,
+
+    #[DbField]
     pub display_order: u64,
 
     #[DbField]
@@ -116,6 +124,19 @@ impl MessageScrollData {
 
         Ok(())
     }
+
+    pub fn context_time(&self, order_field: ScrollOrderField) -> UnixTimestamp {
+        match order_field {
+            ScrollOrderField::Time => self.message_time,
+            ScrollOrderField::SnoozeTime => {
+                if self.snooze_time.as_u64() > 0 {
+                    self.snooze_time
+                } else {
+                    self.message_time
+                }
+            }
+        }
+    }
 }
 
 impl From<MessageScrollData> for ScrollCursor<MessageScrollData> {
@@ -124,6 +145,7 @@ impl From<MessageScrollData> for ScrollCursor<MessageScrollData> {
             local_label_id: data.local_label_id,
             unread: data.unread,
             time: data.message_time,
+            snooze_time: data.snooze_time,
             display_order: data.display_order,
             order_dir: data.order_dir,
             order_field: data.order_field,
@@ -151,23 +173,52 @@ impl ScrollData for MessageScrollData {
     fn query(
         filter: ReadFilter,
         limit: Option<usize>,
-        require_remote_id: bool,
         offset: Option<u64>,
+        require_remote_id: bool,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        time: UnixTimestamp,
+        snooze_time: UnixTimestamp,
     ) -> String {
         //NOTE: we only check the display order for elements with matching time
         // or we will get incorrect query results.
 
-        let (time_op, display_order_op, sort_op) = if order_dir == ScrollOrderDir::Desc {
+        let (time_op, fallback_order_op, sort_op) = if order_dir == ScrollOrderDir::Desc {
             ('>', ">=", "DESC")
         } else {
             ('<', "<=", "ASC")
         };
 
         let time_column = match order_field {
-            ScrollOrderField::Time => "messages.time",
-            ScrollOrderField::SnoozeTime => "MAX(messages.snooze_time, messages.time)",
+            ScrollOrderField::Time => "messages.time".to_string(),
+            ScrollOrderField::SnoozeTime => formatdoc!(
+                "CASE WHEN messages.snooze_time > 0
+                    THEN messages.snooze_time
+                    ELSE messages.time END"
+            ),
+        };
+
+        let cursor_constraint = match order_field {
+            ScrollOrderField::Time => format!(
+                "(
+                {time_column} {time_op} {time}
+                OR
+                ({time_column} = {time} AND messages.display_order {fallback_order_op} ?2)
+                )"
+            ),
+            ScrollOrderField::SnoozeTime => formatdoc!(
+                "(
+                {time_column} {time_op} {snooze_time}
+                OR
+                ({time_column} = {snooze_time}
+                    AND messages.time {time_op} {time}
+                )
+                OR
+                ({time_column} = {snooze_time}
+                    AND messages.time = {time}
+                    AND messages.display_order {fallback_order_op} ?2)
+                )"
+            ),
         };
 
         let mut query = formatdoc!(
@@ -178,11 +229,7 @@ impl ScrollData for MessageScrollData {
                 message_labels.local_label_id = ?1
             AND
                 messages.deleted = 0
-            AND (
-                    {time_column} {time_op} ?2
-                OR
-                    ({time_column} = ?2 AND messages.display_order {display_order_op} ?3)
-                )
+            AND {cursor_constraint}
             "
         );
         if require_remote_id {
@@ -199,12 +246,23 @@ impl ScrollData for MessageScrollData {
             }
         }
 
-        query += &format!(
-            " ORDER BY
-            {time_column} {sort_op},
-            messages.display_order {sort_op}
-        "
-        );
+        let order_by = match order_field {
+            ScrollOrderField::Time => format!(
+                " ORDER BY
+                {time_column} {sort_op},
+                messages.display_order {sort_op}
+            "
+            ),
+            ScrollOrderField::SnoozeTime => format!(
+                " ORDER BY
+                {time_column} {sort_op},
+                messages.time {sort_op},
+                messages.display_order {sort_op}
+            "
+            ),
+        };
+
+        query += &order_by;
 
         if let Some(limit) = limit {
             query += &format!(" LIMIT {limit} ");
@@ -221,10 +279,20 @@ impl ScrollData for MessageScrollData {
         items
     }
 
-    fn time(item: &Self::Item, order_field: ScrollOrderField) -> UnixTimestamp {
+    fn time(item: &Self::Item) -> UnixTimestamp {
+        item.time
+    }
+
+    fn snooze_time(item: &Self::Item, order_field: ScrollOrderField) -> UnixTimestamp {
         match order_field {
             ScrollOrderField::Time => item.time,
-            ScrollOrderField::SnoozeTime => item.snooze_time,
+            ScrollOrderField::SnoozeTime => {
+                if item.snooze_time.as_u64() > 0 {
+                    item.snooze_time
+                } else {
+                    item.time
+                }
+            }
         }
     }
 
@@ -239,7 +307,8 @@ impl ScrollData for MessageScrollData {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Option<Self> {
-        let time = Self::time(&item, order_field);
+        let time = Self::time(&item);
+        let snooze_time = Self::snooze_time(&item, order_field);
         let display_order = Self::display_order(&item);
 
         if let Some(remote_id) = item.remote_id.clone() {
@@ -248,6 +317,7 @@ impl ScrollData for MessageScrollData {
                     .local_label_id(local_label_id)
                     .unread(unread)
                     .message_time(time)
+                    .snooze_time(snooze_time)
                     .display_order(display_order)
                     .remote_message_id(remote_id)
                     .order_dir(order_dir)
@@ -291,6 +361,9 @@ pub struct ConversationScrollData {
     pub conversation_time: UnixTimestamp,
 
     #[DbField]
+    pub snooze_time: UnixTimestamp,
+
+    #[DbField]
     pub display_order: u64,
 
     #[DbField]
@@ -318,6 +391,19 @@ impl ConversationScrollData {
 
         Ok(())
     }
+
+    pub fn context_time(&self, order_field: ScrollOrderField) -> UnixTimestamp {
+        match order_field {
+            ScrollOrderField::Time => self.conversation_time,
+            ScrollOrderField::SnoozeTime => {
+                if self.snooze_time.as_u64() > 0 {
+                    self.snooze_time
+                } else {
+                    self.conversation_time
+                }
+            }
+        }
+    }
 }
 
 impl From<ConversationScrollData> for ScrollCursor<ConversationScrollData> {
@@ -326,6 +412,7 @@ impl From<ConversationScrollData> for ScrollCursor<ConversationScrollData> {
             local_label_id: data.local_label_id,
             unread: data.unread,
             time: data.conversation_time,
+            snooze_time: data.snooze_time,
             display_order: data.display_order,
             order_dir: data.order_dir,
             order_field: data.order_field,
@@ -353,22 +440,51 @@ impl ScrollData for ConversationScrollData {
     fn query(
         filter: ReadFilter,
         limit: Option<usize>,
-        require_remote_id: bool,
         offset: Option<u64>,
+        require_remote_id: bool,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        time: UnixTimestamp,
+        snooze_time: UnixTimestamp,
     ) -> String {
-        let (time_op, display_order_op, sort_op) = if order_dir == ScrollOrderDir::Desc {
+        let (time_op, fallback_order_op, sort_op) = if order_dir == ScrollOrderDir::Desc {
             ('>', ">=", "DESC")
         } else {
             ('<', "<=", "ASC")
         };
 
         let time_column = match order_field {
-            ScrollOrderField::Time => "conversation_labels.context_time",
+            ScrollOrderField::Time => "conversation_labels.context_time".to_string(),
             ScrollOrderField::SnoozeTime => {
-                "MAX(conversation_labels.context_snooze_time, conversation_labels.context_time)"
+                formatdoc!(
+                    "CASE WHEN conversation_labels.context_snooze_time > 0
+                        THEN conversation_labels.context_snooze_time
+                        ELSE conversation_labels.context_time END"
+                )
             }
+        };
+
+        let cursor_constraint = match order_field {
+            ScrollOrderField::Time => format!(
+                "(
+                {time_column} {time_op} {time}
+                OR
+                ({time_column} = {time} AND conversations.display_order {fallback_order_op} ?2)
+                )"
+            ),
+            ScrollOrderField::SnoozeTime => formatdoc!(
+                "(
+                {time_column} {time_op} {snooze_time}
+                OR
+                ({time_column} = {snooze_time}
+                    AND conversation_labels.context_time {time_op} {time}
+                )
+                OR
+                ({time_column} = {snooze_time}
+                    AND conversation_labels.context_time = {time}
+                    AND conversations.display_order {fallback_order_op} ?2)
+                )"
+            ),
         };
 
         let mut query = formatdoc!(
@@ -381,11 +497,7 @@ impl ScrollData for ConversationScrollData {
                 conversations.deleted = 0
             AND
                 conversation_labels.deleted = 0
-            AND (
-                    {time_column} {time_op} ?2
-                OR
-                    ({time_column} = ?2 AND conversations.display_order {display_order_op} ?3)
-                )
+            AND {cursor_constraint}
             "
         );
 
@@ -403,12 +515,22 @@ impl ScrollData for ConversationScrollData {
             }
         }
 
-        query += &format!(
-            " ORDER BY
-            {time_column} {sort_op},
-            conversations.display_order {sort_op}
-        "
-        );
+        let order_by = match order_field {
+            ScrollOrderField::Time => format!(
+                " ORDER BY
+                {time_column} {sort_op},
+                conversations.display_order {sort_op}
+            "
+            ),
+            ScrollOrderField::SnoozeTime => format!(
+                " ORDER BY
+                {time_column} {sort_op},
+                conversation_labels.context_time {sort_op},
+                conversations.display_order {sort_op}
+            "
+            ),
+        };
+        query += &order_by;
 
         if let Some(limit) = limit {
             query += &format!(" LIMIT {limit} ");
@@ -428,10 +550,20 @@ impl ScrollData for ConversationScrollData {
             .collect()
     }
 
-    fn time(item: &Self::Item, order_field: ScrollOrderField) -> UnixTimestamp {
+    fn time(item: &Self::Item) -> UnixTimestamp {
+        item.time
+    }
+
+    fn snooze_time(item: &Self::Item, order_field: ScrollOrderField) -> UnixTimestamp {
         match order_field {
             ScrollOrderField::Time => item.time,
-            ScrollOrderField::SnoozeTime => item.snooze_time,
+            ScrollOrderField::SnoozeTime => {
+                if item.snooze_time.as_u64() > 0 {
+                    item.snooze_time
+                } else {
+                    item.time
+                }
+            }
         }
     }
 
@@ -446,7 +578,8 @@ impl ScrollData for ConversationScrollData {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Option<Self> {
-        let time = Self::time(&item, order_field);
+        let time = Self::time(&item);
+        let snooze_time = Self::snooze_time(&item, order_field);
         let display_order = Self::display_order(&item);
 
         if let Some(remote_id) = item.remote_id.clone() {
@@ -455,6 +588,7 @@ impl ScrollData for ConversationScrollData {
                     .local_label_id(local_label_id)
                     .unread(unread)
                     .conversation_time(time)
+                    .snooze_time(snooze_time)
                     .display_order(display_order)
                     .remote_conversation_id(remote_id)
                     .order_dir(order_dir)
@@ -480,6 +614,7 @@ pub struct ScrollCursor<T: ScrollData> {
     pub local_label_id: LocalLabelId,
     pub unread: ReadFilter,
     pub time: UnixTimestamp,
+    pub snooze_time: UnixTimestamp,
     pub display_order: u64,
     pub order_dir: ScrollOrderDir,
     pub order_field: ScrollOrderField,
@@ -525,6 +660,7 @@ impl<T: ScrollData> ScrollCursor<T> {
             local_label_id,
             unread,
             time: (i64::MAX as u64).into(),
+            snooze_time: (i64::MAX as u64).into(),
             display_order: i64::MAX as u64,
             order_dir,
             order_field,
@@ -542,6 +678,7 @@ impl<T: ScrollData> ScrollCursor<T> {
             local_label_id,
             unread,
             time: 0.into(),
+            snooze_time: 0.into(),
             display_order: 0,
             order_dir,
             order_field,
@@ -556,21 +693,7 @@ impl<T: ScrollData> ScrollCursor<T> {
     /// Return error if the query failed.
     ///
     pub async fn seen_count(&self, tether: &Tether) -> Result<u64, StashError> {
-        let query = T::query(
-            self.unread,
-            None,
-            false,
-            None,
-            self.order_dir,
-            self.order_field,
-        );
-
-        T::Model::count(
-            query,
-            params![self.local_label_id, self.time, self.display_order],
-            tether,
-        )
-        .await
+        ScrollQuery::new(self.clone()).count(tether).await
     }
 
     /// Return all elements that are in the range of data we have synced from the server.
@@ -600,24 +723,12 @@ impl<T: ScrollData> ScrollCursor<T> {
         require_remote_id: bool,
         tether: &Tether,
     ) -> Result<Vec<T::Item>, StashError> {
-        let query = T::query(
-            self.unread,
-            limit,
-            require_remote_id,
-            offset,
-            self.order_dir,
-            self.order_field,
-        );
-
-        Ok(T::convert(
-            self.local_label_id,
-            T::Model::find(
-                query,
-                params![self.local_label_id, self.time, self.display_order],
-                tether,
-            )
-            .await?,
-        ))
+        ScrollQuery::new(self.clone())
+            .with_limit(limit)
+            .with_offset(offset)
+            .with_remote_id(require_remote_id)
+            .find(tether)
+            .await
     }
 }
 
@@ -813,7 +924,8 @@ impl<T: ScrollData> CachedScrollData<T> {
             Some(last) => ScrollCursor::builder()
                 .local_label_id(self.local_label_id)
                 .unread(self.unread)
-                .time(T::time(last, self.end.order_field))
+                .time(T::time(last))
+                .snooze_time(T::snooze_time(last, self.end.order_field))
                 .display_order(T::display_order(last))
                 .order_dir(self.end.order_dir)
                 .order_field(self.end.order_field)
@@ -1051,5 +1163,79 @@ impl SearchScrollData {
         }
 
         query
+    }
+}
+
+pub struct ScrollQuery<T: ScrollData> {
+    cursor: ScrollCursor<T>,
+    limit: Option<usize>,
+    offset: Option<u64>,
+    require_remote_id: bool,
+}
+
+impl<T: ScrollData> ScrollQuery<T> {
+    pub fn new(cursor: ScrollCursor<T>) -> Self {
+        Self {
+            cursor,
+            limit: None,
+            offset: None,
+            require_remote_id: false,
+        }
+    }
+
+    pub fn with_limit(mut self, limit: impl Into<Option<usize>>) -> Self {
+        self.limit = limit.into();
+        self
+    }
+
+    pub fn with_offset(mut self, offset: impl Into<Option<u64>>) -> Self {
+        self.offset = offset.into();
+        self
+    }
+
+    pub fn with_remote_id(mut self, remote_id: bool) -> Self {
+        self.require_remote_id = remote_id;
+        self
+    }
+
+    pub async fn find(&self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
+        let query = T::query(
+            self.cursor.unread,
+            self.limit,
+            self.offset,
+            self.require_remote_id,
+            self.cursor.order_dir,
+            self.cursor.order_field,
+            self.cursor.time,
+            self.cursor.snooze_time,
+        );
+        let items = T::Model::find(
+            query,
+            params![self.cursor.local_label_id, self.cursor.display_order],
+            tether,
+        )
+        .await?;
+
+        Ok(T::convert(self.cursor.local_label_id, items))
+    }
+
+    pub async fn count(&self, tether: &Tether) -> Result<u64, StashError> {
+        let query = T::query(
+            self.cursor.unread,
+            None,
+            None,
+            self.require_remote_id,
+            self.cursor.order_dir,
+            self.cursor.order_field,
+            self.cursor.time,
+            self.cursor.snooze_time,
+        );
+
+        T::Model::count(
+            query,
+            params![self.cursor.local_label_id, self.cursor.display_order],
+            tether,
+        )
+        .await
     }
 }

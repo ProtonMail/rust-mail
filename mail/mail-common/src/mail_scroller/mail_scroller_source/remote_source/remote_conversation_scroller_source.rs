@@ -162,7 +162,7 @@ impl RemoteConversationScrollerSource {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let stash = ctx.user_stash().clone();
         let remote_id = scroller.remote_conversation_id.clone();
-        let conversation_time = scroller.conversation_time;
+        let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
         let task = Some(ctx.spawn(async move {
@@ -172,7 +172,7 @@ impl RemoteConversationScrollerSource {
                 label_local_id,
                 remote_label_id,
                 remote_id,
-                conversation_time,
+                context_time,
                 unread,
                 page_size,
                 order_dir,
@@ -345,8 +345,8 @@ impl RemoteConversationScrollerSource {
             .api()
             .get_conversations(GetConversationsOptions {
                 // time == 0 breaks the api query.
-                end: Some(last_element_time.as_u64()),
-                end_id: Some(last_element_id.clone()),
+                anchor: Some(last_element_time.as_u64()),
+                anchor_id: Some(last_element_id.clone()),
                 label_id: Some(remote_label_id),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
@@ -477,15 +477,8 @@ impl RemoteConversationScrollerSource {
                     )));
                 };
 
-                let context_time = context_time.unwrap_or_else(|| {
-                    if matches!(order_field, ScrollOrderField::SnoozeTime)
-                        && label.context_snooze_time.as_u64() > 0
-                    {
-                        label.context_snooze_time
-                    } else {
-                        label.context_time
-                    }
-                });
+                let snooze_time = label.context_snooze_time;
+                let context_time = context_time.unwrap_or(label.context_time);
 
                 // Unwrap safety: RemoteId is present as this method is called on conversation
                 // downloaded from API
@@ -498,6 +491,7 @@ impl RemoteConversationScrollerSource {
                         remote_id.clone(),
                         unread,
                         context_time,
+                        snooze_time,
                         display_order,
                         order_dir,
                         order_field,
@@ -505,11 +499,6 @@ impl RemoteConversationScrollerSource {
                     )
                     .await?;
                 }
-
-                debug!(
-                    "New last element id={:?}, time={}, order={}",
-                    remote_id, context_time, display_order
-                );
 
                 Ok(())
             })
@@ -522,19 +511,21 @@ impl RemoteConversationScrollerSource {
         remote_conv_id: ConversationId,
         unread: ReadFilter,
         context_time: UnixTimestamp,
+        snooze_time: UnixTimestamp,
         display_order: u64,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
         bond: &Bond<'_>,
     ) -> Result<ConversationScrollData, MailContextError> {
         tracing::debug!(
-            "Updating scroller data, new cursor at {context_time}, order={display_order}"
+            "New conversation cursor {remote_conv_id} at time={context_time}, snooze_time={snooze_time}, order={display_order}"
         );
         let mut conv_paginator = ConversationScrollData::builder()
             .local_label_id(local_label_id)
             .unread(unread)
             .remote_conversation_id(remote_conv_id)
             .conversation_time(context_time)
+            .snooze_time(snooze_time)
             .display_order(display_order)
             .order_dir(order_dir)
             .order_field(order_field)

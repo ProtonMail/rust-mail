@@ -68,6 +68,7 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
         .unread(unread)
         .remote_message_id(last_message.remote_id.clone().unwrap())
         .message_time(last_message.time)
+        .snooze_time(last_message.snooze_time)
         .display_order(last_message.display_order)
         .order_dir(ScrollOrderDir::Desc)
         .order_field(ScrollOrderField::Time)
@@ -634,7 +635,7 @@ pub async fn mock_get_messages_page(
 ) {
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))
-        .and(query_param_contains("EndID", last_id))
+        .and(query_param_contains("AnchorID", last_id))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
                 total: messages.len() as u64,

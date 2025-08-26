@@ -75,6 +75,13 @@ pub struct GetConversationsOptions {
     #[serde(rename = "EndID")]
     pub end_id: Option<ConversationId>,
 
+    /// Value to filter on according to Sort parameter
+    pub anchor: Option<u64>,
+
+    /// Conversation ID use to disambiguate filtering done according to the Anchor parameter
+    #[serde(rename = "AnchorID")]
+    pub anchor_id: Option<ConversationId>,
+
     /// External ID to filter on.
     // TODO: Document this properly.
     pub external_id: Option<String>,
@@ -168,6 +175,13 @@ pub struct GetMessagesOptions {
     /// specified message ID.
     #[serde(rename = "EndID")]
     pub end_id: Option<MessageId>,
+
+    /// Return only messages with the specified anchor.
+    pub anchor: Option<u64>,
+
+    /// Return only messages with the specified anchor ID.
+    #[serde(rename = "AnchorID")]
+    pub anchor_id: Option<MessageId>,
 
     /// Filter on external ID.
     // TODO: Document this properly.

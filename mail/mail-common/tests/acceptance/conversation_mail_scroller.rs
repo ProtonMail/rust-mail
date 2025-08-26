@@ -17,6 +17,7 @@ use proton_mail_common::datatypes::{
     SystemLabelId,
     labels::{ScrollOrderDir, ScrollOrderField},
 };
+use proton_mail_common::models::ConversationLabel;
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
     scroller::{StoreLabeledModelMap, TestScroller, save_single_conversation, test_conversations},
@@ -111,6 +112,7 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
         .unread(unread)
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
+        .snooze_time(last_label.context_snooze_time)
         .display_order(last_conversation.display_order)
         .order_dir(ScrollOrderDir::Desc)
         .order_field(ScrollOrderField::Time)
@@ -658,6 +660,7 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
         .unread(unread)
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
+        .snooze_time(last_label.context_snooze_time)
         .display_order(last_conversation.display_order)
         .order_dir(ScrollOrderDir::Desc)
         .order_field(ScrollOrderField::Time)
@@ -743,6 +746,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
         .unread(unread)
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_snooze_time)
+        .snooze_time(last_label.context_snooze_time)
         .display_order(last_conversation.display_order)
         .order_dir(ScrollOrderDir::Desc)
         .order_field(ScrollOrderField::SnoozeTime)
@@ -1101,6 +1105,123 @@ async fn snoozed_conversations() {
     assert_eq!("myconv_4", convs[2].remote_id.as_ref().unwrap().to_string());
 }
 
+#[tokio::test]
+async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_context_time() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    // Mock offline to use cached data
+    mock_not_responsive_api(&ctx).await;
+    ctx.catch_all().await;
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let unread = ReadFilter::All;
+    let page_size = 3;
+
+    // Create 3 test conversations for inbox with same snooze_time but different context_time
+    let same_snooze_time = 1000;
+    let context_times = [500, 300, 700]; // Different context times
+    let orders: [u64; 3] = [10, 20, 30]; // Different display orders
+
+    // Save conversations to database using the inbox label
+    let mut data = hash_map! {
+        vec![LabelId::inbox().to_string()]: test_conversations(3, 0),
+    };
+    data.save_to_database(&mut tether).await;
+    for (i, (conv, (context_time, order))) in data
+        .values_mut()
+        .flatten()
+        .zip(context_times.iter().zip(orders.iter()))
+        .enumerate()
+    {
+        conv.remote_id = Some(format!("snooze_conv_{i}").into());
+        conv.labels[0].context_snooze_time = same_snooze_time.into();
+        conv.labels[0].context_time = (*context_time).into();
+        conv.display_order = *order;
+        tether.tx(async |tx| conv.save(tx).await).await.unwrap();
+    }
+    let mut cursor_scroller = ConversationScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(unread)
+        .remote_conversation_id("Nothing visible".into())
+        .conversation_time(1000.into()) // out of the range of the cursor
+        .snooze_time(1000.into())
+        .display_order(30)
+        .order_dir(ScrollOrderDir::Desc)
+        .order_field(ScrollOrderField::SnoozeTime)
+        .build();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 3;
+    tether
+        .tx(async |bond| {
+            cursor_scroller.save(bond).await?;
+            counters.save(bond).await
+        })
+        .await
+        .unwrap();
+
+    // Set up mocks
+    ctx.mock_ping_success().await;
+    ctx.catch_all().await;
+
+    // Create scroller with SnoozeTime ordering
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    // Fetch conversations
+    let items = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(items.len(), 3);
+
+    // Verify ordering: same snooze_time, so should be ordered by context_time DESC (newest first)
+    // Expected order: conv_2 (context_time=700), conv_0 (context_time=500), conv_1 (context_time=300)
+    // 1st
+    assert_eq!(
+        items[0].remote_id.as_ref().unwrap().to_string(),
+        "snooze_conv_2"
+    );
+    assert_eq!(items[0].snooze_time.as_u64(), 1000);
+    assert_eq!(items[0].time.as_u64(), 700);
+    // 2nd
+    assert_eq!(
+        items[1].remote_id.as_ref().unwrap().to_string(),
+        "snooze_conv_0"
+    );
+    assert_eq!(items[1].snooze_time.as_u64(), 1000);
+    assert_eq!(items[1].time.as_u64(), 500);
+    // 3rd
+    assert_eq!(
+        items[2].remote_id.as_ref().unwrap().to_string(),
+        "snooze_conv_1"
+    );
+    assert_eq!(items[2].snooze_time.as_u64(), 1000);
+    assert_eq!(items[2].time.as_u64(), 300);
+
+    let mut last = conversation!(remote_id: Some("snooze_conv_3".into()),
+        labels: vec![ConversationLabel {
+            remote_label_id: Some(LabelId::inbox()),
+            context_snooze_time: 1000.into(),
+            context_time: 200.into(),
+            ..ConversationLabel::test_default()
+        }],
+        display_order: 30
+    );
+    tether.tx(async |tx| last.save(tx).await).await.unwrap();
+    let next_items = test_scroller.fetch_more_and_wait().await.unwrap();
+
+    // Should get snooze_conv_3 (context_time=200) which is the only conversation
+    // with the same snooze_time but older context_time than the cursor
+    assert_eq!(next_items.len(), 1);
+    assert_eq!(
+        next_items[0].remote_id.as_ref().unwrap().to_string(),
+        "snooze_conv_3"
+    );
+    assert_eq!(next_items[0].snooze_time.as_u64(), 1000);
+    assert_eq!(next_items[0].time.as_u64(), 200);
+}
+
 #[function_name::named]
 async fn setup_api_sync_previous_page(
     ctx: &MailTestContext,
@@ -1292,7 +1413,7 @@ pub async fn mock_get_conversations_page(
 ) {
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
-        .and(query_param_contains("EndID", last_id))
+        .and(query_param_contains("AnchorID", last_id))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                 conversations,
