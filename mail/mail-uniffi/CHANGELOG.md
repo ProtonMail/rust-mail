@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.141.0] - 2025-08-26
+
+### Features
+
+- Network Monitor Service
+
+### Fixes
+
+- Bug in which snooze_time was eqaul across pages.
+
+
 ## [mail-uniffi-v0.140.0] - 2025-08-26
 
 ### Changed
@@ -24,8 +35,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Filter out unnecessary mobile actions in uniffi
 - Resolver trait now must return an error
+
+### Features
+
+- Add uniffi bindings to restore default action lists
+
+### Fixes
+
+- Correct expected input json for PUT /mobilesettings
+- remote images correctly get proxied
+- Excessive Ping
+
+
+## [mail-uniffi-v0.138.0] - 2025-08-22
+
+### Changed
+
+- Filter out unnecessary mobile actions in uniffi
 
 ### Features
 
@@ -33,7 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-1307] Introduce Unleash feature flags service
 - [ET-4397] Fixed failing test, assert new Forbidden error.
 - [ET-4374] expose `remote_id` in UniFFI in `ContactDetailCard`
-- Add uniffi bindings to restore default action lists
 
 ### Fixes
 
@@ -47,9 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scroller will finish refresh update correctly
 - [ET-4412] Update text signatures generated from web
 - When scroller finds out on refresh that the label has items to display but they are not currently retivable it will queue `FetchMore` task
-- Correct expected input json for PUT /mobilesettings
-- remote images correctly get proxied
-- Excessive Ping
 
 
 ## [mail-uniffi-v0.137.0] - 2025-08-22
