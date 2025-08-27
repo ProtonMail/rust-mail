@@ -529,7 +529,12 @@ impl ModelHooks for StoredAction {
             for dep in dependency_set {
                 if existing_action_ids.contains(&dep.dependency_id) {
                     bond.execute(
-                        "INSERT OR IGNORE INTO action_queue_dependencies (action_id, dependency_id, dependency_type) VALUES (?,?, ?)",
+                        indoc! {
+                            "INSERT INTO action_queue_dependencies (action_id, dependency_id, dependency_type)
+                             VALUES (?,?,?)
+                             ON CONFLICT DO UPDATE SET dependency_type = excluded.dependency_type
+                            "
+                        },
                         params![self.id, dep.dependency_id, dep.dependency_type],
                     )
                     .await?;

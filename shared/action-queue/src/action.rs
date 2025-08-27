@@ -607,7 +607,7 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_required_dependency(mut self, action_id: ActionId) -> Self {
+    pub fn with_optional_dependency(mut self, action_id: ActionId) -> Self {
         self.metadata
             .dependencies
             .push(ActionDependency::optional(action_id));

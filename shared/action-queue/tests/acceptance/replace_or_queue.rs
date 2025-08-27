@@ -3,7 +3,7 @@ use super::common::{new_factory, new_queue};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
-use proton_action_queue::db::ExecutionGuard;
+use proton_action_queue::db::{DependencyType, ExecutionGuard, StoredAction};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -157,6 +157,59 @@ async fn replace_updates_local_state_with_resources() {
     let executor = queue.new_executor();
     let executed = executor.execute_all().await.unwrap();
     assert_eq!(executed, 1);
+}
+
+#[tokio::test]
+async fn replace_updates_previous_dependencies_type() {
+    // Action queued with optional dependency, should have that dependency replaced with the
+    // required type if it is overwritten.
+    let queue = new_queue(new_factory::<TestAction>(TestActionHandler)).await;
+    let queued_output_dep = queue
+        .queue_action(TestAction {
+            v: ACTION_VALUE_AFTER_LOCAL_APPLY,
+        })
+        .await
+        .unwrap();
+
+    let metadata = MetadataBuilder::default()
+        .with_optional_dependency(queued_output_dep.id)
+        .build();
+
+    // Check direct execution.
+    let queued_output = queue
+        .queue_action_with_metadata(
+            TestAction {
+                v: ACTION_VALUE_AFTER_LOCAL_APPLY,
+            },
+            metadata,
+        )
+        .await
+        .unwrap();
+
+    // queue replacement
+    let metadata = MetadataBuilder::default()
+        .with_dependency(queued_output_dep.id)
+        .build();
+
+    // Check direct execution.
+    let queued_output2 = queue
+        .replace_or_queue_action_with_metadata(
+            queued_output.id,
+            TestAction {
+                v: ACTION_VALUE_AFTER_LOCAL_APPLY,
+            },
+            metadata,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(queued_output2.id, queued_output.id);
+    let deps = StoredAction::all_dependencies(&queue.tether(), queued_output2.id)
+        .await
+        .unwrap();
+    assert_eq!(deps.len(), 1);
+    assert_eq!(deps[0].dependency_id, queued_output_dep.id);
+    assert_eq!(deps[0].dependency_type, DependencyType::Required);
 }
 
 #[derive(Serialize, Deserialize)]

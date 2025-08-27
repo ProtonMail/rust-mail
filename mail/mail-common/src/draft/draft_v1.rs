@@ -944,7 +944,7 @@ impl Draft {
     ///
     /// Use [`Attachment::create_local`] to create a new attachment first.
     pub async fn add_attachment(
-        &self,
+        &mut self,
         ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
     ) -> Result<ActionId, MailContextError> {
@@ -952,7 +952,14 @@ impl Draft {
 
         let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
-        let result = upload_action.queue(queue, &tether, ctx.origin()).await?;
+        let result = upload_action
+            .queue(
+                queue,
+                &tether,
+                ctx.origin(),
+                &mut self.last_draft_save_action_id,
+            )
+            .await?;
 
         Ok(result.id)
     }
@@ -1019,7 +1026,7 @@ impl Draft {
     }
 
     pub async fn retry_attachment_upload(
-        &self,
+        &mut self,
         ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
     ) -> Result<ActionId, MailContextError> {
@@ -1027,7 +1034,14 @@ impl Draft {
 
         let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
-        let result = upload_action.queue(queue, &tether, ctx.origin()).await?;
+        let result = upload_action
+            .queue(
+                queue,
+                &tether,
+                ctx.origin(),
+                &mut self.last_draft_save_action_id,
+            )
+            .await?;
 
         Ok(result.id)
     }
@@ -1539,10 +1553,15 @@ impl DraftSendActionQueuer {
 
         *last_draft_save_action_id = Some(save_output.id);
 
+        // We can't send if until all attachments have finished uploading.
+        let pending_attachment_ids =
+            DraftAttachmentMetadata::find_attachment_upload_action_ids(self.id, tether).await?;
+
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail")
-            .with_dependency(save_output.id);
+            .with_dependency(save_output.id)
+            .with_dependencies(pending_attachment_ids);
 
         if let Origin::ShareExt = origin {
             metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
@@ -1619,9 +1638,8 @@ impl DraftAttachmentUploadQueuer {
         queue: &Queue,
         tether: &Tether,
         origin: Origin,
+        last_draft_save_action_id: &mut Option<ActionId>,
     ) -> Result<QueuedActionOutput<AttachmentUpload>, MailContextError> {
-        let mut last_draft_save_action_id = None;
-
         let stats =
             DraftAttachmentMetadata::total_attachments_size_and_count(self.id, tether).await?;
         if stats.total_size >= Attachment::MAX_ATTACHMENT_SIZE {
@@ -1649,12 +1667,9 @@ impl DraftAttachmentUploadQueuer {
             if !message_has_remote_id {
                 // If an existing save is ongoing, we want to depend on that action first, otherwise
                 // we create a new one ourselves.
-                last_draft_save_action_id =
-                    DraftMetadata::last_save_action_id(self.id, tether).await?;
-
                 if last_draft_save_action_id.is_none() {
-                    last_draft_save_action_id =
-                        Some(self.save_action.queue(queue, tether, origin).await?.id)
+                    *last_draft_save_action_id =
+                        Some(self.save_action.queue(queue, tether, origin).await?.id);
                 };
             };
         }
@@ -1668,7 +1683,7 @@ impl DraftAttachmentUploadQueuer {
         }
 
         if let Some(last_draft_save_action_id) = last_draft_save_action_id {
-            metadata = metadata.with_dependency(last_draft_save_action_id)
+            metadata = metadata.with_dependency(*last_draft_save_action_id)
         }
 
         // If we are retrying we should wait for the existing one to
@@ -1770,7 +1785,7 @@ impl DraftAttachmentRemovalQueuer {
                     e => return Err(e.into()),
                 }
             }
-            metadata = metadata.with_required_dependency(action_id);
+            metadata = metadata.with_optional_dependency(action_id);
         };
 
         Ok(queue
