@@ -127,7 +127,7 @@ impl NetworkMonitorService {
         let (sender, receiver) = mpsc::channel(1);
         let task = NetworkMonitorBackgroundTask::new(self, spawner.clone(), tester, receiver);
         self.immediate_test_requester = Some(sender);
-        self.monitor_task = Some(spawner.spawn_boxed_task(async move { task.run().await }.boxed()));
+        self.monitor_task = Some(tokio::spawn(async move { task.run().await }.boxed()));
         Ok(())
     }
 
