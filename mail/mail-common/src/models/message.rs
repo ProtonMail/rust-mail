@@ -2162,10 +2162,6 @@ impl Message {
         encrypted_message_body
             .into_decrypted_message(ctx, address_id, address_keys, pgp, attachment_prefetch)
             .await
-            .map_err(|e| {
-                error!("Failed to decrypt message body: {e:?}");
-                MailContextError::Crypto
-            })
     }
 
     /// Load a [`DecryptedMessageBody`] for message with `local_id` from the database.
