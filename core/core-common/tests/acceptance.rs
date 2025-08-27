@@ -4,5 +4,4 @@ mod acceptance {
     mod images_logo;
     mod pin_code;
     mod session;
-    mod status_watcher;
 }

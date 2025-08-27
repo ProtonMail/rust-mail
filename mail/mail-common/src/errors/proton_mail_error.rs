@@ -269,6 +269,7 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::MailScroller(mail_scroller_error) => Self::from(mail_scroller_error),
             MailContextError::UrlParseError(_) => Self::Unexpected(Unexpected::Internal),
             MailContextError::NonProcessableActions(_) => Self::NonProcessableActions,
+            MailContextError::NetworkMonitorService(_) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

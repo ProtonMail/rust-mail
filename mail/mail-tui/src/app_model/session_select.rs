@@ -208,7 +208,6 @@ impl AppStateHandler for SessionSelectModel {
                                 let context = ctx
                                     .user_context_from_session(
                                         sess,
-                                        None,
                                         ShouldInitializeMailUserContext::Yes,
                                     )
                                     .await

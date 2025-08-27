@@ -810,7 +810,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
     async fn wait_for_request(&mut self) -> Result<(), MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let is_online = ctx.session().status().await.is_online();
+        let is_online = ctx.network_monitor_service().status().is_online();
 
         if self.task.is_some() && is_online {
             Self::await_task(&mut self.task).await

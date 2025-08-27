@@ -17,8 +17,6 @@ use proton_calendar_common::{
 };
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::session::{Config, Session};
-use proton_core_api::status_observer::StatusObserver;
-use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
 use proton_crypto::crypto::{DataEncoding, KeyGeneratorAlgorithm, PGPProviderSync};
 use proton_crypto::{new_pgp_provider, new_srp_provider};
@@ -28,6 +26,7 @@ use proton_crypto_account::keys::{
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_ical as ical;
+use proton_network_monitor_service::ConnectionMonitor;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
@@ -125,20 +124,21 @@ where
     cache: DummyRsvpCache,
     contacts: DummyRsvpContacts,
     now: Zoned,
+    connection_monitor: ConnectionMonitor,
 }
 
 async fn world() -> World<impl PGPProviderSync> {
     let ctx = TestContext::new().await;
 
+    let connection_monitor = ConnectionMonitor::standalone();
     let sess = {
         let env = MockApiEnv::new(ctx.mock_server().uri()).with_path("/api");
         let cfg = Config::for_env(env);
-        let status = StatusWatcher::with_observer(StatusObserver::test(ctx.context.spawner()));
 
         Session::builder()
             .with_config(&cfg)
-            .with_status(status)
-            .build(ctx.context.spawner())
+            .with_connection_monitor(connection_monitor.clone())
+            .build()
             .await
             .unwrap()
     };
@@ -212,6 +212,7 @@ async fn world() -> World<impl PGPProviderSync> {
         cache: DummyRsvpCache,
         contacts: DummyRsvpContacts,
         now: "20180101T100000[UTC]".parse().unwrap(),
+        connection_monitor,
     }
 }
 

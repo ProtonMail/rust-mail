@@ -52,8 +52,6 @@ use crate::services::proton::layers::SetDefaultServiceTypeLayer;
 use crate::services::proton::layers::SetDefaultTimeoutLayer;
 use crate::services::proton::store::MuonStoreImpl;
 use crate::session::Config;
-use crate::status_observer::StatusObserverLayer;
-use crate::status_watcher::StatusWatcher;
 use crate::store::Store;
 use crate::verification::ChallengeNotifierLayer;
 use crate::verification::DynChallengeNotifier;
@@ -90,6 +88,7 @@ pub use self::core::*;
 pub use self::data::*;
 pub use self::payments::*;
 pub use muon;
+use proton_network_monitor_service::ConnectionMonitor;
 
 /// An error that can occur when building a Proton client.
 #[derive(Debug, Error)]
@@ -111,7 +110,7 @@ pub enum BuildError {
 pub async fn build<S: Store>(
     config: &Arc<Config>,
     store: &Arc<RwLock<S>>,
-    status: &StatusWatcher,
+    connection_monitor: &ConnectionMonitor,
     notifier: DynChallengeNotifier,
     info_provider: Option<Arc<dyn InfoProvider>>,
     allow_doh: bool,
@@ -129,7 +128,7 @@ pub async fn build<S: Store>(
         .layer_back(SetCryptoClockLayer)
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)
-        .layer_back(StatusObserverLayer::new(status.observer()))
+        .layer_back(connection_monitor.clone())
         .layer_back(ChallengeNotifierLayer::new(notifier))
         .layer_back(CookieJarLayer::new(CookieJar::new()))
         .layer_back(DisplayLogger::debug())

@@ -16,7 +16,6 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::CoreSession as _;
-use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_core_common::auth_store::DecryptExt;
 use proton_core_common::datatypes::ApiConfig;
@@ -27,7 +26,9 @@ use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::pin_code::{PinCode, PinError};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
-use proton_core_common::services::{DeviceInfoService, SessionObserverService};
+use proton_core_common::services::{
+    DeviceInfoService, NetworkMonitorService, SessionObserverService,
+};
 use proton_core_common::{
     ContactError, Context, ContextBuilder, CoreAccountState, CoreContextError, CoreContextResult,
     CoreSessionState, KeyHandlingError, Origin, UserContext,
@@ -37,6 +38,7 @@ use proton_crypto_inbox::attachment::AttachmentEncryptionError;
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_log_service::LogService;
+use proton_network_monitor_service::NetworkMonitorServiceError;
 use proton_sqlite3::MigratorError;
 use proton_task_service::Spawner;
 use secrecy::ExposeSecret;
@@ -145,6 +147,8 @@ pub enum MailContextError {
     UrlParseError(#[from] url::ParseError),
     #[error("One or many pending actions are not processable")]
     NonProcessableActions(QueuedError),
+    #[error(transparent)]
+    NetworkMonitorService(#[from] NetworkMonitorServiceError),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -220,6 +224,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::QueuedAction(queued_error) => Self::QueuedAction(queued_error),
             CoreContextError::ActionQueue(error) => Self::ActionQueue(error),
             CoreContextError::EventLoop(err) => Self::EventLoop(err),
+            CoreContextError::NetworkMonitorService(e) => Self::NetworkMonitorService(e),
         }
     }
 }
@@ -266,6 +271,7 @@ impl MailContext {
         device_info_provider: Option<DynDeviceInfoProvider>,
         log_service: LogService,
         event_poll_mode: EventPollMode,
+        network_monitor_config: proton_network_monitor_service::Config,
     ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
@@ -286,6 +292,7 @@ impl MailContext {
             core_cache_path,
             log_service,
             event_poll_mode,
+            network_monitor_config,
         )
         .await?;
 
@@ -348,7 +355,7 @@ impl MailContext {
     /// See [`Context::new_login_flow`].
     pub async fn new_login_flow(&self) -> CoreContextResult<LoginFlow> {
         let _ = self.core_context.get_encryption_key()?;
-        let session = self.core_context.new_api_session(None, None).await?;
+        let session = self.core_context.new_api_session(None).await?;
         let device_info = self
             .core_context
             .get_service::<DeviceInfoService>()
@@ -406,10 +413,7 @@ impl MailContext {
             .await?
             .ok_or(MailContextError::Other(anyhow!("session not found")))?;
 
-        let api_session = self
-            .core_context
-            .new_api_session(Some(&session), None)
-            .await?;
+        let api_session = self.core_context.new_api_session(Some(&session)).await?;
 
         let migration_snooper = Box::new(MailMigrationSnooper::new(Arc::clone(&self.core_context)));
 
@@ -483,7 +487,7 @@ impl MailContext {
         let _ = self.core_context.get_encryption_key()?;
 
         // Create a new API session
-        let session = self.core_context.new_api_session(None, None).await?;
+        let session = self.core_context.new_api_session(None).await?;
         let client = session.api().to_owned();
         let store = session.store().to_owned();
 
@@ -594,12 +598,8 @@ impl MailContext {
     pub async fn initialized_user_context_from_session(
         self: &Arc<Self>,
         session: &CoreSession,
-        status: Option<StatusWatcher>,
     ) -> MailContextResult<Option<Arc<MailUserContext>>> {
-        let ctx = self
-            .core_context
-            .user_context_from_session(session, status)
-            .await?;
+        let ctx = self.core_context.user_context_from_session(session).await?;
 
         self.new_initialized_user_context(ctx).await
     }
@@ -611,13 +611,9 @@ impl MailContext {
     pub async fn user_context_from_session(
         self: &Arc<Self>,
         session: &CoreSession,
-        status: Option<StatusWatcher>,
         init: ShouldInitializeMailUserContext,
     ) -> MailContextResult<Arc<MailUserContext>> {
-        let ctx = self
-            .core_context
-            .user_context_from_session(session, status)
-            .await?;
+        let ctx = self.core_context.user_context_from_session(session).await?;
 
         Arc::clone(self).new_user_context(ctx, init).await
     }
@@ -638,7 +634,7 @@ impl MailContext {
 
         for session in sessions {
             ctxs.push(
-                self.user_context_from_session(&session, None, ShouldInitializeMailUserContext::No)
+                self.user_context_from_session(&session, ShouldInitializeMailUserContext::No)
                     .await?,
             );
         }
@@ -664,7 +660,7 @@ impl MailContext {
 
         for session in sessions.filter(|s| &s.remote_id != current_session_id) {
             ctxs.push(
-                self.user_context_from_session(&session, None, ShouldInitializeMailUserContext::No)
+                self.user_context_from_session(&session, ShouldInitializeMailUserContext::No)
                     .await?,
             );
         }
@@ -988,10 +984,7 @@ impl MailContext {
         let mut ctxs = Vec::new();
 
         for session in sessions {
-            match self
-                .initialized_user_context_from_session(&session, None)
-                .await
-            {
+            match self.initialized_user_context_from_session(&session).await {
                 Ok(Some(user_context)) => ctxs.push(user_context),
                 Ok(None) => {
                     tracing::debug!("{} has non-initialized context", session.account_id);
@@ -1008,6 +1001,10 @@ impl MailContext {
 
     pub fn http_client(&self) -> &reqwest::Client {
         self.http_client.get_or_init(reqwest::Client::new)
+    }
+
+    pub fn network_monitor_service(&self) -> &NetworkMonitorService {
+        self.core_context.network_monitor_service()
     }
 }
 

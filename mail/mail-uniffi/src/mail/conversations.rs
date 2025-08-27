@@ -9,6 +9,7 @@
 //! won't.
 //!
 
+use super::messages::WatchedLabelAs;
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, MobileActionsResult, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
@@ -31,6 +32,7 @@ use proton_mail_common::datatypes::{
     ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
     MobileAction as RealMobileAction,
 };
+use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
@@ -39,8 +41,6 @@ use proton_mail_common::models::Conversation as RealConversation;
 use stash::orm::Model;
 use stash::stash::Stash;
 use std::sync::Arc;
-
-use super::messages::WatchedLabelAs;
 
 /// Delete the given conversations.
 ///
@@ -357,9 +357,13 @@ async fn get_conversation(
     session: Session,
     id: Id,
 ) -> Result<Option<ConversationAndMessages>, RealProtonMailError> {
+    let ctx = mailbox
+        .ctx()
+        .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Internal))?;
     uniffi_async(async move {
         Ok::<_, RealProtonMailError>(
             ContextualConversation::conversation_and_messages(
+                ctx.network_monitor_service(),
                 LocalConversationId::from(id),
                 mailbox.mbox().label_id(),
                 &stash,

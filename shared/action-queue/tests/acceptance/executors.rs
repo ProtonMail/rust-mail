@@ -3,19 +3,18 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_action_queue::queue::{
-    QueueAutoExecutorPool, QueueAutoTerminationPolicy, TokioTaskSpawner,
+    NoopOnlineStatusWaiter, NoopOnlineStatusWaiterBuilder, QueueAutoExecutorPool,
+    QueueAutoTerminationPolicy, TokioTaskSpawner,
 };
 use proton_action_queue::tests::common::DefaultError;
 use stash::stash::Bond;
 use std::num::NonZeroUsize;
 use std::time::Duration;
-use tokio::sync::watch;
 
 #[tokio::test]
 async fn auto_execute_until_empty() {
     let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
-    let online = watch::channel(true);
 
     queue
         .queue_action(TestAction {
@@ -34,7 +33,7 @@ async fn auto_execute_until_empty() {
     assert_eq!(queue.queued_actions_count().await.unwrap(), 2);
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        online.1,
+        Box::new(NoopOnlineStatusWaiter),
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::Empty,
@@ -48,7 +47,6 @@ async fn auto_execute_until_empty() {
 async fn auto_execute_until_network_failure() {
     let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
-    let online = watch::channel(true);
 
     queue
         .queue_action(TestAction {
@@ -72,7 +70,7 @@ async fn auto_execute_until_network_failure() {
     assert_eq!(queue.queued_actions_count().await.unwrap(), 3);
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        online.1,
+        Box::new(NoopOnlineStatusWaiter),
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::NetworkLoss,
@@ -86,7 +84,6 @@ async fn auto_execute_until_network_failure() {
 async fn auto_execute_until_empty_or_network_failure() {
     let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
-    let online = watch::channel(true);
 
     let action_id = queue
         .queue_action(TestAction { fail_network: true })
@@ -111,7 +108,7 @@ async fn auto_execute_until_empty_or_network_failure() {
     assert_eq!(queue.queued_actions_count().await.unwrap(), 3);
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        online.1.clone(),
+        Box::new(NoopOnlineStatusWaiter),
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
@@ -125,7 +122,7 @@ async fn auto_execute_until_empty_or_network_failure() {
     assert_eq!(queue.queued_actions_count().await.unwrap(), 2);
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        online.1,
+        Box::new(NoopOnlineStatusWaiter),
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
@@ -139,7 +136,6 @@ async fn auto_execute_until_empty_or_network_failure() {
 async fn auto_execute_pool() {
     let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
-    let online = watch::channel(true);
 
     for _ in 0..20 {
         queue
@@ -156,7 +152,7 @@ async fn auto_execute_pool() {
         &queue,
         &ActionGroup::default(),
         NonZeroUsize::new(3).unwrap(),
-        online.1,
+        &NoopOnlineStatusWaiterBuilder,
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::Empty,
@@ -175,7 +171,6 @@ async fn auto_execute_pool() {
 async fn auto_execute_forever() {
     let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
-    let online = watch::channel(true);
 
     queue
         .queue_action(TestAction {
@@ -187,7 +182,7 @@ async fn auto_execute_forever() {
     assert_eq!(queue.queued_actions_count().await.unwrap(), 1);
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        online.1,
+        Box::new(NoopOnlineStatusWaiter),
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::Never,

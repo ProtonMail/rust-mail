@@ -25,7 +25,9 @@ use clap::{Parser, Subcommand};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, NoopError, Type, WriterGuard,
 };
-use proton_action_queue::queue::{Queue, QueueAutoExecutorPool, TokioTaskSpawner};
+use proton_action_queue::queue::{
+    NoopOnlineStatusWaiterBuilder, Queue, QueueAutoExecutorPool, TokioTaskSpawner,
+};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, StashConfiguration};
 use std::num::NonZeroUsize;
@@ -33,7 +35,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-use tokio::sync::watch;
 use uuid::Uuid;
 
 #[derive(Debug, Subcommand)]
@@ -107,12 +108,12 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
         drop(executor);
         // we can now auto execute from here on forward.
         let task_spawner = TokioTaskSpawner;
-        let online = watch::channel(true);
+        let online = NoopOnlineStatusWaiterBuilder;
         let _executors = QueueAutoExecutorPool::new(
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(process_count * 2).unwrap(),
-            online.1,
+            &online,
             false,
             &task_spawner,
         );
@@ -160,12 +161,12 @@ async fn child_main(directory: &Path, action_count: Option<usize>) {
         }
     } else {
         let task_spawner = TokioTaskSpawner;
-        let online = watch::channel(true);
+        let online = NoopOnlineStatusWaiterBuilder;
         let _executors = QueueAutoExecutorPool::new(
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(2).unwrap(),
-            online.1,
+            &online,
             false,
             &task_spawner,
         );

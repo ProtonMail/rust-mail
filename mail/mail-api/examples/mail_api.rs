@@ -42,7 +42,7 @@ async fn main() {
     let user_email = std::env::var("USER_EMAIL").unwrap();
     let user_password = std::env::var("USER_PASSWORD").unwrap();
     let context = create_context().await;
-    let session = Session::new(context.spawner()).await.unwrap();
+    let session = Session::new().await.unwrap();
     let migration_snooper = Box::new(NoopMigrationSnooper);
 
     let post_login_validator = Box::new(DefaultPostLoginValidator::new(
@@ -155,6 +155,8 @@ async fn create_context() -> Arc<Context> {
         tmp_dir.path().join("core-cache"),
         LogService::new(log_config),
         EventPollMode::Manual,
+        #[allow(clippy::default_trait_access)]
+        Default::default(),
     )
     .await
     .expect("failed to create core context")

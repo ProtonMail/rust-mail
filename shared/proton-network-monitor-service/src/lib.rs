@@ -85,6 +85,7 @@ impl RequestNetworkStatus {
     }
 }
 
+#[derive(Clone)]
 pub struct NetworkStatusObserver {
     receiver: watch::Receiver<RequestNetworkStatus>,
 }

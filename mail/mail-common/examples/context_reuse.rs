@@ -66,6 +66,7 @@ async fn main() {
             None,
             LogService::new(config),
             EventPollMode::Manual,
+            Default::default(),
         )
         .await
         .unwrap()
@@ -101,7 +102,7 @@ async fn main() {
         .await
         .unwrap();
     let ctx2 = context
-        .user_context_from_session(&sessions[0], None, ShouldInitializeMailUserContext::Yes)
+        .user_context_from_session(&sessions[0], ShouldInitializeMailUserContext::Yes)
         .await
         .unwrap();
 

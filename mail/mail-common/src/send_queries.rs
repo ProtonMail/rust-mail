@@ -24,9 +24,7 @@ impl MailContext {
                     CoreSessionState::Authenticated
                 ) =>
             {
-                let Some(user_ctx) = self
-                    .initialized_user_context_from_session(&session, None)
-                    .await?
+                let Some(user_ctx) = self.initialized_user_context_from_session(&session).await?
                 else {
                     return Err(MailContextError::UserContextNotInitialized(user_id));
                 };

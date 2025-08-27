@@ -10,7 +10,6 @@ use proton_core_api::{
     service::ApiServiceError,
     services::proton::{ProtonCore, SessionId, muon::Status, prelude::RegisterDeviceRequest},
     session::CoreSession as _,
-    status_watcher::StatusWatcher,
 };
 use stash::{
     exports::ToSql,
@@ -170,15 +169,7 @@ pub async fn registered_device_task_step(
         return Ok(());
     }
 
-    // SAFETY: We just assured the vector is not empty
-    let any_session = &sessions[0];
-    // We need to retrieve status watcher from existing session, because
-    // we need to ensure that the `status.initialize()` is not only triggered,
-    // but the task is not aborted on drop.
-    let session_ctx = ctx.user_context_from_session(any_session, None).await?;
-    let status_watcher = session_ctx.session().status_watcher();
-
-    let mut is_online = status_watcher.subscribe_to_online();
+    let mut network_status_observer = ctx.network_monitor_service().network_status_observer();
 
     if let Some(device) = state.device.as_ref() {
         // Trying in a loop. If registration fails because of network, let's retry.
@@ -188,7 +179,6 @@ pub async fn registered_device_task_step(
                 sessions.clone(),
                 &mut state.registered_sessions,
                 device.clone(),
-                status_watcher.clone(),
             )
             .await
             {
@@ -198,7 +188,7 @@ pub async fn registered_device_task_step(
                     // Most likely happened because of network issue, so let's
                     // see if we are online.
 
-                    is_online.wait_for(|t| *t).await?;
+                    network_status_observer.wait_until_online().await;
 
                     tracing::trace!("Device is online... Sleeping just in case");
                     // Even though we just waited for online, we should still sleep for a while.
@@ -255,18 +245,10 @@ async fn register_sessions(
     sessions: Vec<CoreSession>,
     registered_sessions: &mut HashSet<SessionId>,
     device: RegisteredDevice,
-    status_watcher: StatusWatcher,
 ) -> Result<(), RegisteredDeviceTaskError> {
     tracing::debug!("Registering sessions: {}", sessions.len());
     for session in sessions {
-        register_session(
-            ctx,
-            session,
-            registered_sessions,
-            &device,
-            status_watcher.clone(),
-        )
-        .await?;
+        register_session(ctx, session, registered_sessions, &device).await?;
     }
     tracing::debug!("Registered successfully");
     Ok(())
@@ -278,11 +260,8 @@ async fn register_session(
     session: CoreSession,
     registered_sessions: &mut HashSet<SessionId>,
     device: &RegisteredDevice,
-    status_watcher: StatusWatcher,
 ) -> Result<(), RegisteredDeviceTaskError> {
-    let session_ctx = ctx
-        .user_context_from_session(&session, Some(status_watcher))
-        .await?;
+    let session_ctx = ctx.user_context_from_session(&session).await?;
 
     let pgp = proton_crypto::new_pgp_provider();
 

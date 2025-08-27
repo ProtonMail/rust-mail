@@ -34,7 +34,7 @@ use proton_core_api::session::{CoreSession as _, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, User, UserSettings};
-use proton_core_common::services::EventPollConfigService;
+use proton_core_common::services::{EventPollConfigService, NetworkMonitorService};
 use proton_core_common::{
     ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
 };
@@ -174,11 +174,6 @@ impl MailUserContext {
         let origin = mail_context.core_context().origin();
         let mut builder = MailUserContextBuilder::new().with_service(AttachmentCacheState::new());
 
-        let online = user_context
-            .session()
-            .status_watcher()
-            .subscribe_to_online();
-
         builder = match origin {
             Origin::App => {
                 let builder = builder
@@ -187,7 +182,7 @@ impl MailUserContext {
                             user_context.queue(),
                             &SEND_ACTION_GROUP,
                             NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
-                            online.clone(),
+                            mail_context.core_context().as_ref(),
                             true,
                             user_context.as_ref(),
                         ),
@@ -197,7 +192,7 @@ impl MailUserContext {
                             user_context.queue(),
                             &ActionGroup::default(),
                             NonZeroUsize::new(DEFAULT_DEFAULT_QUEUE_POOL_SIZE).unwrap(),
-                            online.clone(),
+                            mail_context.core_context().as_ref(),
                             true,
                             user_context.as_ref(),
                         ),
@@ -205,7 +200,7 @@ impl MailUserContext {
                             user_context.queue(),
                             &PREFETCH_ROLLBACK_ACTION_GROUP,
                             NonZeroUsize::new(DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE).unwrap(),
-                            online.clone(),
+                            mail_context.core_context().as_ref(),
                             true,
                             user_context.as_ref(),
                         ),
@@ -238,7 +233,7 @@ impl MailUserContext {
                             user_context.queue(),
                             &SHARE_EXT_ACTION_GROUP,
                             NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
-                            online,
+                            mail_context.core_context().as_ref(),
                             true,
                             user_context.as_ref(),
                         )
@@ -665,8 +660,8 @@ impl MailUserContext {
         Ok(())
     }
 
-    pub async fn connection_status(&self) -> ConnectionStatus {
-        self.user_context.connection_status().await
+    pub fn connection_status(&self) -> ConnectionStatus {
+        self.user_context.connection_status()
     }
 
     pub fn event_subscriber(&self) -> impl Subscriber<MailEvent> + 'static {
@@ -802,6 +797,10 @@ impl MailUserContext {
             data,
             mime: String::from("image/*"),
         })
+    }
+
+    pub fn network_monitor_service(&self) -> &NetworkMonitorService {
+        self.mail_context.network_monitor_service()
     }
 }
 

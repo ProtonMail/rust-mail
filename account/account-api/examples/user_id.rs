@@ -46,7 +46,7 @@ async fn main() {
 
     let session = Session::builder()
         .with_app_version(app_platform, app_product, app_version)
-        .build(context.spawner())
+        .build()
         .await
         .unwrap();
 
@@ -158,6 +158,8 @@ async fn create_context() -> Arc<Context> {
         tmp_dir.path().join("core-cache"),
         LogService::new(log_config),
         EventPollMode::Manual,
+        #[allow(clippy::default_trait_access)]
+        Default::default(),
     )
     .await
     .expect("failed to create core context")

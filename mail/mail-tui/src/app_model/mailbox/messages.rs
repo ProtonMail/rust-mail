@@ -229,6 +229,7 @@ impl MessagesState {
         conversation_id: LocalConversationId,
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let Some(conv_and_messages) = ContextualConversation::conversation_and_messages(
+            ctx.network_monitor_service(),
             conversation_id,
             label_id,
             ctx.user_stash(),

@@ -17,6 +17,7 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{PrivateEmail, PrivateEmailRef};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::models::{ModelExtension, PaidSubscription};
+use proton_core_common::services::NetworkMonitorService;
 use proton_crypto_account::keys::{
     PrimaryUnlockedAddressKey, UnlockedAddressKey, UnlockedAddressKeys,
 };
@@ -723,7 +724,13 @@ impl<Tz: chrono::TimeZone> ScheduleSendOptions<Tz> {
 /// On completion returns the original scheduled time of the message.
 #[instrument(
     level = "debug",
-    skip(tether, queue, session, wait_on_completion_duration)
+    skip(
+        tether,
+        queue,
+        session,
+        wait_on_completion_duration,
+        network_monitor_service
+    )
 )]
 pub async fn cancel_schedule_send(
     message_id: LocalMessageId,
@@ -731,6 +738,7 @@ pub async fn cancel_schedule_send(
     queue: &Queue,
     session: &Session,
     wait_on_completion_duration: Duration,
+    network_monitor_service: &NetworkMonitorService,
 ) -> Result<DateTime<Local>, MailContextError> {
     info!("Cancelling schedule sent message");
     // Validate if the message is actually scheduled for sending
@@ -743,7 +751,7 @@ pub async fn cancel_schedule_send(
     }
 
     // Pre-check we are offline before proceeding to avoid long stalls during api requests.
-    if session.status().await.is_offline() {
+    if network_monitor_service.check_now().await.is_offline() {
         return Err(MailContextError::Api(ApiServiceError::NetworkError(
             "Offline".into(),
         )));

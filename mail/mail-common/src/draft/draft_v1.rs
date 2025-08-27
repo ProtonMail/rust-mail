@@ -1154,7 +1154,16 @@ impl Draft {
         let queue = ctx.action_queue();
         let timeout = Duration::from_secs(15);
         let session = ctx.session();
-        send::cancel_schedule_send(message_id, &mut tether, queue, session, timeout).await
+        let network_monitor_service = ctx.network_monitor_service();
+        send::cancel_schedule_send(
+            message_id,
+            &mut tether,
+            queue,
+            session,
+            timeout,
+            network_monitor_service,
+        )
+        .await
     }
 
     // Note: this type is currently separate from the draft implementation so that it can be executed

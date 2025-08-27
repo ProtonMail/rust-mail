@@ -40,7 +40,7 @@ impl ConnectionMonitor {
         if resp.is(429) || resp.status().is_server_error() {
             self.update_request_status(RequestNetworkStatus::ServerUnreachable);
         } else {
-            self.update_request_status(RequestNetworkStatus::Offline);
+            self.update_request_status(RequestNetworkStatus::Online);
         }
     }
 }

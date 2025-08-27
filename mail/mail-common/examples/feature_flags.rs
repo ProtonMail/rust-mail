@@ -86,6 +86,7 @@ async fn create_mail_context() -> Result<Arc<MailContext>> {
         None,
         LogService::new(config),
         EventPollMode::Manual,
+        Default::default(),
     )
     .await?;
 

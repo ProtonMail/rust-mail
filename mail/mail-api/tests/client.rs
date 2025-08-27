@@ -36,9 +36,6 @@ mod basic {
 mod messages {
     use super::*;
 
-    use proton_core_api::status_observer::StatusObserver;
-    use proton_core_api::status_watcher::StatusWatcher;
-    use proton_task_service::Tokio;
     use serde_json::json;
     use test_case::test_case;
     use wiremock::matchers::path_regex;
@@ -106,12 +103,6 @@ mod messages {
             ..Default::default()
         };
 
-        let status = StatusWatcher::with_observer(StatusObserver::test(Tokio::spawner()));
-
-        Ok(Session::builder()
-            .with_config(config)
-            .with_status(status)
-            .build(Tokio::spawner())
-            .await?)
+        Ok(Session::builder().with_config(config).build().await?)
     }
 }

@@ -795,7 +795,7 @@ impl QueueExecutor {
     #[must_use]
     pub fn into_auto_executor(
         self,
-        online: watch::Receiver<bool>,
+        online: Box<dyn OnlineStatusWaiter>,
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
     ) -> QueueAutoExecutor {
@@ -811,7 +811,7 @@ impl QueueExecutor {
     #[must_use]
     pub fn into_auto_executor_with_policy(
         self,
-        online: watch::Receiver<bool>,
+        online: Box<dyn OnlineStatusWaiter>,
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
@@ -951,6 +951,30 @@ pub trait TaskSpawner {
         F: Future<Output = ()> + Send + 'static;
 }
 
+#[async_trait::async_trait]
+pub trait OnlineStatusWaiter: Send {
+    async fn wait_until_online(&mut self);
+}
+
+pub trait OnlineStatusWaiterBuilder {
+    fn build(&self) -> Box<dyn OnlineStatusWaiter>;
+}
+
+pub struct NoopOnlineStatusWaiter;
+
+#[async_trait::async_trait]
+impl OnlineStatusWaiter for NoopOnlineStatusWaiter {
+    async fn wait_until_online(&mut self) {}
+}
+
+pub struct NoopOnlineStatusWaiterBuilder;
+
+impl OnlineStatusWaiterBuilder for NoopOnlineStatusWaiterBuilder {
+    fn build(&self) -> Box<dyn OnlineStatusWaiter> {
+        Box::new(NoopOnlineStatusWaiter)
+    }
+}
+
 pub struct TokioTaskSpawner;
 
 impl TaskSpawner for TokioTaskSpawner {
@@ -984,7 +1008,7 @@ impl Drop for QueueAutoExecutor {
 impl QueueAutoExecutor {
     fn new(
         executor: QueueExecutor,
-        online: watch::Receiver<bool>,
+        online: Box<dyn OnlineStatusWaiter>,
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
@@ -1030,7 +1054,7 @@ impl QueueAutoExecutor {
     async fn run(
         executor: QueueExecutor,
         mut paused: watch::Receiver<bool>,
-        mut online: watch::Receiver<bool>,
+        mut online: Box<dyn OnlineStatusWaiter>,
         termination_policy: QueueAutoTerminationPolicy,
     ) {
         debug!(
@@ -1091,7 +1115,7 @@ impl QueueAutoExecutor {
 
                 ActionExecutionFollowup::WaitForNetwork => {
                     debug!("Waiting for network connection");
-                    _ = online.wait_for(|online| *online).await;
+                    online.wait_until_online().await;
                     debug!("Network connection restored - resuming the auto queue executor");
                 }
 
@@ -1128,7 +1152,7 @@ impl QueueAutoExecutorPool {
         queue: &Queue,
         action_group: &ActionGroup,
         count: NonZeroUsize,
-        online: watch::Receiver<bool>,
+        online: &impl OnlineStatusWaiterBuilder,
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
     ) -> Self {
@@ -1148,7 +1172,7 @@ impl QueueAutoExecutorPool {
         queue: &Queue,
         action_group: &ActionGroup,
         count: NonZeroUsize,
-        online: watch::Receiver<bool>,
+        online: &impl OnlineStatusWaiterBuilder,
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
@@ -1158,7 +1182,7 @@ impl QueueAutoExecutorPool {
                 queue
                     .new_executor_with_group(action_group.clone())
                     .into_auto_executor_with_policy(
-                        online.clone(),
+                        online.build(),
                         start_paused,
                         task_spawner,
                         termination_policy,

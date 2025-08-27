@@ -24,6 +24,7 @@ tokio = { workspace = true }
 topological-sort = "0.2.2"
 tracing = { workspace = true }
 uuid = { workspace = true }
+async-trait = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }

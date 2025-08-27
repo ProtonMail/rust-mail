@@ -4,12 +4,12 @@ use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard, WriterGuardError,
 };
 use proton_action_queue::queue::{
-    ActionRequeueReason, BroadcastMessage, QueuedActionState, TokioTaskSpawner,
+    ActionRequeueReason, BroadcastMessage, NoopOnlineStatusWaiter, OnlineStatusWaiter,
+    QueuedActionState, TokioTaskSpawner,
 };
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use std::time::Duration;
-use tokio::sync::watch;
 use tokio::time::sleep;
 
 #[tokio::test]
@@ -32,11 +32,12 @@ async fn auto_queued_on_pause() {
     let queue = new_queue_typed::<SuccessAction>(SuccessActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_spawner = TokioTaskSpawner;
-    let online = watch::channel(true);
 
-    let auto_executor = queue
-        .new_executor()
-        .into_auto_executor(online.1, false, &task_spawner);
+    let auto_executor = queue.new_executor().into_auto_executor(
+        Box::new(NoopOnlineStatusWaiter),
+        false,
+        &task_spawner,
+    );
 
     auto_executor.pause();
     queue.queue_action(SuccessAction).await.unwrap();
@@ -61,11 +62,12 @@ async fn auto_queued_on_multiple_resume() {
     queue.queue_action(SuccessAction).await.unwrap();
 
     let task_spawner = TokioTaskSpawner;
-    let online = watch::channel(true);
 
-    let auto_executor = queue
-        .new_executor()
-        .into_auto_executor(online.1, false, &task_spawner);
+    let auto_executor = queue.new_executor().into_auto_executor(
+        Box::new(NoopOnlineStatusWaiter),
+        false,
+        &task_spawner,
+    );
 
     // Calling resume should have no effect as auto executors starts active.
     auto_executor.resume();
@@ -84,11 +86,12 @@ async fn auto_queued_on_multiple_pause() {
     let queue = new_queue_typed::<SuccessAction>(SuccessActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_spawner = TokioTaskSpawner;
-    let online = watch::channel(true);
 
-    let auto_executor = queue
-        .new_executor()
-        .into_auto_executor(online.1, false, &task_spawner);
+    let auto_executor = queue.new_executor().into_auto_executor(
+        Box::new(NoopOnlineStatusWaiter),
+        false,
+        &task_spawner,
+    );
 
     // Calling pause multiple times should still end up in paused state.
     auto_executor.pause();
@@ -116,11 +119,12 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
     let queue = new_queue_typed::<SuccessAction>(SuccessActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_spawner = TokioTaskSpawner;
-    let online = watch::channel(true);
 
-    let auto_executor = queue
-        .new_executor()
-        .into_auto_executor(online.1, false, &task_spawner);
+    let auto_executor = queue.new_executor().into_auto_executor(
+        Box::new(NoopOnlineStatusWaiter),
+        false,
+        &task_spawner,
+    );
 
     auto_executor.pause();
     queue.queue_action(SuccessAction).await.unwrap();
@@ -177,14 +181,23 @@ async fn execute_all_does_not_loop_forever_on_network_failure() {
 
 #[tokio::test]
 async fn execute_all_waits_for_network_to_reoccur() {
-    let online = watch::channel(false);
+    struct TimedOnlineStatusWaiter(Duration);
+
+    #[async_trait::async_trait]
+    impl OnlineStatusWaiter for TimedOnlineStatusWaiter {
+        async fn wait_until_online(&mut self) {
+            tokio::time::sleep(self.0).await;
+        }
+    }
     let queue = new_queue_typed::<ErrorAction>(ErrorActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_spawner = TokioTaskSpawner;
 
-    let auto_executor = queue
-        .new_executor()
-        .into_auto_executor(online.1, false, &task_spawner);
+    let auto_executor = queue.new_executor().into_auto_executor(
+        Box::new(TimedOnlineStatusWaiter(Duration::from_secs(2))),
+        false,
+        &task_spawner,
+    );
 
     auto_executor.pause();
     queue.queue_action(ErrorAction).await.unwrap();
