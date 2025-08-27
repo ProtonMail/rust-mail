@@ -441,5 +441,5 @@ async fn message_body_failed_to_decrypt() {
             .contains(&MessageBanner::UnableToDecrypt)
     );
 
-    assert_eq!(body_output.body, message.body.body);
+    insta::assert_snapshot!(body_output.body);
 }
