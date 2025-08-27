@@ -126,7 +126,6 @@ pub fn test_network_monitor_service_config() -> proton_network_monitor_service::
             timeout: Duration::from_secs(2),
             infinite_checks: false,
         },
-        verify_os_updates: false,
     }
 }
 impl TestContext {
