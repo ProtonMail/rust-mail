@@ -91,7 +91,6 @@ enum TransactionTrackingPolicy {
     Quiet,
 }
 
-#[derive(Debug)]
 /// Only the operations related to a transaction.
 enum OperationTransaction {
     /// Starts a new transaction.
@@ -109,13 +108,27 @@ enum OperationTransaction {
     /// Rolls back a transaction, i.e. abandons it.
     Rollback(OneshotSender<Result<(), StashError>>),
 
+    /// Used to bridge between async and sync code, Bond -> rusqlite::Transaction
+    Bridge(BridgeClosure),
+
     /// Rollbacks a transaction too.
     /// This one is meant to be called in Bond's drop glue. That's why it doesn't have a sender.
     /// Same semantics as Rollback.
     RollbackAbort,
 }
 
-#[derive(Debug)]
+impl Debug for OperationTransaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Start(..) => write!(f, "Start"),
+            Self::Commit(..) => write!(f, "Commit"),
+            Self::Rollback(_) => write!(f, "Rollback"),
+            Self::Bridge(_) => write!(f, "Bridge"),
+            Self::RollbackAbort => write!(f, "RollbackAbort"),
+        }
+    }
+}
+
 enum OperationExec {
     /// A query to be executed, where no results are expected. This is usually
     /// a write query, or a command, but differentiation is up to the caller and
@@ -133,6 +146,17 @@ enum OperationExec {
 
     /// This can be either a query or a transaction.
     Sync(SyncClosure),
+}
+
+impl Debug for OperationExec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Instruct(_) => write!(f, "Instruct"),
+            Self::Batch(_) => write!(f, "Batch"),
+            Self::Query(_) => write!(f, "Query"),
+            Self::Sync(_) => write!(f, "Sync"),
+        }
+    }
 }
 
 /// Error type for the [`Stash`] module.
@@ -1187,6 +1211,7 @@ impl PooledTetherInterruptNotifier {
     }
 }
 
+// PERF: Monomorphic SyncClosure for common use cases like () and usize.
 type SyncClosureRetTy = Result<Box<dyn Any + Send>, StashError>;
 struct SyncClosure {
     closure: Box<dyn FnOnce(&Connection) -> SyncClosureRetTy + Send>,
@@ -1195,10 +1220,9 @@ struct SyncClosure {
     is_transaction: bool,
 }
 
-impl Debug for SyncClosure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SyncClosure").finish()
-    }
+struct BridgeClosure {
+    closure: Box<dyn FnOnce(&Transaction) -> SyncClosureRetTy + Send>,
+    sender: OneshotSender<SyncClosureRetTy>,
 }
 
 /// Database transaction context.
@@ -1305,6 +1329,31 @@ impl<'tether> Bond<'tether> {
             .map_err(|_| anyhow!("The stash worker dropped"))??;
 
         Ok(())
+    }
+
+    /// This function will execute `callback` in the thread that holds the transaction.
+    ///
+    /// Useful to speed up slow logic and to get better ergonomics.
+    pub async fn sync_bridge<T: Send + 'static>(
+        &self,
+        callback: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<T, StashError> + Send + 'static,
+    ) -> Result<T, StashError> {
+        let closure = Box::new(move |conn: &rusqlite::Transaction| {
+            callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
+        });
+
+        let (sender, receiver) = oneshot::channel();
+        let sync_closure = BridgeClosure { closure, sender };
+        let operation = Operation::Transaction(OperationTransaction::Bridge(sync_closure));
+
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        let ret = receiver
+            .await
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        // This cannot fail as the type system assures us that the return type of `callback` is T
+        ret.map(|x| *x.downcast().expect("Downcast failed?"))
     }
 }
 
@@ -1433,6 +1482,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         // wait until resume was called.
                         self.handle_transaction(op, pool);
                     }
+                    OperationTransaction::Bridge(o) => {
+                        let _ = o.sender.send(Err(StashError::interrupted()));
+                    }
                     OperationTransaction::RollbackAbort => {
                         //nothing to do
                     }
@@ -1557,6 +1609,18 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         error!("Critical error: RollbackAbort with no transaction open!?");
                     }
                 }
+            }
+            OperationTransaction::Bridge(sync) => {
+                let Some(tx) = &self.transaction else {
+                    let e = anyhow!(
+                        "Critical error: OperationTransaction::Bridge with no transaction open!?"
+                    );
+                    let _ = sync.sender.send(Err(e.into()));
+                    return;
+                };
+
+                let res = (sync.closure)(tx);
+                let _ = sync.sender.send(res);
             }
         }
     }

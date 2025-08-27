@@ -30,8 +30,9 @@ use proton_action_queue::queue::MultiActionError;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_api::session::Session;
 use proton_core_common::utils::MapVec as _;
+use proton_sqlite3::rusqlite::Transaction;
+use proton_sqlite3::rusqlite::params_from_iter;
 use sqlite_watcher::watcher::TableObserver;
-use stash::utils::IterMapToSql;
 use stash::utils::placeholders_n;
 use stash::utils::{MapToSql, placeholders};
 
@@ -1324,10 +1325,10 @@ impl Message {
         Ok(())
     }
 
-    async fn mark_read_or_unread(
+    fn mark_read_or_unread(
         mark_read: bool,
-        ids: impl IntoIterator<Item = LocalMessageId>,
-        bond: &Bond<'_>,
+        ids: Vec<LocalMessageId>,
+        bond: &Transaction<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
         struct IdPair {
             local_message_id: LocalMessageId,
@@ -1336,19 +1337,17 @@ impl Message {
 
         let mut conversation_count_changed = HashMap::new();
 
-        let params = ids.bridge_sql();
-        let mut updated: Vec<IdPair> = Vec::with_capacity(params.len());
+        let mut updated: Vec<IdPair> = Vec::with_capacity(ids.len());
 
-        let msgs = Message::find(
+        let msgs = Message::load_sync(
             format!(
                 "WHERE local_id IN ({placeholders}) AND unread = {unread}",
-                placeholders = placeholders(&params),
+                placeholders = placeholders(&ids),
                 unread = if mark_read { 1 } else { 0 }
             ),
-            params,
+            params_from_iter(ids),
             bond,
-        )
-        .await?;
+        )?;
 
         // update unread flag
         for mut msg in msgs {
@@ -1362,7 +1361,7 @@ impl Message {
                 // Reset snooze state
                 msg.set_display_snooze_reminder(false);
             }
-            msg.save(bond).await?;
+            msg.save_sync(bond)?;
             updated.push(IdPair {
                 local_message_id: msg.id(),
                 local_conversation_id: msg.local_conversation_id.unwrap(),
@@ -1373,14 +1372,14 @@ impl Message {
         }
 
         for (conversation_id, count) in conversation_count_changed {
-            if let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await? {
+            if let Some(mut conversation) = Conversation::load_by_id_sync(conversation_id, bond)? {
                 if mark_read {
                     conversation.display_snooze_reminder = false;
                     conversation.num_unread = conversation.num_unread.saturating_sub(count);
                 } else {
                     conversation.num_unread += count;
                 }
-                conversation.save(bond).await?;
+                conversation.save_sync(bond)?;
             }
         }
 
@@ -1393,16 +1392,15 @@ impl Message {
 
         // Messages Counters
         for id_pair in &updated {
-            let counters = MessageCounters::find(
+            let counters = MessageCounters::load_sync(
                 indoc! {"
                     WHERE local_label_id IN (
                         SELECT local_label_id FROM message_labels
                         WHERE local_message_id=?
                     )"},
-                params![id_pair.local_message_id],
+                (id_pair.local_message_id,),
                 bond,
-            )
-            .await?;
+            )?;
             for mut counter in counters {
                 if mark_read {
                     counter.unread = counter.unread.saturating_sub(1);
@@ -1410,22 +1408,21 @@ impl Message {
                     counter.unread += 1;
                 }
 
-                counter.save(bond).await?
+                counter.save_sync(bond)?
             }
         }
 
         let mut label_ids: HashMap<LocalLabelId, u64> = HashMap::new();
         // Update conversation labels
         for id_pair in &updated {
-            let mut conversation_labels = ConversationLabel::find(
+            let mut conversation_labels = ConversationLabel::load_sync(
                 indoc! {
                 "WHERE local_conversation_id=? AND local_label_id IN (
                     SELECT local_label_id FROM message_labels WHERE local_message_id=?
                 )"},
-                params![id_pair.local_conversation_id, id_pair.local_message_id],
+                (id_pair.local_conversation_id, id_pair.local_message_id),
                 bond,
-            )
-            .await?;
+            )?;
             for conversation_label in &mut conversation_labels {
                 if mark_read {
                     conversation_label.context_num_unread =
@@ -1445,19 +1442,19 @@ impl Message {
                             .or_insert(0) += 1;
                     }
                 }
-                conversation_label.save(bond).await?
+                conversation_label.save_sync(bond)?
             }
         }
 
         for (label_id, count) in label_ids {
             // Update conversation label counts.
-            if let Some(mut counters) = ConversationCounters::find_by_id(label_id, bond).await? {
+            if let Some(mut counters) = ConversationCounters::load_by_id_sync(label_id, bond)? {
                 if mark_read {
                     counters.unread = counters.unread.saturating_sub(count);
                 } else {
                     counters.unread += count;
                 }
-                counters.save(bond).await?;
+                counters.save_sync(bond)?;
             }
         }
 
@@ -2400,7 +2397,9 @@ impl Message {
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
-        Self::mark_read_or_unread(false, ids, bond).await
+        let ids = Vec::from_iter(ids);
+        bond.sync_bridge(|tx| Self::mark_read_or_unread(false, ids, tx))
+            .await
     }
 
     pub fn display_snooze_reminder(&self) -> bool {
@@ -2482,7 +2481,9 @@ impl ConversationOrMessage for Message {
         ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Bond<'_>,
     ) -> Result<Vec<Self::IdType>, StashError> {
-        Self::mark_read_or_unread(true, ids, bond).await
+        let ids = Vec::from_iter(ids);
+        bond.sync_bridge(|tx| Self::mark_read_or_unread(true, ids, tx))
+            .await
     }
 
     fn grouped_labels_and_messages_query(placeholders: usize) -> String {
