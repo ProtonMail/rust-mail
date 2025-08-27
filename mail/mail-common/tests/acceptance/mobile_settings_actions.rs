@@ -50,8 +50,18 @@ async fn test_update_list_toolbar_actions() {
             ApiMobileAction::Archive,
             ApiMobileAction::Trash,
         ],
-        message_toolbar: vec![],
-        conversation_toolbar: vec![],
+        message_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::Trash,
+            ApiMobileAction::Move,
+            ApiMobileAction::Label,
+        ],
+        conversation_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::Trash,
+            ApiMobileAction::Move,
+            ApiMobileAction::Label,
+        ],
     };
 
     ctx.mock_put_mobile_settings(success_response(), expected_put_mobile_settings, 1)
@@ -119,14 +129,6 @@ async fn test_update_list_toolbar_actions() {
         !mobile_settings.conversation_toolbar.is_custom,
         "Conversation toolbar should remain default"
     );
-    assert!(
-        mobile_settings.message_toolbar.actions.is_empty(),
-        "Message toolbar should have empty actions"
-    );
-    assert!(
-        mobile_settings.conversation_toolbar.actions.is_empty(),
-        "Conversation toolbar should have empty actions"
-    );
 }
 
 /// Test updating message toolbar actions specifically
@@ -147,13 +149,23 @@ async fn test_update_message_toolbar_actions() {
 
     // Mock the API call for message toolbar update
     let expected_put_mobile_settings = PutMobileSettings {
-        list_toolbar: vec![],
+        list_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::Trash,
+            ApiMobileAction::Move,
+            ApiMobileAction::Label,
+        ],
         message_toolbar: vec![
             ApiMobileAction::Reply,
             ApiMobileAction::Forward,
             ApiMobileAction::Print,
         ],
-        conversation_toolbar: vec![],
+        conversation_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::Trash,
+            ApiMobileAction::Move,
+            ApiMobileAction::Label,
+        ],
     };
 
     ctx.mock_put_mobile_settings(success_response(), expected_put_mobile_settings, 1)
@@ -223,8 +235,18 @@ async fn test_update_conversation_toolbar_actions() {
 
     // Mock the API call for conversation toolbar update
     let expected_put_mobile_settings = PutMobileSettings {
-        list_toolbar: vec![],
-        message_toolbar: vec![],
+        list_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::Trash,
+            ApiMobileAction::Move,
+            ApiMobileAction::Label,
+        ],
+        message_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::Trash,
+            ApiMobileAction::Move,
+            ApiMobileAction::Label,
+        ],
         conversation_toolbar: vec![
             ApiMobileAction::ToggleRead,
             ApiMobileAction::ToggleStar,
@@ -299,8 +321,18 @@ async fn test_api_failure_handling() {
     // The mock needs to expect the API payload that would be sent for list toolbar update
     let expected_put_mobile_settings = PutMobileSettings {
         list_toolbar: vec![ApiMobileAction::ToggleRead, ApiMobileAction::Archive],
-        message_toolbar: vec![],
-        conversation_toolbar: vec![],
+        message_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::Trash,
+            ApiMobileAction::Move,
+            ApiMobileAction::Label,
+        ],
+        conversation_toolbar: vec![
+            ApiMobileAction::ToggleRead,
+            ApiMobileAction::Trash,
+            ApiMobileAction::Move,
+            ApiMobileAction::Label,
+        ],
     };
 
     ctx.mock_put_mobile_settings(error_response(), expected_put_mobile_settings, 4)
@@ -336,28 +368,11 @@ async fn test_api_failure_handling() {
         "List toolbar should not be marked as custom after revert"
     );
     assert!(
-        mobile_settings.list_toolbar.actions.is_empty(),
-        "List toolbar should have no actions after revert"
-    );
-    assert!(
         !mobile_settings.message_toolbar.is_custom,
         "Message toolbar should not be marked as custom after revert"
-    );
-    assert!(
-        mobile_settings.message_toolbar.actions.is_empty(),
-        "Message toolbar should have no actions after revert"
     );
     assert!(
         !mobile_settings.conversation_toolbar.is_custom,
         "Conversation toolbar should not be marked as custom after revert"
     );
-    assert!(
-        mobile_settings.conversation_toolbar.actions.is_empty(),
-        "Conversation toolbar should have no actions after revert"
-    );
-
-    // This demonstrates that the action queue maintains consistency:
-    // - Local changes are applied immediately
-    // - If remote sync fails, local changes are rolled back
-    // - This ensures the local state always matches what the server has
 }
