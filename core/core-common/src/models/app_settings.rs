@@ -322,6 +322,7 @@ impl ToSql for SingleEntryId {
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(transparent)]
 pub struct AppFeatures {
     pub features: BTreeMap<String, bool>,
 }
