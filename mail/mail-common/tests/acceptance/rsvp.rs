@@ -7,7 +7,7 @@ use proton_core_common::models::{Contact, ContactEmail, ModelExtension};
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, KeyPackets};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
-use proton_mail_api::services::proton::prelude as mail;
+use proton_mail_api::services::proton::prelude::{self as mail, ContentDisposition};
 use proton_mail_common::models::Message;
 use proton_mail_common::test_utils::message_body::{
     TEST_USER_ADDRESS_ID, TEST_USER_ID, message_body_test_message_simple, message_body_test_params,
@@ -180,7 +180,7 @@ async fn fetch_and_answer() {
             disposition: mail::Disposition::Attachment,
             enc_signature: None,
             headers: mail::MessageAttachmentHeaders {
-                content_disposition: "attachment".into(),
+                content_disposition: ContentDisposition::One("attachment".into()),
                 content_id: None,
                 content_transfer_encoding: None,
                 image_height: None,
@@ -409,7 +409,7 @@ async fn fetch_and_answer() {
                         disposition: mail::Disposition::Attachment,
                         enc_signature: None,
                         headers: mail::MessageAttachmentHeaders {
-                            content_disposition: "attachment".into(),
+                            content_disposition: ContentDisposition::One("attachment".into()),
                             content_id: None,
                             content_transfer_encoding: None,
                             image_height: None,
