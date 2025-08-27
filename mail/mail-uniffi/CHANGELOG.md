@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Enable prefetching back
+
+### Fixes
+
+- Do not spawn network monitor task on pausable future
+- [ET-4538] Fix serialization of `AppFeatures`
+- Do not ping when os tells us we are offline
+- Mobile settings should now be stored correctly in local database
+
+
 ## [mail-uniffi-v0.142.0] - 2025-08-27
 
 ### Changed
