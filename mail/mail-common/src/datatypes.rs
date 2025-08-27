@@ -1814,14 +1814,19 @@ impl ToSql for MessageFlags {
     }
 }
 
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MobileSetting {
-    /// TODO: Document this field.
     pub actions: Vec<MobileAction>,
-
-    /// TODO: Document this field.
     pub is_custom: bool,
+}
+
+impl Default for MobileSetting {
+    fn default() -> Self {
+        Self {
+            actions: MobileAction::default_chosen_actions(),
+            is_custom: false,
+        }
+    }
 }
 
 impl From<ApiMobileSetting> for MobileSetting {
