@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.142.0] - 2025-08-27
+
+### Changed
+
+- Integrate Network Monitor Service
+
+### Features
+
+- `MailSession::update_os_network_status`
+
+### Fixes
+
+- [ET-4011] Correctly report attachment upload failures
+- Network Monitor Service - Ping after os status change
+- [ET-4011] Action replace should update dependency types
+- [ET-4011] Send should cancel if attachments fail to upload
+- Endless event loop enqueues
+
+
 ## [mail-uniffi-v0.141.0] - 2025-08-26
 
 ### Features
