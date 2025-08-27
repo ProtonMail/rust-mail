@@ -42,7 +42,6 @@ async fn main_gtk() -> Result<()> {
     use crate::app::backend::App;
     use futures::TryFutureExt;
     use proton_core_api::{session::Config, verification::ChallengeLoader};
-    use proton_task_service::Tokio;
     use tao::event_loop::EventLoopBuilder;
 
     let events = EventLoopBuilder::with_user_event().build();
@@ -54,7 +53,7 @@ async fn main_gtk() -> Result<()> {
         ..Default::default()
     };
 
-    let loader = ChallengeLoader::new(config, Tokio::spawner()).await?;
+    let loader = ChallengeLoader::new(config).await?;
 
     App::new(&events, loader)?.run(events)
 }
