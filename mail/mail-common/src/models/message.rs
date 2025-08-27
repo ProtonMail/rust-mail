@@ -1314,9 +1314,11 @@ impl Message {
         )
         .await?;
 
-        tether
-            .tx(async |tx| Self::mark_deleted(ids, tx).await)
-            .await?;
+        if !ids.is_empty() {
+            tether
+                .tx(async |tx| Self::mark_deleted(ids, tx).await)
+                .await?;
+        }
 
         Ok(())
     }

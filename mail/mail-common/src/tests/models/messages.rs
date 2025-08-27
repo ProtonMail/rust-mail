@@ -3178,6 +3178,60 @@ async fn message_save_preserves_pgp_attachments() {
     );
 }
 
+#[tokio::test]
+async fn message_expiration_deletion() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
+    let address = create_address(&mut tether).await;
+    let mut conv = conversation!(remote_id: conv_id!("my_conv"));
+    let expiration_time = UnixTimestamp::now().saturating_sub(20);
+    let api_message = ApiMessageMetadata {
+        id: MessageId::from("MY-MSG-ID"),
+        conversation_id: ConversationId::from("my_conv"),
+        address_id: address.remote_id.clone().unwrap(),
+        attachments_metadata: vec![],
+        bcc_list: vec![],
+        cc_list: vec![],
+        expiration_time: expiration_time.as_u64(),
+        external_id: None,
+        flags: ApiMessageFlags::empty(),
+        is_forwarded: false,
+        is_replied: false,
+        is_replied_all: false,
+        label_ids: vec![],
+        num_attachments: 0,
+        order: 0,
+        sender: Default::default(),
+        size: 0,
+        snooze_time: 0,
+        subject: "".to_string(),
+        time: 0,
+        to_list: vec![],
+        unread: false,
+    };
+
+    let mut msg = tether
+        .tx::<_, _, StashError>(async |tx| {
+            conv.save(tx).await?;
+            let mut msg = Message::from_api_metadata(api_message, tx).await.unwrap();
+            msg.save(tx).await?;
+            Ok(msg)
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(msg.expiration_time, expiration_time);
+    msg.reload(&tether).await.unwrap();
+    assert_eq!(msg.expiration_time, expiration_time);
+
+    Message::delete_expired(&mut tether).await.unwrap();
+    let msg = Message::find_by_id(msg.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(msg.deleted);
+}
+
 async fn check_message_and_body_metadata_for_single_attachment(
     tether: &Tether,
     message_id: LocalMessageId,
