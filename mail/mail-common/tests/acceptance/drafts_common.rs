@@ -10,7 +10,7 @@ use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
 };
-use proton_mail_api::services::proton::prelude::MailSettings;
+use proton_mail_api::services::proton::prelude::{ContentDisposition, MailSettings};
 use proton_mail_api::services::proton::request_data::{DraftParams, DraftRecipient, DraftSender};
 use proton_mail_api::services::proton::response_data::AttachmentMetadata;
 use proton_mail_api::services::proton::response_data::{
@@ -175,7 +175,7 @@ pub fn gen_inline_attachment() -> MessageAttachment {
         disposition: Disposition::Inline,
         enc_signature: None,
         headers: MessageAttachmentHeaders {
-            content_disposition: "inline".to_owned(),
+            content_disposition: ContentDisposition::One("inline".to_owned()),
             content_id: Some("InlineCID".to_owned()),
             content_transfer_encoding: None,
             image_height: None,
@@ -194,7 +194,7 @@ pub fn gen_normal_attachment() -> MessageAttachment {
         disposition: Disposition::Attachment,
         enc_signature: None,
         headers: MessageAttachmentHeaders {
-            content_disposition: "attachment".to_owned(),
+            content_disposition: ContentDisposition::One("attachment".to_owned()),
             content_id: None,
             content_transfer_encoding: None,
             image_height: None,

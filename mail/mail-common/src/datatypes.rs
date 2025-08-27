@@ -53,6 +53,7 @@ mod search_options;
 mod system_folder;
 pub mod theme;
 
+use proton_mail_api::services::proton::prelude::ContentDisposition;
 use stash::orm::Model;
 
 pub use assigned_actions::*;
@@ -1490,19 +1491,10 @@ impl From<ApiMessageAttachment> for MessageAttachment {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MessageAttachmentHeaders {
-    /// TODO: Document this field.
-    pub content_disposition: String,
-
-    /// TODO: Document this field.
+    pub content_disposition: ContentDisposition,
     pub content_id: Option<String>,
-
-    /// TODO: Document this field.
     pub content_transfer_encoding: Option<String>,
-
-    /// TODO: Document this field.
     pub image_height: Option<String>,
-
-    /// TODO: Document this field.
     pub image_width: Option<String>,
 }
 

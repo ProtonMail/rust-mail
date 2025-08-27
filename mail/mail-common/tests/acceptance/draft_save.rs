@@ -8,7 +8,9 @@ use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_api::services::proton::common::ConversationId;
-use proton_mail_api::services::proton::prelude::{AttachmentId, MessageAttachmentHeaders};
+use proton_mail_api::services::proton::prelude::{
+    AttachmentId, ContentDisposition, MessageAttachmentHeaders,
+};
 use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftRecipient,
 };
@@ -1671,7 +1673,7 @@ async fn prepare_draft_reply_attach_public_key(
                 disposition: Disposition::Attachment,
                 enc_signature: None,
                 headers: MessageAttachmentHeaders {
-                    content_disposition: "attachment".to_string(),
+                    content_disposition: ContentDisposition::One("attachment".to_string()),
                     content_id: None,
                     content_transfer_encoding: None,
                     image_height: None,

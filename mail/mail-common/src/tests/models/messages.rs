@@ -30,6 +30,7 @@ use proton_core_common::datatypes::{LabelColor, LabelType};
 use proton_core_common::models::Label;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_api::services::proton::common::AttachmentId;
+use proton_mail_api::services::proton::prelude::ContentDisposition;
 use proton_mail_api::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_mail_api::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
@@ -1643,7 +1644,7 @@ async fn test_create_message_and_body_with_attachments() {
                 signature: None,
                 enc_signature: None,
                 headers: ApiMessageAttachmentHeaders {
-                    content_disposition: "inline".to_owned(),
+                    content_disposition: ContentDisposition::One("inline".to_owned()),
                     content_id: Some("mycontent_id".to_owned()),
                     content_transfer_encoding: Some("base64".to_owned()),
                     image_width: Some("1280".to_owned()),
@@ -1749,7 +1750,7 @@ async fn message_metadata_update_does_not_purge_inline_attachments() {
                     signature: None,
                     enc_signature: None,
                     headers: ApiMessageAttachmentHeaders {
-                        content_disposition: "attachment".to_owned(),
+                        content_disposition: ContentDisposition::One("attachment".to_owned()),
                         content_id: None,
                         content_transfer_encoding: Some("base64".to_owned()),
                         image_width: None,
@@ -1766,7 +1767,7 @@ async fn message_metadata_update_does_not_purge_inline_attachments() {
                     signature: None,
                     enc_signature: None,
                     headers: ApiMessageAttachmentHeaders {
-                        content_disposition: "inline".to_owned(),
+                        content_disposition: ContentDisposition::One("inline".to_owned()),
                         content_id: Some("mycontent_id".to_owned()),
                         content_transfer_encoding: Some("base64".to_owned()),
                         image_width: Some("1280".to_owned()),
@@ -2964,7 +2965,7 @@ async fn message_save_updates_local_ids_for_attachment_metadata() {
                         proton_mail_api::services::proton::prelude::Disposition::Attachment,
                     enc_signature: None,
                     headers: ApiMessageAttachmentHeaders {
-                        content_disposition: "".to_string(),
+                        content_disposition: ContentDisposition::One("".to_string()),
                         content_id: None,
                         content_transfer_encoding: None,
                         image_height: None,
@@ -2981,7 +2982,7 @@ async fn message_save_updates_local_ids_for_attachment_metadata() {
                     disposition: proton_mail_api::services::proton::prelude::Disposition::Inline,
                     enc_signature: None,
                     headers: ApiMessageAttachmentHeaders {
-                        content_disposition: "cid-10".to_string(),
+                        content_disposition: ContentDisposition::One("cid-10".to_string()),
                         content_id: None,
                         content_transfer_encoding: None,
                         image_height: None,

@@ -889,9 +889,8 @@ pub struct MessageAttachmentInfo {
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageAttachmentHeaders {
-    /// TODO: Document this field.
     #[serde(rename = "content-disposition")]
-    pub content_disposition: String,
+    pub content_disposition: ContentDisposition,
 
     #[serde(rename = "content-id")]
     pub content_id: Option<String>,
@@ -904,6 +903,13 @@ pub struct MessageAttachmentHeaders {
 
     #[serde(rename = "x-pm-image-width")]
     pub image_width: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ContentDisposition {
+    One(String),
+    Many(Vec<String>),
 }
 
 /// TODO: Document this struct.
@@ -1441,4 +1447,79 @@ pub enum UnleashTogglePayloadType {
     #[cfg_attr(feature = "mocks", default)]
     String,
     Number,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod message_attachment_headers {
+        use super::*;
+
+        #[test]
+        fn typical() {
+            let actual = serde_json::from_str::<MessageAttachmentHeaders>(
+                r#"
+                {
+                    "content-type": "image/gif",
+                    "content-description": "logo.gif",
+                    "x-pm-image-width": "128",
+                    "x-pm-image-height": "64",
+                    "x-pm-content-encryption": "on-delivery",
+                    "content-disposition": "attachment; filename=logo.gif",
+                    "content-id": "<asdf>"
+                }
+            "#,
+            )
+            .unwrap();
+
+            assert_eq!(
+                MessageAttachmentHeaders {
+                    content_disposition: ContentDisposition::One(
+                        "attachment; filename=logo.gif".into()
+                    ),
+                    content_id: Some("<asdf>".into()),
+                    content_transfer_encoding: None,
+                    image_height: Some("64".into()),
+                    image_width: Some("128".into())
+                },
+                actual,
+            );
+        }
+
+        #[test]
+        fn with_multiple_content_dispositions() {
+            let actual = serde_json::from_str::<MessageAttachmentHeaders>(
+                r#"
+                {
+                    "content-type": "image/gif",
+                    "content-description": "logo.gif",
+                    "x-pm-image-width": "128",
+                    "x-pm-image-height": "64",
+                    "x-pm-content-encryption": "on-delivery",
+                    "content-disposition": [
+                        "attachment; filename=logo.gif",
+                        "inline; filename=logo.gif"
+                    ],
+                    "content-id": "<asdf>"
+                }
+            "#,
+            )
+            .unwrap();
+
+            assert_eq!(
+                MessageAttachmentHeaders {
+                    content_disposition: ContentDisposition::Many(vec![
+                        "attachment; filename=logo.gif".into(),
+                        "inline; filename=logo.gif".into(),
+                    ]),
+                    content_id: Some("<asdf>".into()),
+                    content_transfer_encoding: None,
+                    image_height: Some("64".into()),
+                    image_width: Some("128".into())
+                },
+                actual,
+            );
+        }
+    }
 }
