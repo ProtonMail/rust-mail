@@ -387,16 +387,6 @@ impl DecryptedMessageBody {
 
         if self.failed_to_decrypt() {
             banners.push(MessageBanner::UnableToDecrypt);
-            return BodyOutput {
-                body: self.body.to_string(),
-                had_blockquote: false,
-                tags_stripped: 0,
-                utm_stripped: 0,
-                remote_images_disabled: 0,
-                embedded_images_disabled: 0,
-                transform_opts: Default::default(),
-                body_banners: banners,
-            };
         }
 
         transform_html_with_banners(
