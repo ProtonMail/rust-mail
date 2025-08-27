@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- [ET-4381] Support attachments with multiple content-dispositions
+
+
+## [mail-uniffi-v0.142.1] - 2025-08-27
+
 ### Changed
 
 - Enable prefetching back
