@@ -417,6 +417,9 @@ impl StoredAction {
                 // failsafe, filter out any dependencies on self.
                 // We also check this at submission time.
                 self.dependencies.retain(|v| v.dependency_id != existing_id);
+                // Remove any dependency key associated with the old action to prevent cyclic
+                // references
+                ActionDependencyKeysTable::delete_for_action_id(existing_id, bond).await?;
             }
         }
 
@@ -801,6 +804,18 @@ impl ActionDependencyKeysTable {
             .await?;
         }
 
+        Ok(())
+    }
+
+    pub async fn delete_for_action_id(
+        action_id: ActionId,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            format!("DELETE FROM {KEY_DEPENDENCIES_TABLE_NAME} WHERE action_id = ?"),
+            params![action_id],
+        )
+        .await?;
         Ok(())
     }
 }

@@ -57,7 +57,7 @@ impl MailUserContext {
                         return;
                     };
 
-                    if let Err(e) = ctx.force_event_loop_poll().await {
+                    if let Err(e) = ctx.poll_event_loop().await {
                         error!("Failed to queue poll event loop poll: {e:?}");
                     }
 
