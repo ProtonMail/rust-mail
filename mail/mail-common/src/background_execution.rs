@@ -1,4 +1,5 @@
-use crate::{MailContext, MailContextResult};
+use crate::user_context::DefaultQueueExecutor;
+use crate::{MailContext, MailContextResult, MailUserContext};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::error;
@@ -63,6 +64,8 @@ impl BackgroundExecutionContext {
             return Ok(BackgroundExecutionResult::no_active_contexts());
         }
 
+        let _pause_prefetch_rollback = PausePrefetchRollbackScope::new(&all_user_ctxs);
+
         ctx.core_context().task_service().resume_background();
 
         tracing::debug!("Background execution is in progress... awaiting for abort");
@@ -89,7 +92,7 @@ impl BackgroundExecutionContext {
         tracing::info!("Background execution finished");
 
         let mut has_unsent_messages = false;
-        for ctx in all_user_ctxs {
+        for ctx in &all_user_ctxs {
             has_unsent_messages = has_unsent_messages
                 || ctx
                     .has_unsent_messages()
@@ -107,5 +110,33 @@ impl BackgroundExecutionContext {
             status,
             has_unsent_messages,
         })
+    }
+}
+
+/// Interface for avoiding running prefetch and rollback while background execution is running.
+pub struct PausePrefetchRollbackScope<'a> {
+    ctxs: &'a [Arc<MailUserContext>],
+}
+
+impl<'a> PausePrefetchRollbackScope<'a> {
+    pub fn new(ctxs: &'a [Arc<MailUserContext>]) -> Self {
+        for ctx in ctxs {
+            ctx.get_service::<DefaultQueueExecutor>()
+                .pause_prefetch_rollback();
+        }
+        Self { ctxs }
+    }
+
+    pub fn resume(&self) {
+        for ctx in self.ctxs {
+            ctx.get_service::<DefaultQueueExecutor>()
+                .resume_prefetch_rollback();
+        }
+    }
+}
+
+impl<'a> Drop for PausePrefetchRollbackScope<'a> {
+    fn drop(&mut self) {
+        self.resume();
     }
 }

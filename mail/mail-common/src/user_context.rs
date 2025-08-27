@@ -63,7 +63,7 @@ use tracing::{error, instrument};
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
 const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 2;
 
-const DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE: usize = 2;
+const DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE: usize = 1;
 const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
 
 #[cfg(feature = "prefetch")]
@@ -81,8 +81,16 @@ impl DefaultQueueExecutor {
         self.prefetch_rollback.pause();
     }
 
+    pub fn pause_prefetch_rollback(&self) {
+        self.prefetch_rollback.pause();
+    }
+
     pub fn resume(&self) {
         self.default.resume();
+        self.prefetch_rollback.resume();
+    }
+
+    pub fn resume_prefetch_rollback(&self) {
         self.prefetch_rollback.resume();
     }
 
