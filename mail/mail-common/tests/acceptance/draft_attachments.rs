@@ -12,8 +12,9 @@ use proton_crypto_inbox::attachment::{
 };
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{
-    AttachmentId, DraftAction, DraftAttachmentKeyPackets, MessageAttachmentHeaders, MessageFlags,
-    NewAttachmentDisposition, NewAttachmentResponse, PostAttachmentResponse,
+    AttachmentId, ContentDisposition, DraftAction, DraftAttachmentKeyPackets,
+    MessageAttachmentHeaders, MessageFlags, NewAttachmentDisposition, NewAttachmentResponse,
+    PostAttachmentResponse,
 };
 use proton_mail_api::services::proton::request_data::NewAttachmentParams;
 use proton_mail_api::services::proton::response_data::MessageAttachment;
@@ -381,7 +382,7 @@ async fn removing_uploaded_attachment() {
                 signature: None,
                 enc_signature: None,
                 headers: MessageAttachmentHeaders {
-                    content_disposition: "attachment".to_string(),
+                    content_disposition: ContentDisposition::One("attachment".to_string()),
                     content_id: None,
                     content_transfer_encoding: None,
                     image_height: None,
@@ -556,7 +557,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
                     signature: None,
                     enc_signature: None,
                     headers: MessageAttachmentHeaders {
-                        content_disposition: "disposition".to_string(),
+                        content_disposition: ContentDisposition::One("disposition".to_string()),
                         content_id: None,
                         content_transfer_encoding: None,
                         image_height: None,
@@ -572,7 +573,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
             disposition: proton_mail_api::services::proton::response_data::Disposition::Attachment,
             enc_signature: None,
             headers: MessageAttachmentHeaders {
-                content_disposition: "".to_string(),
+                content_disposition: ContentDisposition::One("".to_string()),
                 content_id: None,
                 content_transfer_encoding: None,
                 image_height: None,
