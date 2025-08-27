@@ -3108,3 +3108,49 @@ async fn conversation_snooze_only_snoozes_received_messages_in_inbox() {
     assert!(!msg_3.label_ids.contains(&LabelId::inbox()));
     assert!(msg_3.label_ids.contains(&MY_LABEL_ID2));
 }
+
+#[tokio::test]
+async fn conversation_expiration() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
+    let expiration_time = UnixTimestamp::now().saturating_sub(20);
+    let api_conversation = ApiConversation {
+        id: ConversationId::from("My-Conv"),
+        attachment_info: Default::default(),
+        attachments_metadata: vec![],
+        display_snoozed_reminder: false,
+        expiration_time: expiration_time.as_u64(),
+        labels: vec![ApiConversationLabel {
+            id: LabelId::inbox(),
+            context_expiration_time: 0,
+            context_num_attachments: 0,
+            context_num_messages: 2,
+            context_num_unread: 0,
+            context_size: 1025,
+            context_snooze_time: 0,
+            context_time: 0,
+        }],
+        num_attachments: 0,
+        num_messages: 0,
+        num_unread: 0,
+        order: 0,
+        recipients: vec![],
+        senders: vec![],
+        size: 0,
+        subject: "".to_string(),
+        context_time: None,
+    };
+    let mut local_conv: Conversation = tether
+        .tx::<_, _, MailContextError>(async |tx| {
+            let mut conv = Conversation::from(api_conversation);
+            conv.save(tx).await?;
+            Ok(conv)
+        })
+        .await
+        .unwrap();
+
+    Conversation::delete_expired(&mut tether).await.unwrap();
+
+    local_conv.reload(&tether).await.unwrap();
+    assert!(local_conv.deleted);
+}

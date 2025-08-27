@@ -788,7 +788,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
-            info!("Marking {id:?} in all mail");
+            info!("Marking {id:?} as deleted in all mail");
             let Some(mut conversation) = Conversation::find_by_id(id, bond).await? else {
                 continue;
             };
@@ -880,7 +880,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
-            info!("Marking {id:?} in {label_id:?}");
+            info!("Marking {id:?} as deleted in {label_id:?}");
             let Some(mut conversation) = Conversation::find_first(
                 "WHERE local_id=? AND deleted=0 AND is_known=1",
                 params![id],
