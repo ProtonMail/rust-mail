@@ -321,17 +321,24 @@ impl NetworkMonitorBackgroundTask {
                 }
             } else {
                 tracing::info!("Network connection lost");
-                if self.tester_task.is_none() {
-                    tracing::debug!("Starting tester task");
-                    let config = self.config.background.clone();
-                    let tester = self.tester.clone();
-                    let watcher = self.request_watcher.clone();
-                    self.tester_task = Some(
-                        self.spawner.spawn_boxed_task(
-                            async move { network_tester(config, tester.as_ref(), watcher).await }
+                if self.os_network_status == OsNetworkStatus::Online {
+                    if self.tester_task.is_none() {
+                        tracing::debug!("Starting tester task");
+                        let config = self.config.background.clone();
+                        let tester = self.tester.clone();
+                        let watcher = self.request_watcher.clone();
+                        self.tester_task = Some(
+                            self.spawner.spawn_boxed_task(
+                                async move {
+                                    network_tester(config, tester.as_ref(), watcher).await;
+                                }
                                 .boxed(),
-                        ),
-                    );
+                            ),
+                        );
+                    }
+                } else if let Some(task) = self.tester_task.take() {
+                    tracing::debug!("Cancelling tester task due to offline os update");
+                    task.abort();
                 }
             }
             tracing::info!("Subscriber status changed to {:?}", subscriber_status);
