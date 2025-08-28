@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.142.4] - 2025-08-28
+
+### Features
+
+- mail-scroller: Add lifecycle logs
+
+### Fixes
+
+- Network Monitor Layering
+- [ET-4378] Don't block in 'to_user_session' which is already async
+- Scroller is permitted to spawn first page request everytime it is visiting empty location
+
+
+## [mail-uniffi-v0.142.3] - 2025-08-28
 
 ### Fixes
 
