@@ -230,26 +230,24 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         }
 
         // No entry exist, which means we have not synced this label yet.
-        debug!("Paginating for the first time, getting first page");
+        let is_offline = is_offline().await;
+        debug!(
+            "Paginating for the first time, getting first page while being {}.",
+            if is_offline { "offline" } else { "online" }
+        );
+
         let local_label_id = label.id();
         let remote_label_id = label.remote_id.clone().unwrap();
-
-        let task = if is_offline().await {
-            debug!("We are offline, return scroller without a task");
-            None
-        } else {
-            debug!("Syncing first page in a task");
-            Self::sync_first_page(
-                ctx,
-                local_label_id,
-                remote_label_id,
-                unread,
-                self.page_size,
-                self.order_dir,
-                self.order_field,
-            )
-            .await?
-        };
+        let task = Self::sync_first_page(
+            ctx,
+            local_label_id,
+            remote_label_id,
+            unread,
+            self.page_size,
+            self.order_dir,
+            self.order_field,
+        )
+        .await?;
 
         Ok(task)
     }
