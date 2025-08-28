@@ -26,7 +26,7 @@ pub struct PaymentsResourcesIconCmd {
 impl PaymentsResourcesIconCmd {
     async fn run(self, ctx: Arc<MailUserContext>) -> Result<()> {
         let icon = ctx
-            .api()
+            .session()
             .get_payments_resources_icons(self.name.clone())
             .await?;
 

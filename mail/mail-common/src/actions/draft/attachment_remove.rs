@@ -9,7 +9,7 @@ use crate::models::{
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::Deserialize;
@@ -66,7 +66,7 @@ impl Action for AttachmentRemove {
 }
 
 pub struct AttachmentRemoveHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for AttachmentRemoveHandler {
@@ -170,18 +170,15 @@ impl Handler for AttachmentRemoveHandler {
         if matches!(
             attachment_metadata.ownership,
             DraftAttachmentOwnership::Owned
-        ) {
-            if let Some(AttachmentType::Remote(Some(remote_id))) =
-                Attachment::local_id_counterpart(action.attachment_id, writer_guard.tether())
-                    .await?
-            {
-                info!("Deleting {remote_id:?}");
+        ) && let Some(AttachmentType::Remote(Some(remote_id))) =
+            Attachment::local_id_counterpart(action.attachment_id, writer_guard.tether()).await?
+        {
+            info!("Deleting {remote_id:?}");
 
-                self.api
-                    .delete_attachment(remote_id)
-                    .await
-                    .inspect_err(|e| error!("Failed to delete attachment on the server{e}"))?;
-            }
+            self.api
+                .delete_attachment(remote_id)
+                .await
+                .inspect_err(|e| error!("Failed to delete attachment on the server{e}"))?;
         }
 
         // Delete metadata & attachment record

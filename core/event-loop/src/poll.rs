@@ -126,7 +126,7 @@ impl EventPollInternal {
         Ok(())
     }
 
-    /// Perform one iteration of the event loop with RawSubscribers, which consists of retrieving the latest events,
+    /// Perform one iteration of the event loop with `RawSubscribers`, which consists of retrieving the latest events,
     /// publishing raw events to all registered subscribers and storing the event id for the next iteration.
     /// The execution of the loop is aborted on the first error.
     #[tracing::instrument(name="event_poll_raw", level=Level::DEBUG, skip_all)]

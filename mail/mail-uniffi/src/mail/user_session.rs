@@ -15,6 +15,7 @@ use crate::{
     watch_channel_async,
 };
 use futures::TryFutureExt;
+use muon::common::IntoDyn;
 use proton_account_api::login::state::want_qr_confirmation::process_target_device_qr_code;
 use proton_account_uniffi::login::ProcessTargetDeviceQrError;
 use proton_account_uniffi::password::PasswordFlow;
@@ -166,7 +167,7 @@ impl MailUserSession {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            let res = ctx.api().get_sessions_uuid().await?;
+            let res = ctx.session().get_sessions_uuid().await?;
 
             Result::<_, RealProtonMailError>::Ok(res.uuid)
         })
@@ -234,11 +235,12 @@ impl MailUserSession {
             .map_err(|_| {
                 ProcessTargetDeviceQrError::Other(String::from("Failed to get Context"))
             })?;
-        let muon_client = ctx.api().clone();
+        let session = ctx.session().to_owned();
+        let (client, _) = session.into_parts();
         let core_context = Arc::clone(ctx.core_context());
         let observability = ObservabilityRecorder::default();
         uniffi_async::<_, ProcessTargetDeviceQrError, _>(async move {
-            process_target_device_qr_code(&qr_code, muon_client, core_context, observability)
+            process_target_device_qr_code(&qr_code, client, core_context, observability)
                 .await
                 .map_err(ProcessTargetDeviceQrError::from)
         })
@@ -254,7 +256,7 @@ impl MailUserSession {
             .inspect_err(|err| error!("Failed to get Context: {err:?}"))
             .ok()?;
         Some(Arc::new(PasswordValidatorService::setup(
-            ctx.api().to_owned(),
+            ctx.session().to_owned().into_dyn(),
         )))
     }
 
@@ -392,7 +394,7 @@ impl MailUserSession {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            let res = ctx.api().get_payments_plans(options.into()).await?;
+            let res = ctx.session().get_payments_plans(options.into()).await?;
 
             Result::<_, RealProtonMailError>::Ok(PaymentsPlans {
                 plans: res.plans.into_iter().map(Into::into).collect(),
@@ -411,7 +413,7 @@ impl MailUserSession {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            let res = ctx.api().get_payments_resources_icons(name).await?;
+            let res = ctx.session().get_payments_resources_icons(name).await?;
 
             Result::<_, RealProtonMailError>::Ok(res.into())
         })
@@ -430,7 +432,7 @@ impl MailUserSession {
 
         uniffi_async(async move {
             let res = ctx
-                .api()
+                .session()
                 .post_payments_tokens(amount, currency, payment.into())
                 .await?;
 
@@ -448,7 +450,7 @@ impl MailUserSession {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            let res = ctx.api().get_payments_subscription().await?;
+            let res = ctx.session().get_payments_subscription().await?;
             let current = res.subscriptions.into_iter().map(Into::into);
             let upcoming = res.upcoming_subscriptions.into_iter().map(Into::into);
 
@@ -470,7 +472,7 @@ impl MailUserSession {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            ctx.api()
+            ctx.session()
                 .post_payments_subscription(subscription.into(), new_values.into())
                 .await?;
 

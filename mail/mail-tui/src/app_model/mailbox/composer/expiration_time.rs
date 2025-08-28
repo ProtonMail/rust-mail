@@ -35,18 +35,18 @@ impl Popup for ExpirationTimePopup {
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         self.text_input_state.handle_event(&event);
-        if let Event::Key(KeyEvent { code, .. }) = event {
-            if matches!(code, KeyCode::Enter) {
-                match parse_date_time(self.text_input_state.value()) {
-                    Ok(date_time) => {
-                        return Command::batch([
-                            Command::message(Messages::DismissPopup),
-                            Command::message(ComposerMessage::SetExpirationTime(date_time)),
-                        ]);
-                    }
-                    Err(e) => {
-                        self.error = Some(format!("Parse Error: {e}"));
-                    }
+        if let Event::Key(KeyEvent { code, .. }) = event
+            && matches!(code, KeyCode::Enter)
+        {
+            match parse_date_time(self.text_input_state.value()) {
+                Ok(date_time) => {
+                    return Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        Command::message(ComposerMessage::SetExpirationTime(date_time)),
+                    ]);
+                }
+                Err(e) => {
+                    self.error = Some(format!("Parse Error: {e}"));
                 }
             }
         }

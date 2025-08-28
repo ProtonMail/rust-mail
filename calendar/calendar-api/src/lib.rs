@@ -14,8 +14,11 @@ pub use self::test_utils::*;
 
 use jiff::Zoned;
 use muon::PUT;
+use muon::ProtonRequest;
+use muon::ProtonResponse;
+use muon::common::Sender;
 use muon::{GET, http::HttpReqExt};
-use proton_core_api::{service::ApiServiceResult, services::proton::Proton};
+use proton_core_api::service::ApiServiceResult;
 
 pub const CALENDAR_V1: &str = "/calendar/v1";
 
@@ -76,7 +79,7 @@ pub trait ProtonCalendar {
     ) -> impl Future<Output = ApiServiceResult<()>> + Send;
 }
 
-impl ProtonCalendar for Proton {
+impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCalendar for This {
     async fn get_calendar_bootstrap(
         &self,
         cal_id: &CalendarId,

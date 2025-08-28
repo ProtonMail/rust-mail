@@ -8,7 +8,6 @@ use crate::mail::datatypes::{MessageRecipientDisplayMode, ViewMode};
 use crate::mail::state::MailUserContextPtr;
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use proton_core_api::services::proton::LabelId as RealLabelId;
-use proton_core_api::services::proton::Proton;
 use proton_core_api::session::Session;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::Mailbox as RealMailbox;
@@ -192,11 +191,6 @@ impl Mailbox {
     #[must_use]
     pub fn mbox(&self) -> &RealMailbox {
         &self.mbox
-    }
-
-    /// Get the API service.
-    pub fn api(&self) -> Result<Proton, ProtonError> {
-        Ok(self.ctx()?.api().to_owned())
     }
 
     /// Get the API session.

@@ -6,7 +6,7 @@ use itertools::Itertools;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::models::ModelExtension;
 use serde::{self, Deserialize, Serialize};
 use stash::stash::Bond;
@@ -43,7 +43,7 @@ impl Action for RefreshMetadata {
 }
 
 pub struct RefreshMetadataHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for RefreshMetadataHandler {

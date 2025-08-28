@@ -57,7 +57,11 @@ async fn label_message() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -115,7 +119,11 @@ async fn unlabel_message() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -180,7 +188,7 @@ async fn message_action_read_unread() {
     mailbox
         .sync(
             &mut user_context.user_stash().connection(),
-            user_context.api(),
+            user_context.session(),
             10,
         )
         .await
@@ -243,7 +251,7 @@ async fn message_action_delete() {
     mailbox
         .sync(
             &mut user_context.user_stash().connection(),
-            user_context.api(),
+            user_context.session(),
             10,
         )
         .await
@@ -315,7 +323,7 @@ async fn message_action_ham() {
     mailbox
         .sync(
             &mut user_context.user_stash().connection(),
-            user_context.api(),
+            user_context.session(),
             10,
         )
         .await

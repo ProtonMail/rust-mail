@@ -28,9 +28,9 @@ use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
 use proton_core_api::service::{ApiServiceError, ApiServiceResult};
+use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
-use proton_core_api::services::proton::{Proton, ProtonCore};
-use proton_core_api::session::{CoreSession as _, Session};
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, User, UserSettings};
@@ -369,10 +369,6 @@ impl MailUserContext {
         self.user_context.queue()
     }
 
-    pub fn api(&self) -> &Proton {
-        self.user_context.session().api()
-    }
-
     #[must_use]
     pub fn user_stash(&self) -> &Stash {
         self.user_context.stash()
@@ -541,16 +537,16 @@ impl MailUserContext {
         );
 
         // Handle error when loading contact keys, but ignore CardNotFound as it's valid to have no contact.
-        if let Err(e) = &vcard_keys_result {
-            if !matches!(
+        if let Err(e) = &vcard_keys_result
+            && !matches!(
                 e,
                 CoreContextError::ContactError(ContactError::CardNotFound(_))
-            ) {
-                error!(
-                    "send preferences: failed to load contact pinned keys: {}",
-                    e
-                );
-            }
+            )
+        {
+            error!(
+                "send preferences: failed to load contact pinned keys: {}",
+                e
+            );
         }
 
         // On error, we currently assume no pinned keys exists.
@@ -662,7 +658,6 @@ impl MailUserContext {
     pub async fn ping(&self) -> MailContextResult<()> {
         self.user_context
             .session()
-            .api()
             .get_tests_ping(None, None)
             .await?;
         Ok(())
@@ -777,8 +772,7 @@ impl MailUserContext {
             .is_proxy_enabled();
 
         let data = if is_proxy_enabled {
-            let api = self.api();
-            api.proxy_img(&url).await?
+            self.session().proxy_img(&url).await?
         } else {
             self.http_client()
                 .request(Method::GET, url)

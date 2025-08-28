@@ -6,7 +6,7 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
@@ -48,7 +48,7 @@ impl Action for Ham {
 }
 
 pub struct HamHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for HamHandler {

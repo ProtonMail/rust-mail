@@ -222,10 +222,10 @@ impl CoreAccountState {
         }
 
         // Does the account have any sessions that are awaiting a second factor?
-        if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedTfa) {
-            if account.second_factor_mode.is_some_and(TfaStatus::has_tfa) {
-                return CoreAccountState::NeedTfa(sessions);
-            }
+        if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedTfa)
+            && account.second_factor_mode.is_some_and(TfaStatus::has_tfa)
+        {
+            return CoreAccountState::NeedTfa(sessions);
         }
 
         // Is the account ready for use?
@@ -1101,17 +1101,17 @@ impl Context {
         // clean up any context that may have been dropped.
         active_contexts.retain(|_, value| value.strong_count() != 0);
 
-        if let Some(context) = active_contexts.get(&user_id) {
-            if let Some(upgraded) = context.upgrade() {
-                // If we are attempting to maintain uniqueness we can't
-                // return the same context with different sessions
-                // as this is not compatible.
-                if session_id != *upgraded.session_id() {
-                    return Err(CoreContextError::DuplicateContext(user_id));
-                }
-
-                return Ok(upgraded);
+        if let Some(context) = active_contexts.get(&user_id)
+            && let Some(upgraded) = context.upgrade()
+        {
+            // If we are attempting to maintain uniqueness we can't
+            // return the same context with different sessions
+            // as this is not compatible.
+            if session_id != *upgraded.session_id() {
+                return Err(CoreContextError::DuplicateContext(user_id));
             }
+
+            return Ok(upgraded);
         }
 
         // context is not register or it is no longer active.

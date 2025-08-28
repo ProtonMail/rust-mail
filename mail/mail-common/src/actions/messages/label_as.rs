@@ -8,7 +8,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
@@ -45,7 +45,7 @@ impl Action for LabelAs {
 }
 
 pub struct LabelAsHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for LabelAsHandler {

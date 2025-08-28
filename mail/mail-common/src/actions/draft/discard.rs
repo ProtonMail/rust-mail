@@ -8,7 +8,8 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_api::consts::General;
-use proton_core_api::services::proton::{LabelId, Proton};
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::session::Session;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -50,7 +51,7 @@ impl Action for Discard {
 }
 
 pub struct DiscardHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for DiscardHandler {
@@ -135,22 +136,21 @@ impl Handler for DiscardHandler {
 
                     // If we are not replying or forwarding, it means we have a new draft and we may
                     // have to delete the conversation id as well.
-                    if let Some(local_conversation_id) = action.local_conversation_id {
-                        if let Some(conversation) =
+                    if let Some(local_conversation_id) = action.local_conversation_id
+                        && let Some(conversation) =
                             Conversation::find_by_id(local_conversation_id, tx).await?
-                        {
-                            // Conversation has no remote id, so we need to do local cleanup, but only
-                            // if it only has no more messages.
-                            if conversation.num_messages == 0 && !conversation.is_synced() {
-                                Conversation::delete_by_id(local_conversation_id, tx)
-                                    .await
-                                    .inspect_err(|e| {
-                                        error!(
-                                            "Failed to delete conversation {}:{e}",
-                                            local_conversation_id
-                                        )
-                                    })?;
-                            }
+                    {
+                        // Conversation has no remote id, so we need to do local cleanup, but only
+                        // if it only has no more messages.
+                        if conversation.num_messages == 0 && !conversation.is_synced() {
+                            Conversation::delete_by_id(local_conversation_id, tx)
+                                .await
+                                .inspect_err(|e| {
+                                    error!(
+                                        "Failed to delete conversation {}:{e}",
+                                        local_conversation_id
+                                    )
+                                })?;
                         }
                     }
                     Ok(())

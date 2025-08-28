@@ -23,11 +23,12 @@ use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::ContactId;
 use proton_core_api::services::proton::ContactUID;
+use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
 };
 use proton_core_api::services::proton::{GetContactsEmailsOptions, GetContactsOptions};
-use proton_core_api::services::proton::{Proton, ProtonCore};
+use proton_core_api::session::Session;
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard as _};
 use proton_crypto_account::keys::UnlockedUserKeys;
@@ -104,10 +105,10 @@ impl Contact {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
             }
-        } else if let Some(local_id) = self.local_id {
-            if let Some(existing) = Self::find_by_id(local_id, bond).await? {
-                self.remote_id = existing.remote_id;
-            }
+        } else if let Some(local_id) = self.local_id
+            && let Some(existing) = Self::find_by_id(local_id, bond).await?
+        {
+            self.remote_id = existing.remote_id;
         }
 
         <Self as Model>::save(self, bond).await
@@ -232,7 +233,7 @@ impl Contact {
     ///
     #[tracing::instrument(skip(api))]
     #[allow(clippy::too_many_lines)]
-    pub async fn sync(api: &Proton) -> Result<SyncedContacts, ApiServiceError> {
+    pub async fn sync(api: &Session) -> Result<SyncedContacts, ApiServiceError> {
         info!("Syncing contacts");
         // In order to maximize throughput we do as follows:
         // 1. We download the first batch
@@ -335,7 +336,7 @@ impl Contact {
     ///
     pub async fn initialize(
         watcher: Arc<InitializationWatcher>,
-        api: &Proton,
+        api: &Session,
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>> {
         InitializedComponent::initialize(
@@ -359,7 +360,7 @@ impl Contact {
     /// `force_sync_with_card` instead.
     pub async fn sync_with_card(
         local_id: LocalContactId,
-        api: &Proton,
+        api: &Session,
         tx: &mut impl RunTransaction,
     ) -> CoreContextResult<()> {
         // First let's check if the sync has already happened.
@@ -381,7 +382,7 @@ impl Contact {
 
     pub async fn force_sync_with_card(
         local_id: LocalContactId,
-        api: &Proton,
+        api: &Session,
         tx: &mut impl RunTransaction,
     ) -> CoreContextResult<()> {
         info!("Syncing full contact for contact id {local_id}");
@@ -549,7 +550,7 @@ impl Contact {
 
     pub async fn delete_from_remote(
         remote_ids: &[ContactId],
-        api: &Proton,
+        api: &Session,
     ) -> CoreContextResult<Vec<ContactId>> {
         info!("Deleting contacts {remote_ids:?}");
         let response = api

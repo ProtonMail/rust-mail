@@ -76,7 +76,7 @@ where
             debug!("Sending mail");
 
             self.ctx
-                .api()
+                .session()
                 .send_direct(message, parent, packages, auto_save_contacts)
                 .await?
         };

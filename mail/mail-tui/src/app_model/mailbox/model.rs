@@ -402,10 +402,10 @@ impl AppStateHandler for MailboxModel {
             return search.handle_event(&event);
         }
 
-        if let Event::Key(key) = &event {
-            if key.code == KeyCode::Char('/') {
-                return Command::Message(Message::SearchPopup(Search::new()).into());
-            }
+        if let Event::Key(key) = &event
+            && key.code == KeyCode::Char('/')
+        {
+            return Command::Message(Message::SearchPopup(Search::new()).into());
         }
 
         match &mut self.state {

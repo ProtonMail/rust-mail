@@ -2,7 +2,9 @@
 
 use crate::prelude::*;
 use derive_more::Display;
-use muon::{Status, http::HttpReqExt, serde_to_query};
+use muon::{
+    ProtonRequest, ProtonResponse, Status, common::Sender, http::HttpReqExt, serde_to_query,
+};
 use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use serde::Deserialize;
 use serde_json::Value;
@@ -318,7 +320,7 @@ pub trait AccountApi {
     ) -> ApiServiceResult<PutUsersPasswordResponse>;
 }
 
-impl AccountApi for muon::Client {
+impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> AccountApi for This {
     async fn get_password_policies(&self) -> ApiServiceResult<GetPasswordPoliciesResponse> {
         Ok(GET!("{AUTH_V4}/password-policies")
             .send_with(self)

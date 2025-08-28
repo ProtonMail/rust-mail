@@ -450,24 +450,22 @@ impl MessagesState {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
 
-                if let Mode::Label(paginator) = &self.mode {
-                    if self.table_state.selected().unwrap_or_default()
+                if let Mode::Label(paginator) = &self.mode
+                    && self.table_state.selected().unwrap_or_default()
                         >= self.messages.len().saturating_sub(1)
-                        && !self.fetching.load(Ordering::Acquire)
-                    {
-                        self.fetching.store(true, Ordering::Release);
-                        return paginator.next_page_command();
-                    }
+                    && !self.fetching.load(Ordering::Acquire)
+                {
+                    self.fetching.store(true, Ordering::Release);
+                    return paginator.next_page_command();
                 }
 
-                if let Mode::Search(paginator) = &self.mode {
-                    if self.table_state.selected().unwrap_or_default()
+                if let Mode::Search(paginator) = &self.mode
+                    && self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
-                        && !self.fetching.load(Ordering::Acquire)
-                    {
-                        self.fetching.store(true, Ordering::Release);
-                        return paginator.next_page_command();
-                    }
+                    && !self.fetching.load(Ordering::Acquire)
+                {
+                    self.fetching.store(true, Ordering::Release);
+                    return paginator.next_page_command();
                 }
 
                 Command::None
@@ -858,7 +856,7 @@ impl Rsvp {
                     *self = Rsvp::None;
                 }
                 Some(Ok(Err(err))) => {
-                    *self = Rsvp::Error(err.to_string());
+                    *self = Rsvp::Error(err.clone());
                 }
                 Some(Err(err)) => {
                     *self = Rsvp::Error(err.to_string());

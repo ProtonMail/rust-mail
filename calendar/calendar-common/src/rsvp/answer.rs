@@ -9,7 +9,7 @@ use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarAttendeeToken, CalendarBootstrap,
     CalendarColor, CalendarEvent, CalendarNotificationsUpdate, ProtonCalendar,
 };
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_calendar::{CalendarKeyPacketUpgrader, KeyPacketRef, LockedCalendarKey};
 use proton_ical as ical;
@@ -18,7 +18,7 @@ use tracing::{debug, error, info, instrument, warn};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn run<P, K, M>(
-    api: &Proton,
+    api: &Session,
     pgp: &P,
     keys: &K,
     cache: &impl RsvpCache,
@@ -79,7 +79,7 @@ enum EventType {
 
 #[instrument(skip_all)]
 async fn init<'a, P, K, M>(
-    api: &Proton,
+    api: &Session,
     pgp: &P,
     keys: &K,
     cache: &impl RsvpCache,
@@ -375,7 +375,7 @@ fn plan_event_notifications(
 #[instrument(skip_all)]
 #[allow(clippy::too_many_arguments)]
 async fn exec<P, K, M>(
-    api: &Proton,
+    api: &Session,
     pgp: &P,
     keys: &CalendarDecryptorKeys<P>,
     sender: M,
@@ -504,7 +504,7 @@ where
 /// remains the same, we just change the key representation.
 #[instrument(skip_all)]
 async fn exec_upgrade_event<P>(
-    api: &Proton,
+    api: &Session,
     pgp: &P,
     keys: &CalendarDecryptorKeys<P>,
     event: &mut AnswerableRsvpEvent<'_>,
@@ -545,7 +545,7 @@ where
 
 #[instrument(skip_all)]
 async fn exec_update_attendee(
-    api: &Proton,
+    api: &Session,
     now: &Zoned,
     event: &mut CalendarEvent,
     att_id: &CalendarAttendeeId,
@@ -582,7 +582,7 @@ async fn exec_update_attendee(
 
 #[instrument(skip_all)]
 async fn exec_update_event(
-    api: &Proton,
+    api: &Session,
     event: &CalendarEvent,
     event_color: Option<CalendarColor>,
     event_notifs: CalendarNotificationsUpdate,
@@ -610,7 +610,7 @@ async fn exec_update_event(
 #[allow(clippy::needless_lifetimes, reason = "false-positive")]
 #[allow(clippy::too_many_arguments)]
 async fn exec_notify_organizer<P, K, M>(
-    api: &Proton,
+    api: &Session,
     pgp: &P,
     keys: &CalendarDecryptorKeys<P>,
     sender: M,
@@ -652,7 +652,7 @@ where
 
 /// Builds an `invite.ics` file that's attached to email sent to the organizer.
 async fn build_ics<P>(
-    api: &Proton,
+    api: &Session,
     pgp: &P,
     keys: &CalendarDecryptorKeys<P>,
     calendar: &CalendarBootstrap,
@@ -741,7 +741,7 @@ where
 }
 
 async fn build_ics_timezones(
-    api: &Proton,
+    api: &Session,
     event: &ical::VEvent,
 ) -> RsvpResult<Vec<ical::VTimeZone>> {
     let dtstart = event.dtstart.as_ref().map(|dtstart| &dtstart.value);

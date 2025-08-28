@@ -155,12 +155,11 @@ impl Visitor<'_> for DeclarationBlockVisitor {
                     }
                 }
 
-                if matches!(self.should_remove_important, ShouldRemoveImportant::Yes) {
-                    if let Some(pos) = decls.important_declarations.iter().position(|p| p == &prop)
-                    {
-                        decls.important_declarations.remove(pos);
-                        decls.declarations.push(prop);
-                    }
+                if matches!(self.should_remove_important, ShouldRemoveImportant::Yes)
+                    && let Some(pos) = decls.important_declarations.iter().position(|p| p == &prop)
+                {
+                    decls.important_declarations.remove(pos);
+                    decls.declarations.push(prop);
                 }
             }
         }

@@ -3,8 +3,9 @@ use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, Message};
 use futures::stream::{FuturesUnordered, StreamExt};
 use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
-use proton_core_api::services::proton::{Proton, ProtonCore};
+use proton_core_api::session::Session;
 use proton_core_common::models::Label;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
@@ -88,7 +89,7 @@ impl RollbackItem {
     ///
     ///
     pub async fn sync_all<I>(
-        api: &Proton,
+        api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
@@ -104,7 +105,7 @@ impl RollbackItem {
 
     #[tracing::instrument(skip_all)]
     pub async fn sync_labels<I>(
-        api: &Proton,
+        api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
@@ -116,7 +117,7 @@ impl RollbackItem {
 
     #[tracing::instrument(skip_all)]
     pub async fn sync_messages<I>(
-        api: &Proton,
+        api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
@@ -128,7 +129,7 @@ impl RollbackItem {
 
     #[tracing::instrument(skip_all)]
     pub async fn sync_conversations<I>(
-        api: &Proton,
+        api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
@@ -197,7 +198,7 @@ impl RollbackItem {
     }
 
     async fn sync_items_impl<H: RollbackHandler, T: RunTransaction>(
-        api: &Proton,
+        api: &Session,
         tx_runner: &mut T,
         batch: Option<usize>,
     ) -> Result<(), MailContextError> {
@@ -265,7 +266,7 @@ trait RollbackHandler: 'static + Send + Sync {
     fn item_type() -> RollbackItemType;
 
     fn fetch_items(
-        api: &Proton,
+        api: &Session,
         remote_ids: &[Self::RemoteId],
     ) -> impl Future<Output = Result<Vec<Self::Item>, ApiServiceError>> + Send;
 
@@ -286,7 +287,7 @@ impl RollbackHandler for MessageRollbackHandler {
     }
 
     async fn fetch_items(
-        api: &Proton,
+        api: &Session,
         remote_ids: &[Self::RemoteId],
     ) -> Result<Vec<Self::Item>, ApiServiceError> {
         let options = GetMessagesOptions {
@@ -319,7 +320,7 @@ impl RollbackHandler for ConversationRollbackHandler {
     }
 
     async fn fetch_items(
-        api: &Proton,
+        api: &Session,
         remote_ids: &[Self::RemoteId],
     ) -> Result<Vec<Self::Item>, ApiServiceError> {
         let options = GetConversationsOptions {
@@ -352,7 +353,7 @@ impl RollbackHandler for LabelRollbackHandler {
     }
 
     async fn fetch_items(
-        api: &Proton,
+        api: &Session,
         remote_ids: &[Self::RemoteId],
     ) -> Result<Vec<Self::Item>, ApiServiceError> {
         Ok(api.get_labels_by_ids(remote_ids.to_vec()).await?.labels)

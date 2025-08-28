@@ -77,8 +77,6 @@ mod macros;
 mod payments;
 mod store;
 
-pub type Proton = muon::Client;
-
 pub mod common;
 pub mod prelude;
 pub mod traits;
@@ -88,7 +86,6 @@ pub use self::core::*;
 pub use self::data::*;
 pub use self::payments::*;
 pub use muon;
-use proton_network_monitor_service::ConnectionMonitor;
 
 /// An error that can occur when building a Proton client.
 #[derive(Debug, Error)]
@@ -110,11 +107,10 @@ pub enum BuildError {
 pub async fn build<S: Store>(
     config: &Arc<Config>,
     store: &Arc<RwLock<S>>,
-    connection_monitor: &ConnectionMonitor,
     notifier: DynChallengeNotifier,
     info_provider: Option<Arc<dyn InfoProvider>>,
     allow_doh: bool,
-) -> Result<Proton, BuildError> {
+) -> Result<muon::Client, BuildError> {
     let store = MuonStoreImpl::new(&config.env_id, store);
 
     let app = if let Some(agent) = &config.user_agent {
@@ -123,9 +119,8 @@ pub async fn build<S: Store>(
         App::new(&config.app_version)?
     };
 
-    let mut builder = (Proton::builder_async(app, store).await)
+    let mut builder = (muon::Client::builder_async(app, store).await)
         .layer_front(Tagger::default())
-        .layer_front(connection_monitor.clone())
         .layer_back(SetCryptoClockLayer)
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)

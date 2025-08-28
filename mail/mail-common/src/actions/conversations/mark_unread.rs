@@ -6,7 +6,7 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::consts::General;
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,7 @@ impl Action for MarkUnread {
 }
 
 pub struct MarkUnreadHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for MarkUnreadHandler {

@@ -10,11 +10,7 @@ use crate::{
     models::{Conversation, ConversationScrollData},
 };
 use anyhow::anyhow;
-use proton_core_api::services::proton::Proton;
-use proton_core_api::{
-    services::proton::LabelId,
-    session::{CoreSession, Session},
-};
+use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_mail_api::services::proton::{
     ProtonMail,
@@ -201,7 +197,6 @@ impl RemoteConversationScrollerSource {
         tracing::info!("Syncing first page in {remote_label_id:?}");
 
         let response = session
-            .api()
             .get_conversations(GetConversationsOptions {
                 label_id: Some(remote_label_id),
                 page_size: page_size as u64,
@@ -240,7 +235,7 @@ impl RemoteConversationScrollerSource {
             true,
             order_dir,
             order_field,
-            session.api(),
+            session,
             &mut tether,
         )
         .await?;
@@ -270,7 +265,6 @@ impl RemoteConversationScrollerSource {
         );
 
         let response = session
-            .api()
             .get_conversations(GetConversationsOptions {
                 // time == 0 breaks the api query.
                 begin: Some(first_element_time.as_u64()),
@@ -312,7 +306,7 @@ impl RemoteConversationScrollerSource {
             false,
             order_dir,
             order_field,
-            session.api(),
+            session,
             &mut tether,
         )
         .await?;
@@ -342,7 +336,6 @@ impl RemoteConversationScrollerSource {
         );
 
         let mut response = session
-            .api()
             .get_conversations(GetConversationsOptions {
                 // time == 0 breaks the api query.
                 anchor: Some(last_element_time.as_u64()),
@@ -395,7 +388,7 @@ impl RemoteConversationScrollerSource {
             true,
             order_dir,
             order_field,
-            session.api(),
+            session,
             &mut tether,
         )
         .await?;
@@ -442,7 +435,7 @@ impl RemoteConversationScrollerSource {
         update_scroller: bool,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        api: &Proton,
+        api: &Session,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         // Resolve missing dependencies.

@@ -1,3 +1,4 @@
+use muon::common::IntoDyn;
 use proton_account_api::password::state::StateKind;
 use proton_account_api::password::{FlowAuthError, PasswordError as RealPasswordError};
 use proton_account_api::password::{LoginFailedReason, PasswordFlow as RealPasswordFlow};
@@ -158,7 +159,7 @@ impl PasswordFlow {
 
 #[uniffi_export]
 impl PasswordFlow {
-    /// Get the current state of the PasswordFlow
+    /// Get the current state of the `PasswordFlow`
     #[must_use]
     pub fn get_state(&self) -> SimplePasswordState {
         async_runtime().block_on(async { self.flow.lock().await.kind().unwrap().into() })
@@ -275,7 +276,7 @@ impl PasswordFlow {
             flow.lock()
                 .await
                 .api()
-                .map(|api| Arc::new(PasswordValidatorService::setup(api)))
+                .map(|api| Arc::new(PasswordValidatorService::setup(api.into_dyn())))
                 .map_err(PasswordError::from)
         })
         .await

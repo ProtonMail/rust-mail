@@ -398,10 +398,10 @@ impl Handler for SaveHandler {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::LostContext)?;
         let r = Save::apply_remote_impl(&ctx, action, &mut guard).await;
 
-        if let Err(e) = &r {
-            if let Err(e) = save_send_error(action, &mut guard, e).await {
-                error!("Failed to save draft send result: {e:?}");
-            }
+        if let Err(e) = &r
+            && let Err(e) = save_send_error(action, &mut guard, e).await
+        {
+            error!("Failed to save draft send result: {e:?}");
         }
 
         r
@@ -578,8 +578,8 @@ impl Save {
             .tx::<_, _, <Self as Action>::Error>(async |bond| {
                 // check if someone else already created this conversation through some other
                 // flow.
-                if let Some(remote_conv_local_id) = Conversation::remote_id_counterpart(new_message.metadata.conversation_id.clone(), bond).await? {
-                    if remote_conv_local_id != conversation_id {
+                if let Some(remote_conv_local_id) = Conversation::remote_id_counterpart(new_message.metadata.conversation_id.clone(), bond).await?
+                    && remote_conv_local_id != conversation_id {
                         warn!("Draft conversation was synced by other means, patching data to preserve local changes");
                         // Someone else managed to create this before us, but we don't want this
                         // conversation to overwrite our local data so we remove it. This is safe
@@ -596,7 +596,6 @@ impl Save {
                         // Delete the other conversation.
                         Conversation::delete_by_id(remote_conv_local_id, bond).await?;
                     }
-                }
                     // Update the remote conversation id.
                     Conversation::update_remote_id(
                         conversation_id,

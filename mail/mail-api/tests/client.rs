@@ -40,8 +40,8 @@ mod messages {
     use test_case::test_case;
     use wiremock::matchers::path_regex;
 
+    use proton_core_api::session::Session;
     use proton_core_api::session::{Config, EnvId};
-    use proton_core_api::session::{CoreSession, Session};
     use proton_core_common::test_utils::test_context::MockApiEnv;
     use proton_core_common::test_utils::utils::mock_auth_endpoints;
     use proton_mail_api::MAX_PAGE_ELEMENT_COUNT_U64;
@@ -70,7 +70,6 @@ mod messages {
             .await;
 
         session
-            .api()
             .get_messages(GetMessagesOptions {
                 page_size,
                 ..Default::default()

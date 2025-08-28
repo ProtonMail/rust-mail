@@ -5,7 +5,8 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
-use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail, Proton};
+use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail};
+use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,7 @@ impl Action for Unblock {
 }
 
 pub struct UnblockHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for UnblockHandler {

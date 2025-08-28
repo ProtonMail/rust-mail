@@ -5,7 +5,8 @@ use crate::models::{Contact, ModelExtension, ModelIdExtension};
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_core_api::services::proton::{ContactId, Proton};
+use proton_core_api::services::proton::ContactId;
+use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -43,7 +44,7 @@ impl Action for Delete {
 }
 
 pub struct DeleteHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for DeleteHandler {

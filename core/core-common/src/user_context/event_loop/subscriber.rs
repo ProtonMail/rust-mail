@@ -12,10 +12,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
-use proton_core_api::{
-    services::proton::{EventId, ProtonCore, UserId},
-    session::CoreSession,
-};
+use proton_core_api::services::proton::{EventId, ProtonCore, UserId};
 use proton_event_loop::{
     EventLoopError, RawEvent,
     provider::Provider,
@@ -168,7 +165,7 @@ impl Provider for CoreEventLoopContext {
         &self,
     ) -> Result<EventId, proton_core_api::service::ApiServiceError> {
         let ctx = self.inner()?;
-        Ok(ctx.session().api().get_events_latest().await?.event_id)
+        Ok(ctx.session().get_events_latest().await?.event_id)
     }
 
     async fn get_event(
@@ -178,7 +175,6 @@ impl Provider for CoreEventLoopContext {
         let ctx = self.inner()?;
         let json_string = ctx
             .session()
-            .api()
             .get_event(
                 event_id.clone(),
                 proton_core_api::services::proton::GetEventOptions::all(),
@@ -407,13 +403,13 @@ impl UserContext {
 
 #[tracing::instrument(skip_all)]
 async fn refresh_core(ctx: &UserContext) -> Result<(), SubscriberError> {
-    let api = ctx.session().api().clone();
+    let api = ctx.session().clone();
     let contacts = ctx.spawn(async move { Contact::sync(&api).await });
-    let api = ctx.session().api().clone();
+    let api = ctx.session().clone();
     let all_remote_addresses = ctx.spawn(async move { Address::sync(&api).await });
-    let api = ctx.session().api().clone();
+    let api = ctx.session().clone();
     let user_and_settings = ctx.spawn(async move { User::sync_user_and_settings(&api).await });
-    let api = ctx.session().api().clone();
+    let api = ctx.session().clone();
     let all_remote_labels = ctx.spawn(async move { Label::fetch_contact_labels(&api).await });
 
     let mut tether = ctx.stash().connection();
@@ -501,9 +497,9 @@ async fn refresh_core(ctx: &UserContext) -> Result<(), SubscriberError> {
 
 #[tracing::instrument(skip_all)]
 async fn refresh_contacts(ctx: &UserContext) -> Result<(), SubscriberError> {
-    let api = ctx.session().api().clone();
+    let api = ctx.session().clone();
     let contacts = ctx.spawn(async move { Contact::sync(&api).await });
-    let api = ctx.session().api().clone();
+    let api = ctx.session().clone();
     let all_remote_labels = ctx.spawn(async move { Label::fetch_contact_labels(&api).await });
     let mut tether = ctx.stash().connection();
     let mut all_local_labels: HashMap<_, _> = Label::all_contact_groups(&tether)

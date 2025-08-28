@@ -10,7 +10,8 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_api::consts::Mail;
-use proton_core_api::services::proton::{LabelId, Proton};
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
@@ -57,7 +58,7 @@ impl Action for UndoSend {
 }
 
 pub struct UndoSendHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for UndoSendHandler {
@@ -170,10 +171,10 @@ impl Handler for UndoSendHandler {
             Ok(r) => r,
             Err(e) => {
                 error!("Failed to cancel send: {e:?}");
-                if let Some(proton_error) = e.to_proton_error() {
-                    if proton_error.code == Mail::MessageSentCanNoLongerBeUndone as u32 {
-                        return Err(UndoError::SendCanNoLongerBeUndone.into());
-                    }
+                if let Some(proton_error) = e.to_proton_error()
+                    && proton_error.code == Mail::MessageSentCanNoLongerBeUndone as u32
+                {
+                    return Err(UndoError::SendCanNoLongerBeUndone.into());
                 }
                 return Err(e.into());
             }

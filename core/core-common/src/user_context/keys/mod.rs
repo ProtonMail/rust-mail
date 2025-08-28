@@ -12,8 +12,8 @@ use crate::{
 use crate::{CoreContextResult, UserContext};
 use ical::{VcardParser, parser::ParserError};
 pub use manager::*;
+use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::proton::PrivateEmailRef;
-use proton_core_api::{auth::UserKeySecret, session::CoreSession};
 use proton_core_api::{services::proton::AddressId, session::Session};
 use proton_crypto_account::{
     contacts::{ContactCardType, DecryptableVerifiableCard},
@@ -186,7 +186,7 @@ impl UserContext {
                 ))?;
 
         // On success try to sync the most recent full contact including its v-cards from the BE.
-        Contact::force_sync_with_card(local_contact_id, self.session().api(), tx).await?;
+        Contact::force_sync_with_card(local_contact_id, self.session(), tx).await?;
 
         let mut contact = Contact::load(local_contact_id, tx.tether())
             .await?

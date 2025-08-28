@@ -64,7 +64,11 @@ async fn move_between_folders() {
             .await
             .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -147,7 +151,11 @@ async fn move_between_folders_and_undo() {
             .await
             .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -258,7 +266,11 @@ async fn move_from_label_does_not_unlabel() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -336,7 +348,11 @@ async fn move_into_trash_remove_label_and_mark_read() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -439,7 +455,11 @@ async fn move_into_spam_remove_labels() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -517,7 +537,11 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -712,7 +736,11 @@ async fn move_conversation_between_folders_and_undo() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -853,7 +881,7 @@ async fn move_conversation_mix_unread() {
         conv_is_labeled(conv, [LabelId::inbox()]);
 
         let msgs = Message::in_label(local_inbox, tether).await.unwrap();
-        let unreads = msgs.iter().map(|m| (m.unread)).collect_vec();
+        let unreads = msgs.iter().map(|m| m.unread).collect_vec();
         assert_eq!(unreads, vec![false, true, true]);
         for message in msgs {
             assert_eq!(message.label_ids, vec![LabelId::inbox()]);
@@ -884,7 +912,7 @@ async fn move_conversation_mix_unread() {
         conv_is_labeled(conv, [LabelId::all_mail(), LabelId::trash()]);
 
         let msgs = Message::in_label(local_trash, tether).await.unwrap();
-        let unreads = msgs.iter().map(|m| (m.unread)).collect_vec();
+        let unreads = msgs.iter().map(|m| m.unread).collect_vec();
         assert_eq!(unreads, vec![false, false, false]);
         for message in msgs {
             assert_eq!(
@@ -915,7 +943,7 @@ async fn move_conversation_mix_unread() {
         );
 
         let msgs = Message::in_label(local_inbox, tether).await.unwrap();
-        let unreads = msgs.iter().map(|m| (m.unread)).collect_vec();
+        let unreads = msgs.iter().map(|m| m.unread).collect_vec();
         assert_eq!(unreads, vec![false, true, true]);
         for message in msgs {
             assert_eq!(

@@ -1,5 +1,6 @@
 use crate::{password_validator::PasswordValidatorService, user_behavior::UserBehavior};
 use datatypes::{Fido2RequestFfi, Fido2ResponseFfi, MigrationData};
+use muon::common::IntoDyn;
 use proton_account_api::login as login_api;
 use proton_account_api::login::state::want_qr_confirmation::ProcessTargetDeviceQrError as RealProcessTargetDeviceQrError;
 use proton_account_api::responses as responses_api;
@@ -215,7 +216,7 @@ impl LoginFlow {
 
         uniffi_async::<_, JoinError, _>(async move {
             Ok(Arc::new(PasswordValidatorService::setup(
-                flow.lock().await.api().to_owned(),
+                flow.lock().await.api().to_owned().into_dyn(),
             )))
         })
         .await
@@ -448,8 +449,8 @@ impl From<login_api::LoginError> for LoginError {
             | login_api::LoginError::NewPasswordSetupAborted => LoginError::UserKeySetupAborted,
 
             login_api::LoginError::AddressFetch(e) => LoginError::AddressFetch(e.into()),
-            login_api::LoginError::AddressSetup(e) => LoginError::AddressSetup(e.to_string()),
-            login_api::LoginError::AddressKeySetup(e) => LoginError::AddressKeySetup(e.to_string()),
+            login_api::LoginError::AddressSetup(e) => LoginError::AddressSetup(e.clone()),
+            login_api::LoginError::AddressKeySetup(e) => LoginError::AddressKeySetup(e.clone()),
             login_api::LoginError::AddressKeySetupAborted => LoginError::AddressKeySetupAborted,
 
             login_api::LoginError::MissingSession => LoginError::MissingSession,

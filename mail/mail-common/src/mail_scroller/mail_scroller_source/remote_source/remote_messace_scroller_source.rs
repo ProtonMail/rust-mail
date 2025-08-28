@@ -10,11 +10,7 @@ use crate::{
     models::{Message, MessageScrollData},
 };
 use anyhow::anyhow;
-use proton_core_api::services::proton::Proton;
-use proton_core_api::{
-    services::proton::LabelId,
-    session::{CoreSession, Session},
-};
+use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
@@ -196,7 +192,6 @@ impl RemoteMessageScrollerSource {
         tracing::info!("Syncing first page in {remote_label_id:?}");
 
         let response = session
-            .api()
             .get_messages(GetMessagesOptions {
                 label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64,
@@ -231,7 +226,7 @@ impl RemoteMessageScrollerSource {
             true,
             order_dir,
             order_field,
-            session.api(),
+            session,
             &mut tether,
         )
         .await?;
@@ -258,7 +253,6 @@ impl RemoteMessageScrollerSource {
         );
 
         let mut response = session
-            .api()
             .get_messages(GetMessagesOptions {
                 anchor: Some(last_element_time.as_u64()),
                 anchor_id: Some(last_element_id.clone()),
@@ -306,7 +300,7 @@ impl RemoteMessageScrollerSource {
             true,
             order_dir,
             order_field,
-            session.api(),
+            session,
             &mut tether,
         )
         .await?;
@@ -333,7 +327,6 @@ impl RemoteMessageScrollerSource {
         );
 
         let response = session
-            .api()
             .get_messages(GetMessagesOptions {
                 // time == 0 breaks the api query.
                 begin: Some(first_element_time.as_u64()),
@@ -370,7 +363,7 @@ impl RemoteMessageScrollerSource {
             false,
             order_dir,
             order_field,
-            session.api(),
+            session,
             &mut tether,
         )
         .await?;
@@ -386,7 +379,7 @@ impl RemoteMessageScrollerSource {
         update_scroller: bool,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        api: &Proton,
+        api: &Session,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         if messages.is_empty() {

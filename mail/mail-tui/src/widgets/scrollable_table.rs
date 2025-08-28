@@ -51,10 +51,10 @@ impl ScrollableTableState {
     }
 
     pub fn toggle(&mut self) {
-        if let Some(idx) = self.selected() {
-            if !self.marked.insert(idx) {
-                self.marked.remove(&idx);
-            }
+        if let Some(idx) = self.selected()
+            && !self.marked.insert(idx)
+        {
+            self.marked.remove(&idx);
         }
     }
 

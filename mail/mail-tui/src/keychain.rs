@@ -47,10 +47,10 @@ impl KeyChain for AppKeyChain {
     }
 
     fn delete_entry(&self, kind: KeyChainEntryKind) -> Result<(), KeyChainError> {
-        if let Err(e) = self.kind_to_entry(kind).delete_credential() {
-            if !matches!(e, keyring::Error::NoEntry) {
-                return Err(KeyChainError::new(anyhow!(e).into()));
-            }
+        if let Err(e) = self.kind_to_entry(kind).delete_credential()
+            && !matches!(e, keyring::Error::NoEntry)
+        {
+            return Err(KeyChainError::new(anyhow!(e).into()));
         }
         Ok(())
     }

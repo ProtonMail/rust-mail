@@ -56,16 +56,14 @@ fn find_split_doc(i: impl Iterator<Item = NodeRef>) -> Option<NodeRef> {
         if let Some(next) = blockquote
             .following_siblings() // The next sibling element
             .find(|x| matches!(x.data(), NodeData::Element(_)))
-        {
-            if next
+            && next
                 .select(".proton-image-anchor")
                 .unwrap()
                 .next()
                 .is_some()
-            {
-                // It has an image after
-                return false;
-            }
+        {
+            // It has an image after
+            return false;
         }
         // If it has text after
         if blockquote.following_siblings().any(|node_ref| {

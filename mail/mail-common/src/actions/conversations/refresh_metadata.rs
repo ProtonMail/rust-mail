@@ -95,7 +95,7 @@ impl Handler for RefreshMetadataHandler {
         }
 
         let items_sync_result =
-            Conversation::sync_metadata(remote_ids.clone(), ctx.api(), &mut guard).await;
+            Conversation::sync_metadata(remote_ids.clone(), ctx.session(), &mut guard).await;
 
         let refreshed_items = match items_sync_result {
             Ok(items) => items,
@@ -168,7 +168,7 @@ async fn refresh_conversation_messages(
     let local_id = conversation.id();
     let conv_count = Conversation::message_count(local_id, guard.tether()).await?;
     if conv_count > 0 {
-        let api = ctx.api().clone();
+        let api = ctx.session().clone();
         let remote_msgs = ctx.spawn(async move {
             Message::fetch_metadata(
                 GetMessagesOptions {

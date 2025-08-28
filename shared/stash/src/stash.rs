@@ -1428,15 +1428,14 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         &mut self,
         transaction_tracking_policy: TransactionTrackingPolicy,
     ) -> Result<Transaction<'a>, SqliteError> {
-        if transaction_tracking_policy == TransactionTrackingPolicy::Tracking {
-            if let Err(e) = self
+        if transaction_tracking_policy == TransactionTrackingPolicy::Tracking
+            && let Err(e) = self
                 .state
                 .sync_tables(self.watcher)
                 .execute(self.connection)
-            {
-                error!("Failed to sync tables: {e:?}");
-                return Err(e);
-            }
+        {
+            error!("Failed to sync tables: {e:?}");
+            return Err(e);
         }
         // We call new_unchecked() here because new() requires a mutable borrow.
         // Being unchecked does not matter, as we perform the necessary checks

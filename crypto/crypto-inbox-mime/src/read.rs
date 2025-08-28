@@ -171,10 +171,10 @@ fn process_attachments(message_id: &str, parsed_message: &Message<'_>) -> Vec<Pr
                 base_content_type
             });
             // Filter out signature attachments.
-            if let Some(content_type) = &content_type_option {
-                if content_type == "application/pgp-signature" {
-                    return None;
-                }
+            if let Some(content_type) = &content_type_option
+                && content_type == "application/pgp-signature"
+            {
+                return None;
             }
             // Generate a unique file name.
             let mut generated_filename =
@@ -402,12 +402,11 @@ fn extract_matched_content_subtype<'a>(
     content_type: &str,
 ) -> Option<&'a str> {
     for header in headers {
-        if let mail_parser::HeaderValue::ContentType(c) = header.value() {
-            if c.c_type == content_type {
-                if let Some(value) = &c.c_subtype {
-                    return Some(value.as_ref());
-                }
-            }
+        if let mail_parser::HeaderValue::ContentType(c) = header.value()
+            && c.c_type == content_type
+            && let Some(value) = &c.c_subtype
+        {
+            return Some(value.as_ref());
         }
     }
     None

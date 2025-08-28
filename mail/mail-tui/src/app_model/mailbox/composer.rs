@@ -667,11 +667,11 @@ impl Composer {
             ),
         ] {
             frame.render_stateful_widget(TextInput::new(title), area, state);
-            if let Some(input_selection) = input_selection {
-                if input_selection == self.selected_input {
-                    let (x, y) = state.frame_cursor();
-                    frame.set_cursor_position(Position { x, y });
-                }
+            if let Some(input_selection) = input_selection
+                && input_selection == self.selected_input
+            {
+                let (x, y) = state.frame_cursor();
+                frame.set_cursor_position(Position { x, y });
             }
         }
 

@@ -20,15 +20,14 @@ impl TuiWatchHandle {
         let command = Command::background_task(|background_sender| {
             async move {
                 while let Ok(value) = receiver.recv_async().await {
-                    if let Some(message) = converter(value).await {
-                        if background_sender
+                    if let Some(message) = converter(value).await
+                        && background_sender
                             .send_async(Command::message(message))
                             .await
                             .is_err()
-                        {
-                            error!("Failed to send message from watcher");
-                            return;
-                        }
+                    {
+                        error!("Failed to send message from watcher");
+                        return;
                     }
                 }
             }

@@ -589,7 +589,7 @@ pub async fn search_for_conversations(
         let mut tether = stash.connection();
         let conversations = RealConversation::search(
             options.into_api_options(&tether).await?,
-            user_context.api(),
+            user_context.session(),
             &mut tether,
         )
         .await?

@@ -1080,16 +1080,16 @@ impl SearchScrollData {
     ) -> Result<Vec<Message>, StashError> {
         let last = Self::last(tether).await?;
 
-        if let Some(last) = last {
-            if last.display_order > self.display_order {
-                let offset = self.display_order.saturating_add(1);
+        if let Some(last) = last
+            && last.display_order > self.display_order
+        {
+            let offset = self.display_order.saturating_add(1);
 
-                let query = Self::query(Some(page_size), Some(offset));
-                let items = Message::find(query, params![last.display_order], tether).await?;
-                *self = last;
+            let query = Self::query(Some(page_size), Some(offset));
+            let items = Message::find(query, params![last.display_order], tether).await?;
+            *self = last;
 
-                return Ok(items);
-            }
+            return Ok(items);
         }
 
         Ok(vec![])

@@ -344,21 +344,22 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // state. This is the soonest place it can be safely called.
         self.sync_scroller(&tether).await?;
 
-        if is_online && self.state.is_not_synced() {
-            if let Some(task) = self.initialize(ctx).await? {
-                match task.await {
-                    Ok(Ok(_)) => (),
-                    Ok(Err(err)) => {
-                        warn!(?err, "Couldn't initialize scroller, continuing anyway");
-                    }
-                    Err(err) => {
-                        warn!(?err, "Couldn't initialize scroller, continuing anyway");
-                    }
+        if is_online
+            && self.state.is_not_synced()
+            && let Some(task) = self.initialize(ctx).await?
+        {
+            match task.await {
+                Ok(Ok(_)) => (),
+                Ok(Err(err)) => {
+                    warn!(?err, "Couldn't initialize scroller, continuing anyway");
                 }
-
-                self.sync_scroller(&tether).await?;
-                replace = true;
+                Err(err) => {
+                    warn!(?err, "Couldn't initialize scroller, continuing anyway");
+                }
             }
+
+            self.sync_scroller(&tether).await?;
+            replace = true;
         }
 
         let (items, task) = match &mut self.state {

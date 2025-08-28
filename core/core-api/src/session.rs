@@ -1,8 +1,10 @@
-use derive_more::{Debug, Deref};
+use derive_more::Debug;
+use futures::FutureExt;
 use muon::client::InfoProvider;
 use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
-use muon::common::ParseEndpointErr;
+use muon::common::{BoxFut, ParseEndpointErr, Sender, SenderExt};
 use muon::rt::DynResolver;
+use muon::{ProtonRequest, ProtonResponse, Result as MuonResult};
 use std::borrow::Borrow;
 use std::fmt::Formatter;
 use std::sync::Arc;
@@ -13,7 +15,7 @@ use crate::auth::UserKeySecret;
 use crate::crypto_clock::init_server_crypto_clock;
 use crate::service::ApiServiceResult;
 use crate::services::observability::ObservabilityManager;
-use crate::services::proton::{self, BuildError, Proton};
+use crate::services::proton::{self, BuildError};
 use crate::store::{BoxStore, DynStore, Store, TempStore};
 use crate::verification::{DynChallengeNotifier, FailNotifier};
 
@@ -58,18 +60,6 @@ impl EnvIdExt for EnvId {
         }
 
         Ok(Self::new_custom(CustomEnv::new(url)?))
-    }
-}
-
-/// Core session trait which provides access to the API.
-pub trait CoreSession {
-    #[must_use]
-    fn api(&self) -> &Proton;
-}
-
-impl CoreSession for Session {
-    fn api(&self) -> &Proton {
-        &self.client
     }
 }
 
@@ -243,7 +233,6 @@ impl Builder {
         let client = proton::build(
             &config,
             &store,
-            &connection_monitor,
             notifier,
             self.info_provider,
             self.allow_doh,
@@ -261,19 +250,36 @@ impl Builder {
             client,
             config,
             store,
+            connection_monitor: connection_monitor.clone(),
             network_status_observer: connection_monitor.network_status_observer(),
         })
     }
 }
 
 /// An API session, capable of making requests to the API on behalf of a user.
-#[derive(Deref, Clone)]
+#[derive(Clone)]
 pub struct Session {
-    #[deref]
-    client: Proton,
+    client: muon::Client,
     config: Arc<Config>,
     store: DynStore,
+    connection_monitor: ConnectionMonitor,
     network_status_observer: NetworkStatusObserver,
+}
+
+impl Sender<ProtonRequest, ProtonResponse> for Session {
+    fn send(&self, req: ProtonRequest) -> BoxFut<'_, MuonResult<ProtonResponse>> {
+        self.send_impl(req).boxed()
+    }
+}
+
+impl Session {
+    async fn send_impl(&self, req: ProtonRequest) -> MuonResult<ProtonResponse> {
+        let layer = self.connection_monitor.clone();
+        let client = self.client.clone();
+        let sender = client.layer([layer]);
+
+        sender.send(req).await
+    }
 }
 
 impl std::fmt::Debug for Session {
@@ -347,6 +353,7 @@ impl Session {
                 client,
                 config: self.config.clone(),
                 store: self.store.clone(),
+                connection_monitor: self.connection_monitor.clone(),
                 network_status_observer: self.network_status_observer.clone(),
             }),
             WithSelectorFlow::Failed { reason, .. } => Err(muon::Error::from(reason).into()),
@@ -395,20 +402,22 @@ impl Session {
 pub struct SessionParts {
     pub config: Arc<Config>,
     pub store: DynStore,
+    pub connection_monitor: ConnectionMonitor,
     pub network_status_observer: NetworkStatusObserver,
 }
 
 impl Session {
     #[must_use]
-    pub fn to_parts(&self) -> (Proton, SessionParts) {
+    pub fn to_parts(&self) -> (muon::Client, SessionParts) {
         self.clone().into_parts()
     }
 
     #[must_use]
-    pub fn into_parts(self) -> (Proton, SessionParts) {
+    pub fn into_parts(self) -> (muon::Client, SessionParts) {
         let parts = SessionParts {
             config: self.config,
             store: self.store,
+            connection_monitor: self.connection_monitor,
             network_status_observer: self.network_status_observer,
         };
 
@@ -416,11 +425,12 @@ impl Session {
     }
 
     #[must_use]
-    pub fn from_parts(client: Proton, parts: SessionParts) -> Self {
+    pub fn from_parts(client: muon::Client, parts: SessionParts) -> Self {
         Self {
             client,
             config: parts.config,
             store: parts.store,
+            connection_monitor: parts.connection_monitor,
             network_status_observer: parts.network_status_observer,
         }
     }

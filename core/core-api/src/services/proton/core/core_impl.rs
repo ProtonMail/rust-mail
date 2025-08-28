@@ -2,19 +2,18 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use bytes::Bytes;
-use muon::common::RetryPolicy;
-use muon::serde_to_query;
+use muon::common::{RetryPolicy, Sender};
 use muon::util::ProtonRequestExt;
 use muon::{DELETE, GET, PATCH, POST, PUT};
+use muon::{ProtonRequest, ProtonResponse, serde_to_query};
 use proton_crypto_account::keys::APIPublicAddressKeys;
 use serde_json::json;
 
 use crate::service::ApiServiceResult;
-use crate::services::proton::Proton;
 use crate::services::proton::core::{CORE_V4, CORE_V5, ProtonCore};
 use crate::services::proton::prelude::*;
 
-impl ProtonCore for Proton {
+impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
     async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse> {
         Ok(GET!("{CORE_V4}/addresses")
             .send_with(self)

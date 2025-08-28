@@ -147,18 +147,18 @@ async fn remove_files(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut failed = vec![];
 
     for file in paths {
-        if file.exists() {
-            if let Err(e) = fs::remove_file(file).await {
-                tracing::error!("Could not remove `{}`, details: `{e}`", file.display());
-                let ext = file
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .map_or("nuked".to_string(), |ext| format!("{ext}.nuked"));
-                let new_path = file.with_extension(ext);
-                match fs::rename(file, &new_path).await {
-                    Ok(()) => failed.push(new_path),
-                    Err(_) => failed.push(file.clone()),
-                }
+        if file.exists()
+            && let Err(e) = fs::remove_file(file).await
+        {
+            tracing::error!("Could not remove `{}`, details: `{e}`", file.display());
+            let ext = file
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map_or("nuked".to_string(), |ext| format!("{ext}.nuked"));
+            let new_path = file.with_extension(ext);
+            match fs::rename(file, &new_path).await {
+                Ok(()) => failed.push(new_path),
+                Err(_) => failed.push(file.clone()),
             }
         }
     }

@@ -6,7 +6,7 @@ use crate::models::Conversation;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use serde::{self, Deserialize, Serialize};
@@ -41,7 +41,7 @@ impl Action for Delete {
 }
 
 pub struct DeleteHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for DeleteHandler {

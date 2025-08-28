@@ -4,8 +4,9 @@ use derive_more::TryFrom;
 use indoc::indoc;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_api::service::ApiServiceResult;
-use proton_core_api::services::proton::{PrivateEmail, Proton};
+use proton_core_api::services::proton::PrivateEmail;
 
+use proton_core_api::session::Session;
 use proton_core_common::{
     datatypes::InitializationKey,
     models::{Address, InitializationError, InitializationWatcher, InitializedComponent},
@@ -64,7 +65,7 @@ impl IncomingDefaultLocation {
     /// Idempotently initialization, syncing with the backend.
     pub async fn initialize(
         watcher: Arc<InitializationWatcher>,
-        api: &Proton,
+        api: &Session,
         stash: &Stash,
     ) -> Result<(), InitializationError<MailContextError>> {
         InitializedComponent::initialize(
@@ -83,7 +84,7 @@ impl IncomingDefaultLocation {
 
     /// Downloads all `IncomingDefault`s
     #[tracing::instrument(skip_all)]
-    pub async fn sync(api: &Proton) -> ApiServiceResult<Vec<IncomingDefault>> {
+    pub async fn sync(api: &Session) -> ApiServiceResult<Vec<IncomingDefault>> {
         let t0 = Instant::now();
         let initial = api.get_incoming_defaults(0).await?;
         debug!("Requested initial batch in {:?}", t0.elapsed());

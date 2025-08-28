@@ -8,7 +8,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::consts::General;
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -40,7 +40,7 @@ impl Action for Read {
 }
 
 pub struct ReadHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for ReadHandler {

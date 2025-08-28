@@ -518,10 +518,10 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
                 Token::String(value) => {
                     // This string could be anything, we can't make any assumptions, but
                     // if it happens to be an uri, we can at least check it.
-                    if let Ok(uri) = url::Url::parse(value) {
-                        if !is_valid_url_type(uri) {
-                            *value = String::new().into();
-                        }
+                    if let Ok(uri) = url::Url::parse(value)
+                        && !is_valid_url_type(uri)
+                    {
+                        *value = String::new().into();
                     }
                 }
                 Token::UnquotedUrl(url) => {

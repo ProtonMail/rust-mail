@@ -5,7 +5,8 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
-use proton_core_api::services::proton::{PrivateEmail, Proton};
+use proton_core_api::services::proton::PrivateEmail;
+use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
@@ -36,7 +37,7 @@ impl Action for Block {
 }
 
 pub struct BlockHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for BlockHandler {
