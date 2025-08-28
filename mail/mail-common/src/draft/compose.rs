@@ -12,6 +12,7 @@ use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::DateTime;
 use derive_more::Display;
 use indoc::indoc;
+use proton_canonical_email::CanonicalEmail;
 use proton_core_api::services::proton::AddressId;
 use proton_core_common::Platform;
 use proton_core_common::datatypes::{AddressStatus, UnixTimestamp};
@@ -46,6 +47,10 @@ pub(super) async fn patch_draft_with_reply_mode(
 ) {
     let is_sent_message = source_message.is_sent();
     let canonical_sender_email = proton_canonical_email::canonicalize_auto(&draft.sender);
+    let subject_prefix = match reply_mode {
+        ReplyMode::Sender | ReplyMode::All => REPLY_PREFIX,
+        ReplyMode::Forward => FORWARD_PREFIX,
+    };
 
     // Copy over the addresses based on reply mode
     match reply_mode {
@@ -61,60 +66,58 @@ pub(super) async fn patch_draft_with_reply_mode(
                     source_message_body.reply_to.clone(),
                 ));
             }
-            draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::All => {
-            if is_sent_message {
-                draft.to_list = RecipientList::from_message_recipients(
-                    contact_group_resolver,
-                    source_message.to_list.value.iter().cloned(),
+            let (to, cc) = if is_sent_message {
+                (
+                    source_message.to_list.value.to_vec(),
+                    source_message.cc_list.value.to_vec(),
                 )
-                .await;
             } else {
-                let reply_tos_iter =
-                    source_message_body
-                        .reply_tos
-                        .iter()
-                        .map(|v| MessageRecipient {
-                            address: v.address.clone(),
-                            is_proton: v.is_proton,
-                            name: v.name.clone(),
-                            group: MaybeEmptyString::from_option(None),
-                        });
-                let to_list_iter = source_message
-                    .to_list
-                    .value
-                    .iter()
-                    .filter(|v| {
-                        proton_canonical_email::canonicalize_auto(&v.address)
-                            != canonical_sender_email
-                    })
-                    .cloned();
-                draft.to_list = RecipientList::from_message_recipients(
-                    contact_group_resolver,
-                    reply_tos_iter.chain(to_list_iter),
+                reply_all_recipients_for_received(
+                    source_message,
+                    source_message_body,
+                    canonical_sender_email,
                 )
-                .await;
-            }
-            draft.cc_list = RecipientList::from_message_recipients(
-                contact_group_resolver,
-                source_message
-                    .cc_list
-                    .value
-                    .iter()
-                    .filter(|v| {
-                        proton_canonical_email::canonicalize_auto(&v.address)
-                            != canonical_sender_email
-                    })
-                    .cloned(),
-            )
-            .await;
-            draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
+            };
+            draft.to_list =
+                RecipientList::from_message_recipients(contact_group_resolver, to).await;
+            draft.cc_list =
+                RecipientList::from_message_recipients(contact_group_resolver, cc).await;
         }
-        ReplyMode::Forward => {
-            draft.subject = apply_prefix_to_subject(FORWARD_PREFIX, &source_message.subject);
-        }
+        ReplyMode::Forward => {}
     }
+
+    draft.subject = apply_prefix_to_subject(subject_prefix, &source_message.subject);
+}
+
+fn reply_all_recipients_for_received(
+    source_message: &Message,
+    source_message_body: &MessageBodyMetadata,
+    canonical_sender_email: CanonicalEmail,
+) -> (Vec<MessageRecipient>, Vec<MessageRecipient>) {
+    let to = source_message_body
+        .reply_tos
+        .iter()
+        .map(|recipient| MessageRecipient {
+            address: recipient.address.clone(),
+            is_proton: recipient.is_proton,
+            name: recipient.name.clone(),
+            group: MaybeEmptyString::from_option(None),
+        })
+        .collect();
+    let cc = source_message
+        .to_list
+        .value
+        .iter()
+        .chain(&source_message.cc_list.value)
+        .filter(|recipient| {
+            proton_canonical_email::canonicalize_auto(&recipient.address) != canonical_sender_email
+        })
+        .cloned()
+        .collect();
+
+    (to, cc)
 }
 
 /// Build signature from mail settings.

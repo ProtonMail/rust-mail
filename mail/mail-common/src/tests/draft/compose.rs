@@ -9,6 +9,7 @@ use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, Message
 use crate::datatypes::{LocalAttachmentId, ParsedHeaders};
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::MetadataId;
+use crate::draft::Recipient;
 use crate::draft::draft_v1::Draft;
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::models::{Attachment, MessageBodyMetadata, MessageReplyTo};
@@ -78,6 +79,95 @@ async fn reply_all_draft_message_creation() {
     );
     assert!(draft.bcc_list.is_empty());
     assert_eq!(attachments, vec![inline_attachment()])
+}
+
+#[tokio::test]
+async fn reply_all_sent_by_me_takes_original_recipients() {
+    let source_body_metadata = existing_message_body_metadata();
+    let mut message = existing_message();
+    message.label_ids.push(LabelId::sent());
+    message.flags |= MessageFlags::SENT;
+
+    let (draft, _, _) = create_reply_with_mime_and_body_and_message(
+        ReplyMode::All,
+        MimeType::TextPlain,
+        "VIP invitation".to_owned(),
+        source_body_metadata,
+        MessageMimeType::TextPlain,
+        message.clone(),
+    )
+    .await;
+
+    assert_eq!(
+        draft.subject,
+        apply_prefix_to_subject(REPLY_PREFIX, &message.subject)
+    );
+
+    assert_eq!(
+        draft.to_list.as_strings(),
+        vec![
+            "to_contact_1@pm.me",
+            "to_contact_2@pm.me",
+            "address_email@proton.me",
+            "to_and_cc_contact_4@pm.me",
+        ],
+        "to_list should contain all to-recipients"
+    );
+    assert_eq!(
+        draft.cc_list.as_strings(),
+        vec![
+            "cc_contact_3@pm.me",
+            "address_email@proton.me",
+            "to_and_cc_contact_4@pm.me",
+        ],
+        "cc_list should contain cc-recipients without sender"
+    );
+    assert!(
+        draft.bcc_list.is_empty(),
+        "bcc_list should be empty for reply-all"
+    );
+}
+
+#[tokio::test]
+async fn reply_all_not_sent_by_me_updates_to_and_cc_recipients() {
+    let source_body_metadata = existing_message_body_metadata();
+    let message = existing_message();
+
+    let reply_to = source_body_metadata.reply_tos.first().unwrap().clone();
+    let (draft, _mime, _body) = create_reply_with_mime_and_body_and_message(
+        ReplyMode::All,
+        MimeType::TextPlain,
+        "VIP invitation to release party".to_owned(),
+        source_body_metadata,
+        MessageMimeType::TextPlain,
+        message.clone(),
+    )
+    .await;
+
+    assert_eq!(
+        draft.subject,
+        apply_prefix_to_subject(REPLY_PREFIX, &message.subject)
+    );
+
+    assert_eq!(
+        draft.to_list.as_strings(),
+        vec![reply_to.address.into_clear_text_string()],
+        "to_list should contain only sender"
+    );
+    assert_eq!(
+        draft.cc_list.as_strings(),
+        vec![
+            "to_contact_1@pm.me",
+            "to_contact_2@pm.me",
+            "to_and_cc_contact_4@pm.me",
+            "cc_contact_3@pm.me"
+        ],
+        "cc_list should contain to-recipients and cc-recipients without sender and duplicates"
+    );
+    assert!(
+        draft.bcc_list.is_empty(),
+        "bcc_list should be empty for reply-all"
+    );
 }
 
 #[tokio::test]
@@ -739,6 +829,18 @@ fn custom_settings() -> CustomSettings {
 }
 
 fn existing_message() -> Message {
+    let sender_recipient = MessageRecipient {
+        address: TEST_EMAIL.into(),
+        is_proton: true,
+        name: "".into(),
+        group: MaybeEmptyString(None),
+    };
+    let duplicated_recipient = MessageRecipient {
+        address: "to_and_cc_contact_4@pm.me".into(),
+        is_proton: false,
+        name: "TO AND CC Contact #4".into(),
+        group: MaybeEmptyString(None),
+    };
     Message {
         local_id: Some(local_msg_id()),
         remote_id: None,
@@ -748,12 +850,16 @@ fn existing_message() -> Message {
         remote_address_id: remote_address_id(),
         attachments_metadata: vec![],
         cc_list: MessageRecipients {
-            value: vec![MessageRecipient {
-                address: "cc_contact_1@pm.me".into(),
-                is_proton: false,
-                name: "CC Contact".into(),
-                group: MaybeEmptyString(None),
-            }],
+            value: vec![
+                MessageRecipient {
+                    address: "cc_contact_3@pm.me".into(),
+                    is_proton: false,
+                    name: "CC Contact #3".into(),
+                    group: MaybeEmptyString(None),
+                },
+                sender_recipient.clone(),
+                duplicated_recipient.clone(),
+            ],
         },
         bcc_list: Default::default(),
         deleted: false,
@@ -779,13 +885,38 @@ fn existing_message() -> Message {
         snooze_time: 0.into(),
         subject: "".to_string(),
         time: 0.into(),
-        to_list: Default::default(),
+        to_list: MessageRecipients {
+            value: vec![
+                MessageRecipient {
+                    address: "to_contact_1@pm.me".into(),
+                    is_proton: true,
+                    name: "TO Contact #1".into(),
+                    group: MaybeEmptyString(None),
+                },
+                MessageRecipient {
+                    address: "to_contact_2@pm.me".into(),
+                    is_proton: true,
+                    name: "TO Contact #2".into(),
+                    group: MaybeEmptyString(None),
+                },
+                sender_recipient.clone(),
+                duplicated_recipient.clone(),
+            ],
+        },
         unread: false,
         custom_labels: vec![],
     }
 }
 
 fn existing_message_body_metadata() -> MessageBodyMetadata {
+    let reply_to = MessageReplyTo {
+        address: "sender@void.org".into(),
+        bimi_selector: None,
+        display_sender_image: false,
+        is_proton: false,
+        is_simple_login: false,
+        name: "Send InToVoid".into(),
+    };
     MessageBodyMetadata {
         local_message_id: Some(local_msg_id()),
         remote_message_id: None,
@@ -793,22 +924,8 @@ fn existing_message_body_metadata() -> MessageBodyMetadata {
         mime_type: Default::default(),
         parsed_headers: Default::default(),
         attachments: vec![inline_attachment(), normal_attachment()],
-        reply_to: MessageReplyTo {
-            address: "sender@void.org".into(),
-            bimi_selector: None,
-            display_sender_image: false,
-            is_proton: false,
-            is_simple_login: false,
-            name: "Send InToVoid".into(),
-        },
-        reply_tos: vec![MessageReplyTo {
-            address: "sender@void.org".into(),
-            bimi_selector: None,
-            display_sender_image: false,
-            is_proton: false,
-            is_simple_login: false,
-            name: "Send InToVoid".into(),
-        }],
+        reply_to: reply_to.clone(),
+        reply_tos: vec![reply_to.clone()],
     }
 }
 
@@ -1011,5 +1128,21 @@ fn normal_attachment() -> Attachment {
         mime_type: attachment::MimeType::from_str("application/pdf").unwrap(),
         filename: "doc.pdf".to_owned(),
         ..Default::default()
+    }
+}
+
+trait RecipientListTestExt {
+    fn as_strings(&self) -> Vec<String>;
+}
+
+impl RecipientListTestExt for RecipientList {
+    fn as_strings(&self) -> Vec<String> {
+        self.recipients()
+            .iter()
+            .map(|r| match r {
+                Recipient::Single(s) => s.email.clone().into_clear_text_string(),
+                Recipient::Group(g) => g.group_name.clone().into_inner(),
+            })
+            .collect()
     }
 }
