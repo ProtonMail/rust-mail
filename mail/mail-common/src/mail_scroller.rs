@@ -114,6 +114,7 @@ impl PartialEq for ScrollerSource {
 /// invalidated. It is set when the callback from the database is received and cleared
 /// when the data is re-fetched using `all_items()`.
 pub struct MailScroller {
+    id: Uuid,
     command: flume::Sender<ScrollerCommand>,
     ordered_command: flume::Sender<ScrollerOrderedCommand>,
     aborts: Vec<AbortHandle>,
@@ -121,7 +122,8 @@ pub struct MailScroller {
 
 impl Drop for MailScroller {
     fn drop(&mut self) {
-        tracing::trace!(
+        tracing::debug!(
+            ?self.id,
             "Dropping MailScroller, aborting {} tasks",
             self.aborts.len()
         );
@@ -200,7 +202,10 @@ impl MailScroller {
         source: T,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<T::Item>), MailContextError> {
+        let id = Uuid::new_v4();
         let ctx = Arc::downgrade(&ctx);
+
+        tracing::debug!(?id, "Creating MailScroller");
 
         let ScrollerWorkerHandle {
             command,
@@ -212,6 +217,7 @@ impl MailScroller {
 
         Ok((
             Self {
+                id,
                 command,
                 ordered_command,
                 aborts,
