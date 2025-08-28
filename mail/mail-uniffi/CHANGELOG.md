@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Network monitor service immediate timeout
+
+
+## [mail-uniffi-v0.142.2] - 2025-08-27
+
+### Fixes
+
 - [ET-4381] Support attachments with multiple content-dispositions
 
 
