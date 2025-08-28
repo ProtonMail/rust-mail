@@ -125,10 +125,10 @@ pub async fn build<S: Store>(
 
     let mut builder = (Proton::builder_async(app, store).await)
         .layer_front(Tagger::default())
+        .layer_front(connection_monitor.clone())
         .layer_back(SetCryptoClockLayer)
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)
-        .layer_back(connection_monitor.clone())
         .layer_back(ChallengeNotifierLayer::new(notifier))
         .layer_back(CookieJarLayer::new(CookieJar::new()))
         .layer_back(DisplayLogger::debug())
