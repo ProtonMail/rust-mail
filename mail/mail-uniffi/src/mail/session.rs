@@ -947,18 +947,20 @@ impl MailSession {
     ) -> Result<Arc<MailUserSession>, UserSessionError> {
         self.params.origin.guard(Origin::App)?;
 
-        let core_flow = ffi_flow.inner_flow();
-        let mut guard = core_flow.lock().await;
-        async_runtime()
-            .block_on(async {
-                self.mail_ctx
-                    .user_context_from_login_flow(&mut guard)
-                    .map_ok(|ctx| self.user_ctx.insert(ctx))
-                    .map_ok(MailUserSession::new)
-                    .map_err(RealProtonMailError::from)
-                    .await
-            })
-            .map_err(UserSessionError::from)
+        let ctx = self.mail_ctx.clone();
+        let user_ctxs = self.user_ctx.clone();
+
+        uniffi_async(async move {
+            let core_flow = ffi_flow.inner_flow();
+            let mut guard = core_flow.lock().await;
+            ctx.user_context_from_login_flow(&mut guard)
+                .map_ok(|ctx| user_ctxs.insert(ctx))
+                .map_ok(MailUserSession::new)
+                .map_err(RealProtonMailError::from)
+                .await
+        })
+        .await
+        .map_err(UserSessionError::from)
     }
 
     /// Converts this session into a [`MailUserSession`] for the primary user.
