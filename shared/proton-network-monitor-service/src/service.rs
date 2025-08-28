@@ -341,15 +341,17 @@ impl NetworkMonitorBackgroundTask {
 
     async fn handle_immediate_request(&mut self, sender: oneshot::Sender<RequestNetworkStatus>) {
         let value = if self.last_immediate_check.elapsed() > self.config.immediate.retry_interval {
-            tracing::debug!("Performing immediate check");
+            tracing::debug!("Performing immediate check...");
             self.last_immediate_check = Instant::now();
-            perform_tester_check(
+            let status = perform_tester_check(
                 self.tester.as_ref(),
                 self.config.immediate.request_timeout,
                 self.config.immediate.retry_policy,
                 &self.request_watcher,
             )
-            .await
+            .await;
+            tracing::debug!("Performing immediate check... -> {status:?}");
+            status
         } else {
             tracing::debug!(
                 "Received immediate check request, but still too soon. Using cached value"

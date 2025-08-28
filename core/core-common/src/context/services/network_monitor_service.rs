@@ -87,6 +87,7 @@ impl OnlineTester for CoreOnlineTester {
             .0
             .get_tests_ping(Some(timeout), Some(RetryPolicy::default().never()))
             .await
+            .inspect_err(|e| tracing::error!("Online check failed: {e:?}"))
         {
             Err(e) if e.is_server_unreachable() => RequestNetworkStatus::ServerUnreachable,
             Err(e) if e.is_network_failure() => RequestNetworkStatus::Offline,
