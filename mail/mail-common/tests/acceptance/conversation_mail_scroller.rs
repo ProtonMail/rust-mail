@@ -37,7 +37,7 @@ use std::{collections::HashMap, time::Duration};
 use test_case::test_case;
 use velcro::hash_map;
 use wiremock::{
-    Mock, ResponseTemplate, Times,
+    Mock, Request, ResponseTemplate, Times,
     matchers::{method, path, query_param_contains},
 };
 
@@ -865,7 +865,8 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     assert!(!test_scroller.has_more().await.unwrap());
 }
 
-#[test_case(50, 3; "Test1: Conversation added at the end in offline mode it will be added to the end of the list, 3 (3 + 0) items")]
+#[test_case(50, 3; "Test1: Conversation added at the end in offline mode it will be added to the end of the list, 3 (3 + 0) items"
+)]
 #[tokio::test]
 async fn test_conversation_mail_scroller_database_refresh_will_not_triggers_fetch_for_small_totals(
     order: usize,
@@ -926,7 +927,8 @@ async fn test_conversation_mail_scroller_database_refresh_will_not_triggers_fetc
     assert_eq!(test_scroller.items().len(), expected + 1);
 }
 
-#[test_case(200, 4; "Test2: Conversation added at the beggining, 4 (3 + 1) items, as the item is at the beggining")]
+#[test_case(200, 4; "Test2: Conversation added at the beggining, 4 (3 + 1) items, as the item is at the beggining"
+)]
 #[tokio::test]
 async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_small_totals(
     order: usize,
@@ -989,7 +991,8 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_sma
 }
 
 #[test_case(50, 5; "Test1: Conversation added at the end, 5 (5 + 0) items, as the page size is 5")]
-#[test_case(200, 6; "Test2: Conversation added at the beggining, 6 (5 + 1) items, as the item is at the beggining")]
+#[test_case(200, 6; "Test2: Conversation added at the beggining, 6 (5 + 1) items, as the item is at the beggining"
+)]
 #[tokio::test]
 async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_large_totals(
     order: usize,
@@ -1433,13 +1436,17 @@ pub async fn mock_get_conversations_page(
 pub async fn mock_not_responsive_api(ctx: &MailTestContext) {
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
-        .respond_with(ResponseTemplate::new(500))
+        .respond_with_err(|_: &Request| {
+            std::io::Error::new(std::io::ErrorKind::ConnectionReset, "connection reset")
+        })
         .named(function_name!())
         .mount(ctx.mock_server())
         .await;
     Mock::given(method("GET"))
         .and(path("/api/core/v4/tests/ping"))
-        .respond_with(ResponseTemplate::new(500))
+        .respond_with_err(|_: &Request| {
+            std::io::Error::new(std::io::ErrorKind::ConnectionReset, "connection reset")
+        })
         .mount(ctx.mock_server())
         .await;
 }
