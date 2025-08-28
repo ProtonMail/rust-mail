@@ -210,7 +210,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     setup_api_sync_previous_page(&ctx, "myconv_9", 1).await;
-    let params = setup_api_conversation_pages(&ctx, page_size, 0, 1..=2).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 0, 1..=3).await;
     ctx.setup_user(params.clone()).await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -311,21 +311,21 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     // First call should not have any items initially
     assert_eq!(test_scroller.items().len(), 0);
 
-    test_scroller.fetch_more().unwrap();
-    let result = test_scroller.wait_for_update().await;
+    let result = test_scroller.fetch_more_and_wait().await;
     assert!(result.is_err());
     let actual = result.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: Network error: No connection".to_string()
+        "API Error: Forbidden: 403 Forbidden. None".to_string()
     );
 
     assert_eq!(test_scroller.items().len(), 0);
     // It has more as the total is 1
     assert!(test_scroller.has_more().await.unwrap());
 
-    test_scroller.fetch_more().unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap_err();
+    let result = test_scroller.fetch_more_and_wait().await;
+    assert!(result.is_err());
+    let actual = result.unwrap_err();
     assert_eq!(
         actual.to_string(),
         "API Error: Network error: No connection".to_string()
@@ -571,8 +571,8 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ]
     );
 
-    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
-    // let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(actual.len(), 5);
 
     assert_scroller_content!(

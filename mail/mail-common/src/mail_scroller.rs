@@ -355,6 +355,7 @@ pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
     execute_on_online: Option<AbortHandle>,
     items: Vec<T::Item>,
     page_size: usize,
+    previous_update: Option<ScrollerSource>,
     update: flume::Sender<ScrollerUpdate<T::Item>>,
     ordered_command_recv: flume::Receiver<ScrollerOrderedCommand>,
     ordered_command_send: flume::Sender<ScrollerOrderedCommand>,
@@ -397,6 +398,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             task,
             execute_on_online: None,
             items: vec![],
+            previous_update: None,
             update: update_sender,
             ordered_command_recv: ordered_command_receiver,
             ordered_command_send: ordered_command_sender.clone(),
@@ -627,7 +629,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         &mut self,
         call_src: ScrollerSource,
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
-        let mut items = self.sync_next().await?;
+        let items = self.sync_next().await?;
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let (seen, synced, total, has_more_in_source) = {
             let source = self.source.read().await;
@@ -637,8 +639,6 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             let has_more = source.has_more(&ctx).await?;
             (seen, synced, total, has_more)
         };
-        let page_size = self.page_size as u64;
-        let is_small_label = total > 0 && total < page_size;
         let has_more_in_label = seen < total;
 
         tracing::info!(
@@ -669,11 +669,15 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 // and task will be spawned only when we are online,
                 // lets wait for another call.
                 return Err(MailContextError::no_connection());
-            } else if is_small_label {
-                // If we are on a small label, we can wait for the task
-                // to complete and get requested data.
-                // For other cases we would jump double pages.
-                items = self.sync_next().await?;
+            } else if self.previous_update.is_some() {
+                // To avoid infinite loop we will not automatically request fetch more
+                // if we requested it once with no effect.
+                self.previous_update = None;
+                tracing::debug!("No items to return, requesting additional fetch more");
+                self.ordered_command_send
+                    .send_async(ScrollerOrderedCommand::FetchMore(call_src))
+                    .await
+                    .map_err(|e| anyhow!("Failed to schedule fetch more command: {e:?}"))?;
             }
         }
 
@@ -685,6 +689,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             tracing::debug!("No new items fetched");
             Ok(ScrollerUpdate::None(call_src))
         } else {
+            self.previous_update = Some(call_src);
             tracing::debug!("New items fetched: {}", items.len());
             self.items.extend(items.clone());
             Ok(ScrollerUpdate::Append {
@@ -827,9 +832,10 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
     async fn sync_next(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let result = self.wait_for_request().await;
 
-        if let Err(e) = self.wait_for_request().await {
-            tracing::error!("Error occurred while waiting for previous request: {e:?}");
+        if let Err(e) = &result {
+            tracing::error!("Error occurred while waiting for previous request: {e}");
         }
 
         let (items, task) = {
@@ -842,6 +848,14 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
         tracing::debug!("Fetched next page, items number: {}", items.len());
         self.task = task;
+
+        if items.is_empty() && self.task.is_none() {
+            let status = ctx.network_monitor_service().status();
+            tracing::warn!(
+                "No items and no task to return - status: {status:?}, previous fetch result: {result:?}"
+            );
+            result?;
+        }
 
         Ok(items)
     }
