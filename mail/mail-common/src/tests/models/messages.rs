@@ -193,7 +193,7 @@ mod available_label_as_actions {
 
                     let ids = vec![message.id()];
 
-                    Message::apply_label(label_id, ids, tx).await.unwrap();
+                    Message::apply_label_async(label_id, ids, tx).await.unwrap();
                 }
             }
             Ok(())
@@ -578,7 +578,7 @@ mod available_move_to_actions {
 
                     let ids = vec![message.id()];
 
-                    Message::apply_label(label_id, ids, tx).await.unwrap();
+                    Message::apply_label_async(label_id, ids, tx).await.unwrap();
                 }
             }
             Ok(())
@@ -1919,7 +1919,7 @@ async fn messages_mark_read() {
     };
 
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::mark_read([local_msg_id1], tx)
+        Message::mark_read_async([local_msg_id1], tx)
             .await
             .expect("failed to mark as read");
         Ok(())
@@ -1947,7 +1947,7 @@ async fn messages_mark_read() {
 
     check_counters(stash_fun(), 1, 0).await;
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::mark_read(std::iter::once(local_msg_id3), tx)
+        Message::mark_read_async(std::iter::once(local_msg_id3), tx)
             .await
             .expect("failed to mark as read");
         Ok(())
@@ -1956,7 +1956,7 @@ async fn messages_mark_read() {
     .unwrap();
     check_counters(stash_fun(), 2, 0).await;
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::mark_read(std::iter::once(local_msg_id4), tx)
+        Message::mark_read_async(std::iter::once(local_msg_id4), tx)
             .await
             .expect("failed to mark as read");
         Ok(())
@@ -2015,7 +2015,7 @@ async fn messages_mark_read_with_separate_conversations() {
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
 
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::mark_read(
+        Message::mark_read_async(
             [local_msg_id1, local_msg_id2, local_msg_id3, local_msg_id4],
             tx,
         )
@@ -2113,7 +2113,7 @@ async fn messages_mark_unread() {
 
     conn.tx::<_, _, StashError>(async |tx| {
         // mark messages read (also servers as bulk test).
-        Message::mark_read([local_msg_id1, local_msg_id3, local_msg_id4], tx)
+        Message::mark_read_async([local_msg_id1, local_msg_id3, local_msg_id4], tx)
             .await
             .expect("failed to mark as read");
         Ok(())
@@ -2180,7 +2180,7 @@ async fn messages_mark_unread() {
 
     check_counters(stash.clone(), 3, 1).await;
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::mark_unread(std::iter::once(local_msg_id1), tx)
+        Message::mark_unread_async(std::iter::once(local_msg_id1), tx)
             .await
             .expect("failed to mark as read");
         Ok(())
@@ -2206,7 +2206,7 @@ async fn messages_mark_unread() {
 
     check_counters(stash.clone(), 2, 0).await;
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::mark_unread(std::iter::once(local_msg_id3), tx)
+        Message::mark_unread_async(std::iter::once(local_msg_id3), tx)
             .await
             .expect("failed to mark as read");
         Ok(())
@@ -2215,7 +2215,7 @@ async fn messages_mark_unread() {
     .unwrap();
     check_counters(stash.clone(), 1, 0).await;
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::mark_unread(std::iter::once(local_msg_id4), tx)
+        Message::mark_unread_async(std::iter::once(local_msg_id4), tx)
             .await
             .expect("failed to mark as read");
         Ok(())
@@ -2265,7 +2265,7 @@ async fn label_messages() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
 
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::apply_label(local_label_id1, std::iter::once(local_msg_id1), tx)
+        Message::apply_label_async(local_label_id1, std::iter::once(local_msg_id1), tx)
             .await
             .expect("failed to label");
         Ok(())
@@ -2366,7 +2366,7 @@ async fn label_messages() {
 
     // Label remaining messages.
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::apply_label(local_label_id1, [local_msg_id2, local_msg_id3], tx)
+        Message::apply_label_async(local_label_id1, [local_msg_id2, local_msg_id3], tx)
             .await
             .unwrap();
         Ok(())
@@ -2378,7 +2378,7 @@ async fn label_messages() {
 
     // Apply again, should be noop.
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::apply_label(
+        Message::apply_label_async(
             local_label_id1,
             [local_msg_id1, local_msg_id2, local_msg_id3],
             tx,
@@ -2422,12 +2422,14 @@ async fn unlabel_messages() {
 
     tether
         .tx::<_, _, StashError>(async |tx| {
-            Message::apply_label(label, [msg1, msg2, msg3], tx)
+            Message::apply_label_async(label, [msg1, msg2, msg3], tx)
                 .await
                 .expect("failed to label");
 
             // unlabel first message.
-            Message::remove_label(label, [msg1], tx).await.unwrap();
+            Message::remove_label_async(label, [msg1], tx)
+                .await
+                .unwrap();
             Ok(())
         })
         .await
@@ -2518,7 +2520,7 @@ async fn unlabel_messages() {
     // remove labels
     tether
         .tx::<_, _, StashError>(async |tx| {
-            Message::remove_label(label, [msg2, msg3], tx)
+            Message::remove_label_async(label, [msg2, msg3], tx)
                 .await
                 .unwrap();
             Ok(())
@@ -2531,7 +2533,7 @@ async fn unlabel_messages() {
     // Apply again, should be noop.
     tether
         .tx::<_, _, StashError>(async |tx| {
-            Message::remove_label(label, [msg1, msg2, msg3], tx)
+            Message::remove_label_async(label, [msg1, msg2, msg3], tx)
                 .await
                 .unwrap();
             Ok(())
@@ -2804,7 +2806,7 @@ async fn watch_messages_in_label() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
 
     conn.tx::<_, _, StashError>(async |tx| {
-        Message::apply_label(local_label_id1, std::iter::once(local_msg_id1), tx)
+        Message::apply_label_async(local_label_id1, std::iter::once(local_msg_id1), tx)
             .await
             .expect("failed to label");
         Ok(())

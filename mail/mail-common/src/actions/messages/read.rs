@@ -55,7 +55,8 @@ impl Handler for ReadHandler {
         // API call return an error 2501(Message does not exist) for message already
         // read, so we only pass to apply_remote the things that were unread.
 
-        action.0.target_ids = Message::mark_read(action.0.target_ids.iter().copied(), tx).await?;
+        action.0.target_ids =
+            Message::mark_read_async(action.0.target_ids.iter().copied(), tx).await?;
 
         if action.0.target_ids.is_empty() {
             tracing::warn!("mark read doesn't do anything.");
@@ -70,7 +71,7 @@ impl Handler for ReadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::mark_unread(action.0.target_ids.clone(), tx).await?;
+        Message::mark_unread_async(action.0.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Message, tx)
@@ -107,7 +108,7 @@ impl Handler for ReadHandler {
                 .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
                     let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-                    Message::mark_unread(local_ids, tx)
+                    Message::mark_unread_async(local_ids, tx)
                         .await
                         .inspect_err(|e| error!("Failed to rollback read on messages: {e:?}"))?;
                     Ok(())

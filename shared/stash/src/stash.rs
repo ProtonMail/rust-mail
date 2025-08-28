@@ -200,6 +200,9 @@ pub enum StashError {
     #[error("No rows updated upon saving record")]
     NoRowsUpdated,
 
+    #[error("The query did not affect any row.")]
+    QueryReturnedNoRows,
+
     /// Critical internal error that cannot be recovered from.
     #[error("Critical internal stash error: {0}")]
     Critical(#[from] anyhow::Error),
@@ -210,6 +213,7 @@ pub enum StashError {
 }
 
 pub type StashResult<T> = Result<T, StashError>;
+pub type RusqliteResult<T> = Result<T, SqliteError>;
 
 impl StashError {
     pub fn interrupted() -> Self {

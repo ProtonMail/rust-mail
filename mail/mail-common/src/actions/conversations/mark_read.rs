@@ -1,4 +1,7 @@
-use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses_by_codes};
+use crate::actions::{
+    ConversationOrMessage, GenericLabelRelatedActionData, MailActionError,
+    filter_responses_by_codes,
+};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
@@ -73,7 +76,9 @@ impl Handler for MarkReadHandler {
 
         action.data.resolve_ids(tx).await?;
 
-        Conversation::mark_read(action.data.data.target_ids.clone(), tx).await?;
+        let ids = action.data.data.target_ids.clone();
+
+        Conversation::mark_read_async(ids, tx).await?;
         Ok(())
     }
 
@@ -87,7 +92,7 @@ impl Handler for MarkReadHandler {
             Conversation::set_display_snooze_reminder(&action.snooze_remind_ids, tx).await?;
         }
 
-        Conversation::mark_unread(
+        Conversation::mark_unread_async(
             action.data.label_id,
             action.data.data.target_ids.clone(),
             tx,
@@ -126,7 +131,7 @@ impl Handler for MarkReadHandler {
                     let local_ids =
                         Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-                    Conversation::mark_unread(action.data.label_id, local_ids, tx)
+                    Conversation::mark_unread_async(action.data.label_id, local_ids, tx)
                         .await
                         .map_err(|e| {
                             error!("Failed to rollback failed conversations: {e:?}");

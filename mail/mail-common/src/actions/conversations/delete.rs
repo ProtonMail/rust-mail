@@ -122,7 +122,7 @@ impl Handler for DeleteHandler {
                         let local_ids =
                             Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-                        Conversation::remove_label(action.0.label_id, local_ids, tx)
+                        Conversation::remove_label_async(action.0.label_id, local_ids, tx)
                             .await
                             .map_err(|e| {
                                 error!("Failed to rollback failed conversations: {e:?}");

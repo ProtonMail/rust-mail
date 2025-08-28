@@ -51,6 +51,7 @@ pub mod exports {
     };
     pub use rusqlite::{Connection, Error as SqliteError, Row, Transaction};
 }
+pub use rusqlite;
 
 /// Use of crates that are used in integration tests, to prevent lint warnings.
 #[cfg(test)]
