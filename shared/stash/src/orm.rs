@@ -14,7 +14,7 @@
 
 use crate::params;
 use crate::stash::{Bond, StashError, StashResult, Tether};
-use crate::utils::IterMapToSql;
+use crate::utils::{ConnectionExt, IterMapToSql};
 use anyhow::{Context, anyhow};
 use core::any::Any;
 use core::fmt::{Debug, Display};
@@ -383,6 +383,42 @@ where
         }
     }
 
+    fn find_sync(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Vec<Self>> {
+        let query = format!(
+            "SELECT * FROM {table} {query_logic}",
+            query_logic = query.as_ref(),
+            table = Self::table_name(),
+        );
+        Self::load_sync(query, params, conn)
+    }
+
+    fn find_first_sync(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Option<Self>> {
+        let query = format!(
+            "SELECT * FROM {table} {query_logic} LIMIT 1",
+            query_logic = query.as_ref(),
+            table = Self::table_name(),
+        );
+        let mut stmt = conn
+            .prepare(query.as_ref())
+            .context("Error preparing the query for load")?;
+        let mut res = stmt
+            .query_and_then(params, Self::from_row)?
+            .next()
+            .transpose()?;
+        if let Some(record) = &mut res {
+            record.after_load_sync(conn)?;
+        }
+        Ok(res)
+    }
+
     fn load_sync(
         query: impl AsRef<str>,
         params: impl Params,
@@ -391,26 +427,27 @@ where
         let mut stmt = conn
             .prepare(query.as_ref())
             .context("Error preparing the query for load")?;
-        let rows = stmt.query(params).map_err(StashError::ExecutionError)?;
-        let mut records = from_rows::<Self>(rows)?;
+        let records = stmt
+            .query_and_then(params, |row| {
+                let mut rec = Self::from_row(row)?;
+                rec.after_load_sync(conn)?;
+                Ok::<_, StashError>(rec)
+            })?
+            .collect::<Result<_, _>>()?;
 
-        for record in &mut records {
-            record.after_load_sync(conn)?;
-        }
         Ok(records)
     }
 
     fn load_by_id_sync(id: Self::IdType, conn: &Connection) -> StashResult<Option<Self>> {
-        let query = formatdoc! {"
-            SELECT * FROM {table}
-            WHERE {id} = ?
-            LIMIT 1
-            ",
-            table = Self::table_name(),
-            id = Self::id_field_name(),
-        };
+        let query = format!("WHERE {id} = ?", id = Self::id_field_name());
 
-        Ok(Self::load_sync(query, (id,), conn)?.into_iter().next())
+        Self::find_first_sync(query, (id,), conn)
+    }
+
+    fn load_by_id_exact_sync(id: Self::IdType, conn: &Connection) -> StashResult<Self> {
+        Self::load_by_id_sync(id, conn)
+            .transpose()
+            .ok_or_else(|| StashError::QueryReturnedNoRows)?
     }
 
     /// Saves a record to the database.
@@ -608,74 +645,6 @@ where
         self.insert_sync(tx)
     }
 
-    //     match self.id_value() {
-    //         // ID is set: update
-    //         Ok(id) => {
-    //             let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
-    //             let query = formatdoc!(
-    //                 "UPDATE {table}
-    //                 SET {fields}
-    //                 WHERE {id} = ?",
-    //                 table = Self::table_name(),
-    //                 id = Self::id_field_name(),
-    //             );
-    //
-    //             let values = values
-    //                 .iter()
-    //                 .map(|x| x as &dyn ToSql)
-    //                 .chain(std::iter::once(&id as &dyn ToSql));
-    //             let values = params_from_iter(values);
-    //
-    //             let affected: usize = tx
-    //                 .execute(&query, values)
-    //                 .map_err(StashError::ExecutionError)?;
-    //
-    //             if affected == 0 {
-    //                 return Err(StashError::NoRowsUpdated);
-    //             }
-    //         }
-    //         // ID is not set: insert
-    //         Err(_) => {
-    //             if Self::id_is_autoincrementing() && self.id_value().is_ok() {
-    //                 // If the ID field is configured as auto-incrementing and is set, but the
-    //                 // row ID is not set, then the state is invalid, because it should have been
-    //                 // loaded from the database.
-    //                 return Err(StashError::InvalidIdState);
-    //             }
-    //             if Self::id_is_optional()
-    //                 && !Self::id_is_autoincrementing()
-    //                 && self.id_value().is_err()
-    //             {
-    //                 // If the ID field is configured as optional but NOT auto-incrementing, and
-    //                 // is not set, then the state is invalid, because it is under manual control
-    //                 // and needs to be set before saving.
-    //                 return Err(StashError::IdNotSet);
-    //             }
-    //             let placeholders = crate::utils::placeholders(&fields);
-    //             let query = formatdoc! {"
-    //                 INSERT INTO {table} ({fields})
-    //                 VALUES ({placeholders})
-    //                 RETURNING {id} AS value
-    //                 ",
-    //                 table = Self::table_name(),
-    //                 fields = fields.join(", "),
-    //                 id = Self::id_field_name(),
-    //             };
-    //
-    //             let values = params_from_iter(values);
-    //
-    //             let id: Self::IdType = tx
-    //                 .query_row_and_then(&query, values, |row| row.get(0))
-    //                 .map_err(StashError::ExecutionError)?;
-    //
-    //             self.set_id_value(id);
-    //         }
-    //     };
-    //
-    //     self.after_save_sync(tx)?;
-    //     Ok(())
-    // }
-
     /// Gets the name of the table for the record type.
     fn table_name() -> &'static str;
 
@@ -684,40 +653,29 @@ where
     }
 
     /// Counts models in database.
-    ///
-    /// # Parameters
-    ///
-    /// * `query_logic` - The query logic to use for finding the records. This
-    ///   should be a string that represents the conditions,
-    ///   ordering, offset, and limit for the query, as may be
-    ///   required. It can be empty. Note that each part of the
-    ///   logic is optional — so if conditions are passed, for
-    ///   instance, the `WHERE` keyword needs to be included.
-    ///
-    /// # Errors
-    ///
-    /// When querying the database fails.
-    ///
     fn count<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         tether: &Tether,
     ) -> impl Future<Output = Result<u64, StashError>> + Send
     where
-        Q: Into<String> + Send,
+        Q: Into<String>,
     {
-        async move {
-            tether
-                .query_value::<_, u64>(
-                    formatdoc!(
-                        "SELECT COUNT(*) AS value FROM {} {}",
-                        Self::table_name(),
-                        query_logic.into(),
-                    ),
-                    params,
-                )
-                .await
-        }
+        let query_logic = query_logic.into();
+        tether.sync_query(move |tx| Self::count_sync(&query_logic, params_from_iter(params), tx))
+    }
+
+    /// Counts models in database.
+    fn count_sync(query_logic: &str, params: impl Params, conn: &Connection) -> StashResult<u64> {
+        conn.query_row_col::<u64>(
+            formatdoc!(
+                "SELECT COUNT(*) FROM {} {}",
+                Self::table_name(),
+                query_logic,
+            ),
+            params,
+        )
+        .map_err(Into::into)
     }
 
     /// Gets the next id for the record type for manual id management.

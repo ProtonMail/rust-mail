@@ -18,6 +18,7 @@ use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use std::sync::Arc;
+use std::time::Instant;
 use throbber_widgets_tui::ThrobberState;
 
 use super::LabelAs;
@@ -402,8 +403,12 @@ fn mark_conversation_read(
 ) -> Command<Messages> {
     let local_label_id = mailbox.label_id();
     Command::task(async move {
+        let t0 = Instant::now();
         match Conversation::action_mark_read(ctx.action_queue(), local_label_id, ids).await {
-            Ok(()) => Command::None,
+            Ok(()) => {
+                tracing::info!("action mark_read took {:?}", t0.elapsed());
+                Command::None
+            }
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
                 tracing::error!("{e:?}");
@@ -420,8 +425,12 @@ fn mark_conversation_unread(
 ) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::task(async move {
+        let t0 = Instant::now();
         match Conversation::action_mark_unread(ctx.action_queue(), current_label_id, ids).await {
-            Ok(()) => Command::None,
+            Ok(()) => {
+                tracing::info!("action mark_read took {:?}", t0.elapsed());
+                Command::None
+            }
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
                 tracing::error!("{e:?}");

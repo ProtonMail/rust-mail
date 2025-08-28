@@ -9,6 +9,7 @@ use stash::{
 };
 
 use crate::{
+    actions::ConversationOrMessage,
     conv_id, conversation, label, lbl_id, message,
     models::{Conversation, ConversationCounters, Message, MessageCounters},
     msg_id,
@@ -40,7 +41,7 @@ pub async fn save_single_message(labels: &[Label], message: &mut Message, bond: 
     message.save(bond).await.unwrap();
     let local_message_id = message.id();
     for label_id in labels.iter().map(|l| l.id()) {
-        Message::apply_label(label_id, vec![local_message_id], bond)
+        Message::apply_label_async(label_id, vec![local_message_id], bond)
             .await
             .unwrap();
     }
@@ -98,7 +99,7 @@ pub async fn save_single_conversation(
     conversation.save(bond).await.unwrap();
     let local_conversation_id = conversation.id();
     for label_id in labels.iter().map(|l| l.id()) {
-        Conversation::apply_label(label_id, vec![local_conversation_id], bond)
+        Conversation::apply_label_async(label_id, vec![local_conversation_id], bond)
             .await
             .unwrap();
     }

@@ -11,7 +11,7 @@ use proton_core_api::session::Session;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
-use stash::stash::Bond;
+use stash::stash::{Bond, RunTransaction};
 use tracing::{error, info};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -54,7 +54,8 @@ impl Handler for UnreadHandler {
         // API call return an error 2501(Message does not exist) for message already
         // unread, so we only pass to apply_remote the things that were read.
 
-        action.0.target_ids = Message::mark_unread(action.0.target_ids.iter().copied(), tx).await?;
+        action.0.target_ids =
+            Message::mark_unread_async(action.0.target_ids.iter().copied(), tx).await?;
 
         if action.0.target_ids.is_empty() {
             tracing::warn!("mark unread doesn't do anything.");
@@ -70,7 +71,7 @@ impl Handler for UnreadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::mark_read(action.0.target_ids.iter().copied(), tx).await?;
+        Message::mark_read_async(action.0.target_ids.iter().copied(), tx).await?;
 
         action
             .0
@@ -107,11 +108,10 @@ impl Handler for UnreadHandler {
             error!("Unread messages failed for: {failed_ids:?} ");
 
             guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
-                    let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
+                .run_tx_sync(move |tx| {
+                    let local_ids = Message::remote_ids_counterpart_sync(&failed_ids, tx)?;
 
                     Message::mark_read(local_ids, tx)
-                        .await
                         .inspect_err(|e| error!("Failed to rollback unread on messages: {e:?}"))?;
 
                     Ok(())

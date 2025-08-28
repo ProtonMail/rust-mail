@@ -4,7 +4,6 @@ mod messages;
 
 mod message_body;
 mod message_mime_type;
-
 pub use self::message_body::*;
 pub use self::message_mime_type::*;
 use crate::actions::messages::Delete;
@@ -33,8 +32,8 @@ use proton_core_common::utils::MapVec as _;
 use proton_sqlite3::rusqlite::Transaction;
 use proton_sqlite3::rusqlite::params_from_iter;
 use sqlite_watcher::watcher::TableObserver;
-use stash::utils::placeholders_n;
-use stash::utils::{MapToSql, placeholders};
+use stash::rusqlite::OptionalExtension;
+use stash::utils::{ConnectionExt, MapToSql, placeholders, placeholders_n};
 
 use crate::MailContextResult;
 use crate::actions::{
@@ -1325,11 +1324,12 @@ impl Message {
         Ok(())
     }
 
-    fn mark_read_or_unread(
+    pub fn mark_read_or_unread(
         mark_read: bool,
         ids: Vec<LocalMessageId>,
-        bond: &Transaction<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
+        let t0 = std::time::Instant::now();
         struct IdPair {
             local_message_id: LocalMessageId,
             local_conversation_id: LocalConversationId,
@@ -1339,14 +1339,14 @@ impl Message {
 
         let mut updated: Vec<IdPair> = Vec::with_capacity(ids.len());
 
-        let msgs = Message::load_sync(
+        let msgs = Message::find_sync(
             format!(
                 "WHERE local_id IN ({placeholders}) AND unread = {unread}",
                 placeholders = placeholders(&ids),
                 unread = if mark_read { 1 } else { 0 }
             ),
             params_from_iter(ids),
-            bond,
+            tx,
         )?;
 
         // update unread flag
@@ -1361,7 +1361,7 @@ impl Message {
                 // Reset snooze state
                 msg.set_display_snooze_reminder(false);
             }
-            msg.save_sync(bond)?;
+            msg.save_sync(tx)?;
             updated.push(IdPair {
                 local_message_id: msg.id(),
                 local_conversation_id: msg.local_conversation_id.unwrap(),
@@ -1372,14 +1372,14 @@ impl Message {
         }
 
         for (conversation_id, count) in conversation_count_changed {
-            if let Some(mut conversation) = Conversation::load_by_id_sync(conversation_id, bond)? {
+            if let Some(mut conversation) = Conversation::load_by_id_sync(conversation_id, tx)? {
                 if mark_read {
                     conversation.display_snooze_reminder = false;
                     conversation.num_unread = conversation.num_unread.saturating_sub(count);
                 } else {
                     conversation.num_unread += count;
                 }
-                conversation.save_sync(bond)?;
+                conversation.save_sync(tx)?;
             }
         }
 
@@ -1392,14 +1392,14 @@ impl Message {
 
         // Messages Counters
         for id_pair in &updated {
-            let counters = MessageCounters::load_sync(
+            let counters = MessageCounters::find_sync(
                 indoc! {"
                     WHERE local_label_id IN (
                         SELECT local_label_id FROM message_labels
                         WHERE local_message_id=?
                     )"},
                 (id_pair.local_message_id,),
-                bond,
+                tx,
             )?;
             for mut counter in counters {
                 if mark_read {
@@ -1408,20 +1408,20 @@ impl Message {
                     counter.unread += 1;
                 }
 
-                counter.save_sync(bond)?
+                counter.save_sync(tx)?
             }
         }
 
         let mut label_ids: HashMap<LocalLabelId, u64> = HashMap::new();
         // Update conversation labels
         for id_pair in &updated {
-            let mut conversation_labels = ConversationLabel::load_sync(
+            let mut conversation_labels = ConversationLabel::find_sync(
                 indoc! {
                 "WHERE local_conversation_id=? AND local_label_id IN (
                     SELECT local_label_id FROM message_labels WHERE local_message_id=?
                 )"},
                 (id_pair.local_conversation_id, id_pair.local_message_id),
-                bond,
+                tx,
             )?;
             for conversation_label in &mut conversation_labels {
                 if mark_read {
@@ -1442,22 +1442,23 @@ impl Message {
                             .or_insert(0) += 1;
                     }
                 }
-                conversation_label.save_sync(bond)?
+                conversation_label.save_sync(tx)?
             }
         }
 
         for (label_id, count) in label_ids {
             // Update conversation label counts.
-            if let Some(mut counters) = ConversationCounters::load_by_id_sync(label_id, bond)? {
+            if let Some(mut counters) = ConversationCounters::load_by_id_sync(label_id, tx)? {
                 if mark_read {
                     counters.unread = counters.unread.saturating_sub(count);
                 } else {
                     counters.unread += count;
                 }
-                counters.save_sync(bond)?;
+                counters.save_sync(tx)?;
             }
         }
 
+        info!(%mark_read, "took {:?}", t0.elapsed());
         Ok(updated.into_iter().map(|x| x.local_message_id).collect())
     }
 
@@ -1542,254 +1543,6 @@ impl Message {
             unread: value.unread,
             custom_labels: vec![],
         })
-    }
-
-    pub async fn apply_remote_label(
-        label_id: LabelId,
-        ids: impl IntoIterator<Item = LocalMessageId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        let local_label_id = Label::resolve_local_label_id(label_id, bond).await?;
-
-        Self::apply_label(local_label_id, ids, bond).await?;
-        Ok(())
-    }
-
-    /// Apply label with `local_label_id` to the given messages with `ids`.
-    ///
-    /// This will also update conversation labels and label counters.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries fail.
-    #[tracing::instrument(skip_all)]
-    pub async fn apply_label(
-        local_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = LocalMessageId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
-
-        for id in ids {
-            info!("Applying {local_label_id:?} to {id:?}");
-            if bond
-                .query_value_opt::<LocalConversationId>(
-                    indoc::indoc! {
-                    "INSERT OR IGNORE INTO message_labels
-                    VALUES (?,?)
-                    RETURNING local_message_id AS value",
-                    },
-                    params![id, local_label_id],
-                )
-                .await?
-                .is_some()
-            {
-                if let Some(message) = Message::find_by_id(id, bond).await? {
-                    conversation_messages
-                        .entry(message.local_conversation_id.unwrap())
-                        .and_modify(|v| v.push(id))
-                        .or_insert_with(|| vec![id]);
-                }
-            } else {
-                trace!("{id:?} already labeled {local_label_id:?}");
-            }
-        }
-
-        for (conversation_id, message_ids) in conversation_messages {
-            Conversation::label_impl(local_label_id, conversation_id, &message_ids, bond).await?;
-        }
-
-        Ok(())
-    }
-
-    /// Remove label with `local_label_id` to the given messages with `ids`.
-    ///
-    /// This will also update conversation labels and label counters.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries fail.
-    #[tracing::instrument(skip_all)]
-    pub async fn remove_label(
-        local_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = LocalMessageId>,
-        bond: &Bond<'_>,
-    ) -> Result<Vec<LocalMessageId>, StashError> {
-        let mut ids = ids.into_iter().peekable();
-        if ids.peek().is_none() {
-            if cfg!(debug_assertions) {
-                panic!("remove_label for no messages")
-            } else {
-                return Ok(vec![]);
-            }
-        }
-
-        // First let's unlabel all messages.
-
-        // We need to remember how many were unread and modified so we can update
-        // the unread counts and the message counter
-        let mut unread_msg_count = 0_u64;
-        let mut updated_count = 0_u64;
-
-        let ids = ids.collect_vec();
-        let params = ids.to_sql();
-        let conversations = bond
-            .query_values::<_, LocalConversationId>(
-                indoc::formatdoc! {"
-                    SELECT DISTINCT m.local_conversation_id AS value
-                    FROM messages m
-                    WHERE local_id IN ({})
-                    ", placeholders(&params)},
-                params,
-            )
-            .await?;
-
-        let mut modified_ids = vec![];
-        for id in ids {
-            info!("Removing {local_label_id:?} from {id:?}");
-            // unlabel the message and return whether it was unlabeled
-            if let Some(id) = bond
-                .query_value_opt::<LocalMessageId>(
-                    indoc::indoc! {"
-                    DELETE FROM message_labels
-                    WHERE local_label_id=?
-                      AND local_message_id=?
-                    RETURNING local_message_id AS value
-                    "},
-                    params![local_label_id, id],
-                )
-                .await?
-            {
-                modified_ids.push(id);
-            } else {
-                tracing::trace!("Message {id} was not labeled with {local_label_id}");
-            };
-
-            let unread = bond
-                .query_value::<_, u64>(
-                    indoc::formatdoc! {"
-                    SELECT unread as value
-                    FROM messages
-                    WHERE local_id = ?
-                "},
-                    params![id],
-                )
-                .await?;
-
-            unread_msg_count += unread;
-            updated_count += 1;
-        }
-
-        // Update message counters
-        if updated_count == 0 {
-            warn!("No updated messages?");
-            return Ok(vec![]);
-        }
-
-        let mut msg_counters = MessageCounters::find_by_id(local_label_id, bond)
-            .await?
-            .context("No message counter for label")?;
-
-        msg_counters.unread = msg_counters.unread.saturating_sub(unread_msg_count);
-        msg_counters.total = msg_counters.total.saturating_sub(updated_count);
-        msg_counters
-            .save(bond)
-            .await
-            .context("Error saving counters")?;
-
-        let mut conv_counters = ConversationCounters::find_by_id(local_label_id, bond)
-            .await?
-            .context("No conversation counter for label")?;
-
-        for conversation_id in conversations {
-            // We get the stats for the remaining messages (those that have not just been deleted)
-            // and update the conversation label accordingly.
-            let messages = Message::find(
-                indoc! {"
-                    JOIN message_labels AS ML
-                    ON ML.local_message_id = messages.local_id
-                       AND ML.local_label_id = ?
-                    WHERE messages.local_conversation_id = ?
-                "},
-                params![local_label_id, conversation_id],
-                bond,
-            )
-            .await?;
-
-            let label_stats = if messages.is_empty() {
-                // Now we can delete the conversation_label too
-                None
-            } else {
-                Some(ConversationMessageLabelStats::from_messages(&messages))
-            };
-
-            let conversation_label = ConversationLabel::find_by_conversation_and_label(
-                &conversation_id,
-                local_label_id,
-                bond,
-            )
-            .await?;
-
-            match (label_stats, conversation_label) {
-                // If some messages in the conversation still remain in the label
-                (Some(stats), Some(mut conversation_label)) => {
-                    assert_ne!(
-                        stats.count, 0,
-                        "Entered unreachable code: At least one message must still exist here."
-                    );
-
-                    conversation_label.context_num_messages = stats.count;
-                    conversation_label.context_time = stats.time;
-                    conversation_label.context_snooze_time = stats.snooze_time;
-                    conversation_label.context_expiration_time = stats.expiration_time;
-                    conversation_label.context_size = stats.size;
-                    conversation_label.context_num_attachments = stats.num_attachments as u64;
-                    conversation_label.save(bond).await?;
-
-                    // If it had at least 1 unread message that has been removed &&
-                    // there aren't any more in the conversation we can decrease the counter
-                    // because the last unread message(s) for this conversation have been removed
-                    if unread_msg_count != 0 && conversation_label.context_num_unread == 0 {
-                        conv_counters.unread = conv_counters.unread.saturating_sub(1);
-                    }
-                }
-                // If no more messages remain we can unlabel the conversation
-                _ => {
-                    if bond
-                        .query_value_opt::<u64>(
-                            indoc::indoc! {"
-                            DELETE FROM conversation_labels
-                            WHERE local_label_id=?
-                              AND local_conversation_id=?
-                            RETURNING local_conversation_id AS value
-                            "},
-                            params![local_label_id, conversation_id],
-                        )
-                        .await?
-                        .is_some()
-                    {
-                        trace!("Deleting conversation label");
-
-                        conv_counters.total = conv_counters.total.saturating_sub(1);
-                        // See previous match arm for an explanation of the logic
-                        if unread_msg_count != 0 {
-                            assert_ne!(unread_msg_count, 0);
-                            conv_counters.unread = conv_counters.unread.saturating_sub(1);
-                        }
-                    } else {
-                        tracing::trace!("Conversation {conversation_id} was not unlabeled");
-                        continue;
-                    }
-                }
-            }
-        }
-
-        conv_counters
-            .save(bond)
-            .await
-            .context("Error saving counters")?;
-
-        Ok(modified_ids)
     }
 
     /// Retrieve all the messages which are in a given label.
@@ -2393,7 +2146,7 @@ impl Message {
         })
     }
 
-    pub async fn mark_unread(
+    pub async fn mark_unread_async(
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
@@ -2422,20 +2175,210 @@ impl Message {
 impl ConversationOrMessage for Message {
     const ROLLBACK_ITEM_TYPE: RollbackItemType = RollbackItemType::Message;
 
-    async fn apply_label(
+    fn apply_label(
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType>,
-        bond: &Bond<'_>,
+        bond: &Transaction<'_>,
     ) -> Result<(), StashError> {
-        Self::apply_label(local_label_id, ids, bond).await
+        let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
+
+        for id in ids {
+            info!("Applying {local_label_id:?} to {id:?}");
+            if bond
+                .query_row_col::<u64>(
+                    "INSERT OR IGNORE INTO message_labels
+                    VALUES (?,?)
+                    RETURNING local_message_id",
+                    (id, local_label_id),
+                )
+                .is_ok()
+            {
+                if let Some(message) = Message::load_by_id_sync(id, bond)? {
+                    conversation_messages
+                        .entry(message.local_conversation_id.unwrap())
+                        .and_modify(|v| v.push(id))
+                        .or_insert_with(|| vec![id]);
+                }
+            } else {
+                trace!("{id:?} already labeled {local_label_id:?}");
+            }
+        }
+
+        for (conversation_id, message_ids) in conversation_messages {
+            Conversation::label_impl(local_label_id, conversation_id, &message_ids, bond)?;
+        }
+
+        Ok(())
     }
 
-    async fn remove_label(
+    fn remove_label(
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType>,
-        bond: &Bond<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<(), StashError> {
-        Self::remove_label(local_label_id, ids, bond).await?;
+        let mut ids = ids.into_iter().peekable();
+        if ids.peek().is_none() {
+            if cfg!(debug_assertions) {
+                panic!("remove_label for no messages")
+            } else {
+                return Ok(());
+            }
+        }
+
+        // First let's unlabel all messages.
+
+        // We need to remember how many were unread and modified so we can update
+        // the unread counts and the message counter
+        let mut unread_msg_count = 0_u64;
+        let mut updated_count = 0_u64;
+
+        let ids = ids.collect_vec();
+        let conversations = tx.query_rows_col::<LocalConversationId>(
+            indoc::formatdoc! {"
+                    SELECT DISTINCT m.local_conversation_id
+                    FROM messages m
+                    WHERE local_id IN ({})
+                    ", placeholders(&ids)},
+            params_from_iter(&ids),
+        )?;
+
+        let mut modified_ids = vec![];
+        for id in ids {
+            info!("Removing {local_label_id:?} from {id:?}");
+            // unlabel the message and return whether it was unlabeled
+            if let Some(id) = tx
+                .query_row_col::<LocalMessageId>(
+                    indoc::indoc! {"
+                    DELETE FROM message_labels
+                    WHERE local_label_id=?
+                      AND local_message_id=?
+                    RETURNING local_message_id
+                    "},
+                    (local_label_id, id),
+                )
+                .optional()?
+            {
+                modified_ids.push(id);
+            } else {
+                tracing::trace!("Message {id} was not labeled with {local_label_id}");
+            };
+
+            let unread = tx.query_row_col::<u64>(
+                indoc::formatdoc! {"
+                    SELECT unread
+                    FROM messages
+                    WHERE local_id = ?
+                "},
+                (id,),
+            )?;
+
+            unread_msg_count += unread;
+            updated_count += 1;
+        }
+
+        // Update message counters
+        if updated_count == 0 {
+            warn!("No updated messages?");
+            return Ok(());
+        }
+
+        let mut msg_counters = MessageCounters::load_by_id_sync(local_label_id, tx)?
+            .context("No message counter for label")?;
+
+        msg_counters.unread = msg_counters.unread.saturating_sub(unread_msg_count);
+        msg_counters.total = msg_counters.total.saturating_sub(updated_count);
+        msg_counters
+            .save_sync(tx)
+            .context("Error saving counters")?;
+
+        let mut conv_counters = ConversationCounters::load_by_id_sync(local_label_id, tx)?
+            .context("No conversation counter for label")?;
+
+        for conversation_id in conversations {
+            // We get the stats for the remaining messages (those that have not just been deleted)
+            // and update the conversation label accordingly.
+            let messages = Message::find_sync(
+                indoc! {"
+                    JOIN message_labels AS ML
+                    ON ML.local_message_id = messages.local_id
+                       AND ML.local_label_id = ?
+                    WHERE messages.local_conversation_id = ?
+                "},
+                (local_label_id, conversation_id),
+                tx,
+            )?;
+
+            let label_stats = if messages.is_empty() {
+                // Now we can delete the conversation_label too
+                None
+            } else {
+                Some(ConversationMessageLabelStats::from_messages(&messages))
+            };
+
+            let conversation_label = ConversationLabel::find_by_conversation_and_label_sync(
+                conversation_id,
+                local_label_id,
+                tx,
+            )?;
+
+            match (label_stats, conversation_label) {
+                // If some messages in the conversation still remain in the label
+                (Some(stats), Some(mut conversation_label)) => {
+                    assert_ne!(
+                        stats.count, 0,
+                        "Entered unreachable code: At least one message must still exist here."
+                    );
+
+                    conversation_label.context_num_messages = stats.count;
+                    conversation_label.context_time = stats.time;
+                    conversation_label.context_snooze_time = stats.snooze_time;
+                    conversation_label.context_expiration_time = stats.expiration_time;
+                    conversation_label.context_size = stats.size;
+                    conversation_label.context_num_attachments = stats.num_attachments as u64;
+                    conversation_label.save_sync(tx)?;
+
+                    // If it had at least 1 unread message that has been removed &&
+                    // there aren't any more in the conversation we can decrease the counter
+                    // because the last unread message(s) for this conversation have been removed
+                    if unread_msg_count != 0 && conversation_label.context_num_unread == 0 {
+                        conv_counters.unread = conv_counters.unread.saturating_sub(1);
+                    }
+                }
+                // If no more messages remain we can unlabel the conversation
+                _ => {
+                    if tx
+                        .query_row_col::<u64>(
+                            indoc::indoc! {"
+                            DELETE FROM conversation_labels
+                            WHERE local_label_id=?
+                              AND local_conversation_id=?
+                            RETURNING local_conversation_id
+                            "},
+                            (local_label_id, conversation_id),
+                        )
+                        .is_ok()
+                    {
+                        trace!("Deleting conversation label");
+
+                        conv_counters.total = conv_counters.total.saturating_sub(1);
+                        // See previous match arm for an explanation of the logic
+                        if unread_msg_count != 0 {
+                            assert_ne!(unread_msg_count, 0);
+                            conv_counters.unread = conv_counters.unread.saturating_sub(1);
+                        }
+                    } else {
+                        tracing::trace!("Conversation {conversation_id} was not unlabeled");
+                        continue;
+                    }
+                }
+            }
+        }
+
+        conv_counters
+            .save_sync(tx)
+            .context("Error saving counters")?;
+
+        drop(modified_ids); // TODO
         Ok(())
     }
 
@@ -2477,13 +2420,11 @@ impl ConversationOrMessage for Message {
         self.exclusive_location.as_ref().map(|x| x.local_id())
     }
 
-    async fn mark_read(
+    fn mark_read(
         ids: impl IntoIterator<Item = Self::IdType>,
-        bond: &Bond<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<Vec<Self::IdType>, StashError> {
-        let ids = Vec::from_iter(ids);
-        bond.sync_bridge(|tx| Self::mark_read_or_unread(true, ids, tx))
-            .await
+        Self::mark_read_or_unread(true, Vec::from_iter(ids), tx)
     }
 
     fn grouped_labels_and_messages_query(placeholders: usize) -> String {

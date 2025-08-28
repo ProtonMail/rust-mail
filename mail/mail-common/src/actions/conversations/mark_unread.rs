@@ -1,7 +1,11 @@
-use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses_by_codes};
+use crate::actions::{
+    ConversationOrMessage, GenericLabelRelatedActionData, MailActionError,
+    filter_responses_by_codes,
+};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
+use anyhow::Context;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
@@ -10,7 +14,8 @@ use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
-use stash::stash::Bond;
+use stash::exports::Transaction;
+use stash::stash::{Bond, RunTransaction};
 use tracing::error;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -62,7 +67,8 @@ impl Handler for MarkUnreadHandler {
 
         action.0.resolve_ids(tx).await?;
 
-        Conversation::mark_unread(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
+        Conversation::mark_unread_async(action.0.label_id, action.0.data.target_ids.clone(), tx)
+            .await?;
         Ok(())
     }
 
@@ -72,7 +78,7 @@ impl Handler for MarkUnreadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::mark_read(action.0.data.target_ids.clone(), tx).await?;
+        Conversation::mark_read_async(action.0.data.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Conversation, tx)
@@ -104,14 +110,11 @@ impl Handler for MarkUnreadHandler {
             error!("Mark unread operation failed for: {:?}", failed_ids);
 
             guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx: &Bond<'_>| {
-                    let local_ids =
-                        Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
+                .run_tx_sync(move |tx: &Transaction<'_>| {
+                    let local_ids = Conversation::remote_ids_counterpart_sync(&*failed_ids, tx)?;
 
-                    Conversation::mark_read(local_ids, tx).await.map_err(|e| {
-                        error!("Failed to rollback failed conversations: {e:?}");
-                        e
-                    })?;
+                    Conversation::mark_read(local_ids, tx)
+                        .context("Failed to rollback failed conversations")?;
                     Ok(())
                 })
                 .await?;

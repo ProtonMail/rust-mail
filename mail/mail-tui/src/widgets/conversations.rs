@@ -49,7 +49,7 @@ impl AsIntoTable for Vec<ContextualConversation> {
             ]);
 
             if conv.num_unread != 0 {
-                row.bold()
+                row.bold().on_red()
             } else {
                 row
             }
