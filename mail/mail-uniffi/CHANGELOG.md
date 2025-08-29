@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Expose separate os level network observer
+- Check network status on resume_work/on_enter_foreground
+- Conversation and message body fetch check OS network status
+- Integrate OS level status checks in the scroller
+- Scroller schedules fetch_more automatically when offline to be executed once online
+
+
+## [mail-uniffi-v0.142.5] - 2025-08-29
+
+### Changed
+
 - Enable muon error logs
 
 ### Features
