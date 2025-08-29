@@ -9,7 +9,6 @@ use chrono::Utc;
 use futures::io::AsyncWriteExt;
 use proton_core_api::services::proton::PostReportBug;
 use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::session::CoreSession;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::io::Cursor;
@@ -180,7 +179,7 @@ pub async fn report_an_issue(
 
     let payload = create_bug_report_payload(report, username, email, logs);
 
-    user_ctx.session().api().post_report_bug(payload).await?;
+    user_ctx.session().post_report_bug(payload).await?;
 
     info!("Issue reported");
 

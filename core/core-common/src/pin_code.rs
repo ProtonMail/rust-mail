@@ -121,10 +121,10 @@ impl PinCode {
                 return Err(PinError::MissingPinMetadata);
             };
 
-            if let Some(last_access) = ctx.clock().pin_code_elapsed() {
-                if last_access.as_secs() <= Self::PIN_CODE_ACCESS_INTERVAL {
-                    return Err(PinError::TooFrequentAttempts);
-                }
+            if let Some(last_access) = ctx.clock().pin_code_elapsed()
+                && last_access.as_secs() <= Self::PIN_CODE_ACCESS_INTERVAL
+            {
+                return Err(PinError::TooFrequentAttempts);
             }
 
             // We have no guarantees that hashing function will not block whole runtime

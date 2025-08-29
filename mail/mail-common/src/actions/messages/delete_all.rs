@@ -4,7 +4,7 @@ use crate::models::Message;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension as _};
@@ -49,7 +49,7 @@ impl Action for DeleteAllMessagesInLabel {
 }
 
 pub struct DeleteAllMessagesInLabelHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for DeleteAllMessagesInLabelHandler {

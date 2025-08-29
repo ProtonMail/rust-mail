@@ -34,7 +34,7 @@ use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput, QueuedE
 use proton_canonical_email::canonicalize_auto;
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::AddressId;
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::db::account::EncryptedPassword;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
@@ -685,7 +685,6 @@ impl Draft {
             build_attachment_key_packets(context, &address_id, attachments, tether).await?;
 
         let response = session
-            .api()
             .create_draft(
                 params,
                 attachment_key_packets,
@@ -715,7 +714,6 @@ impl Draft {
             build_attachment_key_packets(context, &address_id, attachments, tether).await?;
 
         match session
-            .api()
             .update_draft(message_id, params, attachment_key_packets)
             .await
         {
@@ -930,13 +928,12 @@ impl Draft {
     pub async fn delete_attachment_if_in_staging_area(&self, ctx: &MailUserContext, path: &Path) {
         let staging_path = self.attachment_staging_path(ctx);
 
-        if path.starts_with(&staging_path) {
-            if let Err(e) = fs::remove_file(&staging_path).await {
-                if e.kind() != std::io::ErrorKind::NotFound {
-                    // This is a warning as the background process will try again.
-                    warn!("Failed to delete attachment from staging area at {path:?}: {e:?}");
-                }
-            }
+        if path.starts_with(&staging_path)
+            && let Err(e) = fs::remove_file(&staging_path).await
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            // This is a warning as the background process will try again.
+            warn!("Failed to delete attachment from staging area at {path:?}: {e:?}");
         }
     }
 

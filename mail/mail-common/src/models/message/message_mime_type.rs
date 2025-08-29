@@ -49,7 +49,7 @@ impl From<MessageMimeType> for EmailMimeType {
 }
 
 impl ToSql for MessageMimeType {
-    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Text(match self {
             Self::TextHtml => "text/html".into(),
             Self::TextPlain => "text/plain".into(),

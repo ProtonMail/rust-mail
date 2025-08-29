@@ -6,7 +6,7 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::consts::General;
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ impl Action for MarkRead {
 }
 
 pub struct MarkReadHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for MarkReadHandler {
@@ -107,7 +107,7 @@ impl Handler for MarkReadHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let responses = Conversation::mark_multiple_as_read_remote::<Proton>(
+        let responses = Conversation::mark_multiple_as_read_remote(
             action.data.data.remote_target_ids.clone(),
             &self.api,
         )

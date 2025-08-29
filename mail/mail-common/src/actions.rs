@@ -35,7 +35,8 @@ use proton_action_queue::action::{
 use proton_action_queue::queue::{ActionRequeueReason, Queue};
 use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::{LabelId, Proton, ProtonIdMarker};
+use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
+use proton_core_api::session::Session;
 use proton_core_common::Origin;
 use proton_core_common::action_queue::CoreActionError;
 use proton_core_common::actions::dependency_builder::{
@@ -125,7 +126,7 @@ pub(crate) fn register_actions(
     queue: &Queue,
     origin: Origin,
     ctx: &Weak<MailUserContext>,
-    api: &Proton,
+    api: &Session,
     http_client: &reqwest::Client,
 ) {
     fn reg<T>(queue: &Queue, handler: T)
@@ -537,7 +538,7 @@ where
 
     async fn apply_remote(
         &self,
-        api: &Proton,
+        api: &Session,
         mut guard: WriterGuard<'_>,
     ) -> Result<(), MailActionError> {
         let tether = guard.tether();
@@ -867,7 +868,7 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
 
     async fn apply_remote(
         &self,
-        api: &Proton,
+        api: &Session,
         mut guard: WriterGuard<'_>,
     ) -> Result<(), MailActionError> {
         let (add, remove) = self.segregate_label();

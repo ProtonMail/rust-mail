@@ -143,10 +143,10 @@ impl GenericMobileActions for ListAction {
     }
 
     fn get_high_priority_actions(context: &ActionContext) -> Vec<Self> {
-        if context.is_conversation {
-            if let Some(snooze) = Self::toggle_snooze(&context.current_label) {
-                return vec![snooze];
-            }
+        if context.is_conversation
+            && let Some(snooze) = Self::toggle_snooze(&context.current_label)
+        {
+            return vec![snooze];
         }
         vec![]
     }

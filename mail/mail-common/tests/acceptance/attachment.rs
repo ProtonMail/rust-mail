@@ -42,7 +42,11 @@ async fn setup_common(
         .unwrap();
 
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 1)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            1,
+        )
         .await
         .expect("mailbox sync failed");
 

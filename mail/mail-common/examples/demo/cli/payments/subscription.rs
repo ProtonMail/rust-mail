@@ -9,7 +9,7 @@ pub struct Cmd {}
 
 impl Cmd {
     pub async fn run(self, ctx: Arc<MailUserContext>) -> Result<()> {
-        let plan = ctx.api().get_payments_subscription().await?;
+        let plan = ctx.session().get_payments_subscription().await?;
 
         println!("{plan:#?}");
 

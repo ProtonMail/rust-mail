@@ -97,7 +97,7 @@ impl RsvpEvent {
 
         self.event
             .answer(
-                ctx.api(),
+                ctx.session(),
                 &pgp,
                 &keys,
                 ctx.rsvp_service().cache(),

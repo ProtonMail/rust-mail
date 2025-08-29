@@ -758,13 +758,12 @@ impl DraftActor {
     pub async fn delete_attachment_if_in_staging_area(&self, ctx: &MailUserContext, path: &Path) {
         let staging_path = self.attachment_staging_path(ctx);
 
-        if path.starts_with(&staging_path) {
-            if let Err(e) = fs::remove_file(&staging_path).await {
-                if e.kind() != std::io::ErrorKind::NotFound {
-                    // This is a warning as the background process will try again.
-                    warn!("Failed to delete attachment from staging area at {path:?}: {e:?}");
-                }
-            }
+        if path.starts_with(&staging_path)
+            && let Err(e) = fs::remove_file(&staging_path).await
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            // This is a warning as the background process will try again.
+            warn!("Failed to delete attachment from staging area at {path:?}: {e:?}");
         }
     }
     pub async fn add_attachment(
@@ -1949,7 +1948,7 @@ impl DraftOnRecipientValidation {
         group: RecipientGroupId,
         sender: mpsc::Sender<DraftActorMessage>,
         list: &mut RecipientList,
-    ) -> DraftValidatingRecipientList {
+    ) -> DraftValidatingRecipientList<'_> {
         ValidatingRecipientList::new(list, DraftOnRecipientValidation { group, sender })
     }
 }

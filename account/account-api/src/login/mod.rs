@@ -6,7 +6,7 @@ use crate::shared::challenge::{Behavior, ChallengeInfo};
 use muon::rest::auth::v4::fido2;
 use proton_core_api::service::{ApiServiceError, ServiceError};
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::session::Session;
 use proton_core_api::store::{StoreError, UserData};
 use proton_core_common::migration_snooper::MigrationSnooper;
 use proton_core_common::post_login_check::PostLoginValidationError;
@@ -398,8 +398,8 @@ impl LoginFlow {
     }
 
     #[must_use]
-    pub fn api(&self) -> &muon::Client {
-        self.session.api()
+    pub fn api(&self) -> &Session {
+        &self.session
     }
 
     /// Check whether the session is awaiting totp.

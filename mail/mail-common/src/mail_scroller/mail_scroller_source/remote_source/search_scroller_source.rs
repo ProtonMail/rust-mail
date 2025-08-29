@@ -9,11 +9,7 @@ use crate::{
     mail_scroller::MailScrollerSource,
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
 };
-use proton_core_api::services::proton::Proton;
-use proton_core_api::{
-    services::proton::LabelId,
-    session::{CoreSession, Session},
-};
+use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::{datatypes::SystemLabel, models::ModelExtension};
 use proton_mail_api::services::proton::{
@@ -139,7 +135,6 @@ impl SearchScrollerSource {
         let order_field = ScrollOrderField::for_label(&remote_label_id);
 
         let response = session
-            .api()
             .get_messages(GetMessagesOptions {
                 label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64,
@@ -170,7 +165,7 @@ impl SearchScrollerSource {
             messages.push(Message::from_api_metadata(message, tether).await?);
         }
 
-        Self::save_messages(&mut messages, session.api(), tether).await?;
+        Self::save_messages(&mut messages, session, tether).await?;
 
         Ok(messages)
     }
@@ -190,7 +185,6 @@ impl SearchScrollerSource {
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_time}"
         );
         let mut response = session
-            .api()
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
                 end: Some(last_time.as_u64()),
@@ -229,14 +223,14 @@ impl SearchScrollerSource {
             messages.push(Message::from_api_metadata(message, &tether).await?);
         }
 
-        Self::save_messages(&mut messages, session.api(), &mut tether).await?;
+        Self::save_messages(&mut messages, session, &mut tether).await?;
 
         Ok(messages)
     }
 
     async fn save_messages(
         messages: &mut [Message],
-        api: &Proton,
+        api: &Session,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         if messages.is_empty() {

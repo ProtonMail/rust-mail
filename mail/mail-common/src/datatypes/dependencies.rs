@@ -2,7 +2,8 @@ use crate::MailContextError;
 use crate::datatypes::{ConversationLabelsCount, MessageLabelsCount};
 use crate::models::{Conversation, Message};
 use anyhow::Context;
-use proton_core_api::services::proton::{AddressId, LabelId, Proton, ProtonCore};
+use proton_core_api::services::proton::{AddressId, LabelId, ProtonCore};
+use proton_core_api::session::Session;
 use proton_core_common::models::{Address, Label, ModelIdExtension};
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, MessageMetadata as ApiMessageMetadata,
@@ -77,7 +78,7 @@ impl MessageOrConversationDependencyFetcher {
 
     pub async fn fetch_and_store(
         &self,
-        api: &Proton,
+        api: &Session,
         tx: &mut (impl RunTransaction + Send),
     ) -> Result<(), MailContextError> {
         if !self.label_ids.is_empty() {

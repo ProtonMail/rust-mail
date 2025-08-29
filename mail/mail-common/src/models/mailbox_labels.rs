@@ -55,16 +55,15 @@ pub trait MailLabel {
 
 impl MailLabel for Label {
     async fn view_mode(&self, tether: &Tether) -> Result<ViewMode, StashError> {
-        if let Some(remote_id) = self.remote_id.as_ref() {
-            if *remote_id == LabelId::drafts()
+        if let Some(remote_id) = self.remote_id.as_ref()
+            && (*remote_id == LabelId::drafts()
                 || *remote_id == LabelId::sent()
                 || *remote_id == LabelId::all_drafts()
                 || *remote_id == LabelId::all_sent()
                 || *remote_id == LabelId::all_scheduled()
-                || *remote_id == LabelId::outbox()
-            {
-                return Ok(ViewMode::Messages);
-            }
+                || *remote_id == LabelId::outbox())
+        {
+            return Ok(ViewMode::Messages);
         }
         Ok(MailSettings::get_or_default(tether).await.view_mode)
     }

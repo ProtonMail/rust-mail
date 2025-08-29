@@ -196,13 +196,12 @@ impl Handler for AttachmentUploadHandler {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::LostContext)?;
         let r = action.apply_remote_impl(&ctx, &mut writer_guard).await;
 
-        if let Err(e) = &r {
-            if let Err(e) = action
+        if let Err(e) = &r
+            && let Err(e) = action
                 .save_attachment_upload_result(&mut writer_guard, e)
                 .await
-            {
-                error!("Failed to save attachment upload result: {e:?}");
-            }
+        {
+            error!("Failed to save attachment upload result: {e:?}");
         }
         r
     }
@@ -335,7 +334,7 @@ async fn encrypt_and_upload_attachment(
         data_packet: encrypted_attachment.data,
     };
 
-    let response = match ctx.api().post_attachment(new_attachment_params).await {
+    let response = match ctx.session().post_attachment(new_attachment_params).await {
         Ok(response) => response,
         Err(e) => {
             error!("Failed to upload attachment: {:?}", e);

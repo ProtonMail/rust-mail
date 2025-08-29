@@ -22,10 +22,10 @@ impl SizeRollingAppender {
         }
         let mut log_file = LogFile::new(&config)?;
 
-        if log_file.should_rotate(&config) {
-            if let Err(e) = log_file.rotate(&config) {
-                eprintln!("Failed to rotate log file: {e:?}");
-            }
+        if log_file.should_rotate(&config)
+            && let Err(e) = log_file.rotate(&config)
+        {
+            eprintln!("Failed to rotate log file: {e:?}");
         }
         Ok(Self {
             config,
@@ -100,10 +100,10 @@ fn new_file(path: &Path) -> std::io::Result<File> {
 impl Write for SizeRollingAppender {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let mut log_file = self.file.write();
-        if log_file.should_rotate(&self.config) {
-            if let Err(e) = log_file.rotate(&self.config) {
-                eprintln!("Could not rotate files: {e:?}");
-            }
+        if log_file.should_rotate(&self.config)
+            && let Err(e) = log_file.rotate(&self.config)
+        {
+            eprintln!("Could not rotate files: {e:?}");
         }
 
         log_file.write(buf)

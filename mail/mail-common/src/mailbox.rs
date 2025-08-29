@@ -113,7 +113,7 @@ mod test_utils {
     use crate::MailContextError;
     use crate::models::{Conversation, MailboxLabels, Message};
     use futures::TryFutureExt;
-    use proton_core_api::services::proton::Proton;
+    use proton_core_api::session::Session;
     use tracing::error;
 
     impl Mailbox {
@@ -128,7 +128,7 @@ mod test_utils {
         pub async fn sync(
             &self,
             tether: &mut Tether,
-            api: &Proton,
+            api: &Session,
             count: usize,
         ) -> MailContextResult<()> {
             let Some(label) = Label::load(self.label_id, tether).await? else {

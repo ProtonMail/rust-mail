@@ -7,6 +7,7 @@ use crate::password_validator::PasswordType;
 use crate::password_validator::PasswordValidatorService;
 use crate::user_behavior::UserBehavior;
 use itertools::Itertools;
+use muon::common::IntoDyn;
 use proton_account_api::countries::Country as RealCountry;
 use proton_account_api::signup::SignupError as RealSignupError;
 use proton_account_api::signup::SignupFlow as RealSignupFlow;
@@ -338,7 +339,7 @@ impl SignupFlow {
             })
     }
 
-    /// Get the current state of the SignupFlow
+    /// Get the current state of the `SignupFlow`
     #[must_use]
     pub fn get_state(&self) -> SimpleSignupState {
         async_runtime().block_on(async { self.flow.lock().await.kind().unwrap().into() })
@@ -388,7 +389,7 @@ impl SignupFlow {
 
         uniffi_async::<_, JoinError, _>(async move {
             Ok(Arc::new(PasswordValidatorService::setup(
-                flow.lock().await.api().to_owned(),
+                flow.lock().await.api().to_owned().into_dyn(),
             )))
         })
         .await

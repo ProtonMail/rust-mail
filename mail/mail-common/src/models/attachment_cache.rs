@@ -366,12 +366,13 @@ impl Attachment {
         };
 
         tracing::info!("Fetching {remote_attachment_id:?} from server");
-        let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), ctx.api())
-            .await
-            .map_err(|e| {
-                error!("Failed to fetch attachment ({attachment_id:?}) from API: {e:?}");
-                e
-            })?;
+        let encrypted_content =
+            Attachment::fetch_content(remote_attachment_id.clone(), ctx.session())
+                .await
+                .map_err(|e| {
+                    error!("Failed to fetch attachment ({attachment_id:?}) from API: {e:?}");
+                    e
+                })?;
 
         let (decrypted_content, _verification_result) = self
             .decrypt_content(ctx, &pgp, encrypted_content.as_ref())
@@ -402,7 +403,7 @@ impl Attachment {
         // First check if the metadata is complete for decryption.
         if !attachment.is_pgp_attachment() && !attachment.has_complete_metadata() {
             attachment
-                .sync_complete_metadata(ctx.api(), &mut conn)
+                .sync_complete_metadata(ctx.session(), &mut conn)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to sync attachment({attachment_id:?}) metadata: {e:?})")

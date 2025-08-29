@@ -447,7 +447,7 @@ pub struct PostSendRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delay_seconds: Option<u64>,
 
-    /// Date when the message has to be delivered. It takes precedence over DelaySeconds.
+    /// Date when the message has to be delivered. It takes precedence over `DelaySeconds`.
     /// If this option is used, the message will be marked as schedule send.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delivery_time: Option<u64>,

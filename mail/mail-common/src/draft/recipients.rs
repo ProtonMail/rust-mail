@@ -6,7 +6,6 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{
     GetKeysAllOptions, PrivateEmail, PrivateEmailRef, PrivateString,
 };
-use proton_core_api::session::CoreSession;
 use proton_core_api::{consts::CoreBundle, services::proton::ProtonCore};
 use proton_core_common::models::ContactEmail;
 use serde::{Deserialize, Serialize};
@@ -454,10 +453,10 @@ impl RecipientList {
 
     fn find_group_mut(&mut self, group_name: &NonEmptyString) -> Option<&mut GroupRecipient> {
         for r in self.recipients.iter_mut() {
-            if let Recipient::Group(recipient) = r {
-                if &recipient.group_name == group_name {
-                    return Some(recipient);
-                }
+            if let Recipient::Group(recipient) = r
+                && &recipient.group_name == group_name
+            {
+                return Some(recipient);
             }
         }
 
@@ -809,13 +808,7 @@ async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> Validat
         internal_only: Some(false),
     };
 
-    let state = match ctx
-        .user_context()
-        .session()
-        .api()
-        .get_keys_all(options)
-        .await
-    {
+    let state = match ctx.user_context().session().get_keys_all(options).await {
         Ok(response) => ValidationState::Valid(response.is_proton),
         Err(e) => ValidationState::from(e),
     };

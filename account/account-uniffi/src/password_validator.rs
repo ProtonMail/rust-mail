@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use muon::http::DynHttpSender;
 use proton_account_common::password_validator::PasswordType as RealPasswordType;
 use proton_account_common::password_validator::PasswordValidatorResult;
 use proton_account_common::password_validator::PasswordValidatorService as RealPasswordValidatorService;
@@ -21,8 +22,8 @@ impl PasswordValidatorService {
     /// Creates a new service, while spawning an async task to fetch password policies from the API.
     /// This method returns immediately, without waiting for the spawned task.
     #[must_use]
-    pub fn setup(client: muon::Client) -> PasswordValidatorService {
-        let real_service = Arc::new(Mutex::new(RealPasswordValidatorService::new(client)));
+    pub fn setup(api: DynHttpSender) -> PasswordValidatorService {
+        let real_service = Arc::new(Mutex::new(RealPasswordValidatorService::new(api)));
         let real_service_clone = real_service.clone();
         async_runtime().spawn(async move {
             let mut guard = real_service_clone.lock().await;

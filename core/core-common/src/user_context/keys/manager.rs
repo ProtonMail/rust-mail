@@ -8,7 +8,6 @@ use parking_lot::RwLock;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{AddressId, UserId};
 use proton_core_api::services::proton::{GetKeysAllOptions, PrivateEmailRef};
-use proton_core_api::session::CoreSession;
 use proton_crypto_account::keys::PublicAddressKeys;
 use proton_crypto_account::keys::{
     UnlockedAddressKey, UnlockedAddressKeys, UnlockedUserKey, UnlockedUserKeys,
@@ -140,7 +139,6 @@ impl CryptoKeyManager {
         // TODO: A limited TTL cache would make sense here for active keys.
         let api_keys = user_context
             .session()
-            .api()
             .get_keys_all(GetKeysAllOptions {
                 email: email.to_owned(),
                 internal_only: Some(internal_only),

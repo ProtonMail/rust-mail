@@ -15,7 +15,7 @@ use proton_calendar_common::RsvpError;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::CoreSession as _;
+use proton_core_api::session::SessionParts;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_core_common::auth_store::DecryptExt;
 use proton_core_common::datatypes::ApiConfig;
@@ -488,8 +488,7 @@ impl MailContext {
 
         // Create a new API session
         let session = self.core_context.new_api_session(None).await?;
-        let client = session.api().to_owned();
-        let store = session.store().to_owned();
+        let (client, SessionParts { store, .. }) = session.into_parts();
 
         // Obtain device info (if possible)
         let device_info = self
@@ -511,6 +510,7 @@ impl MailContext {
             Some(MAIL_ALLOWED_FREE_USER_COUNT),
             Arc::clone(&self.core_context),
         ));
+
         // Create a new signup flow
         Ok(
             SignupFlow::new(client, store, challenge_info, post_login_validator)
@@ -938,23 +938,23 @@ impl MailContext {
 
         active_contexts.retain(|_, ctx| ctx.strong_count() != 0);
 
-        if let Some(existing) = active_contexts.get(core_context.user_id()) {
-            if let Some(upgraded) = existing.upgrade() {
-                // This should be handled by the core context creating,
-                // but if for some reason it slips through the cracks,
-                // catch it again.
-                if upgraded.session_id() != core_context.session_id() {
-                    return Err(MailContextError::DuplicateContext(
-                        core_context.user_id().clone(),
-                    ));
-                }
-                // Initial context creation might have failed, lets re-initialize.
-                // In best case scenario it will just check that it was initialized before and then early exit.
-                if matches!(init, ShouldInitializeMailUserContext::Yes) {
-                    MailUserContext::initialize_async(upgraded.clone()).await?;
-                }
-                return Ok(upgraded);
+        if let Some(existing) = active_contexts.get(core_context.user_id())
+            && let Some(upgraded) = existing.upgrade()
+        {
+            // This should be handled by the core context creating,
+            // but if for some reason it slips through the cracks,
+            // catch it again.
+            if upgraded.session_id() != core_context.session_id() {
+                return Err(MailContextError::DuplicateContext(
+                    core_context.user_id().clone(),
+                ));
             }
+            // Initial context creation might have failed, lets re-initialize.
+            // In best case scenario it will just check that it was initialized before and then early exit.
+            if matches!(init, ShouldInitializeMailUserContext::Yes) {
+                MailUserContext::initialize_async(upgraded.clone()).await?;
+            }
+            return Ok(upgraded);
         }
 
         let ctx = MailUserContext::new(self.clone(), core_context).await?;

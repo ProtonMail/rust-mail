@@ -133,7 +133,11 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -210,7 +214,11 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 

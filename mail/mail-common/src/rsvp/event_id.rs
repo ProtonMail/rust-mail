@@ -65,7 +65,7 @@ impl RsvpEventId {
         match self
             .id
             .fetch(
-                ctx.api(),
+                ctx.session(),
                 &pgp,
                 &keys,
                 cache,

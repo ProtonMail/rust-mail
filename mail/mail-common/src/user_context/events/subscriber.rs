@@ -71,7 +71,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
         calculate_missing_dependencies(events, &tether)
             .await
             .context("Failed to calculate dependencies")?
-            .fetch_and_store(ctx.api(), &mut tether)
+            .fetch_and_store(ctx.session(), &mut tether)
             .await
             .context("Failed to fetch or store dependencies")?;
 
@@ -213,11 +213,11 @@ impl MailUserContext {
 
 #[tracing::instrument(skip_all)]
 async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
-    let api = ctx.api().clone();
+    let api = ctx.session().clone();
     let all_remote_labels = ctx.spawn(async move { Label::fetch_mail_labels(&api).await });
-    let api = ctx.api().clone();
+    let api = ctx.session().clone();
     let counters = ctx.spawn(async move { StoreLabelCounters::fetch(&api).await });
-    let api = ctx.api().clone();
+    let api = ctx.session().clone();
     let mail_settings = ctx.spawn(async move { MailSettings::sync_mail_settings(&api).await });
 
     let mut tether = ctx.user_context.stash().connection();

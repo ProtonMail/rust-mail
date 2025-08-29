@@ -5,7 +5,7 @@ use crate::models::Conversation;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
@@ -50,7 +50,7 @@ impl Action for Snooze {
 }
 
 pub struct SnoozeHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for SnoozeHandler {

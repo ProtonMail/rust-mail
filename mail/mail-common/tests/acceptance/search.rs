@@ -9,7 +9,7 @@ async fn unsynced_conversations() {
     let ctx = MailTestContext::new().await;
     let user_context = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_context.user_stash().connection();
-    let api = user_context.api();
+    let api = user_context.session();
 
     ctx.mock_get_labels_by_ids(ctx.get_test_labels()).await;
     ctx.mock_get_conversations(ctx.get_test_convers(), 1).await;
@@ -39,7 +39,7 @@ async fn unsynced_messages() {
     let ctx = MailTestContext::new().await;
     let user_context = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_context.user_stash().connection();
-    let api = user_context.api();
+    let api = user_context.session();
 
     ctx.mock_get_labels_by_ids(ctx.get_test_labels()).await;
     let addrs = ctx.get_test_addrs();

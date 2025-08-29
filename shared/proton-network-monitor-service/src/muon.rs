@@ -7,15 +7,19 @@ impl ConnectionMonitor {
     where
         S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
     {
-        match inner.send(req).await {
+        let r = inner.send(req).await;
+        self.inspect_result(&r);
+        r
+    }
+
+    pub fn inspect_result(&self, result: &muon::Result<ProtonResponse>) {
+        match result {
             Ok(resp) => {
-                self.on_recv_ok(&resp);
-                Ok(resp)
+                self.on_recv_ok(resp);
             }
 
             Err(error) => {
-                self.on_recv_err(&error);
-                Err(error)
+                self.on_recv_err(error);
             }
         }
     }
