@@ -31,6 +31,7 @@ use proton_mail_common::{
 use proton_mail_common::{
     api_conversation, conv_id, conversation, lbl_id, test_utils::test_context::MailTestContext,
 };
+use proton_network_monitor_service::OsNetworkStatus;
 use stash::orm::Model;
 use stash::stash::StashError;
 use std::{collections::HashMap, time::Duration};
@@ -484,6 +485,9 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     ctx.mock_server().reset().await;
     ctx.mock_ping_success().await;
     setup_api_conversation_pages(&ctx, page_size, 200, 1).await;
+    user_ctx
+        .network_monitor_service()
+        .update_os_network_status(OsNetworkStatus::Online);
     user_ctx.network_monitor_service().check_now().await;
 
     let timeout = Some(Duration::from_secs(3));
@@ -1449,6 +1453,9 @@ pub async fn mock_not_responsive_api(ctx: &MailTestContext) {
         })
         .mount(ctx.mock_server())
         .await;
+    ctx.mail_context
+        .network_monitor_service()
+        .update_os_network_status(OsNetworkStatus::Offline);
 }
 
 #[tokio::test]
