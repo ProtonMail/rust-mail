@@ -352,11 +352,20 @@ pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
     ctx: Weak<MailUserContext>,
     source: Arc<RwLock<T>>,
     task: MailPaginatorJoinHandle,
+    execute_on_online: Option<AbortHandle>,
     items: Vec<T::Item>,
     page_size: usize,
     update: flume::Sender<ScrollerUpdate<T::Item>>,
     ordered_command_recv: flume::Receiver<ScrollerOrderedCommand>,
     ordered_command_send: flume::Sender<ScrollerOrderedCommand>,
+}
+
+impl<T: MailScrollerSource + 'static> Drop for ScrollerWorker<T> {
+    fn drop(&mut self) {
+        if let Some(handle) = self.execute_on_online.take() {
+            handle.abort();
+        }
+    }
 }
 
 impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
@@ -386,6 +395,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             source,
             page_size,
             task,
+            execute_on_online: None,
             items: vec![],
             update: update_sender,
             ordered_command_recv: ordered_command_receiver,
@@ -617,6 +627,10 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         &mut self,
         call_src: ScrollerSource,
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
+        if let Some(handle) = self.execute_on_online.take() {
+            handle.abort();
+        }
+
         let mut items = self.sync_next().await?;
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let (seen, synced, total, has_more_in_source) = {
@@ -637,6 +651,24 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
         if items.is_empty() && has_more_in_label {
             if self.task.is_none() {
+                let ctx_clone = ctx.clone();
+                let channel = self.ordered_command_send.clone();
+                if self.execute_on_online.is_none() {
+                    let handle = ctx.spawn(async move {
+                        ctx_clone
+                            .network_monitor_service()
+                            .os_network_status_observer()
+                            .wait_until_online()
+                            .await;
+                        let _ = channel
+                            .send_async(ScrollerOrderedCommand::FetchMore(call_src))
+                            .await
+                            .inspect_err(|e| {
+                                tracing::error!("Failed to send fetch more command: {e:?}")
+                            });
+                    });
+                    self.execute_on_online = Some(handle.abort_handle());
+                }
                 // We will not progress any further without task,
                 // and task will be spawned only when we are online,
                 // lets wait for another call.
