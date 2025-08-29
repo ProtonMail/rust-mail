@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::muon::Client;
+use proton_core_api::session::Session;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use reqwest::Method;
@@ -89,7 +89,7 @@ impl Action for UnsubscribeNewsletter {
 
 pub struct UnsubscribeNewsletterHandler {
     pub http_client: reqwest::Client,
-    pub api: Client,
+    pub api: Session,
 }
 
 impl Handler for UnsubscribeNewsletterHandler {
