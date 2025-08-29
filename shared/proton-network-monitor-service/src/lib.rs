@@ -144,6 +144,67 @@ pub enum OsNetworkStatus {
     Offline,
 }
 
+impl OsNetworkStatus {
+    #[must_use]
+    pub fn is_online(&self) -> bool {
+        self == &OsNetworkStatus::Online
+    }
+    #[must_use]
+    pub fn is_offline(&self) -> bool {
+        self == &OsNetworkStatus::Offline
+    }
+}
+
+#[derive(Clone)]
+pub struct OsNetworkStatusObserver {
+    receiver: watch::Receiver<OsNetworkStatus>,
+}
+
+impl OsNetworkStatusObserver {
+    fn new(receiver: watch::Receiver<OsNetworkStatus>) -> Self {
+        Self { receiver }
+    }
+
+    pub async fn wait_until_online(&mut self) {
+        // `wait_for()` returns `Err` if the channel's tx has died - this
+        // shouldn't be the case here, because the channel is allowed to die
+        // only after the *last* instance of status watcher is dropped, and we
+        // know at least one instance must be alive as it's held within `self`.
+        //
+        // If this logic becomes violated, the worst that can happen is that
+        // this function returns even if the network connection is actually
+        // offline. This is alright, because listening on network status is
+        // advisory anyway - the caller is supposed to handle potential network
+        // problems on their side one way or another.
+        let _ = self.receiver.wait_for(OsNetworkStatus::is_online).await;
+    }
+
+    #[must_use]
+    pub fn is_online(&self) -> bool {
+        self.receiver.borrow().is_online()
+    }
+
+    #[must_use]
+    pub fn status(&self) -> OsNetworkStatus {
+        *self.receiver.borrow()
+    }
+
+    pub async fn wait_for_change(&mut self) -> OsNetworkStatus {
+        // `changed()` returns `Err` if the channel's tx has died - this
+        // shouldn't be the case here, because the channel is allowed to die
+        // only after the *last* instance of status watcher is dropped, and we
+        // know at least one instance must be alive as it's held within `self`.
+        //
+        // If this logic becomes violated, the worst that can happen is that
+        // this function returns even if the network connection is actually
+        // offline. This is alright, because listening on network status is
+        // advisory anyway - the caller is supposed to handle potential network
+        // problems on their side one way or another.
+        let _ = self.receiver.changed().await;
+        *self.receiver.borrow()
+    }
+}
+
 #[cfg_attr(test, mockall::automock)]
 #[async_trait::async_trait]
 pub trait OnlineTester: Send + Sync + 'static {

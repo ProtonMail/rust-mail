@@ -257,7 +257,7 @@ impl UserContext {
 
     #[must_use]
     pub fn connection_status(&self) -> ConnectionStatus {
-        self.context.network_monitor_service().status()
+        self.context.network_monitor_service().combined_status()
     }
 
     async fn open_db(
