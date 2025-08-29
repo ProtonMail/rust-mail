@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Enable muon error logs
+
+### Features
+
+- ConnectionMonitor as layer on top of muon::Client
+
+### Fixes
+
+- Do not start ping test when OS tells us we are offline
+- Prefetch actions report network errors back to the queue
+- Use default retry policy for immediate checks
+
+
 ## [mail-uniffi-v0.142.4] - 2025-08-28
 
 ### Features
