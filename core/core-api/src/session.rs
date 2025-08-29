@@ -2,7 +2,7 @@ use derive_more::Debug;
 use futures::FutureExt;
 use muon::client::InfoProvider;
 use muon::client::flow::{ForkFlowResult, WithSelectorFlow};
-use muon::common::{BoxFut, ParseEndpointErr, Sender, SenderExt};
+use muon::common::{BoxFut, ParseEndpointErr, Sender};
 use muon::rt::DynResolver;
 use muon::{ProtonRequest, ProtonResponse, Result as MuonResult};
 use std::borrow::Borrow;
@@ -274,11 +274,9 @@ impl Sender<ProtonRequest, ProtonResponse> for Session {
 
 impl Session {
     async fn send_impl(&self, req: ProtonRequest) -> MuonResult<ProtonResponse> {
-        let layer = self.connection_monitor.clone();
-        let client = self.client.clone();
-        let sender = client.layer([layer]);
-
-        sender.send(req).await
+        let result = self.client.send(req).await;
+        self.connection_monitor.inspect_result(&result);
+        result
     }
 }
 
