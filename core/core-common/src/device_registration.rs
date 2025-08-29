@@ -168,7 +168,7 @@ pub async fn registered_device_task_step(
         return Ok(());
     }
 
-    let mut network_status_observer = ctx.network_monitor_service().network_status_observer();
+    let mut network_status_observer = ctx.network_monitor_service().os_network_status_observer();
 
     if let Some(device) = state.device.as_ref() {
         // Trying in a loop. If registration fails because of network, let's retry.

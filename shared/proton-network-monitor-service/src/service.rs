@@ -1,6 +1,6 @@
 use crate::{
-    ConnectionMonitor, NetworkStatusObserver, OnlineTester, OsNetworkStatus, RequestNetworkStatus,
-    update_watcher_value,
+    ConnectionMonitor, NetworkStatusObserver, OnlineTester, OsNetworkStatus,
+    OsNetworkStatusObserver, RequestNetworkStatus, update_watcher_value,
 };
 use futures::FutureExt;
 use muon::common::RetryPolicy;
@@ -138,8 +138,18 @@ impl NetworkMonitorService {
     }
 
     #[must_use]
+    pub fn os_network_status_observer(&self) -> OsNetworkStatusObserver {
+        OsNetworkStatusObserver::new(self.os_network_watcher.subscribe())
+    }
+
+    #[must_use]
     pub fn is_online(&self) -> bool {
         self.network_status_observer().is_online()
+    }
+
+    #[must_use]
+    pub fn is_os_online(&self) -> bool {
+        self.os_network_status_observer().is_online()
     }
 
     /// This method will perform an network test immediately.

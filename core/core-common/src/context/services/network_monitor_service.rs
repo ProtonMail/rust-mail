@@ -10,7 +10,8 @@ use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::session::Session;
 use proton_network_monitor_service::{
     Config, ConnectionMonitor, NetworkMonitorService as ProtonNetworkMonitorService,
-    NetworkStatusObserver, OnlineTester, OsNetworkStatus, RequestNetworkStatus,
+    NetworkStatusObserver, OnlineTester, OsNetworkStatus, OsNetworkStatusObserver,
+    RequestNetworkStatus,
 };
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -38,15 +39,36 @@ impl NetworkMonitorService {
         self.service.read().network_status_observer()
     }
 
+    pub fn os_network_status_observer(&self) -> OsNetworkStatusObserver {
+        self.service.read().os_network_status_observer()
+    }
+
+    pub fn is_os_online(&self) -> bool {
+        self.service.read().is_os_online()
+    }
+    pub fn is_os_offline(&self) -> bool {
+        !self.service.read().is_os_online()
+    }
+
     pub async fn check_now(&self) -> RequestNetworkStatus {
         let request = self.service.read().check_now_deferred();
         request.await
     }
 
-    pub fn status(&self) -> ConnectionStatus {
+    /// Networks status that uses both the os network and the request status reports.
+    pub fn combined_status(&self) -> ConnectionStatus {
         self.service
             .read()
             .network_status_observer()
+            .status()
+            .into()
+    }
+
+    /// Network status that only uses the os network status report.
+    pub fn os_status(&self) -> ConnectionStatus {
+        self.service
+            .read()
+            .os_network_status_observer()
             .status()
             .into()
     }
