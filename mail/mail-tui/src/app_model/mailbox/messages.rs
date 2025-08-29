@@ -564,7 +564,8 @@ impl MessagesState {
                 let user_ctx = Arc::clone(&user_ctx);
 
                 async move {
-                    Attachment::get_attachment(&user_ctx, mdata.local_id.unwrap())
+                    let mut tether = user_ctx.user_stash().connection();
+                    Attachment::get_attachment(&user_ctx, mdata.local_id.unwrap(), &mut tether)
                         .await
                         .map(|att| {
                             format!(

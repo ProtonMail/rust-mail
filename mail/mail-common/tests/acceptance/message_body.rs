@@ -386,8 +386,9 @@ async fn pgp_mime_attachments_retrievable_via_get_attachments() {
     assert_eq!(pgp_attachments[0].filename, "attachment1.txt");
     assert_eq!(pgp_attachments[0].mime_type, MimeType::text_plain());
 
+    let mut tether = user_ctx.user_stash().connection();
     for (index, attachment) in pgp_attachments.into_iter().enumerate() {
-        let data = Attachment::get_attachment(&user_ctx, attachment.local_id.unwrap())
+        let data = Attachment::get_attachment(&user_ctx, attachment.local_id.unwrap(), &mut tether)
             .await
             .unwrap_or_else(|_| panic!("failed to get attachment {index}"));
 

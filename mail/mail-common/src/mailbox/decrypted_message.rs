@@ -433,12 +433,14 @@ impl DecryptedMessageBody {
         if let Some(invite) = invite {
             debug!("Analyzing invite attachment");
 
-            let ics = Attachment::get_attachment(ctx, invite)
+            let mut tether = ctx.user_stash().connection();
+            let ics = Attachment::get_attachment(ctx, invite, &mut tether)
                 .await
                 .map_err(|err| {
                     warn!(?err, "Couldn't get the RSVP attachment");
                     err
                 })?;
+            drop(tether);
 
             let ics = fs::read(&ics.data_path).await.map_err(|err| {
                 warn!(?err, "Couldn't read the RSVP attachment");

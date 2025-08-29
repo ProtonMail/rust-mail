@@ -7,6 +7,7 @@ use sqlite_watcher::statement::Statement;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tempdir::TempDir;
 
 #[derive(Debug)]
@@ -15,16 +16,21 @@ enum Source {
     TmpFile(TempDir),
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum StashConnectionPoolError {
+    #[error(transparent)]
+    Connection(#[from] Error),
+    #[error("Failed to acquire a connection in the given time limit")]
+    TimedOut,
+}
+
 type InitFn = dyn Fn(&mut Connection) -> Result<(), Error> + Send + Sync + 'static;
 type NotifierFn = dyn Fn() + Send + Sync + 'static;
 /// Maintains a pool of sqlite connections.
 pub struct StashConnectionPool {
     connections: Mutex<Vec<Connection>>,
+    connections_cond_var: Condvar,
     interrupt_handles: Mutex<SlotMap<InterruptHandleKey, InterruptData>>,
-    source: Source,
-    max_connections: usize,
-    init_fn: Box<InitFn>,
-    flags: OpenFlags,
     interrupted: Mutex<bool>,
     wait_resume: Condvar,
 }
@@ -37,17 +43,8 @@ impl StashConnectionPool {
         path: P,
         max_connections: usize,
         init_fn: Box<InitFn>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            connections: Default::default(),
-            interrupt_handles: Default::default(),
-            source: Source::File(path.into()),
-            max_connections,
-            init_fn,
-            flags: Default::default(),
-            interrupted: Default::default(),
-            wait_resume: Condvar::new(),
-        })
+    ) -> Result<Arc<Self>, Error> {
+        Self::new(Source::File(path.into()), max_connections, init_fn)
     }
 
     /// Creates a new `StashConnectionPool` pretending to be memory database.
@@ -57,18 +54,30 @@ impl StashConnectionPool {
     /// Since the production usage is exclusively file database it is nice bonus to run all tests in the
     /// file.
     ///
-    pub fn tmp_file(max_connections: usize, init_fn: Box<InitFn>) -> Arc<Self> {
+    pub fn tmp_file(max_connections: usize, init_fn: Box<InitFn>) -> Result<Arc<Self>, Error> {
         let tmp_dir = TempDir::new("stash-tmp").expect("failed to create temp dir");
-        Arc::new(Self {
-            connections: Default::default(),
+        Self::new(Source::TmpFile(tmp_dir), max_connections, init_fn)
+    }
+
+    fn new(
+        source: Source,
+        max_connections: usize,
+        init_fn: Box<InitFn>,
+    ) -> Result<Arc<Self>, Error> {
+        let connections: Result<Vec<Connection>, Error> = (0..max_connections)
+            .map(|_| Self::create_connection(&source, &init_fn, OpenFlags::default()))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .collect();
+        let connections = connections?;
+
+        Ok(Arc::new(Self {
+            connections: Mutex::new(connections),
+            connections_cond_var: Condvar::new(),
             interrupt_handles: Default::default(),
-            source: Source::TmpFile(tmp_dir),
-            max_connections,
-            init_fn,
-            flags: Default::default(),
             interrupted: Default::default(),
             wait_resume: Condvar::new(),
-        })
+        }))
     }
 
     /// Acquire a new connection from the pool.
@@ -84,8 +93,9 @@ impl StashConnectionPool {
     pub fn acquire(
         self: &Arc<Self>,
         notify_interrupt: Box<NotifierFn>,
-    ) -> Result<StashPooledConnection, Error> {
-        let connection = self.create_or_acquire()?;
+        timeout: Option<Duration>,
+    ) -> Result<StashPooledConnection, StashConnectionPoolError> {
+        let connection = self.wait_or_acquire(timeout)?;
 
         let mut interrupt_handles = self.interrupt_handles.lock();
         let key = interrupt_handles.insert(InterruptData {
@@ -142,31 +152,42 @@ impl StashConnectionPool {
         self.wait_resume.wait(&mut interrupted);
     }
 
-    pub fn create_or_acquire(&self) -> Result<Connection, Error> {
-        let mut connections = self.connections.lock();
-        while let Some(connection) = connections.pop() {
-            if Self::is_connection_valid(&connection) {
+    fn wait_or_acquire(
+        &self,
+        timeout: Option<Duration>,
+    ) -> Result<Connection, StashConnectionPoolError> {
+        loop {
+            let mut connections = self.connections.lock();
+            if connections.is_empty() {
+                if let Some(timeout) = timeout {
+                    let result = self
+                        .connections_cond_var
+                        .wait_for(&mut connections, timeout);
+                    if result.timed_out() {
+                        return Err(StashConnectionPoolError::TimedOut);
+                    }
+                } else {
+                    self.connections_cond_var.wait(&mut connections);
+                }
+            }
+
+            if let Some(connection) = connections.pop() {
                 return Ok(connection);
             }
         }
-        drop(connections);
-
-        self.create_connection()
     }
 
-    fn is_connection_valid(connection: &Connection) -> bool {
-        connection.execute_batch("SELECT 1").is_ok()
-    }
-
-    fn create_connection(&self) -> Result<Connection, Error> {
-        match &self.source {
-            Source::File(path) => Connection::open_with_flags(path, self.flags),
-            Source::TmpFile(tmp) => {
-                Connection::open_with_flags(tmp.path().join("test"), self.flags)
-            }
+    fn create_connection(
+        source: &Source,
+        init_fn: &InitFn,
+        flags: OpenFlags,
+    ) -> Result<Connection, Error> {
+        match source {
+            Source::File(path) => Connection::open_with_flags(path, flags),
+            Source::TmpFile(tmp) => Connection::open_with_flags(tmp.path().join("test"), flags),
         }
         .and_then(|mut c| {
-            (self.init_fn)(&mut c)?;
+            (init_fn)(&mut c)?;
             State::set_pragmas().execute(&c)?;
             State::start_tracking().execute(&c)?;
             Ok(c)
@@ -179,9 +200,8 @@ impl StashConnectionPool {
         interrupt_handles.remove(interrupt_handle_key);
         drop(interrupt_handles);
         let mut connections = self.connections.lock();
-        if connections.len() < self.max_connections {
-            connections.push(connection);
-        }
+        connections.push(connection);
+        self.connections_cond_var.notify_one();
     }
 }
 
@@ -245,5 +265,37 @@ impl InterruptData {
     fn interrupt(&self) {
         self.handle.interrupt();
         (self.notifier)();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn connection_pool_upper_limit() {
+        let pool = StashConnectionPool::tmp_file(2, Box::new(|_| Ok(()))).unwrap();
+
+        let conn1 = pool.acquire(Box::new(|| {}), None).unwrap();
+        let _conn2 = pool.acquire(Box::new(|| {}), None).unwrap();
+        let r = pool.acquire(Box::new(|| {}), Some(Duration::from_millis(200)));
+        assert!(matches!(r, Err(StashConnectionPoolError::TimedOut)));
+        drop(conn1);
+        pool.acquire(Box::new(|| {}), Some(Duration::from_millis(200)))
+            .unwrap();
+    }
+
+    #[test]
+    fn connection_pool_waits_on_connections_to_be_returned() {
+        let pool = StashConnectionPool::tmp_file(2, Box::new(|_| Ok(()))).unwrap();
+
+        let conn1 = pool.acquire(Box::new(|| {}), None).unwrap();
+        let _conn2 = pool.acquire(Box::new(|| {}), None).unwrap();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            drop(conn1);
+        });
+        pool.acquire(Box::new(|| {}), Some(Duration::from_secs(1)))
+            .unwrap();
     }
 }
