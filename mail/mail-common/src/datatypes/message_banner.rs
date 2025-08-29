@@ -147,11 +147,7 @@ impl Message {
         }
 
         if can_unsubscribe {
-            let already_unsubscribed = if let Some(id) = self.local_id {
-                Message::is_unsubscribed(id, tether).await
-            } else {
-                false
-            };
+            let already_unsubscribed = self.flags.contains(MessageFlags::UNSUBSCRIBED);
 
             banners.push(MessageBanner::UnsubscribeNewsletter {
                 already_unsubscribed,
