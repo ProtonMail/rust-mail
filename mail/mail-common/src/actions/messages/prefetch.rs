@@ -1,7 +1,7 @@
-use crate::MailUserContext;
 use crate::actions::{MailActionError, PREFETCH_ROLLBACK_ACTION_GROUP};
 use crate::datatypes::LocalMessageId;
 use crate::models::Message;
+use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionGroup, ActionId, DefaultVersionConverter, Handler,
     Priority, Type, WriterGuard,
@@ -72,7 +72,7 @@ impl Handler for PrefetchHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        tracing::debug!(
+        tracing::trace!(
             "Prefetching message {local_id} body",
             local_id = action.local_id
         );
@@ -89,8 +89,15 @@ impl Handler for PrefetchHandler {
         };
 
         if let Err(e) = local_message.prefetch_message_body(&ctx, &mut guard).await {
-            tracing::error!("Couldn't prefetch message body, details: `{e}`");
-        };
+            match e {
+                MailContextError::Api(network_error) => {
+                    return Err(MailActionError::Http(network_error));
+                }
+                _ => {
+                    error!("Error prefetching message body, details: `{e}`");
+                }
+            }
+        }
 
         Ok(())
     }
