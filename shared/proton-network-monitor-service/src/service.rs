@@ -34,7 +34,7 @@ impl Default for ImmediateConfig {
         Self {
             command_timeout: Duration::from_secs(2),
             request_timeout: Duration::from_secs(20),
-            retry_policy: RetryPolicy::default().never(),
+            retry_policy: RetryPolicy::default(),
             retry_interval: Duration::from_secs(5),
         }
     }
