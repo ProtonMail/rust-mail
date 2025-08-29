@@ -627,10 +627,6 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         &mut self,
         call_src: ScrollerSource,
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
-        if let Some(handle) = self.execute_on_online.take() {
-            handle.abort();
-        }
-
         let mut items = self.sync_next().await?;
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let (seen, synced, total, has_more_in_source) = {
@@ -651,13 +647,13 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
         if items.is_empty() && has_more_in_label {
             if self.task.is_none() {
-                let ctx_clone = ctx.clone();
-                let channel = self.ordered_command_send.clone();
                 if self.execute_on_online.is_none() {
+                    let ctx_clone = ctx.clone();
+                    let channel = self.ordered_command_send.clone();
                     let handle = ctx.spawn(async move {
                         ctx_clone
                             .network_monitor_service()
-                            .os_network_status_observer()
+                            .network_status_observer()
                             .wait_until_online()
                             .await;
                         let _ = channel
@@ -679,6 +675,10 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 // For other cases we would jump double pages.
                 items = self.sync_next().await?;
             }
+        }
+
+        if let Some(handle) = self.execute_on_online.take() {
+            handle.abort();
         }
 
         if items.is_empty() {
