@@ -495,11 +495,8 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .wait_for(timeout, |status| status.is_online())
         .await;
 
-    // `all_items` will react to the online data being available
-    // listing will be done in correct the order of the cache
-    // note: asserting here leads to races between request, db transaction, and the read instant.
-    // But `fetch_more` will force replacing unordered items with correct order from API
-    test_scroller.fetch_more_and_wait().await.unwrap();
+    // automatic fetch_more will be triggered by the online status change
+    test_scroller.wait_for_update().await.unwrap();
 
     // Wait for the second update containing the actual data replacement
     // In the new push-based model, fetch_more_and_wait() only waits for immediate feedback,
