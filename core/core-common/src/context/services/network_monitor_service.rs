@@ -43,6 +43,13 @@ impl NetworkMonitorService {
         self.service.read().os_network_status_observer()
     }
 
+    pub fn is_os_online(&self) -> bool {
+        self.service.read().is_os_online()
+    }
+    pub fn is_os_offline(&self) -> bool {
+        !self.service.read().is_os_online()
+    }
+
     pub async fn check_now(&self) -> RequestNetworkStatus {
         let request = self.service.read().check_now_deferred();
         request.await
