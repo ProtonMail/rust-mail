@@ -75,9 +75,7 @@ typed-builder = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
 sqlite-watcher = { workspace = true }
-reqwest = { version = "0.12.23", features = [
-  "rustls-tls",
-], default-features = false }
+reqwest = { workspace = true }
 
 # test-util option deps
 function_name = { workspace = true, optional = true }
@@ -114,6 +112,8 @@ tempfile = { workspace = true }
 velcro = { workspace = true }
 wiremock = { workspace = true }
 proton-mail-common = { path = ".", features = ["test-utils"] }
+criterion = { version = "0.6.0" }
+pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
 
 # not compatible with global clippy configuration yet
 # [lints]
@@ -137,3 +137,8 @@ module_name_repetitions = "allow"
 print_stdout = "warn"
 unseparated_literal_suffix = "warn"
 wrong_self_convention = "warn"
+
+[[bench]]
+name = "messages_load"
+harness = false
+required-features = []
