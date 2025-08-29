@@ -123,13 +123,13 @@ impl<T: ScrollData> MailScrollerState<T> {
     ) -> Result<(), StashError> {
         match self {
             MailScrollerState::Online(ordered) | MailScrollerState::Offline { ordered, .. } => {
-                if !ordered.has_next_page(tether).await? {
-                    if let Err(e) = ordered.update(tether).await {
-                        tracing::error!(
-                            "Could not update scroller end cursor, it has been removed: `{e}`"
-                        );
-                        *self = MailScrollerState::NotSynced(ordered.clone());
-                    }
+                if !ordered.has_next_page(tether).await?
+                    && let Err(e) = ordered.update(tether).await
+                {
+                    tracing::error!(
+                        "Could not update scroller end cursor, it has been removed: `{e}`"
+                    );
+                    *self = MailScrollerState::NotSynced(ordered.clone());
                 }
 
                 return Ok(());

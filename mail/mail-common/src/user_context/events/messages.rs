@@ -93,12 +93,11 @@ pub async fn handle_message_events(
                 }
 
                 // Case 4.
-                if event.action == Action::Update || is_stale_draft {
-                    if let Some(local_id) =
+                if (event.action == Action::Update || is_stale_draft)
+                    && let Some(local_id) =
                         Message::remote_id_counterpart(message.id.clone(), tx).await?
-                    {
-                        _ = MessageBody::delete(local_id, tx).await;
-                    }
+                {
+                    _ = MessageBody::delete(local_id, tx).await;
                 }
 
                 Message::create_or_update_messages_from_metadata(vec![message.clone()], tx).await?;

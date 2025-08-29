@@ -397,14 +397,13 @@ where
             id_name = Self::id_field_name(),
         };
 
-        if let Ok(id) = self.id_value() {
-            if bond
+        if let Ok(id) = self.id_value()
+            && bond
                 .query_value_opt::<Self::IdType>(query, params![id])
                 .await?
                 .is_some()
-            {
-                return self.update(bond).await;
-            }
+        {
+            return self.update(bond).await;
         }
         self.insert(bond).await
     }

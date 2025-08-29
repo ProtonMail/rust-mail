@@ -628,7 +628,7 @@ pub async fn search_for_messages(
         let mut tether = stash.connection();
         let messages = RealMessage::search(
             options.into_api_options(&tether).await?,
-            user_context.api(),
+            user_context.session(),
             &mut tether,
         )
         .await?

@@ -28,6 +28,7 @@ use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::MultiActionError;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
+use proton_core_api::session::Session;
 use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::utils::IterMapToSql;
@@ -52,7 +53,7 @@ use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, LabelId};
-use proton_core_api::services::proton::{PrivateEmail, PrivateString, Proton};
+use proton_core_api::services::proton::{PrivateEmail, PrivateString};
 use proton_core_common::datatypes::{
     LabelType, LocalAddressId, LocalLabelId, SystemLabel, UnixTimestamp,
 };
@@ -640,17 +641,17 @@ impl Message {
     /// failed.
     ///
     pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                *self = existing;
+        if let Some(remote_id) = self.remote_id.clone()
+            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
+        {
+            *self = existing;
 
-                tracing::trace!(
-                    remote_id = ?self.remote_id,
-                    "Skipping saving message, we already have it in the local DB"
-                );
+            tracing::trace!(
+                remote_id = ?self.remote_id,
+                "Skipping saving message, we already have it in the local DB"
+            );
 
-                return Ok(());
-            }
+            return Ok(());
         }
 
         self.save(bond).await?;
@@ -660,18 +661,18 @@ impl Message {
     /// Set convarsation ids before saving
     ///
     async fn set_coversation_before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.local_conversation_id.is_none() {
-            if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
-                if let Some(conversation) =
-                    Conversation::find_by_remote_id(remote_conversation_id.clone(), bond).await?
-                {
-                    self.local_conversation_id = conversation.local_id;
-                } else {
-                    // Create an unknown entry.
-                    let mut conversation = Conversation::unknown(remote_conversation_id);
-                    conversation.save(bond).await?;
-                    self.local_conversation_id = conversation.local_id;
-                }
+        if self.local_conversation_id.is_none()
+            && let Some(remote_conversation_id) = self.remote_conversation_id.clone()
+        {
+            if let Some(conversation) =
+                Conversation::find_by_remote_id(remote_conversation_id.clone(), bond).await?
+            {
+                self.local_conversation_id = conversation.local_id;
+            } else {
+                // Create an unknown entry.
+                let mut conversation = Conversation::unknown(remote_conversation_id);
+                conversation.save(bond).await?;
+                self.local_conversation_id = conversation.local_id;
             }
         }
 
@@ -944,7 +945,7 @@ impl Message {
     ///
     async fn sync_dependencies_from_metadata(
         messages: &[MessageMetadata],
-        api: &Proton,
+        api: &Session,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         let mut fetcher = MessageOrConversationDependencyFetcher::new();
@@ -972,7 +973,7 @@ impl Message {
     ///
     pub async fn search(
         options: GetMessagesOptions,
-        api: &Proton,
+        api: &Session,
         tether: &mut Tether,
     ) -> Result<Vec<Message>, MailContextError> {
         let messages = api
@@ -1268,7 +1269,7 @@ impl Message {
         }
 
         let (_, encrypted_body) =
-            Self::sync_message_and_body(remote_id, ctx.api(), &mut tx).await?;
+            Self::sync_message_and_body(remote_id, ctx.session(), &mut tx).await?;
 
         trace!("Message successfully downloaded. Decrypting...");
 
@@ -2071,7 +2072,7 @@ impl Message {
         tracing::info!("Force syncing");
 
         let (message, encrypted) =
-            Self::sync_message_and_body(message_id, ctx.api(), tether).await?;
+            Self::sync_message_and_body(message_id, ctx.session(), tether).await?;
 
         let decrypted = Self::decrypt_message_body(
             ctx,
@@ -2106,7 +2107,7 @@ impl Message {
     #[tracing::instrument(skip(api, tx))]
     async fn sync_message_and_body(
         message_id: MessageId,
-        api: &Proton,
+        api: &Session,
         tx: &mut impl RunTransaction,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         info!("Fetching message");
@@ -2256,7 +2257,7 @@ impl Message {
             return Ok(message.id());
         }
         tracing::debug!("Message does not exist, fetching");
-        let result = Message::sync_metadata(vec![remote_id], ctx.api(), tether).await?;
+        let result = Message::sync_metadata(vec![remote_id], ctx.session(), tether).await?;
         if result.len() != 1 {
             return Err(MailContextError::Other(anyhow!(
                 "Failed to sync message from server"
@@ -2640,10 +2641,10 @@ impl ModelHooks for Message {
     }
 
     async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.local_id = existing.local_id;
-            }
+        if let Some(remote_id) = self.remote_id.clone()
+            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
+        {
+            self.local_id = existing.local_id;
         }
 
         self.set_coversation_before_save(bond).await?;
@@ -2909,25 +2910,25 @@ impl MessageBodyMetadata {
 
 impl ModelHooks for MessageBodyMetadata {
     async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.local_message_id.is_none() {
-            if let Some(remote_id) = self.remote_message_id.clone() {
-                if let Some(existing) = Self::find_first(
-                    "WHERE remote_message_id=?",
-                    params![remote_id.clone()],
-                    bond,
-                )
-                .await?
-                {
-                    self.local_message_id = existing.local_message_id;
-                } else {
-                    let Some(message) = Message::find_by_remote_id(remote_id, bond).await? else {
-                        return Err(StashError::Custom(anyhow!(
-                            "Failed to find message with remote id {}",
-                            self.remote_message_id.as_ref().unwrap()
-                        )));
-                    };
-                    self.local_message_id = message.local_id;
-                }
+        if self.local_message_id.is_none()
+            && let Some(remote_id) = self.remote_message_id.clone()
+        {
+            if let Some(existing) = Self::find_first(
+                "WHERE remote_message_id=?",
+                params![remote_id.clone()],
+                bond,
+            )
+            .await?
+            {
+                self.local_message_id = existing.local_message_id;
+            } else {
+                let Some(message) = Message::find_by_remote_id(remote_id, bond).await? else {
+                    return Err(StashError::Custom(anyhow!(
+                        "Failed to find message with remote id {}",
+                        self.remote_message_id.as_ref().unwrap()
+                    )));
+                };
+                self.local_message_id = message.local_id;
             }
         }
         // Update all attachment links - When creating drafts we can update
@@ -2972,13 +2973,13 @@ impl ModelHooks for MessageBodyMetadata {
     }
 
     async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.local_message_id.is_none() {
-            if let Some(remote_id) = self.remote_message_id.clone() {
-                let message =
-                    Message::find_first("WHERE remote_id = ?", params![remote_id], bond).await?;
-                if let Some(message) = message {
-                    self.local_message_id = message.local_id;
-                }
+        if self.local_message_id.is_none()
+            && let Some(remote_id) = self.remote_message_id.clone()
+        {
+            let message =
+                Message::find_first("WHERE remote_id = ?", params![remote_id], bond).await?;
+            if let Some(message) = message {
+                self.local_message_id = message.local_id;
             }
         }
 

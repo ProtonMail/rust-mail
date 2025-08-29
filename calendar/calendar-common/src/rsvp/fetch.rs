@@ -13,7 +13,7 @@ use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, ProtonCalendar,
 };
 use proton_canonical_email::{self as email, CanonicalEmail};
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::validation::is_valid_email_address;
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_calendar::CalendarEventDecryptor;
@@ -23,7 +23,7 @@ use tracing::{debug, info, instrument, warn};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn run<P, K>(
-    api: &Proton,
+    api: &Session,
     pgp: &P,
     keys: &K,
     cache: &impl RsvpCache,
@@ -72,7 +72,7 @@ enum Fetched {
 }
 
 #[instrument(skip_all)]
-async fn fetch(api: &Proton, cache: &impl RsvpCache, id: &RsvpEventId) -> RsvpResult<Fetched> {
+async fn fetch(api: &Session, cache: &impl RsvpCache, id: &RsvpEventId) -> RsvpResult<Fetched> {
     info!("Fetching event data");
 
     match fetch_ex(api, cache, id).await {
@@ -88,7 +88,7 @@ async fn fetch(api: &Proton, cache: &impl RsvpCache, id: &RsvpEventId) -> RsvpRe
 
 // Extracted out of `fetch()` since this way it's easier to catch all network
 // errors without having to `match` on each `api.whatever()`
-async fn fetch_ex(api: &Proton, cache: &impl RsvpCache, id: &RsvpEventId) -> RsvpResult<Fetched> {
+async fn fetch_ex(api: &Session, cache: &impl RsvpCache, id: &RsvpEventId) -> RsvpResult<Fetched> {
     let (event, children) = match id {
         RsvpEventId::Invite { uid, rid, .. } => {
             let mut events = api.find_calendar_events(uid, *rid).await?;

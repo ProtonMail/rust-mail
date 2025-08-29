@@ -321,7 +321,7 @@ impl From<MaybeUri> for VCardUrlValue {
                     Self::NotHttp(uri)
                 }
             }
-            MaybeUri::Text(v) => Self::Text(v.to_string()),
+            MaybeUri::Text(v) => Self::Text(v.clone()),
         }
     }
 }

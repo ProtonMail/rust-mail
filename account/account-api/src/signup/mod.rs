@@ -136,6 +136,7 @@ impl SignupFlow {
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Result<Self, ApiError> {
         let recorder = ObservabilityRecorder::default();
+
         let domains = client
             .get_available_domains(None)
             .inspect_ok(|_| {
@@ -146,6 +147,7 @@ impl SignupFlow {
             })
             .await?
             .domains;
+
         let countries = COUNTRIES.to_owned();
         let state = vec![State::new(client.clone(), challenge_info)];
 

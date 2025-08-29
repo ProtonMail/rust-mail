@@ -19,7 +19,11 @@ pub struct Config {
 
 #[derive(Debug, Clone)]
 pub struct ImmediateConfig {
-    pub timeout: Duration,
+    /// Duration of time one is willing to wait for the result of the immediate request.
+    /// The request will continue in the background, but will return cached status if we time
+    /// out.
+    pub command_timeout: Duration,
+    pub request_timeout: Duration,
     pub retry_policy: RetryPolicy,
     /// The amount of time to wait before another quick check can be made.
     pub retry_interval: Duration,
@@ -28,8 +32,9 @@ pub struct ImmediateConfig {
 impl Default for ImmediateConfig {
     fn default() -> Self {
         Self {
-            timeout: Duration::from_secs(2),
-            retry_policy: RetryPolicy::default().never(),
+            command_timeout: Duration::from_secs(2),
+            request_timeout: Duration::from_secs(20),
+            retry_policy: RetryPolicy::default(),
             retry_interval: Duration::from_secs(5),
         }
     }
@@ -137,6 +142,13 @@ impl NetworkMonitorService {
         self.network_status_observer().is_online()
     }
 
+    /// This method will perform an network test immediately.
+    ///
+    /// If we don't get a response before `ImmediateConfig.command_timeout`, we will return
+    /// a cached status.
+    ///
+    /// If this request happens less `ImmediateConfig.retry_interval` before another request, the
+    /// cached status will be returned.
     pub async fn check_now(&self) -> RequestNetworkStatus {
         self.check_now_deferred().await
     }
@@ -145,6 +157,8 @@ impl NetworkMonitorService {
     // in core-common does not have mut access.
     pub fn check_now_deferred(&self) -> impl Future<Output = RequestNetworkStatus> + 'static {
         let requester = self.immediate_test_requester.clone();
+        let network_status_observer = self.network_status_observer();
+        let command_timeout = self.config.immediate.command_timeout;
         async move {
             let Some(sender) = requester else {
                 tracing::warn!(
@@ -158,12 +172,19 @@ impl NetworkMonitorService {
                 return RequestNetworkStatus::Online;
             }
 
-            let Ok(status) = oneshot_receiver.await else {
-                tracing::warn!("Failed to communicate with the network monitor service");
-                return RequestNetworkStatus::Online;
-            };
-
-            status
+            match tokio::time::timeout(command_timeout, oneshot_receiver).await {
+                Err(_) => {
+                    // Timed out, return current value
+                    network_status_observer.status()
+                }
+                Ok(Ok(v)) => v,
+                Ok(Err(_)) => {
+                    tracing::warn!(
+                        "Failed to communicate with the network monitor service, returning last status"
+                    );
+                    network_status_observer.status()
+                }
+            }
         }
     }
 }
@@ -189,6 +210,7 @@ struct NetworkMonitorBackgroundTask {
     spawner: SpawnerRef,
     tester_task: Option<JoinHandle<()>>,
     immediate_request: mpsc::Receiver<oneshot::Sender<RequestNetworkStatus>>,
+    last_immediate_check: Instant,
 }
 
 impl NetworkMonitorBackgroundTask {
@@ -203,9 +225,14 @@ impl NetworkMonitorBackgroundTask {
         let subscriber_watcher = monitor.subscriber_watcher.clone();
         let os_network_status = *os_network_subscriber.borrow();
         let request_network_status = *request_network_subscriber.borrow();
+        let config = monitor.config.clone();
+        let mut last_immediate_check = Instant::now();
+        if let Some(new_value) = last_immediate_check.checked_sub(config.immediate.retry_interval) {
+            last_immediate_check = new_value;
+        }
 
         let mut instance = Self {
-            config: monitor.config.clone(),
+            config,
             os_network_subscriber,
             request_network_subscriber,
             subscriber_watcher,
@@ -217,6 +244,7 @@ impl NetworkMonitorBackgroundTask {
             tester_task: None,
             immediate_request,
             request_watcher: monitor.request_watcher(),
+            last_immediate_check,
         };
         tracing::debug!(
             "Current status os={os_network_status:?} request={request_network_status:?}"
@@ -228,12 +256,6 @@ impl NetworkMonitorBackgroundTask {
     #[instrument(skip_all, name = "network_monitor_service")]
     async fn run(mut self) {
         tracing::info!("Starting NetworkMonitorService");
-        let mut last_immediate_check = Instant::now();
-        if let Some(new_value) =
-            last_immediate_check.checked_sub(self.config.immediate.retry_interval)
-        {
-            last_immediate_check = new_value;
-        }
 
         loop {
             tokio::select! {
@@ -245,16 +267,7 @@ impl NetworkMonitorBackgroundTask {
                 }
                 r = self.immediate_request.recv() => {
                     if let Some(sender)  = r {
-                        let value = if last_immediate_check.elapsed() > self.config.immediate.retry_interval {
-                            tracing::debug!("Performing immediate check");
-                            last_immediate_check = Instant::now();
-                            perform_tester_check(self.tester.as_ref(), self.config.immediate.timeout, self.config.immediate.retry_policy,&self.request_watcher).await
-                        } else {
-                            tracing::debug!("Received immediate check request, but still too soon. Using cached value");
-                            self.request_network_status
-                        };
-
-                        let _ = sender.send(value);
+                        self.handle_immediate_request(sender).await;
                     }
                 }
             }
@@ -269,7 +282,10 @@ impl NetworkMonitorBackgroundTask {
             if self.os_network_status == OsNetworkStatus::Online {
                 // Perform one check to validate we are actually online
                 // and restart the ping task if necessary
-                let network_status = self.tester.check(self.config.immediate.timeout).await;
+                let network_status = self
+                    .tester
+                    .check(self.config.immediate.request_timeout)
+                    .await;
                 update_watcher_value(&self.request_watcher, network_status);
                 self.request_network_status = network_status;
             } else if let Some(task) = self.tester_task.take() {
@@ -305,22 +321,52 @@ impl NetworkMonitorBackgroundTask {
                 }
             } else {
                 tracing::info!("Network connection lost");
-                if self.tester_task.is_none() {
-                    tracing::debug!("Starting tester task");
-                    let config = self.config.background.clone();
-                    let tester = self.tester.clone();
-                    let watcher = self.request_watcher.clone();
-                    self.tester_task = Some(
-                        self.spawner.spawn_boxed_task(
-                            async move { network_tester(config, tester.as_ref(), watcher).await }
+                if self.os_network_status == OsNetworkStatus::Online {
+                    if self.tester_task.is_none() {
+                        tracing::debug!("Starting tester task");
+                        let config = self.config.background.clone();
+                        let tester = self.tester.clone();
+                        let watcher = self.request_watcher.clone();
+                        self.tester_task = Some(
+                            self.spawner.spawn_boxed_task(
+                                async move {
+                                    network_tester(config, tester.as_ref(), watcher).await;
+                                }
                                 .boxed(),
-                        ),
-                    );
+                            ),
+                        );
+                    }
+                } else if let Some(task) = self.tester_task.take() {
+                    tracing::debug!("Cancelling tester task due to offline os update");
+                    task.abort();
                 }
             }
             tracing::info!("Subscriber status changed to {:?}", subscriber_status);
             self.subscriber_status = subscriber_status;
         }
+    }
+
+    async fn handle_immediate_request(&mut self, sender: oneshot::Sender<RequestNetworkStatus>) {
+        let value = if self.last_immediate_check.elapsed() > self.config.immediate.retry_interval {
+            tracing::debug!("Performing immediate check...");
+            self.last_immediate_check = Instant::now();
+            let status = perform_tester_check(
+                self.tester.as_ref(),
+                self.config.immediate.request_timeout,
+                self.config.immediate.retry_policy,
+                &self.request_watcher,
+            )
+            .await;
+            tracing::debug!("Performing immediate check... -> {status:?}");
+            status
+        } else {
+            tracing::debug!(
+                "Received immediate check request, but still too soon. Using cached value"
+            );
+            self.request_network_status
+        };
+
+        let _ = sender.send(value);
     }
 }
 
@@ -416,7 +462,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn os_updates_resume_network_ping() {
         let mut config = test_config();
-        config.immediate.timeout = Duration::from_millis(5);
+        config.immediate.request_timeout = Duration::from_millis(5);
         config.background.retry_policy = RetryPolicy::default()
             .min_delay(Duration::from_secs(60))
             .max_delay(Duration::from_secs(60))
@@ -434,7 +480,7 @@ mod tests {
         tester
             .expect_check()
             .once()
-            .with(eq(config.immediate.timeout))
+            .with(eq(config.immediate.request_timeout))
             .returning(|_| RequestNetworkStatus::ServerUnreachable);
         let service = new_service(config, tester);
 
@@ -525,13 +571,13 @@ mod tests {
             .expect_check()
             .once()
             .in_sequence(&mut sequence)
-            .with(eq(config.immediate.timeout))
+            .with(eq(config.immediate.request_timeout))
             .returning(|_| RequestNetworkStatus::Offline);
         tester
             .expect_check()
             .once()
             .in_sequence(&mut sequence)
-            .with(eq(config.immediate.timeout))
+            .with(eq(config.immediate.request_timeout))
             .returning(|_| RequestNetworkStatus::Online);
 
         let service = new_service(config.clone(), tester);
@@ -565,7 +611,8 @@ mod tests {
     fn test_config() -> Config {
         Config {
             immediate: ImmediateConfig {
-                timeout: Duration::from_millis(200),
+                command_timeout: Duration::from_secs(1),
+                request_timeout: Duration::from_millis(200),
                 retry_policy: RetryPolicy::default().never(),
                 retry_interval: Duration::from_millis(500),
             },

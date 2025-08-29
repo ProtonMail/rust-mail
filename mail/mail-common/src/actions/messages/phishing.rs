@@ -99,7 +99,7 @@ impl Handler for ReportPhishingHandler {
 
         info!("Reporting phishing for {remote_id:?}");
 
-        ctx.api()
+        ctx.session()
             .report_phishing(remote_id, mime_type, &body.body)
             .await?;
 

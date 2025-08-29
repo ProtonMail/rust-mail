@@ -1,7 +1,6 @@
 use crate::actions::register_actions;
 
 use crate::{MailContext, MailContextResult};
-use proton_core_api::session::CoreSession;
 use proton_core_common::UserContext;
 
 use std::any::{Any, TypeId};
@@ -62,7 +61,7 @@ impl MailUserContextBuilder {
                 user_context.queue(),
                 origin,
                 this,
-                user_context.session().api(),
+                user_context.session(),
                 mail_context.http_client(),
             );
 

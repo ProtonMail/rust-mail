@@ -4,7 +4,7 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -28,7 +28,7 @@ impl Action for SyncIncomingDefaults {
 }
 
 pub struct SyncIncomingDefaultsHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for SyncIncomingDefaultsHandler {

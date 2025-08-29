@@ -63,7 +63,7 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
             proton_mail_api=debug,\
             proton_network_monitor_service=debug,\
             stash={}",
-            LogService::silence_muon_errors_evn_filter(),
+            "muon=error",
             if std::env::var("STASH_SQL_DEBUG").is_ok() {
                 "trace"
             } else {

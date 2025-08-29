@@ -91,10 +91,10 @@ async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<Mail
 
 async fn new_or_resume_login_flow(ctx: &MailContext, username: Option<&str>) -> Result<LoginFlow> {
     for acc in ctx.get_accounts().await? {
-        if let Some(username) = username {
-            if !match_account(&acc, username) {
-                continue;
-            }
+        if let Some(username) = username
+            && !match_account(&acc, username)
+        {
+            continue;
         }
 
         let session = match ctx.get_account_state(acc.remote_id.clone()).await? {

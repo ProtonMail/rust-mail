@@ -5,14 +5,14 @@ pub mod event_poll;
 use crate::{Origin, UserContext};
 use proton_action_queue::action::{FactoryError, Handler};
 use proton_action_queue::queue::Queue;
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use std::sync::Weak;
 
 pub(crate) fn register_actions(
     origin: Origin,
     queue: &Queue,
     ctx: &Weak<UserContext>,
-    api: &Proton,
+    api: &Session,
 ) {
     fn reg<T>(queue: &Queue, handler: T)
     where

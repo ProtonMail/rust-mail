@@ -101,13 +101,12 @@ impl Label {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that the information is update correctly in the database.
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(label) =
+        if let Some(remote_id) = self.remote_id.clone()
+            && let Some(label) =
                 Label::find_first("WHERE remote_id=?", params![remote_id], bond).await?
-            {
-                self.local_parent_id = label.local_parent_id;
-                self.local_id = label.local_id;
-            }
+        {
+            self.local_parent_id = label.local_parent_id;
+            self.local_id = label.local_id;
         }
 
         <Self as Model>::save(self, bond).await

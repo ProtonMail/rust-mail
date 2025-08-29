@@ -3,7 +3,7 @@ use crate::actions::register_actions;
 
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::session::Session;
 use stash::stash::Stash;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -72,7 +72,7 @@ impl UserContextBuilder {
         cache_path: PathBuf,
     ) -> Arc<UserContext> {
         Arc::new_cyclic(|this| {
-            register_actions(context.origin(), &queue, this, session.api());
+            register_actions(context.origin(), &queue, this, &session);
 
             let services = self
                 .services

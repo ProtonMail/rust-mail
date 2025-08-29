@@ -1097,10 +1097,9 @@ impl QueueAutoExecutor {
                             StoredAction::pending_count(&tether).await.inspect_err(|e| {
                                 error!("Failed to get pending action count: {e:?}");
                             })
+                            && count == 0
                         {
-                            if count == 0 {
-                                return;
-                            }
+                            return;
                         }
                     }
                     // We currently wait for a signal from an action queue to start executing.

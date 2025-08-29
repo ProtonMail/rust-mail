@@ -88,15 +88,14 @@ impl Message {
             .label_ids
             .iter()
             .any(|label| *label == LabelId::trash() || *label == LabelId::spam())
+            && let Some(days) = settings.auto_delete_spam_and_trash_days
         {
-            if let Some(days) = settings.auto_delete_spam_and_trash_days {
-                // TODO: let chains
-                if days != 0 && self.expiration_time != 0.into() {
-                    banners.push(MessageBanner::AutoDelete {
-                        timestamp: self.expiration_time,
-                    });
-                    autodelete = true;
-                }
+            // TODO: let chains
+            if days != 0 && self.expiration_time != 0.into() {
+                banners.push(MessageBanner::AutoDelete {
+                    timestamp: self.expiration_time,
+                });
+                autodelete = true;
             }
         }
 

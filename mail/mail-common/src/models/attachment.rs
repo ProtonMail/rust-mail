@@ -280,25 +280,23 @@ impl Attachment {
             self.local_id = existing.local_id;
         }
 
-        if self.local_address_id.is_none() {
-            if let Some(remote_address_id) = self.remote_address_id.clone() {
-                self.local_address_id =
-                    Address::remote_id_counterpart(remote_address_id, bond).await?;
-            }
+        if self.local_address_id.is_none()
+            && let Some(remote_address_id) = self.remote_address_id.clone()
+        {
+            self.local_address_id = Address::remote_id_counterpart(remote_address_id, bond).await?;
         }
 
-        if self.local_message_id.is_none() {
-            if let Some(remote_message_id) = self.remote_message_id.clone() {
-                self.local_message_id =
-                    Message::remote_id_counterpart(remote_message_id, bond).await?;
-            }
+        if self.local_message_id.is_none()
+            && let Some(remote_message_id) = self.remote_message_id.clone()
+        {
+            self.local_message_id = Message::remote_id_counterpart(remote_message_id, bond).await?;
         }
 
-        if self.local_conversation_id.is_none() {
-            if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
-                self.local_conversation_id =
-                    Conversation::remote_id_counterpart(remote_conversation_id, bond).await?;
-            }
+        if self.local_conversation_id.is_none()
+            && let Some(remote_conversation_id) = self.remote_conversation_id.clone()
+        {
+            self.local_conversation_id =
+                Conversation::remote_id_counterpart(remote_conversation_id, bond).await?;
         }
 
         <Self as Model>::save(self, bond).await

@@ -230,26 +230,24 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         }
 
         // No entry exist, which means we have not synced this label yet.
-        debug!("Paginating for the first time, getting first page");
+        let is_offline = is_offline().await;
+        debug!(
+            "Paginating for the first time, getting first page while being {}.",
+            if is_offline { "offline" } else { "online" }
+        );
+
         let local_label_id = label.id();
         let remote_label_id = label.remote_id.clone().unwrap();
-
-        let task = if is_offline().await {
-            debug!("We are offline, return scroller without a task");
-            None
-        } else {
-            debug!("Syncing first page in a task");
-            Self::sync_first_page(
-                ctx,
-                local_label_id,
-                remote_label_id,
-                unread,
-                self.page_size,
-                self.order_dir,
-                self.order_field,
-            )
-            .await?
-        };
+        let task = Self::sync_first_page(
+            ctx,
+            local_label_id,
+            remote_label_id,
+            unread,
+            self.page_size,
+            self.order_dir,
+            self.order_field,
+        )
+        .await?;
 
         Ok(task)
     }
@@ -346,21 +344,22 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // state. This is the soonest place it can be safely called.
         self.sync_scroller(&tether).await?;
 
-        if is_online && self.state.is_not_synced() {
-            if let Some(task) = self.initialize(ctx).await? {
-                match task.await {
-                    Ok(Ok(_)) => (),
-                    Ok(Err(err)) => {
-                        warn!(?err, "Couldn't initialize scroller, continuing anyway");
-                    }
-                    Err(err) => {
-                        warn!(?err, "Couldn't initialize scroller, continuing anyway");
-                    }
+        if is_online
+            && self.state.is_not_synced()
+            && let Some(task) = self.initialize(ctx).await?
+        {
+            match task.await {
+                Ok(Ok(_)) => (),
+                Ok(Err(err)) => {
+                    warn!(?err, "Couldn't initialize scroller, continuing anyway");
                 }
-
-                self.sync_scroller(&tether).await?;
-                replace = true;
+                Err(err) => {
+                    warn!(?err, "Couldn't initialize scroller, continuing anyway");
+                }
             }
+
+            self.sync_scroller(&tether).await?;
+            replace = true;
         }
 
         let (items, task) = match &mut self.state {

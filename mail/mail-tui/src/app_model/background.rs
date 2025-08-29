@@ -320,7 +320,7 @@ impl AppStateHandler for BackgroundModel {
             for (user_id, user_stats) in &stats.user_stats {
                 rows.push(Row::new([Cell::from(""), Cell::from("")]));
                 rows.push(Row::new([
-                    Cell::from(Span::from(user_id.to_string())).bold(),
+                    Cell::from(Span::from(user_id.clone())).bold(),
                     Cell::from(""),
                 ]));
                 rows.push(Row::new([

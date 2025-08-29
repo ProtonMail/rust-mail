@@ -1,9 +1,10 @@
 use bytes::Bytes;
-use muon::DELETE;
+use muon::common::Sender;
+use muon::{DELETE, ProtonRequest, ProtonResponse};
 use proton_core_api::service::ApiServiceResult;
 use proton_core_api::services::proton::muon::util::ProtonRequestExt;
 use proton_core_api::services::proton::muon::{GET, POST, PUT, serde_to_query};
-use proton_core_api::services::proton::{CORE_V4, IncomingDefaultId, LabelId, Proton};
+use proton_core_api::services::proton::{CORE_V4, IncomingDefaultId, LabelId};
 use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;
@@ -13,7 +14,7 @@ use crate::services::proton::{MAIL_V4, Package, PostSendRequest, UNLEASH_V2};
 use crate::services::proton::{PostSendMessageResponse, ProtonMail};
 use crate::{INCOMING_DEFAULTS_PAGE_SIZE, MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 
-impl ProtonMail for Proton {
+impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
     async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes> {
         Ok(GET!("{MAIL_V4}/attachments/{attachment_id}")
             .send_with(self)

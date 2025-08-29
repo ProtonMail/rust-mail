@@ -209,10 +209,10 @@ impl DraftStagingAreaCleaner {
             };
 
             debug!("Removing {:?}", entry.path());
-            if let Err(e) = tokio::fs::remove_dir_all(entry.path()).await {
-                if e.kind() != std::io::ErrorKind::NotFound {
-                    error!("Failed to remove draft staging dir {entry_str}: {e:?}");
-                }
+            if let Err(e) = tokio::fs::remove_dir_all(entry.path()).await
+                && e.kind() != std::io::ErrorKind::NotFound
+            {
+                error!("Failed to remove draft staging dir {entry_str}: {e:?}");
             }
         }
     }

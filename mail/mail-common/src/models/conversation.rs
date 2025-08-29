@@ -31,9 +31,8 @@ use itertools::Itertools;
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::Proton;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::{
     InitializationKey, LabelType, LocalLabelId, SystemLabel, UnixTimestamp, WeekStart,
 };
@@ -545,40 +544,40 @@ impl Conversation {
     /// Returns an error if the local conversation id is not set or the query failed.
     ///
     pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(mut existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                if existing.is_known {
-                    let existing_labels = existing
-                        .labels
-                        .iter()
-                        .map(|l| l.remote_label_id.clone())
-                        .collect::<HashSet<_>>();
-                    let new_labels = self
-                        .labels
-                        .iter()
-                        .filter(|l| !existing_labels.contains(&l.remote_label_id))
-                        .cloned()
-                        .collect_vec();
-                    let no_new_labels = new_labels.is_empty();
-                    existing.labels.extend(new_labels);
+        if let Some(remote_id) = self.remote_id.clone()
+            && let Some(mut existing) = Self::find_by_remote_id(remote_id, bond).await?
+        {
+            if existing.is_known {
+                let existing_labels = existing
+                    .labels
+                    .iter()
+                    .map(|l| l.remote_label_id.clone())
+                    .collect::<HashSet<_>>();
+                let new_labels = self
+                    .labels
+                    .iter()
+                    .filter(|l| !existing_labels.contains(&l.remote_label_id))
+                    .cloned()
+                    .collect_vec();
+                let no_new_labels = new_labels.is_empty();
+                existing.labels.extend(new_labels);
 
-                    *self = existing;
+                *self = existing;
 
-                    if no_new_labels {
-                        tracing::trace!(
-                            remote_id = ?self.remote_id,
-                            "Skipping saving conversation, we already have it in the local DB"
-                        );
-                        return Ok(());
-                    }
-                } else {
-                    // Otherwise, update the unknown conversation with API data
-                    self.local_id = existing.local_id;
-                    tracing::debug!(
+                if no_new_labels {
+                    tracing::trace!(
                         remote_id = ?self.remote_id,
-                        "Updating unknown conversation with API data"
+                        "Skipping saving conversation, we already have it in the local DB"
                     );
+                    return Ok(());
                 }
+            } else {
+                // Otherwise, update the unknown conversation with API data
+                self.local_id = existing.local_id;
+                tracing::debug!(
+                    remote_id = ?self.remote_id,
+                    "Updating unknown conversation with API data"
+                );
             }
         }
 
@@ -1615,20 +1614,19 @@ impl Conversation {
                     counter.save(bond).await?;
                 }
 
-                if let Some(mut counter) = ConversationCounters::find_by_id(label_id, bond).await? {
-                    if let Some(conv_label) = conversation
+                if let Some(mut counter) = ConversationCounters::find_by_id(label_id, bond).await?
+                    && let Some(conv_label) = conversation
                         .labels
                         .iter_mut()
                         .find(|l| l.local_label_id.unwrap() == label_id)
-                    {
-                        // Only update conversation unread count if it is the first time we are marking
-                        // the message as read.
-                        if conv_label.context_num_unread == 0 {
-                            counter.unread += 1;
-                            counter.save(bond).await?;
-                        }
-                        conv_label.context_num_unread += 1;
+                {
+                    // Only update conversation unread count if it is the first time we are marking
+                    // the message as read.
+                    if conv_label.context_num_unread == 0 {
+                        counter.unread += 1;
+                        counter.save(bond).await?;
                     }
+                    conv_label.context_num_unread += 1;
                 }
             }
 
@@ -1918,7 +1916,7 @@ impl Conversation {
     ///
     async fn sync_dependencies(
         conversations: &[ApiConversation],
-        api: &Proton,
+        api: &Session,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         let mut fetcher = MessageOrConversationDependencyFetcher::new();
@@ -1947,7 +1945,7 @@ impl Conversation {
     ///
     pub async fn search(
         options: GetConversationsOptions,
-        api: &Proton,
+        api: &Session,
         tether: &mut Tether,
     ) -> Result<Vec<Conversation>, MailContextError> {
         // Fetch all the conversations from the API
@@ -2446,14 +2444,10 @@ impl Conversation {
             }
 
             let conversation_response =
-                session
-                    .api()
-                    .get_conversation(rid.clone())
-                    .await
-                    .map_err(|e| {
-                        error!("failed to download conversation messages: {e:?}");
-                        AppError::from(e)
-                    })?;
+                session.get_conversation(rid.clone()).await.map_err(|e| {
+                    error!("failed to download conversation messages: {e:?}");
+                    AppError::from(e)
+                })?;
 
             tx.run_tx::<_, _>(async move |tx| {
                 let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
@@ -2871,13 +2865,13 @@ impl ModelHooks for Conversation {
     }
 
     async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.local_id = existing.local_id;
-                // We want to preserve this to prevent unnecessary resyncing of conversations
-                // messages if we update something.
-                self.has_messages = self.has_messages || existing.has_messages;
-            }
+        if let Some(remote_id) = self.remote_id.clone()
+            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
+        {
+            self.local_id = existing.local_id;
+            // We want to preserve this to prevent unnecessary resyncing of conversations
+            // messages if we update something.
+            self.has_messages = self.has_messages || existing.has_messages;
         }
         Ok(())
     }

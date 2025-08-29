@@ -4,7 +4,7 @@ use muon::env::EnvId;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_core_api::services::proton::LabelId;
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
@@ -97,7 +97,6 @@ async fn main() {
     println!("Session ID is {}", session_id.unwrap());
 
     let _ = session
-        .api()
         .get_conversations(GetConversationsOptions {
             page: 0,
             page_size: 10,
@@ -109,7 +108,6 @@ async fn main() {
         .unwrap();
 
     let messages = session
-        .api()
         .get_messages(GetMessagesOptions {
             page: 0,
             page_size: 10,
@@ -121,7 +119,7 @@ async fn main() {
         .messages;
 
     for m in messages {
-        let m = session.api().get_message(m.id).await.unwrap();
+        let m = session.get_message(m.id).await.unwrap();
         println!("{:?}", m.message.body.attachments);
     }
 

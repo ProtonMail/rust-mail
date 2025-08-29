@@ -101,7 +101,11 @@ async fn label_as_without_archive() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -273,7 +277,11 @@ async fn label_as_with_archive() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 

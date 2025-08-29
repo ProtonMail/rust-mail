@@ -2,8 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Weak};
 
 use anyhow::{Context as _, Result};
-use proton_core_api::services::proton::Proton;
-use proton_core_api::session::CoreSession as _;
+use proton_core_api::session::Session;
 use proton_core_common::{Context, models::AppSettings, services::Service};
 use proton_core_common::{CoreContextError, CoreContextResult};
 use proton_mail_api::services::proton::ProtonMail;
@@ -40,7 +39,7 @@ impl FeatureFlagsService {
     }
 
     #[tracing::instrument(skip_all, name = "FeatureFlagsFetchAndUpdate")]
-    async fn fetch_and_update(&self, api: &Proton) -> CoreContextResult<()> {
+    async fn fetch_and_update(&self, api: &Session) -> CoreContextResult<()> {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
 
         let response = api.get_unleash_feature_flags().await?;
@@ -77,8 +76,7 @@ impl FeatureFlagsService {
     pub async fn refresh(&self) -> CoreContextResult<()> {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
         let session = ctx.new_api_session(None).await?;
-        let api = session.api();
-        self.fetch_and_update(api).await
+        self.fetch_and_update(&session).await
     }
 
     pub async fn list_all(&self) -> Vec<(String, bool)> {

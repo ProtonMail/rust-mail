@@ -244,18 +244,20 @@ impl Model<Messages> for AppModel {
             return Command::None;
         }
 
-        if let Event::Key(key) = event {
-            if key.kind == KeyEventKind::Press && key.code == KeyCode::F(2) {
-                self.display_log = !self.display_log;
-                return Command::None;
-            }
+        if let Event::Key(key) = event
+            && key.kind == KeyEventKind::Press
+            && key.code == KeyCode::F(2)
+        {
+            self.display_log = !self.display_log;
+            return Command::None;
         }
 
         if let Some(popup) = &mut self.popup {
-            if let Event::Key(key) = &event {
-                if key.kind == KeyEventKind::Press && key.code == KeyCode::Esc {
-                    return Command::message(Messages::DismissPopup);
-                }
+            if let Event::Key(key) = &event
+                && key.kind == KeyEventKind::Press
+                && key.code == KeyCode::Esc
+            {
+                return Command::message(Messages::DismissPopup);
             }
 
             return popup.handle_event(event);
@@ -319,21 +321,20 @@ impl Model<Messages> for AppModel {
                     AppState::Contacts(state) => Some(state.ctx()),
                     AppState::Background(state) => Some(state.ctx()),
                     _ => None,
-                } {
-                    if *ctx.user_id() == *user_id {
-                        let ctx = self.context.clone();
-                        return Command::task(async move {
-                            match SessionSelectModel::new(&ctx).await {
-                                Ok(m) => Command::message(Messages::SwitchAppState(
-                                    AppState::SessionSelect(m),
-                                )),
-                                Err(e) => Command::message(Messages::DisplayError(
-                                    Some("Irrecoverable Error".to_string()),
-                                    anyhow!("Failed to load session select state: {e:?}"),
-                                )),
-                            }
-                        });
-                    }
+                } && *ctx.user_id() == *user_id
+                {
+                    let ctx = self.context.clone();
+                    return Command::task(async move {
+                        match SessionSelectModel::new(&ctx).await {
+                            Ok(m) => Command::message(Messages::SwitchAppState(
+                                AppState::SessionSelect(m),
+                            )),
+                            Err(e) => Command::message(Messages::DisplayError(
+                                Some("Irrecoverable Error".to_string()),
+                                anyhow!("Failed to load session select state: {e:?}"),
+                            )),
+                        }
+                    });
                 }
                 message
             }
@@ -428,13 +429,13 @@ impl AppStateHandler for AppState {
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
-        if let Event::Key(k) = event {
-            if k.code == KeyCode::F(1) {
-                return Command::Message(Messages::RaisePopup(Box::new(HelpPopup {
-                    items: self.help_options(),
-                    list_state: ScrollableListState::new(Some(0)),
-                })));
-            }
+        if let Event::Key(k) = event
+            && k.code == KeyCode::F(1)
+        {
+            return Command::Message(Messages::RaisePopup(Box::new(HelpPopup {
+                items: self.help_options(),
+                list_state: ScrollableListState::new(Some(0)),
+            })));
         }
         match self {
             AppState::SessionSelect(state) => state.handle_event(event),
@@ -767,7 +768,7 @@ impl Popup for YesNoPopup {
         .areas(area.inner(Margin::new(2, 2)));
         frame.render_widget(Block::new(), area);
         frame.render_widget(
-            Paragraph::new(self.description.to_string())
+            Paragraph::new(self.description.clone())
                 .centered()
                 .wrap(Wrap { trim: false }),
             msg,
@@ -876,23 +877,23 @@ impl<T> Popup for ChoosePopup<T> {
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
-        if let Event::Key(pressed) = event {
-            if pressed.modifiers.is_empty() {
-                let event = self.widgets.iter_mut().find_map(|widget| {
-                    let ChoosePopupWidget::Button { key, event, .. } = widget else {
-                        return None;
-                    };
+        if let Event::Key(pressed) = event
+            && pressed.modifiers.is_empty()
+        {
+            let event = self.widgets.iter_mut().find_map(|widget| {
+                let ChoosePopupWidget::Button { key, event, .. } = widget else {
+                    return None;
+                };
 
-                    if *key == pressed.code {
-                        event.take()
-                    } else {
-                        None
-                    }
-                });
-
-                if let (Some(event), Some(handler)) = (event, self.handler.take()) {
-                    return handler(event);
+                if *key == pressed.code {
+                    event.take()
+                } else {
+                    None
                 }
+            });
+
+            if let (Some(event), Some(handler)) = (event, self.handler.take()) {
+                return handler(event);
             }
         }
 

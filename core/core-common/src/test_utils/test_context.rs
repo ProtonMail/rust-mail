@@ -118,7 +118,8 @@ pub fn test_network_monitor_service_config() -> proton_network_monitor_service::
     proton_network_monitor_service::Config {
         immediate: proton_network_monitor_service::ImmediateConfig {
             retry_policy: never,
-            timeout: Duration::from_secs(1),
+            command_timeout: Duration::from_secs(1),
+            request_timeout: Duration::from_secs(2),
             retry_interval: Duration::from_secs(0),
         },
         background: proton_network_monitor_service::BackgroundConfig {

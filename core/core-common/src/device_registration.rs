@@ -9,7 +9,6 @@ use itertools::Itertools;
 use proton_core_api::{
     service::ApiServiceError,
     services::proton::{ProtonCore, SessionId, muon::Status, prelude::RegisterDeviceRequest},
-    session::CoreSession as _,
 };
 use stash::{
     exports::ToSql,
@@ -289,7 +288,6 @@ async fn register_session(
 
     session_ctx
         .session()
-        .api()
         .register_device(RegisterDeviceRequest {
             device_token: device.device_token.clone(),
             environment: device.environment.into(),

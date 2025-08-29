@@ -106,16 +106,16 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
     }
     let mut rep = String::with_capacity(text.len() * 2); // TODO:(perf) reserve a bit less capacity
     for word in text.split_whitespace() {
-        if word.starts_with("http") {
-            if let Ok(url) = Url::parse(word) {
-                let scheme = url.scheme();
-                if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
-                    let url: String = strip_from_url(&url).0.into();
-                    write!(rep, r#"<a href="{url}" rel="noreferrer">{url}</a>"#)
-                        .expect("Write to complete");
-                    rep.push(' ');
-                    continue;
-                }
+        if word.starts_with("http")
+            && let Ok(url) = Url::parse(word)
+        {
+            let scheme = url.scheme();
+            if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
+                let url: String = strip_from_url(&url).0.into();
+                write!(rep, r#"<a href="{url}" rel="noreferrer">{url}</a>"#)
+                    .expect("Write to complete");
+                rep.push(' ');
+                continue;
             }
         }
         rep.push_str(word);

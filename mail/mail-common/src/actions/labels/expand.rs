@@ -4,7 +4,8 @@ use crate::{AppError, actions::MailActionError};
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_core_api::services::proton::{LabelId, Proton};
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::{
     ActionDependencyKeysBuilder, LocalIdActionDepExt,
 };
@@ -62,7 +63,7 @@ impl Action for Expand {
 }
 
 pub struct ExpandHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for ExpandHandler {

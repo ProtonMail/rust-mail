@@ -47,7 +47,11 @@ async fn mailbox_message_body_simple() {
         .await
         .unwrap();
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
     let mut tether = user_ctx.user_stash().connection();
@@ -119,7 +123,11 @@ async fn mailbox_message_body_mime() {
         .unwrap();
 
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -236,7 +244,11 @@ async fn mailbox_message_retains_pgp_attachments() {
         .unwrap();
 
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -340,7 +352,11 @@ async fn pgp_mime_attachments_retrievable_via_get_attachments() {
         .unwrap();
 
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 

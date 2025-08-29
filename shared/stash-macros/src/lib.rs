@@ -414,8 +414,8 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type, bool, bool) {
     let mut is_autoincrement = false;
 
     for attr in &id_field.attrs {
-        if attr.path().is_ident("IdField") {
-            if let Ok(meta) = attr.parse_args_with(|input: ParseStream| {
+        if attr.path().is_ident("IdField")
+            && let Ok(meta) = attr.parse_args_with(|input: ParseStream| {
                 let mut args = Vec::new();
                 while !input.is_empty() {
                     args.push(input.parse::<Ident>()?);
@@ -425,14 +425,14 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type, bool, bool) {
                     input.parse::<Token![,]>()?;
                 }
                 Ok(args)
-            }) {
-                for arg in meta {
-                    if arg == "optional" {
-                        is_optional = true;
-                    } else if arg == "autoincrement" {
-                        is_optional = true;
-                        is_autoincrement = true;
-                    }
+            })
+        {
+            for arg in meta {
+                if arg == "optional" {
+                    is_optional = true;
+                } else if arg == "autoincrement" {
+                    is_optional = true;
+                    is_autoincrement = true;
                 }
             }
         }

@@ -69,7 +69,11 @@ async fn test_labeling_conversation_with_custom_label() {
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     inbox_mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -198,7 +202,11 @@ async fn test_labeling_conversation_with_starred_label() {
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     inbox_mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -301,7 +309,11 @@ async fn test_labeling_fails_when_labelling_folders() {
 
     // Sync the mailbox
     inbox_mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
 
@@ -321,7 +333,7 @@ async fn test_labeling_fails_when_labelling_folders() {
         label.remote_id.unwrap(),
         vec![local_conversation.remote_id.unwrap()],
         None,
-        ctx.mail_user_context().await.api(),
+        ctx.mail_user_context().await.session(),
     )
     .await
     .unwrap_err();

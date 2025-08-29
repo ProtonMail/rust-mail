@@ -15,7 +15,7 @@ use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{PrivateEmail, PrivateEmailRef};
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::session::Session;
 use proton_core_common::models::{ModelExtension, PaidSubscription};
 use proton_core_common::services::NetworkMonitorService;
 use proton_crypto_account::keys::{
@@ -466,7 +466,6 @@ where
             };
 
             let response = session
-                .api()
                 .get_auth_modulus()
                 .await
                 .map_err(PackageError::ModulusRequest)?;
@@ -830,15 +829,15 @@ pub async fn cancel_schedule_send(
         .ok_or(AppError::MessageHasNoRemoteId(message_id))?;
 
     // Invoke server call
-    let response = match session.api().cancel_send(remote_id).await.inspect_err(|e| {
+    let response = match session.cancel_send(remote_id).await.inspect_err(|e| {
         error!("Failed to cancel send on server: {e:?}");
     }) {
         Ok(response) => response,
         Err(err) => {
-            if let Some(api_error) = err.to_proton_error() {
-                if api_error.code == Mail::MessageAlreadySent as u32 {
-                    return Err(CancelScheduleSendError::AlreadySent(message_id).into());
-                }
+            if let Some(api_error) = err.to_proton_error()
+                && api_error.code == Mail::MessageAlreadySent as u32
+            {
+                return Err(CancelScheduleSendError::AlreadySent(message_id).into());
             }
             return Err(err.into());
         }

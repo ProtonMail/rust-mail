@@ -53,7 +53,7 @@ pub struct DecryptedEmailPushNotification {
     #[serde(rename = "body")]
     pub subject: String,
 
-    /// This is hardcoded on the backend, always with the value "large_icon"
+    /// This is hardcoded on the backend, always with the value "`large_icon`"
     ///
     pub large_icon: String,
 
@@ -65,7 +65,7 @@ pub struct DecryptedEmailPushNotification {
     ///
     pub sender: NotificationSender,
 
-    /// This is hardcoded on the backend, always with the value "small_icon"
+    /// This is hardcoded on the backend, always with the value "`small_icon`"
     ///
     pub small_icon: String,
 

@@ -168,14 +168,12 @@ impl Handler for SendHandler {
         let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
         let local_all_scheduled_label_id = local_all_scheduled_label_id(tx).await?;
 
-        if action.is_scheduled() {
-            if let Some(counters) =
+        if action.is_scheduled()
+            && let Some(counters) =
                 MessageCounters::find_by_id(local_all_scheduled_label_id, tx).await?
-            {
-                if counters.total >= MAX_SCHEDULED_SEND_COUNT {
-                    return Err(SendError::ScheduleSendMessageLimitExceeded.into());
-                }
-            }
+            && counters.total >= MAX_SCHEDULED_SEND_COUNT
+        {
+            return Err(SendError::ScheduleSendMessageLimitExceeded.into());
         }
 
         let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, tx)
@@ -455,7 +453,7 @@ impl Send {
         info!("Sending {:?}", remote_message_id);
 
         let delivery_time = match ctx
-            .api()
+            .session()
             .send_mail(
                 remote_message_id.clone(),
                 packages,
@@ -575,11 +573,11 @@ impl Send {
         // try to delete staging path.
         let staging_path = draft_attachment_staging_path(ctx, action.metadata_id);
 
-        if let Err(e) = tokio::fs::remove_dir_all(&staging_path).await {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                // This is a warning as the background process will try again.
-                tracing::warn!("Failed to remove staging path: {e:?}");
-            }
+        if let Err(e) = tokio::fs::remove_dir_all(&staging_path).await
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            // This is a warning as the background process will try again.
+            tracing::warn!("Failed to remove staging path: {e:?}");
         }
 
         Ok((remote_message_id, delivery_time.into()))

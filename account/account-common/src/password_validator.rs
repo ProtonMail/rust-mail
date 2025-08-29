@@ -1,4 +1,5 @@
 use fancy_regex::Regex;
+use muon::http::DynHttpSender;
 use proton_account_api::{
     AccountApi, ApiError,
     prelude::{PasswordPolicyResponse, PasswordPolicyState},
@@ -38,16 +39,16 @@ pub enum PasswordType {
 }
 
 pub struct PasswordValidatorService {
-    client: muon::Client,
+    api: DynHttpSender,
     default_validator: Box<dyn PasswordValidator>,
     policies: Vec<BackendPasswordValidator>,
 }
 
 impl PasswordValidatorService {
     #[must_use]
-    pub fn new(client: muon::Client) -> Self {
+    pub fn new(api: DynHttpSender) -> Self {
         Self {
-            client,
+            api,
             default_validator: Box::new(MinLengthPasswordValidator::default()),
             policies: Vec::new(),
         }
@@ -56,7 +57,7 @@ impl PasswordValidatorService {
     pub async fn fetch_validators(&mut self) -> Result<(), FetchValidatorsError> {
         info!("Fetching password policies");
         let result = self
-            .client
+            .api
             .get_password_policies()
             .await
             .map_err(FetchValidatorsError::Api)?;

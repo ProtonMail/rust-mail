@@ -5,7 +5,6 @@ use anyhow::Context as _;
 use indoc::indoc;
 use proton_core_api::services::proton::prelude::GetImagesLogoOptions;
 use proton_core_api::services::proton::{PrivateEmail, ProtonCore};
-use proton_core_api::session::CoreSession;
 use stash::exports::{SqliteError, ToSql};
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
@@ -80,7 +79,7 @@ impl UserContext {
 
         // If the request fails we don't store anything into the database, let the clients handle
         // it.
-        let image = self.session().api().get_images_logo(options).await?;
+        let image = self.session().get_images_logo(options).await?;
         tether
             .tx(async |tx| {
                 match find_sender_image_in_cache(

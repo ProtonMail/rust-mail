@@ -11,10 +11,7 @@ use proton_calendar_api::{
     CalendarColor, CalendarEvent, CalendarEventId, CalendarEventRecurrenceId, CalendarEventUid,
     CalendarId,
 };
-use proton_core_api::{
-    service::ApiServiceError,
-    services::proton::{AddressId, Proton},
-};
+use proton_core_api::{service::ApiServiceError, services::proton::AddressId, session::Session};
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_calendar::Error as CryptoError;
@@ -124,7 +121,7 @@ impl RsvpEventId {
     #[allow(clippy::too_many_arguments)]
     pub async fn fetch<P, K>(
         &self,
-        api: &Proton,
+        api: &Session,
         pgp: &P,
         keys: &K,
         cache: &impl RsvpCache,
@@ -190,7 +187,7 @@ impl RsvpEvent {
     #[allow(clippy::too_many_arguments)]
     pub async fn answer<P, K, M>(
         &mut self,
-        api: &Proton,
+        api: &Session,
         pgp: &P,
         keys: &K,
         cache: &impl RsvpCache,

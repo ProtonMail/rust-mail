@@ -191,10 +191,10 @@ impl VCard {
                     }
                     PropertyKind::Categories => {
                         result.add_category(Category::try_from(&property)?)?;
-                        if let Some((id, _)) = property.name.split_once('.') {
-                            if result.add_group(id.to_owned(), value.to_owned()).is_some() {
-                                warn!("Two CATEGORIES property are in the same group ({id})");
-                            }
+                        if let Some((id, _)) = property.name.split_once('.')
+                            && result.add_group(id.to_owned(), value.to_owned()).is_some()
+                        {
+                            warn!("Two CATEGORIES property are in the same group ({id})");
                         }
                     }
                     PropertyKind::ClientPIDMap => {

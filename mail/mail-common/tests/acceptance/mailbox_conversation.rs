@@ -62,7 +62,11 @@ async fn test_new_mailbox_sync_conversations() {
 
     // Sync mailbox 1 - this should fire a network request
     mailbox
-        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
         .await
         .unwrap();
     let tether = user_ctx.user_stash().connection();

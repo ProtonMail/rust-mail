@@ -60,7 +60,8 @@ impl HostCmd {
                 .unwrap();
 
         let ctx = Arc::clone(mail_ctx.core_context());
-        let client = user_ctx.api().clone();
+        let session = user_ctx.session().to_owned();
+        let (client, _) = session.into_parts();
         let qr_code = read("QR Code").unwrap();
         process_target_device_qr_code(&qr_code, client, ctx, ObservabilityRecorder::default())
             .await

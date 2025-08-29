@@ -4,7 +4,7 @@ use crate::session::{Config, Session};
 use bytes::Bytes;
 use futures::TryFutureExt;
 use muon::ProtonRequest;
-use muon::common::Server;
+use muon::common::{Sender, Server};
 use muon::{Method, ProtonResponse};
 use std::str::FromStr;
 

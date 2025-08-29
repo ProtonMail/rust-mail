@@ -5,7 +5,7 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionGroup, ActionId, DefaultVersionConverter, Handler,
     Priority, Type, WriterGuard,
 };
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -38,7 +38,7 @@ impl Action for RollbackAction {
 }
 
 pub struct RollbackActionHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for RollbackActionHandler {

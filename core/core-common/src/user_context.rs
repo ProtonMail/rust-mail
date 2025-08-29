@@ -131,15 +131,15 @@ impl UserContext {
         fs::create_dir_all(this.sender_images_cache_path())?;
         fs::create_dir_all(this.trash_path())?;
 
-        if matches!(origin, Origin::App) {
-            if let Some(init_service) = this.get_service_opt::<InitializationService>() {
-                let init_watcher = init_service.initialization_watcher().clone();
-                this.spawn(async move {
-                    if let Err(e) = init_watcher.task().await {
-                        error!("Initialization watcher finished with error: {e:?}");
-                    }
-                });
-            }
+        if matches!(origin, Origin::App)
+            && let Some(init_service) = this.get_service_opt::<InitializationService>()
+        {
+            let init_watcher = init_service.initialization_watcher().clone();
+            this.spawn(async move {
+                if let Err(e) = init_watcher.task().await {
+                    error!("Initialization watcher finished with error: {e:?}");
+                }
+            });
         }
 
         let this_user_id = this.user_id.clone();

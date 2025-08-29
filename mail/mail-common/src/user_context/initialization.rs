@@ -227,22 +227,22 @@ impl InitializationMediator {
         let t0 = Instant::now();
 
         let labels = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            LabelWithCounters::initialize(watcher, ctx.api(), ctx.user_stash()).await
+            LabelWithCounters::initialize(watcher, ctx.session(), ctx.user_stash()).await
         });
         let counters = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            StoreLabelCounters::initialize(watcher, ctx.api(), ctx.user_stash()).await
+            StoreLabelCounters::initialize(watcher, ctx.session(), ctx.user_stash()).await
         });
         let contacts = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            Contact::initialize(watcher, ctx.api(), ctx.user_stash()).await
+            Contact::initialize(watcher, ctx.session(), ctx.user_stash()).await
         });
         let event_loop = ctx.spawn_init(&watcher, |ctx, watcher| async move {
             initialize_event_loop(watcher, ctx.as_ref()).await
         });
         let user_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            User::initialize_with_settings(watcher, ctx.api(), ctx.user_stash()).await
+            User::initialize_with_settings(watcher, ctx.session(), ctx.user_stash()).await
         });
         let mail_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            MailSettings::initialize(watcher, ctx.api(), ctx.user_stash()).await
+            MailSettings::initialize(watcher, ctx.session(), ctx.user_stash()).await
         });
         let custom_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
             CustomSettings::initialize(
@@ -254,10 +254,10 @@ impl InitializationMediator {
             .await
         });
         let addresses = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            Address::initialize(watcher, ctx.api(), ctx.user_stash()).await
+            Address::initialize(watcher, ctx.session(), ctx.user_stash()).await
         });
         let inc_defs = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            IncomingDefaultLocation::initialize(watcher, ctx.api(), ctx.user_stash()).await
+            IncomingDefaultLocation::initialize(watcher, ctx.session(), ctx.user_stash()).await
         });
 
         let abort_handles = vec![

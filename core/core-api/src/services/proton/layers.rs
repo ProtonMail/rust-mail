@@ -129,10 +129,10 @@ impl CookieJarLayer {
         let res = inner.send(req).await?;
 
         for cookie in res.headers().get_all("set-cookie") {
-            if let Ok(cookie) = cookie.to_str() {
-                if let Ok(cookie) = Cookie::parse(cookie) {
-                    self.jar.write().await.add(cookie.into_owned());
-                }
+            if let Ok(cookie) = cookie.to_str()
+                && let Ok(cookie) = Cookie::parse(cookie)
+            {
+                self.jar.write().await.add(cookie.into_owned());
             }
         }
 

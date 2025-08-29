@@ -1,5 +1,5 @@
 use proton_core_api::auth::UserKeySecret;
-use proton_core_api::session::{CoreSession as _, EnvId};
+use proton_core_api::session::EnvId;
 use proton_core_api::store::UserData;
 use proton_core_common::Origin;
 use proton_core_common::datatypes::ApiConfig;
@@ -108,7 +108,7 @@ async fn main() {
         .unwrap();
 
     // Test that session works in legacy
-    let network_session = ctx.session().api();
+    let network_session = ctx.session();
     let labels = Label::all_labels(network_session).await.unwrap();
     tracing::info!("Legacy labels: {labels:?}");
 
@@ -170,7 +170,7 @@ async fn main() {
 
     tracing::info!("Testing if the migration works. Let's fetch some labels");
 
-    let network_session = ctx.session().api();
+    let network_session = ctx.session();
     let labels = Label::all_labels(network_session).await.unwrap();
 
     tracing::info!("ET Labels: {labels:?}");

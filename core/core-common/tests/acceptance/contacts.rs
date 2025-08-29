@@ -6,7 +6,6 @@ use proton_core_api::services::proton::{
     ContactSendingPreferences as ApiContactSendingPreferences,
 };
 use proton_core_api::services::proton::{ContactEmailId, ContactId, ContactUID, LabelId};
-use proton_core_api::session::CoreSession;
 use proton_core_common::UserContext;
 use proton_core_common::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
 use proton_core_common::event_loop::subscriber::CoreEventSubscriber;
@@ -88,7 +87,7 @@ async fn test_sync_and_load_contacts() {
     let mut tether = user_ctx.stash().connection();
     tether
         .tx(async |tx| {
-            Contact::sync(user_ctx.session().api())
+            Contact::sync(user_ctx.session())
                 .await
                 .expect("failed to download contacts")
                 .store(tx)
@@ -411,7 +410,7 @@ async fn prepare_sync_test_data_contacts(
     let mut tether = user_ctx.stash().connection();
     tether
         .tx(async |tx| {
-            Contact::sync(user_ctx.session().api())
+            Contact::sync(user_ctx.session())
                 .await
                 .expect("failed to download contacts")
                 .store(tx)
@@ -424,7 +423,7 @@ async fn prepare_sync_test_data_contacts(
         .await
         .unwrap()
         .unwrap();
-    Contact::force_sync_with_card(local_id, user_ctx.session().api(), &mut tether)
+    Contact::force_sync_with_card(local_id, user_ctx.session(), &mut tether)
         .await
         .expect("failed to sync contacts");
 }

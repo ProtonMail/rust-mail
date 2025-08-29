@@ -4,7 +4,7 @@ use muon::env::EnvId;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
@@ -125,7 +125,7 @@ async fn main() {
     println!("User ID is {}", user_id.unwrap());
     println!("Session ID is {}", session_id.unwrap());
 
-    let settings = session.api().get_settings().await.unwrap();
+    let settings = session.get_settings().await.unwrap();
     println!("User settings is {settings:?}");
 
     session.logout().await.unwrap();

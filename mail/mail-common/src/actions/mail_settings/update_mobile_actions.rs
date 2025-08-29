@@ -6,7 +6,7 @@ use anyhow::Context;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_core_api::services::proton::Proton;
+use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, RunTransaction};
@@ -91,7 +91,7 @@ impl Action for UpdateMobileActions {
 }
 
 pub struct UpdateMobileActionsHandler {
-    pub api: Proton,
+    pub api: Session,
 }
 
 impl Handler for UpdateMobileActionsHandler {
