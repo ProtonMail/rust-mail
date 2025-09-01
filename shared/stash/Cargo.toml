@@ -23,7 +23,6 @@ tempdir = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-slotmap = { workspace = true }
 
 [dev-dependencies]
 tempdir = { workspace = true }
