@@ -250,7 +250,7 @@ path = "crypto/crypto-inbox-mime"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-account]
-version = "0.12.0"
+version = "0.12.1"
 registry = "proton"
 features = ["sql"]
 

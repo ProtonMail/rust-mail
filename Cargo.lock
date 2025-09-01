@@ -5882,9 +5882,9 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto-account"
-version = "0.12.0"
+version = "0.12.1"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "df36433a25785f4c9988df2527af08f7c454e84c0ac83c262b5736f04f805816"
+checksum = "8d64bf09cb798beaa0a48a0672ec278794a20dea700dbbe87b20eda37ebe584e"
 dependencies = [
  "base64",
  "derive_more 2.0.1",
@@ -6235,7 +6235,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.142.5"
+version = "0.142.9"
 dependencies = [
  "anyhow",
  "async-trait",

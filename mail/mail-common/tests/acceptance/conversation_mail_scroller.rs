@@ -31,6 +31,7 @@ use proton_mail_common::{
 use proton_mail_common::{
     api_conversation, conv_id, conversation, lbl_id, test_utils::test_context::MailTestContext,
 };
+use proton_network_monitor_service::OsNetworkStatus;
 use stash::orm::Model;
 use stash::stash::StashError;
 use std::{collections::HashMap, time::Duration};
@@ -484,6 +485,9 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     ctx.mock_server().reset().await;
     ctx.mock_ping_success().await;
     setup_api_conversation_pages(&ctx, page_size, 200, 1).await;
+    user_ctx
+        .network_monitor_service()
+        .update_os_network_status(OsNetworkStatus::Online);
     user_ctx.network_monitor_service().check_now().await;
 
     let timeout = Some(Duration::from_secs(3));
@@ -491,11 +495,8 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .wait_for(timeout, |status| status.is_online())
         .await;
 
-    // `all_items` will react to the online data being available
-    // listing will be done in correct the order of the cache
-    // note: asserting here leads to races between request, db transaction, and the read instant.
-    // But `fetch_more` will force replacing unordered items with correct order from API
-    test_scroller.fetch_more_and_wait().await.unwrap();
+    // automatic fetch_more will be triggered by the online status change
+    test_scroller.wait_for_update().await.unwrap();
 
     // Wait for the second update containing the actual data replacement
     // In the new push-based model, fetch_more_and_wait() only waits for immediate feedback,
@@ -537,9 +538,11 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     );
 
     // There is no more data in API
-    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
-    assert!(actual.is_empty());
+    // However we should not call fetch more again as this will make a test
+    // to carry over the fetch_more task to the offline context in which
+    // you will get a correct update without "asking" for it, which can look suspicious.
 
+    // --------------------------------
     // The unordered items are not included in the api response
     // they will not be shown untill we go offline again
     // this is test specific behavior, in real app we should not have such a situation
@@ -570,8 +573,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ]
     );
 
-    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 5);
 
     assert_scroller_content!(
@@ -596,8 +598,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ]
     );
 
-    test_scroller.fetch_more().unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 6);
 
     assert_scroller_content!(
@@ -1449,6 +1450,9 @@ pub async fn mock_not_responsive_api(ctx: &MailTestContext) {
         })
         .mount(ctx.mock_server())
         .await;
+    ctx.mail_context
+        .network_monitor_service()
+        .update_os_network_status(OsNetworkStatus::Offline);
 }
 
 #[tokio::test]

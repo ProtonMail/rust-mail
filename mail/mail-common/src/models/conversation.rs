@@ -2436,7 +2436,7 @@ impl Conversation {
             };
             info!("Syncing {rid:?}'s messages");
 
-            if network_monitor_service.check_now().await.is_offline() {
+            if network_monitor_service.is_os_offline() {
                 debug!("No connection, skipping sync");
                 return Err(AppError::API(ApiServiceError::NetworkError(
                     "No connection".to_owned(),

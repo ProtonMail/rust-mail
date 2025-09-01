@@ -1179,6 +1179,13 @@ impl MailSession {
         async_runtime().block_on(self.get_primary_account())
     }
 
+    pub fn on_enter_foreground(&self) {
+        self.resume_work();
+    }
+
+    pub fn on_exit_foreground(&self) {
+        self.pause_work();
+    }
     /// Pause all background work
     ///
     /// This should be called once the application enters the background.
@@ -1207,7 +1214,12 @@ impl MailSession {
     ///
     /// This should be called once the application enters the foreground.
     pub fn resume_work(&self) {
-        self.mail_ctx.core_context().task_service().resume_main();
+        let ctx = self.mail_ctx.core_context();
+        let ctx_cloned = ctx.clone();
+        ctx.task_service().spawn(async move {
+            ctx_cloned.network_monitor_service().check_now().await;
+        });
+        ctx.task_service().resume_main();
     }
 
     /// Export all logs into a single file wih the given `file_path`

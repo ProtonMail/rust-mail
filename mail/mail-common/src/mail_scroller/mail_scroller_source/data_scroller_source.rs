@@ -184,53 +184,39 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let remote_label_id = label.remote_id.clone().unwrap();
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
         let unread = self.unread;
-        let network_monitor_service = ctx.network_monitor_service();
-        // On the initialization of the scroller its vital to be able to
-        // recognize the connection state with high precision due to the fact
-        // it may impare how the whole application is behaving.
-        //
-        // double call is done in order to utilize low_latency check
-        // only when we may be online but we have to confirm it, never for offline
-        // as we will have a 2 sec downtime everytime we load location in offline.
-        let is_offline = async || {
-            let is_offline = ctx.network_monitor_service().status().is_offline();
-            let is_offline = is_offline || network_monitor_service.check_now().await.is_offline();
-
-            debug!("Might be offline: {}", is_offline);
-
-            is_offline
-        };
+        let is_offline = ctx.network_monitor_service().is_os_offline();
+        let is_online = !is_offline;
 
         self.sync_scroller(&tether).await?;
 
         // Check if we have a data suggesting we have synced this label before
         if let Some(scroller) = self.state.online() {
-            debug!("We have paginated here before, try to create cached scroller");
+            debug!(
+                "We have paginated here before, try to sync data, status: {}",
+                if is_online { "online" } else { "offline" }
+            );
             if let Some(scroll_data) = scroller.scroll_data_begin(&tether).await? {
-                if network_monitor_service.status().is_online() {
-                    debug!("Syncing previous page in background");
-                    self.sync_previous_page(ctx, &scroll_data, remote_label_id.clone())
-                        .await?;
-                }
-                let task =
-                    if !scroller.has_next_page(&tether).await? && total > self.page_size as u64 {
-                        if is_offline().await {
-                            debug!("We are offline, return scroller without a task");
-                            None
-                        } else {
-                            debug!("Syncing next page in a task");
-                            self.sync_next_page(ctx, &scroll_data, remote_label_id)
-                                .await?
-                        }
-                    } else {
-                        None
-                    };
+                debug!("Syncing previous page in background");
+
+                self.sync_previous_page(ctx, &scroll_data, remote_label_id.clone())
+                    .await?;
+                let task = if is_online
+                    && !scroller.has_next_page(&tether).await?
+                    && total > self.page_size as u64
+                {
+                    debug!("Syncing next page in a task");
+                    self.sync_next_page(ctx, &scroll_data, remote_label_id)
+                        .await?
+                } else {
+                    None
+                };
                 return Ok(task);
+            } else {
+                debug!("Cursor points to empty scroll data, will sync first page instead");
             };
         }
 
         // No entry exist, which means we have not synced this label yet.
-        let is_offline = is_offline().await;
         debug!(
             "Paginating for the first time, getting first page while being {}.",
             if is_offline { "offline" } else { "online" }
@@ -323,7 +309,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
-        let is_offline = ctx.network_monitor_service().status().is_offline();
+        let is_offline = ctx.network_monitor_service().is_os_offline();
         let is_online = !is_offline;
 
         // If we go back online, we need to replace

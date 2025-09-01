@@ -1,6 +1,6 @@
 use crate::{
-    ConnectionMonitor, NetworkStatusObserver, OnlineTester, OsNetworkStatus, RequestNetworkStatus,
-    update_watcher_value,
+    ConnectionMonitor, NetworkStatusObserver, OnlineTester, OsNetworkStatus,
+    OsNetworkStatusObserver, RequestNetworkStatus, update_watcher_value,
 };
 use futures::FutureExt;
 use muon::common::RetryPolicy;
@@ -138,8 +138,18 @@ impl NetworkMonitorService {
     }
 
     #[must_use]
+    pub fn os_network_status_observer(&self) -> OsNetworkStatusObserver {
+        OsNetworkStatusObserver::new(self.os_network_watcher.subscribe())
+    }
+
+    #[must_use]
     pub fn is_online(&self) -> bool {
         self.network_status_observer().is_online()
+    }
+
+    #[must_use]
+    pub fn is_os_online(&self) -> bool {
+        self.os_network_status_observer().is_online()
     }
 
     /// This method will perform an network test immediately.
@@ -211,6 +221,9 @@ struct NetworkMonitorBackgroundTask {
     tester_task: Option<JoinHandle<()>>,
     immediate_request: mpsc::Receiver<oneshot::Sender<RequestNetworkStatus>>,
     last_immediate_check: Instant,
+    immediate_check_running: bool,
+    immediate_check_result_receiver: mpsc::Receiver<RequestNetworkStatus>,
+    immediate_check_request_sender: mpsc::Sender<oneshot::Sender<RequestNetworkStatus>>,
 }
 
 impl NetworkMonitorBackgroundTask {
@@ -231,6 +244,27 @@ impl NetworkMonitorBackgroundTask {
             last_immediate_check = new_value;
         }
 
+        let (immediate_check_request_sender, immediate_check_request_receiver) = mpsc::channel(1);
+        let (immediate_check_result_sender, immediate_check_result_receiver) = mpsc::channel(1);
+
+        let immediate_config = config.immediate.clone();
+        let tester_cloned = tester.clone();
+
+        let request_watcher_cloned = monitor.request_watcher();
+        spawner.spawn_boxed_task(
+            async move {
+                immediate_tester(
+                    immediate_config,
+                    tester_cloned.as_ref(),
+                    immediate_check_request_receiver,
+                    immediate_check_result_sender,
+                    request_watcher_cloned,
+                )
+                .await;
+            }
+            .boxed(),
+        );
+
         let mut instance = Self {
             config,
             os_network_subscriber,
@@ -245,6 +279,9 @@ impl NetworkMonitorBackgroundTask {
             immediate_request,
             request_watcher: monitor.request_watcher(),
             last_immediate_check,
+            immediate_check_running: false,
+            immediate_check_request_sender,
+            immediate_check_result_receiver,
         };
         tracing::debug!(
             "Current status os={os_network_status:?} request={request_network_status:?}"
@@ -264,6 +301,12 @@ impl NetworkMonitorBackgroundTask {
                 }
                 _= self.request_network_subscriber.changed() => {
                     self.update_request_network_status();
+                }
+                v = self.immediate_check_result_receiver.recv() => {
+                    if v.is_some() {
+                        tracing::debug!("Immediate check completed");
+                        self.immediate_check_running=false;
+                    }
                 }
                 r = self.immediate_request.recv() => {
                     if let Some(sender)  = r {
@@ -347,26 +390,29 @@ impl NetworkMonitorBackgroundTask {
     }
 
     async fn handle_immediate_request(&mut self, sender: oneshot::Sender<RequestNetworkStatus>) {
-        let value = if self.last_immediate_check.elapsed() > self.config.immediate.retry_interval {
-            tracing::debug!("Performing immediate check...");
+        if !self.immediate_check_running
+            && self.last_immediate_check.elapsed() > self.config.immediate.retry_interval
+        {
             self.last_immediate_check = Instant::now();
-            let status = perform_tester_check(
-                self.tester.as_ref(),
-                self.config.immediate.request_timeout,
-                self.config.immediate.retry_policy,
-                &self.request_watcher,
-            )
-            .await;
-            tracing::debug!("Performing immediate check... -> {status:?}");
-            status
+            self.immediate_check_running = true;
+            if let Err(mpsc::error::SendError(sender)) =
+                self.immediate_check_request_sender.send(sender).await
+            {
+                tracing::warn!("immediate tester is dead, returning cached value");
+                let _ = sender.send(self.request_network_status);
+            }
         } else {
-            tracing::debug!(
-                "Received immediate check request, but still too soon. Using cached value"
-            );
-            self.request_network_status
-        };
-
-        let _ = sender.send(value);
+            if self.immediate_check_running {
+                tracing::debug!(
+                    "Received immediate check request, but last request is still ongoing. Using cached value"
+                );
+            } else {
+                tracing::debug!(
+                    "Received immediate check request, but still too soon. Using cached value"
+                );
+            }
+            let _ = sender.send(self.request_network_status);
+        }
     }
 }
 
@@ -388,6 +434,36 @@ async fn network_tester(
         if !config.infinite_checks {
             tracing::info!("Network exiting, max checks reached");
             return;
+        }
+    }
+}
+
+#[instrument(skip_all, name = "network_monitor_immediate_test")]
+async fn immediate_tester(
+    config: ImmediateConfig,
+    tester: &dyn OnlineTester,
+    mut receiver: mpsc::Receiver<oneshot::Sender<RequestNetworkStatus>>,
+    main_sender: mpsc::Sender<RequestNetworkStatus>,
+    request_watcher: watch::Sender<RequestNetworkStatus>,
+) {
+    tracing::info!("Starting");
+    loop {
+        while let Some(sender) = receiver.recv().await {
+            tracing::debug!("Performing immediate check...");
+            let status = perform_tester_check(
+                tester,
+                config.request_timeout,
+                config.retry_policy,
+                &request_watcher,
+            )
+            .await;
+            tracing::debug!("Performing immediate check... -> {status:?}");
+
+            let _ = sender.send(status);
+
+            if main_sender.send(status).await.is_err() {
+                return;
+            }
         }
     }
 }
@@ -474,7 +550,7 @@ mod tests {
         tester
             .expect_check()
             .with(eq(config.background.timeout))
-            .times(2)
+            .times(1..=2)
             .returning(|_| RequestNetworkStatus::Offline);
 
         tester

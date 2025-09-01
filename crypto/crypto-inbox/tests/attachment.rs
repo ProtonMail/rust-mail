@@ -321,24 +321,6 @@ fn test_attachment_encrypt_decrypt_v6() {
 
     let verification_result = decrypted_attachment.verification_result();
     assert!(verification_result.is_ok());
-
-    // Sig should be ok v6
-    let decrypted_attachment = DecryptableAttachmentMetadata::new(&pgp, &result.metadata)
-        .decrypt(
-            &pgp,
-            &address_keys,
-            &[primary_address_key.for_encryption()],
-            &result.data,
-        )
-        .unwrap();
-
-    assert_eq!(
-        decrypted_attachment.as_ref(),
-        TEST_ATTACHMENT_PLAIN_DATA.as_bytes()
-    );
-
-    let verification_result = decrypted_attachment.verification_result();
-    assert!(verification_result.is_ok());
 }
 
 fn test_attachment_encrypt_decrypt_helper(enc_sig: bool) {

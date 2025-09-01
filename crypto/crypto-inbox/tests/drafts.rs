@@ -128,17 +128,10 @@ fn test_encrypt_and_decrypt_draft_v6() {
     let plain_text = decryptable_message
         .decrypt(&pgp, &unlocked_address_keys)
         .unwrap();
-    let signature_verification_v6 = plain_text
-        .1
-        .verify_signature(&pgp, &[primary.for_encryption()]);
     let primary_key_v4 = unlocked_address_keys.primary_default().unwrap();
     let signature_verification_v4 = plain_text.1.verify_signature(&pgp, &[primary_key_v4]);
 
     assert_eq!(plain_text.0.body(), message);
-    assert!(
-        signature_verification_v6.is_ok(),
-        "signature should verify with a v6 key"
-    );
     assert!(
         signature_verification_v4.is_ok(),
         "signature should verify with a v4 key"

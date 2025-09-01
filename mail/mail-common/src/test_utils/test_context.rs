@@ -304,7 +304,7 @@ impl MailUserContextTestExtension for MailUserContext {
 }
 
 async fn wait_for_impl(user_ctx: &MailUserContext, fun: impl Fn(ConnectionStatus) -> bool) {
-    while !fun(user_ctx.network_monitor_service().status()) {
+    while !fun(user_ctx.network_monitor_service().combined_status()) {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
