@@ -44,6 +44,7 @@ impl CustomSettings {
 
         let payload = account_stash
             .connection()
+            .await?
             .tx(async |tx| PostLoginMobileMigrationPayload::load(user_id, tx).await)
             .await?;
 
@@ -57,7 +58,7 @@ impl CustomSettings {
             watcher,
             Self::INIT_KEY,
             &[],
-            user_stash.connection(),
+            user_stash.connection().await?,
             async move || Ok(SyncedCustomSettings { settings: this }),
             async |tx, synced| {
                 synced.store(tx).await?;
@@ -106,6 +107,7 @@ impl CustomSettings {
     ) -> Result<(), StashError> {
         ctx.user_stash()
             .connection()
+            .await?
             .tx(async move |tx| {
                 let mut this = Self::get_or_default(tx.tether()).await?;
 
@@ -135,6 +137,7 @@ impl CustomSettings {
     ) -> Result<(), StashError> {
         ctx.user_stash()
             .connection()
+            .await?
             .tx(async move |tx| {
                 let mut this = CustomSettings::get_or_default(tx.tether()).await?;
 
@@ -225,7 +228,7 @@ mod tests {
 
         assert_eq!(
             None,
-            CustomSettings::get_or_default(&ctx.user_stash().connection())
+            CustomSettings::get_or_default(&ctx.user_stash().connection().await.unwrap())
                 .await
                 .unwrap()
                 .mobile_signature
@@ -240,7 +243,7 @@ mod tests {
 
         assert_eq!(
             Some("greetings from my oxidized mail".into()),
-            CustomSettings::get_or_default(&ctx.user_stash().connection())
+            CustomSettings::get_or_default(&ctx.user_stash().connection().await.unwrap())
                 .await
                 .unwrap()
                 .mobile_signature
@@ -254,7 +257,7 @@ mod tests {
 
         assert_eq!(
             None,
-            CustomSettings::get_or_default(&ctx.user_stash().connection())
+            CustomSettings::get_or_default(&ctx.user_stash().connection().await.unwrap())
                 .await
                 .unwrap()
                 .mobile_signature
@@ -266,7 +269,7 @@ mod tests {
 
         assert_eq!(
             Some(true),
-            CustomSettings::get_or_default(&ctx.user_stash().connection())
+            CustomSettings::get_or_default(&ctx.user_stash().connection().await.unwrap())
                 .await
                 .unwrap()
                 .mobile_signature_enabled

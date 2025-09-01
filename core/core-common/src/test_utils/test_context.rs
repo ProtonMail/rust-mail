@@ -258,7 +258,7 @@ impl TestContext {
     ) -> (CoreAccount, CoreSession) {
         let (core_account, core_session) = {
             // Create a temporary stash just to insert the fake data.
-            let mut tether = context.account_stash().connection();
+            let mut tether = context.account_stash().connection().await.unwrap();
             tether
                 .tx::<_, _, StashError>(async |tx| {
                     // Create

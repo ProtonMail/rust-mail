@@ -119,7 +119,7 @@ async fn sidebar_custom_folders(labels: &[(&str, Option<&str>, &str, u32)], expe
     let user_ctx = ctx.mail_user_context().await;
 
     let stash = user_ctx.user_stash();
-    let tether = stash.connection();
+    let tether = stash.connection().await.unwrap();
 
     // Action
     let result = Sidebar.custom_folders(&tether).await.unwrap();

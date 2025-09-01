@@ -19,7 +19,7 @@ async fn test_attachment_create_without_metadata() {
     // Simulates an attachment's full info being stored without having any previous
     // message or conversation metadata.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let (_, _, _) = create_attachment_dependencies(&mut conn, None)
         .await
         .unwrap();
@@ -42,7 +42,7 @@ async fn test_attachment_create_with_metadata() {
     // Simulates an attachment's full info being stored with an existing
     // message or conversation metadata.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let api_attachment = test_attachment();
     let metadata = ApiAttachmentMetadata {
         id: api_attachment.id.clone(),

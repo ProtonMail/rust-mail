@@ -11,7 +11,7 @@ use stash::stash::StashError;
 
 #[tokio::test]
 async fn test_core_store_and_load_user() {
-    let mut tether = new_core_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection().await.unwrap();
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut user = new_test_user();
@@ -29,7 +29,7 @@ async fn test_core_store_and_load_user() {
 
 #[tokio::test]
 async fn test_core_user_space_updates() {
-    let mut tether = new_core_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection().await.unwrap();
     let mut user = new_test_user();
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -60,7 +60,7 @@ async fn test_core_user_space_updates() {
 }
 #[tokio::test]
 async fn test_core_store_and_load_user_settings() {
-    let mut tether = new_core_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection().await.unwrap();
 
     let user_id = UserId::from("USER");
 

@@ -27,6 +27,8 @@ async fn state_preserved_after_local_change() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(ACTION_KEY)
             .await
             .unwrap()

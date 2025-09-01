@@ -87,7 +87,7 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
     const REMOTE_LABEL_ID: &str = "rid1";
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let mut data = hash_map! {
         vec![REMOTE_LABEL_ID]: test_conversations(100, 100),
@@ -169,7 +169,7 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
@@ -205,7 +205,7 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
 async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
@@ -288,7 +288,7 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
  {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let unread = ReadFilter::All;
 
     mock_api_forbidden(&ctx).await;
@@ -337,7 +337,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
  {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let unread = ReadFilter::All;
 
     mock_not_responsive_api(&ctx).await;
@@ -384,7 +384,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
  {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let unread = ReadFilter::All;
     // Set up cached data
     let remote_label_id = SystemLabel::Inbox.remote_id();
@@ -432,7 +432,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
  {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let unread = ReadFilter::All;
     // Set up cached data
     let remote_label_id = SystemLabel::Inbox.remote_id();
@@ -640,7 +640,7 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
 {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let unread = ReadFilter::All;
 
     // Set up cached data
@@ -718,7 +718,7 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
 async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_first_page() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
@@ -875,7 +875,7 @@ async fn test_conversation_mail_scroller_database_refresh_will_not_triggers_fetc
 ) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 10; // Larger than our test data
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
@@ -937,7 +937,7 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_sma
 ) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 10; // Larger than our test data
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
@@ -1001,7 +1001,7 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_lar
 ) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
@@ -1063,7 +1063,7 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_lar
 async fn snoozed_conversations() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let label = Label::find_by_remote_id(LabelId::snoozed(), &tether)
         .await
@@ -1115,7 +1115,7 @@ async fn snoozed_conversations() {
 async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_context_time() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Mock offline to use cached data
     mock_not_responsive_api(&ctx).await;
@@ -1299,7 +1299,7 @@ async fn setup_api_conversation_pages(
 async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
@@ -1459,7 +1459,7 @@ pub async fn mock_not_responsive_api(ctx: &MailTestContext) {
 async fn test_conversation_mail_scroller_handles_create_or_get_local_missing_labels() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Create initial conversation in inbox only
     const INBOX_LABEL_ID: &str = "0";

@@ -44,7 +44,7 @@ impl RsvpEventServiceProvider {
     pub async fn event_service(self: Arc<Self>) -> Option<Arc<RsvpEventService>> {
         uniffi_async(async move {
             let ctx = self.ctx()?;
-            let mut tether = ctx.user_stash().connection();
+            let mut tether = ctx.user_stash().connection().await?;
             let rsvp = self.rsvp.fetch(&ctx, &mut tether).await?;
 
             if let Some(rsvp) = rsvp {
@@ -95,8 +95,8 @@ impl RsvpEventService {
     pub async fn answer(self: Arc<Self>, answer: RsvpAnswer) -> Result<(), ProtonError> {
         uniffi_async(async move {
             let ctx = self.ctx()?;
-            let mut tether = ctx.user_stash().connection();
-            let tether2 = ctx.user_stash().connection();
+            let mut tether = ctx.user_stash().connection().await?;
+            let tether2 = ctx.user_stash().connection().await?;
             let mut rsvp = self.rsvp.lock().clone();
 
             rsvp.answer(&ctx, &mut tether, &tether2, answer.into())

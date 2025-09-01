@@ -89,7 +89,7 @@ async fn main() {
 
     let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
 
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
     let label = Label::find_by_remote_id(LabelId::inbox(), &tether)
         .await
         .unwrap()

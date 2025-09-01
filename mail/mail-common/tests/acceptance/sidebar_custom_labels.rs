@@ -37,7 +37,7 @@ async fn sidebar_custom_labels(labels: &[(LabelId, String, u32)], expected: &[St
     let user_ctx = ctx.mail_user_context().await;
 
     let stash = user_ctx.user_stash();
-    let tether = stash.connection();
+    let tether = stash.connection().await.unwrap();
 
     // Action
     let result = Sidebar.custom_labels(&tether).await.unwrap();

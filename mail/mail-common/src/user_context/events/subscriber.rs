@@ -62,7 +62,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
         debug!("Handling {} mail events", events.len());
 
-        let mut tether = ctx.user_context.stash().connection();
+        let mut tether = ctx.user_context.stash().connection().await?;
         let mut data = PostEventSyncData::default();
 
         // Check for missing dependencies. Sometimes when lot of messages/conversations get moved
@@ -220,7 +220,7 @@ async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
     let api = ctx.session().clone();
     let mail_settings = ctx.spawn(async move { MailSettings::sync_mail_settings(&api).await });
 
-    let mut tether = ctx.user_context.stash().connection();
+    let mut tether = ctx.user_context.stash().connection().await?;
     let mut all_local_labels: HashMap<_, _> = Label::all_mail(&tether)
         .await?
         .into_iter()

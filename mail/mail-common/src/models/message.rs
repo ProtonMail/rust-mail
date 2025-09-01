@@ -197,7 +197,7 @@ impl Message {
         local_message_id: LocalMessageId,
         ctx: &MailUserContext,
     ) -> Result<Option<Message>, AppError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         if let Some(message) = Message::load(local_message_id, &tether).await? {
             if message.display_snooze_reminder() {
                 let queue = ctx.action_queue();
@@ -212,7 +212,7 @@ impl Message {
     }
 
     pub async fn action_star(queue: &Queue, ids: Vec<LocalMessageId>) -> LabelAsResult {
-        let tether = queue.stash().connection();
+        let tether = queue.stash().connection().await?;
 
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
@@ -222,7 +222,7 @@ impl Message {
     }
 
     pub async fn action_unstar(queue: &Queue, ids: Vec<LocalMessageId>) -> LabelAsResult {
-        let tether = queue.stash().connection();
+        let tether = queue.stash().connection().await?;
 
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
@@ -355,7 +355,7 @@ impl Message {
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
     ) -> Result<(), MultiActionError> {
-        let tether = &queue.stash().connection();
+        let tether = &queue.stash().connection().await?;
         let inbox = Label::resolve_local_label_id(LabelId::inbox(), tether)
             .await
             .context("inbox doesn't exist?")?;
@@ -1197,7 +1197,7 @@ impl Message {
         user_context: &MailUserContext,
         id: LocalMessageId,
     ) -> MailContextResult<DecryptedMessageBody> {
-        let tether = &mut user_context.user_stash().connection();
+        let tether = &mut user_context.user_stash().connection().await?;
         let saved_message = Message::load(id, tether)
             .await?
             .ok_or(AppError::MessageMissing(id))?;
@@ -1210,7 +1210,7 @@ impl Message {
         user_context: &MailUserContext,
         id: LocalMessageId,
     ) -> MailContextResult<(PrivateEmail, DecryptedMessageBody)> {
-        let tether = &mut user_context.user_stash().connection();
+        let tether = &mut user_context.user_stash().connection().await?;
         let saved_message = Message::load(id, tether)
             .await?
             .ok_or(AppError::MessageMissing(id))?;
@@ -2252,7 +2252,7 @@ impl Message {
         ctx: &MailUserContext,
         remote_id: MessageId,
     ) -> MailContextResult<LocalMessageId> {
-        let tether = &mut ctx.user_stash().connection();
+        let tether = &mut ctx.user_stash().connection().await?;
         if let Some(message) = Self::find_by_remote_id(remote_id.clone(), tether).await? {
             return Ok(message.id());
         }

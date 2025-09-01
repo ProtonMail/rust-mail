@@ -197,7 +197,7 @@ impl Conversation {
     }
 
     pub async fn action_star(queue: &Queue, ids: Vec<LocalConversationId>) -> LabelAsResult {
-        let tether = queue.stash().connection();
+        let tether = queue.stash().connection().await?;
 
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
@@ -207,7 +207,7 @@ impl Conversation {
     }
 
     pub async fn action_unstar(queue: &Queue, ids: Vec<LocalConversationId>) -> LabelAsResult {
-        let tether = queue.stash().connection();
+        let tether = queue.stash().connection().await?;
 
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
@@ -3491,7 +3491,7 @@ impl StoreLabelCounters {
             watcher,
             Self::INIT_KEY,
             &[Label::INIT_KEY],
-            stash.connection(),
+            stash.connection().await?,
             async || Ok(Self::fetch(api).await?),
             async |tx, this| Ok(this.save(tx).await?),
         )

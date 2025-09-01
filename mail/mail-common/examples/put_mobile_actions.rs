@@ -138,7 +138,7 @@ async fn main() {
     info!("Successfully logged in. Now modifying mobile settings...");
 
     // Get current mail settings to see the current state
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
     let current_settings = MailSettings::get_or_default(&tether).await;
 
     info!(

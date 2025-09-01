@@ -1097,7 +1097,7 @@ impl EncryptedMessageBody {
                             model_attachments.push((model_att, att.data));
                         }
 
-                        let mut tether = ctx.user_stash().connection();
+                        let mut tether = ctx.user_stash().connection().await?;
                         tether
                             .tx::<_, _, MailContextError>(async |tx| {
                                 for (mut att, data) in model_attachments {

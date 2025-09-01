@@ -346,15 +346,15 @@ impl MailUserContext {
                 let Some(ctx) = ctx.upgrade() else {
                     return;
                 };
-                let mut tether = ctx.user_stash().connection();
-                if let Err(e) = Conversation::delete_expired(&mut tether).await {
-                    error!("Error in background task deleting expired conversations: {e:?}");
-                }
+                if let Ok(mut tether) = ctx.user_stash().connection().await {
+                    if let Err(e) = Conversation::delete_expired(&mut tether).await {
+                        error!("Error in background task deleting expired conversations: {e:?}");
+                    }
 
-                if let Err(e) = Message::delete_expired(&mut tether).await {
-                    error!("Error in background task deleting expired messages: {e:?}");
+                    if let Err(e) = Message::delete_expired(&mut tether).await {
+                        error!("Error in background task deleting expired messages: {e:?}");
+                    }
                 }
-                drop(tether);
                 drop(ctx);
                 interval.tick().await;
             }
@@ -422,7 +422,7 @@ impl MailUserContext {
 
     pub async fn user(&self) -> MailContextResult<User> {
         let stash = self.user_stash();
-        let tether = stash.connection();
+        let tether = stash.connection().await?;
         let user_id = self.user_id();
         let real_user = User::load(user_id.clone(), &tether)
             .await?
@@ -766,10 +766,14 @@ impl MailUserContext {
     }
 
     pub async fn proxy_image(&self, url: Url) -> ApiServiceResult<AttachmentData> {
-        let tether = self.user_stash().connection();
-        let is_proxy_enabled = MailSettings::get_or_default(&tether)
-            .await
-            .is_proxy_enabled();
+        let mail_settings = async {
+            let Ok(tether) = self.user_stash().connection().await else {
+                return MailSettings::default();
+            };
+            MailSettings::get_or_default(&tether).await
+        }
+        .await;
+        let is_proxy_enabled = mail_settings.is_proxy_enabled();
 
         let data = if is_proxy_enabled {
             self.session().proxy_img(&url).await?

@@ -53,7 +53,7 @@ impl AuthStore {
 
     async fn try_get_auth(&self) -> Result<Auth, StoreError> {
         let key = self.encryption_key()?;
-        let tether = self.stash.connection();
+        let tether = self.stash.connection().await?;
 
         let Some(account) = (if let Some(id) = &self.user_id {
             CoreAccount::find_by_id(id.to_owned(), &tether).await?
@@ -84,7 +84,7 @@ impl AuthStore {
 
     async fn try_expose_key_secret(&self) -> Result<Option<UserKeySecret>, StoreError> {
         let key = self.encryption_key()?;
-        let tether = self.stash.connection();
+        let tether = self.stash.connection().await?;
 
         let Some(session_id) = self.session_id.clone() else {
             return Ok(None);
@@ -149,6 +149,7 @@ impl Store for AuthStore {
         // We write twice, so do it in a transaction.
         self.stash
             .connection()
+            .await?
             .tx(async |tx| {
                 // Load or create the account.
                 if (CoreAccount::find_by_id(user_id.clone(), tx).await?).is_none() {
@@ -209,6 +210,7 @@ impl Store for AuthStore {
         // We write twice, so do it in a transaction.
         self.stash
             .connection()
+            .await?
             .tx(async |tx| {
                 // Load or create the account.
                 if let Some(account) = CoreAccount::find_by_id(user_id.clone(), tx).await? {
@@ -253,6 +255,7 @@ impl Store for AuthStore {
 
         self.stash
             .connection()
+            .await?
             .tx(async |tx| {
                 let key = self.encryption_key()?;
 
@@ -276,6 +279,7 @@ impl Store for AuthStore {
 
         self.stash
             .connection()
+            .await?
             .tx(async |tx| {
                 let Some(user_id) = self.user_id.clone() else {
                     bail!("failed to set pass: no user ID");
@@ -297,6 +301,7 @@ impl Store for AuthStore {
 
         self.stash
             .connection()
+            .await?
             .tx(async |tx| {
                 let Some(user_id) = self.user_id.clone() else {
                     bail!("failed to set temp pass: no user ID");
@@ -320,6 +325,7 @@ impl Store for AuthStore {
 
         self.stash
             .connection()
+            .await?
             .tx(async |tx| {
                 let Some(user_id) = self.user_id.clone() else {
                     bail!("failed to set user data: no user ID");
@@ -358,7 +364,7 @@ impl Store for AuthStore {
         let key = self.encryption_key()?;
 
         // We write twice, so do it in a transaction.
-        let mut tether = self.stash.connection();
+        let mut tether = self.stash.connection().await?;
         tether
             .tx(async |tx| {
                 let Some(user_id) = self.user_id.clone() else {
@@ -391,6 +397,7 @@ impl Store for AuthStore {
         if let Some(id) = &self.session_id {
             self.stash
                 .connection()
+                .await?
                 .tx(async |tx| CoreSession::delete_by_id(id.to_owned(), tx).await)
                 .await?;
         }
@@ -411,6 +418,7 @@ impl Store for AuthStore {
         if let Some(id) = &self.user_id {
             self.stash
                 .connection()
+                .await?
                 .tx(async |tx| CoreAccount::delete_by_id(id.to_owned(), tx).await)
                 .await?;
         }
@@ -424,7 +432,7 @@ impl Store for AuthStore {
     async fn get_session_id(&self, user_id: &UserId) -> Result<Option<SessionId>, StoreError> {
         info!("getting user auth UID from store");
 
-        let tether = self.stash.connection();
+        let tether = self.stash.connection().await?;
         let sessions = CoreSession::find_by_user_id(user_id.to_owned(), &tether).await?;
         let session_id = sessions.into_iter().next().map(|s| s.remote_id);
 

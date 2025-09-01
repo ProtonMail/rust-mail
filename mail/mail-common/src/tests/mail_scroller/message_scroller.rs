@@ -70,7 +70,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     const REMOTE_LABEL_ID: &str = "rid1";
 
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut data = btree_map! {
         REMOTE_LABEL_ID: test_message(100, 100),
         "rid2": test_message(50, 0),
@@ -201,7 +201,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     const REMOTE_LABEL_ID: &str = "rid1";
 
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut data = btree_map! {
         REMOTE_LABEL_ID: test_message(100, 100),
         "rid2": test_message(50, 0),
@@ -437,7 +437,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
     const REMOTE_LABEL_ID: &str = "rid1";
 
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut data = btree_map! {
         REMOTE_LABEL_ID: test_message(5, 100),
         "rid2": test_message(50, 0),
@@ -496,7 +496,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
 #[tokio::test]
 async fn allow_different_filter_types_to_be_stored_in_database() {
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut scroller_all = MessageScrollData::builder()
         .local_label_id(local_label_id)

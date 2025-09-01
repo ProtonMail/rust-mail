@@ -4,7 +4,7 @@ use proton_mail_common::test_utils::db::new_test_connection;
 
 #[tokio::test]
 async fn test_mail_settings_store_read() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_test_connection().await.connection().await.unwrap();
     let mut settings = MailSettings {
         local_id: MailSettingsId,
         display_name: "foo".to_owned(),
@@ -60,7 +60,7 @@ async fn test_mail_settings_store_read() {
 
 #[tokio::test]
 async fn test_mail_settings_updated() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_test_connection().await.connection().await.unwrap();
     let mut settings = MailSettings {
         local_id: MailSettingsId,
         display_name: "foo".to_owned(),

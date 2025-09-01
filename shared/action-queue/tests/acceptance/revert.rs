@@ -36,6 +36,8 @@ async fn network_failure_causes_revert_on_apply() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(key)
             .await
             .unwrap()
@@ -64,6 +66,8 @@ async fn network_failure_causes_revert_on_queue() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(key)
             .await
             .unwrap()
@@ -86,6 +90,8 @@ async fn network_failure_causes_revert_on_queue() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(key)
             .await
             .unwrap()
@@ -107,7 +113,7 @@ async fn revert_cancels_all_dependent_actions() {
     let value4 = 400_u32;
 
     {
-        let mut conn = queue.stash().connection();
+        let mut conn = queue.stash().connection().await.unwrap();
         conn.tx(async |tx| tx.ext_insert_value(key, value).await)
             .await
             .unwrap();
@@ -156,6 +162,8 @@ async fn revert_cancels_all_dependent_actions() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(key)
             .await
             .unwrap()
@@ -176,6 +184,8 @@ async fn revert_cancels_all_dependent_actions() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(key)
             .await
             .unwrap()

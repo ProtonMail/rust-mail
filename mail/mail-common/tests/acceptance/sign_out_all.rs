@@ -21,7 +21,7 @@ async fn sign_out_all() {
 
     for user_ctx in all_user_ctxs.iter() {
         // Make sure we can read from user databases
-        let tether = user_ctx.user_stash().connection();
+        let tether = user_ctx.user_stash().connection().await.unwrap();
         let inbox_local_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
 
         assert_eq!(inbox_local_id, LocalLabelId::from(1));
@@ -44,7 +44,7 @@ async fn sign_out_all() {
 
     for user_ctx in all_user_ctxs.iter() {
         // Make sure we no longer are able to read from user database
-        let tether = user_ctx.user_stash().connection();
+        let tether = user_ctx.user_stash().connection().await.unwrap();
         let error = SystemLabel::Inbox
             .local_id(&tether)
             .await
@@ -78,7 +78,12 @@ async fn sign_out_all() {
     }
 
     // Check that app settings and pin protection are reset
-    let tether = user_ctx.core_context().account_stash().connection();
+    let tether = user_ctx
+        .core_context()
+        .account_stash()
+        .connection()
+        .await
+        .unwrap();
     let app_settings = AppSettings::get_or_default(&tether).await;
     assert_eq!(app_settings.protection, AppProtection::None);
 

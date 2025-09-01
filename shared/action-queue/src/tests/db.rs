@@ -77,7 +77,7 @@ async fn action_store_and_retrieve() {
     };
 
     let stash = new_test_connection().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
     conn.tx(async |tx| stored.save(tx).await).await.unwrap();
@@ -122,7 +122,7 @@ async fn action_store_with_non_existent_action_dependency_is_accepted() {
     };
 
     let stash = new_test_connection().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
 
     let metadata = MetadataBuilder::new()
         .with_debug_string("my debug string")
@@ -145,7 +145,7 @@ async fn action_execution_lock() {
     };
 
     let stash = new_test_connection().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
     let (first_action_id, second_action_id, third_action_id) = conn
@@ -281,7 +281,7 @@ async fn leftover_execution_lock() {
     };
 
     let stash = new_test_connection().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut stored1 = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
     let mut stored2 = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
@@ -322,7 +322,7 @@ async fn action_execution_group_selection() {
     };
 
     let stash = new_test_connection().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
     conn.tx(async |tx| stored.save(tx).await).await.unwrap();
@@ -371,7 +371,7 @@ async fn action_replace_or_queue() {
     };
 
     let stash = new_test_connection().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
     conn.tx(async |tx| stored.save(tx).await).await.unwrap();
@@ -443,7 +443,7 @@ async fn action_store_records_all_dependencies() {
     };
 
     let stash = new_test_connection().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
 
     // Create first action, which registers the first dependency key
     let mut stored =
@@ -528,7 +528,7 @@ async fn clear_all_actions_in_chosen_action_group() {
     };
 
     let stash = new_test_connection().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
 
     // Create two actions in the default group.
     let mut stored_default_1 =
@@ -596,7 +596,7 @@ async fn new_test_connection() -> Stash {
     );
 
     let stash = Stash::new(StashConfiguration::test()).unwrap();
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
 
     migrate(&mut tether).await.unwrap();
 

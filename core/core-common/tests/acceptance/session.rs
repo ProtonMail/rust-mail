@@ -53,6 +53,8 @@ async fn test_session_delete_subscriber() {
     real_ctx
         .account_stash()
         .connection()
+        .await
+        .unwrap()
         .tx(async |tx: &Bond<'_>| {
             assert_eq!(CoreSession::all(tx).await.unwrap().len(), 1);
             assert_eq!(

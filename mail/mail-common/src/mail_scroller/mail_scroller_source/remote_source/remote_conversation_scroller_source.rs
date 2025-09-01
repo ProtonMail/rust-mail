@@ -225,7 +225,7 @@ impl RemoteConversationScrollerSource {
             .map(|c| c.into())
             .collect();
 
-        let mut tether = stash.connection();
+        let mut tether = stash.connection().await?;
 
         Self::save_conversations(
             local_label_id,
@@ -296,7 +296,7 @@ impl RemoteConversationScrollerSource {
             .map(|c| c.into())
             .collect();
 
-        let mut tether = stash.connection();
+        let mut tether = stash.connection().await?;
 
         Self::save_conversations(
             local_label_id,
@@ -378,7 +378,7 @@ impl RemoteConversationScrollerSource {
             .map(|c| c.into())
             .collect();
 
-        let mut tether = stash.connection();
+        let mut tether = stash.connection().await?;
 
         Self::save_conversations(
             local_label_id,

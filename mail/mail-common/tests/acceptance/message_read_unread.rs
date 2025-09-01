@@ -98,7 +98,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     // * Create all given messages in stash
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let mut params = Params::default_basic();
     params.mail_settings = Some(ApiMailSettings {
@@ -129,12 +129,15 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
-    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
-        .await
-        .unwrap();
+    let mailbox = Mailbox::with_remote_id(
+        &user_ctx.user_stash().connection().await.unwrap(),
+        LabelId::inbox(),
+    )
+    .await
+    .unwrap();
     mailbox
         .sync(
-            &mut user_ctx.user_stash().connection(),
+            &mut user_ctx.user_stash().connection().await.unwrap(),
             user_ctx.session(),
             10,
         )
@@ -180,7 +183,7 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     // * Create all given messages in stash
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     let mut params = Params::default_basic();
     params.mail_settings = Some(ApiMailSettings {
@@ -210,12 +213,15 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
-    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
-        .await
-        .unwrap();
+    let mailbox = Mailbox::with_remote_id(
+        &user_ctx.user_stash().connection().await.unwrap(),
+        LabelId::inbox(),
+    )
+    .await
+    .unwrap();
     mailbox
         .sync(
-            &mut user_ctx.user_stash().connection(),
+            &mut user_ctx.user_stash().connection().await.unwrap(),
             user_ctx.session(),
             10,
         )

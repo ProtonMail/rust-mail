@@ -28,6 +28,8 @@ async fn cancel_causes_revert() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(key)
             .await
             .unwrap()
@@ -43,6 +45,8 @@ async fn cancel_causes_revert() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(key)
             .await
             .unwrap()
@@ -68,7 +72,7 @@ async fn cancel_causes_revert_with_dependees() {
     let value4 = 400_u32;
 
     {
-        let mut conn = queue.stash().connection();
+        let mut conn = queue.stash().connection().await.unwrap();
         conn.tx(async |tx| tx.ext_insert_value(key, value).await)
             .await
             .unwrap();
@@ -117,6 +121,8 @@ async fn cancel_causes_revert_with_dependees() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(key)
             .await
             .unwrap()
@@ -134,6 +140,8 @@ async fn cancel_causes_revert_with_dependees() {
         queue
             .stash()
             .connection()
+            .await
+            .unwrap()
             .ext_get_value(key)
             .await
             .unwrap()
@@ -168,7 +176,7 @@ async fn accidental_cyclic_dependency_with_replace() {
     let action_148 = create_action(148);
 
     {
-        let mut conn = queue.stash().connection();
+        let mut conn = queue.stash().connection().await.unwrap();
         conn.tx(async |tx| tx.ext_insert_value("foo", 0).await)
             .await
             .unwrap();
@@ -217,7 +225,7 @@ async fn cancel_causes_revert_to_only_direct_dependees() {
     let value4 = 400_u32;
 
     {
-        let mut conn = queue.stash().connection();
+        let mut conn = queue.stash().connection().await.unwrap();
         conn.tx(async |tx| tx.ext_insert_value(key, value).await)
             .await
             .unwrap();

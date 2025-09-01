@@ -31,7 +31,7 @@ pub async fn contact_list(
 ) -> Result<Vec<GroupedContacts>, ActionError> {
     let stash = session.user_stash()?;
     uniffi_async(async move {
-        let tether = stash.connection();
+        let tether = stash.connection().await?;
         Ok::<_, RealProtonMailError>(
             RealContact::contact_list(&tether)
                 .await?
@@ -53,7 +53,7 @@ pub async fn contact_group_by_id(
 ) -> Result<ContactGroupItem, ActionError> {
     let stash = session.user_stash()?;
     uniffi_async(async move {
-        let tether = stash.connection();
+        let tether = stash.connection().await?;
         Ok::<_, RealProtonMailError>(
             RealContact::contact_group_by_id(&tether, id.into())
                 .await?
@@ -79,7 +79,7 @@ pub async fn contact_suggestions(
 ) -> Result<Arc<ContactSuggestions>, ActionError> {
     let ctx = session.ctx()?.clone();
     uniffi_async(async move {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let primary_contacts = RealContact::contact_suggestions(
             device_contacts
                 .into_iter()
@@ -91,12 +91,13 @@ pub async fn contact_suggestions(
             .mail_context()
             .core_context()
             .account_stash()
-            .connection();
+            .connection()
+            .await?;
         let app_settings = AppSettings::get_or_default(&acc_tether).await;
         let other_acc_contacts = if app_settings.use_combine_contacts {
             let other_user_ctxs = ctx.other_mail_user_ctxs().await?;
             let iter = other_user_ctxs.iter().map(|ctx| async {
-                let tether = ctx.user_stash().connection();
+                let tether = ctx.user_stash().connection().await?;
                 let contacts = RealContact::contact_suggestions(vec![], &tether).await?;
 
                 Result::<_, MailContextError>::Ok(contacts)

@@ -150,14 +150,14 @@ pub async fn registered_device_task_step(
             state.device.clone_from(&device_rx.borrow_and_update());
             // New device token registered. We need to re-register all sessions.
             state.registered_sessions.clear();
-            let tether = ctx.account_stash().connection();
+            let tether = ctx.account_stash().connection().await?;
             CoreSession::all(&tether).await?
         },
         res = sessions_stream.next() => {
             tracing::debug!("Sessions changed: {res:?}");
             res.ok_or(RegisteredDeviceTaskError::SessionStreamEnded)?;
 
-            let tether = ctx.account_stash().connection();
+            let tether = ctx.account_stash().connection().await?;
             // New session has been created. Instead of re-registering everything, we only
             // process unregistered sessions.
             get_unregistered_sessions(&tether, &state.registered_sessions).await?

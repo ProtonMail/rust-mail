@@ -12,7 +12,7 @@ use stash::stash::StashError;
 
 #[tokio::test]
 async fn label_with_counts() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_test_connection().await.connection().await.unwrap();
     let label = ApiLabel {
         id: LabelId::from("label"),
         parent_id: None,

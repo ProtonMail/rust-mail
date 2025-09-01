@@ -19,7 +19,7 @@ use stash::stash::{Bond, StashError};
 async fn draft_send_observer_only_triggers_for_new_items_empty_db() {
     let (stash, _db_dir) = new_test_connection_file().await;
 
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     conn.tx::<_, _, StashError>(async |tx| {
         create_test_messages(2, tx).await;
         Ok(())
@@ -89,7 +89,7 @@ async fn draft_send_observer_only_triggers_for_new_items_empty_db() {
 async fn draft_send_observer_only_triggers_for_new_items_with_existing() {
     let (stash, _db_dir) = new_test_connection_file().await;
 
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     conn.tx::<_, _, StashError>(async |tx| {
         create_test_messages(5, tx).await;
 
@@ -185,7 +185,7 @@ async fn draft_send_observer_only_triggers_for_new_items_with_existing() {
 async fn draft_send_observer_re_triggers_for_same_message_with_different_error() {
     let (stash, _db_dir) = new_test_connection_file().await;
 
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     conn.tx::<_, _, StashError>(async |tx| {
         create_test_messages(2, tx).await;
         Ok(())
@@ -255,7 +255,7 @@ async fn draft_send_observer_only_triggers_when_send_action_is_queued() {
         dependency_keys: Default::default(),
         version: 1,
     };
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut draft_metadata = DraftMetadata::builder()
         .local_message_id(LocalMessageId::from(2))
         .build();
@@ -333,7 +333,7 @@ async fn draft_send_observer_only_triggers_when_send_action_is_queued() {
 async fn draft_attachment_observer_updates_when_attachment_is_removed() {
     let (stash, _db_dir) = new_test_connection_file().await;
 
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut attachment = Attachment {
         local_id: None,
         attachment_type: Default::default(),

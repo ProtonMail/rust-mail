@@ -193,7 +193,7 @@ impl MailSettings {
             watcher,
             Self::INIT_KEY,
             &[],
-            stash.connection(),
+            stash.connection().await?,
             async move || Self::sync_mail_settings(api).await,
             async |tx, res| {
                 res.store(tx).await?;

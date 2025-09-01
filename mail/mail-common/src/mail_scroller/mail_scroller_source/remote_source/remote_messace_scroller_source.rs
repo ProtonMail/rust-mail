@@ -213,7 +213,7 @@ impl RemoteMessageScrollerSource {
         }
 
         let mut messages: Vec<Message> = vec![];
-        let mut tether = stash.connection();
+        let mut tether = stash.connection().await?;
 
         for message in response.messages {
             messages.push(Message::from_api_metadata(message, &tether).await?);
@@ -287,7 +287,7 @@ impl RemoteMessageScrollerSource {
         }
 
         let mut messages: Vec<Message> = vec![];
-        let mut tether = stash.connection();
+        let mut tether = stash.connection().await?;
 
         for message in response.messages {
             messages.push(Message::from_api_metadata(message, &tether).await?);
@@ -351,7 +351,7 @@ impl RemoteMessageScrollerSource {
         }
 
         let mut messages: Vec<Message> = vec![];
-        let mut tether = stash.connection();
+        let mut tether = stash.connection().await?;
         for message in response.messages {
             messages.push(Message::from_api_metadata(message, &tether).await?);
         }

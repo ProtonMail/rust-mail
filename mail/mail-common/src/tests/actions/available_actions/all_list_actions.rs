@@ -307,7 +307,8 @@ mod message {
     #[tokio::test]
     async fn bottom_bar_actions(test_case: &TestCase<Vec<Message>>) {
         // Setup
-        let mut tether = new_test_connection().await.connection();
+        let stash = new_test_connection().await;
+        let mut tether = stash.connection().await.unwrap();
         let address = create_address(&mut tether).await;
         let mut settings = MailSettings::get_or_default(&tether).await;
         settings.mobile_settings = Some(MobileSettings {
@@ -788,7 +789,8 @@ mod conversation {
     #[tokio::test]
     async fn bottom_bar_actions(test_case: &TestCase<Vec<Conversation>>) {
         // Setup
-        let mut tether = new_test_connection().await.connection();
+        let stash = new_test_connection().await;
+        let mut tether = stash.connection().await.unwrap();
 
         let mut settings = MailSettings::get_or_default(&tether).await;
         settings.mobile_settings = Some(MobileSettings {

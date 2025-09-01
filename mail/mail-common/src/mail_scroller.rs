@@ -147,7 +147,7 @@ impl MailScroller {
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<ContextualConversation>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
 
         let order_dir = ScrollOrderDir::for_local_label(local_label_id, &tether).await?;
         let order_field = ScrollOrderField::for_local_label(local_label_id, &tether).await?;
@@ -170,7 +170,7 @@ impl MailScroller {
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
 
         let order_dir = ScrollOrderDir::for_local_label(local_label_id, &tether).await?;
         let order_field = ScrollOrderField::for_local_label(local_label_id, &tether).await?;

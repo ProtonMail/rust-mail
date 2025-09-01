@@ -564,7 +564,7 @@ impl Attachment {
 
         let encryptable_attachment = AttachmentData(data.as_ref());
         let pgp = new_pgp_provider();
-        let tether = context.user_stash().connection();
+        let tether = context.user_stash().connection().await?;
 
         let unlocked_address_keys = context
             .unlocked_address_keys(&pgp, &tether, address_id)

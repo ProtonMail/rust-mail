@@ -295,9 +295,8 @@ pub struct QueuedActionOutput<T: Action> {
 }
 
 impl Queue {
-    #[must_use]
-    pub fn tether(&self) -> Tether {
-        self.shared.stash.connection()
+    pub async fn tether(&self) -> Result<Tether, StashError> {
+        self.shared.stash.connection().await
     }
 
     /// Create a new queue with the given `stash`;
@@ -315,7 +314,7 @@ impl Queue {
     ///
     /// Returns error if the database migration failed.
     pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
-        let mut tether = stash.connection();
+        let mut tether = stash.connection().await?;
 
         db::migrate(&mut tether).await?;
 
@@ -351,7 +350,7 @@ impl Queue {
     /// This operation does not operate within execution guards. It is intended to be used
     /// before queue executor is resumed (during app initialization). Use with caution.
     pub async fn delete_all_in_group(this: &Self, action_group: ActionGroup) -> QueuedResult<()> {
-        let mut tether = this.shared.stash.connection();
+        let mut tether = this.shared.stash.connection().await?;
         tether
             .tx(async |tx| StoredAction::delete_all_in_group(tx, action_group).await)
             .await?;
@@ -383,6 +382,7 @@ impl Queue {
         self.shared
             .stash
             .connection()
+            .await?
             .tx(async |tx| {
                 let mut res: Vec<QueuedActionOutput<T>> = vec![];
 
@@ -417,6 +417,7 @@ impl Queue {
         self.shared
             .stash
             .connection()
+            .await?
             .tx(async |tx| {
                 self.queue_action_with_metadata_in_tx(action, metadata, tx)
                     .await
@@ -505,6 +506,7 @@ impl Queue {
                 .shared
                 .stash
                 .connection()
+                .await?
                 .tx(async |tx| {
                     execute_action_local(&mut action, &handler, metadata, Some(existing_id), tx)
                         .await
@@ -535,7 +537,7 @@ impl Queue {
     ///
     /// Returns error if the db operation failed or if the action is currently being executed.
     pub async fn delete_action(&self, action_id: ActionId) -> QueuedResult<()> {
-        let mut tether = self.shared.stash.connection();
+        let mut tether = self.shared.stash.connection().await?;
         let existing_action_type = tether
             .tx(async |tx| {
                 // Safety: It's safe to perform this check without an executor guard as sqlite's
@@ -562,12 +564,12 @@ impl Queue {
     ///
     /// Returns error if the db query failed.
     pub async fn queued_actions_count(&self) -> Result<u64> {
-        let tether = self.shared.stash.connection();
+        let tether = self.shared.stash.connection().await?;
         Ok(StoredAction::pending_count(&tether).await?)
     }
 
     pub async fn typed_actions_count<T: Action>(&self) -> Result<u64> {
-        let tether = self.shared.stash.connection();
+        let tether = self.shared.stash.connection().await?;
         Ok(StoredAction::type_count::<T>(&tether).await?)
     }
 
@@ -577,7 +579,7 @@ impl Queue {
     ///
     /// Returns error if the db query failed.
     pub async fn contains(&self, action_id: ActionId) -> Result<bool> {
-        let tether = self.shared.stash.connection();
+        let tether = self.shared.stash.connection().await?;
         Ok(StoredAction::contains(&tether, action_id).await?)
     }
 
@@ -587,7 +589,7 @@ impl Queue {
     ///
     /// Returns error if the db query failed.
     pub async fn action(&self, action_id: ActionId) -> Result<Option<QueuedMetadata>> {
-        let tether = self.shared.stash.connection();
+        let tether = self.shared.stash.connection().await?;
         let stored_action = StoredAction::load(action_id, &tether).await?;
         Ok(stored_action.map(QueuedMetadata::from))
     }
@@ -602,7 +604,7 @@ impl Queue {
     /// Returns error if the db query failed or the action could not be found or the action
     /// is currently being executed.
     pub async fn cancel(&self, action_id: ActionId) -> QueuedResult<Vec<ActionId>> {
-        let mut tether = self.shared.stash.connection();
+        let mut tether = self.shared.stash.connection().await?;
         let cancelled_actions = tether
             .tx(async |tx| {
                 // Safety: It's safe to perform this check without an executor guard as sqlite's
@@ -627,7 +629,7 @@ impl Queue {
     /// Retrieve the next action to execute.
     #[cfg(test)]
     pub(crate) async fn next_action(&self) -> Result<Option<StoredAction>, StashError> {
-        let tether = self.shared.stash.connection();
+        let tether = self.shared.stash.connection().await?;
         StoredAction::next(ActionGroup::default().as_ref(), &tether).await
     }
 
@@ -652,7 +654,7 @@ impl Queue {
     /// Validate all pending actions can be loaded and deserialized to prevent
     /// infinite execution loops.
     pub async fn validate_queued_actions(&self) -> QueuedResult<()> {
-        let tether = self.shared.stash.connection();
+        let tether = self.shared.stash.connection().await?;
         let actions = StoredAction::find("", vec![], &tether).await?;
         for action in actions {
             decode_action(&self.shared.factory, action)?;
@@ -826,7 +828,7 @@ impl QueueExecutor {
     /// Returns error if the queued action could not be executed locally or remotely, or if
     /// another thread is currently invoking this function.
     pub async fn execute_one(&self) -> QueuedResult<Option<QueuedActionState>> {
-        let mut tether = self.shared.stash.connection();
+        let mut tether = self.shared.stash.connection().await?;
         self.execute_impl(&mut tether).await
     }
 
@@ -838,7 +840,7 @@ impl QueueExecutor {
     ///
     /// Returns error if the queued action could not be executed locally or remotely, or if
     pub async fn execute_all(&self) -> QueuedResult<usize> {
-        let mut tether = self.shared.stash.connection();
+        let mut tether = self.shared.stash.connection().await?;
         let mut counter = 0;
         while let Some(QueuedActionState::Executed(_)) = self.execute_impl(&mut tether).await? {
             counter += 1;
@@ -1092,7 +1094,10 @@ impl QueueAutoExecutor {
             match followup {
                 ActionExecutionFollowup::WaitForAction => {
                     if termination_policy.is_empty_policy() {
-                        let tether = executor.shared.stash.connection();
+                        let Ok(tether) = executor.shared.stash.connection().await else {
+                            tracing::error!("Failed to acquire db connection");
+                            continue;
+                        };
                         if let Ok(count) =
                             StoredAction::pending_count(&tether).await.inspect_err(|e| {
                                 error!("Failed to get pending action count: {e:?}");
@@ -1442,7 +1447,7 @@ macro_rules! enqueue {
         use $crate::action::{ActionId, Metadata};
         use ::anyhow::anyhow;
 
-        $queue.tether().tx::<_,_, MultiActionError>(async |tx| {
+        $queue.tether().await?.tx::<_,_, MultiActionError>(async |tx| {
             let mut last = None;
             $(
                 let meta = if let Some(last) = last {

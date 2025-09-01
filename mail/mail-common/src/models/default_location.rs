@@ -72,7 +72,7 @@ impl IncomingDefaultLocation {
             watcher,
             Self::INIT_KEY,
             &[Address::INIT_KEY],
-            stash.connection(),
+            stash.connection().await?,
             async || Ok(Self::sync(api).await?),
             async |tx, res| {
                 Self::store_by_email(res, tx).await?;

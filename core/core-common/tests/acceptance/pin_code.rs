@@ -14,7 +14,7 @@ async fn create_and_delete_pin() {
 
     PinCode::set(core_ctx.clone(), pin.clone()).await.unwrap();
 
-    let tether = core_ctx.account_stash().connection();
+    let tether = core_ctx.account_stash().connection().await.unwrap();
     let app_settings = AppSettings::get_or_default(&tether).await;
 
     assert_eq!(app_settings.protection, AppProtection::Pin);
@@ -54,7 +54,7 @@ async fn modify_pin() {
 
     PinCode::set(core_ctx.clone(), pin.clone()).await.unwrap();
 
-    let tether = core_ctx.account_stash().connection();
+    let tether = core_ctx.account_stash().connection().await.unwrap();
     let app_settings = AppSettings::get_or_default(&tether).await;
 
     assert_eq!(app_settings.protection, AppProtection::Pin);
@@ -100,7 +100,7 @@ async fn validation_max_attempts() {
 
     PinCode::set(core_ctx.clone(), pin).await.unwrap();
 
-    let mut tether = core_ctx.account_stash().connection();
+    let mut tether = core_ctx.account_stash().connection().await.unwrap();
     let app_settings = AppSettings::get_or_default(&tether).await;
 
     assert_eq!(app_settings.protection, AppProtection::Pin);
@@ -149,7 +149,7 @@ async fn deleting_not_existing_pin_multiple_times_should_succeed() {
     let test_ctx = TestContext::new().await;
     let core_ctx = test_ctx.core_context();
 
-    let mut tether = core_ctx.account_stash().connection();
+    let mut tether = core_ctx.account_stash().connection().await.unwrap();
     let mut app_settings = AppSettings::get_or_default(&tether).await;
     app_settings.set_biometrics();
     tether

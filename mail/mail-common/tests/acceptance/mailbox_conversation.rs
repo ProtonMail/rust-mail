@@ -56,20 +56,23 @@ async fn test_new_mailbox_sync_conversations() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
-        .await
-        .unwrap();
+    let mailbox = Mailbox::with_remote_id(
+        &user_ctx.user_stash().connection().await.unwrap(),
+        LabelId::inbox(),
+    )
+    .await
+    .unwrap();
 
     // Sync mailbox 1 - this should fire a network request
     mailbox
         .sync(
-            &mut user_ctx.user_stash().connection(),
+            &mut user_ctx.user_stash().connection().await.unwrap(),
             user_ctx.session(),
             10,
         )
         .await
         .unwrap();
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
     // Get conversations for mailbox.
     let conversation = Conversation::find_first("", vec![], &tether)
         .await

@@ -30,7 +30,7 @@ pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
         v019_proton_mail_draft_send_result_refactor::DraftSendResultMigration,
     ));
 
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await?;
 
     Migrator::new(TABLE, migrations).migrate(&mut tether).await
 }

@@ -68,9 +68,8 @@ pub struct MailboxModel {
 impl MailboxModel {
     pub async fn new(ctx: Arc<MailUserContext>) -> MailContextResult<Self> {
         let stash = ctx.user_stash();
-        let tether = stash.connection();
+        let tether = stash.connection().await?;
         let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox()).await?;
-        let tether = ctx.user_stash().connection();
 
         let label = LabelWithCounters::load(mailbox.label_id(), &tether)
             .await?
@@ -116,7 +115,12 @@ impl MailboxModel {
             self.create_background_worker(),
             Command::task(async move {
                 let stash = ctx.user_stash();
-                let tether = stash.connection();
+                let Ok(tether) = stash.connection().await else {
+                    return Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Failed to acquire db connection"),
+                    ));
+                };
                 let label = match LabelWithCounters::load(mbox.label_id(), &tether).await {
                     Ok(Some(label)) => label,
                     Ok(None) => {
@@ -147,7 +151,13 @@ impl MailboxModel {
         let label_id = self.label.local_id.unwrap();
         let stash = self.ctx.user_stash().to_owned();
         Command::task(async move {
-            let label = Label::find_by_id(label_id, &stash.connection()).await;
+            let Ok(tether) = stash.connection().await else {
+                return Command::message(Messages::DisplayError(
+                    None,
+                    anyhow!("Failed to acquire db connection"),
+                ));
+            };
+            let label = Label::find_by_id(label_id, &tether).await;
             let handle = LabelWithCounters::watch(&stash);
             let label_and_recevier = label.and_then(|l| handle.map(|h| (l, h)));
             match label_and_recevier {
@@ -155,10 +165,15 @@ impl MailboxModel {
                     if let Some(label) = label {
                         let (watcher, background_command) =
                             TuiWatchHandle::from_watcher_handle(handle, move || {
-                                let tether = stash.connection();
+                                let stash = stash.clone();
                                 async move {
+                                    let Ok(tether) = stash.connection().await else {
+                                        return Some(Messages::DisplayError(
+                                            None,
+                                            anyhow!("Failed to acquire db connection"),
+                                        ));
+                                    };
                                     let label_id = label.local_id.unwrap();
-
                                     LabelWithCounters::load(label_id, &tether)
                                         .await
                                         .inspect_err(|e| {
@@ -282,15 +297,21 @@ impl MailboxModel {
         let ctx = Arc::clone(&self.ctx);
         Command::task(async move {
             let stash = ctx.user_stash();
-            let tether = stash.connection();
-            Command::message(match Mailbox::new(&tether, label_id).await {
-                Ok(mbox) => Message::Sync(mbox).into(),
-                Err(e) => {
-                    let e = anyhow!("Failed to open label: {e}");
-                    tracing::error!("{e:?}");
-                    Messages::DisplayError(None, e)
+            Command::message(
+                match async {
+                    let tether = stash.connection().await?;
+                    Mailbox::new(&tether, label_id).await
                 }
-            })
+                .await
+                {
+                    Ok(mbox) => Message::Sync(mbox).into(),
+                    Err(e) => {
+                        let e = anyhow!("Failed to open label: {e}");
+                        tracing::error!("{e:?}");
+                        Messages::DisplayError(None, e)
+                    }
+                },
+            )
         })
     }
 

@@ -84,7 +84,7 @@ impl StashConnectionPool {
                 .enumerate()
                 .map(|(idx, conn)| {
                     let handle = conn.get_interrupt_handle();
-                    let pooled_tether = PooledTether::new(conn, &watcher, weak.clone(), idx);
+                    let pooled_tether = PooledTether::new(conn, watcher, weak.clone(), idx);
                     interrupts.push(InterruptData {
                         handle,
                         interrupt_notifier: pooled_tether.interrupt_notifier(),

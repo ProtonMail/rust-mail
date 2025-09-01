@@ -153,7 +153,7 @@ impl User {
             watcher,
             Self::INIT_KEY,
             &[],
-            stash.connection(),
+            stash.connection().await?,
             async move || Ok(Self::sync_user_and_settings(api).await?),
             async |tx, res| {
                 res.store(tx).await?;

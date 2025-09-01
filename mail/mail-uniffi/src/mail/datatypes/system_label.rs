@@ -109,7 +109,7 @@ pub async fn resolve_system_label_id(
 
     uniffi_async::<_, RealProtonMailError, _>(async move {
         let local_id = RealSystemLabel::from(label)
-            .local_id(&ctx.user_stash().connection())
+            .local_id(&ctx.user_stash().connection().await?)
             .await?
             .map(Into::into);
 

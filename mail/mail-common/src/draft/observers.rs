@@ -35,7 +35,7 @@ impl DraftSendResultWatcher {
     ///
     /// Returns error if the registration or initial db query failed.
     pub async fn new(stash: Stash, mode: DraftSendResultWatcherMode) -> Result<Self, StashError> {
-        let conn = stash.connection();
+        let conn = stash.connection().await?;
 
         let all_unseen = Self::load_send_results(mode, &conn).await?;
 
@@ -64,7 +64,7 @@ impl DraftSendResultWatcher {
                 .map_err(|_| StashError::WatcherError("Connection Lost".to_owned()))?;
 
             let mut all_unseen =
-                Self::load_send_results(self.mode, &self.stash.connection()).await?;
+                Self::load_send_results(self.mode, &self.stash.connection().await?).await?;
 
             if all_unseen.is_empty() {
                 continue;
@@ -115,7 +115,7 @@ impl DraftAttachmentObserver {
     ///
     /// Returns error if the query failed.
     pub async fn new(metadata_id: MetadataId, stash: Stash) -> Result<Self, StashError> {
-        let conn = stash.connection();
+        let conn = stash.connection().await?;
 
         let current = DraftAttachmentMetadata::find_by_metadata_id(metadata_id, &conn).await?;
 
@@ -147,7 +147,7 @@ impl DraftAttachmentObserver {
                 .await
                 .map_err(|_| StashError::WatcherError("Connection Lost".to_owned()))?;
 
-            let conn = self.stash.connection();
+            let conn = self.stash.connection().await?;
             let current = DraftAttachmentMetadata::find_by_metadata_id(self.id, &conn).await?;
             let new_state_set = HashSet::from_iter(
                 current

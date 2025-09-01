@@ -48,7 +48,7 @@ async fn draft_undo_send() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let mut local_sent_message = Message::from_api_metadata(sent_message.metadata.clone(), &tether)
         .await
@@ -118,7 +118,7 @@ async fn draft_undo_send_failure() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let mut local_sent_message = Message::from_api_metadata(sent_message.metadata.clone(), &tether)
         .await

@@ -179,7 +179,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         tracing::info!("Initializing MailScroller Source");
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let label = self.get_label(&tether).await?;
         let remote_label_id = label.remote_id.clone().unwrap();
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
@@ -248,10 +248,10 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // The latter case is handled in the `Self::sync_more` method.
         // Here we simply assume empty label.
         if let Some(scroller) = self.state.offline() {
-            let tether = ctx.user_stash().connection();
+            let tether = ctx.user_stash().connection().await?;
             Ok(scroller.visible_elements(&tether).await?)
         } else if let Some(scroller) = self.state.online() {
-            let tether = ctx.user_stash().connection();
+            let tether = ctx.user_stash().connection().await?;
             Ok(scroller.visible_elements(&tether).await?)
         } else {
             Ok(vec![])
@@ -265,10 +265,10 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // The latter case is handled in the `Self::sync_more` method.
         // Here we simply assume empty label.
         if let Some(scroller) = self.state.offline() {
-            let tether = ctx.user_stash().connection();
+            let tether = ctx.user_stash().connection().await?;
             Ok(scroller.seen_count(&tether).await?)
         } else if let Some(scroller) = self.state.online() {
-            let tether = ctx.user_stash().connection();
+            let tether = ctx.user_stash().connection().await?;
             Ok(scroller.seen_count(&tether).await?)
         } else {
             Ok(0)
@@ -277,10 +277,10 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
     async fn synced_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
         if let Some(scroller) = self.state.offline() {
-            let tether = ctx.user_stash().connection();
+            let tether = ctx.user_stash().connection().await?;
             Ok(scroller.synced_count(&tether).await?)
         } else if let Some(scroller) = self.state.online() {
-            let tether = ctx.user_stash().connection();
+            let tether = ctx.user_stash().connection().await?;
             Ok(scroller.synced_count(&tether).await?)
         } else {
             Ok(0)
@@ -288,14 +288,14 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     }
 
     async fn all_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
 
         Ok(total)
     }
 
     async fn has_more(&self, ctx: &MailUserContext) -> Result<bool, MailContextError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let has_more = self.state.has_more_in_order(&tether).await?;
 
         Ok(has_more)
@@ -306,7 +306,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<(Vec<Self::Item>, MailPaginatorJoinHandle), MailContextError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let label = self.get_label(&tether).await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
         let is_offline = ctx.network_monitor_service().is_os_offline();
@@ -407,7 +407,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         ctx: &MailUserContext,
         filter: ReadFilter,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         self.unread = filter;
         self.state =
             MailScrollerState::new_online(self.local_label_id, filter, self.page_size, &tether)
@@ -425,7 +425,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         if let Some(scroller) = self.state.online() {
             tracing::info!("Clearing cache for label {}", self.local_label_id);
-            let mut tether = ctx.user_stash().connection();
+            let mut tether = ctx.user_stash().connection().await?;
             let cursor = scroller.scroll_data_end(&tether).await?;
             tether.tx(async |tx| cursor.delete(tx).await).await?;
         }

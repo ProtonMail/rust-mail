@@ -9,7 +9,7 @@ use stash::stash::StashError;
 
 #[tokio::test]
 async fn test_full_contact() {
-    let mut tether = new_core_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection().await.unwrap();
     let mut full_contact = create_test_full_contact();
     let local_id = tether
         .tx::<_, _, StashError>(async |tx| {
@@ -46,7 +46,7 @@ async fn test_full_contact() {
 
 #[tokio::test]
 async fn test_partial_contact() {
-    let mut tether = new_core_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection().await.unwrap();
     let mut partial_contacts = create_test_partial_contacts();
     let mut contact_emails = create_test_contact_emails();
     tether

@@ -252,7 +252,7 @@ impl ContextualConversation {
         api: &Session,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
-        let mut conn = stash.connection();
+        let mut conn = stash.connection().await?;
         let label = Label::find_by_id(local_label_id, &conn)
             .await?
             .ok_or(AppError::LabelNotFound(local_label_id))?;
@@ -449,7 +449,7 @@ impl ContextualConversation {
         local_label_id: LocalLabelId,
         ctx: &MailUserContext,
     ) -> MailContextResult<Option<AutoDeleteBanner>> {
-        let tether = &ctx.user_stash().connection();
+        let tether = &ctx.user_stash().connection().await?;
         let user = ctx.user().await?;
         let user: &User = &user;
         let trash = Label::remote_id_counterpart(LabelId::trash(), tether)

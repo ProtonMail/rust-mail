@@ -155,7 +155,7 @@ async fn basic_send_check() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
@@ -194,7 +194,7 @@ async fn basic_send_check() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     let draft_message = Message::load(draft_message_id, &tether)
         .await
@@ -345,7 +345,7 @@ async fn basic_schedule_send_check() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
@@ -478,7 +478,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
@@ -580,10 +580,11 @@ async fn send_fail_recorded_to_db() {
     let (_, local_id, ctx) =
         send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetInputInvalid as u32).await;
 
-    let send_result = DraftSendResult::find_by_id(local_id, &ctx.user_stash().connection())
-        .await
-        .unwrap()
-        .unwrap();
+    let send_result =
+        DraftSendResult::find_by_id(local_id, &ctx.user_stash().connection().await.unwrap())
+            .await
+            .unwrap()
+            .unwrap();
 
     assert!(!send_result.is_success());
     assert!(!send_result.seen);
@@ -598,16 +599,19 @@ async fn send_fail_puts_message_back_in_drafts() {
     let (_, local_id, ctx) =
         send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetInputInvalid as u32).await;
 
-    let send_result = DraftSendResult::find_by_id(local_id, &ctx.user_stash().connection())
-        .await
-        .unwrap()
-        .unwrap();
-
-    let draft_message =
-        Message::find_by_id(send_result.local_message_id, &ctx.user_stash().connection())
+    let send_result =
+        DraftSendResult::find_by_id(local_id, &ctx.user_stash().connection().await.unwrap())
             .await
             .unwrap()
             .unwrap();
+
+    let draft_message = Message::find_by_id(
+        send_result.local_message_id,
+        &ctx.user_stash().connection().await.unwrap(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
     assert!(draft_message.label_ids.contains(&LabelId::drafts()));
     assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
@@ -667,7 +671,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
 
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     let send_result =
         DraftSendResult::find_by_id(draft.message_id().await.unwrap().unwrap(), &tether)
@@ -850,7 +854,7 @@ async fn cancel_schedule_send_on_non_scheduled_message() {
 
     let user_ctx = ctx.mail_user_context().await;
     let message = message_body_test_message_simple();
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let message = tether
         .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
@@ -914,7 +918,7 @@ async fn cancel_schedule_send_on_queued_send() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
@@ -1006,7 +1010,7 @@ async fn cancel_schedule_send_after_api_request_succeeded() {
 
     api_message.metadata.flags |= MessageFlags::SCHEDULED_SEND;
 
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let message = tether
         .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
@@ -1064,7 +1068,7 @@ async fn cancel_schedule_send_on_already_sent_message() {
 
     api_message.metadata.flags |= MessageFlags::SCHEDULED_SEND;
 
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let message = tether
         .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
@@ -1231,7 +1235,7 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
         .unwrap();
 
     // Load the draft.
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
     let draft_message_id = draft.message_id().await.unwrap().unwrap();
 
     let draft_message = Message::load(draft_message_id, &tether)
@@ -1289,8 +1293,7 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
 
     // Add some other label ids to this message to make sure they are skipped.
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
-
+    let tether = user_ctx.user_stash().connection().await.unwrap();
     // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
     draft
@@ -1698,7 +1701,7 @@ async fn send_with_expiration() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
@@ -1857,7 +1860,7 @@ async fn send_external_with_password_even_if_contact_has_pgp_mime_encryption() {
     let vcard_data = "BEGIN:VCARD\r\nVERSION:4.0\r\nITEM1.EMAIL;PREF=1:foo@bar.com\r\nFN;PREF=1:Mime \r\nUID:proton-web-9c3fda06-3426-fdef-ea4a-aa1b336b085d\r\nPRODID;VALUE=TEXT:-//ProtonMail//ProtonMail vCard 1.0.0//EN\r\nITEM1.KEY;PREF=1:data:application/pgp-keys;base64,xsFNBFzRQp0BEACqHCI6gicK4\r\n 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\r\nITEM1.X-PM-ENCRYPT:true\r\nITEM1.X-PM-SIGN:true\r\nITEM1.X-PM-SCHEME:pgp-mime\r\nEND:VCARD";
     let encrypted_vcard = EncryptableVcardStr(vcard_data);
 
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let provider = new_pgp_provider();
     let user_keys = user_ctx

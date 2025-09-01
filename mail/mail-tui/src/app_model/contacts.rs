@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use futures::FutureExt;
 use itertools::Itertools;
@@ -355,8 +356,12 @@ impl ContactsModel {
         let ctx = self.ctx.clone();
         Command::task(async move {
             let ctx = ctx.user_context();
-            let mut tether = ctx.stash().connection();
-            match InspectableContactDetails::get_from_contact(ctx, contact_id, &mut tether).await {
+            match async {
+                let mut tether = ctx.stash().connection().await?;
+                InspectableContactDetails::get_from_contact(ctx, contact_id, &mut tether).await
+            }
+            .await
+            {
                 Ok(details) => Command::Message(Message::LoadContactDetails(details).into()),
                 Err(e) => {
                     tracing::error!("{e:?}");
@@ -419,8 +424,14 @@ impl ContactsModel {
         let handle = stash.subscribe_to(|sender| Box::new(ContactListWatcher::new(sender)))?;
         let (watcher, background_command) =
             TuiWatchHandle::from_watcher_handle(handle, move || {
-                let tether = ctx.user_stash().connection();
+                let ctx = ctx.clone();
                 async move {
+                    let Ok(tether) = ctx.user_stash().connection().await else {
+                        return Some(Messages::DisplayError(
+                            None,
+                            anyhow!("Failed to acquire db connection"),
+                        ));
+                    };
                     Some(match Self::load_contacts(&tether).await {
                         Ok(list) => Message::LoadContacts(list).into(),
                         Err(e) => {
@@ -441,7 +452,7 @@ impl ContactsModel {
         ctx: Arc<MailUserContext>,
         background_command: Command<Messages>,
     ) -> anyhow::Result<Command<Messages>> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let list = Self::load_contacts(&tether).await?;
         Ok(Command::batch([
             Command::Message(Messages::DismissBackgroundProgress),
@@ -534,8 +545,9 @@ impl AppStateHandler for ContactsModel {
 
                         // Sanity check that our data is legit, only in debug mode.
                         if cfg!(debug_assertions) {
-                            let tether = self.ctx.user_stash().connection();
+                            let ctx = self.ctx.clone();
                             Command::task(async move {
+                                let tether = ctx.user_stash().connection().await.unwrap();
                                 let group_from_db =
                                     Contact::contact_group_by_id(&tether, group_clone.local_id)
                                         .await

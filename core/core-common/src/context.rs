@@ -424,7 +424,7 @@ impl Context {
     ///
     /// Returns an error if we fail to retrieve the accounts from the db.
     pub async fn get_accounts(&self) -> CoreContextResult<Vec<CoreAccount>> {
-        let tether = self.account_stash().connection();
+        let tether = self.account_stash().connection().await?;
         Ok(CoreAccount::all(&tether).await?)
     }
 
@@ -456,7 +456,7 @@ impl Context {
     ///
     /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> CoreContextResult<Vec<CoreSession>> {
-        let tether = self.account_stash().connection();
+        let tether = self.account_stash().connection().await?;
         Ok(CoreSession::all(&tether).await?)
     }
 
@@ -512,7 +512,7 @@ impl Context {
     ///
     /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions(&self) -> CoreContextResult<(Vec<CoreSession>, WatcherHandle)> {
-        let tether = self.account_stash().connection();
+        let tether = self.account_stash().connection().await?;
         let sessions = CoreSession::all(&tether).await?;
         let handle = CoreSession::watch(self.account_stash())?;
 
@@ -530,7 +530,7 @@ impl Context {
         &self,
         user_id: UserId,
     ) -> CoreContextResult<Vec<CoreSession>> {
-        let tether = self.account_stash().connection();
+        let tether = self.account_stash().connection().await?;
         Ok(CoreSession::find_by_user_id(user_id, &tether).await?)
     }
 
@@ -561,7 +561,7 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn get_account(&self, user_id: UserId) -> CoreContextResult<Option<CoreAccount>> {
-        let tether = self.account_stash().connection();
+        let tether = self.account_stash().connection().await?;
         Ok(CoreAccount::find_by_id(user_id, &tether).await?)
     }
 
@@ -574,7 +574,7 @@ impl Context {
         &self,
         user_id: UserId,
     ) -> CoreContextResult<Option<CoreAccountState>> {
-        let tether = self.account_stash().connection();
+        let tether = self.account_stash().connection().await?;
         let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
             return Ok(None);
         };
@@ -598,7 +598,7 @@ impl Context {
         &self,
         session_id: SessionId,
     ) -> CoreContextResult<Option<CoreSession>> {
-        let tether = self.account_stash().connection();
+        let tether = self.account_stash().connection().await?;
         Ok(CoreSession::find_by_id(session_id, &tether).await?)
     }
 
@@ -611,7 +611,7 @@ impl Context {
         &self,
         session_id: SessionId,
     ) -> CoreContextResult<Option<CoreSessionState>> {
-        let tether = self.account_stash().connection();
+        let tether = self.account_stash().connection().await?;
         let Some(session) = CoreSession::find_by_id(session_id, &tether).await? else {
             return Ok(None);
         };
@@ -625,7 +625,7 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn get_primary_account(&self) -> CoreContextResult<Option<CoreAccount>> {
-        let tether = self.account_stash().connection();
+        let tether = self.account_stash().connection().await?;
         for account in CoreAccount::by_primary_seq(&tether).await? {
             let Some(state) = self.get_account_state(account.remote_id.clone()).await? else {
                 continue;
@@ -645,7 +645,7 @@ impl Context {
     ///
     /// Returns an error if the account is not found.
     pub async fn set_primary_account(&self, user_id: UserId) -> CoreContextResult<()> {
-        let mut tether = self.account_stash().connection();
+        let mut tether = self.account_stash().connection().await?;
 
         let seq_max = CoreAccount::primary_seq_max(&tether).await?;
 
@@ -735,7 +735,7 @@ impl Context {
                 orphaned_sessions
             );
 
-            let mut tether = self.account_stash().connection();
+            let mut tether = self.account_stash().connection().await?;
             tether
                 .tx(async |tx| CoreSession::delete_by_ids(orphaned_sessions, tx).await)
                 .await?;
@@ -781,7 +781,7 @@ impl Context {
         if let Some(session) = session {
             tracing::info!("Clear all user data from database");
             if let Ok(user_ctx) = self.user_context_from_session(&session).await {
-                let tether = user_ctx.stash().connection();
+                let tether = user_ctx.stash().connection().await?;
 
                 if let Err(e) = drop_all_tables_in_database(tether).await {
                     tracing::error!("Could not clean user database, details: `{e}`");
@@ -832,7 +832,7 @@ impl Context {
             .await?;
 
         tracing::info!("Remove account");
-        let mut tether = self.account_stash().connection();
+        let mut tether = self.account_stash().connection().await?;
         tether
             .tx(async |tx| {
                 CoreAccount::delete_by_id(user_id, tx)
@@ -922,7 +922,8 @@ impl Context {
         let keychain = Arc::clone(&self.key_chain);
         let store = AuthStore::new(account_stash, keychain, user_id, session_id);
         let api_config = RealApiConfig::from(self.api_config.clone());
-        let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
+        let app_settings =
+            AppSettings::get_or_default(&self.account_stash().connection().await?).await;
 
         let network_monitor_service = self.get_service::<NetworkMonitorService>();
 
@@ -955,7 +956,8 @@ impl Context {
         connection_monitor: ConnectionMonitor,
     ) -> CoreContextResult<ApiSession> {
         let api_config = RealApiConfig::from(self.api_config.clone());
-        let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
+        let app_settings =
+            AppSettings::get_or_default(&self.account_stash().connection().await?).await;
 
         let mut builder = ApiSession::builder()
             .with_config(api_config)
@@ -1052,7 +1054,8 @@ impl Context {
 
         let network_monitor_service = self.get_service::<NetworkMonitorService>();
 
-        let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
+        let app_settings =
+            AppSettings::get_or_default(&self.account_stash().connection().await?).await;
 
         let builder = ApiSession::builder()
             .with_config(RealApiConfig::from(self.api_config.clone()))
