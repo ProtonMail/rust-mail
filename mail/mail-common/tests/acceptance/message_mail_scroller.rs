@@ -173,7 +173,7 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     // mocks
     mock_api_sync_prevous_messages_page(&ctx, "mymsg_9", 1).await;
-    let params = setup_api_message_pages(&ctx, page_size, 1..=4).await;
+    let params = setup_api_message_pages(&ctx, page_size, 1..=5).await;
 
     ctx.setup_user(params.clone()).await;
 
@@ -306,7 +306,7 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let params = setup_api_message_pages(&ctx, page_size, 1..=2).await;
+    let params = setup_api_message_pages(&ctx, page_size, 1..=3).await;
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -351,8 +351,12 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     // Next page will have 5 items
     assert_eq!(actual_page.len(), 5);
 
-    let actual_page = test_scroller.fetch_more_and_wait().await.unwrap();
-    assert!(actual_page.is_empty());
+    test_scroller.fetch_more().unwrap();
+    // It will follow up with 2 updates
+    // One for the current one request
+    //and another one for automatic fetch_more to determine if there is more data
+    let actual_page = test_scroller.wait_for_update().await.unwrap();
+    assert!(actual_page.is_none());
 
     let actual = test_scroller.items();
     assert_eq!(actual.len(), 10);

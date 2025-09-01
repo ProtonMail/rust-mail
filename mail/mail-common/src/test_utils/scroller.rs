@@ -396,6 +396,7 @@ impl<T: Send + Sync + Clone + Eq + std::fmt::Debug + 'static> TestScroller<T> {
         &mut self,
         update: ScrollerUpdate<T>,
     ) -> Result<Option<Vec<T>>, MailContextError> {
+        tracing::info!("Scroller update: {update:?}");
         match update {
             ScrollerUpdate::None(_) => Ok(None),
             ScrollerUpdate::Append { src: _, items } => {

@@ -355,6 +355,7 @@ pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
     execute_on_online: Option<AbortHandle>,
     items: Vec<T::Item>,
     page_size: usize,
+    previous_update: Option<ScrollerSource>,
     update: flume::Sender<ScrollerUpdate<T::Item>>,
     ordered_command_recv: flume::Receiver<ScrollerOrderedCommand>,
     ordered_command_send: flume::Sender<ScrollerOrderedCommand>,
@@ -397,6 +398,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             task,
             execute_on_online: None,
             items: vec![],
+            previous_update: None,
             update: update_sender,
             ordered_command_recv: ordered_command_receiver,
             ordered_command_send: ordered_command_sender.clone(),
@@ -627,7 +629,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         &mut self,
         call_src: ScrollerSource,
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
-        let mut items = self.sync_next().await?;
+        let items = self.sync_next().await?;
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let (seen, synced, total, has_more_in_source) = {
             let source = self.source.read().await;
@@ -637,8 +639,6 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             let has_more = source.has_more(&ctx).await?;
             (seen, synced, total, has_more)
         };
-        let page_size = self.page_size as u64;
-        let is_small_label = total > 0 && total < page_size;
         let has_more_in_label = seen < total;
 
         tracing::info!(
@@ -656,12 +656,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                             .network_status_observer()
                             .wait_until_online()
                             .await;
-                        let _ = channel
-                            .send_async(ScrollerOrderedCommand::FetchMore(call_src))
-                            .await
-                            .inspect_err(|e| {
-                                tracing::error!("Failed to send fetch more command: {e:?}")
-                            });
+                        Self::schedule_fetch_more(&channel, call_src).await;
                     });
                     self.execute_on_online = Some(handle.abort_handle());
                 }
@@ -669,11 +664,12 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 // and task will be spawned only when we are online,
                 // lets wait for another call.
                 return Err(MailContextError::no_connection());
-            } else if is_small_label {
-                // If we are on a small label, we can wait for the task
-                // to complete and get requested data.
-                // For other cases we would jump double pages.
-                items = self.sync_next().await?;
+            } else if self.previous_update.is_some() {
+                // To avoid infinite loop we will not automatically request fetch more
+                // if we requested it once with no effect.
+                self.previous_update = None;
+                tracing::debug!("No items to return, requesting additional fetch more");
+                Self::schedule_fetch_more(&self.ordered_command_send, call_src).await;
             }
         }
 
@@ -686,6 +682,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             Ok(ScrollerUpdate::None(call_src))
         } else {
             tracing::debug!("New items fetched: {}", items.len());
+            self.previous_update = Some(call_src);
             self.items.extend(items.clone());
             Ok(ScrollerUpdate::Append {
                 src: call_src,
@@ -815,11 +812,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
         if cant_see_first_page {
             tracing::info!("We do not see the first page, requesting fetch more");
-            let _ = self
-                .ordered_command_send
-                .send_async(ScrollerOrderedCommand::FetchMore(src))
-                .await
-                .inspect_err(|e| tracing::error!("Failed to send append update: {e:?}"));
+            Self::schedule_fetch_more(&self.ordered_command_send, src).await;
         }
 
         Ok(())
@@ -827,9 +820,10 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
     async fn sync_next(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let result = self.wait_for_request().await;
 
-        if let Err(e) = self.wait_for_request().await {
-            tracing::error!("Error occurred while waiting for previous request: {e:?}");
+        if let Err(e) = &result {
+            tracing::error!("Error occurred while waiting for previous request: {e}");
         }
 
         let (items, task) = {
@@ -842,6 +836,14 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
         tracing::debug!("Fetched next page, items number: {}", items.len());
         self.task = task;
+
+        if items.is_empty() && self.task.is_none() {
+            let status = ctx.network_monitor_service().combined_status();
+            tracing::warn!(
+                "No items and no task to return - status: {status:?}, previous fetch result: {result:?}"
+            );
+            result?;
+        }
 
         Ok(items)
     }
@@ -868,6 +870,16 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         } else {
             Ok(())
         }
+    }
+
+    async fn schedule_fetch_more(
+        channel: &flume::Sender<ScrollerOrderedCommand>,
+        src: ScrollerSource,
+    ) {
+        let _ = channel
+            .send_async(ScrollerOrderedCommand::FetchMore(src))
+            .await
+            .inspect_err(|e| tracing::error!("Failed to schedule fetch more command: {e:?}"));
     }
 }
 
