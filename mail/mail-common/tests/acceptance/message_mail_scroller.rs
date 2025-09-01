@@ -141,9 +141,7 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
         .await
         .unwrap();
 
-    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
-    // We wait for invalidation
-    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
 
     assert_eq!(actual.len(), 1);
 
@@ -197,7 +195,6 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
 
     // Messages can be accessed only when progressed.
     test_scroller.fetch_more_and_wait().await.unwrap();
-    let _ = test_scroller.wait_for_update().await.unwrap();
 
     let actual = test_scroller.items();
     assert_eq!(actual.len(), 5);
@@ -329,7 +326,6 @@ async fn test_message_mail_scroller_notificate_about_changes() {
 
     // Fetch initial page
     test_scroller.fetch_more_and_wait().await.unwrap();
-    let _ = test_scroller.wait_for_update().await.unwrap();
 
     let actual = test_scroller.items();
     assert_eq!(actual.len(), 5);
@@ -466,9 +462,7 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
         .await
         .unwrap();
 
-    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
-    // We wait for invalidation
-    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
 
     assert_eq!(actual.len(), 5);
 
