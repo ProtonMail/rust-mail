@@ -489,7 +489,14 @@ pub const CLOSE_BLOCKQUOTE: &str = "</blockquote>";
 pub const HTML_LINE_BREAK: &str = "<br>";
 pub const TEXT_LINE_BREAK: &str = "\n";
 
-pub const PM_SIGNATURE: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
+#[cfg(target_os = "android")]
+pub const PM_SIGNATURE: &str = r#"Sent from <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> for Android."#;
+#[cfg(target_os = "ios")]
+pub const PM_SIGNATURE: &str =
+    r#"Sent from <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> for iOS."#;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub const PM_SIGNATURE: &str =
+    r#"Sent from <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a>."#;
 
 // this is the value the web client is using.
 pub(super) const PM_SIGNATURE_DIV_CLASS: &str = "protonmail_signature_block-user";
