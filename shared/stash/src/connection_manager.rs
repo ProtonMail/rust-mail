@@ -7,7 +7,7 @@ use sqlite_watcher::statement::Statement;
 use sqlite_watcher::watcher::Watcher;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::Duration;
 use tempdir::TempDir;
 
@@ -117,7 +117,7 @@ impl StashConnectionPool {
         timeout: Option<Duration>,
     ) -> Result<StashPooledConnection, StashConnectionPoolError> {
         let connection = self.wait_or_acquire(timeout)?;
-        Ok(StashPooledConnection::new(connection, Arc::downgrade(self)))
+        Ok(StashPooledConnection::new(connection, self.clone()))
     }
 
     /// Interrupt all ongoing queries and rollback any active transactions.
@@ -215,11 +215,11 @@ impl StashConnectionPool {
 /// On drop the connection is returned to the pool.
 pub(crate) struct StashPooledConnection {
     conn: Option<PooledTether>,
-    pool: Weak<StashConnectionPool>,
+    pool: Arc<StashConnectionPool>,
 }
 
 impl StashPooledConnection {
-    fn new(connection: PooledTether, pool: Weak<StashConnectionPool>) -> Self {
+    fn new(connection: PooledTether, pool: Arc<StashConnectionPool>) -> Self {
         Self {
             conn: Some(connection),
             pool,
@@ -229,9 +229,7 @@ impl StashPooledConnection {
 
 impl Drop for StashPooledConnection {
     fn drop(&mut self) {
-        if let Some(pool) = self.pool.upgrade() {
-            pool.release(self.conn.take().expect("Should be set"));
-        }
+        self.pool.release(self.conn.take().expect("Should be set"));
     }
 }
 

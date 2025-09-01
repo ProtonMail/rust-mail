@@ -78,6 +78,8 @@ enum Operation {
     Interrupt,
     /// Quit the worker thread.
     Quit,
+    /// Clean up any state when this connection is returned to the pool
+    ReturnToPool,
 }
 
 /// Distinguishes transaction change detection behavior
@@ -1014,6 +1016,12 @@ impl Debug for Tether {
     }
 }
 
+impl Drop for Tether {
+    fn drop(&mut self) {
+        let _ = self.connection.send(Operation::ReturnToPool);
+    }
+}
+
 pub(crate) struct PooledTether {
     sender: flume::Sender<Operation>,
 }
@@ -1317,6 +1325,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 Operation::Quit => {
                     should_quit = true;
                 }
+                Operation::ReturnToPool => {
+                    self.handle_close();
+                }
             };
             return should_quit;
         }
@@ -1333,6 +1344,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             }
             Operation::Quit => {
                 should_quit = true;
+            }
+            Operation::ReturnToPool => {
+                self.handle_close();
             }
         }
 
