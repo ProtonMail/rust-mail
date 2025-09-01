@@ -656,12 +656,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                             .network_status_observer()
                             .wait_until_online()
                             .await;
-                        let _ = channel
-                            .send_async(ScrollerOrderedCommand::FetchMore(call_src))
-                            .await
-                            .inspect_err(|e| {
-                                tracing::error!("Failed to send fetch more command: {e:?}")
-                            });
+                        Self::schedule_fetch_more(&channel, call_src).await;
                     });
                     self.execute_on_online = Some(handle.abort_handle());
                 }
@@ -674,10 +669,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 // if we requested it once with no effect.
                 self.previous_update = None;
                 tracing::debug!("No items to return, requesting additional fetch more");
-                self.ordered_command_send
-                    .send_async(ScrollerOrderedCommand::FetchMore(call_src))
-                    .await
-                    .map_err(|e| anyhow!("Failed to schedule fetch more command: {e:?}"))?;
+                Self::schedule_fetch_more(&self.ordered_command_send, call_src).await;
             }
         }
 
@@ -689,8 +681,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             tracing::debug!("No new items fetched");
             Ok(ScrollerUpdate::None(call_src))
         } else {
-            self.previous_update = Some(call_src);
             tracing::debug!("New items fetched: {}", items.len());
+            self.previous_update = Some(call_src);
             self.items.extend(items.clone());
             Ok(ScrollerUpdate::Append {
                 src: call_src,
@@ -820,11 +812,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
         if cant_see_first_page {
             tracing::info!("We do not see the first page, requesting fetch more");
-            let _ = self
-                .ordered_command_send
-                .send_async(ScrollerOrderedCommand::FetchMore(src))
-                .await
-                .inspect_err(|e| tracing::error!("Failed to send append update: {e:?}"));
+            Self::schedule_fetch_more(&self.ordered_command_send, src).await;
         }
 
         Ok(())
@@ -850,7 +838,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         self.task = task;
 
         if items.is_empty() && self.task.is_none() {
-            let status = ctx.network_monitor_service().status();
+            let status = ctx.network_monitor_service().combined_status();
             tracing::warn!(
                 "No items and no task to return - status: {status:?}, previous fetch result: {result:?}"
             );
@@ -882,6 +870,16 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         } else {
             Ok(())
         }
+    }
+
+    async fn schedule_fetch_more(
+        channel: &flume::Sender<ScrollerOrderedCommand>,
+        src: ScrollerSource,
+    ) {
+        let _ = channel
+            .send_async(ScrollerOrderedCommand::FetchMore(src))
+            .await
+            .inspect_err(|e| tracing::error!("Failed to schedule fetch more command: {e:?}"));
     }
 }
 

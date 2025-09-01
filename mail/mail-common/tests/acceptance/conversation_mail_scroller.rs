@@ -538,9 +538,11 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     );
 
     // There is no more data in API
-    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
-    assert!(actual.is_empty());
+    // However we should not call fetch more again as this will make a test
+    // to carry over the fetch_more task to the offline context in which
+    // you will get a correct update without "asking" for it, which can look suspicious.
 
+    // --------------------------------
     // The unordered items are not included in the api response
     // they will not be shown untill we go offline again
     // this is test specific behavior, in real app we should not have such a situation
@@ -571,8 +573,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ]
     );
 
-    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 5);
 
     assert_scroller_content!(
@@ -597,8 +598,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ]
     );
 
-    test_scroller.fetch_more().unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 6);
 
     assert_scroller_content!(
