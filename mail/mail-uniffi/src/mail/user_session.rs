@@ -332,7 +332,8 @@ impl MailUserSession {
     ) -> Result<DecryptedAttachment, ActionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
-            Attachment::get_attachment(&ctx, local_attachment_id.into())
+            let mut tether = ctx.user_stash().connection();
+            Attachment::get_attachment(&ctx, local_attachment_id.into(), &mut tether)
                 .await
                 .map(DecryptedAttachment::try_from)?
                 .map_err(RealProtonMailError::from)

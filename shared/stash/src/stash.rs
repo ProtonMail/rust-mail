@@ -47,7 +47,7 @@ use std::any::Any;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::thread::{self, yield_now};
+use std::thread::{self};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
@@ -63,10 +63,8 @@ type StdSender<T> = flume::Sender<T>;
 /// access inside the same db process.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// The maximum number of simultaneous connections allowed to the database. This
-/// defaults to 100.
-// TODO: Test perf of lower values.
-const MAX_CONNECTIONS: u32 = 100;
+/// The maximum number of simultaneous connections allowed to the database.
+const MAX_CONNECTIONS: u32 = 8;
 
 #[derive(Debug)]
 /// These are all the operations allowed on a tether.
@@ -441,7 +439,7 @@ impl Stash {
     ///
     pub fn new<'a>(config: impl Into<StashConfiguration<'a>>) -> Result<Self, StashError> {
         Ok(Self {
-            pool: Self::make_pool(config.into()),
+            pool: Self::make_pool(config.into())?,
             watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
             tx_lock: Default::default(),
         })
@@ -450,7 +448,7 @@ impl Stash {
     /// Create a sqlite pool.
     /// This is infallible, if it cannot open the file it will fail later on when we try to
     /// connect.
-    fn make_pool(config: StashConfiguration<'_>) -> Arc<StashConnectionPool> {
+    fn make_pool(config: StashConfiguration<'_>) -> Result<Arc<StashConnectionPool>, StashError> {
         let StashConfiguration {
             path, pool_size, ..
         } = config;
@@ -490,8 +488,10 @@ impl Stash {
         });
 
         match path {
-            Some(p) => StashConnectionPool::file(p, max_connections, init_fn),
-            None => StashConnectionPool::tmp_file(max_connections, init_fn),
+            Some(p) => StashConnectionPool::file(p, max_connections, init_fn)
+                .map_err(StashError::ExecutionError),
+            None => StashConnectionPool::tmp_file(max_connections, init_fn)
+                .map_err(StashError::ExecutionError),
         }
     }
 
@@ -1000,20 +1000,16 @@ impl Tether {
         let tether_sender_cloned = tether_sender.clone();
         let thread_builder = thread::Builder::new().name("Tether worker".to_string());
         _ = thread_builder.spawn(move || {
-            debug!("Creating worker thread");
-
             let connection = pool
-                .acquire(Box::new(move || {
-                    let _ = tether_sender_cloned.send(Operation::Interrupt);
-                }))
+                .acquire(
+                    Box::new(move || {
+                        let _ = tether_sender_cloned.send(Operation::Interrupt);
+                    }),
+                    None,
+                )
                 .inspect_err(|e| error!("Failed acquire connection: {e:?}"))
                 .context("Could not connect to the database")
                 .map_err(StashError::from);
-
-            // There might be a race between initializing connection
-            // and handling first operation. Yield ensures to pause a thread for
-            // just enough to shuffle execution order and ensure connection is ready to use.
-            yield_now();
 
             let (first_operation, connection) = match (tether_receiver.recv(), connection) {
                 (Ok(op), Ok(con)) => (op, con),

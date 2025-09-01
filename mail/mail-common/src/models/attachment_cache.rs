@@ -19,8 +19,8 @@ use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model as _;
 use stash::params;
-use stash::stash::RunTransaction;
 use stash::stash::{Bond, StashError};
+use stash::stash::{RunTransaction, Tether};
 use stash::utils::placeholders_n;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt as _;
@@ -83,7 +83,7 @@ impl Attachment {
             return Ok(path);
         };
 
-        let data = self.fetch_data(ctx).await?;
+        let data = self.fetch_data(ctx, tx.tether()).await?;
 
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
@@ -117,7 +117,7 @@ impl Attachment {
             return Ok(fs::read(path).await?);
         };
 
-        let data = self.fetch_data(ctx).await?;
+        let data = self.fetch_data(ctx, tx.tether()).await?;
 
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
@@ -161,13 +161,13 @@ impl Attachment {
     pub async fn get_attachment(
         ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
+        tether: &mut Tether,
     ) -> MailContextResult<DecryptedAttachment> {
-        let attachment = Self::sync(ctx, attachment_id)
+        let attachment = Self::sync(ctx, attachment_id, tether)
             .await
             .inspect_err(|e| error!("Failed to sync attachment: {e:?}"))?;
-        let mut tether = ctx.user_stash().connection();
         let data_path = attachment
-            .content_path(ctx, &mut tether)
+            .content_path(ctx, tether)
             .await
             .inspect_err(|e| error!("Failed to get attachment path: {e:?}"))?;
         Ok(DecryptedAttachment {
@@ -351,7 +351,11 @@ impl Attachment {
     }
 
     /// Fetches and decrypts an attachment from the API.
-    pub async fn fetch_data(&self, ctx: &MailUserContext) -> MailContextResult<Vec<u8>> {
+    pub async fn fetch_data(
+        &self,
+        ctx: &MailUserContext,
+        tether: &Tether,
+    ) -> MailContextResult<Vec<u8>> {
         let attachment_id = self.id();
         let pgp = new_pgp_provider();
 
@@ -375,7 +379,7 @@ impl Attachment {
                 })?;
 
         let (decrypted_content, _verification_result) = self
-            .decrypt_content(ctx, &pgp, encrypted_content.as_ref())
+            .decrypt_content(ctx, &pgp, encrypted_content.as_ref(), tether)
             .await
             // There is not much we can do at this point, and we need to convert from a
             // MailboxError
@@ -392,9 +396,9 @@ impl Attachment {
     pub async fn sync(
         ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
+        conn: &mut Tether,
     ) -> MailContextResult<Attachment> {
-        let mut conn = ctx.user_stash().connection();
-        let mut attachment = Attachment::load(attachment_id, &conn)
+        let mut attachment = Attachment::load(attachment_id, conn)
             .await
             .inspect_err(|e| {
                 error!("Failed to load attachment({attachment_id:?}) from DB: {e:?})")
@@ -403,14 +407,14 @@ impl Attachment {
         // First check if the metadata is complete for decryption.
         if !attachment.is_pgp_attachment() && !attachment.has_complete_metadata() {
             attachment
-                .sync_complete_metadata(ctx.session(), &mut conn)
+                .sync_complete_metadata(ctx.session(), conn)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to sync attachment({attachment_id:?}) metadata: {e:?})")
                 })
                 .map_err(MailContextError::from)?;
             // Load the complete attachment metadata.
-            attachment = Attachment::load(attachment_id, &conn)
+            attachment = Attachment::load(attachment_id, conn)
                 .await?
                 .ok_or(AppError::AttachmentMissing(attachment_id))?;
         }
@@ -423,6 +427,7 @@ impl Attachment {
         ctx: &MailUserContext,
         pgp: &P,
         data: impl Read,
+        tether: &Tether,
     ) -> MailContextResult<(Vec<u8>, VerificationResult)>
     where
         P: PGPProviderSync,
@@ -441,10 +446,8 @@ impl Attachment {
         let mut result_buffer: Vec<u8> =
             Vec::with_capacity(self.size.try_into().unwrap_or_default());
 
-        let tether = ctx.user_stash().connection();
-
         let address_keys = ctx
-            .unlocked_address_keys(pgp, &tether, remote_address_id)
+            .unlocked_address_keys(pgp, tether, remote_address_id)
             .await?;
 
         // TODO: Load the sender verification keys for correct signature verification.

@@ -68,7 +68,8 @@ async fn test_load_attachment_buffer() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Load and decrypt attachment.
-    let att = Attachment::get_attachment(&user_ctx, attachment_local_id)
+    let mut tether = user_ctx.user_stash().connection();
+    let att = Attachment::get_attachment(&user_ctx, attachment_local_id, &mut tether)
         .await
         .expect("decryption should not fail");
     assert_eq!(
@@ -77,7 +78,7 @@ async fn test_load_attachment_buffer() {
         "attachments should be equal"
     );
     filename_is_correct(&att);
-    let att_again = Attachment::get_attachment(&user_ctx, attachment_local_id)
+    let att_again = Attachment::get_attachment(&user_ctx, attachment_local_id, &mut tether)
         .await
         .expect("decryption should not fail");
     assert_eq!(att, att_again);
@@ -93,7 +94,10 @@ async fn concurrency() {
 
     let requests = (0..30).map(|_| {
         let ctx_clone = user_ctx.clone();
-        async move { Attachment::get_attachment(&ctx_clone, attachment_local_id).await }
+        async move {
+            let mut tether = ctx_clone.user_stash().connection();
+            Attachment::get_attachment(&ctx_clone, attachment_local_id, &mut tether).await
+        }
     });
 
     let mut result = try_join_all(requests).await.unwrap();
@@ -120,7 +124,8 @@ async fn load_attachment_from_cache() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Load and decrypt attachment.
-    let decryption_result = Attachment::get_attachment(&user_ctx, attachment_local_id)
+    let mut tether = user_ctx.user_stash().connection();
+    let decryption_result = Attachment::get_attachment(&user_ctx, attachment_local_id, &mut tether)
         .await
         .expect("decryption should not fail");
 
@@ -141,7 +146,8 @@ async fn external_attachment_file_removal_from_cache_triggers_download() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Load and decrypt attachment.
-    let decryption_result = Attachment::get_attachment(&user_ctx, attachment_local_id)
+    let mut tether = user_ctx.user_stash().connection();
+    let decryption_result = Attachment::get_attachment(&user_ctx, attachment_local_id, &mut tether)
         .await
         .expect("decryption should not fail");
 
@@ -155,7 +161,7 @@ async fn external_attachment_file_removal_from_cache_triggers_download() {
     // if the attachment is no longer in disk we re-download it
     fs::remove_file(&decryption_result.data_path).unwrap();
 
-    let decryption_result = Attachment::get_attachment(&user_ctx, attachment_local_id)
+    let decryption_result = Attachment::get_attachment(&user_ctx, attachment_local_id, &mut tether)
         .await
         .expect("decryption should not fail");
 
