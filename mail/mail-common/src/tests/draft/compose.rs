@@ -301,7 +301,7 @@ mod signatures {
         given_custom_settings: custom_settings,
         given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "",
-        expected_mobile: "\n\nSent with Proton Mail secure email.",
+        expected_mobile: "\n\nSent from Proton Mail.",
     };
 
     const TEST_ADDRESS_SIGNATURE: TestCase = TestCase {
@@ -368,8 +368,8 @@ mod signatures {
 
     const TEST_ADDRESS_AND_MOBILE_SIGNATURE_FREE: TestCase = TestCase {
         given_mail_settings: || mail_settings().with_pm_signature(PmSignature::LOCKED),
-        expected_desktop: "\n\ncheers, jerry\n\nSent with Proton Mail secure email.",
-        expected_mobile: "\n\ncheers, jerry\n\nSent with Proton Mail secure email.",
+        expected_desktop: "\n\ncheers, jerry\n\nSent from Proton Mail.",
+        expected_mobile: "\n\ncheers, jerry\n\nSent from Proton Mail.",
         ..TEST_ADDRESS_AND_MOBILE_SIGNATURE
     };
 
