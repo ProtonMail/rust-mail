@@ -46,11 +46,10 @@ async fn test_new_mailbox_sync_conversations() {
             ..ApiMessageMetadata::test_default()
         },
     ];
-
     let conversations = params.conversations.clone();
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
-    ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1_u64)
+    ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 2_u64)
         .await;
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
@@ -90,11 +89,11 @@ async fn test_new_mailbox_sync_conversations() {
     .unwrap();
 
     assert_eq!(result.messages.len(), 2);
-    assert_eq!(result.messages[0].remote_id, Some(message_id1));
-    assert_eq!(result.messages[1].remote_id, Some(message_id2));
+    assert_eq!(result.messages[0].remote_id.as_ref(), Some(&message_id1));
+    assert_eq!(result.messages[1].remote_id.as_ref(), Some(&message_id2));
 
-    // Get messages again, but should not fire request.
-    let _ = ContextualConversation::conversation_and_messages(
+    // Get messages again no changes, but we still make the request
+    let result = ContextualConversation::conversation_and_messages(
         user_ctx.network_monitor_service(),
         conversation.id(),
         mailbox.label_id(),
@@ -104,6 +103,143 @@ async fn test_new_mailbox_sync_conversations() {
     .await
     .unwrap()
     .unwrap();
+
+    assert_eq!(result.messages.len(), 2);
+    assert_eq!(result.messages[0].remote_id.as_ref(), Some(&message_id1));
+    assert_eq!(result.messages[1].remote_id.as_ref(), Some(&message_id2));
+}
+
+#[tokio::test]
+async fn test_new_mailbox_syncs_new_conversation_messages() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::new().await;
+    let mut params = TestParams::default_basic();
+    params
+        .labels
+        .get_mut(&ApiLabelType::Label)
+        .unwrap()
+        .push(ApiLabel {
+            id: LabelId::from("testlabel"),
+            name: "testlabel".to_owned(),
+            label_type: ApiLabelType::Label,
+            ..ApiLabel::test_default()
+        });
+
+    let message_id1 = MessageId::from("m1");
+    let message_id2 = MessageId::from("m2");
+    let message_id3 = MessageId::from("m3");
+
+    let messages = vec![
+        ApiMessageMetadata {
+            id: message_id1.clone(),
+            conversation_id: params.conversations[0].id.clone(),
+            order: 0,
+            address_id: params.addresses[0].id.clone(),
+            label_ids: vec![LabelId::inbox()],
+            ..ApiMessageMetadata::test_default()
+        },
+        ApiMessageMetadata {
+            id: message_id2.clone(),
+            conversation_id: params.conversations[0].id.clone(),
+            order: 1,
+            address_id: params.addresses[0].id.clone(),
+            label_ids: vec![LabelId::inbox()],
+            ..ApiMessageMetadata::test_default()
+        },
+    ];
+
+    let messages_updated = vec![
+        ApiMessageMetadata {
+            id: message_id1.clone(),
+            conversation_id: params.conversations[0].id.clone(),
+            order: 0,
+            address_id: params.addresses[0].id.clone(),
+            label_ids: vec![LabelId::inbox()],
+            ..ApiMessageMetadata::test_default()
+        },
+        ApiMessageMetadata {
+            id: message_id2.clone(),
+            conversation_id: params.conversations[0].id.clone(),
+            order: 1,
+            address_id: params.addresses[0].id.clone(),
+            label_ids: vec![LabelId::inbox()],
+            ..ApiMessageMetadata::test_default()
+        },
+        ApiMessageMetadata {
+            id: message_id3.clone(),
+            conversation_id: params.conversations[0].id.clone(),
+            order: 2,
+            address_id: params.addresses[0].id.clone(),
+            label_ids: vec![LabelId::inbox()],
+            ..ApiMessageMetadata::test_default()
+        },
+    ];
+
+    let conversations = params.conversations.clone();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_conversations(conversations, 1_u64).await;
+    ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1_u64)
+        .await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create a mailbox
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+        .await
+        .unwrap();
+
+    // Sync mailbox 1 - this should fire a network request
+    mailbox
+        .sync(
+            &mut user_ctx.user_stash().connection(),
+            user_ctx.session(),
+            10,
+        )
+        .await
+        .unwrap();
+    let tether = user_ctx.user_stash().connection();
+    // Get conversations for mailbox.
+    let conversation = Conversation::find_first("", vec![], &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Get the message for a conversation.
+
+    let result = ContextualConversation::conversation_and_messages(
+        user_ctx.network_monitor_service(),
+        conversation.id(),
+        mailbox.label_id(),
+        user_ctx.user_stash(),
+        user_ctx.session(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(result.messages.len(), 2);
+    assert_eq!(result.messages[0].remote_id.as_ref(), Some(&message_id1));
+    assert_eq!(result.messages[1].remote_id.as_ref(), Some(&message_id2));
+
+    ctx.mock_server().reset().await;
+    ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages_updated, 1_u64)
+        .await;
+    ctx.catch_all().await;
+    // Get messages again, should have new message
+    let result = ContextualConversation::conversation_and_messages(
+        user_ctx.network_monitor_service(),
+        conversation.id(),
+        mailbox.label_id(),
+        user_ctx.user_stash(),
+        user_ctx.session(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(result.messages.len(), 3);
+    assert_eq!(result.messages[0].remote_id.as_ref(), Some(&message_id1));
+    assert_eq!(result.messages[1].remote_id.as_ref(), Some(&message_id2));
+    assert_eq!(result.messages[2].remote_id.as_ref(), Some(&message_id3));
 }
 
 // #[test]
