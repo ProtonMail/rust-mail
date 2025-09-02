@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use muon::common::Sender;
+use muon::util::DurationExt;
 use muon::{DELETE, ProtonRequest, ProtonResponse};
 use proton_core_api::service::ApiServiceResult;
 use proton_core_api::services::proton::muon::util::ProtonRequestExt;
@@ -17,6 +18,7 @@ use crate::{INCOMING_DEFAULTS_PAGE_SIZE, MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_C
 impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
     async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes> {
         Ok(GET!("{MAIL_V4}/attachments/{attachment_id}")
+            .allowed_time(2.m())
             .send_with(self)
             .await?
             .ok()?
@@ -168,6 +170,7 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
 
     async fn get_message(&self, message_id: MessageId) -> ApiServiceResult<GetMessageResponse> {
         Ok(GET!("{MAIL_V4}/messages/{message_id}")
+            .allowed_time(2.m())
             .send_with(self)
             .await?
             .ok()?

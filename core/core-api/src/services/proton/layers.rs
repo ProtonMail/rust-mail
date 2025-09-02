@@ -74,20 +74,23 @@ impl SenderLayer<ProtonRequest, ProtonResponse> for SetDefaultServiceTypeLayer {
 pub struct SetDefaultTimeoutLayer;
 
 impl SetDefaultTimeoutLayer {
-    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
+    async fn on_send<S>(&self, inner: &S, mut req: ProtonRequest) -> MuonResult<ProtonResponse>
     where
         S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
     {
-        const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+        /// The timeout we set by default.
+        const CUSTOM_TIMEOUT: Duration = Duration::from_secs(60);
+
+        /// The timeout muon sets by default.
+        const MUON_DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
         // NOTE: This is not a bug! Muon logs a warning if no timeout is explicitly set;
         // this workaround sets the timeout explicitly if it was not already set to a
         // non-default value earlier in the layer stack.
-        let req = if req.get_allowed_time() == DEFAULT_TIMEOUT {
-            req.allowed_time(DEFAULT_TIMEOUT)
-        } else {
-            req
-        };
+        if req.get_allowed_time() == MUON_DEFAULT_TIMEOUT {
+            // The request has muon's standard 30s timeout. We bump it here to 60s.
+            req = req.allowed_time(CUSTOM_TIMEOUT);
+        }
 
         inner.send(req).await
     }
