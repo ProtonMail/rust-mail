@@ -30,6 +30,7 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
+use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
 use proton_core_api::session::Session;
@@ -2424,6 +2425,107 @@ impl Conversation {
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
         session: &Session,
+    ) -> Result<Conversation, AppError> {
+        let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
+            return Err(AppError::ConversationNotFound(local_conversation_id));
+        };
+
+        let Some(ref rid) = conversation.remote_id else {
+            return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
+        };
+
+        if network_monitor_service.is_os_offline() {
+            debug!("No connection, skipping sync");
+            return Err(AppError::API(ApiServiceError::NetworkError(
+                "No connection".to_owned(),
+            )));
+        }
+
+        info!("Syncing {rid:?}'s messages");
+        let conversation_response =
+            match session
+                .get_conversation(rid.clone())
+                .await
+                .inspect_err(|e| {
+                    error!("failed to download conversation messages: {e:?}");
+                }) {
+                Ok(r) => r,
+                Err(ApiServiceError::UnprocessableEntity(s, Some(api_error))) => {
+                    return if api_error.code == Mail::ConversationDoesNotExist as u32 {
+                        Err(AppError::ConversationDoesNotExistOnServer(rid.clone()))
+                    } else {
+                        Err(AppError::from(ApiServiceError::UnprocessableEntity(
+                            s,
+                            Some(api_error),
+                        )))
+                    };
+                }
+                Err(e) => return Err(AppError::from(e)),
+            };
+
+        tx.run_tx::<_, _>(async move |tx| {
+            let had_messages = conversation.has_messages;
+            let mut new_conversation = if conversation.is_known {
+                debug!("Conversation was known");
+                let mut conversation = conversation.clone();
+                conversation.has_messages = true;
+                conversation
+            } else {
+                debug!("Conversation was not known");
+                let mut new_conversation: Conversation = conversation_response.conversation.into();
+                new_conversation.local_id = conversation.local_id;
+                new_conversation.has_messages = true;
+                new_conversation
+            };
+
+            // only save if there is a difference
+            if new_conversation != conversation {
+                new_conversation.save(tx).await.map_err(|e| {
+                    error!("Failed to write conversation: {e:?}");
+                    e
+                })?;
+            }
+            let mut message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
+            if had_messages {
+                info!("Messages were synced before");
+                let current_ids =
+                    Message::remote_ids_in_conversation_unordered(local_conversation_id, tx)
+                        .await?
+                        .into_iter()
+                        .collect::<HashSet<_>>();
+                message_metadata.retain(|v| !current_ids.contains(&v.id));
+            } else {
+                info!("Never synced conversation messages before");
+            }
+            if !message_metadata.is_empty() {
+                debug!(
+                    "Debug saving messages {:?}",
+                    message_metadata.iter().map(|v| &v.id).collect::<Vec<_>>()
+                );
+                Message::create_or_update_messages_from_metadata_vec(message_metadata, tx)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to write message metadata: {e:?}");
+                        e
+                    })?;
+            } else {
+                debug!("No new messages to save");
+            }
+
+            Ok(conversation)
+        })
+        .await
+        .map_err(AppError::Other)
+    }
+
+    // Until we have a sync manager, the prefetcher will only sync conversation messages
+    // if we have never synced the messages before.
+    #[tracing::instrument(skip(tx, session, network_monitor_service))]
+    pub async fn sync_conversation_messages_prefetch(
+        network_monitor_service: &NetworkMonitorService,
+        local_conversation_id: LocalConversationId,
+        tx: &mut impl RunTransaction,
+        session: &Session,
     ) -> Result<(), AppError> {
         let Some(mut conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await?
         else {
@@ -2436,7 +2538,7 @@ impl Conversation {
             };
             info!("Syncing {rid:?}'s messages");
 
-            if network_monitor_service.is_os_offline() {
+            if network_monitor_service.check_now().await.is_offline() {
                 debug!("No connection, skipping sync");
                 return Err(AppError::API(ApiServiceError::NetworkError(
                     "No connection".to_owned(),

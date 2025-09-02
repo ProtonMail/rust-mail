@@ -42,6 +42,7 @@ use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
 use proton_core_common::models::LabelError;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 pub use proton_mail_api;
+use proton_mail_api::services::proton::common::ConversationId;
 use stash::stash::StashError;
 use thiserror::Error;
 
@@ -81,6 +82,8 @@ pub enum AppError {
     ConversationHasNoRemoteId(LocalConversationId),
     #[error("Conversation with ID {0} not found")]
     ConversationNotFound(LocalConversationId),
+    #[error("Conversation with ID {0} does not exist on server")]
+    ConversationDoesNotExistOnServer(ConversationId),
     #[error("Empty list of conversations, expected at least one")]
     EmptyListOfConversations,
     #[error("Empty list of messages, expected at least one")]

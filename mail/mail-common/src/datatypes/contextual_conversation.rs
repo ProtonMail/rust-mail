@@ -256,15 +256,28 @@ impl ContextualConversation {
         let label = Label::find_by_id(local_label_id, &conn)
             .await?
             .ok_or(AppError::LabelNotFound(local_label_id))?;
-        Conversation::sync_conversation_messages(
+        let conversation = match Conversation::sync_conversation_messages(
             network_monitor_service,
             local_conversation_id,
             &mut conn,
             api,
         )
-        .await?;
-        let Some(conversation) = Self::load(local_conversation_id, local_label_id, &conn).await?
-        else {
+        .await
+        {
+            Ok(conversation) => conversation,
+            Err(AppError::ConversationNotFound(_)) => {
+                return Ok(None);
+            }
+            Err(AppError::ConversationDoesNotExistOnServer(remote_id)) => {
+                warn!("Conversation {remote_id:?} does not exist on the server");
+                return Ok(None);
+            }
+            Err(e) => return Err(e),
+        };
+        let Some(conversation) = ContextualConversation::new(conversation, local_label_id) else {
+            warn!(
+                "Conversation synced, but could not be converted to contextual in the current label"
+            );
             return Ok(None);
         };
         let messages = Message::in_conversation(local_conversation_id, &conn).await?;
