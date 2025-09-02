@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- [ET-4215] Conversation compare
+
+
+## [mail-uniffi-v0.142.10] - 2025-09-02
+
 ### Features
 
 - Use different default signature on ios and android.
