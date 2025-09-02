@@ -251,44 +251,91 @@ impl ContextualConversation {
         stash: &Stash,
         api: &Session,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
+        Self::conversation_and_messages_impl(
+            network_monitor_service,
+            local_conversation_id,
+            local_label_id,
+            stash,
+            api,
+            true,
+        )
+        .await
+    }
+
+    pub async fn conversation_and_messages_without_sync(
+        network_monitor_service: &NetworkMonitorService,
+        local_conversation_id: LocalConversationId,
+        local_label_id: LocalLabelId,
+        stash: &Stash,
+        api: &Session,
+    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
+        Self::conversation_and_messages_impl(
+            network_monitor_service,
+            local_conversation_id,
+            local_label_id,
+            stash,
+            api,
+            false,
+        )
+        .await
+    }
+    async fn conversation_and_messages_impl(
+        network_monitor_service: &NetworkMonitorService,
+        local_conversation_id: LocalConversationId,
+        local_label_id: LocalLabelId,
+        stash: &Stash,
+        api: &Session,
+        sync: bool,
+    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection();
         let label = Label::find_by_id(local_label_id, &conn)
             .await?
             .ok_or(AppError::LabelNotFound(local_label_id))?;
-        let conversation = match Conversation::sync_conversation_messages(
-            network_monitor_service,
-            local_conversation_id,
-            &mut conn,
-            api,
-        )
-        .await
-        {
-            Ok(conversation) => conversation,
-            Err(AppError::ConversationNotFound(_)) => {
+        let conversation = if sync {
+            let conversation = match Conversation::sync_conversation_messages(
+                network_monitor_service,
+                local_conversation_id,
+                &mut conn,
+                api,
+            )
+            .await
+            {
+                Ok(conversation) => conversation,
+                Err(AppError::ConversationNotFound(_)) => {
+                    return Ok(None);
+                }
+                Err(AppError::ConversationDoesNotExistOnServer(remote_id)) => {
+                    warn!("Conversation {remote_id:?} does not exist on the server");
+                    return Ok(None);
+                }
+                Err(e) => return Err(e),
+            };
+            let Some(conversation) = ContextualConversation::new(conversation, local_label_id)
+            else {
+                warn!(
+                    "Conversation synced, but could not be converted to contextual in the current label"
+                );
                 return Ok(None);
-            }
-            Err(AppError::ConversationDoesNotExistOnServer(remote_id)) => {
-                warn!("Conversation {remote_id:?} does not exist on the server");
-                return Ok(None);
-            }
-            Err(e) => return Err(e),
+            };
+            conversation
+        } else {
+            ContextualConversation::load(local_conversation_id, local_label_id, &conn)
+                .await?
+                .ok_or(AppError::ConversationNotFound(local_conversation_id))?
         };
-        let Some(conversation) = ContextualConversation::new(conversation, local_label_id) else {
-            warn!(
-                "Conversation synced, but could not be converted to contextual in the current label"
-            );
-            return Ok(None);
-        };
+
         let messages = Message::in_conversation(local_conversation_id, &conn).await?;
         tracing::info!("Conversation has {:02} messages", messages.len());
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
 
-        debug!(
-            "Obtained messages and conversations for {local_conversation_id} in {:?}",
-            t.elapsed()
-        );
+        if sync {
+            debug!(
+                "Obtained messages and conversations for {local_conversation_id} in {:?}",
+                t.elapsed()
+            );
+        }
 
         Ok(Some(ContextualConversationAndMessages {
             conversation,
