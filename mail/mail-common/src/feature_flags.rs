@@ -26,8 +26,13 @@ impl FeatureFlagsService {
     }
 
     async fn load_from_cache(&self, ctx: &Context) {
-        let tether = ctx.account_stash().connection();
-        let app_settings = AppSettings::get_or_default(&tether).await;
+        let app_settings = async {
+            let Ok(tether) = ctx.account_stash().connection().await else {
+                return AppSettings::default();
+            };
+            AppSettings::get_or_default(&tether).await
+        }
+        .await;
 
         {
             let mut guard = self.flags.write().await;
@@ -53,7 +58,7 @@ impl FeatureFlagsService {
 
         tracing::info!("Fetched {} featured flags from API", new_map.len());
 
-        let mut tether = ctx.account_stash().connection();
+        let mut tether = ctx.account_stash().connection().await?;
 
         tether
             .tx(async |tx| {

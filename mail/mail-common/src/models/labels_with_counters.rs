@@ -104,7 +104,7 @@ impl LabelWithCounters {
             watcher,
             Label::INIT_KEY,
             &[],
-            stash.connection(),
+            stash.connection().await?,
             async || {
                 let labels = Label::all_labels(api).await?;
                 Ok(labels)

@@ -105,7 +105,7 @@ async fn test_store_and_delete_remote_items(
 ) {
     // * RollbackItem is correctly stored *
     let (stash, _tempdir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     tether
         .tx::<_, _, StashError>(async |tx| {
             if let Some(items) = &mut expected {
@@ -135,7 +135,7 @@ async fn test_store_and_delete_remote_items(
 
     let (_mock, api) = start_server(&tether, BATCH_SIZE).await;
 
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     RollbackItem::sync_all(&api, &mut tether, BATCH_SIZE)
         .await
         .unwrap();

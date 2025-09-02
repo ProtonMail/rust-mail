@@ -10,7 +10,7 @@ use stash::{orm::Model, params};
 
 #[tokio::test]
 async fn count_test() {
-    let mut tether = new_core_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection().await.unwrap();
     tether
         .tx::<_, _, StashError>(async |tx| {
             for i in 0..10 {

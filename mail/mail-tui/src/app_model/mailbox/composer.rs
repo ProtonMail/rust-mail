@@ -281,7 +281,7 @@ impl Composer {
             }
         };
 
-        let tether = stash.connection();
+        let tether = stash.connection().await?;
         let attachment_infos = Self::build_attachment_infos(draft.metadata_id, &tether).await?;
         drop(tether);
 
@@ -376,7 +376,12 @@ impl Composer {
                 "Preparing Attachment".to_owned(),
             )),
             Command::task(async move {
-                let mut tether = context.user_stash().connection();
+                let Ok(mut tether) = context.user_stash().connection().await else {
+                    return Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Failed acquire db connection"),
+                    ));
+                };
                 let Ok(address_id) = draft.address_id().await else {
                     return Command::batch([
                         Command::message(Messages::DismissBackgroundProgress),
@@ -451,8 +456,12 @@ impl Composer {
     fn refresh_attachment_list(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
         let metadata_id = self.draft.metadata_id;
         Command::task(async move {
-            let tether = context.user_stash().connection();
-            match DraftAttachment::build_list(metadata_id, &tether).await {
+            match async {
+                let tether = context.user_stash().connection().await?;
+                DraftAttachment::build_list(metadata_id, &tether).await
+            }
+            .await
+            {
                 Ok(list) => Command::message(ComposerMessage::AttachmentListRefreshed(list)),
                 Err(e) => Command::message(anyhow!(e)),
             }

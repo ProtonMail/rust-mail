@@ -4,14 +4,13 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ProtonError, UserSessionError};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use proton_core_common::models::ModelExtension;
-use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::{
     CustomSettings as RealCustomSettings, MailSettings as RealMailSettings,
     MobileSignatureStatus as RealMobileSignatureStatus,
 };
+use proton_mail_common::{MailContextError, MailUserContext};
 use std::sync::Arc;
-use tokio::task::JoinError;
 use tracing::instrument;
 use uniffi::{Enum, Object, Record};
 
@@ -19,8 +18,8 @@ use uniffi::{Enum, Object, Record};
 pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserSessionError> {
     let stash = ctx.user_stash()?;
 
-    Ok(uniffi_async::<_, JoinError, _>(async move {
-        let tether = stash.connection();
+    Ok(uniffi_async::<_, MailContextError, _>(async move {
+        let tether = stash.connection().await?;
 
         Ok(RealMailSettings::get_or_default(&tether).await.into())
     })
@@ -43,7 +42,7 @@ pub async fn watch_mail_settings(
 
     uniffi_async(async move {
         let stash = ctx.user_stash();
-        let tether = stash.connection();
+        let tether = stash.connection().await?;
 
         let settings = RealMailSettings::all(&tether)
             .await?
@@ -84,7 +83,7 @@ impl CustomSettings {
 
         uniffi_async::<_, RealProtonMailError, _>(async move {
             let user = ctx.user().await?;
-            let tether = ctx.user_stash().connection();
+            let tether = ctx.user_stash().connection().await?;
             let settings = RealCustomSettings::get_or_default(&tether).await?;
             let status = RealMobileSignatureStatus::new(&user, &settings);
 

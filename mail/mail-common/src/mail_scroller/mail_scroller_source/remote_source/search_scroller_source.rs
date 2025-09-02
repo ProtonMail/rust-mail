@@ -70,7 +70,7 @@ impl SearchScrollerSource {
         let session = ctx.session().clone();
 
         let task = Some(ctx.spawn(async move {
-            let mut tether = stash.connection();
+            let mut tether = stash.connection().await?;
 
             Self::sync_first_page(
                 &session,
@@ -98,7 +98,7 @@ impl SearchScrollerSource {
         let session = ctx.session().clone();
 
         let task = Some(ctx.spawn(async move {
-            let tether = stash.connection();
+            let tether = stash.connection().await?;
 
             if let Some((remote_id, time)) =
                 SearchScrollData::last_remote_message_id_and_time(&tether).await?
@@ -289,7 +289,7 @@ impl MailScrollerSource for SearchScrollerSource {
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        let mut tether = ctx.user_stash().connection();
+        let mut tether = ctx.user_stash().connection().await?;
         tether
             .tx(async |tx| SearchScrollData::delete_all(tx).await)
             .await?;
@@ -316,7 +316,7 @@ impl MailScrollerSource for SearchScrollerSource {
         &self,
         ctx: &MailUserContext,
     ) -> Result<Vec<Self::Item>, MailContextError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         if !self.initialized {
             Ok(vec![])
         } else if let Some(ref last) = self.last {
@@ -327,7 +327,7 @@ impl MailScrollerSource for SearchScrollerSource {
     }
 
     async fn seen_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
 
         if !self.initialized {
             Ok(0)
@@ -343,13 +343,13 @@ impl MailScrollerSource for SearchScrollerSource {
     }
 
     async fn all_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
 
         Ok(self.total(&tether).await?)
     }
 
     async fn has_more(&self, ctx: &MailUserContext) -> Result<bool, MailContextError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let has_more = match &self.last {
             Some(last) => last.has_more(&tether).await?,
             None => false,
@@ -363,7 +363,7 @@ impl MailScrollerSource for SearchScrollerSource {
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<(Vec<Self::Item>, MailPaginatorJoinHandle), MailContextError> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
 
         if !self.initialized {
             self.last = SearchScrollData::last(&tether).await?;

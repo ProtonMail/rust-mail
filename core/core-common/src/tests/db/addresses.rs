@@ -12,7 +12,7 @@ use stash::stash::StashError;
 
 #[tokio::test]
 async fn test_address_create() {
-    let mut conn = new_core_test_connection().await.connection();
+    let mut conn = new_core_test_connection().await.connection().await.unwrap();
     conn.tx::<_, _, StashError>(async |tx| {
         let mut address = create_test_address();
         address.save(tx).await.expect("failed to create address");
@@ -29,7 +29,7 @@ async fn test_address_create() {
 
 #[tokio::test]
 async fn test_address_update() {
-    let mut conn = new_core_test_connection().await.connection();
+    let mut conn = new_core_test_connection().await.connection().await.unwrap();
     conn.tx::<_, _, StashError>(async |tx| {
         let mut address = create_test_address();
         address.save(tx).await.expect("failed to create address");
@@ -48,7 +48,7 @@ async fn test_address_update() {
 
 #[tokio::test]
 async fn test_address_delete() {
-    let mut conn = new_core_test_connection().await.connection();
+    let mut conn = new_core_test_connection().await.connection().await.unwrap();
     conn.tx::<_, _, StashError>(async |tx| {
         let mut address = create_test_address();
         address.save(tx).await.expect("failed to create address");

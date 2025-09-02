@@ -12,7 +12,7 @@ use stash::stash::StashError;
 
 #[tokio::test]
 async fn test_messages_with_pending_send() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_test_connection().await.connection().await.unwrap();
     let address = create_address(&mut tether).await;
     tether
         .tx::<_, _, StashError>(async |bond| {

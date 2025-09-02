@@ -375,7 +375,7 @@ impl Handler for ActionHandler2 {
 async fn queue_actions() {
     // Check that an actions are popped from the queue ordered by priority and time.
     let queue = new_queue().await;
-    let tether = &queue.stash().connection();
+    let tether = &queue.stash().connection().await.unwrap();
 
     let actions = (0..=9)
         .map(|num| Action2 { num, die: false })

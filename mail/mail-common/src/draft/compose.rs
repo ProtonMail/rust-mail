@@ -269,7 +269,7 @@ pub(super) async fn encrypt_draft_body(
     let draft_body = DraftBody { body };
     let pgp = new_pgp_provider();
 
-    let tether = ctx.user_stash().connection();
+    let tether = ctx.user_stash().connection().await?;
     let unlocked_keys = ctx.unlocked_address_keys(&pgp, &tether, address_id).await?;
 
     let draft_encryption_key = unlocked_keys

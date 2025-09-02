@@ -85,7 +85,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     const REMOTE_LABEL_ID: &str = "rid1";
 
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut data = btree_map! {
         REMOTE_LABEL_ID: test_conversations(100, 100),
         "rid2": test_conversations(50, 0),
@@ -212,7 +212,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     const REMOTE_LABEL_ID: &str = "rid1";
 
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut data = btree_map! {
         REMOTE_LABEL_ID: test_conversations(100, 100),
         "rid2": test_conversations(50, 0),
@@ -454,7 +454,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
     const REMOTE_LABEL_ID: &str = "rid1";
 
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut data = btree_map! {
         REMOTE_LABEL_ID: test_conversations(5, 100),
         "rid2": test_conversations(50, 0),
@@ -513,7 +513,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
 #[tokio::test]
 async fn allow_different_filter_types_to_be_stored_in_database() {
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     // Create new entries for each filter type
     let mut scroller_all = ConversationScrollData::builder()
@@ -817,7 +817,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
 #[tokio::test]
 async fn test_cashed_scroller_correctly_reads_empty_conversations_from_the_trash() {
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let trash_remote_id = SystemLabel::Trash.remote_id();
     let trash = Label::find_by_remote_id(trash_remote_id, &tether)
         .await
@@ -885,7 +885,7 @@ async fn test_create_or_get_local_fix_preserves_api_conversations_with_labels() 
     // pass the filter and reach the prefetcher successfully.
 
     let stash = new_test_connection().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
 
     // Set up inbox label
     let inbox_remote_id = SystemLabel::Inbox.remote_id();

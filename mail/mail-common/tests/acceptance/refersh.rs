@@ -234,7 +234,7 @@ async fn test_on_refresh_impl_mail_success_and_refresh_conversations() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_conversations(&ctx).await;
     ctx.catch_all().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
     let result = refresh(&user_ctx, Refresh::Mail).await;
     // Should succeed
     assert!(result.is_ok());
@@ -259,7 +259,7 @@ async fn test_on_refresh_impl_mail_success_and_refresh_messages_after_mail_setti
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_messages(&ctx).await;
     ctx.catch_all().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
     let result = refresh(&user_ctx, Refresh::Mail).await;
     // Should succeed
     assert!(result.is_ok());
@@ -286,7 +286,7 @@ async fn test_on_refresh_impl_all_success_and_refresh_messages_after_mail_settin
     let user_ctx = set_up_test_messages(&ctx).await;
     setup_core_refresh_mocks(&ctx).await;
     ctx.catch_all().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     let result = refresh(&user_ctx, Refresh::All).await;
     // Should succeed
@@ -312,7 +312,7 @@ async fn test_on_refresh_leaves_messages_without_remote_id_untouched() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_messages(&ctx).await;
     ctx.catch_all().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Modify one of the local messages to have no remote id
     let mut local_msg = Message::find_by_remote_id("mymsg_1".into(), &tether)
@@ -361,7 +361,7 @@ async fn test_on_refresh_leaves_local_draft_messages_untouched() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_messages(&ctx).await;
     ctx.catch_all().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Modify one of the local messages to be a draft
     let msg = Message::find_by_remote_id("mymsg_1".into(), &tether)
@@ -412,7 +412,7 @@ async fn test_on_refresh_leaves_local_draft_messages_untouched() {
 async fn test_on_refresh_leaves_local_draft_messages_in_converstation_untouched() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_conversations(&ctx).await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let conv = Conversation::find_by_remote_id("myconv_100".into(), &tether)
         .await
         .unwrap()
@@ -468,7 +468,7 @@ async fn test_on_refresh_leaves_conversation_without_remote_id_untouched() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_conversations(&ctx).await;
     ctx.catch_all().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let mut local_conv = Conversation::find_by_remote_id("myconv_1".into(), &tether)
         .await
         .unwrap()
@@ -535,7 +535,7 @@ async fn set_up_test_messages(ctx: &MailTestContext) -> Arc<MailUserContext> {
         vec![SystemLabel::Inbox.remote_id(), SystemLabel::AllMail.remote_id(), "mylabel_1".into()]: test_messages(10, 0),
         vec![SystemLabel::Sent.remote_id(), SystemLabel::AllMail.remote_id(), "mylabel_2".into()]: test_messages(100, 10),
     );
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     data.save_to_database(&mut tether).await;
 
     assert_eq!(Message::count("", vec![], &tether).await.unwrap(), 110);
@@ -569,7 +569,7 @@ async fn set_up_test_conversations(ctx: &MailTestContext) -> Arc<MailUserContext
         vec![SystemLabel::Sent.remote_id(), SystemLabel::AllMail.remote_id(), "mylabel_2".into()]:
             test_conversations(100, 10),
     );
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     data.save_to_database(&mut tether).await;
 
     user_ctx

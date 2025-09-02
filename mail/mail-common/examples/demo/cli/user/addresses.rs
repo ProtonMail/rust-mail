@@ -16,7 +16,8 @@ impl Cmd {
             .get_user_ctx(&self.username)
             .await?
             .user_stash()
-            .connection();
+            .connection()
+            .await?;
 
         for address in Address::all_send_enabled(&tether).await? {
             if address.display_name.is_empty() {

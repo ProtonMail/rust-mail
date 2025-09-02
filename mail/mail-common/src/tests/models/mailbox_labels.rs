@@ -9,7 +9,7 @@ use stash::stash::StashError;
 
 #[tokio::test]
 async fn test_mark_labels_as_initialized() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_test_connection().await.connection().await.unwrap();
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut new_label = Label {

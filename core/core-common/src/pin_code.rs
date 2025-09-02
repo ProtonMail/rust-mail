@@ -89,7 +89,7 @@ impl PinCode {
         .await??;
 
         let mut this = PinProtection::new();
-        let mut tether = ctx.account_stash().connection();
+        let mut tether = ctx.account_stash().connection().await?;
         let mut app_settings = AppSettings::get_or_default(&tether).await;
 
         app_settings.protection = AppProtection::Pin;
@@ -113,7 +113,7 @@ impl PinCode {
         info!("Verifying pin");
 
         let pin = Self::sanitize(pin)?;
-        let mut tether = ctx.account_stash().connection();
+        let mut tether = ctx.account_stash().connection().await?;
         let app_settings = AppSettings::get_or_default(&tether).await;
 
         if matches!(app_settings.protection, AppProtection::Pin) {
@@ -180,7 +180,7 @@ impl PinCode {
 
     #[instrument(skip_all)]
     pub(crate) async fn force_delete(ctx: Arc<Context>) -> Result<(), PinError> {
-        let mut tether = ctx.account_stash().connection();
+        let mut tether = ctx.account_stash().connection().await?;
         let mut app_settings = AppSettings::get_or_default(&tether).await;
         let pin_protection = PinProtection::get(&tether).await?;
 

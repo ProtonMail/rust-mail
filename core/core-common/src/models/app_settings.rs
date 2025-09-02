@@ -403,7 +403,7 @@ mod tests {
     async fn app_settings_autolock() {
         let test_ctx = TestContext::new().await;
         let core_ctx = test_ctx.core_context();
-        let tether = core_ctx.account_stash().connection();
+        let tether = core_ctx.account_stash().connection().await.unwrap();
         let mut app_settings = AppSettings::get_or_default(&tether).await;
 
         app_settings.set_biometrics();

@@ -128,17 +128,13 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
-    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
         .await
         .unwrap();
     mailbox
-        .sync(
-            &mut user_ctx.user_stash().connection(),
-            user_ctx.session(),
-            10,
-        )
+        .sync(&mut tether, user_ctx.session(), 10)
         .await
         .unwrap();
 
@@ -203,17 +199,13 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
-    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
         .await
         .unwrap();
     mailbox
-        .sync(
-            &mut user_ctx.user_stash().connection(),
-            user_ctx.session(),
-            10,
-        )
+        .sync(&mut tether, user_ctx.session(), 10)
         .await
         .unwrap();
 

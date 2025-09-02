@@ -234,14 +234,14 @@ impl UserContext {
 
     pub async fn user_settings(&self) -> CoreContextResult<UserSettings> {
         let user_id = self.user_id();
-        let tether = self.stash().connection();
+        let tether = self.stash().connection().await?;
         let settings = UserSettings::load(user_id.to_owned(), &tether).await?;
 
         settings.ok_or_else(|| CoreContextError::SettingsMissing(user_id.to_owned()))
     }
 
     pub async fn core_account(&self) -> CoreContextResult<CoreAccount> {
-        let tether = self.context.account_stash().connection();
+        let tether = self.context.account_stash().connection().await?;
         let user_id = self.user_id();
         let account = CoreAccount::load(user_id.clone(), &tether)
             .await?

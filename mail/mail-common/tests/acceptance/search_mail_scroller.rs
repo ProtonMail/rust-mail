@@ -191,7 +191,7 @@ async fn test_search_mail_scroller_does_not_refresh_on_new_message_in_database()
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let new_message = Message::from_api_metadata(new_message, &tether)
         .await
         .unwrap();
@@ -254,7 +254,7 @@ async fn test_search_mail_scroller_does_refresh_on_modified_message_in_database(
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let new_message = Message::from_api_metadata(new_message, &tether)
         .await
         .unwrap();

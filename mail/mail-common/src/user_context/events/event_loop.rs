@@ -98,7 +98,7 @@ impl MailUserContext {
 
     async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction>> {
         // Only queue rollback if there is actually anything to rollback.
-        let tether = self.user_stash().connection();
+        let tether = self.user_stash().connection().await?;
         if RollbackItem::count("", vec![], &tether).await? == 0 {
             return Ok(());
         }

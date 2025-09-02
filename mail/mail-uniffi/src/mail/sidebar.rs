@@ -73,7 +73,7 @@ impl Sidebar {
         let stash = self.user_stash()?;
 
         uniffi_async(async move {
-            let tether = stash.connection();
+            let tether = stash.connection().await?;
             let labels = RealSidebar.system_labels(&tether).await?;
 
             Result::<_, RealProtonMailError>::Ok(labels.map_vec())
@@ -86,7 +86,7 @@ impl Sidebar {
         let stash = self.user_stash()?;
 
         uniffi_async(async move {
-            let tether = stash.connection();
+            let tether = stash.connection().await?;
             let labels = RealSidebar.custom_folders(&tether).await?;
 
             Result::<_, RealProtonMailError>::Ok(labels.map_vec())
@@ -99,7 +99,7 @@ impl Sidebar {
         let stash = self.user_stash()?;
 
         uniffi_async(async move {
-            let tether = stash.connection();
+            let tether = stash.connection().await?;
             let labels = RealSidebar.all_custom_folders(&tether).await?;
 
             Result::<_, RealProtonMailError>::Ok(labels.map_vec())
@@ -112,7 +112,7 @@ impl Sidebar {
         let stash = self.user_stash()?;
 
         uniffi_async(async move {
-            let tether = stash.connection();
+            let tether = stash.connection().await?;
             let labels = RealSidebar.custom_labels(&tether).await?;
 
             Result::<_, RealProtonMailError>::Ok(labels.map_vec())

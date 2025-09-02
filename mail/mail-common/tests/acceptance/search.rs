@@ -8,7 +8,7 @@ use proton_mail_common::test_utils::test_context::MailTestContext;
 async fn unsynced_conversations() {
     let ctx = MailTestContext::new().await;
     let user_context = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_context.user_stash().connection();
+    let mut tether = user_context.user_stash().connection().await.unwrap();
     let api = user_context.session();
 
     ctx.mock_get_labels_by_ids(ctx.get_test_labels()).await;
@@ -38,7 +38,7 @@ async fn unsynced_conversations() {
 async fn unsynced_messages() {
     let ctx = MailTestContext::new().await;
     let user_context = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_context.user_stash().connection();
+    let mut tether = user_context.user_stash().connection().await.unwrap();
     let api = user_context.session();
 
     ctx.mock_get_labels_by_ids(ctx.get_test_labels()).await;

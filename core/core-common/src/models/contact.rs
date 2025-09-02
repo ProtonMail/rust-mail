@@ -343,7 +343,7 @@ impl Contact {
             watcher,
             Self::INIT_KEY,
             &[Label::INIT_KEY],
-            stash.connection(),
+            stash.connection().await?,
             async move || Ok(Self::sync(api).await?),
             async |tx, res| {
                 res.store(tx).await?;
@@ -568,7 +568,7 @@ impl Contact {
     pub async fn watch_contact_list(
         stash: &Stash,
     ) -> Result<(Vec<GroupedContacts>, WatcherHandle), StashError> {
-        let tether = stash.connection();
+        let tether = stash.connection().await?;
         let contacts = Contact::contact_list(&tether).await?;
         let handle = stash.subscribe_to(|sender| Box::new(ContactListWatcher { sender }))?;
         Ok((contacts, handle))

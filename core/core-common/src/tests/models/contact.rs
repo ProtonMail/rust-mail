@@ -199,7 +199,7 @@ mod contact_list {
             contact_email!(remote_id: ceid!("2"), email: "bfox@proton.me".into(), display_order: 1, is_proton: true),
         ];
 
-        let mut tether = new_core_test_connection().await.connection();
+        let mut tether = new_core_test_connection().await.connection().await.unwrap();
         let mut contact = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());
         tether
             .tx::<_, _, StashError>(async |tx| {
@@ -220,7 +220,7 @@ mod contact_list {
 
     #[tokio::test]
     async fn test_count_email_group_count() {
-        let mut tether = new_core_test_connection().await.connection();
+        let mut tether = new_core_test_connection().await.connection().await.unwrap();
 
         let empty_group_id = LabelId::from("l1");
         let not_empty_group_id = LabelId::from("l2");
@@ -306,7 +306,7 @@ mod contact_watcher {
     #[tokio::test]
     async fn test_contact_list_watcher() {
         let stash = new_core_test_connection().await;
-        let mut tether = stash.connection();
+        let mut tether = stash.connection().await.unwrap();
         let mut contact = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());
         tether.tx(async |tx| contact.save(tx).await).await.unwrap();
         let (_, list_receiver) = Contact::watch_contact_list(&stash).await.unwrap();
@@ -845,7 +845,7 @@ mod contact_suggestions {
         query: &str,
         mut test_case: TestCase,
     ) -> Vec<ContactSuggestion> {
-        let mut tether = new_core_test_connection().await.connection();
+        let mut tether = new_core_test_connection().await.connection().await.unwrap();
         tether
             .tx::<_, _, stash::stash::StashError>(async |tx| {
                 for contact in &mut test_case.contacts {

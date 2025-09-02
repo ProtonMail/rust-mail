@@ -28,7 +28,7 @@ pub async fn get_contact_details(
 
     uniffi_async(async move {
         let ctx = ctx.user_context();
-        let mut tether = ctx.stash().connection();
+        let mut tether = ctx.stash().connection().await?;
         let details =
             RealContactDetails::get_from_contact(ctx, contact_id.into(), &mut tether).await?;
         Ok::<_, RealProtonMailError>(details.into())

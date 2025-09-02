@@ -115,7 +115,7 @@ impl From<Weak<UserContext>> for CoreEventLoopContext {
 impl Store for CoreEventLoopContext {
     async fn load(&self) -> anyhow::Result<Option<EventId>> {
         let ctx = self.inner()?;
-        let tether = ctx.stash().connection();
+        let tether = ctx.stash().connection().await?;
         match tether
             .query_value::<_, EventId>(
                 "SELECT value FROM event_id_store WHERE id = ?1",
@@ -142,6 +142,7 @@ impl Store for CoreEventLoopContext {
         let ctx = self.inner()?;
         ctx.stash()
             .connection()
+            .await?
             .tx(async |tx| {
                 tx.execute(
                     "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
@@ -219,7 +220,7 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
         let user_id = ctx.user_id().clone();
         let stash = ctx.stash().clone();
 
-        let mut conn = stash.connection();
+        let mut conn = stash.connection().await?;
         conn.tx::<_, _, StashError>(async |tx| {
             for event in events.iter_mut() {
                 handle_event(&ctx, event, tx, &user_id).await?;
@@ -257,6 +258,7 @@ async fn handle_event(
         ctx.context
             .account_stash()
             .connection()
+            .await?
             .tx::<_, _, StashError>(async |account_tx| {
                 if let Some(account) = CoreAccount::load(user.id(), account_tx).await? {
                     account
@@ -412,7 +414,7 @@ async fn refresh_core(ctx: &UserContext) -> Result<(), SubscriberError> {
     let api = ctx.session().clone();
     let all_remote_labels = ctx.spawn(async move { Label::fetch_contact_labels(&api).await });
 
-    let mut tether = ctx.stash().connection();
+    let mut tether = ctx.stash().connection().await?;
     let mut all_local_addresses: HashMap<_, _> = Address::all(&tether)
         .await?
         .into_iter()
@@ -501,7 +503,7 @@ async fn refresh_contacts(ctx: &UserContext) -> Result<(), SubscriberError> {
     let contacts = ctx.spawn(async move { Contact::sync(&api).await });
     let api = ctx.session().clone();
     let all_remote_labels = ctx.spawn(async move { Label::fetch_contact_labels(&api).await });
-    let mut tether = ctx.stash().connection();
+    let mut tether = ctx.stash().connection().await?;
     let mut all_local_labels: HashMap<_, _> = Label::all_contact_groups(&tether)
         .await?
         .into_iter()

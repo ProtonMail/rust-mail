@@ -205,7 +205,7 @@ impl DecryptedMessageBody {
                 let id = att.id();
                 let ctx_clone = ctx.clone();
                 let fut = ctx.spawn(async move {
-                    let tether = &mut ctx_clone.user_stash().connection();
+                    let tether = &mut ctx_clone.user_stash().connection().await?;
                     att.content_data(&ctx_clone, tether).await
                 });
                 (id, fut)
@@ -318,7 +318,7 @@ impl DecryptedMessageBody {
                     Err(_) => return Err(MailContextError::TaskCancelled),
                 },
                 None => {
-                    let tether = &mut ctx.user_stash().connection();
+                    let tether = &mut ctx.user_stash().connection().await?;
                     att.content_data(ctx, tether).await?
                 }
             }
@@ -433,7 +433,7 @@ impl DecryptedMessageBody {
         if let Some(invite) = invite {
             debug!("Analyzing invite attachment");
 
-            let mut tether = ctx.user_stash().connection();
+            let mut tether = ctx.user_stash().connection().await?;
             let ics = Attachment::get_attachment(ctx, invite, &mut tether)
                 .await
                 .map_err(|err| {

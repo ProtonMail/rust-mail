@@ -616,7 +616,7 @@ mod available_move_to_actions {
         expected: Result<&[ExpectedMoveAction], AppError>,
     ) {
         let stash = new_test_connection().await;
-        let mut conn = stash.connection();
+        let mut conn = stash.connection().await.unwrap();
 
         let mut settings = MailSettings::default();
         let mut conversation_ids = vec![];
@@ -664,13 +664,13 @@ mod available_move_to_actions {
             .unwrap();
 
         let result = Conversation::available_move_to_actions(view, conversation_ids, &conn).await;
-        let new_conn = || stash.connection();
+        let new_conn = async || stash.connection().await.unwrap();
 
         match result {
             Ok(actual) => {
                 let actual = stream::iter(actual.into_iter())
                     .then(|action| async move {
-                        let tether = new_conn();
+                        let tether = new_conn().await;
                         ExpectedMoveAction::new(action, &tether).await
                     })
                     .collect::<Vec<_>>()
@@ -726,7 +726,7 @@ mod available_move_to_actions {
 #[tokio::test]
 async fn test_conversation_create_no_labels() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     create_address(&mut tether).await;
     create_labels(&mut tether).await;
     let conv = test_conversation(vec![], vec![]);
@@ -753,7 +753,7 @@ async fn test_conversation_create_no_labels() {
 #[tokio::test]
 async fn test_conversation_has_messages_flag() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     create_address(&mut tether).await;
     create_labels(&mut tether).await;
     let conv = test_conversation(vec![], vec![]);
@@ -779,7 +779,7 @@ async fn test_conversation_has_messages_flag() {
 #[tokio::test]
 async fn test_unknown_conversation_messages_returns_error() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     create_address(&mut tether).await;
     let id = 1024;
     assert_eq!(
@@ -803,7 +803,7 @@ async fn test_conversation_create_starred() {
         context_snooze_time: 0,
     };
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     tether.execute("DELETE FROM labels", vec![]).await.unwrap();
     create_address(&mut tether).await;
     create_labels(&mut tether).await;
@@ -915,7 +915,7 @@ async fn test_conversation_create_starred() {
 #[tokio::test]
 async fn test_conversation_create_with_labels() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     create_address(&mut tether).await;
     let _local_label_ids = create_labels(&mut tether).await;
     let conv = test_conversation(
@@ -980,7 +980,7 @@ async fn test_conversation_create_with_labels() {
 #[tokio::test]
 async fn test_conversation_create_with_attachment() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     create_address(&mut tether).await;
     create_labels(&mut tether).await;
     let conv = test_conversation(
@@ -1029,7 +1029,7 @@ async fn test_conversation_create_with_attachment() {
 #[tokio::test]
 async fn test_conversation_create_with_attachment_and_label() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     create_address(&mut tether).await;
     create_labels(&mut tether).await;
     let conv = test_conversation(
@@ -1087,7 +1087,7 @@ async fn test_conversation_create_with_attachment_and_label() {
 #[tokio::test]
 async fn test_conversation_update() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     create_address(&mut tether).await;
     let _local_label_ids = create_labels(&mut tether).await;
     let conv = test_conversation(
@@ -1203,7 +1203,7 @@ async fn test_conversation_undelete_all_mail() {
     // Same as test_conversation_delete, but undoing the deletions should restore all the state
     // back to the initial values.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
@@ -1284,7 +1284,7 @@ async fn test_conversation_delete_all_mail() {
     // Simulate conversation delete from all mail, all messages for the conversation a
     // are deleted.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
@@ -1431,7 +1431,7 @@ async fn test_conversation_delete() {
     // Simulate conversation according to API expectations, only delete conversations in that label.
     // If conversation has messages in other labels, it must still exist.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
@@ -1587,7 +1587,7 @@ async fn test_conversation_delete() {
 async fn test_conversation_undelete() {
     // Same as test_conversation_delete, but checks for reverse operations.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
@@ -1679,7 +1679,7 @@ async fn test_conversation_undelete() {
 #[tokio::test]
 async fn test_conversation_counts() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     tether.execute("DELETE FROM labels", vec![]).await.unwrap();
     create_address(&mut tether).await;
     let labels = create_labels(&mut tether).await;
@@ -1736,7 +1736,7 @@ async fn test_conversation_mark_read_no_message_metadata() {
     // Mark conversation as read without message metadata.
     let mut state = new_test_unread_db_state();
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) =
         prepare_and_patch_db_state_and_skip(&mut tether, state.clone(), true).await;
@@ -1792,7 +1792,7 @@ async fn test_conversation_mark_read_no_message_metadata() {
 async fn test_conversation_mark_read() {
     // Mark conversation as read and update all conversation / message counts
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_unread_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
@@ -1873,7 +1873,7 @@ async fn test_conversation_mark_unread_no_metadata() {
     // Mark conversation as read and then mark it unread, since we don't have message
     // metadata we should mark the current conversation label only as unread.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_unread_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) =
@@ -1943,7 +1943,7 @@ async fn test_conversation_mark_unread() {
     // 3 are in label1 and 1 in label2
     // The last message in the conversation is of label1
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_unread_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let state = new_test_unread_db_state();
@@ -2047,7 +2047,7 @@ async fn test_conversation_mark_unread() {
 #[tokio::test]
 async fn test_conversation_marks_only_the_last_message_with_the_same_label_as_unread() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_unread_db_state_unread_label_in_folder();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
@@ -2105,7 +2105,7 @@ async fn test_conversation_marks_only_the_last_message_with_the_same_label_as_un
 async fn test_conversation_label_with_message_metadata() {
     // Label conversation with a label that was never assigned to the conversation.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
@@ -2168,7 +2168,7 @@ async fn test_conversation_double_label_with_message_metadata() {
     // Label conversation with a label that was never assigned to the conversation twice and check
     // the changes are not duplicated.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
@@ -2232,7 +2232,7 @@ async fn test_conversation_double_label_with_message_metadata() {
 async fn test_conversation_label_partially() {
     // Label conversation with a label where one of the messages already has been labeled
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let mut state = state.clone();
@@ -2310,7 +2310,7 @@ async fn test_conversation_label_without_message_metadata() {
     // Label a conversation with a label that was never assigned without having any message metadata
     // present.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
     let (state, state_map) =
@@ -2361,7 +2361,7 @@ async fn test_conversation_double_label_without_message_metadata() {
     // Label a conversation with a label that was never assigned without having any message metadata
     // present 2 times and check the data is not duplicated.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
     let (state, state_map) =
@@ -2417,7 +2417,7 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
     // There is a fallback to 0 values if no such thing exists. In production
     // conversation will always be assigned to the "All Mail".
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state_label_with_existing_labels();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) =
@@ -2476,7 +2476,7 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
 async fn test_conversation_unlabel_with_message_metadata() {
     // Label conversation with a label that was never assigned to the conversation.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
@@ -2527,7 +2527,7 @@ async fn test_conversation_unlabel_without_message_metadata() {
     // Label and then unlabel a conversation with a label that was never assigned without having any message metadata
     // present.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
     let (state, state_map) =
@@ -2569,7 +2569,7 @@ async fn test_conversation_unlabel_without_message_metadata() {
 #[tokio::test]
 async fn test_conversation_expiration() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) =
@@ -2619,7 +2619,7 @@ async fn test_conversation_expiration() {
 #[tokio::test]
 async fn test_conversation_watcher() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) =
@@ -2666,7 +2666,7 @@ async fn test_conversation_watcher() {
 #[tokio::test]
 async fn test_contextual_conversation_messages() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) =
@@ -2724,7 +2724,7 @@ async fn conversation_exclusive_location_on_save(
     // Setup:
     //   * create a conversation with some labels
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
 
     let mut conversation = Conversation {
         ..Conversation::test_default()
@@ -2772,7 +2772,7 @@ async fn conversation_exclusive_location_on_save(
 #[tokio::test]
 async fn test_conversation_move_to() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
     let (state, state_map) =
@@ -2821,7 +2821,7 @@ async fn test_conversation_move_to() {
 #[tokio::test]
 async fn conversation_save_updates_local_ids_for_attachment_metadata() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let regular_attachment_id = AttachmentId::from("regular-att");
     let api_conversation = ApiConversation {
         id: ConversationId::from("My-Conv"),
@@ -2864,7 +2864,7 @@ async fn conversation_save_updates_local_ids_for_attachment_metadata() {
 #[tokio::test]
 async fn conversation_snooze_without_message_metadata() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let initial_time = UnixTimestamp::new(4096);
     let snooze_time = UnixTimestamp::now().saturating_add(8096);
     let api_conversation = ApiConversation {
@@ -2974,7 +2974,7 @@ async fn conversation_snooze_only_snoozes_received_messages_in_inbox() {
     // * Sent - sent/replied
     // * Custom folder - received
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut conn = stash.connection().await.unwrap();
     let mut state = new_conversation_snooze_db_state();
     let snooze_time = UnixTimestamp::now().saturating_add(8096);
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
@@ -3112,7 +3112,7 @@ async fn conversation_snooze_only_snoozes_received_messages_in_inbox() {
 #[tokio::test]
 async fn conversation_expiration() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     let expiration_time = UnixTimestamp::now().saturating_sub(20);
     let api_conversation = ApiConversation {
         id: ConversationId::from("My-Conv"),

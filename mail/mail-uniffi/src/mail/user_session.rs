@@ -332,7 +332,7 @@ impl MailUserSession {
     ) -> Result<DecryptedAttachment, ActionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
-            let mut tether = ctx.user_stash().connection();
+            let mut tether = ctx.user_stash().connection().await?;
             Attachment::get_attachment(&ctx, local_attachment_id.into(), &mut tether)
                 .await
                 .map(DecryptedAttachment::try_from)?

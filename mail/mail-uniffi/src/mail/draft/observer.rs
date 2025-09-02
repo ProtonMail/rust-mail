@@ -195,7 +195,7 @@ pub async fn draft_send_result_unseen(
 ) -> Result<Vec<DraftSendResult>, ProtonError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {
-        let connection = ctx.user_stash().connection();
+        let connection = ctx.user_stash().connection().await?;
         RealDraftSendResult::unseen(&connection)
             .await
             .map(MapVec::map_vec)
@@ -218,7 +218,7 @@ pub async fn draft_send_result_mark_seen(
 ) -> Result<(), ProtonError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {
-        let mut connection = ctx.user_stash().connection();
+        let mut connection = ctx.user_stash().connection().await?;
         connection
             .tx(async |tx| {
                 RealDraftSendResult::mark_seen(
@@ -248,7 +248,7 @@ pub async fn draft_send_result_delete(
 ) -> Result<(), ProtonError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {
-        let mut connection = ctx.user_stash().connection();
+        let mut connection = ctx.user_stash().connection().await?;
         connection
             .tx(async |tx| {
                 RealDraftSendResult::delete(message_ids.into_iter().map(LocalMessageId::from), &tx)

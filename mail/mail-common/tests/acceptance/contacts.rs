@@ -46,7 +46,7 @@ async fn contact_list() {
     // Initialize Mocking
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     let contact_list = Contact::contact_list(&tether).await.unwrap();
 
@@ -115,7 +115,7 @@ async fn delete_contacts() {
     // Initialize Mocking
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let tether = user_ctx.user_stash().connection().await.unwrap();
 
     let contact = Contact::find_by_remote_id(ContactId::from("123"), &tether)
         .await

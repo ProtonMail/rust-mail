@@ -28,7 +28,7 @@ pub struct MoveItemPopup {
 impl MoveItemPopup {
     pub async fn new(ctx: &MailUserContext, item: Items) -> MailContextResult<Self> {
         //TODO: improve
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let mut folders = Label::find_by_kind(LabelType::Folder, &tether).await?;
         folders.retain(MailLabel::is_movable_folder);
         let mut system = Label::find_by_kind(LabelType::System, &tether).await?;
@@ -94,7 +94,7 @@ pub struct LabelItemPopup {
 impl LabelItemPopup {
     pub async fn new(ctx: &MailUserContext, item: Items) -> MailContextResult<Self> {
         let stash = ctx.user_stash();
-        let tether = stash.connection();
+        let tether = stash.connection().await?;
         let labels = match item.clone() {
             Items::Conversation(local_ids) => {
                 Conversation::available_label_as_actions(local_ids, &tether).await?
@@ -250,7 +250,7 @@ impl LabelSelectPopup {
         current_label: &LabelWithCounters,
         view_mode: ViewMode,
     ) -> anyhow::Result<Self> {
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let sidebar = Sidebar;
         let system = sidebar.system_labels(&tether).await?;
         let labels = sidebar.custom_labels(&tether).await?;

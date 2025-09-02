@@ -152,16 +152,19 @@ impl DraftStagingAreaCleaner {
                         return;
                     };
                     debug!("Starting draft staging cleanup");
-                    match tokio::fs::read_dir(&staging_area).await {
-                        Ok(dir_reader) => {
-                            let tether = ctx.user_stash().connection();
-                            Self::run_cleanup(dir_reader, &tether).await;
-                            drop(tether);
-                        }
-                        Err(e) => {
-                            error!("Failed to open draft staging dir {staging_area:?}: {e:?}");
-                        }
-                    };
+                    if let Ok(tether) = ctx.user_stash().connection().await {
+                        match tokio::fs::read_dir(&staging_area).await {
+                            Ok(dir_reader) => {
+                                Self::run_cleanup(dir_reader, &tether).await;
+                                drop(tether);
+                            }
+                            Err(e) => {
+                                error!("Failed to open draft staging dir {staging_area:?}: {e:?}");
+                            }
+                        };
+                    } else {
+                        error!("Failed to acquire db connection");
+                    }
                     drop(ctx);
                     tokio::time::sleep(self.interval).await;
                 }
@@ -317,7 +320,7 @@ mod tests {
         let (stash, _db_dir) = new_test_connection_file().await;
         let tmpdir = tempfile::tempdir().unwrap();
 
-        let mut tether = stash.connection();
+        let mut tether = stash.connection().await.unwrap();
         let db_metadata = tether
             .tx(async |tx| DraftMetadata::empty(tx).await)
             .await

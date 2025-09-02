@@ -90,7 +90,7 @@ async fn replace_updates_queues_if_action_is_executing() {
         .unwrap();
 
     // simulate action executing
-    let mut tether = queue.stash().connection();
+    let mut tether = queue.stash().connection().await.unwrap();
     tether
         .tx(async |tx| ExecutionGuard::acquire(queued_output.id, "TEST", tx).await)
         .await
@@ -204,7 +204,7 @@ async fn replace_updates_previous_dependencies_type() {
         .unwrap();
 
     assert_eq!(queued_output2.id, queued_output.id);
-    let deps = StoredAction::all_dependencies(&queue.tether(), queued_output2.id)
+    let deps = StoredAction::all_dependencies(&queue.tether().await.unwrap(), queued_output2.id)
         .await
         .unwrap();
     assert_eq!(deps.len(), 1);

@@ -61,7 +61,7 @@ async fn sign_out_all_on_too_many_attempts_of_pin_code_action(
 
     for user_ctx in all_user_ctxs.iter() {
         // Make sure we can read from user databases
-        let tether = user_ctx.user_stash().connection();
+        let tether = user_ctx.user_stash().connection().await.unwrap();
         let inbox_local_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
 
         assert_eq!(inbox_local_id, LocalLabelId::from(1));
@@ -85,7 +85,7 @@ async fn sign_out_all_on_too_many_attempts_of_pin_code_action(
     // Test that we perform sign out all
     for user_ctx in all_user_ctxs.iter() {
         // Make sure we no longer are able to read from user database
-        let tether = user_ctx.user_stash().connection();
+        let tether = user_ctx.user_stash().connection().await.unwrap();
         let error = SystemLabel::Inbox
             .local_id(&tether)
             .await
@@ -114,7 +114,12 @@ async fn sign_out_all_on_too_many_attempts_of_pin_code_action(
     }
 
     // Check that app settings and pin protection are reset
-    let tether = user_ctx.core_context().account_stash().connection();
+    let tether = user_ctx
+        .core_context()
+        .account_stash()
+        .connection()
+        .await
+        .unwrap();
     let app_settings = AppSettings::get_or_default(&tether).await;
     assert_eq!(app_settings.protection, AppProtection::None);
 
@@ -123,7 +128,12 @@ async fn sign_out_all_on_too_many_attempts_of_pin_code_action(
 }
 
 async fn set_default_pin_code(user_ctx: &MailUserContext) {
-    let mut tether = user_ctx.core_context().account_stash().connection();
+    let mut tether = user_ctx
+        .core_context()
+        .account_stash()
+        .connection()
+        .await
+        .unwrap();
 
     // Set PIN code
     PinCode::set(user_ctx.core_context().clone(), vec![1, 2, 3, 4])

@@ -23,7 +23,7 @@ async fn load_sending_preferences() {
         .0
         .as_str();
 
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let mail_settings = MailSettings::get(&tether)
         .await
@@ -63,7 +63,7 @@ async fn load_sending_preferences_for_self() {
 
     let pgp = proton_crypto::new_pgp_provider();
     let self_address = params.addresses.first().unwrap().email.as_str();
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let mail_settings = MailSettings::get(&tether)
         .await

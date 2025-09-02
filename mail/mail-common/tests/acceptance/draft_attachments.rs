@@ -89,7 +89,7 @@ async fn attachment_not_removed_on_error() {
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Create attachment
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let local_attachment = create_and_add_attachment(
         &user_ctx,
@@ -152,7 +152,7 @@ async fn remove_attachment_updates_attachment_list() {
 
     // Create attachment
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let attachment = create_and_add_attachment(
         &user_ctx,
@@ -199,7 +199,7 @@ async fn remove_attachment_by_cid() {
 
     // Create attachment
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let attachment = create_and_add_attachment(
         &user_ctx,
@@ -307,7 +307,7 @@ async fn removing_non_uploaded_attachment() {
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Create attachment
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let local_attachment = create_and_add_attachment(
         &user_ctx,
@@ -407,7 +407,7 @@ async fn removing_uploaded_attachment() {
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Create attachment
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let local_attachment = create_and_add_attachment(
         &user_ctx,
@@ -466,7 +466,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     ctx.setup_user(params.clone()).await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message.clone(), &tether)
@@ -610,7 +610,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     // Check attachment states.
     let attachments = DraftAttachmentMetadata::find_by_metadata_id(
         draft.metadata_id,
-        &user_ctx.user_stash().connection(),
+        &user_ctx.user_stash().connection().await.unwrap(),
     )
     .await
     .unwrap();
@@ -649,7 +649,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     ctx.setup_user(params.clone()).await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message.clone(), &tether)
@@ -696,7 +696,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     // Get attachments
     let attachments = DraftAttachmentMetadata::find_by_metadata_id(
         draft.metadata_id,
-        &user_ctx.user_stash().connection(),
+        &user_ctx.user_stash().connection().await.unwrap(),
     )
     .await
     .unwrap();
@@ -713,7 +713,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
         assert!(
             Attachment::find_by_id(
                 attachment.local_attachment_id,
-                &user_ctx.user_stash().connection()
+                &user_ctx.user_stash().connection().await.unwrap()
             )
             .await
             .unwrap()
@@ -752,7 +752,7 @@ async fn override_attachment_name() {
         Disposition::Attachment,
         attachment_file.path(),
         Some(filename_override.to_owned()),
-        &mut user_ctx.user_stash().connection(),
+        &mut user_ctx.user_stash().connection().await.unwrap(),
     )
     .await
     .unwrap();
@@ -797,7 +797,7 @@ async fn total_attachment_size_more_than_limit_local() {
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Create on very large attachment
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     {
         let mut attachment = Attachment {
             local_id: None,
@@ -902,7 +902,7 @@ async fn total_attachment_size_more_than_limit() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     // Create normal attachment first so we don't trip the local check
     let _ = create_and_add_attachment(
         &user_ctx,
@@ -1016,7 +1016,7 @@ async fn total_attachment_count_exceeds_limit() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Create attachment before filling the database to avoid triggering local check
 
@@ -1122,7 +1122,7 @@ async fn total_attachment_count_exceeds_limit_local() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Create 100 small attachments
     {

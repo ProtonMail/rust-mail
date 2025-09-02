@@ -57,7 +57,12 @@ async fn test_feature_flags_warm_start_immediate_return() {
     let ctx = MailTestContext::new().await;
 
     {
-        let mut tether = ctx.core_context().account_stash().connection();
+        let mut tether = ctx
+            .core_context()
+            .account_stash()
+            .connection()
+            .await
+            .unwrap();
         let mut app_settings = AppSettings::get_or_default(&tether).await;
         app_settings
             .app_features
@@ -110,7 +115,12 @@ async fn test_feature_flags_warm_start_background_refresh() {
     let ctx = MailTestContext::new().await;
 
     {
-        let mut tether = ctx.core_context().account_stash().connection();
+        let mut tether = ctx
+            .core_context()
+            .account_stash()
+            .connection()
+            .await
+            .unwrap();
         let mut app_settings = AppSettings::get_or_default(&tether).await;
         app_settings
             .app_features
@@ -158,7 +168,12 @@ async fn test_feature_flags_warm_start_background_refresh() {
     assert_eq!(feature_flags.get("NewFeatureFromRefresh").await, Some(true));
 
     {
-        let tether = ctx.core_context().account_stash().connection();
+        let tether = ctx
+            .core_context()
+            .account_stash()
+            .connection()
+            .await
+            .unwrap();
         let app_settings = AppSettings::get_or_default(&tether).await;
 
         assert_eq!(
@@ -180,7 +195,12 @@ async fn test_feature_flags_network_failure_preserves_cache() {
     let ctx = MailTestContext::new().await;
 
     {
-        let mut tether = ctx.core_context().account_stash().connection();
+        let mut tether = ctx
+            .core_context()
+            .account_stash()
+            .connection()
+            .await
+            .unwrap();
         let mut app_settings = AppSettings::get_or_default(&tether).await;
         app_settings
             .app_features

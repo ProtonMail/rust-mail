@@ -46,17 +46,18 @@ use stash_macros::DbRecord;
 use std::any::Any;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::thread::{self};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, trace};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
-use crate::connection_manager::StashConnectionPool;
+use crate::connection_manager::{
+    StashConnectionPool, StashConnectionPoolError, StashPooledConnection,
+};
 
-type StdSender<T> = flume::Sender<T>;
 /// Set a timeout for a specified amount of time when a table is locked. This
 /// defaults to 5,000 milliseconds in the underlying libraries. This is currently only
 /// expected to be triggered when the db is shared between different processes. We mediate the
@@ -77,6 +78,8 @@ enum Operation {
     Interrupt,
     /// Quit the worker thread.
     Quit,
+    /// Clean up any state when this connection is returned to the pool
+    ReturnToPool,
 }
 
 /// Distinguishes transaction change detection behavior
@@ -174,6 +177,9 @@ pub enum StashError {
     /// Critical internal error that cannot be recovered from.
     #[error("Critical internal stash error: {0}")]
     Critical(#[from] anyhow::Error),
+
+    #[error("Failed to acquire connection in the given time limit")]
+    ConnectionAcquireTimedOut,
 
     /// Custom variant that is not critical
     #[error("Critical error: {0}")]
@@ -438,9 +444,11 @@ impl Stash {
     /// the database or connection pool.
     ///
     pub fn new<'a>(config: impl Into<StashConfiguration<'a>>) -> Result<Self, StashError> {
+        let watcher = Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?;
+        let pool = Self::make_pool(config.into(), &watcher)?;
         Ok(Self {
-            pool: Self::make_pool(config.into())?,
-            watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
+            pool,
+            watcher,
             tx_lock: Default::default(),
         })
     }
@@ -448,7 +456,10 @@ impl Stash {
     /// Create a sqlite pool.
     /// This is infallible, if it cannot open the file it will fail later on when we try to
     /// connect.
-    fn make_pool(config: StashConfiguration<'_>) -> Result<Arc<StashConnectionPool>, StashError> {
+    fn make_pool(
+        config: StashConfiguration<'_>,
+        watcher: &Arc<Watcher>,
+    ) -> Result<Arc<StashConnectionPool>, StashError> {
         let StashConfiguration {
             path, pool_size, ..
         } = config;
@@ -488,9 +499,9 @@ impl Stash {
         });
 
         match path {
-            Some(p) => StashConnectionPool::file(p, max_connections, init_fn)
+            Some(p) => StashConnectionPool::file(p, max_connections, init_fn, watcher)
                 .map_err(StashError::ExecutionError),
-            None => StashConnectionPool::tmp_file(max_connections, init_fn)
+            None => StashConnectionPool::tmp_file(max_connections, init_fn, watcher)
                 .map_err(StashError::ExecutionError),
         }
     }
@@ -527,9 +538,8 @@ impl Stash {
     /// * [`Stash::transaction()`]
     /// * [`Tether::transaction()`]
     ///
-    #[must_use]
-    pub fn connection(&self) -> Tether {
-        Tether::new(self)
+    pub async fn connection(&self) -> Result<Tether, StashError> {
+        Tether::new(self).await
     }
 
     /// Subscribes to notifications of changes to a specific table.
@@ -595,10 +605,7 @@ impl WatcherHandle {
 /// `stash` works around it by using the actor pattern and wrapping each connection in a
 /// thread, using message passing for executing the queries and waiting for the result.
 pub struct Tether {
-    /// This is the channel that sends [`TetherOperation`]s to the inner thread.
-    /// This was changed to a std channel since flume seems to hang on sync <-> async under some
-    /// circumstances.
-    sender: StdSender<Operation>,
+    connection: StashPooledConnection,
 
     watcher: Arc<Watcher>,
 
@@ -672,7 +679,7 @@ impl Tether {
             params,
             query: query.into(),
         }));
-        self.sender
+        self.connection
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
@@ -707,7 +714,7 @@ impl Tether {
             sender,
             queries: queries.into(),
         }));
-        self.sender
+        self.connection
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
@@ -762,7 +769,7 @@ impl Tether {
             query: query.into(),
         };
         let operation = Operation::Execution(OperationExec::Query(query));
-        self.sender
+        self.connection
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
@@ -966,7 +973,7 @@ impl Tether {
         let (sender, receiver) = oneshot::channel();
         let operation = Operation::Transaction(OperationTransaction::Start(policy, sender));
 
-        self.sender
+        self.connection
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
@@ -985,97 +992,21 @@ impl Tether {
     /// they are received, and return the results via oneshot channels. In this
     /// way, it is very similar to the main worker, but is connection-specific.
     ///
-    fn new(stash: &Stash) -> Self {
-        // We either receive a command from the `Tether` or from the connection pool, so we only need
-        // to be able to have at most 2 items in the queue.
-        let (tether_sender, tether_receiver) = flume::unbounded::<Operation>();
+    async fn new(stash: &Stash) -> Result<Self, StashError> {
         let pool = stash.pool.clone();
-
-        // Spawn a thread to run the worker. This thread will execute the queries
-        // sequentially, as they are received, on a persistent connection, and will
-        // return the results to the original caller via oneshot channels.
-        debug!("Spawning worker task...");
-        // TODO: replace me with a thread pool.
-        let watcher = stash.watcher.clone();
-        let tether_sender_cloned = tether_sender.clone();
-        let thread_builder = thread::Builder::new().name("Tether worker".to_string());
-        _ = thread_builder.spawn(move || {
-            let connection = pool
-                .acquire(
-                    Box::new(move || {
-                        let _ = tether_sender_cloned.send(Operation::Interrupt);
-                    }),
-                    None,
-                )
-                .inspect_err(|e| error!("Failed acquire connection: {e:?}"))
-                .context("Could not connect to the database")
-                .map_err(StashError::from);
-
-            let (first_operation, connection) = match (tether_receiver.recv(), connection) {
-                (Ok(op), Ok(con)) => (op, con),
-                (Ok(op), Err(e)) => {
-                    error!("Critical error creating worker {e:?}");
-                    match op {
-                        Operation::Transaction(
-                            OperationTransaction::Start(_, ch)
-                            | OperationTransaction::Rollback(ch)
-                            | OperationTransaction::Commit(_, ch),
-                        ) => {
-                            _ = ch.send(Err(e));
-                        }
-                        Operation::Execution(OperationExec::Instruct(x)) => {
-                            let _ = x.sender.send(Err(e));
-                        }
-                        Operation::Execution(OperationExec::Batch(x)) => {
-                            let _ = x.sender.send(Err(e));
-                        }
-                        Operation::Execution(OperationExec::Query(x)) => {
-                            let _ = x.sender.send(Err(e));
-                        }
-                        Operation::Transaction(OperationTransaction::RollbackAbort) => {
-                            unreachable!("This cannot happen at this point")
-                        }
-                        Operation::Interrupt => {
-                            // Do nothing,
-                        }
-                        Operation::Quit => {
-                            // Do nothing;
-                        }
-                    };
-                    return;
-                }
-                (Err(_), _) => {
-                    warn!("Tether dropped before sending anything");
-                    return;
-                }
-            };
-
-            let mut sm = TetheredWorkerStateMachine {
-                transaction: None,
-                connection: &connection,
-                state: State::new(),
-                watcher: &watcher,
-                was_interrupted: false,
-            };
-
-            if sm.handle_operation(first_operation, &pool) {
-                sm.handle_close();
-                return;
-            }
-
-            while let Ok(operation) = tether_receiver.recv() {
-                if sm.handle_operation(operation, &pool) {
-                    break;
-                }
-            }
-            sm.handle_close();
-        });
-
-        Self {
-            sender: tether_sender,
+        let connection = tokio::task::spawn_blocking(move || {
+            pool.acquire(None).map_err(|e| match e {
+                StashConnectionPoolError::Connection(e) => StashError::ExecutionError(e),
+                StashConnectionPoolError::TimedOut => StashError::ConnectionAcquireTimedOut,
+            })
+        })
+        .await
+        .map_err(|e| StashError::Custom(anyhow!("Failed to join blocking task: {e}")))??;
+        Ok(Self {
+            connection,
             watcher: stash.watcher.clone(),
             tx_lock: Arc::clone(&stash.tx_lock),
-        }
+        })
     }
 }
 
@@ -1087,9 +1018,81 @@ impl Debug for Tether {
 
 impl Drop for Tether {
     fn drop(&mut self) {
-        // We need an explicit quit as the sender is shared with connection pool
-        // to receive interruption requests.
+        let _ = self.connection.send(Operation::ReturnToPool);
+    }
+}
+
+pub(crate) struct PooledTether {
+    sender: flume::Sender<Operation>,
+}
+impl PooledTether {
+    pub(crate) fn new(
+        connection: Connection,
+        watcher: &Arc<Watcher>,
+        pool: Weak<StashConnectionPool>,
+        number: usize,
+    ) -> Self {
+        // One for tether commands, another for interruption
+        let (sender, receiver) = flume::bounded(2);
+
+        let watcher_cloned = watcher.clone();
+        let pool_cloned = pool.clone();
+        thread::Builder::new()
+            .name(format!("Tether Worker {number:02}"))
+            .spawn(move || {
+                Self::thread_loop(connection, receiver, watcher_cloned.as_ref(), pool_cloned);
+            })
+            .expect("Failed to create named thread, please fix me");
+
+        Self { sender }
+    }
+
+    pub(crate) fn interrupt_notifier(&self) -> PooledTetherInterruptNotifier {
+        PooledTetherInterruptNotifier(self.sender.clone())
+    }
+
+    fn thread_loop(
+        connection: Connection,
+        receiver: flume::Receiver<Operation>,
+        watcher: &Watcher,
+
+        pool: Weak<StashConnectionPool>,
+    ) {
+        let mut sm = TetheredWorkerStateMachine {
+            transaction: None,
+            connection: &connection,
+            state: State::new(),
+            watcher,
+            was_interrupted: false,
+        };
+
+        while let Ok(operation) = receiver.recv() {
+            let Some(pool) = pool.upgrade() else {
+                break;
+            };
+            if sm.handle_operation(operation, &pool) {
+                break;
+            }
+        }
+        sm.handle_close();
+    }
+
+    fn send(&self, operation: Operation) -> Result<(), flume::SendError<Operation>> {
+        self.sender.send(operation)
+    }
+}
+
+impl Drop for PooledTether {
+    fn drop(&mut self) {
         let _ = self.sender.send(Operation::Quit);
+    }
+}
+
+pub(crate) struct PooledTetherInterruptNotifier(flume::Sender<Operation>);
+
+impl PooledTetherInterruptNotifier {
+    pub fn interrupt(&self) {
+        let _ = self.0.send(Operation::Interrupt);
     }
 }
 
@@ -1145,7 +1148,7 @@ impl<'tether> Bond<'tether> {
         let (sender, receiver) = oneshot::channel();
         let operation =
             Operation::Transaction(OperationTransaction::Commit(transaction_policy, sender));
-        self.sender
+        self.connection
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
@@ -1189,7 +1192,7 @@ impl<'tether> Bond<'tether> {
         let (sender, receiver) = oneshot::channel();
 
         let operation = Operation::Transaction(OperationTransaction::Rollback(sender));
-        this.sender
+        this.connection
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
@@ -1211,7 +1214,7 @@ impl Deref for Bond<'_> {
 impl Drop for Bond<'_> {
     fn drop(&mut self) {
         _ = self
-            .sender
+            .connection
             .send(Operation::Transaction(OperationTransaction::RollbackAbort));
     }
 }
@@ -1322,6 +1325,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 Operation::Quit => {
                     should_quit = true;
                 }
+                Operation::ReturnToPool => {
+                    self.handle_close();
+                }
             };
             return should_quit;
         }
@@ -1338,6 +1344,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             }
             Operation::Quit => {
                 should_quit = true;
+            }
+            Operation::ReturnToPool => {
+                self.handle_close();
             }
         }
 

@@ -44,7 +44,7 @@ async fn label_as_without_archive() {
     //
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
@@ -97,12 +97,15 @@ async fn label_as_without_archive() {
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
-    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
-        .await
-        .unwrap();
+    let mailbox = Mailbox::with_remote_id(
+        &user_ctx.user_stash().connection().await.unwrap(),
+        LabelId::inbox(),
+    )
+    .await
+    .unwrap();
     mailbox
         .sync(
-            &mut user_ctx.user_stash().connection(),
+            &mut user_ctx.user_stash().connection().await.unwrap(),
             user_ctx.session(),
             10,
         )
@@ -228,7 +231,7 @@ async fn label_as_with_archive() {
     //
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
@@ -273,12 +276,15 @@ async fn label_as_with_archive() {
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
-    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
-        .await
-        .unwrap();
+    let mailbox = Mailbox::with_remote_id(
+        &user_ctx.user_stash().connection().await.unwrap(),
+        LabelId::inbox(),
+    )
+    .await
+    .unwrap();
     mailbox
         .sync(
-            &mut user_ctx.user_stash().connection(),
+            &mut user_ctx.user_stash().connection().await.unwrap(),
             user_ctx.session(),
             10,
         )

@@ -48,7 +48,7 @@ async fn change_sender_address() {
     // Extract first attachment key id
     let draft_attachment_metadata = DraftAttachmentMetadata::find_by_metadata_id(
         draft.metadata_id,
-        &user_ctx.user_stash().connection(),
+        &user_ctx.user_stash().connection().await.unwrap(),
     )
     .await
     .unwrap();
@@ -78,7 +78,7 @@ async fn change_sender_address() {
 
     let draft_attachment_metadata = DraftAttachmentMetadata::find_by_metadata_id(
         draft.metadata_id,
-        &user_ctx.user_stash().connection(),
+        &user_ctx.user_stash().connection().await.unwrap(),
     )
     .await
     .unwrap();
@@ -101,7 +101,7 @@ async fn change_sender_address() {
 
     let draft_attachments = DraftAttachmentMetadata::public_key_attachments(
         draft.metadata_id,
-        &user_ctx.user_stash().connection(),
+        &user_ctx.user_stash().connection().await.unwrap(),
     )
     .await
     .unwrap();
@@ -141,7 +141,7 @@ async fn change_sender_address_with_alias() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create message and relevant data
-    let mut tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let old_address = Address::find_by_remote_id(old_address.id, &tether)
         .await
         .unwrap()

@@ -275,7 +275,7 @@ fn comprehensive() -> impl Iterator<Item = UsedVariables> {
 async fn integration() -> anyhow::Result<()> {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let tether = &mut user_ctx.user_stash().connection();
+    let tether = &mut user_ctx.user_stash().connection().await?;
 
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)

@@ -111,7 +111,7 @@ impl Address {
             watcher,
             Self::INIT_KEY,
             &[],
-            stash.connection(),
+            stash.connection().await?,
             async || Self::sync(api).await,
             async |tx, res| {
                 res.store(tx).await?;

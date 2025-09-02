@@ -741,7 +741,7 @@ impl MailSession {
         let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
-            let tether = ctx.core_context().account_stash().connection();
+            let tether = ctx.core_context().account_stash().connection().await?;
             let app_settings = RealAppSettings::get_or_default(&tether).await;
 
             Result::<_, RealProtonMailError>::Ok(app_settings.protection.into())
@@ -769,7 +769,7 @@ impl MailSession {
         let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
-            let tether = ctx.core_context().account_stash().connection();
+            let tether = ctx.core_context().account_stash().connection().await?;
             let app_settings = RealAppSettings::get_or_default(&tether).await;
 
             Result::<_, RealProtonMailError>::Ok(app_settings.should_auto_lock(ctx.core_context()))
@@ -847,7 +847,7 @@ impl MailSession {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {
-            let tether = ctx.account_stash().connection();
+            let tether = ctx.account_stash().connection().await?;
             let pin_metadata = PinProtection::get(&tether).await?;
             let remaining_attempts = match pin_metadata {
                 Some(pin_metadata) => Some(pin_metadata.remaining_attempts()),
@@ -869,7 +869,7 @@ impl MailSession {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {
-            let mut tether = ctx.account_stash().connection();
+            let mut tether = ctx.account_stash().connection().await?;
             let mut app_settings = RealAppSettings::get_or_default(&tether).await;
             app_settings.set_biometrics();
 
@@ -890,7 +890,7 @@ impl MailSession {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {
-            let mut tether = ctx.account_stash().connection();
+            let mut tether = ctx.account_stash().connection().await?;
             let mut app_settings = RealAppSettings::get_or_default(&tether).await;
             app_settings.unset_biometrics();
 
@@ -908,7 +908,7 @@ impl MailSession {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {
-            let tether = ctx.account_stash().connection();
+            let tether = ctx.account_stash().connection().await?;
             let app_settings = RealAppSettings::get_or_default(&tether).await;
 
             Result::<_, RealProtonMailError>::Ok(app_settings.into())
@@ -926,7 +926,7 @@ impl MailSession {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {
-            let mut tether = ctx.account_stash().connection();
+            let mut tether = ctx.account_stash().connection().await?;
             let real_app_settings = RealAppSettings::get_or_default(&tether).await;
             let mut real_app_settings = settings.merge_with_current(real_app_settings);
 

@@ -39,7 +39,7 @@ impl MailUserContext {
             return Ok(None);
         }
 
-        let tether = &mut self.user_stash().connection();
+        let tether = &mut self.user_stash().connection().await?;
         let mail_settings = MailSettings::get_or_default(tether).await;
 
         if mail_settings.hide_sender_images {

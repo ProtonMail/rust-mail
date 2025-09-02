@@ -463,8 +463,12 @@ fn move_conversation(
 ) -> Command<Messages> {
     Command::task(async move {
         // TODO: refactor into common undo toast
-        let tether = ctx.user_stash().connection();
-        match Conversation::action_move(&tether, ctx.action_queue(), label_id, ids).await {
+        match async {
+            let tether = ctx.user_stash().connection().await?;
+            Conversation::action_move(&tether, ctx.action_queue(), label_id, ids).await
+        }
+        .await
+        {
             Ok(None) => Command::None,
             Ok(Some(undo)) => {
                 let ctx = ctx.clone();
@@ -477,10 +481,13 @@ fn move_conversation(
                         "Cancelling Send".to_owned(),
                     )),
                     Command::task(async move {
-                        if let Err(e) = undo
-                            .undo(ctx.action_queue(), &mut ctx.user_stash().connection())
-                            .await
-                            .context("Error undoing conversation labelling")
+                        if let Err(e) = async {
+                            let mut tether = ctx.user_stash().connection().await?;
+                            undo.undo(ctx.action_queue(), &mut tether)
+                                .await
+                                .context("Error undoing conversation labelling")
+                        }
+                        .await
                         {
                             Command::message(e)
                         } else {
@@ -545,7 +552,7 @@ fn label_conversation(
     let ctx2 = ctx.clone();
     let f = async move {
         Conversation::action_label_as(
-            &ctx2.user_stash().connection(),
+            &ctx2.user_stash().connection().await?,
             ctx2.action_queue(),
             source_label_id,
             conversation_ids,
@@ -573,10 +580,13 @@ fn label_conversation(
                         "Cancelling Send".to_owned(),
                     )),
                     Command::task(async move {
-                        if let Err(e) = undo
-                            .undo(ctx.action_queue(), &mut ctx.user_stash().connection())
-                            .await
-                            .context("Error undoing conversation labelling")
+                        if let Err(e) = async {
+                            let mut tether = ctx.user_stash().connection().await?;
+                            undo.undo(ctx.action_queue(), &mut tether)
+                                .await
+                                .context("Error undoing conversation labelling")
+                        }
+                        .await
                         {
                             Command::message(e)
                         } else {
@@ -602,11 +612,10 @@ fn delete_all(ctx: Arc<MailUserContext>, id: LocalLabelId) -> Command<Messages> 
             "Are you sure you wish to permanently delete all messages of this folder?",
         )
         .on_accept(Command::task(async move {
-            match MailMessage::action_delete_all_in_label(
-                ctx.action_queue(),
-                id,
-                &ctx.user_stash().connection(),
-            )
+            match async {
+                let tether = ctx.user_stash().connection().await?;
+                MailMessage::action_delete_all_in_label(ctx.action_queue(), id, &tether).await
+            }
             .await
             {
                 Ok(_) => Command::None,

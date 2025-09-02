@@ -51,7 +51,7 @@ async fn move_msg(
     msg_id: MessageId,
 ) -> MailContextResult<()> {
     let msg_id = Message::find_or_fetch_by_remote_id(ctx, msg_id).await?;
-    let tether = ctx.user_stash().connection();
+    let tether = ctx.user_stash().connection().await?;
 
     let label_id = label
         .local_id(&tether)

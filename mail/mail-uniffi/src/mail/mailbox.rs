@@ -60,7 +60,7 @@ pub fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> Result<Arc<Mailbox>, 
     async_runtime()
         .block_on(async move {
             let stash = ctx.user_stash();
-            let tether = stash.connection();
+            let tether = stash.connection().await?;
             let mbox = RealMailbox::new(&tether, label_id.into()).await?;
 
             Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
@@ -86,7 +86,7 @@ pub fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserSess
     async_runtime()
         .block_on(async move {
             let stash = ctx.user_stash();
-            let tether = stash.connection();
+            let tether = stash.connection().await?;
             let mbox = RealMailbox::with_remote_id(&tether, RealLabelId::inbox()).await?;
 
             Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
@@ -117,7 +117,7 @@ pub fn new_all_mail_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserS
     async_runtime()
         .block_on(async move {
             let stash = ctx.user_stash();
-            let tether = stash.connection();
+            let tether = stash.connection().await?;
             let mbox = RealMailbox::with_remote_id(&tether, RealLabelId::all_mail()).await?;
 
             Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
@@ -154,7 +154,7 @@ impl Mailbox {
         let mbox = self.mbox.clone();
 
         uniffi_async(async move {
-            let tether = stash.connection();
+            let tether = stash.connection().await?;
             let count = mbox.unread_count(&tether).await?;
 
             Result::<_, RealProtonMailError>::Ok(count)

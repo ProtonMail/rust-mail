@@ -32,8 +32,8 @@ pub fn current_benchmark(c: &mut Criterion) {
         let stash = Stash::new(stash_config).unwrap();
         let (label_id, address_id) = runtime.block_on(async { setup_db(&stash).await });
         b.iter(|| {
-            let mut tether = stash.connection();
             runtime.block_on(async {
+                let mut tether = stash.connection().await.unwrap();
                 tether
                     .tx::<_, _, StashError>(async |tx| {
                         create_messages(tx, label_id.clone(), address_id.clone(), 100).await;
@@ -56,8 +56,8 @@ pub fn current_benchmark(c: &mut Criterion) {
         let stash = Stash::new(stash_config).unwrap();
         runtime.block_on(async { setup_and_create_messages(&stash, 100).await });
         b.iter(|| {
-            let tether = stash.connection();
             runtime.block_on(async {
+                let tether = stash.connection().await.unwrap();
                 let _ = Message::all(&tether).await.unwrap();
             })
         })
@@ -73,8 +73,8 @@ pub fn current_benchmark(c: &mut Criterion) {
         let stash = Stash::new(stash_config).unwrap();
         runtime.block_on(async { setup_and_create_messages(&stash, 100).await });
         b.iter(|| {
-            let tether = stash.connection();
             runtime.block_on(async {
+                let tether = stash.connection().await.unwrap();
                 tether.execute("BEGIN", vec![]).await.unwrap();
                 let _ = Message::all(&tether).await.unwrap();
                 tether.execute("END", vec![]).await.unwrap();
@@ -89,7 +89,7 @@ async fn setup_db(stash: &Stash) -> (LabelId, AddressId) {
     let address_id: AddressId = AddressId::from(Uuid::new_v4().to_string());
     let label_id: LabelId = LabelId::from(Uuid::new_v4().to_string());
 
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
 
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -151,7 +151,7 @@ async fn create_messages(
 
 async fn setup_and_create_messages(stash: &Stash, message_count: usize) {
     let (label_id, address_id) = setup_db(stash).await;
-    let mut tether = stash.connection();
+    let mut tether = stash.connection().await.unwrap();
     tether
         .tx::<_, _, StashError>(async |tx| {
             for order in 0..message_count {
