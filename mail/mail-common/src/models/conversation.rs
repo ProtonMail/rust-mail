@@ -1549,7 +1549,7 @@ impl Conversation {
                 params![local_label_id, conversation_id],
                 bond,
             )
-            .await?;
+                .await?;
 
             let Some(mut message) = message else {
                 let total_conversation_message_count = Message::count(
@@ -2465,26 +2465,25 @@ impl Conversation {
 
         tx.run_tx::<_, _>(async move |tx| {
             let had_messages = conversation.has_messages;
-            let mut new_conversation = if conversation.is_known {
-                debug!("Conversation was known");
-                let mut conversation = conversation.clone();
-                conversation.has_messages = true;
-                conversation
-            } else {
-                debug!("Conversation was not known");
+
+            let should_sync_conv = conversation
+                .to_api_conversation()
+                .map(|v| v != conversation_response.conversation)
+                .unwrap_or(true);
+
+            let new_conversation = if should_sync_conv {
                 let mut new_conversation: Conversation = conversation_response.conversation.into();
                 new_conversation.local_id = conversation.local_id;
                 new_conversation.has_messages = true;
+                new_conversation.is_known = true;
+                debug!("Updating conversation");
+                new_conversation.save(tx).await?;
+
                 new_conversation
+            } else {
+                conversation
             };
 
-            // only save if there is a difference
-            if new_conversation != conversation {
-                new_conversation.save(tx).await.map_err(|e| {
-                    error!("Failed to write conversation: {e:?}");
-                    e
-                })?;
-            }
             let mut message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
             if had_messages {
                 info!("Messages were synced before");
@@ -2512,7 +2511,7 @@ impl Conversation {
                 debug!("No new messages to save");
             }
 
-            Ok(conversation)
+            Ok(new_conversation)
         })
         .await
         .map_err(AppError::Other)
@@ -2736,6 +2735,39 @@ impl Conversation {
             params![subject, id],
         )
         .await
+    }
+
+    pub fn to_api_conversation(&self) -> Option<ApiConversation> {
+        self.remote_id.clone().map(|id| ApiConversation {
+            id,
+            attachment_info: self
+                .attachment_info
+                .value
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone().into()))
+                .collect(),
+            attachments_metadata: self
+                .attachments_metadata
+                .iter()
+                .filter_map(|v| v.to_api_attachment_metadata())
+                .collect(),
+            display_snoozed_reminder: self.display_snooze_reminder,
+            expiration_time: self.expiration_time.as_u64(),
+            labels: self
+                .labels
+                .iter()
+                .filter_map(|v| v.to_api_conversation_label())
+                .collect(),
+            num_attachments: self.num_attachments,
+            num_messages: self.num_messages,
+            num_unread: self.num_unread,
+            order: self.display_order,
+            recipients: self.recipients.iter().cloned().map(Into::into).collect(),
+            senders: self.senders.value.iter().cloned().map(Into::into).collect(),
+            size: self.size,
+            subject: self.subject.clone(),
+            context_time: None,
+        })
     }
 }
 
@@ -3338,6 +3370,19 @@ impl ConversationLabel {
         )
         .await
     }
+
+    pub fn to_api_conversation_label(&self) -> Option<ApiConversationLabel> {
+        self.remote_label_id.clone().map(|id| ApiConversationLabel {
+            id,
+            context_expiration_time: self.context_expiration_time.as_u64(),
+            context_num_attachments: self.context_num_attachments,
+            context_num_messages: self.context_num_messages,
+            context_num_unread: self.context_num_unread,
+            context_size: self.context_size,
+            context_snooze_time: self.context_snooze_time.as_u64(),
+            context_time: self.context_time.as_u64(),
+        })
+    }
 }
 
 impl AddAssign<ConversationMessageLabelStats> for ConversationLabel {
@@ -3523,7 +3568,7 @@ impl ConversationCounters {
         Self::find(
             "INNER JOIN labels ON labels.local_id = local_label_id WHERE label_type = ? ORDER BY labels.display_order ASC",
             params![kind],
-            tether
+            tether,
         ).await
     }
 

@@ -251,6 +251,15 @@ impl From<ApiDisposition> for Disposition {
     }
 }
 
+impl From<Disposition> for ApiDisposition {
+    fn from(value: Disposition) -> Self {
+        match value {
+            Disposition::Attachment => Self::Attachment,
+            Disposition::Inline => Self::Inline,
+        }
+    }
+}
+
 impl From<CryptoDisposition> for Disposition {
     fn from(value: CryptoDisposition) -> Self {
         match value {
@@ -876,6 +885,21 @@ impl AttachmentMetadata {
                 | MimeTypeCategory::Word
         )
     }
+
+    pub fn to_api_attachment_metadata(&self) -> Option<ApiAttachmentMetadata> {
+        let id = match &self.attachment_type {
+            AttachmentType::Remote(None) | AttachmentType::Pgp => return None,
+            AttachmentType::Remote(Some(id)) => id.clone(),
+        };
+
+        Some(ApiAttachmentMetadata {
+            id,
+            disposition: self.disposition.into(),
+            mime_type: self.mime_type.to_string(),
+            name: self.filename.clone(),
+            size: self.size,
+        })
+    }
 }
 
 impl From<ApiAttachmentMetadata> for AttachmentMetadata {
@@ -1312,6 +1336,19 @@ impl From<ApiMessageSender> for MessageSender {
     }
 }
 
+impl From<MessageSender> for ApiMessageSender {
+    fn from(value: MessageSender) -> Self {
+        Self {
+            address: value.address,
+            bimi_selector: value.bimi_selector,
+            display_sender_image: value.display_sender_image,
+            is_proton: value.is_proton,
+            is_simple_login: value.is_simple_login,
+            name: value.name,
+        }
+    }
+}
+
 impl From<&str> for MessageSender {
     fn from(value: &str) -> Self {
         Self {
@@ -1521,6 +1558,15 @@ pub struct MessageAttachmentInfo {
 
 impl From<ApiMessageAttachmentInfo> for MessageAttachmentInfo {
     fn from(value: ApiMessageAttachmentInfo) -> Self {
+        Self {
+            attachment: value.attachment,
+            inline: value.inline,
+        }
+    }
+}
+
+impl From<MessageAttachmentInfo> for ApiMessageAttachmentInfo {
+    fn from(value: MessageAttachmentInfo) -> Self {
         Self {
             attachment: value.attachment,
             inline: value.inline,

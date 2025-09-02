@@ -281,6 +281,7 @@ impl ContextualConversation {
             return Ok(None);
         };
         let messages = Message::in_conversation(local_conversation_id, &conn).await?;
+        tracing::info!("Conversation has {:02} messages", messages.len());
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
 
