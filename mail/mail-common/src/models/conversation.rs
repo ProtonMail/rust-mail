@@ -48,8 +48,9 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::requests::GetConversationsOptions;
 use proton_mail_api::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
-    MessageMetadata as ApiMessageMetadata, OperationResult,
+    AttachmentMetadata as ApiAttachmentMetadata, Conversation as ApiConversation,
+    ConversationLabel as ApiConversationLabel, MessageMetadata as ApiMessageMetadata,
+    OperationResult,
 };
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
@@ -2442,33 +2443,49 @@ impl Conversation {
         }
 
         info!("Syncing {rid:?}'s messages");
-        let conversation_response =
-            match session
-                .get_conversation(rid.clone())
-                .await
-                .inspect_err(|e| {
-                    error!("failed to download conversation messages: {e:?}");
-                }) {
-                Ok(r) => r,
-                Err(ApiServiceError::UnprocessableEntity(s, Some(api_error))) => {
-                    return if api_error.code == Mail::ConversationDoesNotExist as u32 {
-                        Err(AppError::ConversationDoesNotExistOnServer(rid.clone()))
-                    } else {
-                        Err(AppError::from(ApiServiceError::UnprocessableEntity(
-                            s,
-                            Some(api_error),
-                        )))
-                    };
-                }
-                Err(e) => return Err(AppError::from(e)),
-            };
+        let mut conversation_response = match session
+            .get_conversation(rid.clone())
+            .await
+            .inspect_err(|e| {
+                error!("failed to download conversation messages: {e:?}");
+            }) {
+            Ok(r) => r,
+            Err(ApiServiceError::UnprocessableEntity(s, Some(api_error))) => {
+                return if api_error.code == Mail::ConversationDoesNotExist as u32 {
+                    Err(AppError::ConversationDoesNotExistOnServer(rid.clone()))
+                } else {
+                    Err(AppError::from(ApiServiceError::UnprocessableEntity(
+                        s,
+                        Some(api_error),
+                    )))
+                };
+            }
+            Err(e) => return Err(AppError::from(e)),
+        };
 
         tx.run_tx::<_, _>(async move |tx| {
             let had_messages = conversation.has_messages;
-
             let should_sync_conv = conversation
                 .to_api_conversation()
-                .map(|v| v != conversation_response.conversation)
+                .map(|mut v| {
+                    let sort_conv_labels_fn =
+                        |l1: &ApiConversationLabel, l2: &ApiConversationLabel| l1.id.cmp(&l2.id);
+                    let sort_attachment_metadata =
+                        |l1: &ApiAttachmentMetadata, l2: &ApiAttachmentMetadata| l1.id.cmp(&l2.id);
+                    conversation_response
+                        .conversation
+                        .labels
+                        .sort_unstable_by(sort_conv_labels_fn);
+                    v.labels.sort_unstable_by(sort_conv_labels_fn);
+                    v.attachments_metadata
+                        .sort_unstable_by(sort_attachment_metadata);
+                    conversation_response
+                        .conversation
+                        .attachments_metadata
+                        .sort_unstable_by(sort_attachment_metadata);
+
+                    v != conversation_response.conversation
+                })
                 .unwrap_or(true);
 
             let new_conversation = if should_sync_conv {
