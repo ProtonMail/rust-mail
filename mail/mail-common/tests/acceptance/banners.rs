@@ -473,6 +473,14 @@ async fn banners_unsubscribe() {
     let ctx = test_ctx.mail_user_context().await;
     let tether = &mut ctx.user_stash().connection();
 
+    Mock::given(method("PUT"))
+        .and(path("/api/mail/v4/messages/mark/unsubscribed"))
+        .respond_with(ResponseTemplate::new(200))
+        .named("mock mark unsubscribe")
+        .expect(1)
+        .mount(test_ctx.mock_server())
+        .await;
+
     let mock_server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/subscribe"))

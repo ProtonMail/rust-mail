@@ -188,6 +188,7 @@ pub(crate) fn register_actions(
                 queue,
                 messages::UnsubscribeNewsletterHandler {
                     http_client: http_client.clone(),
+                    api: api.clone(),
                 },
             );
             replace(queue, draft::SaveHandler { ctx: ctx.clone() });

@@ -2405,38 +2405,6 @@ impl Message {
         Self::mark_read_or_unread(false, ids, bond).await
     }
 
-    pub async fn mark_unsubscribed(id: LocalMessageId, tx: &Bond<'_>) -> Result<(), StashError> {
-        tx.execute(
-            "INSERT OR IGNORE INTO unsubscribe (local_message_id) VALUES (?)",
-            params![id],
-        )
-        .await?;
-        Ok(())
-    }
-
-    pub async fn delete_mark_unsubscribed(
-        id: LocalMessageId,
-        tx: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        tx.execute(
-            "DELETE FROM unsubscribe WHERE local_message_id = ?",
-            params![id],
-        )
-        .await?;
-        Ok(())
-    }
-
-    pub async fn is_unsubscribed(id: LocalMessageId, tether: &Tether) -> bool {
-        let q = tether
-            .query_value_opt::<i64>(
-                "SELECT local_message_id AS value FROM unsubscribe WHERE local_message_id = ?",
-                params![id],
-            )
-            .await;
-
-        matches!(q, Ok(Some(_)))
-    }
-
     pub fn display_snooze_reminder(&self) -> bool {
         self.flags.display_snooze_reminder()
     }
