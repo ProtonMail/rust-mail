@@ -146,12 +146,19 @@ pub(crate) fn register_actions(
         }
     }
 
+    fn replace<T>(queue: &Queue, handler: T)
+    where
+        T: Handler,
+    {
+        queue.register_or_replace::<T::Action>(handler);
+    }
+
     match origin {
         Origin::App => {
             reg(queue, conversations::DeleteHandler { api: api.clone() });
             reg(queue, conversations::MarkReadHandler { api: api.clone() });
             reg(queue, conversations::MarkUnreadHandler { api: api.clone() });
-            reg(queue, conversations::PrefetchHandler { ctx: ctx.clone() });
+            replace(queue, conversations::PrefetchHandler { ctx: ctx.clone() });
             reg(queue, conversations::SnoozeHandler { api: api.clone() });
             reg(queue, conversations::UnsnoozeHandler { api: api.clone() });
             reg(queue, block::BlockHandler { api: api.clone() });
@@ -161,7 +168,7 @@ pub(crate) fn register_actions(
                 update_incoming_defaults::SyncIncomingDefaultsHandler { api: api.clone() },
             );
             reg(queue, conversations::MoveHandler { api: api.clone() });
-            reg(
+            replace(
                 queue,
                 conversations::RefreshMetadataHandler { ctx: ctx.clone() },
             );
@@ -174,8 +181,8 @@ pub(crate) fn register_actions(
             reg(queue, messages::ReadHandler { api: api.clone() });
             reg(queue, messages::UnreadHandler { api: api.clone() });
             reg(queue, messages::HamHandler { api: api.clone() });
-            reg(queue, messages::ReportPhishingHandler { ctx: ctx.clone() });
-            reg(queue, messages::PrefetchHandler { ctx: ctx.clone() });
+            replace(queue, messages::ReportPhishingHandler { ctx: ctx.clone() });
+            replace(queue, messages::PrefetchHandler { ctx: ctx.clone() });
             reg(queue, messages::RefreshMetadataHandler { api: api.clone() });
             reg(
                 queue,
@@ -183,16 +190,16 @@ pub(crate) fn register_actions(
                     http_client: http_client.clone(),
                 },
             );
-            reg(queue, draft::SaveHandler { ctx: ctx.clone() });
-            reg(queue, draft::SendHandler { ctx: ctx.clone() });
+            replace(queue, draft::SaveHandler { ctx: ctx.clone() });
+            replace(queue, draft::SendHandler { ctx: ctx.clone() });
             reg(queue, labels::ExpandHandler { api: api.clone() });
             reg(queue, messages::LabelAsHandler { api: api.clone() });
             reg(queue, conversations::LabelAsHandler { api: api.clone() });
             reg(queue, draft::DiscardHandler { api: api.clone() });
             reg(queue, draft::UndoSendHandler { api: api.clone() });
-            reg(queue, draft::AttachmentUploadHandler { ctx: ctx.clone() });
+            replace(queue, draft::AttachmentUploadHandler { ctx: ctx.clone() });
             reg(queue, draft::AttachmentRemoveHandler { api: api.clone() });
-            reg(queue, refresh::ActionRefreshHandler { ctx: ctx.clone() });
+            replace(queue, refresh::ActionRefreshHandler { ctx: ctx.clone() });
             reg(queue, rollback::RollbackActionHandler { api: api.clone() });
             reg(
                 queue,
@@ -201,10 +208,10 @@ pub(crate) fn register_actions(
         }
 
         Origin::ShareExt => {
-            reg(queue, draft::SaveHandler { ctx: ctx.clone() });
-            reg(queue, draft::SendHandler { ctx: ctx.clone() });
+            replace(queue, draft::SaveHandler { ctx: ctx.clone() });
+            replace(queue, draft::SendHandler { ctx: ctx.clone() });
             reg(queue, draft::DiscardHandler { api: api.clone() });
-            reg(queue, draft::AttachmentUploadHandler { ctx: ctx.clone() });
+            replace(queue, draft::AttachmentUploadHandler { ctx: ctx.clone() });
             reg(queue, draft::AttachmentRemoveHandler { api: api.clone() });
         }
     }
