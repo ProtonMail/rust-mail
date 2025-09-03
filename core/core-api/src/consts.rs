@@ -209,6 +209,8 @@ pub enum Mail {
     /// Too Many Attachments
     TooManyAttachments = 2024,
     ExpirationTimeTooSoon = 2023,
+    MessageDoesNotExist = 2501,
+    ConversationDoesNotExist = 20052,
 }
 
 pub enum Payments {

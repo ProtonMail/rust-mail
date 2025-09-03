@@ -1897,6 +1897,17 @@ impl Message {
         .await
     }
 
+    pub async fn remote_ids_in_conversation_unordered(
+        local_conversation_id: LocalConversationId,
+        tether: &Tether,
+    ) -> Result<Vec<MessageId>, StashError> {
+        tether.query_values::<_, MessageId>(
+            "SELECT remote_id as value FROM messages WHERE remote_id IS NOT NULL AND local_conversation_id = ? AND messages.deleted = 0",
+            params![local_conversation_id],
+        )
+            .await
+    }
+
     /// This fn should be called for message endpoints.
     /// Repeatedly calls `endpoint` in batches of 150 in parallel.
     async fn split_request<F, Fut>(

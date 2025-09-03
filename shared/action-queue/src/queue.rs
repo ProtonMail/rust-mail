@@ -331,12 +331,17 @@ impl Queue {
     }
 
     /// Register an [`Action`] with the factory.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action type was already registered before.
     pub fn register<T: Action>(&self, handler: T::Handler) -> FactoryResult<()> {
         self.shared.factory.write().register::<T>(handler)
+    }
+
+    /// Register an [`Action`] with the factory and replace the current record
+    /// if it already exists.
+    pub fn register_or_replace<T: Action>(&self, handler: T::Handler) {
+        self.shared
+            .factory
+            .write()
+            .register_or_replace::<T>(handler);
     }
 
     /// Return the database associated with the queue.
@@ -1075,6 +1080,9 @@ impl QueueAutoExecutor {
 
             let followup = match executor.execute_one().await {
                 Ok(None) => ActionExecutionFollowup::WaitForAction,
+                Ok(Some(QueuedActionState::Queued(_, ActionRequeueReason::LostContext))) => {
+                    ActionExecutionFollowup::WaitForAction
+                }
                 Ok(Some(QueuedActionState::Queued(_, ActionRequeueReason::NetworkFailed))) => {
                     if termination_policy.is_network_loss_policy() {
                         return;

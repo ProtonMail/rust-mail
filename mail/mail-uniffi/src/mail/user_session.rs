@@ -11,8 +11,7 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
 use crate::{
-    AsyncLiveQueryCallback, LiveQueryCallback, WatchHandle, async_runtime, uniffi_async,
-    watch_channel_async,
+    AsyncLiveQueryCallback, WatchHandle, async_runtime, uniffi_async, watch_channel_async,
 };
 use futures::TryFutureExt;
 use muon::common::IntoDyn;
@@ -369,7 +368,7 @@ impl MailUserSession {
     /// The method will execute callback immediately when current status is online
     /// otherwise it will wait till the status is online again and then execute callback
     ///
-    pub fn execute_when_online(&self, callback: Box<dyn LiveQueryCallback>) {
+    pub fn execute_when_online(&self, callback: Arc<dyn ExecuteWhenOnlineCallback>) {
         let Ok(ctx) = self.ctx() else {
             tracing::error!("Cannot obtain context, callback will not be executed");
             return;
@@ -382,8 +381,33 @@ impl MailUserSession {
                 .network_status_observer()
                 .wait_until_online()
                 .await;
-            let callback = move || callback.on_update();
-            _ = async_runtime().spawn_blocking(callback).await;
+            _ = async_runtime()
+                .spawn_blocking(move || {
+                    callback.on_online();
+                })
+                .await;
+        });
+    }
+
+    /// Execute callback when connection status is online
+    ///
+    /// The method will execute callback immediately when current status is online
+    /// otherwise it will wait till the status is online again and then execute callback
+    ///
+    pub fn execute_when_online_async(&self, callback: Arc<dyn ExecuteWhenOnlineCallbackAsync>) {
+        let Ok(ctx) = self.ctx() else {
+            tracing::error!("Cannot obtain context, callback will not be executed");
+            return;
+        };
+
+        let ctx_cloned = ctx.clone();
+        ctx.spawn(async move {
+            ctx_cloned
+                .network_monitor_service()
+                .network_status_observer()
+                .wait_until_online()
+                .await;
+            callback.on_online().await;
         });
     }
 
@@ -508,4 +532,15 @@ pub struct DecryptedAttachment {
     pub attachment_metadata: AttachmentMetadata,
     /// The attachment content.
     pub data_path: String,
+}
+
+#[uniffi::export(with_foreign)]
+#[async_trait::async_trait]
+pub trait ExecuteWhenOnlineCallbackAsync: Send + Sync {
+    async fn on_online(&self);
+}
+
+#[uniffi::export(with_foreign)]
+pub trait ExecuteWhenOnlineCallback: Send + Sync {
+    fn on_online(&self);
 }

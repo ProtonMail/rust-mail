@@ -788,6 +788,37 @@ impl Factory {
             }
         }
     }
+    pub fn register_or_replace<T: Action>(&mut self, handler: T::Handler) {
+        let handler = Arc::new(handler);
+
+        #[allow(trivial_casts, reason = "false-positive")]
+        let decoder = Box::new({
+            let handler = handler.clone();
+
+            move |stored_action: StoredAction| {
+                let action: T = T::VersionConverter::convert(
+                    stored_action.version,
+                    T::VERSION,
+                    &stored_action.state,
+                )?;
+
+                let id = stored_action.id.unwrap();
+                let meta = QueuedMetadata::from(stored_action);
+
+                Ok((
+                    Box::new(QueuedAction {
+                        id,
+                        action,
+                        handler: handler.clone(),
+                    }) as Box<dyn ErasedQueuedAction>,
+                    Arc::new(meta),
+                ))
+            }
+        });
+
+        self.actions
+            .insert(T::TYPE.to_string(), ActionFactory { decoder, handler });
+    }
 
     pub(crate) fn decode(&self, action: StoredAction) -> FactoryResult<DecodedAction> {
         let Some(factory) = self.actions.get(&action.action_type) else {

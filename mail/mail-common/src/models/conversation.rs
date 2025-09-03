@@ -30,6 +30,7 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
+use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
 use proton_core_api::session::Session;
@@ -47,8 +48,9 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::requests::GetConversationsOptions;
 use proton_mail_api::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
-    MessageMetadata as ApiMessageMetadata, OperationResult,
+    AttachmentMetadata as ApiAttachmentMetadata, Conversation as ApiConversation,
+    ConversationLabel as ApiConversationLabel, MessageMetadata as ApiMessageMetadata,
+    OperationResult,
 };
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
@@ -1548,7 +1550,7 @@ impl Conversation {
                 params![local_label_id, conversation_id],
                 bond,
             )
-            .await?;
+                .await?;
 
             let Some(mut message) = message else {
                 let total_conversation_message_count = Message::count(
@@ -2408,16 +2410,122 @@ impl Conversation {
         Ok(())
     }
 
-    /// Sync the conversation message for `local_conversation_id` from the server.
-    ///
-    /// The messages are only synced once if `has_messages` is not set to true.
-    /// Future updates are expected to happen via the event loop.
-    ///
-    /// If `has_messages` is true, nothing is done.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries failed or if the server request failed.
+    #[tracing::instrument(skip(tx, session, network_monitor_service))]
+    pub async fn sync_conversation_messages_from_push_notification(
+        network_monitor_service: &NetworkMonitorService,
+        local_conversation_id: LocalConversationId,
+        tx: &mut impl RunTransaction,
+        session: &Session,
+    ) -> Result<Conversation, AppError> {
+        let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
+            return Err(AppError::ConversationNotFound(local_conversation_id));
+        };
+
+        let Some(ref rid) = conversation.remote_id else {
+            return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
+        };
+
+        if network_monitor_service.is_os_offline() {
+            debug!("No connection, skipping sync");
+            return Err(AppError::API(ApiServiceError::NetworkError(
+                "No connection".to_owned(),
+            )));
+        }
+
+        info!("Syncing {rid:?}'s messages");
+        let mut conversation_response = match session
+            .get_conversation(rid.clone())
+            .await
+            .inspect_err(|e| {
+                error!("failed to download conversation messages: {e:?}");
+            }) {
+            Ok(r) => r,
+            Err(ApiServiceError::UnprocessableEntity(s, Some(api_error))) => {
+                return if api_error.code == Mail::ConversationDoesNotExist as u32 {
+                    Err(AppError::ConversationDoesNotExistOnServer(rid.clone()))
+                } else {
+                    Err(AppError::from(ApiServiceError::UnprocessableEntity(
+                        s,
+                        Some(api_error),
+                    )))
+                };
+            }
+            Err(e) => return Err(AppError::from(e)),
+        };
+
+        tx.run_tx::<_, _>(async move |tx| {
+            let had_messages = conversation.has_messages;
+            let should_sync_conv = conversation
+                .to_api_conversation()
+                .map(|mut v| {
+                    let sort_conv_labels_fn =
+                        |l1: &ApiConversationLabel, l2: &ApiConversationLabel| l1.id.cmp(&l2.id);
+                    let sort_attachment_metadata =
+                        |l1: &ApiAttachmentMetadata, l2: &ApiAttachmentMetadata| l1.id.cmp(&l2.id);
+                    conversation_response
+                        .conversation
+                        .labels
+                        .sort_unstable_by(sort_conv_labels_fn);
+                    v.labels.sort_unstable_by(sort_conv_labels_fn);
+                    v.attachments_metadata
+                        .sort_unstable_by(sort_attachment_metadata);
+                    conversation_response
+                        .conversation
+                        .attachments_metadata
+                        .sort_unstable_by(sort_attachment_metadata);
+
+                    v != conversation_response.conversation
+                })
+                .unwrap_or(true);
+
+            let new_conversation = if should_sync_conv {
+                let mut new_conversation: Conversation = conversation_response.conversation.into();
+                new_conversation.local_id = conversation.local_id;
+                new_conversation.has_messages = true;
+                new_conversation.is_known = true;
+                debug!("Updating conversation");
+                new_conversation.save(tx).await?;
+
+                new_conversation
+            } else {
+                conversation
+            };
+
+            let mut message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
+            if had_messages {
+                info!("Messages were synced before");
+                let current_ids =
+                    Message::remote_ids_in_conversation_unordered(local_conversation_id, tx)
+                        .await?
+                        .into_iter()
+                        .collect::<HashSet<_>>();
+                message_metadata.retain(|v| !current_ids.contains(&v.id));
+            } else {
+                info!("Never synced conversation messages before");
+            }
+            if !message_metadata.is_empty() {
+                debug!(
+                    "Debug saving messages {:?}",
+                    message_metadata.iter().map(|v| &v.id).collect::<Vec<_>>()
+                );
+                Message::create_or_update_messages_from_metadata_vec(message_metadata, tx)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to write message metadata: {e:?}");
+                        e
+                    })?;
+            } else {
+                debug!("No new messages to save");
+            }
+
+            Ok(new_conversation)
+        })
+        .await
+        .map_err(AppError::Other)
+    }
+
+    // Until we have a sync manager, the prefetcher will only sync conversation messages
+    // if we have never synced the messages before.
     #[tracing::instrument(skip(tx, session, network_monitor_service))]
     pub async fn sync_conversation_messages(
         network_monitor_service: &NetworkMonitorService,
@@ -2436,18 +2544,32 @@ impl Conversation {
             };
             info!("Syncing {rid:?}'s messages");
 
-            if network_monitor_service.is_os_offline() {
+            if network_monitor_service.check_now().await.is_offline() {
                 debug!("No connection, skipping sync");
                 return Err(AppError::API(ApiServiceError::NetworkError(
                     "No connection".to_owned(),
                 )));
             }
 
-            let conversation_response =
-                session.get_conversation(rid.clone()).await.map_err(|e| {
+            let conversation_response = match session
+                .get_conversation(rid.clone())
+                .await
+                .inspect_err(|e| {
                     error!("failed to download conversation messages: {e:?}");
-                    AppError::from(e)
-                })?;
+                }) {
+                Ok(r) => r,
+                Err(ApiServiceError::UnprocessableEntity(s, Some(api_error))) => {
+                    return if api_error.code == Mail::ConversationDoesNotExist as u32 {
+                        Err(AppError::ConversationDoesNotExistOnServer(rid.clone()))
+                    } else {
+                        Err(AppError::from(ApiServiceError::UnprocessableEntity(
+                            s,
+                            Some(api_error),
+                        )))
+                    };
+                }
+                Err(e) => return Err(AppError::from(e)),
+            };
 
             tx.run_tx::<_, _>(async move |tx| {
                 let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
@@ -2634,6 +2756,39 @@ impl Conversation {
             params![subject, id],
         )
         .await
+    }
+
+    pub fn to_api_conversation(&self) -> Option<ApiConversation> {
+        self.remote_id.clone().map(|id| ApiConversation {
+            id,
+            attachment_info: self
+                .attachment_info
+                .value
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone().into()))
+                .collect(),
+            attachments_metadata: self
+                .attachments_metadata
+                .iter()
+                .filter_map(|v| v.to_api_attachment_metadata())
+                .collect(),
+            display_snoozed_reminder: self.display_snooze_reminder,
+            expiration_time: self.expiration_time.as_u64(),
+            labels: self
+                .labels
+                .iter()
+                .filter_map(|v| v.to_api_conversation_label())
+                .collect(),
+            num_attachments: self.num_attachments,
+            num_messages: self.num_messages,
+            num_unread: self.num_unread,
+            order: self.display_order,
+            recipients: self.recipients.iter().cloned().map(Into::into).collect(),
+            senders: self.senders.value.iter().cloned().map(Into::into).collect(),
+            size: self.size,
+            subject: self.subject.clone(),
+            context_time: None,
+        })
     }
 }
 
@@ -3236,6 +3391,19 @@ impl ConversationLabel {
         )
         .await
     }
+
+    pub fn to_api_conversation_label(&self) -> Option<ApiConversationLabel> {
+        self.remote_label_id.clone().map(|id| ApiConversationLabel {
+            id,
+            context_expiration_time: self.context_expiration_time.as_u64(),
+            context_num_attachments: self.context_num_attachments,
+            context_num_messages: self.context_num_messages,
+            context_num_unread: self.context_num_unread,
+            context_size: self.context_size,
+            context_snooze_time: self.context_snooze_time.as_u64(),
+            context_time: self.context_time.as_u64(),
+        })
+    }
 }
 
 impl AddAssign<ConversationMessageLabelStats> for ConversationLabel {
@@ -3421,7 +3589,7 @@ impl ConversationCounters {
         Self::find(
             "INNER JOIN labels ON labels.local_id = local_label_id WHERE label_type = ? ORDER BY labels.display_order ASC",
             params![kind],
-            tether
+            tether,
         ).await
     }
 

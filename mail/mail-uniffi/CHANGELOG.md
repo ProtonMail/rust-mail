@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- [ET-4125] Open conversation from push notification
+
+### Features
+
+- [ET-4215] Add `conversation_wiht_sync` and `conversation_without_sync`
+- Increase default request timeout from 30s to 60s (special case 120s)
+
+### Fixes
+
+- Action queue lost contexts
+
+
+## [mail-uniffi-v0.142.11] - 2025-09-02
+
+### Fixes
+
+- [ET-4215] Conversation compare
+
+
+## [mail-uniffi-v0.142.10] - 2025-09-02
+
+### Features
+
+- Use different default signature on ios and android.
+
+### Fixes
+
+- [ET-4125] Always sync conversation messages
+
+
 ## [mail-uniffi-v0.142.9] - 2025-09-01
 
 ### Fixes

@@ -211,6 +211,7 @@ impl From<AppError> for ProtonMailError {
             AppError::AttachmentDecryptionIO(_) => Self::Unexpected(Unexpected::Os),
             AppError::AttachmentHasNoRemoteId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::ActionError(_) => Self::Unexpected(Unexpected::Internal),
+            AppError::ConversationDoesNotExistOnServer(_) => Self::Unexpected(Unexpected::Api),
         }
     }
 }

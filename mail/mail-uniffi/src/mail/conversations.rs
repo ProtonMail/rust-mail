@@ -24,13 +24,12 @@ use crate::mail::mail_scroller::{
 use crate::mail::{MailUserSession, Mailbox};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use itertools::Itertools;
-use proton_core_api::session::Session;
 use proton_core_common::datatypes::WeekStart as RealWeekStart;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::datatypes::{
     ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
-    MobileAction as RealMobileAction,
+    MobileAction as RealMobileAction, OpenConversationOrigin as RealOpenConversationOrigin,
 };
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::{
@@ -39,7 +38,6 @@ use proton_mail_common::errors::{
 use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::Conversation as RealConversation;
 use stash::orm::Model;
-use stash::stash::Stash;
 use std::sync::Arc;
 
 /// Delete the given conversations.
@@ -344,19 +342,6 @@ pub async fn conversation(
 ) -> Result<Option<ConversationAndMessages>, ActionError> {
     let stash = mailbox.stash()?;
     let session = mailbox.session()?;
-
-    get_conversation(mailbox, stash, session, id)
-        .await
-        .map_err(ActionError::from)
-        .map_err(Into::into)
-}
-
-async fn get_conversation(
-    mailbox: Arc<Mailbox>,
-    stash: Stash,
-    session: Session,
-    id: Id,
-) -> Result<Option<ConversationAndMessages>, RealProtonMailError> {
     let ctx = mailbox
         .ctx()
         .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Internal))?;
@@ -374,6 +359,8 @@ async fn get_conversation(
         )
     })
     .await
+    .map_err(ActionError::from)
+    .map_err(Into::into)
 }
 
 /// Results of [`conversation()`]
@@ -668,6 +655,35 @@ pub struct WatchedConversation {
     pub handle: Arc<WatchHandle>,
 }
 
+#[derive(Default, uniffi::Enum)]
+pub enum OpenConversationOrigin {
+    #[default]
+    Default,
+    PushNotification,
+}
+
+impl From<RealOpenConversationOrigin> for OpenConversationOrigin {
+    fn from(origin: RealOpenConversationOrigin) -> Self {
+        match origin {
+            RealOpenConversationOrigin::Default => OpenConversationOrigin::Default,
+            RealOpenConversationOrigin::PushNotification => {
+                OpenConversationOrigin::PushNotification
+            }
+        }
+    }
+}
+
+impl From<OpenConversationOrigin> for RealOpenConversationOrigin {
+    fn from(origin: OpenConversationOrigin) -> Self {
+        match origin {
+            OpenConversationOrigin::PushNotification => {
+                RealOpenConversationOrigin::PushNotification
+            }
+            OpenConversationOrigin::Default => RealOpenConversationOrigin::Default,
+        }
+    }
+}
+
 /// Watch the given conversation.
 ///
 /// Watches the specified conversation for changes. When the conversation's
@@ -681,6 +697,7 @@ pub struct WatchedConversation {
 pub async fn watch_conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
+    origin: OpenConversationOrigin,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Option<WatchedConversation>, ActionError> {
     let ctx = mailbox.ctx()?;
@@ -688,8 +705,13 @@ pub async fn watch_conversation(
 
     uniffi_async(async move {
         let stash = ctx.user_stash();
-        let Some(conv_and_msgs) =
-            ContextualConversation::open_conversation(id.into(), label_id.into(), &ctx).await?
+        let Some(conv_and_msgs) = ContextualConversation::open_conversation(
+            id.into(),
+            label_id.into(),
+            &ctx,
+            origin.into(),
+        )
+        .await?
         else {
             return Ok(None);
         };
