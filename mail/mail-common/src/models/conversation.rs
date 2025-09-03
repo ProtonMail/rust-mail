@@ -2436,10 +2436,17 @@ impl Conversation {
         };
 
         if network_monitor_service.is_os_offline() {
-            debug!("No connection, skipping sync");
-            return Err(AppError::API(ApiServiceError::NetworkError(
-                "No connection".to_owned(),
-            )));
+            // we only need to sync if the conversation is not known or
+            // we never synced the messages.
+            return if !conversation.has_messages || !conversation.is_known {
+                debug!("No connection, skipping sync");
+                Err(AppError::API(ApiServiceError::NetworkError(
+                    "No connection".to_owned(),
+                )))
+            } else {
+                debug!("No connection, using cached value");
+                Ok(conversation)
+            };
         }
 
         info!("Syncing {rid:?}'s messages");
@@ -2450,6 +2457,12 @@ impl Conversation {
                 error!("failed to download conversation messages: {e:?}");
             }) {
             Ok(r) => r,
+            Err(e)
+                if e.is_network_failure() && conversation.has_messages && conversation.is_known =>
+            {
+                warn!("Failed to sync conversation, but we have cached messages");
+                return Ok(conversation);
+            }
             Err(ApiServiceError::UnprocessableEntity(s, Some(api_error))) => {
                 return if api_error.code == Mail::ConversationDoesNotExist as u32 {
                     Err(AppError::ConversationDoesNotExistOnServer(rid.clone()))

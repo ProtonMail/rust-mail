@@ -24,7 +24,6 @@ use crate::mail::mail_scroller::{
 use crate::mail::{MailUserSession, Mailbox};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use itertools::Itertools;
-use proton_core_api::session::Session;
 use proton_core_common::datatypes::WeekStart as RealWeekStart;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
@@ -39,7 +38,6 @@ use proton_mail_common::errors::{
 use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::Conversation as RealConversation;
 use stash::orm::Model;
-use stash::stash::Stash;
 use std::sync::Arc;
 
 /// Delete the given conversations.
@@ -338,25 +336,12 @@ pub async fn all_available_conversation_actions_for_conversation(
 /// Returns an error if the database query fails or the server request failed.
 ///
 #[uniffi_export]
-pub async fn conversation(
+pub async fn conversation_with_sync(
     mailbox: Arc<Mailbox>,
     id: Id,
 ) -> Result<Option<ConversationAndMessages>, ActionError> {
     let stash = mailbox.stash()?;
     let session = mailbox.session()?;
-
-    get_conversation(mailbox, stash, session, id)
-        .await
-        .map_err(ActionError::from)
-        .map_err(Into::into)
-}
-
-async fn get_conversation(
-    mailbox: Arc<Mailbox>,
-    stash: Stash,
-    session: Session,
-    id: Id,
-) -> Result<Option<ConversationAndMessages>, RealProtonMailError> {
     let ctx = mailbox
         .ctx()
         .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Internal))?;
@@ -374,6 +359,45 @@ async fn get_conversation(
         )
     })
     .await
+    .map_err(ActionError::from)
+    .map_err(Into::into)
+}
+
+/// Get a specified conversation without syncing data.
+///
+/// This function does not sync the conversation from the server. It is intended to be used
+/// for live query updates after `watch_conversation`.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails or the server request failed.
+///
+#[uniffi_export]
+pub async fn conversation_without_sync(
+    mailbox: Arc<Mailbox>,
+    id: Id,
+) -> Result<Option<ConversationAndMessages>, ActionError> {
+    let stash = mailbox.stash()?;
+    let session = mailbox.session()?;
+    let ctx = mailbox
+        .ctx()
+        .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Internal))?;
+    uniffi_async(async move {
+        Ok::<_, RealProtonMailError>(
+            ContextualConversation::conversation_and_messages_without_sync(
+                ctx.network_monitor_service(),
+                LocalConversationId::from(id),
+                mailbox.mbox().label_id(),
+                &stash,
+                &session,
+            )
+            .await?
+            .map(Into::into),
+        )
+    })
+    .await
+    .map_err(ActionError::from)
+    .map_err(Into::into)
 }
 
 /// Results of [`conversation()`]
