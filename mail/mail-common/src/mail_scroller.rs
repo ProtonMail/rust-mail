@@ -1,5 +1,6 @@
 use crate::datatypes::{ContextualConversation, ReadFilter, SearchOptions};
 use crate::models::{ConversationScrollData, Message, MessageScrollData};
+use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
 use anyhow::anyhow;
 use derive_more::Display;
@@ -35,7 +36,7 @@ pub enum MailScrollerError {
 }
 
 #[derive(Debug)]
-pub enum ScrollerUpdate<T: Send + Sync + Clone + Eq + 'static> {
+pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
     None(ScrollerSource),
     Append {
         src: ScrollerSource,
@@ -57,7 +58,7 @@ pub enum ScrollerUpdate<T: Send + Sync + Clone + Eq + 'static> {
     },
 }
 
-impl<T: Send + Sync + Clone + Eq + 'static> ScrollerUpdate<T> {
+impl<T: Send + Sync + Clone + ScrollerEq + 'static> ScrollerUpdate<T> {
     pub fn is_none(&self) -> bool {
         matches!(self, ScrollerUpdate::None(_))
     }
@@ -134,7 +135,7 @@ impl Drop for MailScroller {
     }
 }
 
-pub struct MailScrollerHandle<T: Send + Sync + Clone + Eq + 'static> {
+pub struct MailScrollerHandle<T: Send + Sync + Clone + ScrollerEq + 'static> {
     pub updates: flume::Receiver<ScrollerUpdate<T>>,
     pub handle: DropRemoveTableObserverHandle,
 }
@@ -718,7 +719,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 idx: 0,
                 items: visible_items,
             }
-        } else if self.items == visible_items {
+        } else if self.items.scroller_eq(&visible_items) {
             tracing::debug!("No update required");
             ScrollerUpdate::None(src)
         } else {
@@ -912,7 +913,7 @@ enum ScrollerOrderedCommand {
     ClearCursor(ScrollerSource),
 }
 
-fn calculate_scroller_update<T: Eq + Clone + Send + Sync + 'static>(
+fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
     old: &[T],
     new: &[T],
     src: ScrollerSource,
@@ -920,7 +921,7 @@ fn calculate_scroller_update<T: Eq + Clone + Send + Sync + 'static>(
     let prefix_count = || {
         old.iter()
             .zip(new.iter())
-            .take_while(|(a, b)| a == b)
+            .take_while(|(a, b)| a.scroller_eq(b))
             .count()
     };
 
@@ -939,7 +940,7 @@ fn calculate_scroller_update<T: Eq + Clone + Send + Sync + 'static>(
         .iter()
         .rev()
         .zip(new.iter().rev())
-        .take_while(|(a, b)| a == b)
+        .take_while(|(a, b)| a.scroller_eq(b))
         .count();
 
     tracing::debug!("Common count from the end: {suffix_common_count}");
@@ -985,6 +986,12 @@ mod tests {
     // Helper function to create a test ScrollerSource
     fn test_source() -> ScrollerSource {
         ScrollerSource::ScrollEvent(Uuid::new_v4())
+    }
+
+    impl ScrollerEq for i32 {
+        fn scroller_eq(&self, other: &Self) -> bool {
+            *self == *other
+        }
     }
 
     // Test cases for calculate_scroller_update function

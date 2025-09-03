@@ -12,6 +12,7 @@ use crate::{
     conv_id, conversation, label, lbl_id, message,
     models::{Conversation, ConversationCounters, Message, MessageCounters},
     msg_id,
+    traits::ScrollerEq,
 };
 
 use super::utils::{create_address, test_address};
@@ -282,13 +283,13 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 /// This provides a unified interface for testing any type of MailScroller
 /// (conversations, messages, search) with automatic update handling and
 /// convenient test methods.
-pub struct TestScroller<T: Send + Sync + Clone + Eq + std::fmt::Debug + 'static> {
+pub struct TestScroller<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> {
     scroller: MailScroller,
     handle: MailScrollerHandle<T>,
     collected_items: Vec<T>,
 }
 
-impl<T: Send + Sync + Clone + Eq + std::fmt::Debug + 'static> TestScroller<T> {
+impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroller<T> {
     /// Create a new TestScroller from a MailScroller and handle
     pub async fn new(
         scroller: MailScroller,
@@ -388,7 +389,7 @@ impl<T: Send + Sync + Clone + Eq + std::fmt::Debug + 'static> TestScroller<T> {
 
     /// Assert that the current items match the expected items
     pub fn assert_items(&self, expected: &[T]) {
-        assert_eq!(self.collected_items, expected);
+        assert!(self.collected_items.as_slice().scroller_eq(expected));
     }
 
     /// Handle a scroller update and update the collected items accordingly

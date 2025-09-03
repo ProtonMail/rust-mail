@@ -12,6 +12,7 @@ pub mod models;
 pub mod prefetch;
 pub mod sidebar;
 pub mod snooze;
+pub mod traits;
 mod user_context;
 
 pub mod background_execution;

@@ -69,6 +69,7 @@ use proton_mail_api::services::proton::response_data::{
     MessageMetadata, OperationResult,
 };
 use proton_mail_api::services::proton::responses::GetMessagesResponse;
+use proton_mail_common_derive::ScrollerEq;
 use stash::exports::ToSql;
 use stash::macros::{DbRecord, Model};
 use stash::orm::{Model, ModelHooks};
@@ -79,7 +80,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use tracing::{debug, error, info, trace, warn};
 
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Eq, Model, PartialEq, ScrollerEq)]
 #[TableName("messages")]
 #[ModelHooks]
 pub struct Message {
@@ -93,12 +94,14 @@ pub struct Message {
     pub local_conversation_id: Option<LocalConversationId>,
 
     #[DbField]
+    #[scroller_eq(skip)]
     pub remote_conversation_id: Option<ConversationId>,
 
     #[DbField]
     pub local_address_id: LocalAddressId,
 
     #[DbField]
+    #[scroller_eq(skip)]
     pub remote_address_id: AddressId,
 
     pub attachments_metadata: Vec<AttachmentMetadata>,
@@ -119,6 +122,7 @@ pub struct Message {
     /// model is not fully initialized or there is very nasty bug. Failed
     /// initialization is logged as an error, but flow is not impacted due to
     /// the fact that this is not a critical field.
+    #[scroller_eq(skip)]
     pub exclusive_location: Option<ExclusiveLocation>,
 
     /// The unix timestamp at which this message is set to expire at.
@@ -155,6 +159,7 @@ pub struct Message {
     pub sender: MessageSender,
 
     #[DbField]
+    #[scroller_eq(skip)]
     pub size: u64,
 
     #[DbField]

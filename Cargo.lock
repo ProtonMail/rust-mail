@@ -6140,6 +6140,7 @@ dependencies = [
  "proton-log-service",
  "proton-mail-api",
  "proton-mail-common",
+ "proton-mail-common-derive",
  "proton-mail-html-transformer",
  "proton-network-monitor-service",
  "proton-sqlite3",
@@ -6167,6 +6168,15 @@ dependencies = [
  "wiremock",
  "wiremock-multipart",
  "wry",
+]
+
+[[package]]
+name = "proton-mail-common-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
 ]
 
 [[package]]

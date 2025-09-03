@@ -29,6 +29,7 @@ members = [
   "crypto/crypto-pin-hash",
   "mail/mail-api",
   "mail/mail-common",
+  "mail/mail-common-derive",
   "mail/mail-html-transformer",
   "mail/mail-tui",
   "mail/mail-uniffi",
@@ -225,6 +226,10 @@ version = "0.8"
 path = "mail/mail-common"
 registry = "proton"
 features = ["sql"]
+
+[workspace.dependencies.proton-mail-common-derive]
+version = "0.1"
+path = "mail/mail-common-derive"
 
 [workspace.dependencies.proton-mail-uniffi]
 path = "mail/mail-uniffi"
