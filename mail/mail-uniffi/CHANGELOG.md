@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.142.13] - 2025-09-03
+
+### Features
+
+- Properly sync unsubscribed to newsletter with the backend
+
+### Fixes
+
+- Mobile signature will be disabled by default for paying users, and will be always enabled for free users
+
+
+## [mail-uniffi-v0.142.12] - 2025-09-03
 
 ### Changed
 
