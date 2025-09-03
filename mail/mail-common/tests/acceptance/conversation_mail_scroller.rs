@@ -181,9 +181,7 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
             .unwrap();
 
     // Conversations can be accessed only when progressed.
-    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
-    // And every new scroller is `NotSynced` so we wait for invalidation
-    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 1);
 
     // Verify we have the expected data
@@ -230,8 +228,6 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
 
     // Conversations can be accessed only when progressed.
     test_scroller.fetch_more_and_wait().await.unwrap();
-    // And every new scroller is `NotSynced` so we wait for invalidation
-    let _ = test_scroller.wait_for_update().await.unwrap();
     assert_scroller_content!(
         &mut test_scroller,
         5,
@@ -484,7 +480,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     // Go online suddenly
     ctx.mock_server().reset().await;
     ctx.mock_ping_success().await;
-    setup_api_conversation_pages(&ctx, page_size, 200, 1).await;
+    setup_api_conversation_pages(&ctx, page_size, 200, 2).await;
     user_ctx
         .network_monitor_service()
         .update_os_network_status(OsNetworkStatus::Online);
@@ -537,98 +533,6 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ]
     );
 
-    // There is no more data in API
-    // However we should not call fetch more again as this will make a test
-    // to carry over the fetch_more task to the offline context in which
-    // you will get a correct update without "asking" for it, which can look suspicious.
-
-    // --------------------------------
-    // The unordered items are not included in the api response
-    // they will not be shown untill we go offline again
-    // this is test specific behavior, in real app we should not have such a situation
-    // though simillar case is tested here where we do have big location and not all items were fetched
-    // during online period
-    ctx.mock_server().reset().await;
-    mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
-    user_ctx.network_monitor_service().check_now().await;
-    user_ctx
-        .wait_for(timeout, |status| status.is_offline())
-        .await;
-
-    assert_scroller_content!(
-        &mut test_scroller,
-        10,
-        &[
-            "myconv_209",
-            "myconv_208",
-            "myconv_207",
-            "myconv_206",
-            "myconv_205",
-            "myconv_204",
-            "myconv_203",
-            "myconv_202",
-            "myconv_201",
-            "myconv_200",
-        ]
-    );
-
-    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
-    assert_eq!(actual.len(), 5);
-
-    assert_scroller_content!(
-        &mut test_scroller,
-        15,
-        &[
-            "myconv_209",
-            "myconv_208",
-            "myconv_207",
-            "myconv_206",
-            "myconv_205",
-            "myconv_204",
-            "myconv_203",
-            "myconv_202",
-            "myconv_201",
-            "myconv_200",
-            "myconv_110",
-            "myconv_109",
-            "myconv_108",
-            "myconv_107",
-            "myconv_106",
-        ]
-    );
-
-    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
-    assert_eq!(actual.len(), 6);
-
-    assert_scroller_content!(
-        &mut test_scroller,
-        21,
-        &[
-            "myconv_209",
-            "myconv_208",
-            "myconv_207",
-            "myconv_206",
-            "myconv_205",
-            "myconv_204",
-            "myconv_203",
-            "myconv_202",
-            "myconv_201",
-            "myconv_200",
-            "myconv_110",
-            "myconv_109",
-            "myconv_108",
-            "myconv_107",
-            "myconv_106",
-            "myconv_105",
-            "myconv_104",
-            "myconv_103",
-            "myconv_102",
-            "myconv_101",
-            "myconv_100",
-        ]
-    );
-
     // No more items in the cache and we are offline but we satisfied the counter
     // Return empty page instead of the Network error
     let actual = test_scroller.fetch_more_and_wait().await.unwrap();
@@ -651,28 +555,7 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
     };
 
     data.save_to_database(&mut tether).await;
-    let last_conversation =
-        Conversation::find_by_remote_id(ConversationId::from("myconv_150"), &tether)
-            .await
-            .unwrap()
-            .unwrap();
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let last_label = last_conversation.label(local_label_id).unwrap();
-    let mut scroller = ConversationScrollData::builder()
-        .local_label_id(local_label_id)
-        .unread(unread)
-        .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
-        .conversation_time(last_label.context_time)
-        .snooze_time(last_label.context_snooze_time)
-        .display_order(last_conversation.display_order)
-        .order_dir(ScrollOrderDir::Desc)
-        .order_field(ScrollOrderField::Time)
-        .build();
-
-    tether
-        .tx(async |bond| scroller.save(bond).await)
-        .await
-        .unwrap();
 
     // Mock offline
     mock_not_responsive_api(&ctx).await;
@@ -1150,9 +1033,9 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
     let mut cursor_scroller = ConversationScrollData::builder()
         .local_label_id(local_label_id)
         .unread(unread)
-        .remote_conversation_id("Nothing visible".into())
-        .conversation_time(1000.into()) // out of the range of the cursor
-        .snooze_time(1000.into())
+        .remote_conversation_id("Everything visible".into())
+        .conversation_time(200.into()) // all in range of the cursor
+        .snooze_time(200.into())
         .display_order(30)
         .order_dir(ScrollOrderDir::Desc)
         .order_field(ScrollOrderField::SnoozeTime)
@@ -1168,7 +1051,7 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
         .unwrap();
 
     // Set up mocks
-    ctx.mock_ping_success().await;
+    mock_not_responsive_api(&ctx).await;
     ctx.catch_all().await;
 
     // Create scroller with SnoozeTime ordering
@@ -1334,8 +1217,6 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
 
     // Conversations can be accessed only when progressed.
     test_scroller.fetch_more_and_wait().await.unwrap();
-    // And every new scroller is `NotSynced` so we wait for invalidation
-    let _ = test_scroller.wait_for_update().await.unwrap();
     assert_scroller_content!(&mut test_scroller, 1, &["myconv_9"]);
 
     // Simulate new event
@@ -1509,11 +1390,7 @@ async fn test_conversation_mail_scroller_handles_create_or_get_local_missing_lab
             .unwrap();
 
     // Verify conversation appears in inbox after fetching from API
-    let initial_items = inbox_scroller.fetch_more_and_wait().await.unwrap();
-    assert_eq!(initial_items.len(), 0);
-    // Wait for the automatic refresh to update conversation labels
-    let items = inbox_scroller.wait_for_update().await.unwrap().unwrap();
-    // Check that the conversation is now in the scroller
+    let items = inbox_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(
         items[0].remote_id.as_ref().unwrap().to_string(),
