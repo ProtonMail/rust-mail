@@ -48,10 +48,11 @@ async fn test_new_mailbox_sync_conversations() {
             ..ApiMessageMetadata::test_default()
         },
     ];
+
     let conversations = params.conversations.clone();
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
-    ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 2_u64)
+    ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1_u64)
         .await;
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
@@ -91,11 +92,11 @@ async fn test_new_mailbox_sync_conversations() {
     .unwrap();
 
     assert_eq!(result.messages.len(), 2);
-    assert_eq!(result.messages[0].remote_id.as_ref(), Some(&message_id1));
-    assert_eq!(result.messages[1].remote_id.as_ref(), Some(&message_id2));
+    assert_eq!(result.messages[0].remote_id, Some(message_id1));
+    assert_eq!(result.messages[1].remote_id, Some(message_id2));
 
-    // Get messages again no changes, but we still make the request
-    let result = ContextualConversation::conversation_and_messages(
+    // Get messages again, but should not fire request.
+    let _ = ContextualConversation::conversation_and_messages(
         user_ctx.network_monitor_service(),
         conversation.id(),
         mailbox.label_id(),
@@ -105,14 +106,10 @@ async fn test_new_mailbox_sync_conversations() {
     .await
     .unwrap()
     .unwrap();
-
-    assert_eq!(result.messages.len(), 2);
-    assert_eq!(result.messages[0].remote_id.as_ref(), Some(&message_id1));
-    assert_eq!(result.messages[1].remote_id.as_ref(), Some(&message_id2));
 }
 
 #[tokio::test]
-async fn test_new_mailbox_syncs_new_conversation_messages() {
+async fn test_new_mailbox_syncs_new_conversation_messages_on_push_notification() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
@@ -247,7 +244,7 @@ async fn test_new_mailbox_syncs_new_conversation_messages() {
         .await;
     ctx.catch_all().await;
     // Get messages again, should have new message
-    let result = ContextualConversation::conversation_and_messages(
+    let result = ContextualConversation::conversation_and_messages_from_push_notification(
         user_ctx.network_monitor_service(),
         conversation.id(),
         mailbox.label_id(),

@@ -29,7 +29,7 @@ use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::datatypes::{
     ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
-    MobileAction as RealMobileAction,
+    MobileAction as RealMobileAction, OpenConversationOrigin as RealOpenConversationOrigin,
 };
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::{
@@ -336,7 +336,7 @@ pub async fn all_available_conversation_actions_for_conversation(
 /// Returns an error if the database query fails or the server request failed.
 ///
 #[uniffi_export]
-pub async fn conversation_with_sync(
+pub async fn conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
 ) -> Result<Option<ConversationAndMessages>, ActionError> {
@@ -348,43 +348,6 @@ pub async fn conversation_with_sync(
     uniffi_async(async move {
         Ok::<_, RealProtonMailError>(
             ContextualConversation::conversation_and_messages(
-                ctx.network_monitor_service(),
-                LocalConversationId::from(id),
-                mailbox.mbox().label_id(),
-                &stash,
-                &session,
-            )
-            .await?
-            .map(Into::into),
-        )
-    })
-    .await
-    .map_err(ActionError::from)
-    .map_err(Into::into)
-}
-
-/// Get a specified conversation without syncing data.
-///
-/// This function does not sync the conversation from the server. It is intended to be used
-/// for live query updates after `watch_conversation`.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails or the server request failed.
-///
-#[uniffi_export]
-pub async fn conversation_without_sync(
-    mailbox: Arc<Mailbox>,
-    id: Id,
-) -> Result<Option<ConversationAndMessages>, ActionError> {
-    let stash = mailbox.stash()?;
-    let session = mailbox.session()?;
-    let ctx = mailbox
-        .ctx()
-        .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Internal))?;
-    uniffi_async(async move {
-        Ok::<_, RealProtonMailError>(
-            ContextualConversation::conversation_and_messages_without_sync(
                 ctx.network_monitor_service(),
                 LocalConversationId::from(id),
                 mailbox.mbox().label_id(),
@@ -692,6 +655,35 @@ pub struct WatchedConversation {
     pub handle: Arc<WatchHandle>,
 }
 
+#[derive(Default, uniffi::Enum)]
+pub enum OpenConversationOrigin {
+    #[default]
+    Default,
+    PushNotification,
+}
+
+impl From<RealOpenConversationOrigin> for OpenConversationOrigin {
+    fn from(origin: RealOpenConversationOrigin) -> Self {
+        match origin {
+            RealOpenConversationOrigin::Default => OpenConversationOrigin::Default,
+            RealOpenConversationOrigin::PushNotification => {
+                OpenConversationOrigin::PushNotification
+            }
+        }
+    }
+}
+
+impl From<OpenConversationOrigin> for RealOpenConversationOrigin {
+    fn from(origin: OpenConversationOrigin) -> Self {
+        match origin {
+            OpenConversationOrigin::PushNotification => {
+                RealOpenConversationOrigin::PushNotification
+            }
+            OpenConversationOrigin::Default => RealOpenConversationOrigin::Default,
+        }
+    }
+}
+
 /// Watch the given conversation.
 ///
 /// Watches the specified conversation for changes. When the conversation's
@@ -705,6 +697,7 @@ pub struct WatchedConversation {
 pub async fn watch_conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
+    origin: OpenConversationOrigin,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Option<WatchedConversation>, ActionError> {
     let ctx = mailbox.ctx()?;
@@ -712,8 +705,13 @@ pub async fn watch_conversation(
 
     uniffi_async(async move {
         let stash = ctx.user_stash();
-        let Some(conv_and_msgs) =
-            ContextualConversation::open_conversation(id.into(), label_id.into(), &ctx).await?
+        let Some(conv_and_msgs) = ContextualConversation::open_conversation(
+            id.into(),
+            label_id.into(),
+            &ctx,
+            origin.into(),
+        )
+        .await?
         else {
             return Ok(None);
         };

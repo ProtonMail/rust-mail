@@ -2410,18 +2410,8 @@ impl Conversation {
         Ok(())
     }
 
-    /// Sync the conversation message for `local_conversation_id` from the server.
-    ///
-    /// The messages are only synced once if `has_messages` is not set to true.
-    /// Future updates are expected to happen via the event loop.
-    ///
-    /// If `has_messages` is true, nothing is done.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries failed or if the server request failed.
     #[tracing::instrument(skip(tx, session, network_monitor_service))]
-    pub async fn sync_conversation_messages(
+    pub async fn sync_conversation_messages_from_push_notification(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
@@ -2436,17 +2426,10 @@ impl Conversation {
         };
 
         if network_monitor_service.is_os_offline() {
-            // we only need to sync if the conversation is not known or
-            // we never synced the messages.
-            return if !conversation.has_messages || !conversation.is_known {
-                debug!("No connection, skipping sync");
-                Err(AppError::API(ApiServiceError::NetworkError(
-                    "No connection".to_owned(),
-                )))
-            } else {
-                debug!("No connection, using cached value");
-                Ok(conversation)
-            };
+            debug!("No connection, skipping sync");
+            return Err(AppError::API(ApiServiceError::NetworkError(
+                "No connection".to_owned(),
+            )));
         }
 
         info!("Syncing {rid:?}'s messages");
@@ -2457,12 +2440,6 @@ impl Conversation {
                 error!("failed to download conversation messages: {e:?}");
             }) {
             Ok(r) => r,
-            Err(e)
-                if e.is_network_failure() && conversation.has_messages && conversation.is_known =>
-            {
-                warn!("Failed to sync conversation, but we have cached messages");
-                return Ok(conversation);
-            }
             Err(ApiServiceError::UnprocessableEntity(s, Some(api_error))) => {
                 return if api_error.code == Mail::ConversationDoesNotExist as u32 {
                     Err(AppError::ConversationDoesNotExistOnServer(rid.clone()))
@@ -2550,7 +2527,7 @@ impl Conversation {
     // Until we have a sync manager, the prefetcher will only sync conversation messages
     // if we have never synced the messages before.
     #[tracing::instrument(skip(tx, session, network_monitor_service))]
-    pub async fn sync_conversation_messages_prefetch(
+    pub async fn sync_conversation_messages(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
@@ -2574,11 +2551,25 @@ impl Conversation {
                 )));
             }
 
-            let conversation_response =
-                session.get_conversation(rid.clone()).await.map_err(|e| {
+            let conversation_response = match session
+                .get_conversation(rid.clone())
+                .await
+                .inspect_err(|e| {
                     error!("failed to download conversation messages: {e:?}");
-                    AppError::from(e)
-                })?;
+                }) {
+                Ok(r) => r,
+                Err(ApiServiceError::UnprocessableEntity(s, Some(api_error))) => {
+                    return if api_error.code == Mail::ConversationDoesNotExist as u32 {
+                        Err(AppError::ConversationDoesNotExistOnServer(rid.clone()))
+                    } else {
+                        Err(AppError::from(ApiServiceError::UnprocessableEntity(
+                            s,
+                            Some(api_error),
+                        )))
+                    };
+                }
+                Err(e) => return Err(AppError::from(e)),
+            };
 
             tx.run_tx::<_, _>(async move |tx| {
                 let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;

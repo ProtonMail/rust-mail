@@ -29,6 +29,12 @@ use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use tracing::{debug, warn};
 
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
+pub enum OpenConversationOrigin {
+    #[default]
+    Default,
+    PushNotification,
+}
 /// Contextual representation of a [`Conversation`] when it is opened for display
 /// in a [`Label`].
 ///
@@ -202,18 +208,33 @@ impl ContextualConversation {
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         ctx: &MailUserContext,
+        origin: OpenConversationOrigin,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let stash = ctx.user_stash();
         let api = ctx.session();
-        if let Some(conv_and_messages) = Self::conversation_and_messages(
-            ctx.network_monitor_service(),
-            local_conversation_id,
-            local_label_id,
-            stash,
-            api,
-        )
-        .await?
-        {
+        let conv_and_messages = match origin {
+            OpenConversationOrigin::Default => {
+                Self::conversation_and_messages(
+                    ctx.network_monitor_service(),
+                    local_conversation_id,
+                    local_label_id,
+                    stash,
+                    api,
+                )
+                .await?
+            }
+            OpenConversationOrigin::PushNotification => {
+                Self::conversation_and_messages_from_push_notification(
+                    ctx.network_monitor_service(),
+                    local_conversation_id,
+                    local_label_id,
+                    stash,
+                    api,
+                )
+                .await?
+            }
+        };
+        if let Some(conv_and_messages) = conv_and_messages {
             if conv_and_messages.conversation.display_snooze_reminder {
                 let queue = ctx.action_queue();
                 if let Err(e) = Conversation::action_mark_read(
@@ -231,6 +252,66 @@ impl ContextualConversation {
         } else {
             Ok(None)
         }
+    }
+
+    /// Unlike [`conversation_and_messages()`] this version always sync the conversation
+    /// data to ensure that we have the most up to date information.
+    #[tracing::instrument(skip(stash, api, network_monitor_service))]
+    pub async fn conversation_and_messages_from_push_notification(
+        network_monitor_service: &NetworkMonitorService,
+        local_conversation_id: LocalConversationId,
+        local_label_id: LocalLabelId,
+        stash: &Stash,
+        api: &Session,
+    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
+        let t = Instant::now();
+        let mut conn = stash.connection();
+        let label = Label::find_by_id(local_label_id, &conn)
+            .await?
+            .ok_or(AppError::LabelNotFound(local_label_id))?;
+        let conversation = match Conversation::sync_conversation_messages_from_push_notification(
+            network_monitor_service,
+            local_conversation_id,
+            &mut conn,
+            api,
+        )
+        .await
+        {
+            Ok(conversation) => conversation,
+            Err(AppError::ConversationNotFound(_)) => {
+                return Ok(None);
+            }
+            Err(AppError::ConversationDoesNotExistOnServer(remote_id)) => {
+                warn!("Conversation {remote_id:?} does not exist on the server");
+                return Ok(None);
+            }
+            Err(e) => return Err(e),
+        };
+
+        let conversation = Self::new(conversation, local_label_id).ok_or_else(|| {
+            // if this fails we want the clients to react to the error rather than silently ignore it.
+            tracing::error!("Conversation synced but could not be contextualized to label");
+            AppError::ConversationDoesNotHaveLabel(
+                local_conversation_id,
+                local_label_id.to_string(),
+            )
+        })?;
+
+        let messages = Message::in_conversation(local_conversation_id, &conn).await?;
+        tracing::info!("Conversation has {:02} messages", messages.len());
+        let id_to_open =
+            Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
+
+        debug!(
+            "Obtained messages and conversations for {local_conversation_id} in {:?}",
+            t.elapsed()
+        );
+
+        Ok(Some(ContextualConversationAndMessages {
+            conversation,
+            messages,
+            message_id_to_open: id_to_open,
+        }))
     }
 
     /// Retrieve the conversation with `local_conversation_id` in the
@@ -251,91 +332,42 @@ impl ContextualConversation {
         stash: &Stash,
         api: &Session,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
-        Self::conversation_and_messages_impl(
-            network_monitor_service,
-            local_conversation_id,
-            local_label_id,
-            stash,
-            api,
-            true,
-        )
-        .await
-    }
-
-    pub async fn conversation_and_messages_without_sync(
-        network_monitor_service: &NetworkMonitorService,
-        local_conversation_id: LocalConversationId,
-        local_label_id: LocalLabelId,
-        stash: &Stash,
-        api: &Session,
-    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
-        Self::conversation_and_messages_impl(
-            network_monitor_service,
-            local_conversation_id,
-            local_label_id,
-            stash,
-            api,
-            false,
-        )
-        .await
-    }
-    async fn conversation_and_messages_impl(
-        network_monitor_service: &NetworkMonitorService,
-        local_conversation_id: LocalConversationId,
-        local_label_id: LocalLabelId,
-        stash: &Stash,
-        api: &Session,
-        sync: bool,
-    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection();
         let label = Label::find_by_id(local_label_id, &conn)
             .await?
             .ok_or(AppError::LabelNotFound(local_label_id))?;
-        let conversation = if sync {
-            let conversation = match Conversation::sync_conversation_messages(
-                network_monitor_service,
-                local_conversation_id,
-                &mut conn,
-                api,
-            )
-            .await
-            {
-                Ok(conversation) => conversation,
-                Err(AppError::ConversationNotFound(_)) => {
-                    return Ok(None);
-                }
-                Err(AppError::ConversationDoesNotExistOnServer(remote_id)) => {
-                    warn!("Conversation {remote_id:?} does not exist on the server");
-                    return Ok(None);
-                }
-                Err(e) => return Err(e),
-            };
-            let Some(conversation) = ContextualConversation::new(conversation, local_label_id)
-            else {
-                warn!(
-                    "Conversation synced, but could not be converted to contextual in the current label"
-                );
+        match Conversation::sync_conversation_messages(
+            network_monitor_service,
+            local_conversation_id,
+            &mut conn,
+            api,
+        )
+        .await
+        {
+            Ok(()) => {}
+            Err(AppError::ConversationNotFound(_)) => {
                 return Ok(None);
-            };
-            conversation
-        } else {
-            ContextualConversation::load(local_conversation_id, local_label_id, &conn)
-                .await?
-                .ok_or(AppError::ConversationNotFound(local_conversation_id))?
+            }
+            Err(AppError::ConversationDoesNotExistOnServer(remote_id)) => {
+                warn!("Conversation {remote_id:?} does not exist on the server");
+                return Ok(None);
+            }
+            Err(e) => return Err(e),
         };
-
+        let Some(conversation) = Self::load(local_conversation_id, local_label_id, &conn).await?
+        else {
+            warn!("Conversation could not be contextualized to label");
+            return Ok(None);
+        };
         let messages = Message::in_conversation(local_conversation_id, &conn).await?;
         tracing::info!("Conversation has {:02} messages", messages.len());
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
-
-        if sync {
-            debug!(
-                "Obtained messages and conversations for {local_conversation_id} in {:?}",
-                t.elapsed()
-            );
-        }
+        debug!(
+            "Obtained messages and conversations for {local_conversation_id} in {:?}",
+            t.elapsed()
+        );
 
         Ok(Some(ContextualConversationAndMessages {
             conversation,
