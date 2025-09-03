@@ -412,6 +412,15 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
                 self.collected_items.splice(..idx, items.clone());
                 Ok(Some(items))
             }
+            ScrollerUpdate::ReplaceRange {
+                src: _,
+                from,
+                to,
+                items,
+            } => {
+                self.collected_items.splice(from..to, items.clone());
+                Ok(Some(items))
+            }
             ScrollerUpdate::Error { src: _, error } => Err(error),
         }
     }

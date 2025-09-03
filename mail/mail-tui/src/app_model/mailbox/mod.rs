@@ -82,6 +82,7 @@ pub enum ConversationMessage {
     NextPage(Vec<ContextualConversation>),
     ReplaceFrom(usize, Vec<ContextualConversation>),
     ReplaceBefore(usize, Vec<ContextualConversation>),
+    ReplaceRange(usize, usize, Vec<ContextualConversation>),
     HasMore,
     DeleteAll(LocalLabelId),
 }
@@ -99,6 +100,7 @@ pub enum MessageMessage {
     CloseBody,
     ReplaceFrom(usize, Vec<MailMessage>),
     ReplaceBefore(usize, Vec<MailMessage>),
+    ReplaceRange(usize, usize, Vec<MailMessage>),
     Refreshed(Vec<MailMessage>),
     NextPage(Vec<MailMessage>),
     DeletePermanently(Vec<LocalMessageId>),
