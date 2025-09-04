@@ -18,13 +18,14 @@ use proton_core_common::os::KeyChainExt;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto;
 use secrecy::ExposeSecret;
+use serde_with::serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::error;
 
 /// Quick actions available for mail related push notifications.
 /// It operates on remote ids since local ids are unknown at this point.
 ///
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum PushNotificationQuickAction {
     MarkAsRead { remote_id: MessageId },
     MoveToArchive { remote_id: MessageId },
