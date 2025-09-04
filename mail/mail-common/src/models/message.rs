@@ -1309,15 +1309,18 @@ impl Message {
         WHERE
           expiration_time < STRFTIME('%s', 'NOW')
           AND expiration_time != 0
+          AND deleted = 0
         ",
             vec![],
             tether,
         )
         .await?;
 
-        tether
-            .tx(async |tx| Self::mark_deleted(ids, tx).await)
-            .await?;
+        if !ids.is_empty() {
+            tether
+                .tx(async |tx| Self::mark_deleted(ids, tx).await)
+                .await?;
+        }
 
         Ok(())
     }
