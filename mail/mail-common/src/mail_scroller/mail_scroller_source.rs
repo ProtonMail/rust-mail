@@ -102,6 +102,11 @@ pub trait MailScrollerSource: Send + Sync {
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<(Vec<Self::Item>, MailPaginatorJoinHandle), MailContextError>> + Send;
 
+    fn sync_new(
+        &mut self,
+        ctx: &MailUserContext,
+    ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
+
     fn change_filter(
         &mut self,
         ctx: &MailUserContext,

@@ -249,6 +249,18 @@ impl MailScroller {
         Ok(())
     }
 
+    pub fn fetch_new(&self) -> Result<(), MailContextError> {
+        let uuid = Uuid::new_v4();
+        tracing::trace!("Sending `FetchNew` command with uuid: {uuid}");
+        self.ordered_command
+            .send(ScrollerOrderedCommand::FetchNew(
+                ScrollerSource::ScrollEvent(uuid),
+            ))
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to send fetch new command")))?;
+
+        Ok(())
+    }
+
     pub fn refresh(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
         tracing::trace!("Sending `Refresh` command with uuid: {uuid}");
@@ -548,6 +560,17 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .await
                     .map_err(|e| anyhow!("Failed to send get items update: {e:?}"))?;
             }
+            ScrollerOrderedCommand::FetchNew(src) => {
+                let result = self
+                    .fetch_new(src)
+                    .await
+                    .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
+
+                self.update
+                    .send_async(result)
+                    .await
+                    .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
+            }
             ScrollerOrderedCommand::ChangeFilter { src, filter } => {
                 let result = self
                     .change_filter(src, filter)
@@ -689,6 +712,18 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 items,
             })
         }
+    }
+
+    async fn fetch_new(
+        &mut self,
+        src: ScrollerSource,
+    ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let mut task = self.source.write().await.sync_new(&ctx).await?;
+
+        Self::await_task(&mut task).await?;
+
+        self.refresh(false, src).await
     }
 
     #[tracing::instrument(skip_all, fields(src=%src))]
@@ -901,6 +936,7 @@ enum ScrollerCommand {
 #[derive(Debug, Clone, PartialEq)]
 enum ScrollerOrderedCommand {
     FetchMore(ScrollerSource),
+    FetchNew(ScrollerSource),
     Refresh(ScrollerSource),
     ForceRefresh(ScrollerSource),
     GetItems(ScrollerSource),
