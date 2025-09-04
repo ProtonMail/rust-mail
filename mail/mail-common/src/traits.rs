@@ -1,5 +1,7 @@
 //! Custom traits for mail functionality.
 
+use std::fmt::Debug;
+
 /// Custom equality trait that allows selective field comparison.
 ///
 /// This trait is similar to `Eq` but provides the ability to skip certain fields
@@ -12,9 +14,9 @@
 ///
 /// # Example
 ///
-/// ```rust
-/// use mail_common_derive::ScrollerEq;
-/// use proton_mail_common::traits::ScrollerEq as ScrollerEqTrait;
+/// ```ignore
+/// use proton_mail_common::traits::ScrollerEq as _;
+/// use proton_mail_common_derive::ScrollerEq;
 ///
 /// #[derive(ScrollerEq)]
 /// struct Conversation {
@@ -42,8 +44,6 @@
 ///
 /// assert!(conv1.scroller_eq(&conv2)); // Returns true despite different skipped fields
 /// ```
-use std::fmt::Debug;
-
 pub trait ScrollerEq: Debug {
     /// Checks if two instances are equal, ignoring fields marked with `#[scroller_eq(skip)]`.
     fn scroller_eq(&self, other: &Self) -> bool;

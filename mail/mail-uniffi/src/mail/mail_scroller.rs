@@ -86,9 +86,16 @@ pub enum ConversationScrollerUpdate {
 
     /// A page of conversations needs to be replaced at the given index
     /// replacing everything between the given index and the end with the new items.
-    /// [0, 1, 2, 3] -> ReplaceRange { from: 1, to: 3, items: [5, 6, 7] } -> [0, 5, 6, 7, 3]
-    /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceRange { from: 1, to: 3, items: [5, 6, 7] } -> [0, 5, 6, 7, 3, 4, 8, 9]
-    /// [0, 1, 2, 3] -> ReplaceRange { from: 0, to: 3, items: [5, 6, 7] } -> [5, 6, 7, 3]
+    /// [0, 1, 2, 3] -> ReplaceRange { from: 1, to: 3, items: [5, 6, 7] } -> [0, 5, 6, 7]
+    /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceRange { from: 1, to: 3, items: [5, 6, 7] } -> [0, 5, 6, 7, 4, 8, 9]
+    /// [0, 1, 2, 3] -> ReplaceRange { from: 0, to: 2, items: [5, 6, 7] } -> [5, 6, 7, 3]
+    /// [0, 1, 2, 3] -> ReplaceRange { from: 1, to: 1, items: [5, 6, 7] } -> [0, 5, 6, 7, 1, 2, 3]
+    ///
+    /// # Integration examples
+    /// Rust: collected_items.splice(from..to, items)
+    /// Swift: collected_items.replaceSubrange(from..<to, with: items)
+    /// Kotlin: collected_items.subList(from, to).clear(); collected_items.addAll(from, items)
+    ///
     ReplaceRange {
         from: u64, // inclusive
         to: u64,   // exclusive

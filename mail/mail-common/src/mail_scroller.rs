@@ -933,6 +933,10 @@ fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
     if old.len() == new.len() && prefix_count == old.len() {
         tracing::debug!("No update required");
         return ScrollerUpdate::None(src);
+    } else if prefix_count == old.len() {
+        let items = new[prefix_count..].to_vec();
+        tracing::debug!("Append: items number: {}", items.len());
+        return ScrollerUpdate::Append { src, items };
     }
 
     let suffix_count = old
@@ -962,13 +966,6 @@ fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
             tracing::debug!("Replace before: {idx}, items number: {}", items.len());
             ScrollerUpdate::ReplaceBefore { src, idx, items }
         }
-        (prefix_count, 0) if prefix_count == old.len() => {
-            tracing::debug!("Append: items number: {}", new.len());
-            ScrollerUpdate::Append {
-                src,
-                items: new[prefix_count..].to_vec(),
-            }
-        }
         (prefix_count, 0) => {
             let idx = prefix_count;
             let items = new[prefix_count..].to_vec();
@@ -977,9 +974,9 @@ fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
         }
         (prefix_count, suffix_count) => {
             let from = prefix_count;
-            let to = old.len().saturating_sub(suffix_count).saturating_add(1);
+            let to = old.len().saturating_sub(suffix_count);
             let items = {
-                let to = new.len().saturating_sub(suffix_count).saturating_add(1);
+                let to = new.len().saturating_sub(suffix_count);
                 new[from..to].to_vec()
             };
             tracing::debug!("Replace range: {from}..{to}, items number: {}", items.len());
@@ -1011,8 +1008,8 @@ mod tests {
 
     // Test cases for calculate_scroller_update function
     #[test_case(vec![], vec![] => matches ScrollerUpdate::None(_); "Test 1: empty to empty")]
-    #[test_case(vec![], vec![1] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items == vec![1]; "Test 2: empty to single item")]
-    #[test_case(vec![], vec![1, 2, 3] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items == vec![1, 2, 3]; "Test 3: empty to multiple items")]
+    #[test_case(vec![], vec![1] => matches ScrollerUpdate::Append { items, .. } if items == vec![1]; "Test 2: empty to single item")]
+    #[test_case(vec![], vec![1, 2, 3] => matches ScrollerUpdate::Append { items, .. } if items == vec![1, 2, 3]; "Test 3: empty to multiple items")]
     #[test_case(vec![1], vec![] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items.is_empty(); "Test 4: single item to empty")]
     #[test_case(vec![1, 2, 3], vec![] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items.is_empty(); "Test 5: multiple items to empty")]
     #[test_case(vec![1], vec![1] => matches ScrollerUpdate::None(_); "Test 6: same single item")]
@@ -1025,9 +1022,9 @@ mod tests {
     #[test_case(vec![1, 2, 3], vec![1, 2, 3, 4] => matches ScrollerUpdate::Append { items, .. } if items == vec![4]; "Test 11: add one item at end")]
     #[test_case(vec![1, 2, 3], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::Append { items, .. } if items == vec![4, 5]; "Test 12: add two items at end")]
     // Items added in the middle
-    #[test_case(vec![1, 3], vec![1, 2, 3] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 2, items, .. } if items == vec![2, 3]; "Test 13: add item in middle")]
-    #[test_case(vec![1, 4], vec![1, 2, 3, 4] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 2, items, .. } if items == vec![2, 3, 4]; "Test 14: add two items in middle")]
-    #[test_case(vec![1, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 2, items, .. } if items == vec![2, 3, 4]; "Test 14a: add two items in middle")]
+    #[test_case(vec![1, 3], vec![1, 2, 3] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 1, items, .. } if items == vec![2]; "Test 13: add item in middle")]
+    #[test_case(vec![1, 4], vec![1, 2, 3, 4] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 1, items, .. } if items == vec![2, 3]; "Test 14: add two items in middle")]
+    #[test_case(vec![1, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 1, items, .. } if items == vec![2, 3]; "Test 14a: add two items in middle")]
     // Items removed from beginning
     #[test_case(vec![1, 2, 3], vec![2, 3] => matches ScrollerUpdate::ReplaceBefore { idx: 1, items, .. } if items.is_empty(); "Test 15: remove one item from beginning")]
     #[test_case(vec![1, 2, 3, 4], vec![3, 4] => matches ScrollerUpdate::ReplaceBefore { idx: 2, items, .. } if items.is_empty(); "Test 16: remove two items from beginning")]
@@ -1035,11 +1032,11 @@ mod tests {
     #[test_case(vec![1, 2, 3], vec![1, 2] => matches ScrollerUpdate::ReplaceFrom { idx: 2, items, .. } if items.is_empty(); "Test 17: remove one item from end")]
     #[test_case(vec![1, 2, 3, 4], vec![1, 2] => matches ScrollerUpdate::ReplaceFrom { idx: 2, items, .. } if items.is_empty(); "Test 18: remove two items from end")]
     // Items removed from middle
-    #[test_case(vec![1, 2, 3], vec![1, 3] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 3, items, .. } if items == vec![3]; "Test 19: remove item from middle")]
-    #[test_case(vec![1, 2, 3, 4], vec![1, 4] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 4, items, .. } if items == vec![4]; "Test 20: remove two items from middle")]
-    #[test_case(vec![1, 2, 3, 4, 5], vec![1, 4, 5] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 4, items, .. } if items == vec![4]; "Test 20a: remove two items from middle")]
+    #[test_case(vec![1, 2, 3], vec![1, 3] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 2, items, .. } if items.is_empty(); "Test 19: remove item from middle")]
+    #[test_case(vec![1, 2, 3, 4], vec![1, 4] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 3, items, .. } if items.is_empty(); "Test 20: remove two items from middle")]
+    #[test_case(vec![1, 2, 3, 4, 5], vec![1, 4, 5] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 3, items, .. } if items.is_empty(); "Test 20a: remove two items from middle")]
     // Items replaced
-    #[test_case(vec![1, 2, 3], vec![1, 4, 3] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 3, items, .. } if items == vec![4, 3]; "Test 21: replace item in middle")]
+    #[test_case(vec![1, 2, 3], vec![1, 4, 3] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 2, items, .. } if items == vec![4]; "Test 21: replace item in middle")]
     #[test_case(vec![1, 2, 3], vec![4, 2, 3] => matches ScrollerUpdate::ReplaceBefore { idx: 1, items, .. } if items == vec![4]; "Test 22: replace first item")]
     #[test_case(vec![1, 2, 3], vec![1, 2, 4] => matches ScrollerUpdate::ReplaceFrom { idx: 2, items, .. } if items == vec![4]; "Test 23: replace last item")]
     // Completely different vectors
@@ -1064,7 +1061,35 @@ mod tests {
 
     // Test the actual function
     fn test_calculate_scroller_update(old: Vec<i32>, new: Vec<i32>) -> ScrollerUpdate<i32> {
-        calculate_scroller_update(&old, &new, test_source())
+        let result = calculate_scroller_update(&old, &new, test_source());
+        let actual = apply_scroller_update(old, &result);
+        assert_eq!(actual, new);
+        result
+    }
+
+    fn apply_scroller_update(mut current: Vec<i32>, update: &ScrollerUpdate<i32>) -> Vec<i32> {
+        match update {
+            ScrollerUpdate::None(_) => current,
+            ScrollerUpdate::Append { items, .. } => {
+                current.extend(items.clone());
+                current
+            }
+            ScrollerUpdate::ReplaceFrom { idx, items, .. } => {
+                current.splice(idx.., items.clone());
+                current
+            }
+            ScrollerUpdate::ReplaceBefore { idx, items, .. } => {
+                current.splice(..idx, items.clone());
+                current
+            }
+            ScrollerUpdate::ReplaceRange {
+                from, to, items, ..
+            } => {
+                current.splice(from..to, items.clone());
+                current
+            }
+            ScrollerUpdate::Error { .. } => current,
+        }
     }
 
     #[test]

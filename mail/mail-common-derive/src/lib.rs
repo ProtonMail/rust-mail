@@ -16,38 +16,6 @@ use syn::{Data, DeriveInput, Field, Fields, Ident, parse_macro_input};
 /// # Attributes
 ///
 /// - `#[scroller_eq(skip)]`: Skip this field from equality comparison
-///
-/// # Example
-///
-/// ```rust
-/// use mail_common_derive::ScrollerEq;
-///
-/// #[derive(ScrollerEq)]
-/// struct Conversation {
-///     id: u64,
-///     subject: String,
-///     #[scroller_eq(skip)]
-///     last_updated: u64,  // This field won't be compared
-///     #[scroller_eq(skip)]
-///     unread_count: u32,  // This field won't be compared
-/// }
-///
-/// let conv1 = Conversation {
-///     id: 1,
-///     subject: "Hello".to_string(),
-///     last_updated: 100,
-///     unread_count: 5,
-/// };
-///
-/// let conv2 = Conversation {
-///     id: 1,
-///     subject: "Hello".to_string(),
-///     last_updated: 200,  // Different timestamp
-///     unread_count: 3,    // Different count
-/// };
-///
-/// assert!(conv1.scroller_eq(&conv2)); // Returns true despite different skipped fields
-/// ```
 #[proc_macro_derive(ScrollerEq, attributes(scroller_eq))]
 pub fn scroller_eq_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
