@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.142.14] - 2025-09-04
+
+### Features
+
+- Add `fetch_new` method to try to get newest items
+
+### Fixes
+
+- [ET-4008] Push Notifications Quick Actions fallback
+
+
 ## [mail-uniffi-v0.142.13] - 2025-09-03
 
 ### Features
