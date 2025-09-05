@@ -425,7 +425,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         tracing::info!("Syncing newest items");
-        let tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection().await?;
         let label = self.get_label(&tether).await?;
         let remote_label_id = label.remote_id.clone().unwrap();
         let unread = self.unread;
