@@ -791,7 +791,7 @@ impl ActionDependencyKeysTable {
             return Ok(vec![]);
         }
 
-        let placeholders = placeholders(&keys);
+        let placeholders = placeholders(keys);
         conn
             .query_rows_col::<ActionId>(
                 format!(

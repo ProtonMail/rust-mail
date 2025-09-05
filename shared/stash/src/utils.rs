@@ -255,8 +255,7 @@ impl ConnectionExt for Connection {
         params: impl Params,
     ) -> RusqliteResult<Vec<T>> {
         let mut stmt = self.prepare(sql.as_ref())?;
-        stmt
-            .query_map(params, |x| x.get::<_, T>(0))?
+        stmt.query_map(params, |x| x.get::<_, T>(0))?
             .collect::<Result<_, _>>()
     }
 

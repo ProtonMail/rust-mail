@@ -1343,7 +1343,7 @@ impl Message {
         let msgs = Message::find_sync(
             format!(
                 "WHERE local_id IN ({placeholders}) AND unread = {unread}",
-                placeholders = placeholders(&ids),
+                placeholders = placeholders(ids),
                 unread = if mark_read { 1 } else { 0 }
             ),
             params_from_iter(ids),
@@ -2152,7 +2152,7 @@ impl Message {
         bond: &Bond<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
         let ids = Vec::from_iter(ids);
-        bond.sync_bridge(|tx| Self::mark_read_or_unread(false, &ids, tx))
+        bond.sync_bridge(move |tx| Self::mark_read_or_unread(false, &ids, tx))
             .await
     }
 

@@ -99,6 +99,9 @@ enum OperationTransaction {
         OneshotSender<Result<(), StashError>>,
     ),
 
+    /// Starts a new transaction.
+    StartSync(BridgeClosure, TransactionTrackingPolicy),
+
     /// Commits a transaction, i.e. finalises it.
     Commit(
         TransactionTrackingPolicy,
@@ -121,6 +124,7 @@ impl Debug for OperationTransaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Start(..) => write!(f, "Start"),
+            Self::StartSync(..) => write!(f, "StartSync"),
             Self::Commit(..) => write!(f, "Commit"),
             Self::Rollback(_) => write!(f, "Rollback"),
             Self::Bridge(_) => write!(f, "Bridge"),
@@ -168,7 +172,9 @@ pub enum StashError {
     #[error("Query results deserialization error: {0}")]
     DeserializationError(#[from] ConversionError),
 
-    ///jThere was a problem with statement execution.
+    // TODO: have a better from impl.
+    //
+    /// There was a problem with statement execution.
     /// Note that this refers to executing a prepared statement,
     /// e.g. actually running a query, and not the process of preparing the statement/query.
     #[error("Statement execution error: {0}")]
@@ -1051,11 +1057,7 @@ impl Tether {
         });
 
         let (sender, receiver) = oneshot::channel();
-        let sync_closure = SyncClosure {
-            closure,
-            sender,
-            is_transaction: false,
-        };
+        let sync_closure = SyncClosure { closure, sender };
         let operation = Operation::Execution(OperationExec::Sync(sync_closure));
 
         self.connection
@@ -1090,33 +1092,14 @@ impl Tether {
     ) -> StashResult<T> {
         let tx_lock = self.tx_lock.clone();
         let _guard = tx_lock.lock().await;
-        let closure = Box::new(move |conn: &rusqlite::Connection| {
-            let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)
-                .map_err(StashError::TransactionError)?;
-            match callback(&tx) {
-                Ok(x) => tx
-                    .commit()
-                    .map(|()| Box::new(x) as Box<dyn Any + Send>)
-                    .map_err(StashError::ExecutionError),
-                Err(user_err) => {
-                    if let Err(rollback_err) = tx.rollback() {
-                        Err(StashError::Critical(anyhow!(
-                            "Rollback error occurred {rollback_err:?} when rolling back the transaction after this error: {user_err:?}"
-                        )))
-                    } else {
-                        Err(user_err)
-                    }
-                }
-            }
+        let closure = Box::new(move |tx: &rusqlite::Transaction| {
+            callback(tx).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
 
         let (sender, receiver) = oneshot::channel();
-        let sync_closure = SyncClosure {
-            closure,
-            sender,
-            is_transaction: policy == TransactionTrackingPolicy::Tracking,
-        };
-        let operation = Operation::Execution(OperationExec::Sync(sync_closure));
+        let sync_closure = BridgeClosure { closure, sender };
+        let operation =
+            Operation::Transaction(OperationTransaction::StartSync(sync_closure, policy));
 
         self.connection
             .send(operation)
@@ -1220,8 +1203,6 @@ type SyncClosureRetTy = Result<Box<dyn Any + Send>, StashError>;
 struct SyncClosure {
     closure: Box<dyn FnOnce(&Connection) -> SyncClosureRetTy + Send>,
     sender: OneshotSender<SyncClosureRetTy>,
-    /// Used to know whether or not to notify the watcher
-    is_transaction: bool,
 }
 
 struct BridgeClosure {
@@ -1486,7 +1467,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         // wait until resume was called.
                         self.handle_transaction(op, pool);
                     }
-                    OperationTransaction::Bridge(o) => {
+                    OperationTransaction::StartSync(o, _) | OperationTransaction::Bridge(o) => {
                         let _ = o.sender.send(Err(StashError::interrupted()));
                     }
                     OperationTransaction::RollbackAbort => {
@@ -1565,6 +1546,46 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                     }
                 };
             }
+            OperationTransaction::StartSync(BridgeClosure { closure, sender }, policy) => {
+                // Check whether we can start a new transaction or wait until we are allowed to.
+                pool.check_interrupted_or_wait_resume();
+                // In theory this should be impossible since we require a `&mut Tether` to start a
+                // transaction
+                assert!(self.transaction.is_none(), "Started transaction twice");
+
+                match self.start_transaction(policy) {
+                    Ok(tx) => {
+                        if policy == TransactionTrackingPolicy::Tracking {
+                            if let Err(e) = self
+                                .state
+                                .publish_changes(self.watcher)
+                                .execute(self.connection)
+                                .inspect_err(|e| error!("Failed to report tracked changes: {e:?}"))
+                            {
+                                _ = sender.send(Err(StashError::TransactionError(e)));
+                                return;
+                            }
+                        }
+                        let res = match closure(&tx) {
+                            Ok(x) => Ok(Box::new(x) as Box<dyn Any + Send>),
+                            Err(user_err) => {
+                                if let Err(rollback_err) = tx.rollback() {
+                                    Err(StashError::Critical(anyhow!(
+                                        "Rollback error occurred {rollback_err:?} when rolling back the transaction after this error: {user_err:?}"
+                                    )))
+                                } else {
+                                    Err(user_err)
+                                }
+                            }
+                        };
+                        _ = sender.send(res);
+                    }
+                    Err(error) => {
+                        _ = sender.send(Err(StashError::ExecutionError(error)));
+                    }
+                };
+            }
+
             OperationTransaction::Commit(policy, send_back) => {
                 match self
                     .transaction
@@ -1724,20 +1745,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 query.run_and_send(connection);
             }
             OperationExec::Sync(sync) => {
-                if sync.is_transaction {
-                    if let Err(e) = self
-                        .state
-                        .sync_tables(self.watcher)
-                        .execute(self.connection)
-                    {
-                        error!("Failed to sync tables: {e:?}");
-                        let _ = sync
-                            .sender
-                            .send(Err(StashError::WatcherError(e.to_string())));
-                        return;
-                    }
-                }
-
                 let res = (sync.closure)(connection);
                 let _ = sync.sender.send(res);
             }
