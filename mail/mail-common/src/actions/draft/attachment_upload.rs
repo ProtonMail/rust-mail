@@ -107,6 +107,20 @@ impl Handler for AttachmentUploadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        // Even though we check this before queuing, when running in a tx scope
+        // we have the final source of truth. The previous check can happen in parallel
+        // and can miss certain cases.
+        let stats =
+            DraftAttachmentMetadata::total_attachments_size_and_count(action.metadata_id, tx)
+                .await?;
+        if stats.total_size >= Attachment::MAX_ATTACHMENT_SIZE {
+            return Err(AttachmentUploadError::TotalAttachmentSizeTooLarge.into());
+        }
+
+        if stats.total >= Attachment::MAX_ATTACHMENTS_PER_MESSAGE {
+            return Err(AttachmentUploadError::TooManyAttachments.into());
+        }
+
         let mut attachment_upload_metadata = if let Some(metadata) =
             DraftAttachmentMetadata::find_by_id(action.attachment_id, tx)
                 .await
