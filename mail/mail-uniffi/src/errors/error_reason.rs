@@ -262,6 +262,8 @@ pub enum DraftAttachmentUploadErrorReason {
     RetryInvalidState,
     /// Combined Attachment size is too large
     TotalAttachmentSizeTooLarge,
+    /// Attachment upload timed out
+    Timeout,
 }
 
 impl From<RealDraftAttachmentErrorReason> for DraftAttachmentUploadErrorReason {
@@ -279,6 +281,7 @@ impl From<RealDraftAttachmentErrorReason> for DraftAttachmentUploadErrorReason {
                 Self::TotalAttachmentSizeTooLarge
             }
             RealDraftAttachmentErrorReason::RetryInvalidState => Self::RetryInvalidState,
+            RealDraftAttachmentErrorReason::Timeout => Self::Timeout,
         }
     }
 }

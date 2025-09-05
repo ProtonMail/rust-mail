@@ -661,6 +661,7 @@ pub enum DraftSendFailureAttachment {
     AttachmentAlreadyUploaded,
     TotalAttachmentsTooLarge,
     MessageDoesNotExist,
+    Timeout,
     Other(String),
 }
 
@@ -748,6 +749,9 @@ impl DraftSendFailure {
                 }
                 AttachmentUploadError::TotalAttachmentSizeTooLarge => {
                     Self::Attachment(DraftSendFailureAttachment::TotalAttachmentsTooLarge)
+                }
+                AttachmentUploadError::Timeout => {
+                    Self::Attachment(DraftSendFailureAttachment::Timeout)
                 }
                 _ => Self::Internal,
             },
@@ -871,6 +875,11 @@ impl From<DraftSendFailure> for ProtonMailError {
                 DraftSendFailureAttachment::TotalAttachmentsTooLarge => {
                     Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
                         DraftAttachmentUploadErrorReason::TotalAttachmentSizeTooLarge,
+                    ))
+                }
+                DraftSendFailureAttachment::Timeout => {
+                    Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                        DraftAttachmentUploadErrorReason::Timeout,
                     ))
                 }
             },
