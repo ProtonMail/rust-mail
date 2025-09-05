@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- [ET-4246] Tether Thread Pool
+- [ET-4247] Stash Connection Pool Limits
+
+### Features
+
+- Properly sync unsubscribed to newsletter with the backend
+- Add custom ScrollerEq derive macro for scroller list comparisons
+- [ET-4442] Implement `ReplaceRange` scroller update and eliminate double diff.
+
+### Fixes
+
+- [ET-2062] Missing HTML wrap of undecryptable bodies
+- [ET-2062] Missing HTML wrap of undecryptable bodies
+- Scroller is allowed to schedule automatic `fetch_more` in certain circumstances
+- [ET-3829] Split addresses into TO & CC for reply all action
+- Scroller is not mixing oredered and unordered data and never return an empty update for first page in online env
+
+
+## [mail-uniffi-v0.142.17] - 2025-09-05
+
 ### Fixes
 
 - Do not return attachment timeout error from action
@@ -33,17 +55,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.142.13] - 2025-09-03
 
-### Features
-
-- Properly sync unsubscribed to newsletter with the backend
-
-### Fixes
-
-- Mobile signature will be disabled by default for paying users, and will be always enabled for free users
-
-
-## [mail-uniffi-v0.142.12] - 2025-09-03
-
 ### Changed
 
 - [ET-4125] Open conversation from push notification
@@ -52,10 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-4215] Add `conversation_wiht_sync` and `conversation_without_sync`
 - Increase default request timeout from 30s to 60s (special case 120s)
+- Properly sync unsubscribed to newsletter with the backend
 
 ### Fixes
 
 - Action queue lost contexts
+- Mobile signature will be disabled by default for paying users, and will be always enabled for free users
 
 
 ## [mail-uniffi-v0.142.11] - 2025-09-02
@@ -232,10 +245,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Extend MobileActions implementation with methods allowing to access any toolbar settings available
+- (breaking) Change `all_available_bottom_bar_actions_for_xyz` to `all_available_list_actions_for_xyz`
+- uniffi: Remove unused `label_type` argument for `watch_labels()`
 - Filter out unnecessary mobile actions in uniffi
 
 ### Features
 
+- [ET-4017] Run post login validations after signup too
+- Unsubscribe to newsletter via HTTP request
+- [breaking change] Use load_image instead of load_embedded_attachment and force remote images to use https
+- Introduce `generate_csp_nonce()`
+- Add AllConversationActions and ConversationActionSheet types & methods analogical to the message features
+- Add `AllMessageActions` mechanism based upon `AllListActions`
+- Add MessageActionSheet type build in the same way as message toolbars are
+- Add API integration for changing API settings
+- Add UpdateMobileActions action and all uniffi bindings required to customize toolbar feature to work
+- Bye Bye PDFs
+- [ET-1307] Introduce Unleash API endpoint to mail-api
+- Expose context builder when building context in mail app
 - [ET-4397] Expose HTTP 403 Forbidden errors.
 - [ET-1307] Introduce Unleash feature flags service
 - [ET-4397] Fixed failing test, assert new Forbidden error.
@@ -243,6 +271,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-4235] Stanitize and hide css remote/embedded content
+- [ET-4235] Best attempt at sanitizing  css variables
+- [ET-4235] Only convert http and https links to href
+- [ET-4328] Ensure LabelAs and Move work correctly offline
+- [ET-4298] Fix mime type inference for replies
+- [ET-4260] Improve alternative routing for Human Verification
+- Correct resolved host for challenge server
+- [ET-4298] Parse X-PM-MIMETYPE
+- labels: Watch `MailSettings` as well
+- [ET-4297] Fix invalid order_field scroller records
+- [ET-4297] Fix missing message snooze notifications
+- Ensure fresh auth info is cached
+- Validate queue action state
+- Fix typo on Fido2 observability events
+- Only issue rollback if there are things to rollback
+- Less strict matching for TOTP error
 - vcard: Support empty `;TYPE=`
 - [ET-4439] Support Windows timezones
 - Remove ScrollerEq
@@ -255,19 +299,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When scroller finds out on refresh that the label has items to display but they are not currently retivable it will queue `FetchMore` task
 
 
-## [mail-uniffi-v0.137.0] - 2025-08-22
-
-### Fixes
-
-- Only issue rollback if there are things to rollback
-- Less strict matching for TOTP error
-
-
 ## [mail-uniffi-v0.136.0] - 2025-08-21
 
 ### Features
 
-- Expose context builder when building context in mail app
 - [ET-3702] auto-lock: Add more logs
 
 ### Fixes
@@ -285,37 +320,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.135.0] - 2025-08-21
 
-### Changed
-
-- uniffi: Remove unused `label_type` argument for `watch_labels()`
-
 ### Features
 
-- Introduce `generate_csp_nonce()`
-- Add `AllMessageActions` mechanism based upon `AllListActions`
-- Add MessageActionSheet type build in the same way as message toolbars are
-- [ET-1307] Introduce Unleash API endpoint to mail-api
-- Unsubscribe to newsletter via HTTP request
-- [breaking change] Use load_image instead of load_embedded_attachment and force remote images to use https
-- Add AllConversationActions and ConversationActionSheet types & methods analogical to the message features
-- Add API integration for changing API settings
-- Add UpdateMobileActions action and all uniffi bindings required to customize toolbar feature to work
-- Bye Bye PDFs
 - Scroller now has `get_items` method returning the current state without reading database
-
-### Fixes
-
-- [ET-4328] Ensure LabelAs and Move work correctly offline
-- [ET-4298] Fix mime type inference for replies
-- [ET-4260] Improve alternative routing for Human Verification
-- Correct resolved host for challenge server
-- [ET-4298] Parse X-PM-MIMETYPE
-- labels: Watch `MailSettings` as well
-- [ET-4297] Fix invalid order_field scroller records
-- [ET-4297] Fix missing message snooze notifications
-- Ensure fresh auth info is cached
-- Validate queue action state
-- Fix typo on Fido2 observability events
 
 
 ## [mail-uniffi-v0.125.8] - 2025-08-20
@@ -381,21 +388,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.129.0] - 2025-08-18
 
-### Changed
-
-- Extend MobileActions implementation with methods allowing to access any toolbar settings available
-- (breaking) Change `all_available_bottom_bar_actions_for_xyz` to `all_available_list_actions_for_xyz`
-
 ### Features
 
-- [ET-4017] Run post login validations after signup too
 - Enable PmSignature by default
 
 ### Fixes
 
-- [ET-4235] Stanitize and hide css remote/embedded content
-- [ET-4235] Best attempt at sanitizing  css variables
-- [ET-4235] Only convert http and https links to href
 - [ET-4235] Classify contact card urls [breaking change]
 - [ET-4235] Santize Logo and Photo urls
 
