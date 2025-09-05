@@ -387,12 +387,37 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         id: Self::RemoteId,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        Self::find_first(
+        tether
+            .sync_query(move |conn| Self::find_by_remote_id_sync(&id, conn))
+            .await
+    }
+
+    fn find_by_remote_id_sync(
+        id: &Self::RemoteId,
+        conn: &Connection,
+    ) -> Result<Option<Self>, StashError> {
+        Self::find_first_sync(
             format!("WHERE {} =?", Self::remote_id_field_name()),
-            params![id],
-            tether,
+            (id,),
+            conn,
         )
-        .await
+    }
+
+    fn find_by_remote_ids_sync(
+        ids: &[Self::RemoteId],
+        conn: &Connection,
+    ) -> Result<Vec<Self>, StashError> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let field_name = Self::remote_id_field_name();
+        let placeholders = placeholders(&ids);
+
+        Self::find_sync(
+            &format!("WHERE {field_name} IN ({placeholders})"),
+            params_from_iter(ids),
+            conn,
+        )
     }
 
     /// Finds records by its remote IDs.
@@ -456,13 +481,13 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         tether: &Tether,
     ) -> Result<Option<Self::IdType>, StashError> {
         tether
-            .sync_query(|c| Self::remote_id_counterpart_sync(remote_id, c))
+            .sync_query(move |c| Self::remote_id_counterpart_sync(&remote_id, c))
             .await
     }
 
     /// Return the local id for a given `remote_id`.
     fn remote_id_counterpart_sync(
-        remote_id: Self::RemoteId,
+        remote_id: &Self::RemoteId,
         conn: &Connection,
     ) -> Result<Option<Self::IdType>, StashError> {
         conn.query_row_col(

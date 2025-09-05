@@ -208,12 +208,16 @@ impl DraftMetadata {
         local_message_id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        DraftMetadata::find_first(
-            "WHERE local_message_id=?",
-            params![local_message_id],
-            tether,
-        )
-        .await
+        tether
+            .sync_query(move |conn| Self::find_by_message_id_sync(local_message_id, conn))
+            .await
+    }
+
+    pub fn find_by_message_id_sync(
+        local_message_id: LocalMessageId,
+        conn: &Connection,
+    ) -> Result<Option<Self>, StashError> {
+        DraftMetadata::find_first_sync("WHERE local_message_id=?", (local_message_id,), conn)
     }
 
     /// Delete metadata for a message with `local_message_id`.
@@ -443,10 +447,10 @@ pub struct DraftSendResult {
 }
 
 impl ModelHooks for DraftSendResult {
-    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    fn before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         // Only overwrite if present.
         if let Some(metadata_id) =
-            DraftMetadata::find_by_message_id(self.local_message_id, bond).await?
+            DraftMetadata::find_by_message_id_sync(self.local_message_id, tx)?
         {
             self.has_send_action = metadata_id.send_action_id.is_some();
         }

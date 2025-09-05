@@ -32,6 +32,8 @@ use proton_core_common::utils::MapVec as _;
 use proton_sqlite3::rusqlite::Transaction;
 use proton_sqlite3::rusqlite::params_from_iter;
 use sqlite_watcher::watcher::TableObserver;
+use stash::exports::Connection;
+use stash::orm::DbRecord;
 use stash::rusqlite::OptionalExtension;
 use stash::utils::{ConnectionExt, MapToSql, placeholders, placeholders_n};
 
@@ -660,19 +662,19 @@ impl Message {
 
     /// Set convarsation ids before saving
     ///
-    async fn set_coversation_before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.local_conversation_id.is_none()
-            && let Some(remote_conversation_id) = self.remote_conversation_id.clone()
-        {
-            if let Some(conversation) =
-                Conversation::find_by_remote_id(remote_conversation_id.clone(), bond).await?
-            {
-                self.local_conversation_id = conversation.local_id;
-            } else {
-                // Create an unknown entry.
-                let mut conversation = Conversation::unknown(remote_conversation_id);
-                conversation.save(bond).await?;
-                self.local_conversation_id = conversation.local_id;
+    fn set_coversation_before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        if self.local_conversation_id.is_none() {
+            if let Some(remote_conversation_id) = &self.remote_conversation_id {
+                if let Some(conversation) =
+                    Conversation::find_by_remote_id_sync(remote_conversation_id, tx)?
+                {
+                    self.local_conversation_id = conversation.local_id;
+                } else {
+                    // Create an unknown entry.
+                    let mut conversation = Conversation::unknown(remote_conversation_id.clone());
+                    conversation.save_sync(tx)?;
+                    self.local_conversation_id = conversation.local_id;
+                }
             }
         }
 
@@ -912,17 +914,16 @@ impl Message {
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn all_message_labels(&self, tether: &Tether) -> Result<Vec<Label>, StashError> {
-        let labels = Label::find(
+    pub fn all_message_labels(&self, conn: &Connection) -> Result<Vec<Label>, StashError> {
+        let labels = Label::find_sync(
             r#"
             WHERE local_id IN (
                 SELECT local_label_id FROM message_labels WHERE local_message_id = ?
             ) ORDER BY display_order ASC
             "#,
-            params![self.local_id],
-            tether,
-        )
-        .await?;
+            (self.local_id,),
+            conn,
+        )?;
 
         Ok(labels)
     }
@@ -2442,11 +2443,10 @@ impl ConversationOrMessage for Message {
 }
 
 impl ModelHooks for Message {
-    async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.attachments_metadata =
-            Attachment::load_message_attachment_metadata(self.id(), tether).await?;
+    fn after_load(&mut self, conn: &Connection) -> Result<(), StashError> {
+        self.attachments_metadata = Attachment::load_message_attachment_metadata(self.id(), conn)?;
 
-        let labels = self.all_message_labels(tether).await?;
+        let labels = self.all_message_labels(conn)?;
 
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
         self.label_ids = labels
@@ -2462,12 +2462,14 @@ impl ModelHooks for Message {
 
         Ok(())
     }
-    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+
+    fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         // Remove any labels that are no longer associated with this message.
         if !self.label_ids.is_empty() {
-            #[allow(trivial_casts)]
-            bond.execute(
-                formatdoc!(
+            let id = [self.id()];
+            let params = id.to_sql_extend_iter(&*self.label_ids);
+            tx.execute(
+                &formatdoc!(
                     "
                 DELETE FROM
                     message_labels
@@ -2479,22 +2481,18 @@ impl ModelHooks for Message {
                 ",
                     stash::utils::placeholders(&self.label_ids),
                 ),
-                [self.id()].to_sql_extend(&*self.label_ids),
-            )
-            .await?;
+                params_from_iter(params),
+            )?;
         } else {
-            bond.execute(
-                formatdoc!(
-                    "
+            tx.execute(
+                "
                 DELETE FROM
                     message_labels
                 WHERE
                     local_message_id = ?
                 ",
-                ),
-                params![self.local_id],
-            )
-            .await?;
+                (self.local_id,),
+            )?;
         }
 
         // This code appears to be doing nothing other than setting up the relationship between
@@ -2502,31 +2500,26 @@ impl ModelHooks for Message {
         // method is meant to be used in conjunction with the event loop state updates where
         // conversations update their own state.
         for label_id in &mut self.label_ids {
-            bond.execute(
-                format!(
-                    r#"
+            tx.execute(
+                r#"
                 INSERT OR IGNORE INTO
                     message_labels (local_message_id, local_label_id)
                 VALUES
-                    (?, (SELECT local_id FROM {} WHERE remote_id=? LIMIT 1))
+                    (?, (SELECT local_id FROM labels WHERE remote_id=? LIMIT 1))
                 "#,
-                    Label::table_name()
-                ),
-                params![self.local_id, label_id.clone()],
-            )
-            .await?;
+                (self.local_id, label_id.as_str()),
+            )?;
         }
 
         // Remove any attachments that are no longer associated with this conversation.
         let attachment_ids = if !self.attachments_metadata.is_empty() {
-            let local_ids = Attachment::create_or_update_from_message_metadata(self, bond).await?;
+            let local_ids = Attachment::create_or_update_from_message_metadata(self, tx)?;
 
             for id in &local_ids {
-                bond.execute(
+                tx.execute(
                     "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
-                    params![self.id(), *id],
-                )
-                .await?;
+                    (self.id(), *id),
+                )?;
             }
 
             local_ids
@@ -2534,9 +2527,10 @@ impl ModelHooks for Message {
             vec![]
         };
 
-        #[allow(trivial_casts)]
-            bond.execute(
-                formatdoc!("
+        let params = 
+params_from_iter((self.local_id, Disposition::Attachment, AttachmentType::Pgp).to_sql_extend_iter(&*attachment_ids));
+            tx.execute(
+                &formatdoc!("
                     DELETE FROM message_attachments WHERE
                             local_attachment_id IN (
                                 SELECT local_id FROM attachments
@@ -2548,27 +2542,28 @@ impl ModelHooks for Message {
                             )",
                     stash::utils::placeholders_n(attachment_ids.len()),
                 ),
-               (self.local_id, Disposition::Attachment, AttachmentType::Pgp).to_sql_extend(&*attachment_ids),
+            params
+               
             )
-            .await?;
+            ?;
 
         // If exclusive location is not set, we try to calculate it now.
         if self.exclusive_location.is_none() && !self.label_ids.is_empty() {
             self.exclusive_location =
-                ExclusiveLocation::from_label_ids(&self.label_ids, bond).await?;
+                ExclusiveLocation::from_label_ids_sync(&self.label_ids, tx)?;
         }
 
         Ok(())
     }
 
-    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone()
-            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
-        {
-            self.local_id = existing.local_id;
+    fn before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        if let Some(remote_id) = &self.remote_id {
+            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
+                self.local_id = existing.local_id;
+            }
         }
 
-        self.set_coversation_before_save(bond).await?;
+        self.set_coversation_before_save(tx)?;
         Ok(())
     }
 }
@@ -2830,77 +2825,75 @@ impl MessageBodyMetadata {
 }
 
 impl ModelHooks for MessageBodyMetadata {
-    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.local_message_id.is_none()
-            && let Some(remote_id) = self.remote_message_id.clone()
-        {
-            if let Some(existing) = Self::find_first(
-                "WHERE remote_message_id=?",
-                params![remote_id.clone()],
-                bond,
-            )
-            .await?
-            {
-                self.local_message_id = existing.local_message_id;
-            } else {
-                let Some(message) = Message::find_by_remote_id(remote_id, bond).await? else {
-                    return Err(StashError::Custom(anyhow!(
-                        "Failed to find message with remote id {}",
-                        self.remote_message_id.as_ref().unwrap()
-                    )));
-                };
-                self.local_message_id = message.local_id;
+    fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        if self.local_message_id.is_none() {
+            if let Some(remote_id) = &self.remote_message_id {
+                if let Some(existing) = Self::find_first_sync(
+                    "WHERE remote_message_id=?",
+                    (remote_id,),
+                    tx,
+                )?
+                {
+                    self.local_message_id = existing.local_message_id;
+                } else {
+                    let Some(message) = Message::find_by_remote_id_sync(remote_id, tx)? else {
+                        return Err(StashError::Custom(anyhow!(
+                            "Failed to find message with remote id {}",
+                            self.remote_message_id.as_ref().unwrap()
+                        )));
+                    };
+                    self.local_message_id = message.local_id;
+                }
             }
         }
         // Update all attachment links - When creating drafts we can update
         // and create new ones.
         // PGP attachments should never be deleted.
-        bond.execute(
+        tx.execute(
             indoc! {"DELETE FROM message_attachments
                 WHERE local_message_id=?1
                AND local_attachment_id NOT IN (
                     SELECT local_attachment_id FROM attachments WHERE local_message_id=?1 AND attachment_type = ?2
                )"},
-            params![self.local_message_id, AttachmentType::Pgp],
+            (self.local_message_id, AttachmentType::Pgp,),
         )
-        .await?;
+        ?;
 
         for attachment in &mut self.attachments {
-            attachment.save(bond).await?;
-            bond
+            attachment.save_sync(tx)?;
+            tx
                     .execute(
                         "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",
-                        params![attachment.id(), self.local_message_id],
+                        (attachment.id(), self.local_message_id,),
                     )
-                    .await?;
+                    ?;
         }
 
-        self.reply_to.store_reply_to(self.id(), bond).await?;
+        self.reply_to.store_reply_to(self.id(), tx)?;
         for reply_to in &self.reply_tos {
-            reply_to.store_reply_tos(self.id(), bond).await?;
+            reply_to.store_reply_tos(self.id(), tx)?;
         }
         Ok(())
     }
 
-    async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.attachments = Attachment::for_message(self.local_message_id.unwrap(), tether)
-            .await
+    fn after_load(&mut self, conn: &Connection) -> Result<(), StashError> {
+        self.attachments = Attachment::for_message_sync(self.local_message_id.unwrap(), conn)
             .inspect_err(|e| error!("Failed to load attachments for body metadata: {e:?}"))?;
 
-        self.reply_to = MessageReplyTo::load_reply_to(self.id(), tether).await?;
-        self.reply_tos = MessageReplyTo::load_reply_tos(self.id(), tether).await?;
+        self.reply_to = MessageReplyTo::load_reply_to(self.id(), conn)?;
+        self.reply_tos = MessageReplyTo::load_reply_tos(self.id(), conn)?;
 
         Ok(())
     }
 
-    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.local_message_id.is_none()
-            && let Some(remote_id) = self.remote_message_id.clone()
-        {
-            let message =
-                Message::find_first("WHERE remote_id = ?", params![remote_id], bond).await?;
-            if let Some(message) = message {
-                self.local_message_id = message.local_id;
+    fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
+        if self.local_message_id.is_none() {
+            if let Some(remote_id) = &self.remote_message_id {
+                if let Some(message) =
+                    Message::find_by_remote_id_sync(remote_id, bond)? {
+                    self.local_message_id = message.local_id;
+
+                }
             }
         }
 
@@ -3083,29 +3076,29 @@ pub struct MessageReplyTo {
 }
 
 impl MessageReplyTo {
-    async fn store_reply_to(
+    fn store_reply_to(
         &self,
         message_id: LocalMessageId,
-        bond: &Bond<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<usize, StashError> {
-        self.store_impl(message_id, "message_reply_to", bond).await
+        self.store_impl(message_id, "message_reply_to", tx)
     }
 
-    async fn store_reply_tos(
+    fn store_reply_tos(
         &self,
         message_id: LocalMessageId,
-        bond: &Bond<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<usize, StashError> {
-        self.store_impl(message_id, "message_reply_tos", bond).await
+        self.store_impl(message_id, "message_reply_tos", tx)
     }
-    async fn store_impl(
+    fn store_impl(
         &self,
         message_id: LocalMessageId,
         table_name: &str,
-        bond: &Bond<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<usize, StashError> {
-        bond.execute(
-            formatdoc! {
+        tx.execute(
+            &formatdoc! {
             "INSERT INTO `{table_name}` (
                 local_message_id,
                 name,
@@ -3123,7 +3116,7 @@ impl MessageReplyTo {
                 is_simple_login=excluded.is_simple_login,
                 display_sender_image=excluded.display_sender_image
             "},
-            params![
+            (
                 message_id,
                 self.name.clone(),
                 self.address.clone(),
@@ -3131,37 +3124,25 @@ impl MessageReplyTo {
                 self.is_proton,
                 self.is_simple_login,
                 self.display_sender_image
-            ],
-        )
-        .await
+            ),
+        ).map_err(Into::into)
     }
 
-    async fn load_reply_to(
+    fn load_reply_to(
         message_id: LocalMessageId,
-        tether: &Tether,
+        conn: &Connection,
     ) -> Result<MessageReplyTo, StashError> {
-        tether
-            .query::<_, MessageReplyTo>(
-                "SELECT * FROM message_reply_to WHERE local_message_id = ?",
-                params![message_id],
-            )
-            .await?
-            .pop()
-            .ok_or(StashError::Custom(anyhow!(
+        Ok(MessageReplyTo::model_find_first("SELECT * FROM message_reply_to WHERE local_message_id = ?", (message_id,), conn)?
+            .context(
                 "Message should always have one reply to field"
-            )))
+            )?)
     }
 
-    async fn load_reply_tos(
+    fn load_reply_tos(
         message_id: LocalMessageId,
-        tether: &Tether,
+        conn: &Connection
     ) -> Result<Vec<MessageReplyTo>, StashError> {
-        tether
-            .query::<_, MessageReplyTo>(
-                "SELECT * FROM message_reply_tos WHERE local_message_id = ?",
-                params![message_id],
-            )
-            .await
+        MessageReplyTo::model_find("SELECT * FROM message_reply_tos WHERE local_message_id = ?", (message_id,), conn)
     }
 }
 

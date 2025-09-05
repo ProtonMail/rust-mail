@@ -6,9 +6,9 @@ use crate::models::{Contact, Label, ModelIdExtension};
 use proton_core_api::services::proton::{ContactEmail as ApiContactEmail, PrivateEmail};
 use proton_core_api::services::proton::{ContactEmailId, ContactId, LabelId};
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::params;
-use stash::stash::{Bond, StashError, Tether};
+use stash::stash::{StashError, Tether};
 
 /// Represents a contact's email.
 ///
@@ -16,6 +16,7 @@ use stash::stash::{Bond, StashError, Tether};
 ///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contact_emails")]
+#[ModelHooks]
 pub struct ContactEmail {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalContactEmailId>,
@@ -112,30 +113,6 @@ impl ContactEmail {
 }
 
 impl ContactEmail {
-    /// Save a contact email to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing conversations are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone()
-            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
-        {
-            self.local_id = existing.local_id;
-        }
-
-        if let Some(contact_remote_id) = self.remote_contact_id.clone() {
-            self.local_contact_id = Contact::remote_id_counterpart(contact_remote_id, bond).await?;
-        }
-
-        <Self as Model>::save(self, bond).await
-    }
-
     /// Count the number of emails in a contact group with name `group_name`.
     ///
     /// If the group could not be found, this method returns `None`.
@@ -182,5 +159,24 @@ impl ContactEmail {
             Self::table_name(),
             Self::table_name()
         ), params![contact_group_id]).await
+    }
+}
+
+impl ModelHooks for ContactEmail {
+    fn before_save(
+        &mut self,
+        tx: &stash::exports::Transaction<'_>,
+    ) -> stash::stash::StashResult<()> {
+        if let Some(remote_id) = &self.remote_id {
+            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
+                self.local_id = existing.local_id;
+            }
+        }
+
+        if let Some(contact_remote_id) = &self.remote_contact_id {
+            self.local_contact_id = Contact::remote_id_counterpart_sync(contact_remote_id, tx)?;
+        }
+
+        Ok(())
     }
 }

@@ -13,13 +13,16 @@ use indoc::indoc;
 use proton_sqlite3::MigratorError;
 use proton_sqlite3::file::embedded_migrations;
 use proton_sqlite3::rusqlite::types::ValueRef;
-use stash::exports::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
+use stash::exports::{
+    Connection, FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Transaction,
+};
 use stash::exports::{SqliteError, Value};
 use stash::macros::{DbRecord, Model};
-use stash::orm::{Model, ModelHooks};
+use stash::orm::{DbRecord, Model, ModelHooks};
 use stash::params;
+use stash::rusqlite::{OptionalExtension, params_from_iter};
 use stash::stash::{Bond, StashError, Tether};
-use stash::utils::{IterMapToSql, placeholders};
+use stash::utils::{ConnectionExt, placeholders, placeholders_n};
 use std::collections::HashSet;
 use std::hash::RandomState;
 use std::ops::Add;
@@ -316,11 +319,19 @@ impl StoredAction {
         id: ActionId,
     ) -> Result<Vec<ActionDependency>, StashError> {
         tether
-            .query::<_, ActionDependency>(
-                "SELECT * FROM action_queue_dependencies WHERE action_id = ?",
-                params![id],
-            )
+            .sync_query(move |conn| Self::all_dependencies_sync(conn, id))
             .await
+    }
+
+    pub fn all_dependencies_sync(
+        conn: &Connection,
+        id: ActionId,
+    ) -> Result<Vec<ActionDependency>, StashError> {
+        let mut stmt =
+            conn.prepare("SELECT * FROM action_queue_dependencies WHERE action_id = ?")?;
+        Ok(stmt
+            .query_and_then((id,), ActionDependency::from_row)?
+            .collect::<Result<_, _>>()?)
     }
 
     /// Get all the actions which depend on the action with `id` with a given dependency type.
@@ -457,20 +468,19 @@ impl StoredAction {
 }
 
 impl ModelHooks for StoredAction {
-    async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
+    fn after_load(&mut self, conn: &Connection) -> Result<(), StashError> {
         // Dependencies
-        let dependencies = Self::all_dependencies(tether, self.id())
-            .await
+        let dependencies = Self::all_dependencies_sync(conn, self.id())
             .inspect_err(|e| error!("failed to load action deps: {e:?}"))?;
         self.dependencies.extend(dependencies);
 
         // Resources
-        match tether
-            .query_value_opt::<Resources>(
+        match conn
+            .query_row_col::<Resources>(
                 "SELECT resource AS value FROM action_queue_resources WHERE action_id = ?",
-                params![self.id],
+                (self.id,),
             )
-            .await?
+            .optional()?
         {
             Some(r) => self.resources = r,
             None => {
@@ -481,21 +491,19 @@ impl ModelHooks for StoredAction {
         Ok(())
     }
 
-    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         // Resolve dependencies from keys
-        let direct_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
+        let direct_dependencies = ActionDependencyKeysTable::resolve_dependency_keys_sync(
             self.dependency_keys.required.clone(),
-            bond,
-        )
-        .await?
+            tx,
+        )?
         .into_iter()
         .map(ActionDependency::required)
         .collect::<Vec<_>>();
-        let sequential_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
+        let sequential_dependencies = ActionDependencyKeysTable::resolve_dependency_keys_sync(
             self.dependency_keys.optional.clone(),
-            bond,
-        )
-        .await?
+            tx,
+        )?
         .into_iter()
         .map(ActionDependency::optional)
         .collect::<Vec<_>>();
@@ -513,47 +521,42 @@ impl ModelHooks for StoredAction {
             // Insert or ignore doesn't take into account that the foreign key does not exist.
             // This is an SQLite limitation. So we need to manually check this before inserts.
             #[allow(trivial_casts)]
-            let parameters = dependency_set
-                .iter()
-                .map(|dep| dep.dependency_id)
-                .bridge_sql();
-            let placeholders = placeholders(&parameters);
-            let existing_action_ids: HashSet<ActionId, RandomState> = HashSet::from_iter(
-                bond.query_values::<_, ActionId>(
+            let placeholders = placeholders_n(dependency_set.len());
+            let params = dependency_set.iter().map(|dep| dep.dependency_id);
+
+            let existing_action_ids: HashSet<ActionId, RandomState> =
+                HashSet::from_iter(tx.query_rows_col::<ActionId>(
                     format!(
                         "SELECT id AS value FROM {} WHERE id IN ({placeholders})",
                         Self::table_name()
                     ),
-                    parameters,
-                )
-                .await?,
-            );
+                    params_from_iter(params),
+                )?);
 
             for dep in dependency_set {
                 if existing_action_ids.contains(&dep.dependency_id) {
-                    bond.execute(
+                    tx.execute(
                         indoc! {
                             "INSERT INTO action_queue_dependencies (action_id, dependency_id, dependency_type)
                              VALUES (?,?,?)
                              ON CONFLICT DO UPDATE SET dependency_type = excluded.dependency_type
                             "
                         },
-                        params![self.id, dep.dependency_id, dep.dependency_type],
+                        (self.id, dep.dependency_id, dep.dependency_type),
                     )
-                    .await?;
+                    ?;
                 }
             }
         }
 
         // Create resources
-        bond.execute(
+        tx.execute(
             "INSERT OR REPLACE INTO action_queue_resources VALUES (?,?)",
-            params![self.id, self.resources.clone()],
-        )
-        .await?;
+            (self.id, self.resources.clone()),
+        )?;
 
         // Update direct dependency keys
-        ActionDependencyKeysTable::store_dependency_keys(
+        ActionDependencyKeysTable::store_dependency_keys_sync(
             self.dependency_keys
                 .required
                 .iter()
@@ -561,9 +564,8 @@ impl ModelHooks for StoredAction {
                 .cloned()
                 .collect(),
             self.id(),
-            bond,
-        )
-        .await?;
+            tx,
+        )?;
 
         Ok(())
     }
@@ -769,23 +771,44 @@ pub struct ActionDependencyKeysTable {}
 
 const KEY_DEPENDENCIES_TABLE_NAME: &str = "action_queue_key_deps_v2";
 impl ActionDependencyKeysTable {
+    pub fn store_dependency_keys_sync(
+        keys: Vec<ActionDependencyKey>,
+        action_id: ActionId,
+        tx: &Transaction<'_>,
+    ) -> Result<(), StashError> {
+        let query =
+            format!("INSERT INTO {KEY_DEPENDENCIES_TABLE_NAME} (key_id, action_id) VALUES (?,?)",);
+        for key in keys {
+            tx.execute(&query, (key, action_id))?;
+        }
+
+        Ok(())
+    }
+
+    pub fn resolve_dependency_keys_sync(
+        keys: Vec<ActionDependencyKey>,
+        conn: &Connection,
+    ) -> Result<Vec<ActionId>, StashError> {
+        if keys.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let placeholders = placeholders(&keys);
+        conn
+            .query_rows_col::<ActionId>(
+                format!(
+                    "SELECT DISTINCT action_id AS value FROM {KEY_DEPENDENCIES_TABLE_NAME} WHERE key_id IN ({placeholders})",
+                ),
+                params_from_iter(&keys),
+            ).map_err(Into::into)
+    }
+
     pub async fn resolve_dependency_keys(
         keys: Vec<ActionDependencyKey>,
         tether: &Tether,
     ) -> Result<Vec<ActionId>, StashError> {
-        let parameters = keys.into_iter().bridge_sql();
-        if parameters.is_empty() {
-            return Ok(vec![]);
-        }
-
-        let placeholders = placeholders(&parameters);
         tether
-            .query_values::<_, ActionId>(
-                format!(
-                    "SELECT DISTINCT action_id AS value FROM {KEY_DEPENDENCIES_TABLE_NAME} WHERE key_id IN ({placeholders})",
-                ),
-                parameters,
-            )
+            .sync_query(move |tx| Self::resolve_dependency_keys_sync(keys, tx))
             .await
     }
 
@@ -794,17 +817,8 @@ impl ActionDependencyKeysTable {
         action_id: ActionId,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        for key in keys {
-            bond.execute(
-                format!(
-                    "INSERT INTO {KEY_DEPENDENCIES_TABLE_NAME} (key_id, action_id) VALUES (?,?)",
-                ),
-                params![key, action_id],
-            )
-            .await?;
-        }
-
-        Ok(())
+        bond.sync_bridge(move |tx| Self::store_dependency_keys_sync(keys, action_id, tx))
+            .await
     }
 
     pub async fn delete_for_action_id(

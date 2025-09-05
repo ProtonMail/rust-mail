@@ -34,6 +34,7 @@ use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard
 use proton_crypto_account::keys::UnlockedUserKeys;
 use proton_vcard::vcard::VCard;
 use sqlite_watcher::watcher::TableObserver;
+use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::params;
@@ -90,29 +91,6 @@ impl ModelIdExtension for Contact {
 }
 
 impl Contact {
-    /// Save a contact to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing conversations are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.local_id = existing.local_id;
-            }
-        } else if let Some(local_id) = self.local_id
-            && let Some(existing) = Self::find_by_id(local_id, bond).await?
-        {
-            self.remote_id = existing.remote_id;
-        }
-
-        <Self as Model>::save(self, bond).await
-    }
     /// Returns the associated cards for a contact.
     ///
     /// This function retrieves the cards for a contact from the database,
@@ -576,7 +554,20 @@ impl Contact {
 }
 
 impl ModelHooks for Contact {
-    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
+        if let Some(remote_id) = &self.remote_id {
+            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
+                self.local_id = existing.local_id;
+            }
+        } else if let Some(local_id) = self.local_id {
+            if let Some(existing) = Self::load_by_id_sync(local_id, tx)? {
+                self.remote_id = existing.remote_id;
+            }
+        }
+
+        Ok(())
+    }
+    fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         for card in &mut self.cards {
             card.local_contact_id = self.local_id;
             card.remote_contact_id.clone_from(&self.remote_id);
@@ -585,14 +576,13 @@ impl ModelHooks for Contact {
             email.local_contact_id = self.local_id;
             email.remote_contact_id.clone_from(&self.remote_id);
         }
-        bond.execute(
+        tx.execute(
             "DELETE FROM contact_cards WHERE local_contact_id = ?",
-            params![self.local_id],
-        )
-        .await?;
+            (self.local_id,),
+        )?;
         for card in &mut self.cards {
             card.local_id = None;
-            card.save(bond).await.map_err(|e| {
+            card.save_sync(tx).map_err(|e| {
                 error!("Failed to update contact cards: {e:?}");
                 e
             })?;

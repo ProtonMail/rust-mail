@@ -149,6 +149,35 @@ where
     /// converting the row.
     ///
     fn from_row(row: &Row<'_>) -> Result<Self, ConversionError>;
+
+    fn model_find(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Vec<Self>> {
+        let mut stmt = conn
+            .prepare(query.as_ref())
+            .context("Error preparing the query for load")?;
+        let records = stmt
+            .query_and_then(params, Self::from_row)?
+            .collect::<Result<_, _>>()?;
+        Ok(records)
+    }
+
+    fn model_find_first(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Option<Self>> {
+        let mut stmt = conn
+            .prepare(query.as_ref())
+            .context("Error preparing the query for load")?;
+        let records = stmt
+            .query_and_then(params, Self::from_row)?
+            .next()
+            .transpose()?;
+        Ok(records)
+    }
 }
 
 /// A trait for fully-modelled database records.
@@ -172,7 +201,7 @@ where
 ///
 /// * [`DbRecord`]
 ///
-pub trait Model: DbRecord + ModelHooks + ModelHooksSync
+pub trait Model: DbRecord + ModelHooks
 where
     Self: 'static,
     <Self as Model>::Id: Send + Sync + 'static,
@@ -374,13 +403,7 @@ where
         tether: &Tether,
     ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send {
         let query = query.into();
-        async {
-            let mut rows = tether.query::<_, Self>(query, params).await?;
-            for row in &mut rows {
-                row.after_load(tether).await?;
-            }
-            Ok(rows)
-        }
+        tether.sync_query(move |tx| Self::load_sync(query, params_from_iter(params), tx))
     }
 
     fn find_sync(
@@ -396,6 +419,19 @@ where
         Self::load_sync(query, params, conn)
     }
 
+    fn load_sync(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Vec<Self>> {
+        let mut records = Self::model_find(query, params, conn)?;
+        for i in &mut records {
+            i.after_load(conn)?;
+        }
+
+        Ok(records)
+    }
+
     fn find_first_sync(
         query: impl AsRef<str>,
         params: impl Params,
@@ -406,36 +442,11 @@ where
             query_logic = query.as_ref(),
             table = Self::table_name(),
         );
-        let mut stmt = conn
-            .prepare(query.as_ref())
-            .context("Error preparing the query for load")?;
-        let mut res = stmt
-            .query_and_then(params, Self::from_row)?
-            .next()
-            .transpose()?;
-        if let Some(record) = &mut res {
-            record.after_load_sync(conn)?;
+        let mut record = Self::model_find_first(query, params, conn)?;
+        if let Some(record) = &mut record {
+            record.after_load(conn)?;
         }
-        Ok(res)
-    }
-
-    fn load_sync(
-        query: impl AsRef<str>,
-        params: impl Params,
-        conn: &Connection,
-    ) -> StashResult<Vec<Self>> {
-        let mut stmt = conn
-            .prepare(query.as_ref())
-            .context("Error preparing the query for load")?;
-        let records = stmt
-            .query_and_then(params, |row| {
-                let mut rec = Self::from_row(row)?;
-                rec.after_load_sync(conn)?;
-                Ok::<_, StashError>(rec)
-            })?
-            .collect::<Result<_, _>>()?;
-
-        Ok(records)
+        Ok(record)
     }
 
     fn load_by_id_sync(id: Self::IdType, conn: &Connection) -> StashResult<Option<Self>> {
@@ -453,31 +464,6 @@ where
     /// Saves a record to the database.
     /// If it has a local id it will update the record, otherwise it will insert it.
     ///
-    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        self.before_save(bond).await?;
-
-        // HACK: This is not great but we're forced to do it since there's no guarantee that the
-        // row does or doesn't exist.
-        let query = formatdoc! {"
-                        SELECT {id_name} AS value
-                        FROM {table}
-                        WHERE {id_name} = ?
-                        ",
-            table = Self::table_name(),
-            id_name = Self::id_field_name(),
-        };
-
-        if let Ok(id) = self.id_value()
-            && bond
-                .query_value_opt::<Self::IdType>(query, params![id])
-                .await?
-                .is_some()
-        {
-            return self.update(bond).await;
-        }
-        self.insert(bond).await
-    }
-
     fn insert_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         let (fields, values) = if Self::id_is_autoincrementing() {
             if Self::id_value(self).is_ok() {
@@ -509,47 +495,41 @@ where
 
         self.set_id_value(id);
 
-        self.after_save_sync(tx)?;
+        self.after_save(tx)?;
+        Ok(())
+    }
+
+    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        let mut this = self.clone();
+        *self = bond
+            .sync_bridge(move |tx| {
+                this.save_sync(tx)?;
+                Ok(this)
+            })
+            .await?;
+        Ok(())
+    }
+
+    async fn update(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        let mut this = self.clone();
+        *self = bond
+            .sync_bridge(move |tx| {
+                this.update_sync(tx)?;
+                Ok(this)
+            })
+            .await?;
         Ok(())
     }
 
     /// Forcefully insert, even if it has the ID set.
     async fn insert(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // database, and we exclude it from the list here.
-        let (fields, values) = if Self::id_is_autoincrementing() {
-            if Self::id_value(self).is_ok() {
-                // This should have been an upgrade
-                return Err(StashError::Critical(anyhow!(
-                    "Attempting to insert a record with id autoincrement whose id is set"
-                )));
-            }
-            (
-                Self::field_names_without_id(),
-                Self::field_values_without_id(self),
-            )
-        } else {
-            (Self::field_names(), Self::field_values(self))
-        };
-
-        let placeholders = crate::utils::placeholders(&fields);
-        let query = formatdoc! {"
-                    INSERT INTO {table} ({fields})
-                    VALUES ({placeholders})
-                    RETURNING {id} AS value
-                    ",
-            table = Self::table_name(),
-            fields = fields.join(", "),
-            id = Self::id_field_name(),
-        };
-
-        let id = bond
-            .query_value_opt::<Self::IdType>(query, values.bridge_sql())
-            .await?
-            .context("Insert did not return an id")?;
-
-        self.set_id_value(id);
-
-        self.after_save(bond).await?;
+        let mut this = self.clone();
+        *self = bond
+            .sync_bridge(move |tx| {
+                this.insert_sync(tx)?;
+                Ok(this)
+            })
+            .await?;
         Ok(())
     }
 
@@ -582,50 +562,17 @@ where
         if affected == 0 {
             return Err(StashError::NoRowsUpdated);
         }
-        self.after_save_sync(tx)?;
-        Ok(())
-    }
-
-    async fn update(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        let id = self.id_value().map_err(|_| StashError::IdNotSet)?;
-
-        // If the ID field is auto-incrementing then it is fully managed by the
-        // database, and we exclude it from the list here.
-        let (fields, values) = if Self::id_is_autoincrementing() {
-            (
-                Self::field_names_without_id(),
-                Self::field_values_without_id(self),
-            )
-        } else {
-            (Self::field_names(), Self::field_values(self))
-        };
-
-        let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
-        let query = formatdoc!(
-            "UPDATE {table}
-                    SET {fields}
-                    WHERE {id} = ?",
-            table = Self::table_name(),
-            id = Self::id_field_name(),
-        );
-
-        let values = values.bridge_sql_extend([id]);
-        let affected: usize = bond.execute(&query, values).await?;
-
-        if affected == 0 {
-            return Err(StashError::NoRowsUpdated);
-        }
-        self.after_save(bond).await?;
+        self.after_save(tx)?;
         Ok(())
     }
 
     fn save_sync(&mut self, tx: &Transaction<'_>) -> StashResult<()> {
-        self.before_save_sync(tx)?;
+        self.before_save(tx)?;
         //
         // HACK: This is not great but we're forced to do it since there's no guarantee that the
         // row does or doesn't exist.
         let query = formatdoc! {"
-                        SELECT {id_name}
+                        SELECT COUNT(*)
                         FROM {table}
                         WHERE {id_name} = ?
                         ",
@@ -634,11 +581,7 @@ where
         };
 
         if let Ok(id) = self.id_value() {
-            if tx
-                .query_row(&query, (id,), |r| r.get::<_, usize>(0))
-                .optional()?
-                .is_some()
-            {
+            if tx.query_row_col::<u64>(&query, (id,))? != 0 {
                 return self.update_sync(tx);
             }
         }
@@ -750,24 +693,15 @@ impl IntoIterator for DbRecords {
 /// To use these, you just need to derive model with the `ModelHooks` attribute and impl the trait
 /// manually.
 pub trait ModelHooks {
-    fn after_load(&mut self, _: &Tether) -> impl Future<Output = Result<(), StashError>> + Send {
-        async { Ok(()) }
-    }
-    fn before_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
-        async { Ok(()) }
-    }
-    fn after_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
-        async { Ok(()) }
-    }
-}
-pub trait ModelHooksSync {
-    fn after_load_sync(&mut self, _: &Connection) -> StashResult<()> {
+    fn after_load(&mut self, _: &Connection) -> StashResult<()> {
         Ok(())
     }
-    fn before_save_sync(&mut self, _: &Transaction<'_>) -> StashResult<()> {
+
+    fn before_save(&mut self, _: &Transaction<'_>) -> StashResult<()> {
         Ok(())
     }
-    fn after_save_sync(&mut self, _: &Transaction<'_>) -> StashResult<()> {
+
+    fn after_save(&mut self, _: &Transaction<'_>) -> StashResult<()> {
         Ok(())
     }
 }

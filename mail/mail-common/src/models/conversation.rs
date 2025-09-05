@@ -23,7 +23,7 @@ use crate::models::*;
 use crate::snooze::SnoozeOptions;
 use crate::{AppError, actions::conversations::Delete};
 use crate::{MailContextError, find_in_query};
-use anyhow::{Context, anyhow};
+use anyhow::Context;
 use chrono::Local;
 use futures::future;
 use indoc::{formatdoc, indoc};
@@ -61,7 +61,7 @@ use stash::orm::ModelHooks;
 use stash::params;
 use stash::rusqlite::{OptionalExtension, params_from_iter};
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
-use stash::utils::{ConnectionExt, MapToSql as _, placeholders, placeholders_n};
+use stash::utils::{ConnectionExt, IterMapToSql, MapToSql as _, placeholders, placeholders_n};
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
@@ -1281,23 +1281,19 @@ impl Conversation {
     ///
     /// Database error.
     ///
-    pub async fn load_labels(&self, tehter: &Tether) -> Result<Vec<Label>, StashError> {
+    pub fn load_labels(&self, conn: &Connection) -> Result<Vec<Label>, StashError> {
         let ids = self
             .labels
             .iter()
             .filter_map(|label| label.local_label_id)
-            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
             .collect_vec();
 
-        let labels = Label::find(
-            format!(
-                "WHERE local_id IN ({}) ORDER BY display_order ASC",
-                stash::utils::placeholders_n(ids.len()),
-            ),
-            ids,
-            tehter,
-        )
-        .await?;
+        let placeholders = placeholders(&ids);
+        let labels = Label::find_sync(
+            format!("WHERE local_id IN ({placeholders}) ORDER BY display_order ASC",),
+            params_from_iter(ids),
+            conn,
+        )?;
 
         Ok(labels)
     }
@@ -2009,7 +2005,7 @@ impl Conversation {
             })
             .await?;
         if affected != 1 {
-            Err(StashError::Custom(anyhow!("No conversation found")))
+            Err(StashError::Custom(anyhow::anyhow!("No conversation found")))
         } else {
             Ok(())
         }
@@ -2818,12 +2814,20 @@ impl ConversationOrMessage for Conversation {
 }
 
 impl ModelHooks for Conversation {
-    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         // Remove any labels that are no longer associated with this conversation.
+
         if !self.labels.is_empty() {
-            #[allow(trivial_casts)]
-            bond.execute(
-                formatdoc!(
+            let mut params: Vec<&dyn ToSql> = vec![&self.local_id];
+
+            for l in &self.labels {
+                if let Some(l) = &l.remote_label_id {
+                    params.push(l);
+                }
+            }
+
+            tx.execute(
+                &formatdoc!(
                     "
                 DELETE FROM
                     conversation_labels
@@ -2831,83 +2835,61 @@ impl ModelHooks for Conversation {
                     local_conversation_id = ?
                     AND remote_label_id NOT IN ({})
                 ",
-                    stash::utils::placeholders_n(self.labels.len()),
+                    stash::utils::placeholders_n(params.len() - 1),
                 ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
-                    .into_iter()
-                    .chain(self.labels.iter().map(|label| {
-                        Box::new(label.remote_label_id.clone()) as Box<dyn ToSql + Send>
-                    }))
-                    .collect(),
-            )
-            .await?;
+                params_from_iter(params),
+            )?;
         } else {
-            bond.execute(
-                formatdoc!(
-                    "
+            tx.execute(
+                "
                 DELETE FROM
                     conversation_labels
                 WHERE
                     local_conversation_id = ?
                 ",
-                ),
-                params![self.local_id],
-            )
-            .await?;
+                (self.local_id,),
+            )?;
         }
 
         // Remove any attachments that are no longer associated with this conversation.
         if !self.attachments_metadata.is_empty() {
-            let local_ids =
-                Attachment::create_or_update_from_conversation_metadata(self, bond).await?;
-            for id in &local_ids {
-                bond.execute(
+            let local_ids = Attachment::create_or_update_from_conversation_metadata(self, tx)?;
+            for &id in &local_ids {
+                tx.execute(
                     "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
-                    params![self.id(), *id],
-                )
-                .await?;
+                    (self.id(), id),
+                )?;
             }
 
-            #[allow(trivial_casts)]
-            bond.execute(
-                formatdoc!(
+            let placeholders = placeholders(&local_ids);
+            let params = params_from_iter([self.local_id].bridge_sql_extend_iter(local_ids));
+            tx.execute(
+                &formatdoc!(
                     "
                 DELETE FROM
                     conversation_attachments
                 WHERE
                     local_conversation_id = ?
-                    AND local_attachment_id NOT IN ({})
+                    AND local_attachment_id NOT IN ({placeholders})
                 ",
-                    stash::utils::placeholders_n(local_ids.len()),
                 ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
-                    .into_iter()
-                    .chain(
-                        local_ids
-                            .into_iter()
-                            .map(|attachment| Box::new(attachment) as Box<dyn ToSql + Send>),
-                    )
-                    .collect(),
-            )
-            .await?;
+                params,
+            )?;
         } else {
-            bond.execute(
-                formatdoc!(
-                    "
+            tx.execute(
+                "
                 DELETE FROM
                     conversation_attachments
                 WHERE
                     local_conversation_id = ?
                 ",
-                ),
-                params![self.local_id],
-            )
-            .await?;
+                (self.local_id,),
+            )?;
         }
 
         for label in &mut self.labels {
             label.local_conversation_id = self.local_id;
-            label.save(bond).await.inspect_err(|e| {
+            label.save_sync(tx).inspect_err(|e| {
                 error!(
                     "Failed to save conversation label ({}): {e}",
                     label.remote_label_id.as_deref().unwrap_or("?"),
@@ -2929,27 +2911,28 @@ impl ModelHooks for Conversation {
                 .filter_map(|label| label.remote_label_id.clone())
                 .map_into()
                 .collect_vec();
-            self.exclusive_location = ExclusiveLocation::from_label_ids(&label_ids, bond).await?;
+            self.exclusive_location = ExclusiveLocation::from_label_ids_sync(&label_ids, tx)?;
         }
 
         Ok(())
     }
-    async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.labels = ConversationLabel::find(
+    fn after_load(&mut self, conn: &Connection) -> Result<(), StashError> {
+        self.labels = ConversationLabel::find_sync(
             "WHERE local_conversation_id = ?",
-            params![self.local_id],
-            tether,
-        )
-        .await?;
+            (self.local_id,),
+            conn,
+        )?;
+
         self.snoozed_until = self
             .labels
             .iter()
             .find(|l| l.remote_label_id == Some(LabelId::snoozed()))
             .map(|l| l.context_snooze_time);
-        let labels = self.load_labels(tether).await?;
+
+        let labels = self.load_labels(conn)?;
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
         self.attachments_metadata =
-            Attachment::load_conversation_attachment_metadata(self.id(), tether).await?;
+            Attachment::load_conversation_attachment_metadata(self.id(), conn)?;
         self.custom_labels = labels
             .into_iter()
             .filter(|l| l.label_type == LabelType::Label)
@@ -2966,14 +2949,14 @@ impl ModelHooks for Conversation {
         Ok(())
     }
 
-    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone()
-            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
-        {
-            self.local_id = existing.local_id;
-            // We want to preserve this to prevent unnecessary resyncing of conversations
-            // messages if we update something.
-            self.has_messages = self.has_messages || existing.has_messages;
+    fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
+        if let Some(remote_id) = &self.remote_id {
+            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)? {
+                self.local_id = existing.local_id;
+                // We want to preserve this to prevent unnecessary resyncing of conversations
+                // messages if we update something.
+                self.has_messages = self.has_messages || existing.has_messages;
+            }
         }
         Ok(())
     }
@@ -3054,6 +3037,7 @@ impl TableObserver for ConversationActionWatcher {
 ///
 #[derive(Clone, Debug, Eq, Model, PartialEq, Ord, PartialOrd)]
 #[TableName("conversation_labels")]
+#[ModelHooks]
 pub struct ConversationLabel {
     // NOTE: This id is essentially useless. Stash does not support composite primary keys
     // so we do not assign it a special value. The real primary key is
@@ -3093,6 +3077,34 @@ pub struct ConversationLabel {
 
     #[DbField]
     pub deleted: bool,
+}
+
+impl ModelHooks for ConversationLabel {
+    fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
+        let local_conversation_id = self
+            .local_conversation_id
+            .context("Missing local conversation id")?;
+
+        let remote_label_id = self
+            .remote_label_id
+            .as_ref()
+            .context("Missing remote label id")?;
+
+        let local_label = Label::find_by_remote_id_sync(remote_label_id, tx)?
+            .with_context(|| format!("Can't find label with the remote id {remote_label_id}"))?;
+
+        self.local_label_id = local_label.local_id;
+
+        if let Some(label) = ConversationLabel::find_first_sync(
+            "WHERE local_label_id=? AND local_conversation_id=?",
+            (local_label.id(), local_conversation_id),
+            tx,
+        )? {
+            self.local_id = label.local_id;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(feature = "test-utils")]
@@ -3167,51 +3179,6 @@ impl ConversationLabel {
             bond,
         )
         .await
-    }
-
-    /// Save or update a Conversation Label.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that the information is update correctly in the database.
-    ///
-    /// The current stash database does not allow us to resolve conflicts on
-    /// other unique keys so we have to do this ourselves.
-    /// If [`Model::save()`] is used directly it will bypass this check.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the local conversation id is not set, the remote
-    /// label_id is not set, the local label can not be found or the query
-    /// failed.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        let Some(local_conversation_id) = self.local_conversation_id else {
-            return Err(StashError::Custom(anyhow!("Missing local conversation id")));
-        };
-
-        let Some(remote_label_id) = self.remote_label_id.clone() else {
-            return Err(StashError::Custom(anyhow!("Missing remote label id")));
-        };
-
-        let Some(local_label) = Label::find_by_remote_id(remote_label_id.clone(), bond).await?
-        else {
-            return Err(StashError::Custom(anyhow!(
-                "Can't find label with the remote id {remote_label_id}"
-            )));
-        };
-
-        self.local_label_id = local_label.local_id;
-
-        if let Some(label) = ConversationLabel::find_first(
-            "WHERE local_label_id=? AND local_conversation_id=?",
-            params![local_label.id(), local_conversation_id],
-            bond,
-        )
-        .await?
-        {
-            self.local_id = label.local_id;
-        }
-
-        <Self as Model>::save(self, bond).await
     }
 
     /// Adjust the stats of the conversation label when

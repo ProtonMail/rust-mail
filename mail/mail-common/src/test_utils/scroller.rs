@@ -67,7 +67,12 @@ pub async fn create_single_message(
         .remote_conversation_id
         .clone()
         .or(conv.remote_id.clone());
-    let labels = conv.load_labels(tether).await.unwrap();
+
+    let conv = conv.clone();
+    let labels = tether
+        .sync_query(move |conn| conv.load_labels(conn))
+        .await
+        .unwrap();
 
     tether
         .tx(async |tx| {
