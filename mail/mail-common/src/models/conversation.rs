@@ -2231,6 +2231,7 @@ impl Conversation {
         WHERE
           expiration_time < STRFTIME('%s', 'NOW')
           AND expiration_time != 0
+          AND deleted = 0
         ",
             vec![],
             tether,

@@ -18,6 +18,7 @@ use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::messages::UndoLabelAsMessages;
 use crate::actions::messages::UndoMoveToMessages;
+use crate::actions::notifications_quick_actions::PushNotificationActionHandler;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::{RollbackItemType, SystemLabelId};
 use crate::models::Message;
@@ -206,6 +207,7 @@ pub(crate) fn register_actions(
                 queue,
                 mail_settings::UpdateMobileActionsHandler { api: api.clone() },
             );
+            reg(queue, PushNotificationActionHandler { api: api.clone() })
         }
 
         Origin::ShareExt => {

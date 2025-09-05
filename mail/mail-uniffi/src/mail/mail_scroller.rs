@@ -343,6 +343,16 @@ impl ConversationScroller {
             .map_err(Into::into)
     }
 
+    /// Tries to fetch the newest items.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn fetch_new(self: Arc<Self>) -> Result<(), MailScrollerError> {
+        self.scroller
+            .fetch_new()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     /// Retrieves the current items in the scroller, the items will be returned
     /// in the callback with the `ReplaceFrom { idx: 0, items }` update.
     ///
@@ -439,6 +449,16 @@ impl MessageScroller {
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .fetch_more()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
+    /// Tries to fetch the newest items.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn fetch_new(self: Arc<Self>) -> Result<(), MailScrollerError> {
+        self.scroller
+            .fetch_new()
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }

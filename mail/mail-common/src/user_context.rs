@@ -339,7 +339,7 @@ impl MailUserContext {
     fn init_expiration_loop(&self) {
         let ctx = self.this.clone();
         self.spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            let mut interval = tokio::time::interval(Duration::from_secs(300));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {

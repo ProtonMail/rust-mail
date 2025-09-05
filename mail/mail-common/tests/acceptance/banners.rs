@@ -481,6 +481,14 @@ async fn banners_unsubscribe() {
         .mount(test_ctx.mock_server())
         .await;
 
+    Mock::given(method("PUT"))
+        .and(path("/api/mail/v4/messages/mark/unsubscribed"))
+        .respond_with(ResponseTemplate::new(200))
+        .named("mock mark unsubscribe")
+        .expect(1)
+        .mount(test_ctx.mock_server())
+        .await;
+
     let mock_server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/subscribe"))

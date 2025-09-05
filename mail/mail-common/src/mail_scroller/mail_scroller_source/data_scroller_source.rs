@@ -418,6 +418,64 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         Ok((items, task))
     }
 
+    /// TODO: Try to merge it with initialize past 0.142.xyz release
+    #[tracing::instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
+    async fn sync_new(
+        &mut self,
+        ctx: &MailUserContext,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        tracing::info!("Syncing newest items");
+        let tether = ctx.user_stash().connection();
+        let label = self.get_label(&tether).await?;
+        let remote_label_id = label.remote_id.clone().unwrap();
+        let unread = self.unread;
+        let is_offline = ctx.network_monitor_service().is_os_offline();
+        let is_online = !is_offline;
+
+        self.sync_scroller(&tether).await?;
+
+        // Check if we have a data suggesting we have synced this label before
+        if let Some(scroller) = self.state.online() {
+            debug!(
+                "We have paginated here before, try to sync data, status: {}",
+                if is_online { "online" } else { "offline" }
+            );
+            if let Some(scroll_data) = scroller.scroll_data_begin(&tether).await? {
+                debug!("Syncing previous page in a task");
+
+                let task = self
+                    .sync_previous_page(ctx, &scroll_data, remote_label_id.clone())
+                    .await?;
+                let task = if is_online { task } else { None };
+
+                return Ok(task);
+            } else {
+                debug!("Cursor points to empty scroll data, will sync first page instead");
+            };
+        }
+
+        // No entry exist, which means we have not synced this label yet.
+        debug!(
+            "Paginating for the first time, getting first page while being {}.",
+            if is_offline { "offline" } else { "online" }
+        );
+
+        let local_label_id = label.id();
+        let remote_label_id = label.remote_id.clone().unwrap();
+        let task = Self::sync_first_page(
+            ctx,
+            local_label_id,
+            remote_label_id,
+            unread,
+            self.page_size,
+            self.order_dir,
+            self.order_field,
+        )
+        .await?;
+
+        Ok(task)
+    }
+
     async fn change_filter(
         &mut self,
         ctx: &MailUserContext,

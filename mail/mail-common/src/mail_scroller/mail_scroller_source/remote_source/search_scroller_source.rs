@@ -395,6 +395,13 @@ impl MailScrollerSource for SearchScrollerSource {
         }
     }
 
+    async fn sync_new(
+        &mut self,
+        _ctx: &MailUserContext,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        Ok(None)
+    }
+
     async fn clear_cursor(
         &mut self,
         ctx: &MailUserContext,

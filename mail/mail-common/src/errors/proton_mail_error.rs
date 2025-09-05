@@ -510,6 +510,11 @@ impl From<AttachmentUploadError> for ProtonMailError {
                     DraftAttachmentUploadErrorReason::TotalAttachmentSizeTooLarge,
                 ))
             }
+            AttachmentUploadError::Timeout => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::Timeout,
+                ))
+            }
         }
     }
 }

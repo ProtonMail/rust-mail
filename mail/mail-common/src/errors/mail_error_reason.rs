@@ -212,6 +212,8 @@ pub enum DraftAttachmentUploadErrorReason {
     TotalAttachmentSizeTooLarge,
     /// Upload Retry in invalid state
     RetryInvalidState,
+    /// Attachment upload timed out
+    Timeout,
 }
 
 /// Specific Reason when attempting to discard a draft.

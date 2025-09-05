@@ -216,6 +216,8 @@ pub enum AttachmentUploadError {
     RetryInvalidState(LocalAttachmentId),
     #[error("Combined attachment size is greater than maximum limit")]
     TotalAttachmentSizeTooLarge,
+    #[error("Attachment upload timed out")]
+    Timeout,
 }
 
 impl From<AttachmentUploadError> for MailContextError {

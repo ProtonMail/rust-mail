@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- Do not return attachment timeout error from action
+- [ET-4521] Re-check attachment limits in action
+
+
+## [mail-uniffi-v0.142.15] - 2025-09-05
+
+### Fixes
+
+- Skip already deleted items which have expired
+
+
+## [mail-uniffi-v0.142.14] - 2025-09-04
+
+### Features
+
+- Add `fetch_new` method to try to get newest items
+
+### Fixes
+
+- [ET-4008] Push Notifications Quick Actions fallback
+
+
+## [mail-uniffi-v0.142.13] - 2025-09-03
+
+### Features
+
+- Properly sync unsubscribed to newsletter with the backend
+
+### Fixes
+
+- Mobile signature will be disabled by default for paying users, and will be always enabled for free users
+
+
+## [mail-uniffi-v0.142.12] - 2025-09-03
+
 ### Changed
 
 - [ET-4125] Open conversation from push notification
