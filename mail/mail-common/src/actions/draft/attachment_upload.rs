@@ -13,6 +13,7 @@ use proton_action_queue::action::{
     WriterGuardError,
 };
 use proton_core_api::consts::Mail;
+use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::AddressId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
@@ -194,7 +195,16 @@ impl Handler for AttachmentUploadHandler {
         mut writer_guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::LostContext)?;
-        let r = action.apply_remote_impl(&ctx, &mut writer_guard).await;
+        let r = action
+            .apply_remote_impl(&ctx, &mut writer_guard)
+            .await
+            .map_err(|e| match e {
+                MailContextError::Api(ApiServiceError::Timeout(s)) => {
+                    warn!("Attachment upload timed out: {s}");
+                    AttachmentUploadError::Timeout.into()
+                }
+                e => e,
+            });
 
         if let Err(e) = &r
             && let Err(e) = action
