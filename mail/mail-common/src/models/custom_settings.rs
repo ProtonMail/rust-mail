@@ -3,9 +3,7 @@ use crate::draft::compose::PM_SIGNATURE;
 use crate::migration_snooper::PostLoginMobileMigrationPayload;
 use crate::{AppError, MailUserContext};
 use proton_core_api::services::proton::UserId;
-use proton_core_common::models::{
-    InitializationError, InitializationWatcher, PaidSubscription, User,
-};
+use proton_core_common::models::{InitializationError, InitializationWatcher, User};
 use proton_core_common::{datatypes::InitializationKey, models::InitializedComponent};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
@@ -43,28 +41,23 @@ impl CustomSettings {
         account_stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {
         let mut this = Self::default();
+
         let payload = account_stash
             .connection()
             .tx(async |tx| PostLoginMobileMigrationPayload::load(user_id, tx).await)
             .await?;
-        let tether = user_stash.connection();
 
         if let Some(payload) = payload {
-            let user = User::load(user_id.to_owned(), &tether).await?;
-            let subscribed = user
-                .map(|user| user.subscribed.contains(PaidSubscription::MAIL))
-                .unwrap_or(false);
             this.address_signature_enabled = payload.address_signature_enabled;
             this.mobile_signature = payload.mobile_signature;
             this.mobile_signature_enabled = payload.mobile_signature_enabled;
-            this.enable_signature_based_on_subscription(subscribed);
         }
 
         InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[],
-            tether,
+            user_stash.connection(),
             async move || Ok(SyncedCustomSettings { settings: this }),
             async |tx, synced| {
                 synced.store(tx).await?;
@@ -152,12 +145,6 @@ impl CustomSettings {
             })
             .await
     }
-
-    fn enable_signature_based_on_subscription(&mut self, subscribed: bool) {
-        if self.mobile_signature_enabled.is_none() || !subscribed {
-            self.mobile_signature_enabled = Some(!subscribed);
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
@@ -230,7 +217,6 @@ impl MobileSignatureStatus {
 mod tests {
     use super::*;
     use crate::test_utils::test_context::MailTestContext;
-    use test_case::test_case;
 
     #[tokio::test]
     async fn update_mobile_signature() {
@@ -285,21 +271,5 @@ mod tests {
                 .unwrap()
                 .mobile_signature_enabled
         );
-    }
-
-    #[test_case(CustomSettings::default(), true, false; "Paid users have signature disabled by default")]
-    #[test_case(CustomSettings::default(), false, true; "Free users have signature enabled by default")]
-    #[test_case(CustomSettings { mobile_signature_enabled: Some(true), ..CustomSettings::default() }, true, true; "Paid users with signature enabled preserve it")]
-    #[test_case(CustomSettings { mobile_signature_enabled: Some(false), ..CustomSettings::default() }, true, false; "Paid users with signature disabled disable it")]
-    #[test_case(CustomSettings { mobile_signature_enabled: Some(true), ..CustomSettings::default() }, false, true; "Free users with signature enabled preserve it")]
-    #[test_case(CustomSettings { mobile_signature_enabled: Some(false), ..CustomSettings::default() }, false, true; "Free users with signature disabled enable it")]
-    fn enable_signature_based_on_subscription(
-        mut settings: CustomSettings,
-        subscribed: bool,
-        expected: bool,
-    ) {
-        settings.enable_signature_based_on_subscription(subscribed);
-
-        assert_eq!(settings.mobile_signature_enabled, Some(expected));
     }
 }
