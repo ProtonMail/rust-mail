@@ -494,26 +494,24 @@ impl ModelHooks for StoredAction {
     fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         // Resolve dependencies from keys
         let direct_dependencies = ActionDependencyKeysTable::resolve_dependency_keys_sync(
-            self.dependency_keys.required.clone(),
+            &self.dependency_keys.required,
             tx,
         )?
         .into_iter()
-        .map(ActionDependency::required)
-        .collect::<Vec<_>>();
+        .map(ActionDependency::required);
         let sequential_dependencies = ActionDependencyKeysTable::resolve_dependency_keys_sync(
-            self.dependency_keys.optional.clone(),
+            &self.dependency_keys.optional,
             tx,
         )?
         .into_iter()
-        .map(ActionDependency::optional)
-        .collect::<Vec<_>>();
+        .map(ActionDependency::optional);
 
         let dependency_set: HashSet<ActionDependency> = self
             .dependencies
             .iter()
-            .chain(sequential_dependencies.iter())
-            .chain(direct_dependencies.iter())
             .cloned()
+            .chain(sequential_dependencies)
+            .chain(direct_dependencies)
             .collect();
 
         // Create dependencies.
@@ -786,7 +784,7 @@ impl ActionDependencyKeysTable {
     }
 
     pub fn resolve_dependency_keys_sync(
-        keys: Vec<ActionDependencyKey>,
+        keys: &[ActionDependencyKey],
         conn: &Connection,
     ) -> Result<Vec<ActionId>, StashError> {
         if keys.is_empty() {
@@ -799,7 +797,7 @@ impl ActionDependencyKeysTable {
                 format!(
                     "SELECT DISTINCT action_id AS value FROM {KEY_DEPENDENCIES_TABLE_NAME} WHERE key_id IN ({placeholders})",
                 ),
-                params_from_iter(&keys),
+                params_from_iter(keys),
             ).map_err(Into::into)
     }
 
@@ -808,7 +806,7 @@ impl ActionDependencyKeysTable {
         tether: &Tether,
     ) -> Result<Vec<ActionId>, StashError> {
         tether
-            .sync_query(move |tx| Self::resolve_dependency_keys_sync(keys, tx))
+            .sync_query(move |tx| Self::resolve_dependency_keys_sync(&keys, tx))
             .await
     }
 

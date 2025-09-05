@@ -22,9 +22,7 @@ use core::future::Future;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use rusqlite::types::FromSql;
-use rusqlite::{
-    Connection, Error as SqliteError, OptionalExtension, Row, Rows, ToSql, Transaction,
-};
+use rusqlite::{Connection, Error as SqliteError, Row, Rows, ToSql, Transaction};
 use rusqlite::{Params, params_from_iter};
 use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;

@@ -111,7 +111,7 @@ impl Handler for MarkUnreadHandler {
 
             guard
                 .run_tx_sync(move |tx: &Transaction<'_>| {
-                    let local_ids = Conversation::remote_ids_counterpart_sync(&*failed_ids, tx)?;
+                    let local_ids = Conversation::remote_ids_counterpart_sync(&failed_ids, tx)?;
 
                     Conversation::mark_read(local_ids, tx)
                         .context("Failed to rollback failed conversations")?;

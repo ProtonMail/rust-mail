@@ -613,7 +613,7 @@ where
                 reverse.move_to(tx)?;
             }
 
-            Message::mark_read_or_unread(false, this.marked_read, tx)?;
+            Message::mark_read_or_unread(false, &this.marked_read, tx)?;
 
             for pair in this.removed_labels {
                 T::apply_label(pair.label, [pair.id], tx)?;

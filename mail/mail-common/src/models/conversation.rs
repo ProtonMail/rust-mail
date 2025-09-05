@@ -2950,13 +2950,13 @@ impl ModelHooks for Conversation {
     }
 
     fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = &self.remote_id {
-            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)? {
-                self.local_id = existing.local_id;
-                // We want to preserve this to prevent unnecessary resyncing of conversations
-                // messages if we update something.
-                self.has_messages = self.has_messages || existing.has_messages;
-            }
+        if let Some(remote_id) = &self.remote_id
+            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)?
+        {
+            self.local_id = existing.local_id;
+            // We want to preserve this to prevent unnecessary resyncing of conversations
+            // messages if we update something.
+            self.has_messages = self.has_messages || existing.has_messages;
         }
         Ok(())
     }

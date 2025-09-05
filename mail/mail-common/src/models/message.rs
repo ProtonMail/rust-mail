@@ -1327,7 +1327,7 @@ impl Message {
 
     pub fn mark_read_or_unread(
         mark_read: bool,
-        ids: Vec<LocalMessageId>,
+        ids: &[LocalMessageId],
         tx: &Transaction<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
         let t0 = std::time::Instant::now();
@@ -2152,7 +2152,7 @@ impl Message {
         bond: &Bond<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
         let ids = Vec::from_iter(ids);
-        bond.sync_bridge(|tx| Self::mark_read_or_unread(false, ids, tx))
+        bond.sync_bridge(|tx| Self::mark_read_or_unread(false, &ids, tx))
             .await
     }
 
@@ -2425,7 +2425,8 @@ impl ConversationOrMessage for Message {
         ids: impl IntoIterator<Item = Self::IdType>,
         tx: &Transaction<'_>,
     ) -> Result<Vec<Self::IdType>, StashError> {
-        Self::mark_read_or_unread(true, Vec::from_iter(ids), tx)
+        let ids = Vec::from_iter(ids);
+        Self::mark_read_or_unread(true, &ids, tx)
     }
 
     fn grouped_labels_and_messages_query(placeholders: usize) -> String {
@@ -2527,9 +2528,11 @@ impl ModelHooks for Message {
             vec![]
         };
 
-        let params = 
-params_from_iter((self.local_id, Disposition::Attachment, AttachmentType::Pgp).to_sql_extend_iter(&*attachment_ids));
-            tx.execute(
+        let params = params_from_iter(
+            (self.local_id, Disposition::Attachment, AttachmentType::Pgp)
+                .to_sql_extend_iter(&*attachment_ids),
+        );
+        tx.execute(
                 &formatdoc!("
                     DELETE FROM message_attachments WHERE
                             local_attachment_id IN (
@@ -2542,15 +2545,12 @@ params_from_iter((self.local_id, Disposition::Attachment, AttachmentType::Pgp).t
                             )",
                     stash::utils::placeholders_n(attachment_ids.len()),
                 ),
-            params
-               
-            )
+            params)
             ?;
 
         // If exclusive location is not set, we try to calculate it now.
         if self.exclusive_location.is_none() && !self.label_ids.is_empty() {
-            self.exclusive_location =
-                ExclusiveLocation::from_label_ids_sync(&self.label_ids, tx)?;
+            self.exclusive_location = ExclusiveLocation::from_label_ids_sync(&self.label_ids, tx)?;
         }
 
         Ok(())
@@ -2828,11 +2828,8 @@ impl ModelHooks for MessageBodyMetadata {
     fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         if self.local_message_id.is_none() {
             if let Some(remote_id) = &self.remote_message_id {
-                if let Some(existing) = Self::find_first_sync(
-                    "WHERE remote_message_id=?",
-                    (remote_id,),
-                    tx,
-                )?
+                if let Some(existing) =
+                    Self::find_first_sync("WHERE remote_message_id=?", (remote_id,), tx)?
                 {
                     self.local_message_id = existing.local_message_id;
                 } else {
@@ -2889,10 +2886,8 @@ impl ModelHooks for MessageBodyMetadata {
     fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
         if self.local_message_id.is_none() {
             if let Some(remote_id) = &self.remote_message_id {
-                if let Some(message) =
-                    Message::find_by_remote_id_sync(remote_id, bond)? {
+                if let Some(message) = Message::find_by_remote_id_sync(remote_id, bond)? {
                     self.local_message_id = message.local_id;
-
                 }
             }
         }
@@ -3123,26 +3118,33 @@ impl MessageReplyTo {
                 self.bimi_selector.clone(),
                 self.is_proton,
                 self.is_simple_login,
-                self.display_sender_image
+                self.display_sender_image,
             ),
-        ).map_err(Into::into)
+        )
+        .map_err(Into::into)
     }
 
     fn load_reply_to(
         message_id: LocalMessageId,
         conn: &Connection,
     ) -> Result<MessageReplyTo, StashError> {
-        Ok(MessageReplyTo::model_find_first("SELECT * FROM message_reply_to WHERE local_message_id = ?", (message_id,), conn)?
-            .context(
-                "Message should always have one reply to field"
-            )?)
+        Ok(MessageReplyTo::model_find_first(
+            "SELECT * FROM message_reply_to WHERE local_message_id = ?",
+            (message_id,),
+            conn,
+        )?
+        .context("Message should always have one reply to field")?)
     }
 
     fn load_reply_tos(
         message_id: LocalMessageId,
-        conn: &Connection
+        conn: &Connection,
     ) -> Result<Vec<MessageReplyTo>, StashError> {
-        MessageReplyTo::model_find("SELECT * FROM message_reply_tos WHERE local_message_id = ?", (message_id,), conn)
+        MessageReplyTo::model_find(
+            "SELECT * FROM message_reply_tos WHERE local_message_id = ?",
+            (message_id,),
+            conn,
+        )
     }
 }
 

@@ -411,10 +411,10 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
             return Ok(vec![]);
         }
         let field_name = Self::remote_id_field_name();
-        let placeholders = placeholders(&ids);
+        let placeholders = placeholders(ids);
 
         Self::find_sync(
-            &format!("WHERE {field_name} IN ({placeholders})"),
+            format!("WHERE {field_name} IN ({placeholders})"),
             params_from_iter(ids),
             conn,
         )
@@ -491,7 +491,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         conn: &Connection,
     ) -> Result<Option<Self::IdType>, StashError> {
         conn.query_row_col(
-            &formatdoc! {
+            formatdoc! {
                 "
                 SELECT {} FROM {} WHERE {} = ?
                 LIMIT 1
@@ -512,14 +512,14 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         conn: &Connection,
     ) -> Result<Vec<Self::IdType>, StashError> {
         conn.query_rows_col(
-            &formatdoc! {
+            formatdoc! {
                 "
                 SELECT {} FROM {} WHERE {} IN ({})
                 ",
                 Self::id_field_name(),
                 Self::table_name(),
                 Self::remote_id_field_name(),
-                placeholders(&remote_ids),
+                placeholders(remote_ids),
             },
             params_from_iter(remote_ids),
         )

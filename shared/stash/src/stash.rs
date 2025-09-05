@@ -1058,7 +1058,7 @@ impl Tether {
         };
         let operation = Operation::Execution(OperationExec::Sync(sync_closure));
 
-        self.sender
+        self.connection
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         let ret = receiver
@@ -1118,7 +1118,7 @@ impl Tether {
         };
         let operation = Operation::Execution(OperationExec::Sync(sync_closure));
 
-        self.sender
+        self.connection
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         let ret = receiver
@@ -1350,7 +1350,7 @@ impl<'tether> Bond<'tether> {
         let sync_closure = BridgeClosure { closure, sender };
         let operation = Operation::Transaction(OperationTransaction::Bridge(sync_closure));
 
-        self.sender
+        self.connection
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         let ret = receiver
