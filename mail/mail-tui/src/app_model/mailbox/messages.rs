@@ -83,6 +83,12 @@ fn handle_scroller_update(update: ScrollerUpdate<MailMessage>) -> Messages {
         ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
             MessageMessage::ReplaceBefore(idx, items).into()
         }
+        ScrollerUpdate::ReplaceRange {
+            src: _,
+            from,
+            to,
+            items,
+        } => MessageMessage::ReplaceRange(from, to, items).into(),
         ScrollerUpdate::Error { src, error } => {
             let e = anyhow!("Message Reload Query src: {src:?}, error: {error}");
             tracing::error!("{e:?}");
@@ -711,6 +717,10 @@ impl MessagesState {
             }
             MessageMessage::ReplaceBefore(idx, messages) => {
                 self.messages.splice(..idx, messages);
+                self.try_select_non_empty_list();
+            }
+            MessageMessage::ReplaceRange(from, to, messages) => {
+                self.messages.splice(from..to, messages);
                 self.try_select_non_empty_list();
             }
             MessageMessage::DeletePermanently(id) => {

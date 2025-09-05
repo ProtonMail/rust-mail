@@ -72,6 +72,12 @@ impl ConversationsState {
             ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
                 ConversationMessage::ReplaceBefore(idx, items).into()
             }
+            ScrollerUpdate::ReplaceRange {
+                src: _,
+                from,
+                to,
+                items,
+            } => ConversationMessage::ReplaceRange(from, to, items).into(),
             ScrollerUpdate::Error { src, error } => {
                 let e = anyhow!("Conversation Reload Query src: {src:?}, error: {error}");
                 tracing::error!("{e:?}");
@@ -169,6 +175,16 @@ impl ConversationsState {
         conversations: Vec<ContextualConversation>,
     ) -> Command<Messages> {
         self.conversations.splice(..idx, conversations);
+        self.try_select_non_empty_list()
+    }
+
+    fn on_replace_range(
+        &mut self,
+        from: usize,
+        to: usize,
+        conversations: Vec<ContextualConversation>,
+    ) -> Command<Messages> {
+        self.conversations.splice(from..to, conversations);
         self.try_select_non_empty_list()
     }
 }
@@ -299,6 +315,9 @@ impl ConversationsState {
                     }
                     ConversationMessage::ReplaceBefore(idx, conversations) => {
                         self.on_replace_before(idx, conversations)
+                    }
+                    ConversationMessage::ReplaceRange(from, to, conversations) => {
+                        self.on_replace_range(from, to, conversations)
                     }
                     ConversationMessage::HasMore => {
                         let paginator = self.paginator.clone_inner();

@@ -1,6 +1,3 @@
-use std::collections::BTreeSet;
-use std::time::Instant;
-
 use super::SystemLabelId as _;
 use super::folder_banner::{AutoDeleteBanner, AutoDeleteState, SpamOrTrash};
 use crate::actions::{
@@ -23,10 +20,13 @@ use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::{Label, LabelError, ModelExtension, ModelIdExtension as _, User};
 use proton_core_common::services::NetworkMonitorService;
 use proton_mail_api::services::proton::common::ConversationId;
+use proton_mail_common_derive::ScrollerEq;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
+use std::collections::BTreeSet;
+use std::time::Instant;
 use tracing::{debug, warn};
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
@@ -41,7 +41,7 @@ pub enum OpenConversationOrigin {
 /// The data contained in the [`ConversationLabel`] is superimposed over the
 /// data in the [`Conversation`] to produce the correct information that needs
 /// to be displayed to the client.
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, ScrollerEq)]
 pub struct ContextualConversation {
     /// Local id of the conversation.
     pub local_id: LocalConversationId,
@@ -68,6 +68,7 @@ pub struct ContextualConversation {
     /// model is not fully initialized or there is very nasty bug. Failed
     /// initialization is logged as an error, but flow is not impacted due to
     /// the fact that this is not a critical field.
+    #[scroller_eq(skip)]
     pub exclusive_location: Option<ExclusiveLocation>,
 
     /// Time at which this conversation expires.
@@ -97,6 +98,7 @@ pub struct ContextualConversation {
     /// Address of all the senders in the messages.
     pub senders: MessageSenders,
 
+    #[scroller_eq(skip)]
     /// Total size of all the messages.
     pub size: u64,
 
@@ -112,6 +114,7 @@ pub struct ContextualConversation {
     /// When this conversation is snoozed until - when present it is snoozed at the moment.
     pub snoozed_until: Option<UnixTimestamp>,
 
+    #[scroller_eq(skip)]
     /// Whether the conversation has messages downloaded.
     pub has_messages: bool,
 }

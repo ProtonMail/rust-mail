@@ -3,6 +3,7 @@ use std::{fmt::Debug, future::Future};
 use tokio::task::JoinHandle;
 
 use crate::datatypes::ReadFilter;
+use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
 
 mod data_scroller_source;
@@ -16,7 +17,7 @@ pub use self::remote_source::*;
 pub type MailPaginatorJoinHandle = Option<JoinHandle<Result<(), MailContextError>>>;
 
 pub trait MailScrollerSource: Send + Sync {
-    type Item: Send + Sync + Clone + Eq + Debug + 'static;
+    type Item: Send + Sync + Clone + Debug + ScrollerEq + 'static;
 
     /// Initialize the data source and retrieve up to `element_count` elements from the server.
     ///

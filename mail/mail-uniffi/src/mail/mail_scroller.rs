@@ -44,6 +44,9 @@ pub trait ConversationScrollerLiveQueryCallback: Send + Sync {
     ///         ConversationScrollerUpdate::ReplaceBefore { idx, items } => {
     ///             collected_items.splice(..idx, items);
     ///         }
+    ///         ConversationScrollerUpdate::ReplaceRange { from, to, items } => {
+    ///             collected_items.splice(from..to, items);
+    ///         }
     ///         ConversationScrollerUpdate::Error { error } => {
     ///             tracing::error!("Error: {}", error);
     ///         }
@@ -81,6 +84,24 @@ pub enum ConversationScrollerUpdate {
     /// [0, 1, 2, 3] -> ReplaceBefore { idx: 0, items: [5, 6, 7] } -> [5, 6, 7, 0, 1, 2, 3]
     ReplaceBefore { idx: u64, items: Vec<Conversation> },
 
+    /// A page of conversations needs to be replaced at the given index
+    /// replacing everything between the given index and the end with the new items.
+    /// [0, 1, 2, 3] -> ReplaceRange { from: 1, to: 3, items: [5, 6, 7] } -> [0, 5, 6, 7]
+    /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceRange { from: 1, to: 3, items: [5, 6, 7] } -> [0, 5, 6, 7, 4, 8, 9]
+    /// [0, 1, 2, 3] -> ReplaceRange { from: 0, to: 2, items: [5, 6, 7] } -> [5, 6, 7, 3]
+    /// [0, 1, 2, 3] -> ReplaceRange { from: 1, to: 1, items: [5, 6, 7] } -> [0, 5, 6, 7, 1, 2, 3]
+    ///
+    /// # Integration examples
+    /// Rust: collected_items.splice(from..to, items)
+    /// Swift: collected_items.replaceSubrange(from..<to, with: items)
+    /// Kotlin: collected_items.subList(from, to).clear(); collected_items.addAll(from, items)
+    ///
+    ReplaceRange {
+        from: u64, // inclusive
+        to: u64,   // exclusive
+        items: Vec<Conversation>,
+    },
+
     /// An error has occurred.
     Error { error: MailScrollerError },
 }
@@ -104,6 +125,16 @@ impl From<ScrollerUpdate<ContextualConversation>> for ConversationScrollerUpdate
                     items: items.into_iter().map(Conversation::from).collect(),
                 }
             }
+            ScrollerUpdate::ReplaceRange {
+                src: _,
+                from,
+                to,
+                items,
+            } => ConversationScrollerUpdate::ReplaceRange {
+                from: u64::try_from(from).unwrap(),
+                to: u64::try_from(to).unwrap(),
+                items: items.into_iter().map(Conversation::from).collect(),
+            },
             ScrollerUpdate::Error { src: _, error } => ConversationScrollerUpdate::Error {
                 error: RealProtonMailError::from(error).into(),
             },
@@ -162,6 +193,14 @@ pub enum MessageScrollerUpdate {
     /// Note: This replace excludes the index while replacing
     ReplaceBefore { idx: u64, items: Vec<Message> },
 
+    /// A page of messages needs to be replaced at the given index
+    /// replacing everything between the given index and the end with the new items.
+    ReplaceRange {
+        from: u64,
+        to: u64,
+        items: Vec<Message>,
+    },
+
     /// An error has occurred.
     Error { error: MailScrollerError },
 }
@@ -185,6 +224,16 @@ impl From<ScrollerUpdate<RealMessage>> for MessageScrollerUpdate {
                     items: items.into_iter().map(Message::from).collect(),
                 }
             }
+            ScrollerUpdate::ReplaceRange {
+                src: _,
+                from,
+                to,
+                items,
+            } => MessageScrollerUpdate::ReplaceRange {
+                from: u64::try_from(from).unwrap(),
+                to: u64::try_from(to).unwrap(),
+                items: items.into_iter().map(Message::from).collect(),
+            },
             ScrollerUpdate::Error { src: _, error } => MessageScrollerUpdate::Error {
                 error: RealProtonMailError::from(error).into(),
             },

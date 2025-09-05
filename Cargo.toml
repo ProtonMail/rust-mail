@@ -29,6 +29,7 @@ members = [
   "crypto/crypto-pin-hash",
   "mail/mail-api",
   "mail/mail-common",
+  "mail/mail-common-derive",
   "mail/mail-html-transformer",
   "mail/mail-tui",
   "mail/mail-uniffi",
@@ -87,6 +88,9 @@ parking_lot = "0.12.3"
 paste = "1"
 pin-project = "1"
 pretty_assertions = "1.4.1"
+proc-macro2 = "1.0.93"
+quote = "1.0.38"
+syn = { version = "2.0.96", features = ["full"] }
 rand = "0.8"
 regex = "1.11.1"
 rmp = "0.8"
@@ -225,6 +229,10 @@ version = "0.8"
 path = "mail/mail-common"
 registry = "proton"
 features = ["sql"]
+
+[workspace.dependencies.proton-mail-common-derive]
+version = "0.1"
+path = "mail/mail-common-derive"
 
 [workspace.dependencies.proton-mail-uniffi]
 path = "mail/mail-uniffi"
