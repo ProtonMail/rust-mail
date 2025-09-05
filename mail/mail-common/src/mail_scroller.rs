@@ -949,13 +949,11 @@ fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
     tracing::debug!("Suffix count: {suffix_count}");
 
     match (prefix_count, suffix_count) {
-        (0, 0) => {
-            tracing::debug!("Replace from: 0, items number: {}", new.len());
-            ScrollerUpdate::ReplaceFrom {
-                src,
-                idx: 0,
-                items: new.to_vec(),
-            }
+        (prefix_count, 0) => {
+            let idx = prefix_count;
+            let items = new[prefix_count..].to_vec();
+            tracing::debug!("Replace from: {idx}, items number: {}", items.len());
+            ScrollerUpdate::ReplaceFrom { src, idx, items }
         }
         (0, suffix_count) => {
             let idx = old.len().saturating_sub(suffix_count);
@@ -965,12 +963,6 @@ fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
             };
             tracing::debug!("Replace before: {idx}, items number: {}", items.len());
             ScrollerUpdate::ReplaceBefore { src, idx, items }
-        }
-        (prefix_count, 0) => {
-            let idx = prefix_count;
-            let items = new[prefix_count..].to_vec();
-            tracing::debug!("Replace from: {idx}, items number: {}", items.len());
-            ScrollerUpdate::ReplaceFrom { src, idx, items }
         }
         (prefix_count, suffix_count) => {
             let from = prefix_count;
