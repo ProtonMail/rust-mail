@@ -82,9 +82,9 @@ pub enum ListAction {
 }
 
 impl ListAction {
-    pub fn toggle_snooze(current_label: &LabelId) -> Option<Self> {
-        SystemLabel::from_rid(current_label)
-            .filter(|label| label.is_snooze_location())
+    pub fn toggle_snooze(context: &ActionContext) -> Option<Self> {
+        SystemLabel::from_rid(&context.current_label)
+            .filter(|label| label.is_snooze_location() && context.is_conversation)
             .map(|_| Self::Snooze)
     }
 }
@@ -135,7 +135,7 @@ impl GenericMobileActions for ListAction {
             )),
             Move => Some(Self::MoveTo),
             Label => Some(Self::LabelAs),
-            Snooze => Self::toggle_snooze(&context.current_label),
+            Snooze => Self::toggle_snooze(context),
             // Unsupported actions for lists
             Reply | Forward | Print | ViewHeaders | ViewHTML | ToggleLight | ReportPhishing
             | SaveAttachments | SavePDF | SenderEmails | Remind | Other(_) => None,
@@ -143,12 +143,10 @@ impl GenericMobileActions for ListAction {
     }
 
     fn get_high_priority_actions(context: &ActionContext) -> Vec<Self> {
-        if context.is_conversation
-            && let Some(snooze) = Self::toggle_snooze(&context.current_label)
-        {
-            return vec![snooze];
+        match Self::toggle_snooze(context) {
+            Some(snooze) => vec![snooze],
+            None => vec![],
         }
-        vec![]
     }
 
     fn are_counter_actions(action1: &Self, action2: &Self) -> bool {
