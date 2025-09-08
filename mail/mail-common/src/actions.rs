@@ -580,7 +580,7 @@ where
             all_remote_ids.extend(remote_ids);
         }
 
-        let failed = T::remote_label(api, all_remote_ids, dest_label.clone()).await?;
+        let failed = T::api_apply_label(api, all_remote_ids, dest_label.clone()).await?;
         if !failed.is_empty() {
             guard
                 .tx::<_, _, anyhow::Error>(async move |tx| {
@@ -691,7 +691,7 @@ pub trait ConversationOrMessage:
 {
     const ROLLBACK_ITEM_TYPE: RollbackItemType;
 
-    // TODO: reorder members
+    // -- MAIN DEFS
 
     fn apply_label(
         local_label_id: LocalLabelId,
@@ -705,29 +705,41 @@ pub trait ConversationOrMessage:
         bond: &Transaction<'_>,
     ) -> Result<(), StashError>;
 
-    /// If the request succeeds, returns the list of failed ids for which this operation
-    /// may have failed.
-    async fn remote_label(
-        api: &impl ProtonMail,
-        ids: Vec<Self::RemoteId>,
-        label_id: LabelId,
-    ) -> Result<Vec<Self::RemoteId>, ApiServiceError>;
-
-    /// If the request succeeds, returns the list of failed ids for which this operation
-    /// may have failed.
-    async fn remote_unlabel(
-        api: &impl ProtonMail,
-        ids: Vec<Self::RemoteId>,
-        label_id: LabelId,
-    ) -> Result<Vec<Self::RemoteId>, ApiServiceError>;
-
-    fn get_exclusive_location(&self) -> Option<LocalLabelId>;
-
-    // Returns the messages that actually were marked as read
+    /// Returns the messages that actually were marked as read
+    //
+    // if you're wondering why mark_unread is not part of the trait, the fns are different for
+    // convs and messages.
     fn mark_read(
         ids: impl IntoIterator<Item = Self::IdType>,
         tx: &Transaction<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError>;
+
+    // -- HELPER DEFS
+
+    fn get_exclusive_location(&self) -> Option<LocalLabelId>;
+    fn grouped_labels_and_messages_query(placeholders: usize) -> String;
+
+    // -- API DEFS
+
+    /// If the request succeeds, returns the list of failed ids for which this operation
+    /// may have failed.
+    async fn api_apply_label(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Result<Vec<Self::RemoteId>, ApiServiceError>;
+
+    /// If the request succeeds, returns the list of failed ids for which this operation
+    /// may have failed.
+    async fn api_remove_label(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Result<Vec<Self::RemoteId>, ApiServiceError>;
+
+    // -- PROVIDED SHARED IMPLS
+    // Most of the actual generic impls are on generics over `ConversationOrMessage`, not in
+    // the trait per se.
 
     // Returns the items that were removed
     fn remove_all_labels_except_all_mail(
@@ -792,7 +804,7 @@ pub trait ConversationOrMessage:
         Ok(res)
     }
 
-    fn grouped_labels_and_messages_query(placeholders: usize) -> String;
+    // -- Provided async versions
 
     async fn apply_label_async(
         local_label_id: LocalLabelId,
@@ -941,7 +953,7 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
             let label = Label::resolve_remote_label_id(label, guard.tether()).await?;
             let items = T::local_ids_counterpart(items, guard.tether()).await?;
 
-            let failed_ids = T::remote_label(api, items, label).await?;
+            let failed_ids = T::api_apply_label(api, items, label).await?;
             if !failed_ids.is_empty() {
                 guard
                     .tx::<_, _, anyhow::Error>(async move |tx| {
@@ -956,7 +968,7 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
             let label = Label::resolve_remote_label_id(label, guard.tether()).await?;
             let items = T::local_ids_counterpart(items, guard.tether()).await?;
 
-            let failed_ids = T::remote_unlabel(api, items, label).await?;
+            let failed_ids = T::api_remove_label(api, items, label).await?;
             if !failed_ids.is_empty() {
                 guard
                     .tx::<_, _, anyhow::Error>(async move |tx| {

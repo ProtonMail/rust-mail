@@ -2663,7 +2663,7 @@ impl ConversationOrMessage for Conversation {
         Ok(())
     }
 
-    async fn remote_label(
+    async fn api_apply_label(
         api: &impl ProtonMail,
         ids: Vec<Self::RemoteId>,
         label_id: LabelId,
@@ -2680,7 +2680,7 @@ impl ConversationOrMessage for Conversation {
             .map(filter_responses)
     }
 
-    async fn remote_unlabel(
+    async fn api_remove_label(
         api: &impl ProtonMail,
         ids: Vec<Self::RemoteId>,
         label_id: LabelId,
