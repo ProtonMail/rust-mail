@@ -26,8 +26,8 @@ workspace = true
 [dev-dependencies]
 # The code related to cpuprofiler usage has been commented, we can remove the import for now
 # cpuprofiler = "0.0.4"
-criterion = "0.5.1"
 insta = { workspace = true }
+criterion = "0.5.1"
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 velcro = { workspace = true }
 pretty_assertions = { workspace = true }

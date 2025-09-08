@@ -171,7 +171,7 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn remove_or_clear_dir_safe_non_existend_directory() {
@@ -182,7 +182,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_or_clear_dir_safe_when_path_points_to_empty_directory() {
-        let tmp_dir = TempDir::new("empty").expect("failed to create temp dir");
+        let tmp_dir = TempDir::new().expect("failed to create temp dir");
         let path = tmp_dir.path();
         assert!(path.exists());
         remove_or_clear_dir_safe(path).await;
@@ -191,7 +191,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_or_clear_dir_safe_when_path_points_to_file() {
-        let tmp_dir = TempDir::new("test").expect("failed to create temp dir");
+        let tmp_dir = TempDir::new().expect("failed to create temp dir");
         let path = tmp_dir.path();
         let contents = "First line.\nSecond line.\nThird line.\n";
         let file_path = path.join("file.txt");
@@ -205,7 +205,7 @@ mod tests {
 
     #[tokio::test]
     async fn clear_dir_safe_when_files_lives_at_depth_of_4() {
-        let tmp_dir = TempDir::new("test").expect("failed to create temp dir");
+        let tmp_dir = TempDir::new().expect("failed to create temp dir");
         let original_path = tmp_dir.path();
         let nested_path = original_path.join("one/two/three");
         fs::create_dir_all(&nested_path).await.unwrap();
@@ -224,7 +224,7 @@ mod tests {
 
     #[tokio::test]
     async fn clear_dir_safe_when_files_lives_at_depth_of_6() {
-        let tmp_dir = TempDir::new("test").expect("failed to create temp dir");
+        let tmp_dir = TempDir::new().expect("failed to create temp dir");
         let original_path = tmp_dir.path();
         let nested_path = original_path.join("one/two/three/four/five");
         fs::create_dir_all(&nested_path).await.unwrap();

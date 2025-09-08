@@ -11,7 +11,7 @@ use proton_log_service::LogService;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::{MailContext, MailContextError};
 use std::sync::Arc;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::runtime;
 use tracing::info;
 use tracing::level_filters::LevelFilter;
@@ -28,7 +28,7 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let Args { username, password } = Args::parse();
-    let tmp_dir = TempDir::new("cli").unwrap();
+    let tmp_dir = TempDir::new().unwrap();
     let context = {
         let env_filter = EnvFilter::builder()
             .with_default_directive(LevelFilter::TRACE.into())

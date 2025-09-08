@@ -12,7 +12,7 @@ use proton_mail_common::MailContext;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use secrecy::SecretString;
 use std::sync::Arc;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::runtime;
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, info};
@@ -87,7 +87,7 @@ async fn main() {
 
     tracing::info!("Step 1. We simulate legacy app logging in and storing session in the DB");
 
-    let legacy_dir = TempDir::new("core-common-legacy").unwrap();
+    let legacy_dir = TempDir::new().unwrap();
     let (legacy_context, legacy_key_chain) = prepare_context(&legacy_dir).await;
 
     let mut flow = legacy_context.new_login_flow().await.unwrap();
@@ -151,7 +151,7 @@ async fn main() {
     drop(legacy_context);
 
     tracing::info!("Step 3. We create a new login flow, simulating migration");
-    let et_dir = TempDir::new("core-common-et").unwrap();
+    let et_dir = TempDir::new().unwrap();
     let (et_context, _et_key_chain) = prepare_context(&et_dir).await;
     let mut flow = et_context.new_login_flow().await.unwrap();
     flow.migrate(user_id, session_id, user_data, decrypted_refresh_token)

@@ -22,7 +22,7 @@ use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::runtime;
 use tracing::info;
 use tracing::subscriber::set_global_default;
@@ -171,7 +171,7 @@ impl TestContext {
 
         let mock_web_server = Arc::new(MockServer::start().await);
         mock_auth_endpoints(&mock_web_server).await;
-        let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
+        let tmp_dir = TempDir::new().expect("failed to create temp dir");
         info!("CORE TMP DIR = {:?}", tmp_dir.path());
 
         let keychain = Self::keychain();

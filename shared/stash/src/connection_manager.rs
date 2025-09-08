@@ -9,7 +9,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 #[derive(Debug)]
 enum Source {
@@ -60,7 +60,7 @@ impl StashConnectionPool {
         init_fn: Box<InitFn>,
         watcher: &Arc<Watcher>,
     ) -> Result<Arc<Self>, Error> {
-        let tmp_dir = TempDir::new("stash-tmp").expect("failed to create temp dir");
+        let tmp_dir = TempDir::new().expect("failed to create temp dir");
         Self::new(Source::TmpFile(tmp_dir), max_connections, init_fn, watcher)
     }
 

@@ -11,7 +11,6 @@ test-utils = [
   "dep:wiremock",
   "dep:function_name",
   "dep:tempfile",
-  "dep:tempdir",
   "dep:tracing-subscriber",
   "dep:velcro",
   "dep:wiremock-multipart",
@@ -80,7 +79,6 @@ reqwest = { workspace = true }
 
 # test-util option deps
 function_name = { workspace = true, optional = true }
-tempdir = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 wiremock = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
@@ -104,7 +102,6 @@ proton-ical = { workspace = true }
 proton-mail-api = { workspace = true }
 secrecy = { workspace = true }
 serde_with = { workspace = true }
-tempdir = { workspace = true }
 test-case = { workspace = true }
 tracing-subscriber = { workspace = true }
 function_name = { workspace = true }
