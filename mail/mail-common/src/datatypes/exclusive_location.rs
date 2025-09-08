@@ -9,6 +9,7 @@ use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::{datatypes::LocalLabelId, models::Label};
 use serde::{Deserialize, Serialize};
+use stash::exports::Connection;
 use stash::stash::{StashError, Tether};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -81,6 +82,14 @@ impl ExclusiveLocation {
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
         let labels = Label::find_by_remote_ids(label_ids.iter().cloned(), tether).await?;
+        Ok(ExclusiveLocation::from_labels(&labels))
+    }
+
+    pub fn from_label_ids_sync(
+        label_ids: &[LabelId],
+        conn: &Connection,
+    ) -> Result<Option<Self>, StashError> {
+        let labels = Label::find_by_remote_ids_sync(label_ids, conn)?;
         Ok(ExclusiveLocation::from_labels(&labels))
     }
 

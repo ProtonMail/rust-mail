@@ -19,6 +19,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{PatchLabelRequest, PostLabelsRequest};
 use sqlite_watcher::watcher::TableObserver;
+use stash::exports::{Connection, Transaction};
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::params;
@@ -95,22 +96,6 @@ impl ModelIdExtension for Label {
 
 impl Label {
     pub const INIT_KEY: InitializationKey = InitializationKey::new("labels");
-
-    /// Save or update a Label.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that the information is update correctly in the database.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone()
-            && let Some(label) =
-                Label::find_first("WHERE remote_id=?", params![remote_id], bond).await?
-        {
-            self.local_parent_id = label.local_parent_id;
-            self.local_id = label.local_id;
-        }
-
-        <Self as Model>::save(self, bond).await
-    }
 
     pub async fn create<API: ProtonCore>(
         name: String,
@@ -289,23 +274,20 @@ impl Label {
 }
 
 impl ModelHooks for Label {
-    async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
-        if self.remote_parent_id.is_some() && self.local_parent_id.is_none() {
-            self.local_parent_id = Self::remote_id_counterpart(
-                self.remote_parent_id.clone().expect("Should be set"),
-                tether,
-            )
-            .await?;
+    fn after_load(&mut self, conn: &Connection) -> Result<(), StashError> {
+        if let Some(remote_id) = &self.remote_parent_id
+            && self.local_parent_id.is_none()
+        {
+            self.local_parent_id = Self::remote_id_counterpart_sync(remote_id, conn)?;
         }
         // TODO: https://jira.protontech.ch/browse/ET-1169 ensure that local_remote_id are resolve for Label
         Ok(())
     }
 
-    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        let parent_id_option = self.remote_parent_id.clone();
-        self.local_parent_id = match parent_id_option {
+    fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        self.local_parent_id = match &self.remote_parent_id {
             Some(parent_id) => {
-                let res = Self::remote_id_counterpart(parent_id, bond).await?;
+                let res = Self::remote_id_counterpart_sync(parent_id, tx)?;
                 if res.is_none() {
                     // TODO: handle this error
                     error!(
@@ -317,14 +299,20 @@ impl ModelHooks for Label {
             }
             None => None,
         };
-        bond.execute(
-            format!(
-                "UPDATE {} SET local_parent_id=? WHERE local_id=?",
-                Label::table_name()
-            ),
-            params![self.local_parent_id, self.local_id],
-        )
-        .await?;
+        tx.execute(
+            "UPDATE labels SET local_parent_id=? WHERE local_id=?",
+            (self.local_parent_id, self.local_id),
+        )?;
+        Ok(())
+    }
+
+    fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
+        if let Some(remote_id) = &self.remote_id {
+            if let Some(label) = Label::find_first_sync("WHERE remote_id=?", (remote_id,), tx)? {
+                self.local_parent_id = label.local_parent_id;
+                self.local_id = label.local_id;
+            }
+        }
         Ok(())
     }
 }

@@ -23,7 +23,7 @@ use crate::models::*;
 use crate::snooze::SnoozeOptions;
 use crate::{AppError, actions::conversations::Delete};
 use crate::{MailContextError, find_in_query};
-use anyhow::{Context, anyhow};
+use anyhow::Context;
 use chrono::Local;
 use futures::future;
 use indoc::{formatdoc, indoc};
@@ -53,14 +53,15 @@ use proton_mail_api::services::proton::response_data::{
     OperationResult,
 };
 use sqlite_watcher::watcher::TableObserver;
-use stash::exports::SqliteError;
-use stash::exports::ToSql;
+use stash::exports::{Connection, ToSql};
+use stash::exports::{SqliteError, Transaction};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::orm::ModelHooks;
 use stash::params;
+use stash::rusqlite::{OptionalExtension, params_from_iter};
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
-use stash::utils::{MapToSql as _, placeholders, placeholders_n};
+use stash::utils::{ConnectionExt, IterMapToSql, MapToSql as _, placeholders, placeholders_n};
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
@@ -586,118 +587,20 @@ impl Conversation {
         <Self as Model>::save(self, bond).await
     }
 
-    pub async fn apply_remote_label(
-        label_id: LabelId,
-        ids: impl IntoIterator<Item = LocalConversationId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        let local_label_id = Label::resolve_local_label_id(label_id, bond).await?;
-
-        Self::apply_label(local_label_id, ids, bond).await?;
-        Ok(())
-    }
-
     /// Label multiple conversations.
     ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn apply_label(
+    pub async fn apply_label_async(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        for id in ids {
-            info!("Applying {label_id:?} to {id:?}");
-            let message_ids = bond
-                .query_values::<_, LocalMessageId>(
-                    indoc::indoc! {"
-                    WITH conv_msgs AS (
-                        SELECT local_id, ? AS label_id
-                        FROM messages
-                        WHERE local_conversation_id=?
-                    )
-                    INSERT OR IGNORE INTO
-                        message_labels (local_message_id, local_label_id)
-                    SELECT * FROM conv_msgs
-                    RETURNING local_message_id AS value
-                    "},
-                    params![label_id, id],
-                )
-                .await?;
-
-            if !message_ids.is_empty() {
-                Conversation::label_impl(label_id, id, &message_ids, bond).await?
-            } else {
-                // Fallback without message metadata. We should grab the highest time values from
-                // all the remaining labels assigned to this conversation. All conversations
-                // messages will always have the All Mail label assigned.
-                if ConversationLabel::find_first(
-                    "WHERE local_conversation_id=? AND local_label_id=?",
-                    params![id, label_id],
-                    bond,
-                )
-                .await?
-                .is_none()
-                {
-                    let Some(label) = Label::find_by_id(label_id, bond).await? else {
-                        return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
-                    };
-
-                    let mut new_label = ConversationLabel {
-                        local_id: None,
-                        local_conversation_id: Some(id),
-                        local_label_id: Some(label_id),
-                        remote_label_id: label.remote_id.clone(),
-                        context_expiration_time: 0.into(),
-                        context_num_attachments: 0,
-                        context_num_messages: 0,
-                        context_num_unread: 0,
-                        context_size: 0,
-                        context_snooze_time: 0.into(),
-                        context_time: 0.into(),
-                        deleted: false,
-                    };
-                    let conversation_labels =
-                        ConversationLabel::find("WHERE local_conversation_id=?", params![id], bond)
-                            .await?;
-                    for conversation_label in conversation_labels {
-                        new_label.context_expiration_time = conversation_label
-                            .context_expiration_time
-                            .max(new_label.context_expiration_time);
-                        new_label.context_num_attachments = conversation_label
-                            .context_num_attachments
-                            .max(new_label.context_num_attachments);
-                        new_label.context_num_messages = conversation_label
-                            .context_num_messages
-                            .max(new_label.context_num_messages);
-                        new_label.context_num_unread = conversation_label
-                            .context_num_unread
-                            .max(new_label.context_num_unread);
-                        new_label.context_size =
-                            conversation_label.context_size.max(new_label.context_size);
-                        new_label.context_snooze_time = conversation_label
-                            .context_snooze_time
-                            .max(new_label.context_snooze_time);
-                        new_label.context_time =
-                            conversation_label.context_time.max(new_label.context_time);
-                    }
-
-                    new_label.save(bond).await?;
-
-                    let Some(mut counters) =
-                        ConversationCounters::find_by_id(label_id, bond).await?
-                    else {
-                        return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
-                    };
-                    counters.total += 1;
-                    counters.save(bond).await?;
-                }
-            }
-        }
-
-        Ok(())
+        let ids = Vec::from_iter(ids);
+        bond.sync_bridge(move |tx| Self::apply_label(label_id, ids, tx))
+            .await
     }
 
     /// Label multiple conversations.
@@ -1378,130 +1281,21 @@ impl Conversation {
     ///
     /// Database error.
     ///
-    pub async fn load_labels(&self, tehter: &Tether) -> Result<Vec<Label>, StashError> {
+    pub fn load_labels(&self, conn: &Connection) -> Result<Vec<Label>, StashError> {
         let ids = self
             .labels
             .iter()
             .filter_map(|label| label.local_label_id)
-            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
             .collect_vec();
 
-        let labels = Label::find(
-            format!(
-                "WHERE local_id IN ({}) ORDER BY display_order ASC",
-                stash::utils::placeholders_n(ids.len()),
-            ),
-            ids,
-            tehter,
-        )
-        .await?;
+        let placeholders = placeholders(&ids);
+        let labels = Label::find_sync(
+            format!("WHERE local_id IN ({placeholders}) ORDER BY display_order ASC",),
+            params_from_iter(ids),
+            conn,
+        )?;
 
         Ok(labels)
-    }
-
-    /// Mark multiple conversations as read.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
-    pub async fn mark_read(
-        conversation_ids: impl IntoIterator<Item = LocalConversationId>,
-        bond: &Bond<'_>,
-    ) -> Result<Vec<LocalMessageId>, StashError> {
-        let mut read_messages = vec![];
-        for conversation_id in conversation_ids {
-            info!("Marking {conversation_id:?} as read");
-            let mut conversation = Conversation::find_by_id(conversation_id, bond)
-                .await?
-                .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
-            // If conversation has no unread messages, we need to check if it has a snooze reminder.
-            if conversation.num_unread == 0 {
-                if conversation.display_snooze_reminder {
-                    conversation.display_snooze_reminder = false;
-                    conversation.save(bond).await?;
-                }
-
-                continue;
-            }
-
-            // Otherwise, update conversation unread count.
-            conversation.num_unread = 0;
-            conversation.display_snooze_reminder = false;
-            conversation.save(bond).await?;
-
-            // Update conversation labels unread stats.
-            let conversation_labels = ConversationLabel::find(
-                "WHERE local_conversation_id=? AND context_num_unread <> 0",
-                params![conversation_id],
-                bond,
-            )
-            .await?;
-
-            let mut label_counts = HashMap::new();
-            for mut conversation_label in conversation_labels {
-                match label_counts.entry(conversation_label.local_label_id.unwrap()) {
-                    HmEntry::Occupied(mut o) => {
-                        *o.get_mut() += 1;
-                    }
-                    HmEntry::Vacant(v) => {
-                        v.insert(1);
-                    }
-                }
-
-                conversation_label.context_num_unread = 0;
-                conversation_label.save(bond).await?
-            }
-
-            for (label_id, count) in &mut label_counts {
-                if let Some(mut conv_counter) =
-                    ConversationCounters::find_by_id(*label_id, bond).await?
-                {
-                    conv_counter.unread = conv_counter.unread.saturating_sub(*count);
-                    conv_counter.save(bond).await?;
-                }
-
-                // reset for messages.
-                *count = 0;
-            }
-
-            // Update messages
-            let messages = Message::find(
-                "WHERE local_conversation_id=? AND unread<>0",
-                params![conversation_id],
-                bond,
-            )
-            .await?;
-
-            for mut message in messages {
-                let local_message_id = message.id();
-                message.unread = false;
-                message.save(bond).await?;
-                read_messages.push(local_message_id);
-
-                let label_ids = bond.query_values::<_, LocalLabelId>("SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?", params![local_message_id]).await?;
-                for label_id in label_ids {
-                    match label_counts.entry(label_id) {
-                        HmEntry::Occupied(mut o) => {
-                            *o.get_mut() += 1;
-                        }
-                        HmEntry::Vacant(v) => {
-                            v.insert(1);
-                        }
-                    }
-                }
-            }
-
-            // update message label counters
-            for (label_id, count) in &mut label_counts {
-                if let Some(mut counters) = MessageCounters::find_by_id(*label_id, bond).await? {
-                    counters.unread = counters.unread.saturating_sub(*count);
-                    counters.save(bond).await?;
-                }
-            }
-        }
-
-        Ok(read_messages)
     }
 
     /// Mark multiple conversations as read.
@@ -1519,124 +1313,6 @@ impl Conversation {
             api.put_conversations_read(ids).await.map(|r| r.responses)
         };
         Conversation::split_request(ids, request).await
-    }
-
-    /// Mark multiple conversations as unread.
-    /// For each conversation only the last read message gets marked as unread.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
-    pub async fn mark_unread(
-        local_label_id: LocalLabelId,
-        conversation_ids: impl IntoIterator<Item = LocalConversationId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        for conversation_id in conversation_ids {
-            info!("Marking {conversation_id:?} as unread");
-            let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await?
-            else {
-                warn!("Conversation with id {conversation_id} does not exist!");
-                continue;
-            };
-            // Find all messages that need to be marked as read.
-            let message = Message::find_first(
-                "
-                JOIN message_labels AS ml ON messages.local_id = ml.local_message_id AND local_label_id=?
-                WHERE local_conversation_id=?
-                AND unread=0
-                ORDER BY time DESC",
-                params![local_label_id, conversation_id],
-                bond,
-            )
-                .await?;
-
-            let Some(mut message) = message else {
-                let total_conversation_message_count = Message::count(
-                    "WHERE local_conversation_id=?",
-                    params![conversation_id],
-                    bond,
-                )
-                .await?;
-                if total_conversation_message_count == 0 {
-                    // These conversations where asked to be marked as read, but had
-                    // no messages. Either the messages were already mark as read or
-                    // there was no metadata. For these we need to set the unread
-                    // count to 1 and update the current label count. We let the
-                    // event loop take care of the rest.
-
-                    let should_update_counter = if let Some(conv_label) = conversation
-                        .labels
-                        .iter_mut()
-                        .find(|l| l.local_label_id.unwrap() == local_label_id)
-                    {
-                        // we only want to update the counter if it's the first time we have an
-                        // unread message.
-                        let should_update = conv_label.context_num_unread == 0;
-                        conv_label.context_num_unread += 1;
-                        should_update
-                    } else {
-                        false
-                    };
-
-                    conversation.num_unread += 1;
-                    conversation.save(bond).await?;
-
-                    if should_update_counter
-                        && let Some(mut counter) =
-                            ConversationCounters::find_by_id(local_label_id, bond).await?
-                    {
-                        counter.unread += 1;
-                        counter.save(bond).await?;
-                    }
-                }
-                continue;
-            };
-
-            // Update the message
-            message.unread = true;
-            message.save(bond).await?;
-
-            // Update the label counts
-
-            let label_ids = bond
-                .query_values::<_, LocalLabelId>(
-                    "SELECT local_label_id AS value
-                     FROM message_labels
-                     WHERE local_message_id=?",
-                    params![message.id_value()?],
-                )
-                .await?;
-
-            for label_id in label_ids {
-                if let Some(mut counter) = MessageCounters::find_by_id(label_id, bond).await? {
-                    // Always update the message count
-                    counter.unread += 1;
-                    counter.save(bond).await?;
-                }
-
-                if let Some(mut counter) = ConversationCounters::find_by_id(label_id, bond).await?
-                    && let Some(conv_label) = conversation
-                        .labels
-                        .iter_mut()
-                        .find(|l| l.local_label_id.unwrap() == label_id)
-                {
-                    // Only update conversation unread count if it is the first time we are marking
-                    // the message as read.
-                    if conv_label.context_num_unread == 0 {
-                        counter.unread += 1;
-                        counter.save(bond).await?;
-                    }
-                    conv_label.context_num_unread += 1;
-                }
-            }
-
-            // update conversation
-            conversation.num_unread += 1;
-            conversation.save(bond).await?;
-        }
-        Ok(())
     }
 
     /// Mark multiple conversations as unread.
@@ -1659,6 +1335,130 @@ impl Conversation {
         Conversation::split_request(ids, request).await
     }
 
+    /// Mark multiple conversations as unread.
+    /// For each conversation only the last read message gets marked as unread
+    pub fn mark_unread(
+        local_label_id: LocalLabelId,
+        conversation_ids: impl IntoIterator<Item = LocalConversationId>,
+        tx: &Transaction<'_>,
+    ) -> Result<(), StashError> {
+        let t0 = std::time::Instant::now();
+        for conversation_id in conversation_ids {
+            info!("Marking {conversation_id:?} as unread");
+            let Some(mut conversation) = Conversation::load_by_id_sync(conversation_id, tx)? else {
+                warn!("Conversation with id {conversation_id} does not exist!");
+                continue;
+            };
+            // Find all messages that need to be marked as read.
+            let message = Message::find_first_sync(
+                "
+                JOIN message_labels AS ml ON messages.local_id = ml.local_message_id AND local_label_id=?
+                WHERE local_conversation_id=?
+                AND unread=0
+                ORDER BY time DESC",
+                (local_label_id, conversation_id),
+                tx,
+            )
+            ?;
+
+            let Some(mut message) = message else {
+                let total_conversation_message_count =
+                    Message::count_sync("WHERE local_conversation_id=?", (conversation_id,), tx)?;
+                if total_conversation_message_count == 0 {
+                    // These conversations where asked to be marked as read, but had
+                    // no messages. Either the messages were already mark as read or
+                    // there was no metadata. For these we need to set the unread
+                    // count to 1 and update the current label count. We let the
+                    // event loop take care of the rest.
+
+                    let should_update_counter = if let Some(conv_label) = conversation
+                        .labels
+                        .iter_mut()
+                        .find(|l| l.local_label_id.unwrap() == local_label_id)
+                    {
+                        // we only want to update the counter if it's the first time we have an
+                        // unread message.
+                        let should_update = conv_label.context_num_unread == 0;
+                        conv_label.context_num_unread += 1;
+                        should_update
+                    } else {
+                        false
+                    };
+
+                    conversation.num_unread += 1;
+                    conversation.save_sync(tx)?;
+
+                    if should_update_counter
+                        && let Some(mut counter) =
+                            ConversationCounters::load_by_id_sync(local_label_id, tx)?
+                    {
+                        counter.unread += 1;
+                        counter.save_sync(tx)?;
+                    }
+                }
+                continue;
+            };
+
+            // Update the message
+            message.unread = true;
+            message.save_sync(tx)?;
+
+            // Update the label counts
+
+            let label_ids = tx.query_rows_col::<LocalLabelId>(
+                "
+                SELECT local_label_id
+                FROM message_labels
+                WHERE local_message_id=?",
+                (message.id(),),
+            )?;
+
+            for label_id in label_ids {
+                if let Some(mut counter) = MessageCounters::load_by_id_sync(label_id, tx)? {
+                    // Always update the message count
+                    counter.unread += 1;
+                    counter.save_sync(tx)?;
+                }
+
+                if let Some(mut counter) = ConversationCounters::load_by_id_sync(label_id, tx)? {
+                    if let Some(conv_label) = conversation
+                        .labels
+                        .iter_mut()
+                        .find(|l| l.local_label_id.unwrap() == label_id)
+                    {
+                        // Only update conversation unread count if it is the first time we are marking
+                        // the message as read.
+                        if conv_label.context_num_unread == 0 {
+                            counter.unread += 1;
+                            counter.save_sync(tx)?;
+                        }
+                        conv_label.context_num_unread += 1;
+                    } else {
+                        debug!("No conv_label in convs");
+                    }
+                } else {
+                    debug!("conv not labeled");
+                }
+            }
+
+            // update conversation
+            conversation.num_unread += 1;
+            conversation.save_sync(tx)?;
+        }
+        info!("mark_read took {:?}", t0.elapsed());
+        Ok(())
+    }
+
+    pub async fn mark_unread_async(
+        local_label_id: LocalLabelId,
+        conversation_ids: impl IntoIterator<Item = LocalConversationId>,
+        tx: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        let ids = Vec::from_iter(conversation_ids);
+        tx.sync_bridge(move |tx| Self::mark_unread(local_label_id, ids, tx).map(|_| ()))
+            .await
+    }
+
     /// Unlabel multiple conversations.
     ///
     /// # Errors
@@ -1666,89 +1466,14 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     #[tracing::instrument(skip_all)]
-    pub async fn remove_label(
+    pub async fn remove_label_async(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        let mut ids = ids.into_iter().peekable();
-        if ids.peek().is_none() {
-            if cfg!(debug_assertions) {
-                panic!("remove_label for no conversations")
-            } else {
-                return Ok(());
-            }
-        }
-
-        let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
-            .await?
-            .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
-
-        for id in ids {
-            info!("Removing {label_id:?} from {id:?}",);
-            // Remove label from messages
-            let message_ids = bond
-                .query_values::<_, LocalConversationId>(
-                    indoc! {"
-                    DELETE FROM message_labels
-                    WHERE local_message_id IN (
-                        SELECT local_id
-                        FROM messages
-                        WHERE local_conversation_id=?1
-                    ) AND message_labels.local_label_id=?2
-                    RETURNING local_message_id AS value
-                    "},
-                    params![id, label_id],
-                )
-                .await?;
-
-            // We can only do this part if we have conversation metadata.
-            if !message_ids.is_empty() {
-                let num_unread = Message::find(
-                    format!(
-                        "WHERE local_id IN ({})",
-                        stash::utils::placeholders_n(message_ids.len()),
-                    ),
-                    message_ids.to_sql(),
-                    bond,
-                )
-                .await?
-                .into_iter()
-                .fold(0_u64, |mut value, message| {
-                    if message.unread {
-                        value += 1;
-                    }
-                    value
-                });
-
-                if let Some(mut msg_counter) = MessageCounters::find_by_id(label_id, bond).await? {
-                    msg_counter.total = msg_counter.total.saturating_sub(message_ids.len() as u64);
-                    msg_counter.unread = msg_counter.unread.saturating_sub(num_unread);
-                    msg_counter.save(bond).await?;
-                }
-            }
-
-            // Remove conversation label
-            if let Some(num_unread) = bond
-                .query_value_opt::<u64>(
-                    indoc! {"
-                    DELETE FROM conversation_labels
-                    WHERE local_conversation_id=? AND local_label_id=?
-                    RETURNING context_num_unread AS value
-                    "},
-                    params![id, label_id],
-                )
-                .await?
-            {
-                if num_unread > 0 {
-                    conv_counter.unread = conv_counter.unread.saturating_sub(1);
-                }
-                conv_counter.total = conv_counter.total.saturating_sub(1);
-            }
-        }
-
-        conv_counter.save(bond).await?;
-        Ok(())
+        let ids = Vec::from_iter(ids);
+        bond.sync_bridge(move |tx| Self::remove_label(label_id, ids, tx))
+            .await
     }
 
     /// Unlabel multiple conversations.
@@ -1800,12 +1525,12 @@ impl Conversation {
             let message_ids =
                 Message::update_snooze_time_with_conv_id(*id, local_inbox_id, snooze_until, bond)
                     .await?;
-            Self::remove_label(local_inbox_id, [*id], bond).await?;
+            Self::remove_label_async(local_inbox_id, [*id], bond).await?;
 
             if message_ids.is_empty() {
                 // we don't have any messages available to us, apply the label and manually modify the time.
                 // apply_label will create an initial state for the `ConversationLabel`
-                Self::apply_label(local_snoozed_id, [*id], bond).await?;
+                Self::apply_label_async(local_snoozed_id, [*id], bond).await?;
                 if let Some(mut label) = ConversationLabel::find_by_conversation_and_label_id(
                     *id,
                     local_snoozed_id,
@@ -1818,7 +1543,7 @@ impl Conversation {
                 }
             } else {
                 // Apply snooze label directly to the know messages.
-                Message::apply_label(local_snoozed_id, message_ids, bond).await?;
+                Message::apply_label_async(local_snoozed_id, message_ids, bond).await?;
             }
         }
 
@@ -1850,11 +1575,11 @@ impl Conversation {
             )
             .await?;
 
-            Self::remove_label(local_snoozed_id, [*id], bond).await?;
+            Self::remove_label_async(local_snoozed_id, [*id], bond).await?;
             if message_ids.is_empty() {
-                Self::apply_label(local_inbox_id, [*id], bond).await?;
+                Self::apply_label_async(local_inbox_id, [*id], bond).await?;
             } else {
-                Message::apply_label(local_inbox_id, message_ids, bond).await?;
+                Message::apply_label_async(local_inbox_id, message_ids, bond).await?;
             }
         }
 
@@ -1901,7 +1626,7 @@ impl Conversation {
         tether: &Tether,
     ) -> Result<Option<UnixTimestamp>, StashError> {
         let snooze_time =
-            ConversationLabel::find_by_conversation_and_label(&id, local_label_id, tether)
+            ConversationLabel::find_by_conversation_and_label(id, local_label_id, tether)
                 .await?
                 .map(|l| l.context_snooze_time);
         Ok(snooze_time)
@@ -2281,27 +2006,9 @@ impl Conversation {
             })
             .await?;
         if affected != 1 {
-            Err(StashError::Custom(anyhow!("No conversation found")))
+            Err(StashError::Custom(anyhow::anyhow!("No conversation found")))
         } else {
             Ok(())
-        }
-    }
-
-    async fn check_has_label_and_is_unread(
-        local_label_id: LocalLabelId,
-        local_conversation_id: LocalConversationId,
-        tether: &Tether,
-    ) -> Result<(bool, bool), StashError> {
-        if let Some(label) = ConversationLabel::find_first(
-            "WHERE local_conversation_id=? AND local_label_id=?",
-            params![local_conversation_id, local_label_id],
-            tether,
-        )
-        .await?
-        {
-            Ok((true, label.context_num_unread != 0))
-        } else {
-            Ok((false, false))
         }
     }
 
@@ -2315,39 +2022,38 @@ impl Conversation {
     /// * `local_message_ids`      - Local ids of the messages which belong to
     ///   `local_conversation_id` where the label
     ///   should be applied.
-    pub async fn label_impl(
-        local_label_id: LocalLabelId,
-        local_conversation_id: LocalConversationId,
-        local_message_ids: &[LocalMessageId],
-        bond: &Bond<'_>,
+    pub fn label_impl(
+        label_id: LocalLabelId,
+        conversation_id: LocalConversationId,
+        message_ids: &[LocalMessageId],
+        tx: &Transaction<'_>,
     ) -> Result<(), StashError> {
-        if local_message_ids.is_empty() {
+        if message_ids.is_empty() {
             return Ok(());
         }
 
-        let (has_label, is_unread) = Conversation::check_has_label_and_is_unread(
-            local_label_id,
-            local_conversation_id,
-            bond,
-        )
-        .await?;
+        let (has_label, is_unread) = if let Some(num_unread) = tx
+            .query_row_col::<u64>(
+                "SELECT context_num_unread FROM conversation_labels 
+                            WHERE local_conversation_id=? AND local_label_id=?",
+                (conversation_id, label_id),
+            )
+            .optional()?
+        {
+            (true, num_unread != 0)
+        } else {
+            (false, false)
+        };
 
-        let stats = ConversationMessageLabelStats::with(
-            local_conversation_id,
-            local_label_id,
-            local_message_ids,
-            bond,
-        )
-        .await?;
+        let stats =
+            ConversationMessageLabelStats::with(conversation_id, label_id, message_ids, tx)?;
 
         // Update conversation labels.
-        let mut conversation_label = if let Some(mut label) = ConversationLabel::find_first(
+        let mut conversation_label = if let Some(mut label) = ConversationLabel::find_first_sync(
             "WHERE local_conversation_id=? AND local_label_id=?",
-            params![local_conversation_id, local_label_id],
-            bond,
-        )
-        .await?
-        {
+            (conversation_id, label_id),
+            tx,
+        )? {
             label.context_time = label.context_time.max(stats.time);
             label.context_snooze_time = label.context_snooze_time.max(stats.snooze_time);
             label.context_expiration_time =
@@ -2358,16 +2064,15 @@ impl Conversation {
             label.context_num_messages += stats.count;
             label
         } else {
-            let remote_label_id =
-                if let Some(label) = Label::find_by_id(local_label_id, bond).await? {
-                    label.remote_id
-                } else {
-                    None
-                };
+            let remote_label_id = if let Some(label) = Label::load_by_id_sync(label_id, tx)? {
+                label.remote_id
+            } else {
+                None
+            };
             ConversationLabel {
                 local_id: None,
-                local_conversation_id: Some(local_conversation_id),
-                local_label_id: Some(local_label_id),
+                local_conversation_id: Some(conversation_id),
+                local_label_id: Some(label_id),
                 remote_label_id,
                 context_expiration_time: stats.expiration_time,
                 context_num_attachments: stats.num_attachments as u64,
@@ -2380,18 +2085,15 @@ impl Conversation {
             }
         };
 
-        conversation_label.save(bond).await?;
+        conversation_label.save_sync(tx)?;
 
         // Update message label counts.
-        let Some(mut conv_counters) =
-            ConversationCounters::find_by_id(local_label_id, bond).await?
-        else {
+        let Some(mut conv_counters) = ConversationCounters::load_by_id_sync(label_id, tx)? else {
             error!("Could not find label counters");
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
 
-        let Some(mut msg_counters) = MessageCounters::find_by_id(local_label_id, bond).await?
-        else {
+        let Some(mut msg_counters) = MessageCounters::load_by_id_sync(label_id, tx)? else {
             error!("Could not find label counters");
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
@@ -2405,8 +2107,8 @@ impl Conversation {
         conv_counters.total += should_increment_count as u64;
         conv_counters.unread += should_increment_unread as u64;
 
-        conv_counters.save(bond).await?;
-        msg_counters.save(bond).await?;
+        conv_counters.save_sync(tx)?;
+        msg_counters.save_sync(tx)?;
 
         Ok(())
     }
@@ -2796,23 +2498,173 @@ impl Conversation {
 impl ConversationOrMessage for Conversation {
     const ROLLBACK_ITEM_TYPE: RollbackItemType = RollbackItemType::Conversation;
 
-    async fn apply_label(
-        local_label_id: LocalLabelId,
+    fn apply_label(
+        label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType>,
-        bond: &Bond<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<(), StashError> {
-        Self::apply_label(local_label_id, ids, bond).await
+        for conv_id in ids {
+            info!("Applying {label_id:?} to {conv_id:?}");
+            let message_ids = tx.query_rows_col::<LocalMessageId>(
+                indoc::indoc! {"
+                    WITH conv_msgs AS (
+                        SELECT local_id, ? AS label_id
+                        FROM messages
+                        WHERE local_conversation_id=?
+                    )
+                    INSERT OR IGNORE INTO
+                        message_labels (local_message_id, local_label_id)
+                    SELECT * FROM conv_msgs
+                    RETURNING local_message_id
+                    "},
+                (label_id, conv_id),
+            )?;
+
+            if !message_ids.is_empty() {
+                Conversation::label_impl(label_id, conv_id, &message_ids, tx)?;
+                continue;
+            }
+            // Fallback without message metadata. We should grab the highest time values from
+            // all the remaining labels assigned to this conversation. All conversations
+            // messages will always have the All Mail label assigned.
+            if ConversationLabel::count_sync(
+                "WHERE local_conversation_id=? AND local_label_id=?",
+                (conv_id, label_id),
+                tx,
+            )? != 0
+            {
+                // conv already labeled
+                continue;
+            }
+            let label = Label::load_by_id_exact_sync(label_id, tx)?;
+
+            let mut new_label = ConversationLabel {
+                local_id: None,
+                local_conversation_id: Some(conv_id),
+                local_label_id: Some(label_id),
+                remote_label_id: label.remote_id.clone(),
+                context_expiration_time: 0.into(),
+                context_num_attachments: 0,
+                context_num_messages: 0,
+                context_num_unread: 0,
+                context_size: 0,
+                context_snooze_time: 0.into(),
+                context_time: 0.into(),
+                deleted: false,
+            };
+            let conversation_labels =
+                ConversationLabel::find_sync("WHERE local_conversation_id=?", (conv_id,), tx)?;
+            for conversation_label in conversation_labels {
+                new_label.context_expiration_time = conversation_label
+                    .context_expiration_time
+                    .max(new_label.context_expiration_time);
+                new_label.context_num_attachments = conversation_label
+                    .context_num_attachments
+                    .max(new_label.context_num_attachments);
+                new_label.context_num_messages = conversation_label
+                    .context_num_messages
+                    .max(new_label.context_num_messages);
+                new_label.context_num_unread = conversation_label
+                    .context_num_unread
+                    .max(new_label.context_num_unread);
+                new_label.context_size =
+                    conversation_label.context_size.max(new_label.context_size);
+                new_label.context_snooze_time = conversation_label
+                    .context_snooze_time
+                    .max(new_label.context_snooze_time);
+                new_label.context_time =
+                    conversation_label.context_time.max(new_label.context_time);
+            }
+
+            new_label.save_sync(tx)?;
+
+            let mut counters = ConversationCounters::load_by_id_exact_sync(label_id, tx)?;
+            counters.total += 1;
+            counters.save_sync(tx)?;
+        }
+
+        Ok(())
     }
 
-    async fn remove_label(
-        local_label_id: LocalLabelId,
+    fn remove_label(
+        label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType>,
-        bond: &Bond<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<(), StashError> {
-        Self::remove_label(local_label_id, ids, bond).await
+        let mut ids = ids.into_iter().peekable();
+        if ids.peek().is_none() {
+            if cfg!(debug_assertions) {
+                panic!("remove_label for no conversations")
+            } else {
+                return Ok(());
+            }
+        }
+
+        let mut conv_counter = ConversationCounters::load_by_id_exact_sync(label_id, tx)?;
+
+        for id in ids {
+            info!("Removing {label_id:?} from {id:?}",);
+            // Remove label from messages
+            let message_ids = tx.query_rows_col::<LocalMessageId>(
+                indoc! {"
+                    DELETE FROM message_labels
+                    WHERE local_message_id IN (
+                        SELECT local_id
+                        FROM messages
+                        WHERE local_conversation_id=?1
+                    ) AND message_labels.local_label_id=?2
+                    RETURNING local_message_id
+                    "},
+                (id, label_id),
+            )?;
+
+            // We can only do this part if we have conversation metadata.
+            if !message_ids.is_empty() {
+                // PERF: SELECT COUNT unread instead
+                let num_unread = Message::find_sync(
+                    format!("WHERE local_id IN ({})", placeholders(&message_ids),),
+                    params_from_iter(&message_ids),
+                    tx,
+                )?
+                .into_iter()
+                .fold(0_u64, |mut value, message| {
+                    if message.unread {
+                        value += 1;
+                    }
+                    value
+                });
+
+                if let Some(mut msg_counter) = MessageCounters::load_by_id_sync(label_id, tx)? {
+                    msg_counter.total = msg_counter.total.saturating_sub(message_ids.len() as u64);
+                    msg_counter.unread = msg_counter.unread.saturating_sub(num_unread);
+                    msg_counter.save_sync(tx)?;
+                }
+            }
+
+            // Remove conversation label
+            if let Some(num_unread) = tx
+                .query_row_col::<u64>(
+                    indoc! {"
+                    DELETE FROM conversation_labels
+                    WHERE local_conversation_id=? AND local_label_id=?
+                    RETURNING context_num_unread
+                    "},
+                    (id, label_id),
+                )
+                .optional()?
+            {
+                if num_unread > 0 {
+                    conv_counter.unread = conv_counter.unread.saturating_sub(1);
+                }
+                conv_counter.total = conv_counter.total.saturating_sub(1);
+            }
+        }
+
+        conv_counter.save_sync(tx)?;
+        Ok(())
     }
 
-    async fn remote_label(
+    async fn api_apply_label(
         api: &impl ProtonMail,
         ids: Vec<Self::RemoteId>,
         label_id: LabelId,
@@ -2829,7 +2681,7 @@ impl ConversationOrMessage for Conversation {
             .map(filter_responses)
     }
 
-    async fn remote_unlabel(
+    async fn api_remove_label(
         api: &impl ProtonMail,
         ids: Vec<Self::RemoteId>,
         label_id: LabelId,
@@ -2850,11 +2702,103 @@ impl ConversationOrMessage for Conversation {
         self.exclusive_location.as_ref().map(|x| x.local_id())
     }
 
-    async fn mark_read(
+    fn mark_read(
         ids: impl IntoIterator<Item = LocalConversationId>,
-        bond: &Bond<'_>,
+        bond: &Transaction<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
-        Self::mark_read(ids, bond).await
+        let t0 = std::time::Instant::now();
+        let mut read_messages = vec![];
+        for conversation_id in ids {
+            info!("Marking {conversation_id:?} as read");
+            let mut conversation = Conversation::load_by_id_exact_sync(conversation_id, bond)?;
+            // If conversation has no unread messages, we need to check if it has a snooze reminder.
+            if conversation.num_unread == 0 {
+                if conversation.display_snooze_reminder {
+                    conversation.display_snooze_reminder = false;
+                    conversation.save_sync(bond)?;
+                }
+
+                continue;
+            }
+
+            // Otherwise, update conversation unread count.
+            conversation.num_unread = 0;
+            conversation.display_snooze_reminder = false;
+            conversation.save_sync(bond)?;
+
+            // Update conversation labels unread stats.
+            let conversation_labels = ConversationLabel::find_sync(
+                "WHERE local_conversation_id=? AND context_num_unread <> 0",
+                (conversation_id,),
+                bond,
+            )?;
+
+            let mut label_counts = HashMap::new();
+            for mut conversation_label in conversation_labels {
+                label_counts
+                    .entry(conversation_label.local_label_id.unwrap())
+                    .and_modify(|x| *x += 1)
+                    .or_insert(1);
+
+                conversation_label.context_num_unread = 0;
+                conversation_label.save_sync(bond)?
+            }
+
+            for (label_id, count) in &mut label_counts {
+                if let Some(mut conv_counter) =
+                    ConversationCounters::load_by_id_sync(*label_id, bond)?
+                {
+                    conv_counter.unread = conv_counter.unread.saturating_sub(*count);
+                    conv_counter.save_sync(bond)?;
+                }
+
+                // reset for messages.
+                *count = 0;
+            }
+
+            // Update messages
+            let messages = Message::find_sync(
+                "WHERE local_conversation_id=? AND unread<>0",
+                (conversation_id,),
+                bond,
+            )?;
+
+            let mut stmt = bond.prepare_cached(
+                "SELECT local_label_id FROM message_labels WHERE local_message_id=?",
+            )?;
+            for mut message in messages {
+                let local_message_id = message.id();
+                message.unread = false;
+                message.save_sync(bond)?;
+                read_messages.push(local_message_id);
+
+                let label_ids = stmt
+                    .query_map((local_message_id,), |r| r.get(0))?
+                    .collect::<Result<Vec<LocalLabelId>, _>>()?;
+
+                for label_id in label_ids {
+                    match label_counts.entry(label_id) {
+                        HmEntry::Occupied(mut o) => {
+                            *o.get_mut() += 1;
+                        }
+                        HmEntry::Vacant(v) => {
+                            v.insert(1);
+                        }
+                    }
+                }
+            }
+
+            // update message label counters
+            for (label_id, count) in &mut label_counts {
+                if let Some(mut counters) = MessageCounters::load_by_id_sync(*label_id, bond)? {
+                    counters.unread = counters.unread.saturating_sub(*count);
+                    counters.save_sync(bond)?;
+                }
+            }
+        }
+
+        info!("mark_read took {:?}", t0.elapsed());
+        Ok(read_messages)
     }
 
     fn grouped_labels_and_messages_query(placeholders: usize) -> String {
@@ -2872,12 +2816,20 @@ impl ConversationOrMessage for Conversation {
 }
 
 impl ModelHooks for Conversation {
-    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         // Remove any labels that are no longer associated with this conversation.
+
         if !self.labels.is_empty() {
-            #[allow(trivial_casts)]
-            bond.execute(
-                formatdoc!(
+            let mut params: Vec<&dyn ToSql> = vec![&self.local_id];
+
+            for l in &self.labels {
+                if let Some(l) = &l.remote_label_id {
+                    params.push(l);
+                }
+            }
+
+            tx.execute(
+                &formatdoc!(
                     "
                 DELETE FROM
                     conversation_labels
@@ -2885,83 +2837,61 @@ impl ModelHooks for Conversation {
                     local_conversation_id = ?
                     AND remote_label_id NOT IN ({})
                 ",
-                    stash::utils::placeholders_n(self.labels.len()),
+                    stash::utils::placeholders_n(params.len() - 1),
                 ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
-                    .into_iter()
-                    .chain(self.labels.iter().map(|label| {
-                        Box::new(label.remote_label_id.clone()) as Box<dyn ToSql + Send>
-                    }))
-                    .collect(),
-            )
-            .await?;
+                params_from_iter(params),
+            )?;
         } else {
-            bond.execute(
-                formatdoc!(
-                    "
+            tx.execute(
+                "
                 DELETE FROM
                     conversation_labels
                 WHERE
                     local_conversation_id = ?
                 ",
-                ),
-                params![self.local_id],
-            )
-            .await?;
+                (self.local_id,),
+            )?;
         }
 
         // Remove any attachments that are no longer associated with this conversation.
         if !self.attachments_metadata.is_empty() {
-            let local_ids =
-                Attachment::create_or_update_from_conversation_metadata(self, bond).await?;
-            for id in &local_ids {
-                bond.execute(
+            let local_ids = Attachment::create_or_update_from_conversation_metadata(self, tx)?;
+            for &id in &local_ids {
+                tx.execute(
                     "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
-                    params![self.id(), *id],
-                )
-                .await?;
+                    (self.id(), id),
+                )?;
             }
 
-            #[allow(trivial_casts)]
-            bond.execute(
-                formatdoc!(
+            let placeholders = placeholders(&local_ids);
+            let params = params_from_iter([self.local_id].bridge_sql_extend_iter(local_ids));
+            tx.execute(
+                &formatdoc!(
                     "
                 DELETE FROM
                     conversation_attachments
                 WHERE
                     local_conversation_id = ?
-                    AND local_attachment_id NOT IN ({})
+                    AND local_attachment_id NOT IN ({placeholders})
                 ",
-                    stash::utils::placeholders_n(local_ids.len()),
                 ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
-                    .into_iter()
-                    .chain(
-                        local_ids
-                            .into_iter()
-                            .map(|attachment| Box::new(attachment) as Box<dyn ToSql + Send>),
-                    )
-                    .collect(),
-            )
-            .await?;
+                params,
+            )?;
         } else {
-            bond.execute(
-                formatdoc!(
-                    "
+            tx.execute(
+                "
                 DELETE FROM
                     conversation_attachments
                 WHERE
                     local_conversation_id = ?
                 ",
-                ),
-                params![self.local_id],
-            )
-            .await?;
+                (self.local_id,),
+            )?;
         }
 
         for label in &mut self.labels {
             label.local_conversation_id = self.local_id;
-            label.save(bond).await.inspect_err(|e| {
+            label.save_sync(tx).inspect_err(|e| {
                 error!(
                     "Failed to save conversation label ({}): {e}",
                     label.remote_label_id.as_deref().unwrap_or("?"),
@@ -2983,27 +2913,28 @@ impl ModelHooks for Conversation {
                 .filter_map(|label| label.remote_label_id.clone())
                 .map_into()
                 .collect_vec();
-            self.exclusive_location = ExclusiveLocation::from_label_ids(&label_ids, bond).await?;
+            self.exclusive_location = ExclusiveLocation::from_label_ids_sync(&label_ids, tx)?;
         }
 
         Ok(())
     }
-    async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.labels = ConversationLabel::find(
+    fn after_load(&mut self, conn: &Connection) -> Result<(), StashError> {
+        self.labels = ConversationLabel::find_sync(
             "WHERE local_conversation_id = ?",
-            params![self.local_id],
-            tether,
-        )
-        .await?;
+            (self.local_id,),
+            conn,
+        )?;
+
         self.snoozed_until = self
             .labels
             .iter()
             .find(|l| l.remote_label_id == Some(LabelId::snoozed()))
             .map(|l| l.context_snooze_time);
-        let labels = self.load_labels(tether).await?;
+
+        let labels = self.load_labels(conn)?;
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
         self.attachments_metadata =
-            Attachment::load_conversation_attachment_metadata(self.id(), tether).await?;
+            Attachment::load_conversation_attachment_metadata(self.id(), conn)?;
         self.custom_labels = labels
             .into_iter()
             .filter(|l| l.label_type == LabelType::Label)
@@ -3020,9 +2951,9 @@ impl ModelHooks for Conversation {
         Ok(())
     }
 
-    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone()
-            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
+    fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
+        if let Some(remote_id) = &self.remote_id
+            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)?
         {
             self.local_id = existing.local_id;
             // We want to preserve this to prevent unnecessary resyncing of conversations
@@ -3108,6 +3039,7 @@ impl TableObserver for ConversationActionWatcher {
 ///
 #[derive(Clone, Debug, Eq, Model, PartialEq, Ord, PartialOrd)]
 #[TableName("conversation_labels")]
+#[ModelHooks]
 pub struct ConversationLabel {
     // NOTE: This id is essentially useless. Stash does not support composite primary keys
     // so we do not assign it a special value. The real primary key is
@@ -3147,6 +3079,34 @@ pub struct ConversationLabel {
 
     #[DbField]
     pub deleted: bool,
+}
+
+impl ModelHooks for ConversationLabel {
+    fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
+        let local_conversation_id = self
+            .local_conversation_id
+            .context("Missing local conversation id")?;
+
+        let remote_label_id = self
+            .remote_label_id
+            .as_ref()
+            .context("Missing remote label id")?;
+
+        let local_label = Label::find_by_remote_id_sync(remote_label_id, tx)?
+            .with_context(|| format!("Can't find label with the remote id {remote_label_id}"))?;
+
+        self.local_label_id = local_label.local_id;
+
+        if let Some(label) = ConversationLabel::find_first_sync(
+            "WHERE local_label_id=? AND local_conversation_id=?",
+            (local_label.id(), local_conversation_id),
+            tx,
+        )? {
+            self.local_id = label.local_id;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(feature = "test-utils")]
@@ -3221,51 +3181,6 @@ impl ConversationLabel {
             bond,
         )
         .await
-    }
-
-    /// Save or update a Conversation Label.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that the information is update correctly in the database.
-    ///
-    /// The current stash database does not allow us to resolve conflicts on
-    /// other unique keys so we have to do this ourselves.
-    /// If [`Model::save()`] is used directly it will bypass this check.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the local conversation id is not set, the remote
-    /// label_id is not set, the local label can not be found or the query
-    /// failed.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        let Some(local_conversation_id) = self.local_conversation_id else {
-            return Err(StashError::Custom(anyhow!("Missing local conversation id")));
-        };
-
-        let Some(remote_label_id) = self.remote_label_id.clone() else {
-            return Err(StashError::Custom(anyhow!("Missing remote label id")));
-        };
-
-        let Some(local_label) = Label::find_by_remote_id(remote_label_id.clone(), bond).await?
-        else {
-            return Err(StashError::Custom(anyhow!(
-                "Can't find label with the remote id {remote_label_id}"
-            )));
-        };
-
-        self.local_label_id = local_label.local_id;
-
-        if let Some(label) = ConversationLabel::find_first(
-            "WHERE local_label_id=? AND local_conversation_id=?",
-            params![local_label.id(), local_conversation_id],
-            bond,
-        )
-        .await?
-        {
-            self.local_id = label.local_id;
-        }
-
-        <Self as Model>::save(self, bond).await
     }
 
     /// Adjust the stats of the conversation label when
@@ -3363,16 +3278,27 @@ impl ConversationLabel {
     }
 
     pub(crate) async fn find_by_conversation_and_label(
-        conversation_id: &LocalConversationId,
+        conversation_id: LocalConversationId,
         label_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        Self::find_first(
+        tether
+            .sync_query(move |conn| {
+                Self::find_by_conversation_and_label_sync(conversation_id, label_id, conn)
+            })
+            .await
+    }
+
+    pub(crate) fn find_by_conversation_and_label_sync(
+        conversation_id: LocalConversationId,
+        label_id: LocalLabelId,
+        conn: &Connection,
+    ) -> Result<Option<Self>, StashError> {
+        Self::find_first_sync(
             "WHERE local_conversation_id = ? AND local_label_id = ?",
-            params![*conversation_id, label_id],
-            tether,
+            (conversation_id, label_id),
+            conn,
         )
-        .await
     }
 
     pub(crate) async fn find_by_conversations_and_labels(
@@ -3474,11 +3400,11 @@ pub struct ConversationMessageLabelStats {
 impl ConversationMessageLabelStats {
     /// Get stats about for a conversation with `conversation_id` with the
     /// given `message_ids` for a label with `label_id`.
-    async fn with(
+    fn with(
         conversation_id: LocalConversationId,
         label_id: LocalLabelId,
         message_ids: &[LocalMessageId],
-        tether: &Tether,
+        tether: &Connection,
     ) -> Result<Self, StashError> {
         let params = (label_id, conversation_id).to_sql_extend(message_ids);
         let query = formatdoc! {"
@@ -3492,10 +3418,10 @@ impl ConversationMessageLabelStats {
             placeholders(message_ids)
         };
 
-        let messages = Message::find(query, params, tether).await?;
+        let messages = Message::find_sync(query, params_from_iter(params), tether)?;
 
         if messages.is_empty() {
-            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+            return Err(StashError::QueryReturnedNoRows);
         }
 
         Ok(Self::from_messages(&messages))

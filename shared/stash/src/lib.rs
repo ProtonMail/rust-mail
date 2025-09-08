@@ -49,8 +49,9 @@ pub mod exports {
     pub use rusqlite::types::{
         FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef,
     };
-    pub use rusqlite::{Error as SqliteError, Row};
+    pub use rusqlite::{Connection, Error as SqliteError, Row, Transaction};
 }
+pub use rusqlite;
 
 /// Use of crates that are used in integration tests, to prevent lint warnings.
 #[cfg(test)]

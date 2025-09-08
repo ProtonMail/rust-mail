@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, Local};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel, UnixTimestamp};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_mail_common::actions::ConversationOrMessage;
 use proton_mail_common::actions::conversations::Snooze;
 use proton_mail_common::datatypes::{MessageFlags, SystemLabelId};
 use proton_mail_common::models::{Conversation, ConversationCounters, ConversationLabel, Message};
@@ -64,11 +65,11 @@ async fn setup_test_label(label_id: LocalLabelId, tether: &mut Tether) -> TestDa
 
             // Important: we need to apply the labels to the messages to be able to snooze conversation
             label_message.save(tx).await?;
-            Message::apply_label(label_id, vec![label_message.local_id.unwrap()], tx).await?;
+            Message::apply_label_async(label_id, vec![label_message.local_id.unwrap()], tx).await?;
             label_message.reload(tx).await?;
             sent_message.save(tx).await?;
             let sent = SystemLabel::Sent.load(tx).await.unwrap().unwrap();
-            Message::apply_label(sent.id(), vec![sent_message.local_id.unwrap()], tx).await?;
+            Message::apply_label_async(sent.id(), vec![sent_message.local_id.unwrap()], tx).await?;
             sent_message.reload(tx).await?;
 
             Ok(())

@@ -151,6 +151,7 @@ mod contact_list {
     };
     use pretty_assertions::assert_eq;
     use proton_core_api::services::proton::LabelId;
+    use stash::orm::Model;
     use stash::stash::StashError;
     use test_case::test_case;
 
@@ -374,6 +375,7 @@ mod contact_suggestions {
         models::{Contact, Label},
         tests::common::new_core_test_connection,
     };
+    use stash::orm::Model;
     use test_case::test_case;
 
     use super::display_suggestions;

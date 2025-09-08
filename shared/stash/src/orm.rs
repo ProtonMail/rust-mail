@@ -13,16 +13,17 @@
 //!
 
 use crate::params;
-use crate::stash::{Bond, StashError, Tether};
-use crate::utils::IterMapToSql;
-use anyhow::{Context, anyhow};
+use crate::stash::{Bond, StashError, StashResult, Tether};
+use crate::utils::{ConnectionExt, IterMapToSql};
+use anyhow::anyhow;
 use core::any::Any;
 use core::fmt::{Debug, Display};
 use core::future::Future;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use rusqlite::types::FromSql;
-use rusqlite::{Error as SqliteError, Row, ToSql};
+use rusqlite::{Connection, Error as SqliteError, Row, ToSql, Transaction};
+use rusqlite::{Params, params_from_iter};
 use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;
 use std::vec::IntoIter;
@@ -146,6 +147,31 @@ where
     /// converting the row.
     ///
     fn from_row(row: &Row<'_>) -> Result<Self, ConversionError>;
+
+    fn model_find(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Vec<Self>> {
+        let mut stmt = conn.prepare_cached(query.as_ref())?;
+        let records = stmt
+            .query_and_then(params, Self::from_row)?
+            .collect::<Result<_, _>>()?;
+        Ok(records)
+    }
+
+    fn model_find_first(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Option<Self>> {
+        let mut stmt = conn.prepare_cached(query.as_ref())?;
+        let records = stmt
+            .query_and_then(params, Self::from_row)?
+            .next()
+            .transpose()?;
+        Ok(records)
+    }
 }
 
 /// A trait for fully-modelled database records.
@@ -371,46 +397,68 @@ where
         tether: &Tether,
     ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send {
         let query = query.into();
-        async {
-            let mut rows = tether.query::<_, Self>(query, params).await?;
-            for row in &mut rows {
-                row.after_load(tether).await?;
-            }
-            Ok(rows)
+        tether.sync_query(move |tx| Self::load_sync(query, params_from_iter(params), tx))
+    }
+
+    fn find_sync(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Vec<Self>> {
+        let query = format!(
+            "SELECT * FROM {table} {query_logic}",
+            query_logic = query.as_ref(),
+            table = Self::table_name(),
+        );
+        Self::load_sync(query, params, conn)
+    }
+
+    fn load_sync(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Vec<Self>> {
+        let mut records = Self::model_find(query, params, conn)?;
+        for i in &mut records {
+            i.after_load(conn)?;
         }
+
+        Ok(records)
+    }
+
+    fn find_first_sync(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Option<Self>> {
+        let query = format!(
+            "SELECT * FROM {table} {query_logic} LIMIT 1",
+            query_logic = query.as_ref(),
+            table = Self::table_name(),
+        );
+        let mut record = Self::model_find_first(query, params, conn)?;
+        if let Some(record) = &mut record {
+            record.after_load(conn)?;
+        }
+        Ok(record)
+    }
+
+    fn load_by_id_sync(id: Self::IdType, conn: &Connection) -> StashResult<Option<Self>> {
+        let query = format!("WHERE {id} = ?", id = Self::id_field_name());
+
+        Self::find_first_sync(query, (id,), conn)
+    }
+
+    fn load_by_id_exact_sync(id: Self::IdType, conn: &Connection) -> StashResult<Self> {
+        Self::load_by_id_sync(id, conn)
+            .transpose()
+            .ok_or_else(|| StashError::QueryReturnedNoRows)?
     }
 
     /// Saves a record to the database.
     /// If it has a local id it will update the record, otherwise it will insert it.
     ///
-    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        self.before_save(bond).await?;
-
-        // HACK: This is not great but we're forced to do it since there's no guarantee that the
-        // row does or doesn't exist.
-        let query = formatdoc! {"
-                        SELECT {id_name} AS value
-                        FROM {table}
-                        WHERE {id_name} = ?
-                        ",
-            table = Self::table_name(),
-            id_name = Self::id_field_name(),
-        };
-
-        if let Ok(id) = self.id_value()
-            && bond
-                .query_value_opt::<Self::IdType>(query, params![id])
-                .await?
-                .is_some()
-        {
-            return self.update(bond).await;
-        }
-        self.insert(bond).await
-    }
-
-    /// Forcefully insert, even if it has the ID set.
-    async fn insert(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // database, and we exclude it from the list here.
+    fn insert_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         let (fields, values) = if Self::id_is_autoincrementing() {
             if Self::id_value(self).is_ok() {
                 // This should have been an upgrade
@@ -437,18 +485,49 @@ where
             id = Self::id_field_name(),
         };
 
-        let id = bond
-            .query_value_opt::<Self::IdType>(query, values.bridge_sql())
-            .await?
-            .context("Insert did not return an id")?;
+        let id: Self::IdType = tx.query_row_col(&query, params_from_iter(values))?;
 
         self.set_id_value(id);
 
-        self.after_save(bond).await?;
+        self.after_save(tx)?;
+        Ok(())
+    }
+
+    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        let mut this = self.clone();
+        *self = bond
+            .sync_bridge(move |tx| {
+                this.save_sync(tx)?;
+                Ok(this)
+            })
+            .await?;
         Ok(())
     }
 
     async fn update(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        let mut this = self.clone();
+        *self = bond
+            .sync_bridge(move |tx| {
+                this.update_sync(tx)?;
+                Ok(this)
+            })
+            .await?;
+        Ok(())
+    }
+
+    /// Forcefully insert, even if it has the ID set.
+    async fn insert(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        let mut this = self.clone();
+        *self = bond
+            .sync_bridge(move |tx| {
+                this.insert_sync(tx)?;
+                Ok(this)
+            })
+            .await?;
+        Ok(())
+    }
+
+    fn update_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         let id = self.id_value().map_err(|_| StashError::IdNotSet)?;
 
         // If the ID field is auto-incrementing then it is fully managed by the
@@ -470,15 +549,38 @@ where
             table = Self::table_name(),
             id = Self::id_field_name(),
         );
+        let mut query = tx.prepare_cached(&query)?;
 
         let values = values.bridge_sql_extend([id]);
-        let affected: usize = bond.execute(&query, values).await?;
+        let affected: usize = query.execute(params_from_iter(values))?;
 
         if affected == 0 {
             return Err(StashError::NoRowsUpdated);
         }
-        self.after_save(bond).await?;
+        self.after_save(tx)?;
         Ok(())
+    }
+
+    fn save_sync(&mut self, tx: &Transaction<'_>) -> StashResult<()> {
+        self.before_save(tx)?;
+        //
+        // HACK: This is not great but we're forced to do it since there's no guarantee that the
+        // row does or doesn't exist.
+        let query = formatdoc! {"
+                        SELECT COUNT(*)
+                        FROM {table}
+                        WHERE {id_name} = ?
+                        ",
+            table = Self::table_name(),
+            id_name = Self::id_field_name(),
+        };
+
+        if let Ok(id) = self.id_value() {
+            if tx.query_row_col::<u64>(&query, (id,))? != 0 {
+                return self.update_sync(tx);
+            }
+        }
+        self.insert_sync(tx)
     }
 
     /// Gets the name of the table for the record type.
@@ -489,40 +591,29 @@ where
     }
 
     /// Counts models in database.
-    ///
-    /// # Parameters
-    ///
-    /// * `query_logic` - The query logic to use for finding the records. This
-    ///   should be a string that represents the conditions,
-    ///   ordering, offset, and limit for the query, as may be
-    ///   required. It can be empty. Note that each part of the
-    ///   logic is optional — so if conditions are passed, for
-    ///   instance, the `WHERE` keyword needs to be included.
-    ///
-    /// # Errors
-    ///
-    /// When querying the database fails.
-    ///
     fn count<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         tether: &Tether,
     ) -> impl Future<Output = Result<u64, StashError>> + Send
     where
-        Q: Into<String> + Send,
+        Q: Into<String>,
     {
-        async move {
-            tether
-                .query_value::<_, u64>(
-                    formatdoc!(
-                        "SELECT COUNT(*) AS value FROM {} {}",
-                        Self::table_name(),
-                        query_logic.into(),
-                    ),
-                    params,
-                )
-                .await
-        }
+        let query_logic = query_logic.into();
+        tether.sync_query(move |tx| Self::count_sync(&query_logic, params_from_iter(params), tx))
+    }
+
+    /// Counts models in database.
+    fn count_sync(query_logic: &str, params: impl Params, conn: &Connection) -> StashResult<u64> {
+        conn.query_row_col::<u64>(
+            formatdoc!(
+                "SELECT COUNT(*) FROM {} {}",
+                Self::table_name(),
+                query_logic,
+            ),
+            params,
+        )
+        .map_err(Into::into)
     }
 
     /// Gets the next id for the record type for manual id management.
@@ -597,13 +688,15 @@ impl IntoIterator for DbRecords {
 /// To use these, you just need to derive model with the `ModelHooks` attribute and impl the trait
 /// manually.
 pub trait ModelHooks {
-    fn after_load(&mut self, _: &Tether) -> impl Future<Output = Result<(), StashError>> + Send {
-        async { Ok(()) }
+    fn after_load(&mut self, _: &Connection) -> StashResult<()> {
+        Ok(())
     }
-    fn before_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
-        async { Ok(()) }
+
+    fn before_save(&mut self, _: &Transaction<'_>) -> StashResult<()> {
+        Ok(())
     }
-    fn after_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
-        async { Ok(()) }
+
+    fn after_save(&mut self, _: &Transaction<'_>) -> StashResult<()> {
+        Ok(())
     }
 }

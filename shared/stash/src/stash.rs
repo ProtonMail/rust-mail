@@ -91,7 +91,6 @@ enum TransactionTrackingPolicy {
     Quiet,
 }
 
-#[derive(Debug)]
 /// Only the operations related to a transaction.
 enum OperationTransaction {
     /// Starts a new transaction.
@@ -99,6 +98,9 @@ enum OperationTransaction {
         TransactionTrackingPolicy,
         OneshotSender<Result<(), StashError>>,
     ),
+
+    /// Starts a new transaction.
+    StartSync(BridgeClosure, TransactionTrackingPolicy),
 
     /// Commits a transaction, i.e. finalises it.
     Commit(
@@ -109,13 +111,28 @@ enum OperationTransaction {
     /// Rolls back a transaction, i.e. abandons it.
     Rollback(OneshotSender<Result<(), StashError>>),
 
+    /// Used to bridge between async and sync code, Bond -> rusqlite::Transaction
+    Bridge(BridgeClosure),
+
     /// Rollbacks a transaction too.
     /// This one is meant to be called in Bond's drop glue. That's why it doesn't have a sender.
     /// Same semantics as Rollback.
     RollbackAbort,
 }
 
-#[derive(Debug)]
+impl Debug for OperationTransaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Start(..) => write!(f, "Start"),
+            Self::StartSync(..) => write!(f, "StartSync"),
+            Self::Commit(..) => write!(f, "Commit"),
+            Self::Rollback(_) => write!(f, "Rollback"),
+            Self::Bridge(_) => write!(f, "Bridge"),
+            Self::RollbackAbort => write!(f, "RollbackAbort"),
+        }
+    }
+}
+
 enum OperationExec {
     /// A query to be executed, where no results are expected. This is usually
     /// a write query, or a command, but differentiation is up to the caller and
@@ -130,6 +147,20 @@ enum OperationExec {
     /// read query, but could be any query where results are expected, such as
     /// an `INSERT` query that returns the ID of the inserted row.
     Query(Query),
+
+    /// This can be either a query or a transaction.
+    Sync(SyncClosure),
+}
+
+impl Debug for OperationExec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Instruct(_) => write!(f, "Instruct"),
+            Self::Batch(_) => write!(f, "Batch"),
+            Self::Query(_) => write!(f, "Query"),
+            Self::Sync(_) => write!(f, "Sync"),
+        }
+    }
 }
 
 /// Error type for the [`Stash`] module.
@@ -141,11 +172,13 @@ pub enum StashError {
     #[error("Query results deserialization error: {0}")]
     DeserializationError(#[from] ConversionError),
 
-    ///jThere was a problem with statement execution.
+    // TODO: have a better from impl.
+    //
+    /// There was a problem with statement execution.
     /// Note that this refers to executing a prepared statement,
     /// e.g. actually running a query, and not the process of preparing the statement/query.
     #[error("Statement execution error: {0}")]
-    ExecutionError(SqliteError),
+    ExecutionError(#[from] SqliteError),
 
     #[error("Trying to update a record that hasn't been saved yet")]
     IdNotSet,
@@ -174,6 +207,9 @@ pub enum StashError {
     #[error("No rows updated upon saving record")]
     NoRowsUpdated,
 
+    #[error("The query did not affect any row.")]
+    QueryReturnedNoRows,
+
     /// Critical internal error that cannot be recovered from.
     #[error("Critical internal stash error: {0}")]
     Critical(#[from] anyhow::Error),
@@ -182,9 +218,12 @@ pub enum StashError {
     ConnectionAcquireTimedOut,
 
     /// Custom variant that is not critical
-    #[error("Critical error: {0}")]
+    #[error("{0}")]
     Custom(anyhow::Error),
 }
+
+pub type StashResult<T> = Result<T, StashError>;
+pub type RusqliteResult<T> = Result<T, SqliteError>;
 
 impl StashError {
     pub fn interrupted() -> Self {
@@ -1008,6 +1047,70 @@ impl Tether {
             tx_lock: Arc::clone(&stash.tx_lock),
         })
     }
+
+    pub async fn sync_query<T: Send + 'static>(
+        &self,
+        callback: impl FnOnce(&rusqlite::Connection) -> Result<T, StashError> + Send + 'static,
+    ) -> Result<T, StashError> {
+        let closure = Box::new(move |conn: &rusqlite::Connection| {
+            callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
+        });
+
+        let (sender, receiver) = oneshot::channel();
+        let sync_closure = SyncClosure { closure, sender };
+        let operation = Operation::Execution(OperationExec::Sync(sync_closure));
+
+        self.connection
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        let ret = receiver
+            .await
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        // This cannot fail as the type system assures us that the return type of `callback` is T
+        ret.map(|x| *x.downcast().expect("Downcast failed?"))
+    }
+
+    pub async fn sync_tx(
+        &self,
+        callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<()> + Send + 'static,
+    ) -> StashResult<()> {
+        self.sync_tx_returning(callback).await
+    }
+
+    pub async fn sync_tx_returning<T: Send + 'static>(
+        &self,
+        callback: impl FnOnce(&rusqlite::Transaction) -> StashResult<T> + Send + 'static,
+    ) -> StashResult<T> {
+        self.run_sync_tx(callback, TransactionTrackingPolicy::Tracking)
+            .await
+    }
+
+    /// This runs the given callback in the tether thread.
+    async fn run_sync_tx<T: Send + 'static>(
+        &self,
+        callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
+        policy: TransactionTrackingPolicy,
+    ) -> StashResult<T> {
+        let tx_lock = self.tx_lock.clone();
+        let _guard = tx_lock.lock().await;
+        let closure = Box::new(move |tx: &rusqlite::Transaction| {
+            callback(tx).map(|x| Box::new(x) as Box<dyn Any + Send>)
+        });
+
+        let (sender, receiver) = oneshot::channel();
+        let sync_closure = BridgeClosure { closure, sender };
+        let operation =
+            Operation::Transaction(OperationTransaction::StartSync(sync_closure, policy));
+
+        self.connection
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        let ret = receiver
+            .await
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        // This cannot fail as the type system assures us that the return type of `callback` is T
+        ret.map(|x| *x.downcast().expect("Downcast failed?"))
+    }
 }
 
 impl Debug for Tether {
@@ -1094,6 +1197,18 @@ impl PooledTetherInterruptNotifier {
     pub fn interrupt(&self) {
         let _ = self.0.send(Operation::Interrupt);
     }
+}
+
+// PERF: Monomorphic SyncClosure for common use cases like () and usize.
+type SyncClosureRetTy = Result<Box<dyn Any + Send>, StashError>;
+struct SyncClosure {
+    closure: Box<dyn FnOnce(&Connection) -> SyncClosureRetTy + Send>,
+    sender: OneshotSender<SyncClosureRetTy>,
+}
+
+struct BridgeClosure {
+    closure: Box<dyn FnOnce(&Transaction) -> SyncClosureRetTy + Send>,
+    sender: OneshotSender<SyncClosureRetTy>,
 }
 
 /// Database transaction context.
@@ -1201,6 +1316,31 @@ impl<'tether> Bond<'tether> {
 
         Ok(())
     }
+
+    /// This function will execute `callback` in the thread that holds the transaction.
+    ///
+    /// Useful to speed up slow logic and to get better ergonomics.
+    pub async fn sync_bridge<T: Send + 'static>(
+        &self,
+        callback: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<T, StashError> + Send + 'static,
+    ) -> Result<T, StashError> {
+        let closure = Box::new(move |conn: &rusqlite::Transaction| {
+            callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
+        });
+
+        let (sender, receiver) = oneshot::channel();
+        let sync_closure = BridgeClosure { closure, sender };
+        let operation = Operation::Transaction(OperationTransaction::Bridge(sync_closure));
+
+        self.connection
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        let ret = receiver
+            .await
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        // This cannot fail as the type system assures us that the return type of `callback` is T
+        ret.map(|x| *x.downcast().expect("Downcast failed?"))
+    }
 }
 
 impl Deref for Bond<'_> {
@@ -1235,6 +1375,16 @@ impl RunTransaction for Tether {
                 .context("Could not start transaction for tether")
         }
     }
+
+    async fn run_tx_sync<T, F>(&mut self, closure: F) -> anyhow::Result<T>
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.sync_tx_returning(closure)
+            .await
+            .context("Could not start sync transaction for tether")
+    }
 }
 
 /// This trait should only be used in functions that have to create and commit several
@@ -1248,6 +1398,11 @@ pub trait RunTransaction {
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>;
+
+    fn run_tx_sync<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>> + Send
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
+        T: Send + 'static;
 }
 
 impl<RT: RunTransaction> RunTransaction for &mut RT {
@@ -1260,7 +1415,16 @@ impl<RT: RunTransaction> RunTransaction for &mut RT {
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>,
     {
-        async move { RT::run_tx(self, closure).await }
+        RT::run_tx(self, closure)
+    }
+
+    #[allow(clippy::manual_async_fn)]
+    fn run_tx_sync<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>> + Send
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        RT::run_tx_sync(self, closure)
     }
 }
 
@@ -1304,6 +1468,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         // wait until resume was called.
                         self.handle_transaction(op, pool);
                     }
+                    OperationTransaction::StartSync(o, _) | OperationTransaction::Bridge(o) => {
+                        let _ = o.sender.send(Err(StashError::interrupted()));
+                    }
                     OperationTransaction::RollbackAbort => {
                         //nothing to do
                     }
@@ -1316,6 +1483,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         let _ = o.sender.send(Err(StashError::interrupted()));
                     }
                     OperationExec::Query(o) => {
+                        let _ = o.sender.send(Err(StashError::interrupted()));
+                    }
+                    OperationExec::Sync(o) => {
                         let _ = o.sender.send(Err(StashError::interrupted()));
                     }
                 },
@@ -1377,6 +1547,13 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                     }
                 };
             }
+            OperationTransaction::StartSync(BridgeClosure { closure, sender }, policy) => {
+                // Check whether we can start a new transaction or wait until we are allowed to.
+                pool.check_interrupted_or_wait_resume();
+                let res = self.handle_start_sync(closure, policy);
+                _ = sender.send(res);
+            }
+
             OperationTransaction::Commit(policy, send_back) => {
                 match self
                     .transaction
@@ -1425,6 +1602,18 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         error!("Critical error: RollbackAbort with no transaction open!?");
                     }
                 }
+            }
+            OperationTransaction::Bridge(sync) => {
+                let Some(tx) = &self.transaction else {
+                    let e = anyhow!(
+                        "Critical error: OperationTransaction::Bridge with no transaction open!?"
+                    );
+                    let _ = sync.sender.send(Err(e.into()));
+                    return;
+                };
+
+                let res = (sync.closure)(tx);
+                let _ = sync.sender.send(res);
             }
         }
     }
@@ -1505,7 +1694,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         Ok(())
     }
 
-    fn handle_exec(&self, operation: OperationExec) {
+    fn handle_exec(&mut self, operation: OperationExec) {
         let connection: &Connection = match self.transaction {
             Some(ref tx) => tx,
             None => self.connection,
@@ -1523,6 +1712,10 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             OperationExec::Query(query) => {
                 query.run_and_send(connection);
             }
+            OperationExec::Sync(sync) => {
+                let res = (sync.closure)(connection);
+                let _ = sync.sender.send(res);
+            }
         }
     }
 
@@ -1534,6 +1727,32 @@ impl<'a> TetheredWorkerStateMachine<'a> {
 
         if transaction.rollback().is_err() {
             error!("Failed to roll back transaction upon connection closure");
+        }
+    }
+
+    fn handle_start_sync(
+        &mut self,
+        closure: Box<dyn FnOnce(&Transaction) -> SyncClosureRetTy + Send>,
+        policy: TransactionTrackingPolicy,
+    ) -> StashResult<Box<dyn Any + Send>> {
+        // In theory this should be impossible since we require a `&mut Tether` to start a
+        // transaction
+        assert!(self.transaction.is_none(), "Started transaction twice");
+
+        let tx = self
+            .start_transaction(policy)
+            .map_err(StashError::ExecutionError)?;
+
+        match closure(&tx) {
+            Err(user_err) => {
+                tx.rollback().with_context(|| format!("Rollback error occurred when rolling back the transaction after this error: {user_err:?}"))?;
+                Err(user_err)
+            }
+            Ok(e) => {
+                self.commit_transaction(tx, policy)
+                    .map_err(StashError::TransactionError)?;
+                Ok(e)
+            }
         }
     }
 }
