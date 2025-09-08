@@ -18,6 +18,9 @@
 //! to interface with sqlite.
 //!
 
+use crate::connection_manager::{
+    StashConnectionPool, StashConnectionPoolError, StashPooledConnection,
+};
 use crate::orm::{ConversionError, DbRecord};
 use anyhow::{Context, anyhow};
 use core::fmt;
@@ -42,7 +45,6 @@ use sqlite_watcher::statement::Statement;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
-use stash_macros::DbRecord;
 use std::any::Any;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
@@ -52,11 +54,6 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tracing::{debug, error, trace};
-// Used to resolve undeclared crate of module `stash` from DbRecord proc marco
-use crate as stash;
-use crate::connection_manager::{
-    StashConnectionPool, StashConnectionPoolError, StashPooledConnection,
-};
 
 /// Set a timeout for a specified amount of time when a table is locked. This
 /// defaults to 5,000 milliseconds in the underlying libraries. This is currently only
@@ -1758,9 +1755,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
 }
 
 /// Value record struct used to generate the `DbRecord` glue code.
-#[derive(Debug, DbRecord, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct ValueRecord<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static> {
-    /// Value we wish to read from the query.
-    #[DbField]
     value: V,
 }

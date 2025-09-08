@@ -4,6 +4,7 @@
 //! separately from other code. They are part of the `stash` crate's ecosystem.
 //!
 
+use itertools::Itertools;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, quote};
@@ -63,21 +64,16 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
     let via_attrs = extract_via_attrs(&fields, false);
 
     // Generate trait implementation
-    let db_fields_impl = generate_db_field_values_impl(&db_fields, &via_attrs);
-    let db_field_values_impl = db_fields_impl.clone();
     let from_row_values_impl = generate_from_row_values_impl(&db_fields, &via_attrs);
-    let fn_field_names_impl = generate_fn_field_names_impl(&db_fields);
-    let fn_field_values_impl = generate_fn_field_values_impl(&db_field_values_impl);
+
     let fn_from_row_impl = generate_fn_from_row_impl(&db_fields, &fields, &from_row_values_impl);
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
-            fn field_names() -> Vec<&'static str> {
-                #fn_field_names_impl
-            }
-
-            fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
-                #fn_field_values_impl
+            fn field_values(&self) -> impl ::stash::rusqlite::Params + '_ {
+            [
+                #(&self.#db_fields as &dyn ::stash::rusqlite::ToSql),*,
+            ]
             }
 
             #fn_from_row_impl
@@ -219,7 +215,6 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let db_fields = extract_db_fields(&fields, true);
     let db_fields_without_id = extract_db_fields(&fields, false);
     let via_attrs = extract_via_attrs(&fields, true);
-    let via_attrs_without_id = extract_via_attrs(&fields, false);
 
     // Generate trait implementation
     let id_field_type = if is_optional {
@@ -234,20 +229,50 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         quote! { self.#id_field.clone() }
     };
 
-    let db_fields_impl = generate_db_field_values_impl(&db_fields, &via_attrs);
-    let db_fields_without_id_impl =
-        generate_db_field_values_impl(&db_fields_without_id, &via_attrs_without_id);
-    let db_field_values_impl = db_fields_impl.clone();
-    let db_field_values_without_id_impl = db_fields_without_id_impl.clone();
     let from_row_values_impl = generate_from_row_values_impl(&db_fields, &via_attrs);
-    let fn_field_names_impl = generate_fn_field_names_impl(&db_fields);
-    let fn_field_values_impl = generate_fn_field_values_impl(&db_field_values_impl);
-    let fn_field_names_without_id_impl = generate_fn_field_names_impl(&db_fields_without_id);
-    let fn_field_values_without_id_impl =
-        generate_fn_field_values_impl(&db_field_values_without_id_impl);
+
     let fn_from_row_impl = generate_fn_from_row_impl(&db_fields, &fields, &from_row_values_impl);
     let fn_id_value_impl = generate_fn_id_value_impl(&id_field, is_optional);
     let fn_set_id_value_impl = generate_fn_set_id_value_impl(&id_field, is_optional);
+
+    let table = table_name.value();
+    let (insert_query, update_query) = {
+        let fields = if is_autoincrement {
+            &db_fields
+        } else {
+            &db_fields_without_id
+        };
+
+        let field_names = fields.iter().map(|x| x.to_string()).join(",");
+        let placeholders = "?,".repeat(fields.len());
+        let insert_query = format!(
+            "
+INSERT INTO {table} ({field_names})
+VALUES ({placeholders})
+RETURNING {id_field}
+",
+        );
+
+        let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
+
+        let update_query = format!(
+            "
+UPDATE {table} 
+SET ({fields})
+WHERE {id_field} = ?
+",
+        );
+
+        (insert_query, update_query)
+    };
+
+    let count_query = format!(
+        "
+SELECT COUNT(*)
+FROM {table}
+WHERE {id_field} = ?
+"
+    );
 
     let impl_model_hooks = {
         let has_hooks = input.attrs.iter().any(|x| x.path().is_ident("ModelHooks"));
@@ -260,12 +285,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
-            fn field_names() -> Vec<&'static str> {
-                #fn_field_names_impl
-            }
-
-            fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
-                #fn_field_values_impl
+            fn field_values(&self) -> impl ::stash::rusqlite::Params + '_ {
+                [
+                    #(&self.#db_fields as &dyn ::stash::rusqlite::ToSql),*,
+                ]
             }
 
             #fn_from_row_impl
@@ -275,28 +298,15 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             type Id = #id_field_type;
             type IdType = #id_type;
 
-            fn field_names_without_id() -> Vec<&'static str> {
-                #fn_field_names_without_id_impl
-            }
-
-            fn field_values_without_id(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
-                #fn_field_values_without_id_impl
-            }
-
+            const INSERT_QUERY: &str = #insert_query;
+            const UPDATE_QUERY: &str = #update_query;
+            const COUNT_QUERY: &str = #count_query;
             fn id(&self) -> Self::IdType {
                 #fn_id_impl
             }
 
             fn id_field_name() -> &'static str {
                 stringify!(#id_field)
-            }
-
-            fn id_is_autoincrementing() -> bool {
-                #is_autoincrement
-            }
-
-            fn id_is_optional() -> bool {
-                #is_optional
             }
 
             fn id_value(&self) -> Result<Self::IdType, stash::stash::StashError> {
@@ -542,54 +552,6 @@ fn extract_via_attrs(fields: &[&Field], include_id_field: bool) -> Vec<Option<Vi
             }
         })
         .collect()
-}
-
-/// Generate code implementation for individual database field values.
-///
-/// This function generates the code implementation to return the values of
-/// individual database fields. These are returned in a form that is compatible
-/// with conversion to SQL type, but pre-conversion.
-///
-/// Note: Any fields using an intermediary type (i.e. specified with the `via`
-/// attribute argument) will be converted to that type before being returned.
-///
-fn generate_db_field_values_impl(
-    db_fields: &[Ident],
-    via_attrs: &[Option<ViaIntermediary>],
-) -> Vec<TokenStream2> {
-    db_fields
-        .iter()
-        .zip(via_attrs.iter())
-        .map(|(db_field, via_attr)| {
-            if let Some(via_type) = via_attr {
-                quote! {
-                    Box::new(<#via_type as From<_>>::from(self.#db_field.clone()))
-                }
-            } else {
-                quote! {
-                    Box::new(self.#db_field.clone())
-                }
-            }
-        })
-        .collect()
-}
-
-/// Generate code implementation for the `field_names()` method.
-///
-fn generate_fn_field_names_impl(db_fields: &[Ident]) -> TokenStream2 {
-    quote! {
-        vec![#(stringify!(#db_fields)),*]
-    }
-}
-
-/// Generate code implementation for the `field_values()` method.
-///
-fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> TokenStream2 {
-    quote! {
-        vec![
-            #(#db_field_values_impl as Box<dyn stash::exports::ToSql + Send>),*
-        ]
-    }
 }
 
 fn generate_fn_from_row_impl(
