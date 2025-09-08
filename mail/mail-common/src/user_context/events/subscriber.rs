@@ -5,7 +5,7 @@ use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
 use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{
     CachedScrollData, ConversationScrollData, MailLabel, MailSettings, MessageScrollData,
-    RollbackItem, StoreLabelCounters,
+    StoreLabelCounters,
 };
 #[cfg(feature = "prefetch")]
 use crate::prefetch::PrefetchJob;
@@ -19,7 +19,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_core_common::datatypes::{Refresh, SystemLabel};
-use proton_core_common::models::{Label, ModelExtension};
+use proton_core_common::models::Label;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use stash::orm::Model;
 use std::collections::HashMap;
@@ -244,15 +244,18 @@ async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
     }
 
     tether
-        .tx::<_, _, SubscriberError>(async |tx| {
-            RollbackItem::delete_all(tx).await?;
-            ConversationScrollData::delete_all(tx).await?;
-            MessageScrollData::delete_all(tx).await?;
+        .sync_tx(move |tx| {
+            tx.execute_batch(
+                "
+                    DELETE from rollback_actions;
+                    DELETE from mail_conversation_scroll_data;
+                    DELETE from mail_message_scroll_data;
+                    ",
+            )?;
 
-            Label::store_labels(tx, all_remote_labels)
-                .await
-                .context("Failed to sync labels")?;
+            Label::store_labels(tx, all_remote_labels).context("Failed to sync labels")?;
 
+            let mut ids = vec![];
             for local_label_to_remove in all_local_labels.into_values() {
                 if let Some(_system_label) =
                     SystemLabel::from_opt_rid(local_label_to_remove.remote_id.as_ref())
@@ -266,10 +269,10 @@ async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
                     "Removing label with remote_id {:?}",
                     local_label_to_remove.remote_id
                 );
-                local_label_to_remove.delete(tx).await?;
+                ids.push(local_label_to_remove.id());
             }
-            counters.save(tx).await?;
-            mail_settings.store(tx).await?;
+            counters.store(tx)?;
+            mail_settings.store(tx)?;
 
             Ok(())
         })

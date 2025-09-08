@@ -3584,7 +3584,7 @@ impl StoreLabelCounters {
             &[Label::INIT_KEY],
             stash.connection().await?,
             async || Ok(Self::fetch(api).await?),
-            async |tx, this| Ok(this.save(tx).await?),
+            |tx, this| Ok(this.store(tx)?),
         )
         .await
     }
@@ -3595,10 +3595,10 @@ impl StoreLabelCounters {
         Ok(Self(a, b))
     }
 
-    pub async fn save(self, tx: &Bond<'_>) -> Result<(), StashError> {
-        let Self(a, b) = self;
-        ConversationLabelsCount::create_or_update_conversation_counts(a, tx).await?;
-        MessageLabelsCount::create_or_update_message_counts(b, tx).await?;
+    pub fn store(self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        let Self(convs_count, msgs_count) = self;
+        ConversationLabelsCount::create_or_update_conversation_counts_sync(convs_count, tx)?;
+        MessageLabelsCount::create_or_update_message_counts_sync(msgs_count, tx)?;
         Ok(())
     }
 }

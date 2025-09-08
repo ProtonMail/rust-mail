@@ -845,7 +845,7 @@ impl From<DeviceEnvironment> for ApiDeviceEnvironment {
 /// It is a string, not an enum for making it open for additional changes from different BU.
 ///
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub struct InitializationKey(&'static str);
+pub struct InitializationKey(pub &'static str);
 
 impl InitializationKey {
     #[must_use]

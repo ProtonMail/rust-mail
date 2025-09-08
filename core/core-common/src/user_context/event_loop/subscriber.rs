@@ -10,7 +10,7 @@ use crate::{
     events::{Action, AddressEvent, ContactEmailEvent, ContactEvent, CoreEvent},
     models::{Address, Contact, Label, ModelExtension, User},
 };
-use anyhow::{anyhow, bail};
+use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use proton_core_api::services::proton::{EventId, ProtonCore, UserId};
 use proton_event_loop::{
@@ -469,7 +469,7 @@ async fn refresh_core(ctx: &UserContext) -> Result<(), SubscriberError> {
                 remote_address.save(tx).await?;
             }
 
-            Label::store_labels(tx, all_remote_labels)
+            Label::store_labels_async(tx, all_remote_labels)
                 .await
                 .map_err(|e| {
                     let e = anyhow!("Failed to sync labels: {e}");
@@ -484,8 +484,13 @@ async fn refresh_core(ctx: &UserContext) -> Result<(), SubscriberError> {
                 );
                 local_label_to_remove.delete(tx).await?;
             }
-            user_and_settings.store(tx).await?;
-            contacts.store(tx).await?;
+
+            tx.sync_bridge(move |tx| {
+                user_and_settings.store(tx)?;
+                contacts.store(tx)?;
+                Ok(())
+            })
+            .await?;
 
             Ok(())
         })
@@ -525,23 +530,17 @@ async fn refresh_contacts(ctx: &UserContext) -> Result<(), SubscriberError> {
     let contacts = join_task!(contacts, "contacts");
 
     tether
-        .tx::<_, _, SubscriberError>(async |tx| {
-            Label::store_labels(tx, all_remote_labels)
-                .await
-                .map_err(|e| {
-                    let e = anyhow!("Failed to sync labels: {e}");
-                    error!("{e:?}");
-                    SubscriberError::Other(e)
-                })?;
+        .sync_tx(move |tx| {
+            Label::store_labels(tx, all_remote_labels).context("Failed to sync labels")?;
 
             for local_label_to_remove in all_local_labels.into_values() {
                 debug!(
                     "Removing label with remote_id {:?}",
                     local_label_to_remove.remote_id
                 );
-                local_label_to_remove.delete(tx).await?;
+                local_label_to_remove.delete_sync(tx)?;
             }
-            contacts.store(tx).await?;
+            contacts.store(tx)?;
 
             Ok(())
         })

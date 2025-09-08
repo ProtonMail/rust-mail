@@ -6,11 +6,12 @@ use proton_core_api::services::proton::UserId;
 use proton_core_common::models::{InitializationError, InitializationWatcher, User};
 use proton_core_common::{datatypes::InitializationKey, models::InitializedComponent};
 use stash::exports::{
-    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
+    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Transaction, Value,
+    ValueRef,
 };
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether};
+use stash::stash::{RunTransaction, Stash, StashError, Tether};
 use std::sync::Arc;
 use tracing::instrument;
 
@@ -60,8 +61,8 @@ impl CustomSettings {
             &[],
             user_stash.connection().await?,
             async move || Ok(SyncedCustomSettings { settings: this }),
-            async |tx, synced| {
-                synced.store(tx).await?;
+            |tx, synced| {
+                synced.store(tx)?;
                 Ok(())
             },
         )
@@ -188,8 +189,8 @@ pub struct SyncedCustomSettings {
 
 impl SyncedCustomSettings {
     #[tracing::instrument(skip_all)]
-    pub async fn store(mut self, tx: &Bond<'_>) -> Result<(), StashError> {
-        self.settings.save(tx).await?;
+    pub fn store(mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        self.settings.save_sync(tx)?;
 
         Ok(())
     }
