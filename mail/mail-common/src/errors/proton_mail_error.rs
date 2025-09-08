@@ -346,7 +346,6 @@ impl From<DraftSendError> for ProtonMailError {
                 MailErrorReason::DraftSendReason(DraftSendErrorReason::MessageIsNotADraft),
             ),
             DraftSendError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Internal),
-            DraftSendError::MessageBodyMetadataMissing(_) => Self::Unexpected(Unexpected::Internal),
             DraftSendError::LocalDraftWithoutMessage => Self::Unexpected(Unexpected::Internal),
             DraftSendError::SendMessage(v) => Self::from(v),
             DraftSendError::NoRecipients => Self::Reason(MailErrorReason::DraftSendReason(
@@ -382,7 +381,6 @@ impl From<DraftSaveError> for ProtonMailError {
     fn from(value: DraftSaveError) -> Self {
         let _guard = log_error(&value);
         match value {
-            DraftSaveError::UserHasNoAddresses => Self::Unexpected(Unexpected::Internal),
             DraftSaveError::AddressNotFound(_) => Self::Unexpected(Unexpected::Internal),
             DraftSaveError::AddressWithoutPrimaryKey(v) => {
                 Self::Reason(MailErrorReason::DraftSaveReason(
@@ -392,11 +390,9 @@ impl From<DraftSaveError> for ProtonMailError {
             DraftSaveError::MessageNotADraft(_) => Self::Reason(MailErrorReason::DraftSaveReason(
                 DraftSaveErrorReason::MessageIsNotADraft,
             )),
-            DraftSaveError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Internal),
             DraftSaveError::AttachmentDoesNotHaveKeyPackets(_) => {
                 Self::Unexpected(Unexpected::InvalidArgument)
             }
-            DraftSaveError::LocalDraftWithoutMessage => Self::Unexpected(Unexpected::Internal),
             DraftSaveError::AlreadySent => Self::Reason(MailErrorReason::DraftSaveReason(
                 DraftSaveErrorReason::MessageAlreadySent,
             )),
@@ -413,12 +409,6 @@ impl From<DraftUndoError> for ProtonMailError {
     fn from(value: DraftUndoError) -> Self {
         let _guard = log_error(&value);
         match value {
-            DraftUndoError::MessageNotADraft(_) => Self::Reason(
-                MailErrorReason::DraftUndoSendReason(DraftUndoSendErrorReason::MessageIsNotADraft),
-            ),
-            DraftUndoError::MetadataNotFound(_) => Self::Reason(
-                MailErrorReason::DraftUndoSendReason(DraftUndoSendErrorReason::MessageDoesNotExist),
-            ),
             DraftUndoError::MessageCanNotBeUndoSent(_) => {
                 Self::Reason(MailErrorReason::DraftUndoSendReason(
                     DraftUndoSendErrorReason::MessageCanNotBeUndoSent,
@@ -566,10 +556,7 @@ impl From<SenderAddressChangeError> for ProtonMailError {
     fn from(value: SenderAddressChangeError) -> Self {
         let _guard = log_error(&value);
         match value {
-            SenderAddressChangeError::AddressNotFound(_)
-            | SenderAddressChangeError::MetadataNotFound(_) => {
-                Self::Unexpected(Unexpected::Internal)
-            }
+            SenderAddressChangeError::AddressNotFound(_) => Self::Unexpected(Unexpected::Internal),
             SenderAddressChangeError::AddressHasNoRemoteId(_)
             | SenderAddressChangeError::AddressNotSendEnabled(_) => {
                 Self::Reason(MailErrorReason::DraftSenderAddressChangeReason(

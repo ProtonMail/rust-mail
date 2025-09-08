@@ -205,8 +205,6 @@ pub enum DraftUndoSendErrorReason {
     MessageCanNotBeUndoSent,
     /// The cancellation of sending for this message is no longer possible.
     SendCanNoLongerBeUndone,
-    /// Message is not a draft
-    MessageIsNotADraft,
     /// This message no longer exists.
     MessageDoesNotExist,
 }
@@ -216,7 +214,6 @@ impl From<RealDraftUndoSendErrorReason> for DraftUndoSendErrorReason {
         match value {
             RealDraftUndoSendErrorReason::MessageCanNotBeUndoSent => Self::MessageCanNotBeUndoSent,
             RealDraftUndoSendErrorReason::SendCanNoLongerBeUndone => Self::SendCanNoLongerBeUndone,
-            RealDraftUndoSendErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
             RealDraftUndoSendErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
         }
     }
