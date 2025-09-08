@@ -110,8 +110,8 @@ tempfile = { workspace = true }
 velcro = { workspace = true }
 wiremock = { workspace = true }
 proton-mail-common = { path = ".", features = ["test-utils"] }
-criterion = { version = "0.6.0" }
-pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
+criterion = { workspace = true }
+pprof = { workspace = true }
 
 # not compatible with global clippy configuration yet
 # [lints]

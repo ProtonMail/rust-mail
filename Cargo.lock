@@ -1318,7 +1318,7 @@ dependencies = [
  "cast",
  "ciborium",
  "clap",
- "criterion-plot",
+ "criterion-plot 0.5.0",
  "is-terminal",
  "itertools 0.10.5",
  "num-traits",
@@ -1336,15 +1336,15 @@ dependencies = [
 
 [[package]]
 name = "criterion"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bf7af66b0989381bd0be551bd7cc91912a655a58c6918420c9527b1fd8b4679"
+checksum = "e1c047a62b0cc3e145fa84415a3191f628e980b194c2755aa12300a4e6cbd928"
 dependencies = [
  "anes",
  "cast",
  "ciborium",
  "clap",
- "criterion-plot",
+ "criterion-plot 0.6.0",
  "itertools 0.13.0",
  "num-traits",
  "oorandom",
@@ -1365,6 +1365,16 @@ checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
  "itertools 0.10.5",
+]
+
+[[package]]
+name = "criterion-plot"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b1bcc0dc7dfae599d84ad0b1a55f80cde8af3725da8313b528da95ef783e338"
+dependencies = [
+ "cast",
+ "itertools 0.13.0",
 ]
 
 [[package]]
@@ -5445,28 +5455,6 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "pprof"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef5c97c51bd34c7e742402e216abdeb44d415fbe6ae41d56b114723e953711cb"
-dependencies = [
- "backtrace",
- "cfg-if",
- "criterion 0.5.1",
- "findshlibs",
- "inferno",
- "libc",
- "log",
- "nix",
- "once_cell",
- "parking_lot",
- "smallvec",
- "symbolic-demangle",
- "tempfile",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "pprof"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38a01da47675efa7673b032bf8efd8214f1917d89685e07e395ab125ea42b187"
@@ -6007,7 +5995,7 @@ dependencies = [
 name = "proton-ical"
 version = "0.1.3"
 dependencies = [
- "criterion 0.5.1",
+ "criterion 0.7.0",
  "ext-php-rs",
  "indoc",
  "insta",
@@ -6104,7 +6092,7 @@ dependencies = [
  "chrono",
  "clap",
  "color-backtrace",
- "criterion 0.6.0",
+ "criterion 0.7.0",
  "derive_more 2.0.1",
  "fallible-iterator",
  "file-format",
@@ -6119,7 +6107,7 @@ dependencies = [
  "mime",
  "non-empty-string",
  "parking_lot",
- "pprof 0.15.0",
+ "pprof",
  "pretty_assertions",
  "proton-account-api",
  "proton-action-queue",
@@ -6178,7 +6166,7 @@ dependencies = [
 name = "proton-mail-html-transformer"
 version = "0.2.3"
 dependencies = [
- "criterion 0.5.1",
+ "criterion 0.7.0",
  "email_address",
  "html2text",
  "html5ever 0.26.0",
@@ -6187,7 +6175,7 @@ dependencies = [
  "itertools 0.13.0",
  "kuchikiki",
  "lightningcss",
- "pprof 0.13.0",
+ "pprof",
  "pretty_assertions",
  "regex",
  "test-case",

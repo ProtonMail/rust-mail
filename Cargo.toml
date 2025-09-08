@@ -62,7 +62,6 @@ clap = { version = "4.5.27", features = ["derive"] }
 color-backtrace = "0.6.1"
 common-multipart-rfc7578 = { version = "0.7.0", default-features = false }
 cookie = "0.18.1"
-criterion = "0.5.1"
 derivative = "2.2.0"
 non-empty-string = { version = "0.2.5", features = ["serde"] }
 derive_more = { version = "2.0", features = ["full"] }
@@ -142,6 +141,8 @@ quick-xml = "0.38.2"
 reqwest = { version = "0.12.23", features = [
   "rustls-tls",
 ], default-features = false }
+criterion = "0.7.0"
+pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
 
 [workspace.dependencies.email_address]
 version = "0.2.9"
