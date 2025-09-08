@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- [ET-4529] Filter out snooze action on msg list even if its defined in the API that way
+
+
+## [mail-uniffi-v0.143.0] - 2025-09-05
+
 ### Changed
 
 - [ET-4246] Tether Thread Pool
@@ -55,6 +62,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.142.13] - 2025-09-03
 
+### Features
+
+- Properly sync unsubscribed to newsletter with the backend
+
+### Fixes
+
+- Mobile signature will be disabled by default for paying users, and will be always enabled for free users
+
+
+## [mail-uniffi-v0.142.12] - 2025-09-03
+
 ### Changed
 
 - [ET-4125] Open conversation from push notification
@@ -63,12 +81,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-4215] Add `conversation_wiht_sync` and `conversation_without_sync`
 - Increase default request timeout from 30s to 60s (special case 120s)
-- Properly sync unsubscribed to newsletter with the backend
 
 ### Fixes
 
 - Action queue lost contexts
-- Mobile signature will be disabled by default for paying users, and will be always enabled for free users
 
 
 ## [mail-uniffi-v0.142.11] - 2025-09-02
