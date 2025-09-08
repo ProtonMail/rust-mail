@@ -328,7 +328,7 @@ impl StoredAction {
         id: ActionId,
     ) -> Result<Vec<ActionDependency>, StashError> {
         let mut stmt =
-            conn.prepare("SELECT * FROM action_queue_dependencies WHERE action_id = ?")?;
+            conn.prepare_cached("SELECT * FROM action_queue_dependencies WHERE action_id = ?")?;
         Ok(stmt
             .query_and_then((id,), ActionDependency::from_row)?
             .collect::<Result<_, _>>()?)

@@ -15,14 +15,14 @@
 use crate::params;
 use crate::stash::{Bond, StashError, StashResult, Tether};
 use crate::utils::{ConnectionExt, IterMapToSql};
-use anyhow::{Context, anyhow};
+use anyhow::anyhow;
 use core::any::Any;
 use core::fmt::{Debug, Display};
 use core::future::Future;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use rusqlite::types::FromSql;
-use rusqlite::{Connection, Error as SqliteError, Row, Rows, ToSql, Transaction};
+use rusqlite::{Connection, Error as SqliteError, Row, ToSql, Transaction};
 use rusqlite::{Params, params_from_iter};
 use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;
@@ -153,9 +153,7 @@ where
         params: impl Params,
         conn: &Connection,
     ) -> StashResult<Vec<Self>> {
-        let mut stmt = conn
-            .prepare(query.as_ref())
-            .context("Error preparing the query for load")?;
+        let mut stmt = conn.prepare_cached(query.as_ref())?;
         let records = stmt
             .query_and_then(params, Self::from_row)?
             .collect::<Result<_, _>>()?;
@@ -167,9 +165,7 @@ where
         params: impl Params,
         conn: &Connection,
     ) -> StashResult<Option<Self>> {
-        let mut stmt = conn
-            .prepare(query.as_ref())
-            .context("Error preparing the query for load")?;
+        let mut stmt = conn.prepare_cached(query.as_ref())?;
         let records = stmt
             .query_and_then(params, Self::from_row)?
             .next()
@@ -489,7 +485,7 @@ where
             id = Self::id_field_name(),
         };
 
-        let id: Self::IdType = tx.query_row(&query, params_from_iter(values), |r| r.get(0))?;
+        let id: Self::IdType = tx.query_row_col(&query, params_from_iter(values))?;
 
         self.set_id_value(id);
 
@@ -553,9 +549,10 @@ where
             table = Self::table_name(),
             id = Self::id_field_name(),
         );
+        let mut query = tx.prepare_cached(&query)?;
 
         let values = values.bridge_sql_extend([id]);
-        let affected: usize = tx.execute(&query, params_from_iter(values))?;
+        let affected: usize = query.execute(params_from_iter(values))?;
 
         if affected == 0 {
             return Err(StashError::NoRowsUpdated);
@@ -702,13 +699,4 @@ pub trait ModelHooks {
     fn after_save(&mut self, _: &Transaction<'_>) -> StashResult<()> {
         Ok(())
     }
-}
-
-// TODO: rewrite this fn.
-pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionError> {
-    let mut results = vec![];
-    while let Some(row) = rows.next()? {
-        results.push(T::from_row(row)?);
-    }
-    Ok(results)
 }

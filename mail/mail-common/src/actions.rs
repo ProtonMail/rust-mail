@@ -512,7 +512,7 @@ where
 
     async fn move_to_async(&mut self, bond: &Bond<'_>) -> anyhow::Result<()> {
         // This action modifies self, so we need to send it and get it back.
-        let mut this = self.take();
+        let mut this = self.clone();
         let this = bond
             .sync_bridge(move |tx| {
                 this.move_to(tx)?;
@@ -737,6 +737,7 @@ pub trait ConversationOrMessage:
         let all_mail_id = LabelId::all_mail().local_id(bond)?;
         let almost_all_mail_id = LabelId::almost_all_mail().local_id(bond)?;
 
+        // Not prepare cached because the query depends on the len (it has placeholders)
         let mut stmt = bond.prepare(&Self::grouped_labels_and_messages_query(ids.len()))?;
 
         let rows = stmt.query_map(params_from_iter(ids), |r| {

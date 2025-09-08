@@ -254,7 +254,7 @@ impl ConnectionExt for Connection {
         sql: impl AsRef<str>,
         params: impl Params,
     ) -> RusqliteResult<Vec<T>> {
-        let mut stmt = self.prepare(sql.as_ref())?;
+        let mut stmt = self.prepare_cached(sql.as_ref())?;
         stmt.query_map(params, |x| x.get::<_, T>(0))?
             .collect::<Result<_, _>>()
     }
@@ -264,7 +264,7 @@ impl ConnectionExt for Connection {
         sql: impl AsRef<str>,
         params: impl Params,
     ) -> RusqliteResult<T> {
-        let mut stmt = self.prepare(sql.as_ref())?;
+        let mut stmt = self.prepare_cached(sql.as_ref())?;
         stmt.query_row(params, |x| x.get(0))
     }
 
@@ -273,7 +273,7 @@ impl ConnectionExt for Connection {
         sql: impl AsRef<str>,
         params: impl Params,
     ) -> RusqliteResult<(T, U)> {
-        let mut stmt = self.prepare(sql.as_ref())?;
+        let mut stmt = self.prepare_cached(sql.as_ref())?;
         stmt.query_row(params, |x| Ok((x.get(0)?, x.get(1)?)))
     }
 }

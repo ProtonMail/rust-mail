@@ -1081,11 +1081,12 @@ impl Tether {
         &self,
         callback: impl FnOnce(&rusqlite::Transaction) -> StashResult<T> + Send + 'static,
     ) -> StashResult<T> {
-        self.sync_tx_impl(callback, TransactionTrackingPolicy::Tracking)
+        self.run_sync_tx(callback, TransactionTrackingPolicy::Tracking)
             .await
     }
 
-    async fn sync_tx_impl<T: Send + 'static>(
+    /// This runs the given callback in the tether thread.
+    async fn run_sync_tx<T: Send + 'static>(
         &self,
         callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
         policy: TransactionTrackingPolicy,
@@ -1549,41 +1550,8 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             OperationTransaction::StartSync(BridgeClosure { closure, sender }, policy) => {
                 // Check whether we can start a new transaction or wait until we are allowed to.
                 pool.check_interrupted_or_wait_resume();
-                // In theory this should be impossible since we require a `&mut Tether` to start a
-                // transaction
-                assert!(self.transaction.is_none(), "Started transaction twice");
-
-                match self.start_transaction(policy) {
-                    Ok(tx) => {
-                        if policy == TransactionTrackingPolicy::Tracking {
-                            if let Err(e) = self
-                                .state
-                                .publish_changes(self.watcher)
-                                .execute(self.connection)
-                                .inspect_err(|e| error!("Failed to report tracked changes: {e:?}"))
-                            {
-                                _ = sender.send(Err(StashError::TransactionError(e)));
-                                return;
-                            }
-                        }
-                        let res = match closure(&tx) {
-                            Ok(x) => Ok(Box::new(x) as Box<dyn Any + Send>),
-                            Err(user_err) => {
-                                if let Err(rollback_err) = tx.rollback() {
-                                    Err(StashError::Critical(anyhow!(
-                                        "Rollback error occurred {rollback_err:?} when rolling back the transaction after this error: {user_err:?}"
-                                    )))
-                                } else {
-                                    Err(user_err)
-                                }
-                            }
-                        };
-                        _ = sender.send(res);
-                    }
-                    Err(error) => {
-                        _ = sender.send(Err(StashError::ExecutionError(error)));
-                    }
-                };
+                let res = self.handle_start_sync(closure, policy);
+                _ = sender.send(res);
             }
 
             OperationTransaction::Commit(policy, send_back) => {
@@ -1759,6 +1727,32 @@ impl<'a> TetheredWorkerStateMachine<'a> {
 
         if transaction.rollback().is_err() {
             error!("Failed to roll back transaction upon connection closure");
+        }
+    }
+
+    fn handle_start_sync(
+        &mut self,
+        closure: Box<dyn FnOnce(&Transaction) -> SyncClosureRetTy + Send>,
+        policy: TransactionTrackingPolicy,
+    ) -> StashResult<Box<dyn Any + Send>> {
+        // In theory this should be impossible since we require a `&mut Tether` to start a
+        // transaction
+        assert!(self.transaction.is_none(), "Started transaction twice");
+
+        let tx = self
+            .start_transaction(policy)
+            .map_err(StashError::ExecutionError)?;
+
+        match closure(&tx) {
+            Err(user_err) => {
+                tx.rollback().with_context(|| format!("Rollback error occurred when rolling back the transaction after this error: {user_err:?}"))?;
+                Err(user_err)
+            }
+            Ok(e) => {
+                self.commit_transaction(tx, policy)
+                    .map_err(StashError::TransactionError)?;
+                Ok(e)
+            }
         }
     }
 }

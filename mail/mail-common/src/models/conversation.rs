@@ -2762,8 +2762,9 @@ impl ConversationOrMessage for Conversation {
                 bond,
             )?;
 
-            let mut stmt =
-                bond.prepare("SELECT local_label_id FROM message_labels WHERE local_message_id=?")?;
+            let mut stmt = bond.prepare_cached(
+                "SELECT local_label_id FROM message_labels WHERE local_message_id=?",
+            )?;
             for mut message in messages {
                 let local_message_id = message.id();
                 message.unread = false;
