@@ -187,8 +187,6 @@ pub enum DraftUndoSendErrorReason {
     MessageCanNotBeUndoSent,
     /// The cancellation of sending for this message is no longer possible.
     SendCanNoLongerBeUndone,
-    /// Message is not a draft
-    MessageIsNotADraft,
     /// This message no longer exists.
     MessageDoesNotExist,
 }

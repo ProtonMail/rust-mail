@@ -171,10 +171,12 @@ impl Handler for UndoSendHandler {
             Ok(r) => r,
             Err(e) => {
                 error!("Failed to cancel send: {e:?}");
-                if let Some(proton_error) = e.to_proton_error()
-                    && proton_error.code == Mail::MessageSentCanNoLongerBeUndone as u32
-                {
-                    return Err(UndoError::SendCanNoLongerBeUndone.into());
+                if let Some(proton_error) = e.to_proton_error() {
+                    if proton_error.code == Mail::MessageSentCanNoLongerBeUndone as u32 {
+                        return Err(UndoError::SendCanNoLongerBeUndone.into());
+                    } else if proton_error.code == Mail::MessageDoesNotExist as u32 {
+                        return Err(UndoError::DraftDoesNotExistOnServer.into());
+                    }
                 }
                 return Err(e.into());
             }

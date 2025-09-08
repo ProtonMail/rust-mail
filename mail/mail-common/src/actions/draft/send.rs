@@ -199,6 +199,10 @@ impl Handler for SendHandler {
             return Err(AppError::MessageMissing(local_message_id).into());
         };
 
+        if !message.is_draft() {
+            return Err(SendError::MessageIsNotADraft(local_message_id).into());
+        }
+
         action.update_sent_flag(&mut message, true);
         // When schedule sending the time of the message is the expected delivery time.
         if let Some(delivery_time) = action.delivery_time {
@@ -563,6 +567,8 @@ impl Send {
                     0
                 } else if proton_error.code == Mail::ExpirationTimeTooSoon as u32 {
                     return Err(SendError::ExpirationTimeTooSoon.into());
+                } else if proton_error.code == Mail::MessageDoesNotExist as u32 {
+                    return Err(SendError::DraftDoesNotExistOnServer.into());
                 } else {
                     error!("Failed to send send email request: {err:?}");
                     return Err(err.into());

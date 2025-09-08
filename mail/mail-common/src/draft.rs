@@ -135,8 +135,6 @@ pub enum SendError {
     MissingAttachmentUploads,
     #[error("Message Body for {0} missing")]
     MessageBodyMissing(LocalMessageId),
-    #[error("Message Body Metadata for {0} missing")]
-    MessageBodyMetadataMissing(LocalMessageId),
     #[error("Unable to schedule send before expected delivery time")]
     ScheduleSendExpired,
     #[error("The maximum amount of scheduled messages has been reached")]
@@ -156,22 +154,16 @@ impl From<SendError> for MailContextError {
 /// Errors that occur when saving a draft.
 #[derive(Debug, thiserror::Error)]
 pub enum SaveError {
-    #[error("No addresses found for current user")]
-    UserHasNoAddresses,
     #[error("User Address {0} not found")]
     AddressNotFound(AddressId),
     #[error("User Address {0} has no primary key")]
     AddressWithoutPrimaryKey(AddressId),
     #[error("Message {0} is not a draft")]
     MessageNotADraft(LocalMessageId),
-    #[error("Message Body for {0} missing")]
-    MessageBodyMissing(LocalMessageId),
     #[error("Attachment {0} does not have key packets")]
     AttachmentDoesNotHaveKeyPackets(LocalAttachmentId),
     #[error("Metadata with Id {0} does not exist")]
     MetadataNotFound(MetadataId),
-    #[error("Draft has no message")]
-    LocalDraftWithoutMessage,
     #[error("Can not update a draft that was sent")]
     AlreadySent,
     #[error("Draft does not exist on server")]
@@ -242,10 +234,6 @@ impl From<AttachmentRemoveError> for MailContextError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum UndoError {
-    #[error("Message {0} is not a draft")]
-    MessageNotADraft(LocalMessageId),
-    #[error("Metadata with Id {0} does not exist")]
-    MetadataNotFound(MetadataId),
     #[error("Can not undo send message {0}")]
     MessageCanNotBeUndoSent(LocalMessageId),
     #[error("Can no longer undo send for message")]
@@ -344,8 +332,6 @@ pub enum PackageError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SenderAddressChangeError {
-    #[error("Draft metadata {0} not found")]
-    MetadataNotFound(MetadataId),
     #[error("Address with email '{0}' not found")]
     AddressEmailNotFound(String),
     #[error("Address with id {0} not found")]
