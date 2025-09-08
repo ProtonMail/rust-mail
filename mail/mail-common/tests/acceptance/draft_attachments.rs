@@ -12,16 +12,17 @@ use proton_crypto_inbox::attachment::{
 };
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{
-    AttachmentId, ContentDisposition, DraftAction, DraftAttachmentKeyPackets,
+    AttachmentId, ContentDisposition, DraftAction, DraftAttachmentKeyPackets, DraftRecipient,
     MessageAttachmentHeaders, MessageFlags, NewAttachmentDisposition, NewAttachmentResponse,
     PostAttachmentResponse,
 };
 use proton_mail_api::services::proton::request_data::NewAttachmentParams;
-use proton_mail_api::services::proton::response_data::MessageAttachment;
+use proton_mail_api::services::proton::response_data::{MessageAttachment, MessageRecipient};
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::attachments::DraftAttachmentState;
-use proton_mail_common::draft::{Draft, DraftSyncStatus, ReplyMode};
+use proton_mail_common::draft::recipients::RecipientEntry;
+use proton_mail_common::draft::{Draft, DraftSyncStatus, RecipientGroupId, ReplyMode};
 use proton_mail_common::models::{
     Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, Message,
 };
@@ -1082,6 +1083,117 @@ async fn total_attachment_count_exceeds_limit() {
         err,
         ActionError::Action(MailContextError::Draft(draft::Error::AttachmentUpload(
             draft::AttachmentUploadError::TooManyAttachments
+        )))
+    ));
+}
+#[tokio::test]
+async fn can_not_send_without_all_uploaded_attachments() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let params = draft_test_params();
+    let attachment_file = tempfile::NamedTempFile::new().unwrap();
+    let mut message = draft_message();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".into(),
+        is_proton: false,
+        name: Default::default(),
+        group: None,
+    });
+    let mut expected_draft_params = expected_create_draft_params();
+    expected_draft_params.to_list.push(DraftRecipient {
+        address: "foo@bar.com".into(),
+        name: Default::default(),
+        group: None,
+    });
+
+    ctx.setup_user(params.clone()).await;
+
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    ctx.mock_update_draft(
+        message.metadata.id.clone(),
+        expected_draft_params,
+        message.clone(),
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    ctx.mock_create_attachment(
+        new_attachment_params(attachment_file.path(), message.metadata.id.clone()),
+        Err((
+            422,
+            ApiErrorInfo {
+                code: u32::MAX,
+                error: None,
+                details: None,
+            },
+        )),
+    )
+    .await;
+
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
+    draft
+        .add_single_recipient(
+            RecipientGroupId::To,
+            RecipientEntry {
+                email: "foo@bar.com".into(),
+                display_name: None,
+            },
+        )
+        .await
+        .unwrap();
+    draft.save().await.unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Create attachment
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let _ = create_and_add_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Attachment,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap_err();
+
+    draft.send().await.unwrap();
+    let err = user_ctx.execute_all_send_actions().await.unwrap_err();
+    let QueuedError::Action(err, _) = err else {
+        unreachable!();
+    };
+
+    let err = err
+        .as_action_error::<proton_mail_common::actions::draft::Send>()
+        .unwrap();
+    assert!(matches!(
+        err,
+        ActionError::Action(MailContextError::Draft(draft::Error::Send(
+            draft::SendError::MissingAttachmentUploads
         )))
     ));
 }
