@@ -289,6 +289,21 @@ mod message {
         ],
         ..create_default_list_test_case()
     });
+    static HIDE_SNOOZE_CASE: LazyLock<TestCase<Vec<Message>>> = LazyLock::new(|| TestCase {
+        test_item: vec![Message::test_default(), Message::test_default()],
+        toolbar_actions: vec![MobileAction::ToggleStar, MobileAction::Snooze],
+        is_custom: true,
+        expected_visible: vec![TestActions::Star, TestActions::More],
+        expected_hidden: vec![
+            TestActions::MarkUnread,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+        ],
+        ..create_default_list_test_case()
+    });
 
     #[test_case(&DEFAULT_CASE; "default")]
     #[test_case(&ALL_UNREAD_CASE; "unread")]
@@ -304,6 +319,7 @@ mod message {
     #[test_case(&TRASH_CASE; "trash")]
     #[test_case(&SPAM_CASE; "spam")]
     #[test_case(&TOO_MANY_CASE; "too_many")]
+    #[test_case(&HIDE_SNOOZE_CASE; "hide_snooze")]
     #[tokio::test]
     async fn bottom_bar_actions(test_case: &TestCase<Vec<Message>>) {
         // Setup
