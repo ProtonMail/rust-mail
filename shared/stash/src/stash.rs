@@ -1759,3 +1759,16 @@ impl<'a> TetheredWorkerStateMachine<'a> {
 struct ValueRecord<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static> {
     value: V,
 }
+
+impl<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static> DbRecord
+    for ValueRecord<V>
+{
+    fn field_values(&self) -> impl rusqlite::Params + '_ {
+        (&self.value,)
+    }
+
+    fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, ConversionError> {
+        let value = row.get(0)?;
+        Ok(Self { value })
+    }
+}
