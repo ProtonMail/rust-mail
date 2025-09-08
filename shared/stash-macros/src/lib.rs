@@ -60,7 +60,9 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 
     // Extract attributes
     let fields = extract_fields(&input, "DbRecord");
+
     let db_fields = extract_db_fields(&fields, false);
+
     let via_attrs = extract_via_attrs(&fields, false);
 
     // Generate trait implementation
@@ -70,10 +72,10 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
-            fn field_values(&self) -> impl ::stash::rusqlite::Params + '_ {
-            [
-                #(&self.#db_fields as &dyn ::stash::rusqlite::ToSql),*,
-            ]
+            fn field_values(&self) -> impl Iterator<Item = &dyn ::stash::rusqlite::ToSql>  + '_ {
+                [
+                    #(&self.#db_fields as &dyn ::stash::rusqlite::ToSql),*,
+                ].into_iter()
             }
 
             #fn_from_row_impl
@@ -236,15 +238,16 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let fn_set_id_value_impl = generate_fn_set_id_value_impl(&id_field, is_optional);
 
     let table = table_name.value();
+    let fields = if is_autoincrement {
+        &db_fields_without_id
+    } else {
+        &db_fields
+    };
     let (insert_query, update_query) = {
-        let fields = if is_autoincrement {
-            &db_fields
-        } else {
-            &db_fields_without_id
-        };
 
         let field_names = fields.iter().map(|x| x.to_string()).join(",");
-        let placeholders = "?,".repeat(fields.len());
+        let mut placeholders = "?,".repeat(fields.len());
+        _ = placeholders.pop();
         let insert_query = format!(
             "
 INSERT INTO {table} ({field_names})
@@ -253,12 +256,12 @@ RETURNING {id_field}
 ",
         );
 
-        let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
+        let update_fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
 
         let update_query = format!(
             "
 UPDATE {table} 
-SET ({fields})
+SET {update_fields}
 WHERE {id_field} = ?
 ",
         );
@@ -274,6 +277,13 @@ WHERE {id_field} = ?
 "
     );
 
+    let delete_query = format!(
+        "
+DELETE FROM {table}
+WHERE {id_field} = ?
+"
+    );
+
     let impl_model_hooks = {
         let has_hooks = input.attrs.iter().any(|x| x.path().is_ident("ModelHooks"));
         (!has_hooks).then(|| {
@@ -285,10 +295,10 @@ WHERE {id_field} = ?
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
-            fn field_values(&self) -> impl ::stash::rusqlite::Params + '_ {
+            fn field_values(&self) -> impl Iterator<Item = &dyn ::stash::rusqlite::ToSql>  + '_ {
                 [
-                    #(&self.#db_fields as &dyn ::stash::rusqlite::ToSql),*,
-                ]
+                    #(&self.#fields as &dyn ::stash::rusqlite::ToSql),*,
+                ].into_iter()
             }
 
             #fn_from_row_impl
@@ -301,6 +311,8 @@ WHERE {id_field} = ?
             const INSERT_QUERY: &str = #insert_query;
             const UPDATE_QUERY: &str = #update_query;
             const COUNT_QUERY: &str = #count_query;
+            const DELETE_BY_ID_QUERY: &str = #delete_query;
+
             fn id(&self) -> Self::IdType {
                 #fn_id_impl
             }

@@ -128,7 +128,7 @@ where
     /// `via` attribute argument) will be converted to that type before being
     /// returned.
     ///
-    fn field_values(&self) -> impl Params + '_;
+    fn field_values(&self) -> impl Iterator<Item = &dyn ToSql>  + '_ ;
 
     /// Converts a row from the database into a record.
     ///
@@ -207,6 +207,7 @@ where
     const INSERT_QUERY: &str;
     const UPDATE_QUERY: &str;
     const COUNT_QUERY: &str;
+    const DELETE_BY_ID_QUERY: &str;
 
     /// Finds records in the database using specific query logic.
     ///
@@ -458,7 +459,7 @@ where
     /// If it has a local id it will update the record, otherwise it will insert it.
     ///
     fn insert_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
-        let id: Self::IdType = tx.query_row_col(Self::INSERT_QUERY, self.field_values())?;
+        let id: Self::IdType = tx.query_row_col(Self::INSERT_QUERY, params_from_iter(self.field_values()))?;
 
         self.set_id_value(id);
 
@@ -501,8 +502,11 @@ where
     }
 
     fn update_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
-        let mut query = tx.prepare_cached(Self::INSERT_QUERY)?;
-        let affected: usize = query.execute(self.field_values())?;
+        let mut query = tx.prepare_cached(Self::UPDATE_QUERY)?;
+        let id = self.id();
+        let params = self.field_values().chain([&id as &dyn ToSql]);
+
+        let affected: usize = query.execute(params_from_iter(params))?;
 
         if affected == 0 {
             return Err(StashError::NoRowsUpdated);

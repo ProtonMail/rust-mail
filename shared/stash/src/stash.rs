@@ -1049,7 +1049,9 @@ impl Tether {
         &self,
         callback: impl FnOnce(&rusqlite::Connection) -> Result<T, StashError> + Send + 'static,
     ) -> Result<T, StashError> {
+        let span = tracing::Span::current();
         let closure = Box::new(move |conn: &rusqlite::Connection| {
+            let _g = span.enter();
             callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
 
@@ -1068,14 +1070,14 @@ impl Tether {
     }
 
     pub async fn sync_tx(
-        &self,
+        &mut self,
         callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<()> + Send + 'static,
     ) -> StashResult<()> {
         self.sync_tx_returning(callback).await
     }
 
     pub async fn sync_tx_returning<T: Send + 'static>(
-        &self,
+        &mut self,
         callback: impl FnOnce(&rusqlite::Transaction) -> StashResult<T> + Send + 'static,
     ) -> StashResult<T> {
         self.run_sync_tx(callback, TransactionTrackingPolicy::Tracking)
@@ -1084,13 +1086,15 @@ impl Tether {
 
     /// This runs the given callback in the tether thread.
     async fn run_sync_tx<T: Send + 'static>(
-        &self,
+        &mut self,
         callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
         policy: TransactionTrackingPolicy,
     ) -> StashResult<T> {
         let tx_lock = self.tx_lock.clone();
         let _guard = tx_lock.lock().await;
+        let span = tracing::Span::current();
         let closure = Box::new(move |tx: &rusqlite::Transaction| {
+            let _g = span.enter();
             callback(tx).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
 
@@ -1321,7 +1325,9 @@ impl<'tether> Bond<'tether> {
         &self,
         callback: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<T, StashError> + Send + 'static,
     ) -> Result<T, StashError> {
+        let span = tracing::Span::current();
         let closure = Box::new(move |conn: &rusqlite::Transaction| {
+            let _g = span.enter();
             callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
 
@@ -1763,8 +1769,8 @@ struct ValueRecord<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq 
 impl<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static> DbRecord
     for ValueRecord<V>
 {
-    fn field_values(&self) -> impl rusqlite::Params + '_ {
-        (&self.value,)
+    fn field_values(&self) -> impl Iterator<Item = &dyn ToSql> + '_ {
+        [&self.value as &dyn ToSql].into_iter()
     }
 
     fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, ConversionError> {
