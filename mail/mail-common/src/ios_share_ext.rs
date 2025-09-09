@@ -104,11 +104,11 @@ pub struct IosShareExtAttachment {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     #[test]
     fn smoke() {
-        let dir = TempDir::new("ios-share-ext").unwrap();
+        let dir = TempDir::new().unwrap();
         let mail_cache_path = dir.path().join("mail-cache");
 
         fs::create_dir(&mail_cache_path).unwrap();

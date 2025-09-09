@@ -57,7 +57,7 @@ async_zip = { version = "0.0.15", features = ["deflate", "chrono"] }
 walkdir = { workspace = true }
 wiremock = { workspace = true, optional = true }
 function_name = { workspace = true, optional = true }
-tempdir = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 jiff = { workspace = true }
 url = { workspace = true }
@@ -65,7 +65,7 @@ proton-network-monitor-service = { workspace = true, features = ["muon"] }
 
 [dev-dependencies]
 futures = { workspace = true }
-tempdir = { workspace = true }
+tempfile = { workspace = true }
 rand = { workspace = true }
 insta = { workspace = true }
 proton-core-common = { path = ".", features = ["test-utils"] }
@@ -79,7 +79,7 @@ sql = ["proton-core-api/sql"]
 test-utils = [
   "dep:wiremock",
   "dep:function_name",
-  "dep:tempdir",
+  "dep:tempfile",
   "dep:rand",
   "proton-core-api/mocks",
 ]

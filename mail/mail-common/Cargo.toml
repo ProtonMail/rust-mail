@@ -7,18 +7,17 @@ rust-version.workspace = true
 
 [features]
 default = ["sql", "prefetch"]
+gtk = []
 test-utils = [
   "dep:wiremock",
   "dep:function_name",
   "dep:tempfile",
-  "dep:tempdir",
   "dep:tracing-subscriber",
   "dep:velcro",
   "dep:wiremock-multipart",
   "proton-core-common/test-utils",
 ]
 
-gtk = ["dep:tao", "dep:wry"]
 sql = [
   "proton-core-api/sql",
   "proton-mail-api/sql",
@@ -80,17 +79,12 @@ reqwest = { workspace = true }
 
 # test-util option deps
 function_name = { workspace = true, optional = true }
-tempdir = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 wiremock = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 velcro = { workspace = true, optional = true }
 wiremock-multipart = { workspace = true, optional = true }
 proton-network-monitor-service = { workspace = true }
-
-# Optional dependencies for the `demo` example
-wry = { version = "0.51", optional = true }
-tao = { version = "0.33", optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }
@@ -104,7 +98,6 @@ proton-ical = { workspace = true }
 proton-mail-api = { workspace = true }
 secrecy = { workspace = true }
 serde_with = { workspace = true }
-tempdir = { workspace = true }
 test-case = { workspace = true }
 tracing-subscriber = { workspace = true }
 function_name = { workspace = true }
@@ -113,8 +106,8 @@ tempfile = { workspace = true }
 velcro = { workspace = true }
 wiremock = { workspace = true }
 proton-mail-common = { path = ".", features = ["test-utils"] }
-criterion = { version = "0.6.0" }
-pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
+criterion = { workspace = true }
+pprof = { workspace = true }
 
 # not compatible with global clippy configuration yet
 # [lints]

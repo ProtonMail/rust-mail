@@ -16,7 +16,7 @@ chrono = { workspace = true }
 non_blocking = ["tracing-appender"]
 
 [dev-dependencies]
-tempdir = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

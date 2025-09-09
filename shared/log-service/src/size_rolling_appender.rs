@@ -151,7 +151,7 @@ mod tests {
     use super::*;
     use crate::Config;
     use std::path::PathBuf;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
     const MAX_SIZE: usize = 256;
 
     const BYTES_1: [u8; MAX_SIZE] = [1; MAX_SIZE];
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn rotation_check() {
-        let tmp_dir = TempDir::new("log_service").unwrap();
+        let tmp_dir = TempDir::new().unwrap();
         let config = test_config(tmp_dir.path().to_path_buf());
 
         let rotation_0_file = config.log_file_path(0);
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn rotate_at_startup_at_limit() {
-        let tmp_dir = TempDir::new("log_service").unwrap();
+        let tmp_dir = TempDir::new().unwrap();
         let config = test_config(tmp_dir.path().to_path_buf());
 
         let rotation_0_file = config.log_file_path(0);
@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn skip_rotate_at_startup_when_file_not_at_limit() {
-        let tmp_dir = TempDir::new("log_service").unwrap();
+        let tmp_dir = TempDir::new().unwrap();
         let config = test_config(tmp_dir.path().to_path_buf());
 
         let rotation_0_file = config.log_file_path(0);
@@ -252,7 +252,7 @@ mod tests {
             String::from("Test log header\n")
         }
 
-        let tmp_dir = TempDir::new("log_service").unwrap();
+        let tmp_dir = TempDir::new().unwrap();
         let config = Config::builder()
             .directory(tmp_dir.path().to_path_buf())
             .name("test".into())
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn log_export() {
-        let tmp_dir = TempDir::new("log_service").unwrap();
+        let tmp_dir = TempDir::new().unwrap();
         let config = test_config(tmp_dir.path().to_path_buf());
         let mut logger = SizeRollingAppender::new(config.clone()).unwrap();
 

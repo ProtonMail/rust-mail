@@ -1,0 +1,14 @@
+< /*!
+> - ぐるぐる(guru guru)
+< - guru guru
+> ![Demo Animation](./examples/demo.gif)
+< ![Demo Animation](https://raw.githubusercontent.com/arkbig/throbber-widgets-tui/main/examples/demo.gif)
+> ```sh
+> cargo license --direct-deps-only --avoid-build-deps --avoid-dev-deps | awk -F ":" 'BEGIN {printf "|License|crate|\n|-|-|\n"} {printf "|%s|%s|\n", $1, $2}'
+> ```
+> 
+> ```sh
+> cargo license --avoid-build-deps --avoid-dev-deps | awk -F ":" 'BEGIN {printf "|License|crate|\n|-|-|\n"} {printf "|%s|%s|\n", $1, $2}'
+> ```
+> 
+< */

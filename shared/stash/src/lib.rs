@@ -57,6 +57,5 @@ pub use rusqlite;
 #[cfg(test)]
 mod integration_test_package_usage {
     use futures as _;
-    use tempdir as _;
     use tempfile as _;
 }

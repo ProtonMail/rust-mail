@@ -2,7 +2,8 @@
 
 mod profiler;
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
 
 use proton_mail_html_transformer::{
     Transformer, message_detector, remote_content, sanitizer,

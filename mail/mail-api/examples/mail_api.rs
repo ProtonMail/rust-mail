@@ -17,7 +17,7 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use std::io::{BufRead, Write, stdin, stdout};
 use std::sync::Arc;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::runtime;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -127,7 +127,7 @@ async fn main() {
 }
 
 async fn create_context() -> Arc<Context> {
-    let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
+    let tmp_dir = TempDir::new().expect("failed to create temp dir");
     let keychain = Arc::new(InMemoryKeyChain::default()).clone();
     let key = SessionEncryptionKey::random();
     let log_config = proton_log_service::Config::builder()

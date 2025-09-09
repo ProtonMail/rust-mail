@@ -14,7 +14,7 @@ use proton_core_common::post_login_check::DefaultPostLoginValidator;
 use proton_core_common::{Context, ContextBuilder, Origin};
 use proton_log_service::LogService;
 use std::sync::Arc;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::runtime;
 use tracing::level_filters::LevelFilter;
@@ -132,7 +132,7 @@ async fn main() {
 }
 
 async fn create_context() -> Arc<Context> {
-    let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
+    let tmp_dir = TempDir::new().expect("failed to create temp dir");
     let keychain = Arc::new(InMemoryKeyChain::default()).clone();
     let key = SessionEncryptionKey::random();
     let log_config = proton_log_service::Config::builder()

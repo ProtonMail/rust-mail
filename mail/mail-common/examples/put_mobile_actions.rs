@@ -42,7 +42,7 @@ use proton_mail_common::MailContext;
 use proton_mail_common::actions::mail_settings::{ToolbarType, UpdateMobileActions};
 use proton_mail_common::datatypes::MobileAction;
 use proton_mail_common::models::MailSettings;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::runtime;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
@@ -87,7 +87,7 @@ async fn main() {
         password,
         toolbar_type,
     } = Args::parse();
-    let tmp_dir = TempDir::new("cli").unwrap();
+    let tmp_dir = TempDir::new().unwrap();
 
     let keychain = InMemoryKeyChain::default();
     let key = SessionEncryptionKey::random();

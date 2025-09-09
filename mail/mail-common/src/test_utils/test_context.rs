@@ -16,7 +16,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tracing::info;
 use wiremock::matchers::any;
 use wiremock::{Mock, Request, Respond};
@@ -88,7 +88,7 @@ impl MailTestContext {
             TestContext::with_initializers(initializers).await
         };
 
-        let tmp_dir = TempDir::new("pmc_test").expect("failed to create temp dir");
+        let tmp_dir = TempDir::new().expect("failed to create temp dir");
         info!("MAIL TMP DIR = {:?}", tmp_dir.path());
         let mail_cache_path = tmp_dir.path().join("mail-cache");
         let mail_cache_size = 2 << 17; // 256KiB

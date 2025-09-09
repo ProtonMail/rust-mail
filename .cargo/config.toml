@@ -3,3 +3,28 @@ git-fetch-with-cli = true
 
 [registries.proton]
 index = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source."git+https://github.com/LBeernaertProton/rust-email_address.git?branch=feat/allow-long-local-parts"]
+git = "https://github.com/LBeernaertProton/rust-email_address.git"
+branch = "feat/allow-long-local-parts"
+replace-with = "vendored-sources"
+
+[source."git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12"]
+git = "https://github.com/frondeus/lightningcss"
+rev = "b9dc136b0b43220381965e5806903e7c31a3ca12"
+replace-with = "vendored-sources"
+
+[source."git+https://gitlab.protontech.ch/jhoulahan/muon.git?rev=12c57e6e79c023e5d14e75d6318a878491835c3d"]
+git = "https://gitlab.protontech.ch/jhoulahan/muon.git"
+rev = "12c57e6e79c023e5d14e75d6318a878491835c3d"
+replace-with = "vendored-sources"
+
+[source."sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"]
+registry = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "3rdparty"

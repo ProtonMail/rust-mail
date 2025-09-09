@@ -116,8 +116,8 @@ Example output:
 ```
 ...
 -- iOS 18.3 --
-    iPhone 16 Pro (918F79B8-70DC-4567-B0C6-6253B0D49C25) (Shutdown) 
-    iPhone 16 Pro Max (7C1E9F4F-38BF-4D70-9DA6-52CFF959C061) (Shutdown) 
+    iPhone 16 Pro (918F79B8-70DC-4567-B0C6-6253B0D49C25) (Shutdown)
+    iPhone 16 Pro Max (7C1E9F4F-38BF-4D70-9DA6-52CFF959C061) (Shutdown)
 ...
 ```
 
@@ -169,3 +169,12 @@ xcrun simctl spawn "$DEVICE_ID" log stream \
       --predicate 'subsystem == "ch.protonmail.protonmail" \
       --style syslog
 ```
+
+## Vendoring
+
+To regenerate the `3rdparty` directory, use
+
+```
+cargo vendor --versioned-dirs --locked 3rdparty
+```
+
