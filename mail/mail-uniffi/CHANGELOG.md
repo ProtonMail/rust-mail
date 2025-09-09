@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.143.4] - 2025-09-08
+
+### Fixes
+
+- Scroller should spawn task on next page regardless of the online state
+- [ET-4011] Report attachment validation  errors on draft save
+- [ET-4426] Always disable image decoration
+
+
+## [mail-uniffi-v0.143.2] - 2025-09-08
 
 ### Features
 
