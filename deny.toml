@@ -222,12 +222,15 @@ unknown-registry = "deny"
 unknown-git = "deny"
 # List of URLs for allowed crate registries. Defaults to the crates.io index
 # if not specified. If it is specified but empty, no registries are allowed.
-allow-registry = ["https://github.com/rust-lang/crates.io-index","sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"]
+allow-registry = [
+  "https://github.com/rust-lang/crates.io-index",
+  "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/",
+]
 # List of URLs for allowed Git repositories
 allow-git = [
-    "git+https://gitlab.protontech.ch/jhoulahan/muon.git",
-    "git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12",
-    "git+https://github.com/LBeernaertProton/rust-email_address.git?branch=feat%2Fallow-long-local-parts",
+  "git+https://gitlab.protontech.ch/jhoulahan/muon.git",
+  "git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12",
+  "git+https://github.com/LBeernaertProton/rust-email_address.git?branch=feat%2Fallow-long-local-parts",
 ]
 
 [sources.allow-org]

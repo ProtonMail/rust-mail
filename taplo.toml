@@ -1,1 +1,1 @@
-exclude = [".cargo/**"]
+exclude = [".cargo/**", "3rdparty/**"]
