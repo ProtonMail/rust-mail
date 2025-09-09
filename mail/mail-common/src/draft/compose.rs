@@ -349,7 +349,7 @@ pub fn html_to_text(input: &str) -> String {
     transformer.strip_whitelist();
 
     match transformer.to_plain_text(Html2TextOptions {
-        decorate_links: true,
+        decorate_links: false,
         decorate_images: false,
     }) {
         Ok(text_body) => text_body,
