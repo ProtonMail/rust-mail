@@ -1,4 +1,7 @@
 [advisories]
 ignore = [
 "RUSTSEC-2023-0071", # Validated with crypto team
+"RUSTSEC-2024-0436", # paste is unmaintained, but still usable
+"RUSTSEC-2025-0057", # ET-4664
+"RUSTSEC-2024-0388", # ET-4663
 ]

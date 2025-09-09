@@ -2,46 +2,46 @@
 resolver = "2"
 
 members = [
-  "account/account-api",
-  "account/account-common",
-  "account/account-uniffi",
-  "calendar/calendar-api",
-  "calendar/calendar-common",
-  "shared/action-queue",
-  "core/core-api",
-  "core/core-common",
-  "core/event-loop",
-  "shared/ical",
-  "shared/ical-cli",
-  "shared/ical-fuzz",
-  "shared/ical-tz",
-  "shared/log-service",
-  "shared/proton-canonical-email",
-  "shared/sqlite3",
-  "shared/stash",
-  "shared/stash-macros",
-  "shared/task-service",
-  "shared/vcard",
-  "crypto/crypto-calendar",
-  "crypto/crypto-inbox",
-  "crypto/crypto-inbox-mime",
-  "crypto/crypto-notifications",
-  "crypto/crypto-pin-hash",
-  "mail/mail-api",
-  "mail/mail-common",
-  "mail/mail-common-derive",
-  "mail/mail-html-transformer",
-  "mail/mail-tui",
-  "mail/mail-uniffi",
-  "payment/payment-crux",
-  "payment/payment-sdk",
-  "payment/payment-uniffi",
-  "uniffi/uniffi-bindgen",
-  "uniffi/uniffi-common",
-  "uniffi/uniffi-macros",
-  "uniffi/uniffi-runtime",
-  "shared/proton-event-service",
-  "shared/proton-network-monitor-service",
+    "account/account-api",
+    "account/account-common",
+    "account/account-uniffi",
+    "calendar/calendar-api",
+    "calendar/calendar-common",
+    "shared/action-queue",
+    "core/core-api",
+    "core/core-common",
+    "core/event-loop",
+    "shared/ical",
+    "shared/ical-cli",
+    "shared/ical-fuzz",
+    "shared/ical-tz",
+    "shared/log-service",
+    "shared/proton-canonical-email",
+    "shared/sqlite3",
+    "shared/stash",
+    "shared/stash-macros",
+    "shared/task-service",
+    "shared/vcard",
+    "crypto/crypto-calendar",
+    "crypto/crypto-inbox",
+    "crypto/crypto-inbox-mime",
+    "crypto/crypto-notifications",
+    "crypto/crypto-pin-hash",
+    "mail/mail-api",
+    "mail/mail-common",
+    "mail/mail-common-derive",
+    "mail/mail-html-transformer",
+    "mail/mail-tui",
+    "mail/mail-uniffi",
+    "payment/payment-crux",
+    "payment/payment-sdk",
+    "payment/payment-uniffi",
+    "uniffi/uniffi-bindgen",
+    "uniffi/uniffi-common",
+    "uniffi/uniffi-macros",
+    "uniffi/uniffi-runtime",
+    "shared/proton-event-service",
+    "shared/proton-network-monitor-service",
 ]
 
 [workspace.package]
@@ -62,7 +62,7 @@ clap = { version = "4.5.27", features = ["derive"] }
 color-backtrace = "0.6.1"
 common-multipart-rfc7578 = { version = "0.7.0", default-features = false }
 cookie = "0.18.1"
-derivative = "2.2.0"
+derivative = "=2.2.0"
 non-empty-string = { version = "0.2.5", features = ["serde"] }
 derive_more = { version = "2.0", features = ["full"] }
 ext-php-rs = "0.13.1"
@@ -80,6 +80,7 @@ insta = { version = "1.42.0", features = ["toml"] }
 indexmap = { version = "2.7.1", features = ["serde"] }
 itertools = "0.13.0"
 html2text = "0.14.2"
+fxhash = "=0.2.1" # used by kuchikiki and tui-logger , force to this version to avoid surprises
 jiff = { version = "0.2.4", features = ["serde"] }
 file-format = { version = "0.26.0", features = ["reader"] }
 mime = "0.3.17"
@@ -95,11 +96,11 @@ regex = "1.11.1"
 rmp = "0.8"
 rmp-serde = "1.3"
 rusqlite = { version = "0.32.1", features = [
-  "bundled",
-  "chrono",
-  "functions",
-  "trace",
-  "uuid",
+    "bundled",
+    "chrono",
+    "functions",
+    "trace",
+    "uuid",
 ] }
 sqlite-watcher = { version = "0.5.1", features = ["rusqlite"] }
 slotmap = "1.0.7"
@@ -139,7 +140,7 @@ libfuzzer-sys = "0.4"
 mockall = "0.13.1"
 quick-xml = "0.38.2"
 reqwest = { version = "0.12.23", features = [
-  "rustls-tls",
+    "rustls-tls",
 ], default-features = false }
 criterion = "0.7.0"
 pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
@@ -378,14 +379,3 @@ split-debuginfo = "packed"
 lto = true                 # "Fat" LTO
 incremental = false
 # panic = 'abort' We might want to enable this
-
-[patch."crates-io"]
-# TODO https://github.com/hyperium/hyper/pull/3887 (got merged, waiting for release)
-# TODO https://protonmail.slack.com/archives/C07FCLA1RQW/p1746692300139499
-hyper = { git = "https://github.com/hyperium/hyper", rev = "436cadd1ac08a9508a46f550e03281db9f2fee97" }
-
-# TODO(wpolak) Introduce a proper PR to the upstream with all the changes.
-# * -webkit-text-fill-color support
-# * parsing HEX colors without leading `#`
-# * `Debug`, `Clone` and `Copy` for `PrinterOptions`
-lightningcss = { git = "https://github.com/frondeus/lightningcss", rev = "b9dc136b0b43220381965e5806903e7c31a3ca12" }

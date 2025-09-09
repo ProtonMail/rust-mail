@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [features]
 default = ["sql", "prefetch"]
+gtk = []
 test-utils = [
   "dep:wiremock",
   "dep:function_name",
@@ -17,7 +18,6 @@ test-utils = [
   "proton-core-common/test-utils",
 ]
 
-gtk = ["dep:tao", "dep:wry"]
 sql = [
   "proton-core-api/sql",
   "proton-mail-api/sql",
@@ -85,10 +85,6 @@ tracing-subscriber = { workspace = true, optional = true }
 velcro = { workspace = true, optional = true }
 wiremock-multipart = { workspace = true, optional = true }
 proton-network-monitor-service = { workspace = true }
-
-# Optional dependencies for the `demo` example
-wry = { version = "0.51", optional = true }
-tao = { version = "0.33", optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }
