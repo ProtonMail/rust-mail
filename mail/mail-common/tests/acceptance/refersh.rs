@@ -288,9 +288,7 @@ async fn test_on_refresh_impl_all_success_and_refresh_messages_after_mail_settin
     ctx.catch_all().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
-    let result = refresh(&user_ctx, Refresh::All).await;
-    // Should succeed
-    assert!(result.is_ok());
+    refresh(&user_ctx, Refresh::All).await.unwrap();
     // Check that the messages from api are saved, and local are deleted
     assert_eq!(Message::count("", vec![], &tether).await.unwrap(), 2);
     assert!(

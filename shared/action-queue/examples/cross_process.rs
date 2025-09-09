@@ -83,7 +83,7 @@ async fn main() {
 }
 
 async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
-    let tmp_dir = tempdir::TempDir::new("action-queue-cross-process").unwrap();
+    let tmp_dir = tempfile::TempDir::new().unwrap();
     let queue = new_queue(tmp_dir.path()).await;
 
     println!("PRIMARY_ID= {}", executor_id());

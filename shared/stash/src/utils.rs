@@ -3,9 +3,10 @@
 //! functions for converting values to and from SQLite values using `serde`.
 //!
 
+use crate::stash::RusqliteResult;
 use core::str::from_utf8;
-use rusqlite::types::{FromSqlError, ToSqlOutput, ValueRef};
-use rusqlite::{Error as SqliteError, ToSql};
+use rusqlite::types::{FromSql, FromSqlError, ToSqlOutput, ValueRef};
+use rusqlite::{Connection, Error as SqliteError, Params, ToSql};
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str as from_json, to_string as to_json};
 use std::borrow::Cow;
@@ -226,5 +227,53 @@ pub fn placeholders_n(n: usize) -> Cow<'static, str> {
             Cow::Owned(res)
         }
         cold(n)
+    }
+}
+
+pub trait ConnectionExt {
+    fn query_rows_col<T: FromSql>(
+        &self,
+        sql: impl AsRef<str>,
+        params: impl Params,
+    ) -> RusqliteResult<Vec<T>>;
+    fn query_row_col<T: FromSql>(
+        &self,
+        sql: impl AsRef<str>,
+        params: impl Params,
+    ) -> RusqliteResult<T>;
+    fn query_row_col_2<T: FromSql, U: FromSql>(
+        &self,
+        sql: impl AsRef<str>,
+        params: impl Params,
+    ) -> RusqliteResult<(T, U)>;
+}
+
+impl ConnectionExt for Connection {
+    fn query_rows_col<T: FromSql>(
+        &self,
+        sql: impl AsRef<str>,
+        params: impl Params,
+    ) -> RusqliteResult<Vec<T>> {
+        let mut stmt = self.prepare_cached(sql.as_ref())?;
+        stmt.query_map(params, |x| x.get::<_, T>(0))?
+            .collect::<Result<_, _>>()
+    }
+
+    fn query_row_col<T: FromSql>(
+        &self,
+        sql: impl AsRef<str>,
+        params: impl Params,
+    ) -> RusqliteResult<T> {
+        let mut stmt = self.prepare_cached(sql.as_ref())?;
+        stmt.query_row(params, |x| x.get(0))
+    }
+
+    fn query_row_col_2<T: FromSql, U: FromSql>(
+        &self,
+        sql: impl AsRef<str>,
+        params: impl Params,
+    ) -> RusqliteResult<(T, U)> {
+        let mut stmt = self.prepare_cached(sql.as_ref())?;
+        stmt.query_row(params, |x| Ok((x.get(0)?, x.get(1)?)))
     }
 }

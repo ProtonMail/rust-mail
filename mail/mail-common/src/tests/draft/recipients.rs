@@ -3,6 +3,7 @@ use proton_core_api::services::proton::{ContactEmailId, ContactId, LabelId};
 use proton_core_common::datatypes::{LabelType, Labels};
 use proton_core_common::models::{Contact, ContactEmail, Label};
 use proton_mail_common::test_utils::db::new_test_connection_file;
+use stash::orm::Model;
 use stash::stash::StashError;
 
 #[test]

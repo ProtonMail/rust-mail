@@ -1,3 +1,4 @@
+use crate::actions::ConversationOrMessage;
 use crate::actions::draft::{
     SEND_ACTION_GROUP, local_all_draft_label_id, local_draft_label_id, local_sent_label_id,
 };
@@ -103,15 +104,15 @@ impl Handler for UndoSendHandler {
             .inspect_err(|e| error!("Failed to remove sent flag: {e:?}"))?;
 
         // Move message back to drafts
-        Message::remove_label(local_sent_label_id, [action.id], tx)
+        Message::remove_label_async(local_sent_label_id, [action.id], tx)
             .await
             .inspect_err(|e| error!("Failed to remove sent label: {e:?}"))?;
 
-        Message::apply_label(local_draft_label_id, [action.id], tx)
+        Message::apply_label_async(local_draft_label_id, [action.id], tx)
             .await
             .inspect_err(|e| error!("Failed to apply draft label: {e:?}"))?;
 
-        Message::apply_label(local_all_draft_label_id, [action.id], tx)
+        Message::apply_label_async(local_all_draft_label_id, [action.id], tx)
             .await
             .inspect_err(|e| error!("Failed to apply all draft label: {e:?}"))?;
 
@@ -140,15 +141,15 @@ impl Handler for UndoSendHandler {
             .await
             .inspect_err(|e| error!("Failed to add sent flag: {e:?}"))?;
 
-        Message::remove_label(local_draft_label_id, [action.id], tx)
+        Message::remove_label_async(local_draft_label_id, [action.id], tx)
             .await
             .inspect_err(|e| error!("Failed to remove draft label: {e:?}"))?;
 
-        Message::remove_label(local_all_draft_label_id, [action.id], tx)
+        Message::remove_label_async(local_all_draft_label_id, [action.id], tx)
             .await
             .inspect_err(|e| error!("Failed to remove all draft label: {e:?}"))?;
 
-        Message::apply_label(local_sent_label_id, [action.id], tx)
+        Message::apply_label_async(local_sent_label_id, [action.id], tx)
             .await
             .inspect_err(|e| error!("Failed to apply send label: {e:?}"))?;
         Ok(())

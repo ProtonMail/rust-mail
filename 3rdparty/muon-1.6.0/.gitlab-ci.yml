@@ -1,0 +1,90 @@
+include:
+  - component: $CI_SERVER_FQDN/rust/shared/components/codequality@master
+    inputs:
+      stage: "check"
+  - component: $CI_SERVER_FQDN/proton/devops/cicd-components/kits/devsecops/semgrep@0.0
+    inputs:
+      stage: "check"
+  - component: $CI_SERVER_FQDN/rust/shared/components/cargo-doc@master
+    inputs:
+      rust-version: "bookworm"
+
+  # deploy pipeline environment - quick environment where we don't need any modifications
+  - component: $CI_SERVER_FQDN/rust/shared/components/cargo-test-coverage@master
+    inputs:
+      runner-tag: shared-large
+      
+  - component: $CI_SERVER_FQDN/proton/devops/cicd-components/kubernetes/atlas-deploy/pipenv@0.6
+    inputs:
+      deploy-stage: atlas
+
+  - project: "rust/shared/registry"
+    file: "upload_template.yml"
+    ref: master
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+variables:
+  # Set the `ci` config flag so rustc knows we're in CI
+  RUSTFLAGS: --cfg ci
+
+  # Set the number of jobs for build to avoid oom the CI
+  CARGO_BUILD_JOBS: 4
+
+  RUST_LOG: muon=debug
+
+stages:
+  - check
+  - build
+  - atlas
+  - test
+  - deploy
+
+default:
+  image: harbor.protontech.ch/docker.io/library/rust:latest
+  tags:
+    - shared-large
+
+rust-fmt:
+  before_script:
+    - apt-get update && apt-get install -y clang golang
+
+rust-codequality:
+  before_script: 
+    - apt-get update && apt-get install -y clang golang
+  allow_failure: true
+
+publish-to-registry:
+  extends: .deploy_to_protonvpn_registry
+  stage: deploy
+  variables:
+    PUBLISH_TO_PUBLIC_REGISTRY: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+build:
+  stage: build
+  image: harbor.protontech.ch/ghcr.io/cross-rs/${IMG}:main
+  parallel:
+    matrix:
+      - { TGT: "x86_64-unknown-linux-gnu", IMG: "x86_64-unknown-linux-gnu" }
+      - { TGT: "wasm32-unknown-unknown", IMG: "x86_64-unknown-linux-gnu" }
+      - { TGT: "aarch64-linux-android", IMG: "aarch64-linux-android" }
+      - { TGT: "armv7-linux-androideabi", IMG: "armv7-linux-androideabi" }
+      - { TGT: "aarch64-unknown-linux-gnu", IMG: "aarch64-unknown-linux-gnu" }
+  before_script:
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    - export PATH="$HOME/.cargo/bin:$PATH"
+    - rustup target add $TGT
+  script:
+    - cargo build --target $TGT
+
+rust-test-coverage:
+  variables: 
+    CARGO_TEST_OPTIONS: "--all-features -- --test-threads=1"
+    RUSTFLAGS: "-C instrument-coverage --cfg ci"
+  before_script:
+    - apt-get update && apt-get install -y clang golang 

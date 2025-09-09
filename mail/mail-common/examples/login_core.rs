@@ -8,7 +8,7 @@ use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::runtime;
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, info};
@@ -19,7 +19,7 @@ async fn main() {
     tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(Level::DEBUG)
         .init();
-    let tmp_dir = TempDir::new("cli").unwrap();
+    let tmp_dir = TempDir::new().unwrap();
     let context = {
         let env_filter = EnvFilter::builder()
             .with_default_directive(LevelFilter::TRACE.into())

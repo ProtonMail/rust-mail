@@ -9,6 +9,7 @@ use proton_core_api::services::proton::Address as ApiAddress;
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::ProtonCore;
 
+use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::params;
@@ -72,11 +73,11 @@ pub struct Address {
 }
 
 impl ModelHooks for Address {
-    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone()
-            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
-        {
-            self.local_id = existing.local_id;
+    fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
+        if let Some(remote_id) = &self.remote_id {
+            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)? {
+                self.local_id = existing.local_id;
+            }
         }
 
         Ok(())

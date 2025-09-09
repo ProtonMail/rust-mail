@@ -15,7 +15,7 @@ use proton_mail_common::test_utils::scroller::TestScroller;
 use stash::orm::Model;
 use std::fmt::Debug;
 use std::sync::Arc;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::runtime;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -51,7 +51,7 @@ async fn main() {
         password,
         messages: _,
     } = Args::parse();
-    let tmp_dir = TempDir::new("cli").unwrap();
+    let tmp_dir = TempDir::new().unwrap();
     info!("TEMP_DIR = {tmp_dir:?}");
 
     let keychain = InMemoryKeyChain::default();

@@ -55,16 +55,13 @@ use crate::datatypes::LocalIdMarker;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use proton_core_api::services::proton::ProtonIdMarker;
-use stash::exports::FromSql;
-use stash::exports::{SqliteError, ToSql};
+use stash::exports::{FromSql, SqliteError, ToSql};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Bond;
-use stash::stash::StashError;
-use stash::stash::Tether;
-use stash::utils::IterMapToSql as _;
-use stash::utils::MapToSql as _;
-use stash::utils::placeholders;
+use stash::rusqlite::params_from_iter;
+use stash::rusqlite::{Connection, OptionalExtension};
+use stash::stash::{Bond, StashError, Tether};
+use stash::utils::{ConnectionExt, IterMapToSql as _, MapToSql as _, placeholders};
 
 #[allow(async_fn_in_trait)]
 pub trait ModelExtension: Model {
@@ -390,12 +387,37 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         id: Self::RemoteId,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        Self::find_first(
+        tether
+            .sync_query(move |conn| Self::find_by_remote_id_sync(&id, conn))
+            .await
+    }
+
+    fn find_by_remote_id_sync(
+        id: &Self::RemoteId,
+        conn: &Connection,
+    ) -> Result<Option<Self>, StashError> {
+        Self::find_first_sync(
             format!("WHERE {} =?", Self::remote_id_field_name()),
-            params![id],
-            tether,
+            (id,),
+            conn,
         )
-        .await
+    }
+
+    fn find_by_remote_ids_sync(
+        ids: &[Self::RemoteId],
+        conn: &Connection,
+    ) -> Result<Vec<Self>, StashError> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let field_name = Self::remote_id_field_name();
+        let placeholders = placeholders(ids);
+
+        Self::find_sync(
+            format!("WHERE {field_name} IN ({placeholders})"),
+            params_from_iter(ids),
+            conn,
+        )
     }
 
     /// Finds records by its remote IDs.
@@ -453,39 +475,55 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         bond.execute(query, params![remote_id]).await
     }
 
-    /// Return the local id counterpart for a given `remote_id`.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
+    /// Return the local id for a given `remote_id`.
     async fn remote_id_counterpart(
         remote_id: Self::RemoteId,
         tether: &Tether,
     ) -> Result<Option<Self::IdType>, StashError> {
-        match tether
-            .query_value::<_, Self::IdType>(
-                formatdoc!(
-                    "
-                            SELECT
-                                {} AS value
-                            FROM
-                                {}
-                            WHERE
-                                {} = ?
-                            LIMIT 1
-                            ",
-                    Self::id_field_name(),
-                    Self::table_name(),
-                    Self::remote_id_field_name(),
-                ),
-                params![remote_id],
-            )
+        tether
+            .sync_query(move |c| Self::remote_id_counterpart_sync(&remote_id, c))
             .await
-        {
-            Ok(v) => Ok(Some(v)),
-            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
-            Err(e) => Err(e),
-        }
+    }
+
+    /// Return the local id for a given `remote_id`.
+    fn remote_id_counterpart_sync(
+        remote_id: &Self::RemoteId,
+        conn: &Connection,
+    ) -> Result<Option<Self::IdType>, StashError> {
+        conn.query_row_col(
+            formatdoc! {
+                "
+                SELECT {} FROM {} WHERE {} = ?
+                LIMIT 1
+                ",
+                Self::id_field_name(),
+                Self::table_name(),
+                Self::remote_id_field_name(),
+            },
+            (remote_id,),
+        )
+        .optional()
+        .map_err(StashError::from)
+    }
+
+    /// Return the local id for a given `remote_id`.
+    fn remote_ids_counterpart_sync(
+        remote_ids: &[Self::RemoteId],
+        conn: &Connection,
+    ) -> Result<Vec<Self::IdType>, StashError> {
+        conn.query_rows_col(
+            formatdoc! {
+                "
+                SELECT {} FROM {} WHERE {} IN ({})
+                ",
+                Self::id_field_name(),
+                Self::table_name(),
+                Self::remote_id_field_name(),
+                placeholders(remote_ids),
+            },
+            params_from_iter(remote_ids),
+        )
+        .map_err(StashError::from)
     }
 
     /// Return the local id counterparts for a given set of `remote ids`.

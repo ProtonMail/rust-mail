@@ -1,3 +1,4 @@
+use crate::actions::ConversationOrMessage;
 use crate::actions::draft::{
     SEND_ACTION_GROUP, local_all_draft_label_id, local_all_scheduled_label_id,
     local_draft_label_id, local_outbox_label_id, local_sent_label_id,
@@ -212,18 +213,18 @@ impl Handler for SendHandler {
             error!("Failed to update message sent flag: {e:?}");
         })?;
 
-        Message::remove_label(local_draft_label_id, [local_message_id], tx)
+        Message::remove_label_async(local_draft_label_id, [local_message_id], tx)
             .await
             .inspect_err(|e| error!("Failed to remove draft label: {e:?}"))?;
-        Message::remove_label(local_all_draft_label_id, [local_message_id], tx)
+        Message::remove_label_async(local_all_draft_label_id, [local_message_id], tx)
             .await
             .inspect_err(|e| error!("Failed to remove all draft label: {e:?}"))?;
         if action.is_scheduled() {
-            Message::apply_label(local_all_scheduled_label_id, [local_message_id], tx)
+            Message::apply_label_async(local_all_scheduled_label_id, [local_message_id], tx)
                 .await
                 .inspect_err(|e| error!("Failed to apply scheduled label: {e:?}"))?;
         } else {
-            Message::apply_label(local_outbox_label_id, [local_message_id], tx)
+            Message::apply_label_async(local_outbox_label_id, [local_message_id], tx)
                 .await
                 .inspect_err(|e| error!("Failed to apply outbox label: {e:?}"))?;
         }
@@ -266,18 +267,18 @@ impl Handler for SendHandler {
         })?;
 
         if action.is_scheduled() {
-            Message::remove_label(local_all_scheduled_label_id, [local_message_id], tx)
+            Message::remove_label_async(local_all_scheduled_label_id, [local_message_id], tx)
                 .await
                 .inspect_err(|e| error!("Failed to remove scheduled label: {e:?}"))?;
         } else {
-            Message::remove_label(local_outbox_label_id, [local_message_id], tx)
+            Message::remove_label_async(local_outbox_label_id, [local_message_id], tx)
                 .await
                 .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
         }
-        Message::apply_label(local_draft_label_id, [local_message_id], tx)
+        Message::apply_label_async(local_draft_label_id, [local_message_id], tx)
             .await
             .inspect_err(|e| error!("Failed to apply draft label: {e:?}"))?;
-        Message::apply_label(local_all_draft_label_id, [local_message_id], tx)
+        Message::apply_label_async(local_all_draft_label_id, [local_message_id], tx)
             .await
             .inspect_err(|e| error!("Failed to apply all draft label: {e:?}"))?;
 
@@ -522,15 +523,15 @@ impl Send {
                         }
 
                         // Move message to sent folder
-                        Message::remove_label(local_outbox_label_id, [local_message_id], tx)
+                        Message::remove_label_async(local_outbox_label_id, [local_message_id], tx)
                             .await
                             .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
                         if action.is_scheduled() {
-                            Message::apply_label(local_all_scheduled_id, [local_message_id], tx)
+                            Message::apply_label_async(local_all_scheduled_id, [local_message_id], tx)
                                 .await
                                 .inspect_err(|e| error!("Failed to apply all scheduled label: {e:?}"))?;
                         } else {
-                            Message::apply_label(local_sent_label_id, [local_message_id], tx)
+                            Message::apply_label_async(local_sent_label_id, [local_message_id], tx)
                                 .await
                                 .inspect_err(|e| error!("Failed to apply sent label: {e:?}"))?;
                         }

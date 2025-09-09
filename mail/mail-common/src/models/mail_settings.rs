@@ -18,14 +18,15 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::MailSettings as ApiMailSettings;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
+use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 
 impl ModelHooks for MailSettings {
-    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    fn before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         // Make sure there will be only one row.
-        if Self::get(bond).await?.is_some() {
+        if Self::load_by_id_sync(MailSettingsId, tx)?.is_some() {
             self.local_id = MailSettingsId;
         }
         Ok(())

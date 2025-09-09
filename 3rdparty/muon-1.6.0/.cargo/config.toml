@@ -1,0 +1,8 @@
+[alias]
+    xtask = "run -p xtask --"
+
+[registries.proton]
+    index = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+
+[target.wasm32-unknown-unknown]
+    runner = 'wasm-bindgen-test-runner'

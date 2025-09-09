@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Speedup mark as read and unread
+- [draft] speed up {apply, remove}_label
+
+
+## [mail-uniffi-v0.143.1] - 2025-09-08
+
 ### Fixes
 
 - [ET-4529] Filter out snooze action on msg list even if its defined in the API that way

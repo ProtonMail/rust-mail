@@ -4,12 +4,13 @@ use std::time::Duration;
 use derive_more::derive::TryFrom;
 use serde::{Deserialize, Serialize};
 use stash::exports::{
-    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
+    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Transaction, Value,
+    ValueRef,
 };
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::sql_using_serde;
-use stash::stash::{Bond, StashError, Tether};
+use stash::stash::{StashError, Tether};
 use tracing::{debug, instrument};
 
 use crate::Context;
@@ -48,9 +49,9 @@ pub struct AppSettings {
 }
 
 impl ModelHooks for AppSettings {
-    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    fn before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         // Make sure there will be only one row.
-        if Self::get(bond).await?.is_some() {
+        if Self::load_by_id_sync(SingleEntryId, tx)?.is_some() {
             self.local_id = SingleEntryId;
         }
         Ok(())
@@ -248,8 +249,8 @@ pub struct PinProtection {
 }
 
 impl ModelHooks for PinProtection {
-    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if Self::get(bond).await?.is_some() {
+    fn before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        if Self::load_by_id_sync(SingleEntryId, tx)?.is_some() {
             self.local_id = SingleEntryId;
         }
         Ok(())

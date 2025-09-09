@@ -1,3 +1,4 @@
+use crate::actions::ConversationOrMessage;
 use crate::actions::draft::{
     SEND_ACTION_GROUP, local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id,
     local_sent_label_id,
@@ -332,19 +333,19 @@ impl Handler for SaveHandler {
                 .await
                 .inspect_err(|e| error!("Failed to save message body metadata: {e:?}"))?;
 
-            Message::apply_label(local_draft_id, std::iter::once(message.id()), bond)
+            Message::apply_label_async(local_draft_id, std::iter::once(message.id()), bond)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to apply draft label to new message: {e:?}");
                 })?;
 
-            Message::apply_label(local_all_draft_id, std::iter::once(message.id()), bond)
+            Message::apply_label_async(local_all_draft_id, std::iter::once(message.id()), bond)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to apply all_draft label to new message: {e:?}");
                 })?;
 
-            Message::apply_label(local_all_mail_id, std::iter::once(message.id()), bond)
+            Message::apply_label_async(local_all_mail_id, std::iter::once(message.id()), bond)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to apply all_mail label to new message: {e:?}");
@@ -529,10 +530,15 @@ impl Save {
                         let local_sent_id = local_sent_label_id(tx).await?;
                         let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
 
-                        Message::remove_label(local_draft_label_id, [local_message_id], tx).await?;
-                        Message::remove_label(local_all_draft_label_id, [local_message_id], tx)
+                        Message::remove_label_async(local_draft_label_id, [local_message_id], tx)
                             .await?;
-                        Message::apply_label(local_sent_id, [local_message_id], tx).await?;
+                        Message::remove_label_async(
+                            local_all_draft_label_id,
+                            [local_message_id],
+                            tx,
+                        )
+                        .await?;
+                        Message::apply_label_async(local_sent_id, [local_message_id], tx).await?;
 
                         let mut rollback_item = RollbackItem::new(
                             remote_message_id.to_string(),

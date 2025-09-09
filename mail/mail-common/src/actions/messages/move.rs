@@ -56,7 +56,7 @@ impl Handler for MoveHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<Self::Action, <Self::Action as Action>::Error> {
-        action.0.move_to(tx).await?;
+        action.0.move_to_async(tx).await?;
         Ok(action.clone())
     }
 

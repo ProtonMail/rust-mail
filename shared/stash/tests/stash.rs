@@ -512,9 +512,11 @@ mod concurrency_mixed {
 
 mod orm_tests {
     use crate::params;
+    use rusqlite::{Connection, Transaction};
     use stash::{
         orm::{Model, ModelHooks},
-        stash::{Bond, Stash, StashError, Tether},
+        stash::{Stash, StashError},
+        utils::ConnectionExt,
     };
     use stash_macros::Model;
 
@@ -539,7 +541,7 @@ mod orm_tests {
     }
 
     impl ModelHooks for MyModel {
-        async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        fn before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
             if self.mascot == "ferris" {
                 assert_eq!(self.other_mascot, "corro")
             } else if self.mascot == "corro" {
@@ -547,23 +549,20 @@ mod orm_tests {
             } else {
                 panic!("unknown mascot {}", self.mascot);
             }
-            self.all_rustaceans = bond
-                .query_value("SELECT COUNT(*) as value from my_model", vec![])
-                .await?;
+            self.all_rustaceans = tx.query_row_col("SELECT COUNT(*) as value from my_model", ())?;
             Ok(())
         }
 
-        async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        fn after_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
             bond.execute(
                 "UPDATE my_model SET all_rustaceans = all_rustaceans + 1",
-                vec![],
-            )
-            .await?;
+                (),
+            )?;
             self.all_rustaceans += 1;
             Ok(())
         }
 
-        async fn after_load(&mut self, _: &Tether) -> Result<(), StashError> {
+        fn after_load(&mut self, _: &Connection) -> Result<(), StashError> {
             if self.mascot == "ferris" {
                 self.other_mascot = "corro".to_string();
             } else if self.mascot == "corro" {

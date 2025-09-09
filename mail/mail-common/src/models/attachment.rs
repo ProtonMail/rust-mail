@@ -30,9 +30,12 @@ use proton_mail_api::services::proton::response_data::{
 };
 use proton_mail_api::services::proton::responses::GetAttachmentMetadataResponse;
 use serde::{Deserialize, Serialize};
+use stash::exports::Connection;
+use stash::exports::Transaction;
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model;
+use stash::orm::ModelHooks;
 use stash::stash::{Bond, StashError, Tether};
 use stash::{params, sql_using_serde};
 use std::os::unix::fs::MetadataExt;
@@ -91,6 +94,7 @@ use tracing::{debug, error, info, trace};
 ///
 #[derive(Clone, Debug, Eq, Model, PartialEq, Default)]
 #[TableName("attachments")]
+#[ModelHooks]
 pub struct Attachment {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalAttachmentId>,
@@ -204,15 +208,15 @@ impl Attachment {
     /// # Errors
     ///
     /// Return error if the query failed.
-    pub async fn load_conversation_attachment_metadata(
+    pub fn load_conversation_attachment_metadata(
         conversation_id: LocalConversationId,
-        tether: &Tether,
+        conn: &Connection,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
-        Self::find("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?) AND disposition = ?",
-                   params![conversation_id, Disposition::Attachment],
-                   tether,
+        Ok(Self::find_sync("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?) AND disposition = ?",
+            (conversation_id, Disposition::Attachment),
+                   conn,
         )
-            .await.map(|v| v.map_vec())
+            ?.map_vec())
     }
 
     /// Load attachment metadata for a given `message_id`.
@@ -223,83 +227,16 @@ impl Attachment {
     /// # Errors
     ///
     /// Return error if the query failed.
-    pub async fn load_message_attachment_metadata(
+    pub fn load_message_attachment_metadata(
         message_id: LocalMessageId,
-        tether: &Tether,
+        conn: &Connection,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
-        Self::find("WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?) AND disposition = ?",
-                   params![message_id, Disposition::Attachment],
-                   tether,
-        )
-            .await.map(|v| v.map_vec())
-    }
-
-    /// Save or update the attachment in the database.
-    ///
-    /// It's imperative to call this function rather than
-    /// [`Model::save()`] to make sure that we override the existing
-    /// partial metadata rather than create a new entry that will cause a
-    /// conflict.
-    ///
-    /// There is currently no way to handle this in stash directly, so we have
-    /// to manually perform this check.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query failed.
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // If we already exist in the db
-        if let Some(local_id) = self.local_id {
-            // There is currently a race because we try to write too much data at the same time
-            // rather than what really changed. It's highly unlikely that we ever want to remove
-            // any of these from an attachment that already has one. This happens in the
-            // context of drafts, where a local change to the message body metadata can
-            // accidentally reset the attachment remote id to nothing, causing the send
-            // to fail.
-            if let Some(existing) = Attachment::find_by_id(local_id, bond).await? {
-                if existing.remote_id().is_some() {
-                    self.attachment_type = existing.attachment_type;
-                }
-                if self.key_packets.is_none() {
-                    self.key_packets = existing.key_packets;
-                }
-                if self.enc_signature.is_none() {
-                    self.enc_signature = existing.enc_signature;
-                }
-                if self.signature.is_none() {
-                    self.signature = existing.signature;
-                }
-            } else {
-                error!("local_id exists but attachment does not exist in database?!");
-            }
-        // If another remote attachment exists in the db
-        } else if let Some(existing) =
-            Attachment::find_by_remote_id(&self.attachment_type, bond).await?
-        {
-            self.local_id = existing.local_id;
-        }
-
-        if self.local_address_id.is_none()
-            && let Some(remote_address_id) = self.remote_address_id.clone()
-        {
-            self.local_address_id = Address::remote_id_counterpart(remote_address_id, bond).await?;
-        }
-
-        if self.local_message_id.is_none()
-            && let Some(remote_message_id) = self.remote_message_id.clone()
-        {
-            self.local_message_id = Message::remote_id_counterpart(remote_message_id, bond).await?;
-        }
-
-        if self.local_conversation_id.is_none()
-            && let Some(remote_conversation_id) = self.remote_conversation_id.clone()
-        {
-            self.local_conversation_id =
-                Conversation::remote_id_counterpart(remote_conversation_id, bond).await?;
-        }
-
-        <Self as Model>::save(self, bond).await
+        let res = Self::find_sync(
+            "WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?) AND disposition = ?",
+            (message_id, Disposition::Attachment),
+            conn,
+        )?;
+        Ok(res.map_vec())
     }
 
     /// Fetch attachment content from the API.
@@ -390,17 +327,25 @@ impl Attachment {
         local_message_id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
-        Attachment::find(
+        tether
+            .sync_query(move |conn| Self::for_message_sync(local_message_id, conn))
+            .await
+    }
+
+    pub fn for_message_sync(
+        local_message_id: LocalMessageId,
+        conn: &Connection,
+    ) -> Result<Vec<Self>, StashError> {
+        Attachment::find_sync(
             indoc! {"
             WHERE local_id IN (
                 SELECT local_attachment_id FROM message_attachments
                 WHERE local_message_id=?1
             )
         "},
-            params![local_message_id],
-            tether,
+            (local_message_id,),
+            conn,
         )
-        .await
     }
 
     /// Create or update the attachment table with partial information contained in
@@ -409,40 +354,39 @@ impl Attachment {
     /// # Errors
     ///
     /// Returns error if the query fails.
-    pub async fn create_or_update_from_message_metadata(
+    pub fn create_or_update_from_message_metadata(
         message: &mut Message,
-        bond: &Bond<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<Vec<LocalAttachmentId>, StashError> {
         let mut result = Vec::with_capacity(message.attachments_metadata.len());
         let message_id = message.id();
         for metadata in &mut message.attachments_metadata {
             // Handle case where we have local not uploaded attachments.
             let maybe_existing_attachment = if let Some(local_id) = metadata.local_id {
-                Attachment::find_by_id(local_id, bond).await?
+                Attachment::load_by_id_sync(local_id, tx)?
             } else {
-                Attachment::find_by_remote_id(&metadata.attachment_type, bond).await?
+                Attachment::find_by_remote_id_sync(&metadata.attachment_type, tx)?
             };
 
             let id = if let Some(attachment) = maybe_existing_attachment {
                 // This attachment exists, we need to update only the parts we
                 // want to modify.
-                bond.execute(
-                    formatdoc! {"UPDATE {} SET
+                tx.execute(
+                    "UPDATE attachments SET
                     local_address_id = ?,
                     remote_address_id = ?,
                     local_message_id = ?,
                     remote_message_id = ?
                     WHERE local_id = ?
-                ", Self::table_name()},
-                    params![
+                ",
+                    (
                         message.local_address_id,
                         message.remote_address_id.clone(),
                         message_id,
                         message.remote_id.clone(),
-                        attachment.id()
-                    ],
+                        attachment.id(),
+                    ),
                 )
-                .await
                 .inspect_err(|e| error!("Failed to update attachment from message: {}", e))?;
                 attachment.id()
             } else {
@@ -453,8 +397,7 @@ impl Attachment {
                 attachment.local_message_id = message.local_id;
                 attachment.remote_message_id = message.remote_id.clone();
                 attachment
-                    .save(bond)
-                    .await
+                    .save_sync(tx)
                     .inspect_err(|e| error!("Failed to save attachment from message: {e:?}"))?;
                 attachment.id()
             };
@@ -470,36 +413,35 @@ impl Attachment {
     /// # Errors
     ///
     /// Returns error if the query fails.
-    pub async fn create_or_update_from_conversation_metadata(
+    pub fn create_or_update_from_conversation_metadata(
         conversation: &mut Conversation,
-        bond: &Bond<'_>,
+        tx: &Transaction<'_>,
     ) -> Result<Vec<LocalAttachmentId>, StashError> {
         let conversation_id = conversation.id();
         let mut result = Vec::with_capacity(conversation.attachments_metadata.len());
         for metadata in &mut conversation.attachments_metadata {
             // Handle case where we have local not uploaded attachments.
             let maybe_existing_attachment = if let Some(local_id) = metadata.local_id {
-                Attachment::find_by_id(local_id, bond).await?
+                Attachment::load_by_id_sync(local_id, tx)?
             } else {
-                Attachment::find_by_remote_id(&metadata.attachment_type, bond).await?
+                Attachment::find_by_remote_id_sync(&metadata.attachment_type, tx)?
             };
 
             let id = if let Some(attachment) = maybe_existing_attachment {
                 // This attachment exists, we need to update only the parts we
                 // want to modify.
-                bond.execute(
-                    formatdoc! {"UPDATE {} SET
+                tx.execute(
+                    "UPDATE attachments SET
                     local_conversation_id = ?,
                     remote_conversation_id = ?
                     WHERE local_id = ?
-                ", Self::table_name()},
-                    params![
+                ",
+                    (
                         conversation_id,
                         conversation.remote_id.clone(),
-                        attachment.id()
-                    ],
+                        attachment.id(),
+                    ),
                 )
-                .await
                 .inspect_err(|e| error!("Failed to update attachment from conversation: {}", e))?;
                 attachment.id()
             } else {
@@ -507,7 +449,7 @@ impl Attachment {
                 // This attachment does not exist, we need to create it.
                 attachment.local_conversation_id = Some(conversation_id);
                 attachment.remote_conversation_id = conversation.remote_id.clone();
-                attachment.save(bond).await.inspect_err(|e| {
+                attachment.save_sync(tx).inspect_err(|e| {
                     error!("Failed to save attachment from conversation: {e:?}")
                 })?;
                 attachment.id()
@@ -718,18 +660,27 @@ impl Attachment {
         Ok(attachment)
     }
 
+    pub fn find_by_remote_id_sync(
+        attachment_type: &AttachmentType,
+        tether: &Connection,
+    ) -> Result<Option<Self>, StashError> {
+        if let AttachmentType::Remote(Some(_)) = attachment_type {
+            let json = attachment_type.to_json()?;
+            Attachment::find_first_sync("WHERE attachment_type = ?", (json,), tether)
+        } else {
+            Ok(None)
+        }
+    }
     /// Tries to find an attachment by remote id.
     /// This only returns Some if AttachmentType::Remote(Some(_)) and it finds such a record.
     pub async fn find_by_remote_id(
         attachment_type: &AttachmentType,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        if let AttachmentType::Remote(Some(_)) = attachment_type {
-            let json = attachment_type.to_json()?;
-            Attachment::find_first("WHERE attachment_type = ?", params![json], tether).await
-        } else {
-            Ok(None)
-        }
+        let attachment_type = attachment_type.clone();
+        tether
+            .sync_query(move |conn| Self::find_by_remote_id_sync(&attachment_type, conn))
+            .await
     }
 
     /// Return the local id counterpart for a given `remote_id`.
@@ -984,6 +935,62 @@ impl Attachment {
         self.content_id
             .as_ref()
             .map(|cid| format!(r#"<img src="cid:{cid}" style="max-width: 100%;"><br>"#))
+    }
+}
+
+impl ModelHooks for Attachment {
+    fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
+        // If we already exist in the db
+        if let Some(local_id) = self.local_id {
+            // There is currently a race because we try to write too much data at the same time
+            // rather than what really changed. It's highly unlikely that we ever want to remove
+            // any of these from an attachment that already has one. This happens in the
+            // context of drafts, where a local change to the message body metadata can
+            // accidentally reset the attachment remote id to nothing, causing the send
+            // to fail.
+            if let Some(existing) = Attachment::load_by_id_sync(local_id, tx)? {
+                if existing.remote_id().is_some() {
+                    self.attachment_type = existing.attachment_type;
+                }
+                if self.key_packets.is_none() {
+                    self.key_packets = existing.key_packets;
+                }
+                if self.enc_signature.is_none() {
+                    self.enc_signature = existing.enc_signature;
+                }
+                if self.signature.is_none() {
+                    self.signature = existing.signature;
+                }
+            } else {
+                error!("local_id exists but attachment does not exist in database?!");
+            }
+        // If another remote attachment exists in the db
+        } else if let Some(existing) =
+            Attachment::find_by_remote_id_sync(&self.attachment_type, tx)?
+        {
+            self.local_id = existing.local_id;
+        }
+
+        if self.local_address_id.is_none() {
+            if let Some(remote_address_id) = &self.remote_address_id {
+                self.local_address_id = Address::remote_id_counterpart_sync(remote_address_id, tx)?;
+            }
+        }
+
+        if self.local_message_id.is_none() {
+            if let Some(remote_message_id) = &self.remote_message_id {
+                self.local_message_id = Message::remote_id_counterpart_sync(remote_message_id, tx)?;
+            }
+        }
+
+        if self.local_conversation_id.is_none() {
+            if let Some(remote_conversation_id) = &self.remote_conversation_id {
+                self.local_conversation_id =
+                    Conversation::remote_id_counterpart_sync(remote_conversation_id, tx)?;
+            }
+        }
+
+        Ok(())
     }
 }
 

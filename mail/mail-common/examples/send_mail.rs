@@ -14,7 +14,7 @@ use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::recipients::RecipientEntry;
 use proton_mail_common::draft::{Draft, RecipientGroupId};
 use proton_mail_common::models::Attachment;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::runtime;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
@@ -59,7 +59,7 @@ async fn main() {
         mut body,
         email_password,
     } = Args::parse();
-    let tmp_dir = TempDir::new("cli").unwrap();
+    let tmp_dir = TempDir::new().unwrap();
     let tmp_file = tmp_dir.path().join("hello_world.txt");
 
     let keychain = InMemoryKeyChain::default();

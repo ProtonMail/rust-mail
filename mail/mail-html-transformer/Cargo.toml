@@ -14,7 +14,11 @@ velcro = { workspace = true }
 tracing = { workspace = true }
 itertools = { workspace = true }
 regex = { workspace = true }
-lightningcss = { version = "1.0.0-alpha.66", features = [
+# TODO(wpolak) Introduce a proper PR to the upstream with all the changes.
+# * -webkit-text-fill-color support
+# * parsing HEX colors without leading `#`
+# * `Debug`, `Clone` and `Copy` for `PrinterOptions`
+lightningcss = { git = "https://github.com/frondeus/lightningcss", rev = "b9dc136b0b43220381965e5806903e7c31a3ca12", features = [
   "visitor",
 ], default-features = false }
 html2text = { workspace = true }
@@ -26,9 +30,9 @@ workspace = true
 [dev-dependencies]
 # The code related to cpuprofiler usage has been commented, we can remove the import for now
 # cpuprofiler = "0.0.4"
-criterion = "0.5.1"
 insta = { workspace = true }
-pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
+criterion = { workspace = true }
+pprof = { workspace = true }
 velcro = { workspace = true }
 pretty_assertions = { workspace = true }
 indoc = { workspace = true }

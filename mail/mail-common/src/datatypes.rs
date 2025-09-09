@@ -66,7 +66,7 @@ use proton_core_common::models::Label;
 pub use read_filter::ReadFilter;
 pub use rollback_item_type::RollbackItemType;
 pub use search_options::SearchOptions;
-use stash::stash::{Bond, StashError, Tether};
+use stash::stash::{Bond, StashError, StashResult, Tether};
 pub use system_folder::MovableSystemFolder;
 
 use crate::actions::messages::UnsubscribeNewsletter;
@@ -113,7 +113,8 @@ use proton_mail_api::services::proton::response_data::{
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
-    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
+    Connection, FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value,
+    ValueRef,
 };
 use stash::{params, sql_using_serde};
 use std::collections::HashMap;
@@ -2181,7 +2182,7 @@ impl ToSql for MailSettingsId {
 //==============================================================================
 
 /// System label identifiers that are constant for every account.
-pub trait SystemLabelId: for<'a> From<&'a str> {
+pub trait SystemLabelId: for<'a> From<&'a str> + ToSql {
     #[must_use]
     fn inbox() -> Self {
         Self::from("0")
@@ -2285,6 +2286,18 @@ pub trait SystemLabelId: for<'a> From<&'a str> {
     #[must_use]
     fn movable_sys_folder_list() -> [Self; 4] {
         [Self::inbox(), Self::archive(), Self::spam(), Self::trash()]
+    }
+
+    fn local_id(self, conn: &Connection) -> StashResult<LocalLabelId> {
+        conn.query_row(
+            "
+            SELECT local_id FROM labels WHERE remote_id = ?
+            LIMIT 1
+            ",
+            (self,),
+            |x| x.get(0),
+        )
+        .map_err(StashError::from)
     }
 }
 

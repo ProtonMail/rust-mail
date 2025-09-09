@@ -12,7 +12,7 @@ use proton_mail_common::models::Message;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashConfiguration, StashError};
 use std::string::ToString;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use uuid::Uuid;
 
 pub fn current_benchmark(c: &mut Criterion) {
@@ -22,7 +22,7 @@ pub fn current_benchmark(c: &mut Criterion) {
         .unwrap();
 
     c.bench_function("save_state", |b| {
-        let temp_dir = TempDir::new("message-bench").unwrap();
+        let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("sqlite3.db");
         let stash_config = StashConfiguration {
             path: Some(&db_path),
@@ -46,7 +46,7 @@ pub fn current_benchmark(c: &mut Criterion) {
     });
 
     c.bench_function("load_messages", |b| {
-        let temp_dir = TempDir::new("message-bench").unwrap();
+        let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("sqlite3.db");
         let stash_config = StashConfiguration {
             path: Some(&db_path),
@@ -63,7 +63,7 @@ pub fn current_benchmark(c: &mut Criterion) {
         })
     });
     c.bench_function("load_messages_with_tx", |b| {
-        let temp_dir = TempDir::new("message-bench").unwrap();
+        let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("sqlite3.db");
         let stash_config = StashConfiguration {
             path: Some(&db_path),
