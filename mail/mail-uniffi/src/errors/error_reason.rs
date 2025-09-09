@@ -113,6 +113,12 @@ pub enum DraftSaveErrorReason {
     MessageDoesNotExist,
     /// Message is not a draft
     MessageIsNotADraft,
+    /// Too Many Attachments
+    TooManyAttachments,
+    /// The attachment size exceeds the upper limit
+    AttachmentTooLarge,
+    /// The combined attachment size exceeds the upper limit
+    TotalAttachmentSizeTooLarge,
 }
 
 /// Specific Reason when saving a draft

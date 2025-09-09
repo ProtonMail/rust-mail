@@ -8,6 +8,9 @@ use crate::UniffiEnum;
 use derive_more::From;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::errors::{
+    DraftAttachmentUploadErrorReason as RealDraftAttachmentErrorReason, MailErrorReason,
+};
 
 #[derive(Debug, From, UniffiEnum)]
 pub enum DraftSaveError {
@@ -28,6 +31,21 @@ impl From<RealMailErrorReason> for DraftSaveError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
             RealMailErrorReason::DraftSaveReason(reason) => DraftSaveError::Reason(reason.into()),
+            // Intercept some of the draft attachment upload validation errors that can be triggered when queuing a save action
+            RealMailErrorReason::DraftAttachmentUploadReason(reason) => match reason {
+                RealDraftAttachmentErrorReason::TooManyAttachments => {
+                    DraftSaveError::Reason(DraftSaveErrorReason::TooManyAttachments)
+                }
+                RealDraftAttachmentErrorReason::AttachmentTooLarge => {
+                    DraftSaveError::Reason(DraftSaveErrorReason::AttachmentTooLarge)
+                }
+                RealDraftAttachmentErrorReason::TotalAttachmentSizeTooLarge => {
+                    DraftSaveError::Reason(DraftSaveErrorReason::TotalAttachmentSizeTooLarge)
+                }
+                e => DraftSaveError::Other(ProtonError::from(
+                    MailErrorReason::DraftAttachmentUploadReason(e),
+                )),
+            },
             other_reason => DraftSaveError::Other(ProtonError::from(other_reason)),
         }
     }
