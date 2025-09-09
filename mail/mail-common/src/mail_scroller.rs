@@ -375,7 +375,6 @@ pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
     execute_on_online: Option<AbortHandle>,
     items: Vec<T::Item>,
     page_size: usize,
-    previous_update: Option<ScrollerSource>,
     update: flume::Sender<ScrollerUpdate<T::Item>>,
     ordered_command_recv: flume::Receiver<ScrollerOrderedCommand>,
     ordered_command_send: flume::Sender<ScrollerOrderedCommand>,
@@ -418,7 +417,6 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             task,
             execute_on_online: None,
             items: vec![],
-            previous_update: None,
             update: update_sender,
             ordered_command_recv: ordered_command_receiver,
             ordered_command_send: ordered_command_sender.clone(),
@@ -677,44 +675,39 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         );
 
         if items.is_empty() && has_more_in_label {
+            if self.execute_on_online.is_none() {
+                tracing::debug!("No items to return, requesting additional fetch more");
+                let ctx_clone = ctx.clone();
+                let channel = self.ordered_command_send.clone();
+                let handle = ctx.spawn(async move {
+                    ctx_clone
+                        .network_monitor_service()
+                        .network_status_observer()
+                        .wait_until_online()
+                        .await;
+                    Self::schedule_fetch_more(&channel, call_src).await;
+                });
+                self.execute_on_online = Some(handle.abort_handle());
+            }
+
             if self.task.is_none() {
-                if self.execute_on_online.is_none() {
-                    let ctx_clone = ctx.clone();
-                    let channel = self.ordered_command_send.clone();
-                    let handle = ctx.spawn(async move {
-                        ctx_clone
-                            .network_monitor_service()
-                            .network_status_observer()
-                            .wait_until_online()
-                            .await;
-                        Self::schedule_fetch_more(&channel, call_src).await;
-                    });
-                    self.execute_on_online = Some(handle.abort_handle());
-                }
+                tracing::warn!("Scroller is offline, will not progress any further");
                 // We will not progress any further without task,
                 // and task will be spawned only when we are online,
                 // lets wait for another call.
                 return Err(MailContextError::no_connection());
-            } else if self.previous_update.is_some() {
-                // To avoid infinite loop we will not automatically request fetch more
-                // if we requested it once with no effect.
-                self.previous_update = None;
-                tracing::debug!("No items to return, requesting additional fetch more");
-                Self::schedule_fetch_more(&self.ordered_command_send, call_src).await;
             }
-        }
-
-        if let Some(handle) = self.execute_on_online.take() {
-            handle.abort();
         }
 
         if items.is_empty() {
             tracing::debug!("No new items fetched");
             Ok(ScrollerUpdate::None(call_src))
         } else {
-            self.previous_update = Some(call_src);
-            tracing::debug!("New items fetched: {}", items.len());
-            self.previous_update = Some(call_src);
+            if let Some(handle) = self.execute_on_online.take() {
+                handle.abort();
+            }
+
+            tracing::debug!("Append: items number: {}", items.len());
             self.items.extend(items.clone());
             Ok(ScrollerUpdate::Append {
                 src: call_src,
