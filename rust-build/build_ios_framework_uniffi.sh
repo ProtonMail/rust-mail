@@ -3,6 +3,7 @@
 # Usage: $0 rust_target config_path [output_dir]
 
 MIN_IOS_VERSION="17.2"
+PROFILE="ios"
 
 export LIBSQLITE3_FLAGS="-DNDEBUG=1 -DSQLITE_THREADSAFE=2\
  -DSQLITE_DEFAULT_FILE_PERMISSIONS=0600 -DSQLITE_SECURE_DELETE"
@@ -172,11 +173,11 @@ TMP_DIR=$(readlink -f "$TMP_DIR")
 check_exit
 
 echo "Building aarch64 Sim"
-IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --release -p $TARGET --target aarch64-apple-ios-sim
+IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --profile $PROFILE -p $TARGET --target aarch64-apple-ios-sim
 check_exit
 
 echo "Building aarch64"
-IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --release -p $TARGET --target aarch64-apple-ios
+IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --profile $PROFILE -p $TARGET --target aarch64-apple-ios
 check_exit
 
 mkdir -p "$TMP_DIR/ios-sim" "$TMP_DIR/ios-sim-swift-x86_64" "$TMP_DIR/ios-sim-swift-aarch64"
@@ -192,18 +193,18 @@ echo "Determining crate version"
 CRATE_VERSION=$(cargo metadata --format-version 1 --no-deps | jq --arg target "$TARGET" '.packages[] | select(.name == $target) | .version' | jq -r)
 
 echo "Generating swift bindings"
-cargo run --release -p uniffi-bindgen generate --library "target/aarch64-apple-ios/release/lib${TARGET_UNDERSCORE}.a" \
+cargo run --release -p uniffi-bindgen generate --library "target/aarch64-apple-ios/$PROFILE/lib${TARGET_UNDERSCORE}.a" \
     --config "$CONFIG_PATH" --language swift --out-dir "$TMP_DIR/include"
 check_exit
 
 echo "Generating framework for ios sim aarch64"
-gen_framework "target/aarch64-apple-ios-sim/release" $TARGET_UNDERSCORE "$TMP_DIR/include" $CRATE_VERSION iphonesimulator
+gen_framework "target/aarch64-apple-ios-sim/$PROFILE" $TARGET_UNDERSCORE "$TMP_DIR/include" $CRATE_VERSION iphonesimulator
 
 echo "Generating framework for ios aarch64"
-gen_framework "target/aarch64-apple-ios/release" $TARGET_UNDERSCORE "$TMP_DIR/include" $CRATE_VERSION iphoneos
+gen_framework "target/aarch64-apple-ios/$PROFILE" $TARGET_UNDERSCORE "$TMP_DIR/include" $CRATE_VERSION iphoneos
 
 
-cp target/aarch64-apple-ios/release/lib${TARGET_UNDERSCORE}.a "$TMP_DIR/ios-dev/lib${TARGET_UNDERSCORE}_dev.a"
+cp target/aarch64-apple-ios/$PROFILE/lib${TARGET_UNDERSCORE}.a "$TMP_DIR/ios-dev/lib${TARGET_UNDERSCORE}_dev.a"
 check_exit
 
 
@@ -228,8 +229,8 @@ fi
 echo "Generating xcframework"
 xcodebuild -create-xcframework \
     -output  "$SWIFT_PACKAGE_SOURCES_DIR/${FRAMEWORK_NAME}" \
-    -framework "target/aarch64-apple-ios-sim/release/${TARGET_UNDERSCORE}_ffi.framework" \
-    -framework "target/aarch64-apple-ios/release/${TARGET_UNDERSCORE}_ffi.framework"
+    -framework "target/aarch64-apple-ios-sim/$PROFILE/${TARGET_UNDERSCORE}_ffi.framework" \
+    -framework "target/aarch64-apple-ios/$PROFILE/${TARGET_UNDERSCORE}_ffi.framework"
 check_exit
 
 echo "Changing folder name"

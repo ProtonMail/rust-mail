@@ -369,12 +369,24 @@ similar.opt-level = 3
 [profile.release]
 panic = "unwind"
 
+[profile.android]
+inherits = "release"
+panic = "abort"
+opt-level = "s"
+lto = true
+incremental = false
+codegen-units = 1
+
+[profile.ios]
+inherits = "release"
+panic = "abort"
+opt-level = "s"
+codegen-units = 1
+
 # This profile gets about a 50% reduction in size compared to the default release profile.
 [profile.small]
 inherits = "release"
-opt-level = "s"      # We might want to experiment with "z" instead.
-# Move the debug info to a separate file.
-# At the time of writing, this reduces the size of the binary by 9MB.
+# opt-level = "s"            # We might want to experiment with "z" instead.
 split-debuginfo = "packed"
 lto = true                 # "Fat" LTO
 incremental = false
