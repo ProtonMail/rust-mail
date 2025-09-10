@@ -4,8 +4,7 @@ set -eo pipefail
 
 # Read the Rust crate version
 
-cargo generate-lockfile
-CRATE_VERSION=$(cargo metadata --format-version 1 --no-deps | jq '.packages[] | select(.name == "proton-mail-uniffi") | .version' | jq -r)
+CRATE_VERSION=$(cargo metadata --locked --format-version 1 --no-deps | jq '.packages[] | select(.name == "proton-mail-uniffi") | .version' | jq -r)
 echo $CRATE_VERSION
 
 cd ./tmp/ios-framework/

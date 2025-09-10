@@ -9,8 +9,7 @@ export JAVA_TOOL_OPTIONS="-Dhttp.proxyHost=$( echo ${http_proxy##http://} | cut 
 export GRADLE_USER_HOME=`pwd`/.gradle
 
 # Set version for maven lib release
-cargo generate-lockfile
-CRATE_VERSION=$(cargo metadata --format-version 1 --no-deps | jq '.packages[] | select(.name == "proton-mail-uniffi") | .version' | jq -r)
+CRATE_VERSION=$(cargo metadata --locked --format-version 1 --no-deps | jq '.packages[] | select(.name == "proton-mail-uniffi") | .version' | jq -r)
 sed -i "s%    version = .*%    version = \"$CRATE_VERSION\"%g" "./lib/build.gradle.kts"
 
 # Build and Publish lib to maven
