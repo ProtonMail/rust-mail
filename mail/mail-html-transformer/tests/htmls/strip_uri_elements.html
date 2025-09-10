@@ -71,5 +71,14 @@ ANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4
 </div>
 
 <video poster="javascript:console.log('foo')">invalid_url</video>
+
+<!-- Mailto URL tests -->
+<a href="mailto:user@example.com">Valid mailto</a>
+<a href="mailto:test@proton.me?subject=Test&body=Hello">Mailto with params</a>
+<a href="mailto:user+tag@domain.co.uk">Mailto with plus and TLD</a>
+<img src="mailto:should@be.stripped">Mailto in src attribute (should be stripped)</img>
+<div style="background: url('mailto:css@should.fail')">Mailto in CSS (should be stripped)</div>
+<form action="mailto:form@should.fail">Mailto in form action (should be stripped)</form>
+<blockquote cite="mailto:cite@should.fail">Mailto in cite (should be stripped)</blockquote>
 </body>
 </html>
