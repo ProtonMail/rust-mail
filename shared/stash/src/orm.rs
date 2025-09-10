@@ -347,7 +347,7 @@ where
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<Vec<Self::IdType>, StashError> {
         let query = format!(
-            "SELECT {local_id} AS value FROM {table_name} {query_logic}",
+            "SELECT {local_id} FROM {table_name} {query_logic}",
             table_name = Self::table_name(),
             local_id = Self::id_field_name(),
             query_logic = query_logic.as_ref(),
@@ -566,7 +566,7 @@ where
     fn next_id(tether: &Tether) -> impl Future<Output = Result<Self::IdType, StashError>> + Send {
         async move {
             let query = formatdoc! {"
-                SELECT COALESCE(MAX({id}), 0) + 1 as value
+                SELECT COALESCE(MAX({id}), 0) + 1
                 FROM {table}
                 ",
                 table = Self::table_name(),

@@ -312,7 +312,7 @@ impl DraftMetadata {
         match tether
             .query_value::<_, Option<ActionId>>(
                 format!(
-                    "SELECT save_action_id AS value FROM {} WHERE id =?",
+                    "SELECT save_action_id FROM {} WHERE id =?",
                     Self::table_name()
                 ),
                 params![metadata_id],
@@ -525,7 +525,7 @@ impl DraftSendResult {
         tether
             .query_values::<_, LocalMessageId>(
                 format!(
-                    "SELECT local_message_id AS value FROM `{}` WHERE seen=0",
+                    "SELECT local_message_id FROM `{}` WHERE seen=0",
                     Self::table_name()
                 ),
                 vec![],
@@ -1089,7 +1089,7 @@ impl DraftAttachmentMetadata {
         tether
             .query_values(
                 format!(
-                    "SELECT action_id AS value FROM {} WHERE metadata_id = ? AND action_id IS NOT NULL AND deleted = 0",
+                    "SELECT action_id FROM {} WHERE metadata_id = ? AND action_id IS NOT NULL AND deleted = 0",
                     Self::table_name()
                 ),
                 params![metadata_id],
@@ -1105,7 +1105,7 @@ impl DraftAttachmentMetadata {
         let count = tether
             .query_value::<_, usize>(
                 format!(
-                    "SELECT COUNT(*) AS value FROM {} WHERE metadata_id = ? AND state <> ? AND deleted = 0",
+                    "SELECT COUNT(*) FROM {} WHERE metadata_id = ? AND state <> ? AND deleted = 0",
                     Self::table_name()
                 ),
                 params![metadata_id, DraftAttachmentUploadState::Uploaded],
@@ -1242,7 +1242,7 @@ impl DraftAttachmentMetadata {
         metadata_id: MetadataId,
         tether: &Tether,
     ) -> Result<usize, StashError> {
-        tether.query_value::<_, usize>(formatdoc! {"SELECT IFNULL(MAX(display_order),0) AS value FROM {} WHERE metadata_id = ?", Self::table_name()}, params![metadata_id]).await
+        tether.query_value::<_, usize>(formatdoc! {"SELECT IFNULL(MAX(display_order),0) FROM {} WHERE metadata_id = ?", Self::table_name()}, params![metadata_id]).await
     }
 
     /// Get the attachments id of attachments for a draft with `metadata_id` which
@@ -1256,7 +1256,7 @@ impl DraftAttachmentMetadata {
         metadata_id: MetadataId,
         tether: &Tether,
     ) -> Result<Vec<LocalAttachmentId>, StashError> {
-        tether.query_values(formatdoc! {"SELECT local_attachment_id AS value FROM {} WHERE metadata_id = ? AND state =? AND deleted = 0", Self::table_name()}, params![metadata_id, DraftAttachmentUploadState::Pending]).await
+        tether.query_values(formatdoc! {"SELECT local_attachment_id FROM {} WHERE metadata_id = ? AND state =? AND deleted = 0", Self::table_name()}, params![metadata_id, DraftAttachmentUploadState::Pending]).await
     }
 
     pub async fn total_attachments_size_and_count(

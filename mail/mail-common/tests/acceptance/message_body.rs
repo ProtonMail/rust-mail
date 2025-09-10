@@ -80,7 +80,7 @@ async fn mailbox_message_body_simple() {
         .query_value::<_, String>(
             formatdoc!(
                 "
-            SELECT body as value FROM message_body WHERE
+            SELECT body FROM message_body WHERE
                 message_id = {}
     ",
                 saved_message.id()

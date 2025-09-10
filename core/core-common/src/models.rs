@@ -253,7 +253,7 @@ pub trait ModelExtension: Model {
                 formatdoc!(
                     "
                     SELECT
-                        {} AS value
+                        {}
                     FROM
                         {}
                     {}
@@ -293,7 +293,7 @@ pub trait ModelExtension: Model {
         tether
             .query_values::<_, Self::IdType>(
                 formatdoc!(
-                    "SELECT {} AS value FROM {} WHERE {} = ? LIMIT 1",
+                    "SELECT {} FROM {} WHERE {} = ? LIMIT 1",
                     Self::id_field_name(),
                     Self::table_name(),
                     Self::id_field_name(),
@@ -541,7 +541,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                 formatdoc!(
                     "
                             SELECT
-                                {} AS value
+                                {}
                             FROM
                                 {}
                             WHERE
@@ -571,7 +571,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                 formatdoc!(
                     "
                             SELECT
-                                {} AS value
+                                {}
                             FROM
                                 {}
                             WHERE
@@ -615,7 +615,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                 formatdoc!(
                     "
                             SELECT
-                                {} AS value
+                                {}
                             FROM
                                 {}
                             WHERE
@@ -678,7 +678,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                 formatdoc!(
                     "
                     SELECT
-                        {} AS value
+                        {}
                     FROM
                         {}
                     {}

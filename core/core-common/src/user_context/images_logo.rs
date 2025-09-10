@@ -210,7 +210,7 @@ async fn select(
 ) -> Result<Option<String>, StashError> {
     let mut params: Vec<Box<dyn ToSql + Send>> = vec![Box::new(address)];
     let mut query_parts = vec![indoc! {
-    "SELECT path as value FROM sender_image_cache
+    "SELECT path FROM sender_image_cache
                  WHERE address = ?"}];
 
     macro_rules! push_option {

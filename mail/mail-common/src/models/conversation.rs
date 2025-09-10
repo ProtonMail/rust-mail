@@ -2377,7 +2377,7 @@ impl Conversation {
         Ok(tether
             .query_value::<_, u64>(
                 format!(
-                    "SELECT IFNULL(MAX(display_order),0) AS value FROM {}",
+                    "SELECT IFNULL(MAX(display_order),0) FROM {}",
                     Self::table_name()
                 ),
                 vec![],
@@ -2940,7 +2940,7 @@ impl ModelHooks for Conversation {
         // Example... not good to do this here, though, as the total number comes
         // from the API.
         // self.num_messages = stash.query::<_, QueryResultU64>(
-        //     "SELECT COUNT(*) as value FROM messages WHERE local_conversation_id = ?",
+        //     "SELECT COUNT(*) FROM messages WHERE local_conversation_id = ?",
         //     params![self.local_id],
         // ).await?.into_iter().next().unwrap().value;
 
@@ -3136,7 +3136,7 @@ impl ConversationLabel {
         tether: &Tether,
     ) -> Result<Vec<LocalLabelId>, StashError> {
         let query = format!(
-            "SELECT local_label_id as value FROM {} WHERE local_conversation_id = ?",
+            "SELECT local_label_id FROM {} WHERE local_conversation_id = ?",
             Self::table_name()
         );
 

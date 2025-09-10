@@ -239,7 +239,7 @@ impl StoredAction {
     pub async fn contains(tether: &Tether, id: ActionId) -> Result<bool, StashError> {
         match tether
             .query_value::<_, ActionId>(
-                "SELECT id AS value FROM action_queue WHERE id = ?",
+                "SELECT id FROM action_queue WHERE id = ?",
                 params![id],
             )
             .await
@@ -286,7 +286,7 @@ impl StoredAction {
     pub async fn delete(bond: &Bond<'_>, id: ActionId) -> Result<Option<String>, StashError> {
         match bond
             .query_value::<_, String>(
-                "DELETE FROM action_queue WHERE id = ? RETURNING action_type AS value",
+                "DELETE FROM action_queue WHERE id = ? RETURNING action_type",
                 params![id],
             )
             .await
@@ -346,7 +346,7 @@ impl StoredAction {
     ) -> Result<Vec<ActionId>, StashError> {
         tether
             .query_values::<_, ActionId>(
-                "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ? AND dependency_type =?",
+                "SELECT DISTINCT action_id FROM action_queue_dependencies WHERE dependency_id = ? AND dependency_type =?",
                 params![id, dependency_type],
             )
             .await
@@ -477,7 +477,7 @@ impl ModelHooks for StoredAction {
         // Resources
         match conn
             .query_row_col::<Resources>(
-                "SELECT resource AS value FROM action_queue_resources WHERE action_id = ?",
+                "SELECT resource FROM action_queue_resources WHERE action_id = ?",
                 (self.id,),
             )
             .optional()?
@@ -525,7 +525,7 @@ impl ModelHooks for StoredAction {
             let existing_action_ids: HashSet<ActionId, RandomState> =
                 HashSet::from_iter(tx.query_rows_col::<ActionId>(
                     format!(
-                        "SELECT id AS value FROM {} WHERE id IN ({placeholders})",
+                        "SELECT id FROM {} WHERE id IN ({placeholders})",
                         Self::table_name()
                     ),
                     params_from_iter(params),
@@ -592,7 +592,7 @@ impl ExecutionGuard {
         // the exclusive writer access, which is required for this to work.
         let has_executor = match bond
             .query_value::<_, bool>(
-                "SELECT executor_id IS NOT NULL AS value FROM action_queue_lock WHERE action_id = ?",
+                "SELECT executor_id IS NOT NULL FROM action_queue_lock WHERE action_id = ?",
                 params![action_id],
             )
             .await
@@ -646,7 +646,7 @@ impl ExecutionGuard {
                 executor_id = ?2,
                 permit_id=permit_id +1,
                 acquired_at = ?3
-            RETURNING permit_id AS value
+            RETURNING permit_id
        "},
                 params![action_id, executor_id, timestamp],
             )
@@ -795,7 +795,7 @@ impl ActionDependencyKeysTable {
         conn
             .query_rows_col::<ActionId>(
                 format!(
-                    "SELECT DISTINCT action_id AS value FROM {KEY_DEPENDENCIES_TABLE_NAME} WHERE key_id IN ({placeholders})",
+                    "SELECT DISTINCT action_id FROM {KEY_DEPENDENCIES_TABLE_NAME} WHERE key_id IN ({placeholders})",
                 ),
                 params_from_iter(keys),
             ).map_err(Into::into)

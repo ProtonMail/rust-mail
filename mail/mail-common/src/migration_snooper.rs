@@ -68,7 +68,7 @@ impl PostLoginMobileMigrationPayload {
     pub async fn load(id: &UserId, tether: &Tether) -> Result<Option<Self>, StashError> {
         let exists: Option<i32> = tether
             .query_value_opt(
-                "SELECT 1 AS value FROM sqlite_master WHERE type='table' AND name='post_login_mobile_migration'",
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='post_login_mobile_migration'",
                 Vec::new(),
             )
             .await?;

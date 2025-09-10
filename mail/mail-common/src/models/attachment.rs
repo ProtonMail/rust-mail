@@ -699,7 +699,7 @@ impl Attachment {
                 indoc!(
                     "
                     SELECT
-                        local_id AS value
+                        local_id
                     FROM
                         attachments
                     WHERE
@@ -730,7 +730,7 @@ impl Attachment {
             .query_value::<_, AttachmentType>(
                 indoc! {"
                SELECT
-                    attachment_type AS value
+                    attachment_type
                FROM
                     attachments
                WHERE

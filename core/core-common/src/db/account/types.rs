@@ -93,7 +93,7 @@ impl CoreAccount {
 
     pub async fn primary_seq_max(tether: &Tether) -> Result<i64, StashError> {
         let query = format!(
-            "SELECT MAX(primary_seq) AS value FROM {}",
+            "SELECT MAX(primary_seq) FROM {}",
             Self::table_name()
         );
 

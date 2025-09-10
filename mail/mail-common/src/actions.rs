@@ -286,7 +286,7 @@ where
                 formatdoc!(
                     "
                             SELECT
-                                {} AS value
+                                {}
                             FROM
                                 {}
                             WHERE

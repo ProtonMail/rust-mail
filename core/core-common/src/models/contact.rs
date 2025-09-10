@@ -345,7 +345,7 @@ impl Contact {
         let c: u32 = tx
             .tether()
             .query_value(
-                "SELECT COUNT(*) AS value FROM contact_cards WHERE local_contact_id = ?",
+                "SELECT COUNT(*) FROM contact_cards WHERE local_contact_id = ?",
                 params![local_id],
             )
             .await?;

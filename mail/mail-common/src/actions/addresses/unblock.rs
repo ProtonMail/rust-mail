@@ -87,7 +87,7 @@ impl Handler for UnblockHandler {
         let id = guard
             .tether()
             .query_value::<_, IncomingDefaultId>(
-                "SELECT id AS value FROM incoming_default WHERE email = ?",
+                "SELECT id FROM incoming_default WHERE email = ?",
                 params![action.email.clone()],
             )
             .await?;

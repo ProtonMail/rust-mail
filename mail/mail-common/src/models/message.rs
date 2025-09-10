@@ -1603,7 +1603,7 @@ impl Message {
             .query_values::<_, LocalMessageId>(
                 indoc!(
                     "
-                SELECT local_id as value
+                SELECT local_id
                 FROM messages
                 JOIN message_labels
                     ON messages.local_id = message_labels.local_message_id
@@ -1648,7 +1648,7 @@ impl Message {
         tether: &Tether,
     ) -> Result<Vec<LocalMessageId>, StashError> {
         tether.query_values::<_, LocalMessageId>(
-            "SELECT local_id as value FROM messages WHERE local_conversation_id = ? AND messages.deleted = 0",
+            "SELECT local_id FROM messages WHERE local_conversation_id = ? AND messages.deleted = 0",
             params![local_conversation_id],
         )
         .await
@@ -1659,7 +1659,7 @@ impl Message {
         tether: &Tether,
     ) -> Result<Vec<MessageId>, StashError> {
         tether.query_values::<_, MessageId>(
-            "SELECT remote_id as value FROM messages WHERE remote_id IS NOT NULL AND local_conversation_id = ? AND messages.deleted = 0",
+            "SELECT remote_id FROM messages WHERE remote_id IS NOT NULL AND local_conversation_id = ? AND messages.deleted = 0",
             params![local_conversation_id],
         )
             .await
@@ -1690,7 +1690,7 @@ impl Message {
                 WHERE flags & ? AND local_conversation_id =? AND local_id IN (
                     SELECT local_message_id FROM message_labels WHERE local_label_id =?
                 )
-                RETURNING local_id AS value"
+                RETURNING local_id"
                 },
             params![
                 snooze_time,
@@ -1769,7 +1769,7 @@ impl Message {
         Ok(tether
             .query_value::<_, u64>(
                 format!(
-                    "SELECT IFNULL(MAX(display_order),0) AS value FROM {}",
+                    "SELECT IFNULL(MAX(display_order),0) FROM {}",
                     Self::table_name()
                 ),
                 vec![],
@@ -2920,7 +2920,7 @@ impl MessageLabelStats {
         for message in messages {
             let label_ids = tether
                 .query_values::<_, LocalLabelId>(
-                    "SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?",
+                    "SELECT local_label_id FROM message_labels WHERE local_message_id=?",
                     params![message.id()],
                 )
                 .await?;

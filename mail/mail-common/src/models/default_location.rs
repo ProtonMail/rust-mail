@@ -49,7 +49,7 @@ impl IncomingDefaultLocation {
     pub async fn find(email: String, tether: &Tether) -> Result<Option<Self>, StashError> {
         match tether
             .query_value::<_, Self>(
-                "SELECT location AS value FROM incoming_default WHERE email = ?",
+                "SELECT location FROM incoming_default WHERE email = ?",
                 params![email],
             )
             .await

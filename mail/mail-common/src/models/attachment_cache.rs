@@ -220,7 +220,7 @@ impl Attachment {
             .query_value::<_, String>(
                 indoc! {
                     "
-                    SELECT path as value FROM attachment_cache
+                    SELECT path FROM attachment_cache
                     WHERE attachment_id = ?1;
                     "
                 },
@@ -481,7 +481,7 @@ impl Attachment {
         let mut tether = ctx.user_stash().connection().await?;
         let current_size = tether
             .query_value::<_, u64>(
-                "SELECT IFNULL(SUM(size),0) AS value FROM attachment_cache",
+                "SELECT IFNULL(SUM(size),0) FROM attachment_cache",
                 vec![],
             )
             .await

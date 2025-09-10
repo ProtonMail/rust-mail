@@ -155,7 +155,7 @@ impl ContactEmail {
         // to decode the raw json.
         // TODO(post-release): Transform into relational table.
         tether.query_value::<_, usize>(format!(
-            "SELECT DISTINCT COUNT(local_id) AS value FROM {}, json_each({}.label_ids) WHERE json_each.value = ?",
+            "SELECT DISTINCT COUNT(local_id) FROM {}, json_each({}.label_ids) WHERE json_each.value = ?",
             Self::table_name(),
             Self::table_name()
         ), params![contact_group_id]).await

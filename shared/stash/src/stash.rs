@@ -834,7 +834,7 @@ impl Tether {
     ///  }
     ///
     ///  let values:Vec<RecordValue<T>> = interface.query(
-    ///         "SELECT number AS value FROM table",
+    ///         "SELECT number FROM table",
     ///         vec![]).await.unwrap();
     /// ```
     ///
@@ -855,7 +855,7 @@ impl Tether {
     ///
     /// async fn value_query(tether:&Tether) {
     ///     let values:Vec<f64> = tether.query_values(
-    ///         "SELECT number AS value FROM table",
+    ///         "SELECT number FROM table",
     ///         vec![]).await.unwrap();
     /// }
     /// ```
