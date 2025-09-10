@@ -210,6 +210,7 @@ async fn main() {
     let awaiter = ActionAwaiter::new(user_ctx.action_queue(), action_id);
 
     match awaiter.wait().await.unwrap() {
+        BroadcastMessage::Queued(_, _) => {}
         BroadcastMessage::Success(_) => {
             info!("Mobile settings successfully updated!");
 

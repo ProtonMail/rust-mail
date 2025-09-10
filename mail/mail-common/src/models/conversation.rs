@@ -1342,7 +1342,6 @@ impl Conversation {
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
         tx: &Transaction<'_>,
     ) -> Result<(), StashError> {
-        let t0 = std::time::Instant::now();
         for conversation_id in conversation_ids {
             info!("Marking {conversation_id:?} as unread");
             let Some(mut conversation) = Conversation::load_by_id_sync(conversation_id, tx)? else {
@@ -1445,7 +1444,6 @@ impl Conversation {
             conversation.num_unread += 1;
             conversation.save_sync(tx)?;
         }
-        info!("mark_read took {:?}", t0.elapsed());
         Ok(())
     }
 
@@ -2706,7 +2704,6 @@ impl ConversationOrMessage for Conversation {
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Transaction<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
-        let t0 = std::time::Instant::now();
         let mut read_messages = vec![];
         for conversation_id in ids {
             info!("Marking {conversation_id:?} as read");
@@ -2797,7 +2794,6 @@ impl ConversationOrMessage for Conversation {
             }
         }
 
-        info!("mark_read took {:?}", t0.elapsed());
         Ok(read_messages)
     }
 
