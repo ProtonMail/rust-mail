@@ -18,10 +18,16 @@ use std::sync::Weak;
 ///
 /// Rather than control exclusive execution access between the queue and the event loop, run
 /// the event loop as action in the queue.
-#[derive(Serialize, Deserialize)]
-pub struct EventPoll {}
+#[derive(Default, Serialize, Deserialize)]
+pub struct EventPoll {
+    force: bool,
+}
 
 impl EventPoll {
+    #[must_use]
+    pub fn forced() -> Self {
+        EventPoll { force: true }
+    }
     #[must_use]
     pub fn dependency_key() -> ActionDependencyKey {
         ActionDependencyKey::from("event-poll")
@@ -40,9 +46,14 @@ impl Action for EventPoll {
     type Error = ActionEventLoopError;
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
-        ActionDependencyKeysBuilder::new()
-            .record(Self::dependency_key())
-            .build()
+        if self.force {
+            ActionDependencyKeys::default()
+        } else {
+            ActionDependencyKeysBuilder::new()
+                .record(Self::dependency_key())
+                .with_optional(Self::dependency_key())
+                .build()
+        }
     }
 }
 

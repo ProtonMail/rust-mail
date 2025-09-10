@@ -37,9 +37,13 @@ impl UserContext {
     ///
     /// Returns error if the action failed to be queued.
     ///
-    pub async fn poll_event_loop(&self) -> Result<(), ActionError<event_poll::EventPoll>> {
+    pub async fn poll_event_loop(
+        &self,
+        with_delay: Option<Duration>,
+    ) -> Result<(), ActionError<event_poll::EventPoll>> {
         let event_loop_service = self.event_loop_service();
-        self.queue_poll_event_loop(event_loop_service).await
+        self.queue_poll_event_loop(event_loop_service, with_delay)
+            .await
     }
 
     /// Queue an action to execute the event loop as soon as possible regardless of
@@ -50,7 +54,7 @@ impl UserContext {
     /// Returns error if the action failed to be queued.
     ///
     pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<event_poll::EventPoll>> {
-        let event_poll_action = event_poll::EventPoll {};
+        let event_poll_action = event_poll::EventPoll::forced();
         let metadata = Metadata::builder()
             .with_priority_override(Priority::Highest)
             .build();
@@ -63,24 +67,36 @@ impl UserContext {
     async fn queue_poll_event_loop(
         &self,
         event_loop_service: &EventLoopService,
+        with_delay: Option<Duration>,
     ) -> Result<(), ActionError<event_poll::EventPoll>> {
         let mut last_action_ids = event_loop_service.last_event_loop_action_ids().lock().await;
-        let event_poll_action = event_poll::EventPoll {};
+        let metadata = Metadata::builder()
+            .with_delay(with_delay.unwrap_or(Duration::from_secs(0)))
+            .build();
+        let event_poll_action = event_poll::EventPoll::default();
         {
             let output = if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
                 match self
                     .queue()
-                    .replace_or_queue_action(last_action_id, event_poll_action)
+                    .replace_or_queue_action_with_metadata(
+                        last_action_id,
+                        event_poll_action,
+                        metadata.clone(),
+                    )
                     .await
                 {
                     Ok(output) => Ok(output),
                     Err(ActionError::Queue(Error::CyclicDependency)) => {
-                        self.queue().queue_action(event_poll::EventPoll {}).await
+                        self.queue()
+                            .queue_action_with_metadata(event_poll::EventPoll::default(), metadata)
+                            .await
                     }
                     Err(error) => Err(error),
                 }?
             } else {
-                self.queue().queue_action(event_poll_action).await?
+                self.queue()
+                    .queue_action_with_metadata(event_poll_action, metadata)
+                    .await?
             };
             last_action_ids.last_event_loop_action_id = Some(output.id);
         }

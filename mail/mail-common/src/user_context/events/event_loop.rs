@@ -1,15 +1,19 @@
 use crate::MailUserContext;
 use crate::actions::rollback::RollbackAction;
 use crate::models::RollbackItem;
-use proton_action_queue::queue::ActionError;
+use proton_action_queue::action::{Action, ActionGroup};
+use proton_action_queue::queue::{ActionError, BroadcastMessage};
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::services::EventLoopService;
 use proton_core_common::services::InitializationService;
 use proton_event_loop::EventLoopError;
 use stash::orm::Model;
 use std::time::Duration;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::time;
 use tracing::{Instrument, error};
+
+const EVENT_POLL_REPLACE_DELAY: Duration = Duration::from_secs(5);
 
 impl MailUserContext {
     pub(crate) fn init_event_loop_poll(&self, duration: Duration) {
@@ -27,6 +31,7 @@ impl MailUserContext {
             interval
         };
 
+        let mut queue_observer = self.user_context().queue().new_broadcast_receiver();
         let watcher = self
             .user_context
             .get_service::<InitializationService>()
@@ -51,13 +56,48 @@ impl MailUserContext {
                 }
                 tracing::info!("Starting event poll loop");
                 // `MailUserContext` is now initialized, we can proceed with the event poll.
+
                 loop {
-                    interval.tick().await;
+                    let delay = tokio::select! {
+                        _ = interval.tick() => {
+                            None
+                        }
+                        r = queue_observer.recv() => {
+                            let msg = match r {
+                                Ok(msg) => msg,
+                                Err(e) => {
+                                    match e {
+                                        RecvError::Closed => {
+                                            return;
+                                        }
+                                        RecvError::Lagged(_) => {
+                                            continue;
+                                        }
+                                    }
+                                }
+                            };
+
+                            // if we have queued an action in this process in the default group
+                            // that is not the event loop, reset the timer and replace
+                            // the event poll so it runs after this action.
+                            if let BroadcastMessage::Queued(_, metadata) = msg
+                                && metadata.action_group == ActionGroup::default().as_ref()
+                                && metadata.action_type != EventPoll::TYPE.as_ref() {
+                                tracing::debug!("replacing event poll due to new action");
+                                interval.reset();
+                                // Add a small delay to make sure the server had time
+                                // to process the last action.
+                                Some(EVENT_POLL_REPLACE_DELAY)
+                            } else {
+                                continue;
+                            }
+                        }
+                    };
                     let Some(ctx) = ctx.upgrade() else {
                         return;
                     };
 
-                    if let Err(e) = ctx.poll_event_loop().await {
+                    if let Err(e) = ctx.poll_event_loop(delay).await {
                         error!("Failed to queue poll event loop poll: {e:?}");
                     }
 
@@ -79,9 +119,12 @@ impl MailUserContext {
     ///
     /// Returns error if the action failed to be queued.
     ///
-    pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
+    pub async fn poll_event_loop(
+        &self,
+        with_delay: Option<Duration>,
+    ) -> Result<(), ActionError<EventPoll>> {
         // Delegate to UserContext
-        self.user_context().poll_event_loop().await
+        self.user_context().poll_event_loop(with_delay).await
     }
 
     /// Queue an action to execute the event loop as soon as possible regardless of
