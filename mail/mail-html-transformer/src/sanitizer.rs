@@ -338,7 +338,7 @@ fn validate_uri_attribute(name: &ExpandedName, value: &mut Attribute) -> bool {
         return true;
     }
 
-    is_valid_url(&value.value)
+    is_valid_url_for_attribute(&value.value, name)
 }
 
 fn is_valid_url(value: &str) -> bool {
@@ -350,35 +350,70 @@ fn is_valid_url(value: &str) -> bool {
     is_valid_url_type(uri)
 }
 
+fn is_valid_url_for_attribute(value: &str, attribute_name: &ExpandedName) -> bool {
+    let Ok(uri) = url::Url::parse(value) else {
+        // Invalid urls should be ignored
+        return false;
+    };
+
+    is_valid_url_type_for_attribute(uri, attribute_name)
+}
+
+// Check if the cid data is actually valid
+// https://datatracker.ietf.org/doc/html/rfc2392
+fn is_valid_cid(uri: &url::Url) -> bool {
+    let cid_data = uri.path();
+    if email_address::EmailAddress::parse_with_options(
+        cid_data,
+        email_address::Options::default()
+            .without_display_text()
+            .with_long_local_parts()
+            .with_required_tld(),
+    )
+    .is_err()
+    {
+        // We are using uids for while in ET, check if this actually a UID or a non valid
+        // email address that may contain email chars for greater compatibility
+        uri.path()
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '@')
+    } else {
+        true
+    }
+}
+
 fn is_valid_url_type(uri: url::Url) -> bool {
     let scheme = uri.scheme().to_lowercase();
 
     if scheme == "cid" {
-        // Check if the cid data is actually valid
-        // https://datatracker.ietf.org/doc/html/rfc2392
-        let cid_data = uri.path();
-        return if email_address::EmailAddress::parse_with_options(
-            cid_data,
-            email_address::Options::default()
-                .without_display_text()
-                .with_long_local_parts()
-                .with_required_tld(),
-        )
-        .is_err()
-        {
-            // We are using uids for while in ET, check if this actually a UID or a non valid
-            // email address that may contain email chars for greater compatibility
-            uri.path()
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '@')
-        } else {
-            true
-        };
+        return is_valid_cid(&uri);
     }
 
     scheme == "https" || scheme == "http" || scheme == "data"
 }
+
+fn is_valid_url_type_for_attribute(uri: url::Url, attribute_name: &ExpandedName) -> bool {
+    let scheme = uri.scheme().to_lowercase();
+
+    if scheme == "cid" {
+        return is_valid_cid(&uri);
+    }
+
+    if scheme == "mailto" {
+        return MAILTO_COMPATIBLE_ATTRIBUTES.contains(attribute_name);
+    }
+
+    scheme == "https" || scheme == "http" || scheme == "data"
+}
+
 static URI_ATTRIBUTES: OnceLock<HashSet<ExpandedName>> = OnceLock::new();
+
+static MAILTO_COMPATIBLE_ATTRIBUTES: LazyLock<HashSet<ExpandedName>> = LazyLock::new(|| {
+    hash_set! {
+        ExpandedName::new("", "href"),
+        ExpandedName::new(ns!(xlink), "href"),
+    }
+});
 
 fn get_uri_attributes() -> &'static HashSet<ExpandedName> {
     URI_ATTRIBUTES.get_or_init(|| {

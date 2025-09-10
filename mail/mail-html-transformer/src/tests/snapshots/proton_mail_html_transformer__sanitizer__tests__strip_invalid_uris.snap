@@ -1,7 +1,6 @@
 ---
 source: mail/mail-html-transformer/src/tests/sanitizer.rs
 expression: html
-snapshot_kind: text
 ---
 <!DOCTYPE html><html lang="en"><head>
     
@@ -70,6 +69,15 @@ ANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4
 </div>
 
 <video>invalid_url</video>
+
+<!-- Mailto URL tests -->
+<a href="mailto:user@example.com">Valid mailto</a>
+<a href="mailto:test@proton.me?subject=Test&amp;body=Hello">Mailto with params</a>
+<a href="mailto:user+tag@domain.co.uk">Mailto with plus and TLD</a>
+<img>Mailto in src attribute (should be stripped)
+<div style="background: url(&quot;&quot;)">Mailto in CSS (should be stripped)</div>
+Mailto in form action (should be stripped)
+<blockquote>Mailto in cite (should be stripped)</blockquote>
 
 
 </body></html>
