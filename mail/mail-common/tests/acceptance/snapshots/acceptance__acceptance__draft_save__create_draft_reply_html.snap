@@ -1,6 +1,5 @@
 ---
 source: mail/mail-common/tests/acceptance/draft_save.rs
 expression: draft_body.body
-snapshot_kind: text
 ---
 <html><head></head><body><br><br><div class="protonmail_signature_block-user">Sent from rust rest</div><div class="protonmail_quote"><br><br>-------- Original Message --------<br>On Thursday, 05/16/24 at 12:45 me@proton.me wrote:<br><blockquote class="protonmail_quote"><div style="font-family: Arial, sans-serif; font-size: 14px; color: #000; background-color: #fff">This is a test body.</div></blockquote></div></body></html>

@@ -2,12 +2,12 @@
 #[path = "tests/sanitizer.rs"]
 mod tests;
 
+use crate::css_parser::{parse_style_attribute, parse_stylesheet};
 use html5ever::ns;
 use html5ever::{LocalName, namespace_url};
 use kuchikiki::{Attribute, ExpandedName, NodeData, NodeRef, iter::NodeEdge};
 use lightningcss::printer::PrinterOptions;
 use lightningcss::properties::custom::{Function, Token, TokenOrValue, Variable};
-use lightningcss::stylesheet::{ParserOptions, StyleAttribute, StyleSheet};
 use lightningcss::values::image::Image;
 use lightningcss::values::url::Url;
 use lightningcss::visitor::{Visit, VisitTypes, Visitor};
@@ -443,14 +443,7 @@ fn get_uri_attributes() -> &'static HashSet<ExpandedName> {
 }
 
 fn handle_style_sheet(css: &mut String) {
-    let Ok(mut sheet) = StyleSheet::parse(
-        css,
-        ParserOptions {
-            error_recovery: true,
-            ..Default::default()
-        },
-    )
-    .inspect_err(|e| {
+    let Ok(mut sheet) = parse_stylesheet(css).inspect_err(|e| {
         warn!("StyleSheet parsing failed: {}", e);
     }) else {
         return;
@@ -471,14 +464,7 @@ fn handle_style_sheet(css: &mut String) {
 }
 
 fn handle_style_attribute(css: &mut String) {
-    let Ok(mut style_attribute) = StyleAttribute::parse(
-        css,
-        ParserOptions {
-            error_recovery: true,
-            ..Default::default()
-        },
-    )
-    .inspect_err(|e| {
+    let Ok(mut style_attribute) = parse_style_attribute(css).inspect_err(|e| {
         warn!("Style attribute parsing failed: {}", e);
     }) else {
         return;

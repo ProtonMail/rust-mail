@@ -18,7 +18,7 @@ regex = { workspace = true }
 # * -webkit-text-fill-color support
 # * parsing HEX colors without leading `#`
 # * `Debug`, `Clone` and `Copy` for `PrinterOptions`
-lightningcss = { git = "https://github.com/frondeus/lightningcss", rev = "b9dc136b0b43220381965e5806903e7c31a3ca12", features = [
+lightningcss = { git = "https://github.com/frondeus/lightningcss", rev = "ab7380af1465412bcaeb403d52cfa108165346e0", features = [
   "visitor",
 ], default-features = false }
 html2text = { workspace = true }

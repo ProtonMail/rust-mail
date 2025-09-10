@@ -120,6 +120,10 @@ name = "test_custom_parser"
 path = "tests/test_custom_parser.rs"
 
 [[test]]
+name = "test_error_recovery"
+path = "tests/test_error_recovery.rs"
+
+[[test]]
 name = "test_serde"
 path = "tests/test_serde.rs"
 
