@@ -520,11 +520,10 @@ where
         //
         // HACK: This is not great but we're forced to do it since there's no guarantee that the
         // row does or doesn't exist.
-        if let Ok(id) = self.id_value() {
-            if tx.query_row_col::<u64>(Self::COUNT_QUERY, (id,))? != 0 {
+        if let Ok(id) = self.id_value()
+            && tx.query_row_col::<u64>(Self::COUNT_QUERY, (id,))? != 0 {
                 return self.update_sync(tx);
             }
-        }
         self.insert_sync(tx)
     }
 

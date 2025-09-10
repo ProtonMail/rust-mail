@@ -560,11 +560,10 @@ impl ModelHooks for Contact {
             if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
                 self.local_id = existing.local_id;
             }
-        } else if let Some(local_id) = self.local_id {
-            if let Some(existing) = Self::load_by_id_sync(local_id, tx)? {
+        } else if let Some(local_id) = self.local_id
+            && let Some(existing) = Self::load_by_id_sync(local_id, tx)? {
                 self.remote_id = existing.remote_id;
             }
-        }
 
         Ok(())
     }

@@ -184,9 +184,9 @@ impl Label {
         tx: &Bond<'_>,
         labels: Vec<Label>,
     ) -> StashResult<Vec<LocalLabelId>> {
-        Ok(tx
+        tx
             .sync_bridge(move |tx| Self::store_labels(tx, labels))
-            .await?)
+            .await
     }
 
     pub fn store_labels(
@@ -315,12 +315,11 @@ impl ModelHooks for Label {
     }
 
     fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
-        if let Some(remote_id) = &self.remote_id {
-            if let Some(label) = Label::find_first_sync("WHERE remote_id=?", (remote_id,), tx)? {
+        if let Some(remote_id) = &self.remote_id
+            && let Some(label) = Label::find_first_sync("WHERE remote_id=?", (remote_id,), tx)? {
                 self.local_parent_id = label.local_parent_id;
                 self.local_id = label.local_id;
             }
-        }
         Ok(())
     }
 }

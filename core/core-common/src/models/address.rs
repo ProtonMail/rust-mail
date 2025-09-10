@@ -71,11 +71,10 @@ pub struct Address {
 
 impl ModelHooks for Address {
     fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = &self.remote_id {
-            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)? {
+        if let Some(remote_id) = &self.remote_id
+            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)? {
                 self.local_id = existing.local_id;
             }
-        }
 
         Ok(())
     }
