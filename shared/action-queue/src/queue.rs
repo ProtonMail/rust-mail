@@ -192,6 +192,8 @@ impl From<StoredAction> for QueuedMetadata {
 /// progress can be tracked and potentially awaited on.
 #[derive(Debug, Clone)]
 pub enum BroadcastMessage {
+    /// A new action was queued in this process.
+    Queued(ActionId, Arc<QueuedMetadata>),
     /// This queued action was executed successfully
     Success(ActionId),
     /// This queued action failed to execute.
@@ -451,12 +453,18 @@ impl Queue {
                 Error::UnknownAction(T::TYPE.to_string())
             })?;
 
-            let (local_output, id) =
+            let (local_output, stored_action) =
                 execute_action_local(&mut action, &handler, metadata, None, tx).await?;
+
+            let id = stored_action.id.unwrap();
 
             info!("Action queued with id={id}");
 
             self.shared.queued_action_notifier.notify_waiters();
+            let _ = self.shared.broadcast_sender.send(BroadcastMessage::Queued(
+                id,
+                Arc::new(QueuedMetadata::from(stored_action)),
+            ));
 
             Ok(QueuedActionOutput {
                 local: local_output,
@@ -507,7 +515,7 @@ impl Queue {
                 Error::UnknownAction(T::TYPE.to_string())
             })?;
 
-            let (local_output, id) = self
+            let (local_output, stored_action) = self
                 .shared
                 .stash
                 .connection()
@@ -517,12 +525,17 @@ impl Queue {
                         .await
                 })
                 .await?;
+            let id = stored_action.id.unwrap();
             if existing_id == id {
                 info!("Action has been updated");
                 // We don't want to notify executors in this case.
             } else {
                 info!("Action queued with id={id}");
                 self.shared.queued_action_notifier.notify_waiters();
+                let _ = self.shared.broadcast_sender.send(BroadcastMessage::Queued(
+                    id,
+                    Arc::new(QueuedMetadata::from(stored_action)),
+                ));
             }
 
             Ok(QueuedActionOutput {
@@ -1236,7 +1249,7 @@ async fn execute_action_local<T: Action>(
     metadata: Metadata,
     existing_id: Option<ActionId>,
     tx: &Bond<'_>,
-) -> Result<(T::LocalOutput, ActionId), ActionError<T>> {
+) -> Result<(T::LocalOutput, StoredAction), ActionError<T>> {
     let mut stored_action = StoredAction::without_state::<T>(action.dependency_keys(), metadata);
     if let Some(exising_id) = existing_id {
         stored_action
@@ -1296,7 +1309,8 @@ async fn execute_action_local<T: Action>(
         .inspect_err(|e| {
             error!("Failed to update action state: {e:?}");
         })?;
-    Ok((local_output, stored_action.id.unwrap()))
+
+    Ok((local_output, stored_action))
 }
 
 async fn execute_action_remote<T: Action>(
