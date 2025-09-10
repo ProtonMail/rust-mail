@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- [ET-4637] Request new fido details after resume_login_flow
+- [ET-4637] Request new fido details after resume_login_flow
+
+
+## [mail-uniffi-v0.143.4] - 2025-09-09
+
+### Fixes
+
+- Scroller should spawn task on next page regardless of the online state
+- [ET-4011] Report attachment validation  errors on draft save
+- [ET-4426] Always disable image decoration
+
+
+## [mail-uniffi-v0.143.2] - 2025-09-08
+
 ### Features
 
 - Speedup mark as read and unread

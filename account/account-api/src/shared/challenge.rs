@@ -1,4 +1,9 @@
 use derive_more::From;
+use muon::{ProtonRequest, ProtonResponse, common::Sender};
+use proton_core_api::{
+    service::ApiServiceResult,
+    services::proton::{PostAuthInfoRequest, PostAuthInfoResponse, ProtonAuth as _},
+};
 use proton_core_common::device::DeviceInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -141,6 +146,17 @@ fn insert_payload_frame(
         }
         .into(),
     );
+}
+
+pub async fn get_auth_info(
+    client: &impl Sender<ProtonRequest, ProtonResponse>,
+    username: &str,
+) -> ApiServiceResult<PostAuthInfoResponse> {
+    let request = PostAuthInfoRequest {
+        username: username.to_owned(),
+    };
+
+    client.post_auth_info(request).await
 }
 
 #[cfg(test)]

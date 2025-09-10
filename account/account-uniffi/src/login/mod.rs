@@ -70,19 +70,18 @@ impl LoginFlow {
     }
 
     /// Get the FIDO2 details for authentication.
-    ///
-    /// # Warning
-    /// This returns potentially stale FIDO2 details from the initial auth info.
-    /// For actual authentication, use `get_fido_details` from the `PasswordFlow` instead.
     #[must_use]
-    pub fn get_fido_details(&self) -> Option<Fido2ResponseFfi> {
-        async_runtime().block_on(async {
-            self.flow
-                .lock()
-                .await
+    pub async fn get_fido_details(&self) -> Result<Option<Fido2ResponseFfi>, LoginError> {
+        let flow = self.flow.clone();
+        uniffi_async::<_, LoginError, _>(async move {
+            let mut guard = flow.lock().await;
+            guard
                 .get_fido_details()
-                .map(Fido2ResponseFfi::from)
+                .await
+                .map(|it| it.map(Fido2ResponseFfi::from))
+                .map_err(LoginError::from)
         })
+        .await
     }
 
     /// Submit 2FA fido2 code.
