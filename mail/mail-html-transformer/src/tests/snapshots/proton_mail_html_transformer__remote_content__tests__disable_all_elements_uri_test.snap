@@ -45,11 +45,11 @@ div {
 <img src="">
 <img src="" longdesc="unknown://fadf.com">
 
-<blockquote cite="http://www.google.com">foo</blockquote>
-<blockquote cite="jrand://www.google.com">foo</blockquote>
+<blockquote cite="">foo</blockquote>
+<blockquote cite="">foo</blockquote>
 
-<form action="javascript:console.log('foo')">
-    <button formaction="javascript:console.log('foo')">foo</button>
+<form action="">
+    <button formaction="">foo</button>
 </form>
 
 <div style="background: url(javascript:console.log('hello'))"> invalid_css_style</div>;
@@ -73,8 +73,8 @@ div {
 <a href="mailto:user+tag@domain.co.uk">Mailto with plus and TLD</a>
 <img src="">Mailto in src attribute (should be stripped)
 <div style="background: url(&quot;&quot;)">Mailto in CSS (should be stripped)</div>
-<form action="mailto:form@should.fail">Mailto in form action (should be stripped)</form>
-<blockquote cite="mailto:cite@should.fail">Mailto in cite (should be stripped)</blockquote>
+<form action="">Mailto in form action (should be stripped)</form>
+<blockquote cite="">Mailto in cite (should be stripped)</blockquote>
 
 
 </body></html>

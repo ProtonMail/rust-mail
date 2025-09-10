@@ -434,7 +434,7 @@ fn get_uri_attributes() -> &'static HashSet<ExpandedName> {
             ExpandedName::new("", "codebase"),
             ExpandedName::new("", "data"),
             ExpandedName::new("", "usemap"),
-            ExpandedName::new("", "fromaction"),
+            ExpandedName::new("", "formaction"),
             ExpandedName::new("", "poster"),
             ExpandedName::new("", "archive"),
             ExpandedName::new(ns!(xlink), "href"),

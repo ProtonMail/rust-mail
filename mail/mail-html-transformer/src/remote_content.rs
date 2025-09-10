@@ -68,6 +68,9 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
         ExpandedName::new("", "poster"),
         ExpandedName::new("", "data-src"),
         ExpandedName::new("", "href"),
+        ExpandedName::new("", "action"),
+        ExpandedName::new("", "formaction"),
+        ExpandedName::new("", "cite"),
         ExpandedName::new(ns!(xlink), "href"),
     ];
 
