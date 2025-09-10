@@ -181,12 +181,16 @@ impl WantLogin {
     #[allow(deprecated)]
     async fn try_login(
         self,
-        user: String,
+        username: String,
         pass: SecureString,
         info: LoginExtraInfo,
         post_login_validator: &dyn PostLoginValidator,
     ) -> Result<State, LoginError> {
-        match self.flow.login_with_extra(user, pass.as_str(), info).await {
+        match self
+            .flow
+            .login_with_extra(&username, pass.as_str(), info)
+            .await
+        {
             LoginFlow::Ok(client, data) => {
                 check_store_auth(&self.parts, &data.user_id).await?;
 
@@ -250,6 +254,7 @@ impl WantLogin {
                 Ok(State::want_tfa(
                     flow.into(),
                     get_state_data(&user_id, &session_id, self.parts),
+                    username,
                     pass,
                     fido_details,
                 ))

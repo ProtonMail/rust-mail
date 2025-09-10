@@ -456,8 +456,10 @@ impl MailContext {
                     api_session,
                     user_id,
                     session_id,
+                    account
+                        .username
+                        .unwrap_or_else(|| account.name_or_addr.clone()),
                     password,
-                    None, // Don't use persisted FIDO2 details - they are single-use
                     migration_snooper,
                     post_login_validator,
                 ))
