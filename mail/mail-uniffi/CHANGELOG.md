@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Tweak default db pool sizes
+
+### Features
+
+- improve performance of initial sync
+- On Enter/Exit Foreground
+
+### Fixes
+
+- [ET-4697] Malformed declarations do not affect valid CSS declarations
+
+
+## [mail-uniffi-v0.143.8] - 2025-09-11
+
 ### Fixes
 
 - Missing Event Poll action migration
