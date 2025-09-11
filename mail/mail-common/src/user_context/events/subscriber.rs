@@ -5,7 +5,7 @@ use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
 use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{
     CachedScrollData, ConversationScrollData, MailLabel, MailSettings, MessageScrollData,
-    StoreLabelCounters,
+    RollbackItem, StoreLabelCounters,
 };
 #[cfg(feature = "prefetch")]
 use crate::prefetch::PrefetchJob;
@@ -17,6 +17,7 @@ use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::Context;
 use anyhow::anyhow;
 use async_trait::async_trait;
+use indoc::formatdoc;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::Label;
@@ -245,13 +246,15 @@ async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
 
     tether
         .sync_tx(move |tx| {
-            tx.execute_batch(
-                "
-                    DELETE from rollback_actions;
-                    DELETE from mail_conversation_scroll_data;
-                    DELETE from mail_message_scroll_data;
-                    ",
-            )?;
+            tx.execute_batch(&formatdoc! {"
+                DELETE from {};
+                DELETE from {};
+                DELETE from {};
+                ", 
+                RollbackItem::table_name(),
+                ConversationScrollData::table_name(),
+                MessageScrollData::table_name(),
+            })?;
 
             Label::store_labels(tx, all_remote_labels).context("Failed to sync labels")?;
 
