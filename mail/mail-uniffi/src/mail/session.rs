@@ -1183,30 +1183,8 @@ impl MailSession {
     }
 
     pub fn on_exit_foreground(&self) {
-        self.ctx().core_context().on_exit_foreground();
-    }
-
-    /// Pause all background work
-    ///
-    /// This should be called once the application enters the background.
-    pub fn pause_work(&self) {
-        self.mail_ctx.core_context().task_service().pause_main();
-    }
-
-    /// Pause all background work and wait for all non-pausable futures to complete.
-    ///
-    /// This should be called once the application enters the background.
-    pub fn pause_work_and_wait(&self) {
         async_runtime().block_on(async {
-            if let Err(e) = self
-                .mail_ctx
-                .core_context()
-                .task_service()
-                .pause_main_and_wait(Duration::from_millis(100))
-                .await
-            {
-                error!("Failed to await paused work: {e:?}");
-            }
+            self.ctx().core_context().on_exit_foreground().await;
         });
     }
 
