@@ -167,10 +167,13 @@ impl ModelHooks for ContactEmail {
         &mut self,
         tx: &stash::exports::Transaction<'_>,
     ) -> stash::stash::StashResult<()> {
+        // WARN: For perfomance reasons this will NOT be called in the initial sync. See `SyncedContacts::store`
+        // Any extra logic here should be copied there.
         if let Some(remote_id) = &self.remote_id
-            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
-                self.local_id = existing.local_id;
-            }
+            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)?
+        {
+            self.local_id = existing.local_id;
+        }
 
         if let Some(contact_remote_id) = &self.remote_contact_id {
             self.local_contact_id = Contact::remote_id_counterpart_sync(contact_remote_id, tx)?;

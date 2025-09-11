@@ -71,10 +71,13 @@ pub struct Address {
 
 impl ModelHooks for Address {
     fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
+        // WARN: For perfomance reasons this will NOT be called in the initial sync. See `SyncedAddress::store`
+        // Any extra logic here should be copied there.
         if let Some(remote_id) = &self.remote_id
-            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)? {
-                self.local_id = existing.local_id;
-            }
+            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)?
+        {
+            self.local_id = existing.local_id;
+        }
 
         Ok(())
     }
