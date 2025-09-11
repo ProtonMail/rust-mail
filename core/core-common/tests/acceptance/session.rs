@@ -58,11 +58,10 @@ async fn test_session_delete_subscriber() {
         .unwrap()
         .tx(async |tx: &Bond<'_>| {
             assert_eq!(CoreSession::all(tx).await.unwrap().len(), 1);
-            assert_eq!(
+            assert!(
                 CoreSession::delete_by_id(user_ctx.session_id().clone(), tx)
                     .await
                     .unwrap(),
-                1
             );
             Ok::<_, StashError>(())
         })

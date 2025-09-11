@@ -7044,6 +7044,7 @@ dependencies = [
 name = "stash-macros"
 version = "0.2.0"
 dependencies = [
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "serde",

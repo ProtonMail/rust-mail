@@ -127,7 +127,7 @@ impl Handler for DeleteHandler {
                     for id in local_ids_without_remote_id {
                         if let Some(conv_id) = match tx.query_value::<_, LocalConversationId>(
                             format!(
-                                "SELECT {} AS value FROM {} WHERE remote_id IS NULL AND {} IN (SELECT local_conversation_id FROM {} WHERE {} = ?)",
+                                "SELECT {} FROM {} WHERE remote_id IS NULL AND {} IN (SELECT local_conversation_id FROM {} WHERE {} = ?)",
                                 Conversation::id_field_name(),
                                 Conversation::table_name(),
                                 Conversation::id_field_name(),
@@ -146,7 +146,7 @@ impl Handler for DeleteHandler {
                         } {
                             // We should only delete orphaned conversations.
                             let conversation_message_count = tx.query_value::<_, usize>(
-                                format!("SELECT COUNT(*) AS value FROM {} WHERE local_conversation_id=? AND deleted=0", Message::table_name()), params![conv_id]).await?;
+                                format!("SELECT COUNT(*) FROM {} WHERE local_conversation_id=? AND deleted=0", Message::table_name()), params![conv_id]).await?;
                             if conversation_message_count == 0 {
                                 Conversation::delete_by_id(conv_id, tx)
                                     .await

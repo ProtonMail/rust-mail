@@ -5,17 +5,14 @@ use crate::datatypes::{
     LocalAddressId,
 };
 use crate::{CoreContextError, CoreContextResult};
-use proton_core_api::services::proton::Address as ApiAddress;
-use proton_core_api::services::proton::AddressId;
-use proton_core_api::services::proton::ProtonCore;
+use proton_core_api::services::proton::{Address as ApiAddress, AddressId, ProtonCore};
 
 use stash::exports::Transaction;
 use stash::macros::Model;
-use stash::orm::{Model, ModelHooks};
+use stash::orm::{DbRecord, Model, ModelHooks};
 use stash::params;
-use stash::stash::StashError;
-use stash::stash::Tether;
-use stash::stash::{Bond, Stash};
+use stash::rusqlite::params_from_iter;
+use stash::stash::{Stash, StashError, StashResult, Tether};
 
 use crate::models::ModelIdExtension;
 
@@ -74,10 +71,12 @@ pub struct Address {
 
 impl ModelHooks for Address {
     fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = &self.remote_id {
-            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)? {
-                self.local_id = existing.local_id;
-            }
+        // WARN: For perfomance reasons this will NOT be called in the initial sync. See `SyncedAddress::store`
+        // Any extra logic here should be copied there.
+        if let Some(remote_id) = &self.remote_id
+            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, bond)?
+        {
+            self.local_id = existing.local_id;
         }
 
         Ok(())
@@ -114,8 +113,8 @@ impl Address {
             &[],
             stash.connection().await?,
             async || Self::sync(api).await,
-            async |tx, res| {
-                res.store(tx).await?;
+            |tx, res| {
+                res.store(tx)?;
                 Ok(())
             },
         )
@@ -190,9 +189,11 @@ pub struct SyncedAddresses {
 
 impl SyncedAddresses {
     #[tracing::instrument(skip(tx))]
-    pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
-        for mut address in self.addresses {
-            address.save(tx).await?;
+    pub fn store(self, tx: &Transaction<'_>) -> StashResult<()> {
+        let mut query = tx.prepare(Address::INSERT_QUERY)?;
+        for address in self.addresses {
+            let params = params_from_iter(address.field_values());
+            let _rows = query.query(params)?.next()?;
         }
         Ok(())
     }

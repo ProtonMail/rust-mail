@@ -26,7 +26,7 @@ impl Migration for DefaultLabelsMigration {
 
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {
         // Insert default known system
-        let sql = r#"INSERT OR IGNORE INTO labels (remote_id, label_type, name, color, display_order) VALUES (?,4,?,'#000000',?) RETURNING local_id AS value"#;
+        let sql = r#"INSERT OR IGNORE INTO labels (remote_id, label_type, name, color, display_order) VALUES (?,4,?,'#000000',?) RETURNING local_id"#;
         let sql_message_counters = r"INSERT OR IGNORE INTO message_counters VALUES (?,0,0)";
         let sql_conversation_counters =
             r"INSERT OR IGNORE INTO conversation_counters VALUES (?,0,0)";

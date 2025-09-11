@@ -159,7 +159,7 @@ async fn initialize_event_loop(
                 .await?;
             Ok(())
         },
-        async |_tx, ()| Ok(()),
+        |_tx, ()| Ok(()),
     )
     .await
 }

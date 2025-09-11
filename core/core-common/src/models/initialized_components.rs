@@ -1,11 +1,14 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::models::ModelExtension;
 use itertools::Itertools;
 use sqlite_watcher::watcher::TableObserver;
+use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use tracing::{debug, error, info, trace};
 
 use crate::datatypes::{InitializationKey, InitializedComponentState};
 
@@ -112,18 +115,18 @@ impl InitializedComponent {
     ///
     /// Returns an error if the database query fails.
     ///
-    #[tracing::instrument(skip(tether, fetch, store, watcher))]
+    #[tracing::instrument(skip_all, fields(key = key.0, dependencies = ?dependencies))]
     pub async fn initialize<E, CTX>(
         watcher: Arc<InitializationWatcher>,
         key: InitializationKey,
         dependencies: &[InitializationKey],
         mut tether: Tether,
-        fetch: impl AsyncFnOnce() -> Result<CTX, E> + '_,
-        store: impl AsyncFnOnce(&Bond<'_>, CTX) -> Result<(), E> + '_,
+        fetch: impl AsyncFnOnce() -> Result<CTX, E>,
+        store: impl FnOnce(&Transaction<'_>, CTX) -> Result<(), E> + 'static + Send,
     ) -> Result<(), InitializationError<E>>
     where
-        E: std::fmt::Debug,
-        CTX: Send,
+        E: std::fmt::Debug + Send + 'static,
+        CTX: Send + 'static,
     {
         if Self::is_initialized(key, &tether).await? {
             tracing::info!("Already initialized");
@@ -138,50 +141,56 @@ impl InitializedComponent {
         // other component.
         //
         // Then we store the data, which depends on other components.
-        tracing::debug!("Fetching");
+        debug!("Fetching");
+        let t0 = Instant::now();
         let fetched = match fetch().await {
             Ok(o) => o,
             Err(e) => {
-                tracing::error!("Failed the initialization in fetched stage: {e:?}");
+                tracing::error!(
+                    "Failed the initialization in fetched stage after {:?}: {e:?}",
+                    t0.elapsed()
+                );
                 Self::fail(key, &mut tether).await?;
                 return Err(InitializationError::InitializationFailed(e));
             }
         };
+        let t0 = t0.elapsed();
 
-        tracing::debug!("Fetched");
+        debug!("Fetched");
         if let Err(e) = Self::wait_for_dependencies(dependencies, &watcher, &tether).await {
             tracing::error!("Component dependencies error: {e:?}");
             Self::fail(key, &mut tether).await?;
             return Err(e.into());
         }
 
-        tracing::trace!("Storing. Creating a transaction");
-        let res = tether
-            .tx::<_, _, InitializationError<E>>(async move |tx| {
-                tracing::trace!("Storing");
-                let res = store(tx, fetched).await;
-                tracing::trace!("Stored");
+        trace!("Storing. Creating a transaction");
+        let t1 = Instant::now();
+        let res: Result<(), InitializationError<E>> = tether
+            .sync_tx_returning(move |tx| {
+                trace!("Storing");
 
-                let state = if res.is_err() {
-                    InitializedComponentState::Failed
-                } else {
-                    InitializedComponentState::Succeeded
-                };
-
-                tracing::debug!("Marking as {state:?}");
-
-                Self {
-                    key: key.into(),
-                    state,
+                match store(tx, fetched) {
+                    Ok(()) => {
+                        Self {
+                            key: key.into(),
+                            state: InitializedComponentState::Succeeded,
+                        }
+                        .save_sync(tx)?;
+                        Ok(Ok(()))
+                    }
+                    Err(e) => {
+                        Self {
+                            key: key.into(),
+                            state: InitializedComponentState::Failed,
+                        }
+                        .save_sync(tx)?;
+                        Ok(Err(InitializationError::InitializationFailed(e)))
+                    }
                 }
-                .save(tx)
-                .await?;
-                Ok(res)
             })
             .await?;
-        tracing::trace!("Committed");
-
-        res.map_err(InitializationError::InitializationFailed)
+        info!("Fetch took {t0:?}, store took {:?}", t1.elapsed());
+        res
     }
 
     /// Sets state immediately
@@ -232,10 +241,10 @@ impl InitializedComponent {
         watcher: &InitializationWatcher,
         tether: &Tether,
     ) -> Result<(), DependencyInitializationError> {
-        tracing::debug!("Waiting for dependencies: {dependencies:?}");
+        debug!("Waiting for dependencies: {dependencies:?}");
         // Early exit for leafs
         if dependencies.is_empty() {
-            tracing::debug!("There are no dependencies");
+            debug!("There are no dependencies");
             return Ok(());
         }
 
@@ -269,7 +278,7 @@ impl InitializedComponent {
         let states = Self::states_for_deps(dependencies, tether).await?;
         let state = Self::coalesce_states(states);
 
-        tracing::trace!("Checking state of dependencies: {state:?}");
+        trace!("Checking state of dependencies: {state:?}");
 
         match state {
             InitializedComponentState::Succeeded => Ok(true),

@@ -668,18 +668,18 @@ impl Message {
     /// Set convarsation ids before saving
     ///
     fn set_coversation_before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
-        if self.local_conversation_id.is_none() {
-            if let Some(remote_conversation_id) = &self.remote_conversation_id {
-                if let Some(conversation) =
-                    Conversation::find_by_remote_id_sync(remote_conversation_id, tx)?
-                {
-                    self.local_conversation_id = conversation.local_id;
-                } else {
-                    // Create an unknown entry.
-                    let mut conversation = Conversation::unknown(remote_conversation_id.clone());
-                    conversation.save_sync(tx)?;
-                    self.local_conversation_id = conversation.local_id;
-                }
+        if self.local_conversation_id.is_none()
+            && let Some(remote_conversation_id) = &self.remote_conversation_id
+        {
+            if let Some(conversation) =
+                Conversation::find_by_remote_id_sync(remote_conversation_id, tx)?
+            {
+                self.local_conversation_id = conversation.local_id;
+            } else {
+                // Create an unknown entry.
+                let mut conversation = Conversation::unknown(remote_conversation_id.clone());
+                conversation.save_sync(tx)?;
+                self.local_conversation_id = conversation.local_id;
             }
         }
 
@@ -1603,7 +1603,7 @@ impl Message {
             .query_values::<_, LocalMessageId>(
                 indoc!(
                     "
-                SELECT local_id as value
+                SELECT local_id
                 FROM messages
                 JOIN message_labels
                     ON messages.local_id = message_labels.local_message_id
@@ -1648,7 +1648,7 @@ impl Message {
         tether: &Tether,
     ) -> Result<Vec<LocalMessageId>, StashError> {
         tether.query_values::<_, LocalMessageId>(
-            "SELECT local_id as value FROM messages WHERE local_conversation_id = ? AND messages.deleted = 0",
+            "SELECT local_id FROM messages WHERE local_conversation_id = ? AND messages.deleted = 0",
             params![local_conversation_id],
         )
         .await
@@ -1659,7 +1659,7 @@ impl Message {
         tether: &Tether,
     ) -> Result<Vec<MessageId>, StashError> {
         tether.query_values::<_, MessageId>(
-            "SELECT remote_id as value FROM messages WHERE remote_id IS NOT NULL AND local_conversation_id = ? AND messages.deleted = 0",
+            "SELECT remote_id FROM messages WHERE remote_id IS NOT NULL AND local_conversation_id = ? AND messages.deleted = 0",
             params![local_conversation_id],
         )
             .await
@@ -1690,7 +1690,7 @@ impl Message {
                 WHERE flags & ? AND local_conversation_id =? AND local_id IN (
                     SELECT local_message_id FROM message_labels WHERE local_label_id =?
                 )
-                RETURNING local_id AS value"
+                RETURNING local_id"
                 },
             params![
                 snooze_time,
@@ -1769,7 +1769,7 @@ impl Message {
         Ok(tether
             .query_value::<_, u64>(
                 format!(
-                    "SELECT IFNULL(MAX(display_order),0) AS value FROM {}",
+                    "SELECT IFNULL(MAX(display_order),0) FROM {}",
                     Self::table_name()
                 ),
                 vec![],
@@ -2563,10 +2563,10 @@ impl ModelHooks for Message {
     }
 
     fn before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = &self.remote_id {
-            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
-                self.local_id = existing.local_id;
-            }
+        if let Some(remote_id) = &self.remote_id
+            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)?
+        {
+            self.local_id = existing.local_id;
         }
 
         self.set_coversation_before_save(tx)?;
@@ -2832,21 +2832,21 @@ impl MessageBodyMetadata {
 
 impl ModelHooks for MessageBodyMetadata {
     fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
-        if self.local_message_id.is_none() {
-            if let Some(remote_id) = &self.remote_message_id {
-                if let Some(existing) =
-                    Self::find_first_sync("WHERE remote_message_id=?", (remote_id,), tx)?
-                {
-                    self.local_message_id = existing.local_message_id;
-                } else {
-                    let Some(message) = Message::find_by_remote_id_sync(remote_id, tx)? else {
-                        return Err(StashError::Custom(anyhow!(
-                            "Failed to find message with remote id {}",
-                            self.remote_message_id.as_ref().unwrap()
-                        )));
-                    };
-                    self.local_message_id = message.local_id;
-                }
+        if self.local_message_id.is_none()
+            && let Some(remote_id) = &self.remote_message_id
+        {
+            if let Some(existing) =
+                Self::find_first_sync("WHERE remote_message_id=?", (remote_id,), tx)?
+            {
+                self.local_message_id = existing.local_message_id;
+            } else {
+                let Some(message) = Message::find_by_remote_id_sync(remote_id, tx)? else {
+                    return Err(StashError::Custom(anyhow!(
+                        "Failed to find message with remote id {}",
+                        self.remote_message_id.as_ref().unwrap()
+                    )));
+                };
+                self.local_message_id = message.local_id;
             }
         }
         // Update all attachment links - When creating drafts we can update
@@ -2890,12 +2890,11 @@ impl ModelHooks for MessageBodyMetadata {
     }
 
     fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
-        if self.local_message_id.is_none() {
-            if let Some(remote_id) = &self.remote_message_id {
-                if let Some(message) = Message::find_by_remote_id_sync(remote_id, bond)? {
-                    self.local_message_id = message.local_id;
-                }
-            }
+        if self.local_message_id.is_none()
+            && let Some(remote_id) = &self.remote_message_id
+            && let Some(message) = Message::find_by_remote_id_sync(remote_id, bond)?
+        {
+            self.local_message_id = message.local_id;
         }
 
         Ok(())
@@ -2920,7 +2919,7 @@ impl MessageLabelStats {
         for message in messages {
             let label_ids = tether
                 .query_values::<_, LocalLabelId>(
-                    "SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?",
+                    "SELECT local_label_id FROM message_labels WHERE local_message_id=?",
                     params![message.id()],
                 )
                 .await?;

@@ -345,7 +345,7 @@ impl Handler for ActionHandler2 {
             .unwrap();
 
         let res: Vec<u32> = tx
-            .query_values("SELECT bar AS value FROM foo ORDER BY bar", vec![])
+            .query_values("SELECT bar FROM foo ORDER BY bar", vec![])
             .await
             .unwrap();
         assert_eq!(res, (0..=action.num).collect::<Vec<_>>());
@@ -395,7 +395,7 @@ async fn queue_actions() {
     queue.queue_actions(actions, None).await.unwrap();
 
     let res: Vec<u32> = tether
-        .query_values("SELECT bar AS value FROM foo ORDER BY bar", vec![])
+        .query_values("SELECT bar FROM foo ORDER BY bar", vec![])
         .await
         .unwrap();
     assert_eq!(res, (0..=10).collect::<Vec<_>>());

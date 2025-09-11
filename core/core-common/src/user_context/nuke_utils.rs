@@ -13,7 +13,7 @@ use tokio::{
 use walkdir::WalkDir;
 
 pub const DB_EXTENSIONS: &[&str] = &["db", "db-wal", "db-shm"];
-const QUERY_LIST_TABLES: &str = "SELECT name as value FROM sqlite_master WHERE type='table'";
+const QUERY_LIST_TABLES: &str = "SELECT name FROM sqlite_master WHERE type='table'";
 
 pub(crate) async fn drop_all_tables_in_database(mut tether: Tether) -> Result<(), StashError> {
     tether.execute("PRAGMA foreign_keys = OFF;", vec![]).await?;

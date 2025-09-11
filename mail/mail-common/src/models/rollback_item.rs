@@ -166,7 +166,7 @@ impl RollbackItem {
         tether
             .query_values::<_, String>(
                 format!(
-                    "SELECT remote_id AS value FROM {} WHERE item_type = ?",
+                    "SELECT remote_id FROM {} WHERE item_type = ?",
                     Self::table_name()
                 ),
                 params![kind],

@@ -2377,7 +2377,7 @@ impl Conversation {
         Ok(tether
             .query_value::<_, u64>(
                 format!(
-                    "SELECT IFNULL(MAX(display_order),0) AS value FROM {}",
+                    "SELECT IFNULL(MAX(display_order),0) FROM {}",
                     Self::table_name()
                 ),
                 vec![],
@@ -2940,7 +2940,7 @@ impl ModelHooks for Conversation {
         // Example... not good to do this here, though, as the total number comes
         // from the API.
         // self.num_messages = stash.query::<_, QueryResultU64>(
-        //     "SELECT COUNT(*) as value FROM messages WHERE local_conversation_id = ?",
+        //     "SELECT COUNT(*) FROM messages WHERE local_conversation_id = ?",
         //     params![self.local_id],
         // ).await?.into_iter().next().unwrap().value;
 
@@ -3136,7 +3136,7 @@ impl ConversationLabel {
         tether: &Tether,
     ) -> Result<Vec<LocalLabelId>, StashError> {
         let query = format!(
-            "SELECT local_label_id as value FROM {} WHERE local_conversation_id = ?",
+            "SELECT local_label_id FROM {} WHERE local_conversation_id = ?",
             Self::table_name()
         );
 
@@ -3584,7 +3584,7 @@ impl StoreLabelCounters {
             &[Label::INIT_KEY],
             stash.connection().await?,
             async || Ok(Self::fetch(api).await?),
-            async |tx, this| Ok(this.save(tx).await?),
+            |tx, this| Ok(this.store(tx)?),
         )
         .await
     }
@@ -3595,10 +3595,10 @@ impl StoreLabelCounters {
         Ok(Self(a, b))
     }
 
-    pub async fn save(self, tx: &Bond<'_>) -> Result<(), StashError> {
-        let Self(a, b) = self;
-        ConversationLabelsCount::create_or_update_conversation_counts(a, tx).await?;
-        MessageLabelsCount::create_or_update_message_counts(b, tx).await?;
+    pub fn store(self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        let Self(convs_count, msgs_count) = self;
+        ConversationLabelsCount::create_or_update_conversation_counts_sync(convs_count, tx)?;
+        MessageLabelsCount::create_or_update_message_counts_sync(msgs_count, tx)?;
         Ok(())
     }
 }

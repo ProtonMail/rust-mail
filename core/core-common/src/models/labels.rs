@@ -23,7 +23,7 @@ use stash::exports::{Connection, Transaction};
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::params;
-use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Bond, Stash, StashError, StashResult, Tether, WatcherHandle};
 use stash::utils::{MapToSql as _, placeholders};
 use thiserror::Error;
 use tracing::error;
@@ -180,15 +180,22 @@ impl Label {
             .collect())
     }
 
-    pub async fn store_labels(
+    pub async fn store_labels_async(
         tx: &Bond<'_>,
         labels: Vec<Label>,
-    ) -> Result<Vec<LocalLabelId>, LabelError> {
+    ) -> StashResult<Vec<LocalLabelId>> {
+        tx.sync_bridge(move |tx| Self::store_labels(tx, labels))
+            .await
+    }
+
+    pub fn store_labels(
+        tx: &Transaction<'_>,
+        labels: Vec<Label>,
+    ) -> StashResult<Vec<LocalLabelId>> {
         let mut label_ids = Vec::with_capacity(labels.len());
         for mut label in labels {
-            label.save(tx).await?;
-            let local_id = label.id();
-            label_ids.push(local_id);
+            label.save_sync(tx)?;
+            label_ids.push(label.id());
         }
 
         Ok(label_ids)
@@ -307,11 +314,11 @@ impl ModelHooks for Label {
     }
 
     fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
-        if let Some(remote_id) = &self.remote_id {
-            if let Some(label) = Label::find_first_sync("WHERE remote_id=?", (remote_id,), tx)? {
-                self.local_parent_id = label.local_parent_id;
-                self.local_id = label.local_id;
-            }
+        if let Some(remote_id) = &self.remote_id
+            && let Some(label) = Label::find_first_sync("WHERE remote_id=?", (remote_id,), tx)?
+        {
+            self.local_parent_id = label.local_parent_id;
+            self.local_id = label.local_id;
         }
         Ok(())
     }

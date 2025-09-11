@@ -18,6 +18,9 @@
 //! to interface with sqlite.
 //!
 
+use crate::connection_manager::{
+    StashConnectionPool, StashConnectionPoolError, StashPooledConnection,
+};
 use crate::orm::{ConversionError, DbRecord};
 use anyhow::{Context, anyhow};
 use core::fmt;
@@ -42,7 +45,6 @@ use sqlite_watcher::statement::Statement;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
-use stash_macros::DbRecord;
 use std::any::Any;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
@@ -52,11 +54,6 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tracing::{debug, error, trace};
-// Used to resolve undeclared crate of module `stash` from DbRecord proc marco
-use crate as stash;
-use crate::connection_manager::{
-    StashConnectionPool, StashConnectionPoolError, StashPooledConnection,
-};
 
 /// Set a timeout for a specified amount of time when a table is locked. This
 /// defaults to 5,000 milliseconds in the underlying libraries. This is currently only
@@ -837,7 +834,7 @@ impl Tether {
     ///  }
     ///
     ///  let values:Vec<RecordValue<T>> = interface.query(
-    ///         "SELECT number AS value FROM table",
+    ///         "SELECT number FROM table",
     ///         vec![]).await.unwrap();
     /// ```
     ///
@@ -858,7 +855,7 @@ impl Tether {
     ///
     /// async fn value_query(tether:&Tether) {
     ///     let values:Vec<f64> = tether.query_values(
-    ///         "SELECT number AS value FROM table",
+    ///         "SELECT number FROM table",
     ///         vec![]).await.unwrap();
     /// }
     /// ```
@@ -1052,7 +1049,9 @@ impl Tether {
         &self,
         callback: impl FnOnce(&rusqlite::Connection) -> Result<T, StashError> + Send + 'static,
     ) -> Result<T, StashError> {
+        let span = tracing::Span::current();
         let closure = Box::new(move |conn: &rusqlite::Connection| {
+            let _g = span.enter();
             callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
 
@@ -1071,14 +1070,14 @@ impl Tether {
     }
 
     pub async fn sync_tx(
-        &self,
+        &mut self,
         callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<()> + Send + 'static,
     ) -> StashResult<()> {
         self.sync_tx_returning(callback).await
     }
 
     pub async fn sync_tx_returning<T: Send + 'static>(
-        &self,
+        &mut self,
         callback: impl FnOnce(&rusqlite::Transaction) -> StashResult<T> + Send + 'static,
     ) -> StashResult<T> {
         self.run_sync_tx(callback, TransactionTrackingPolicy::Tracking)
@@ -1087,13 +1086,15 @@ impl Tether {
 
     /// This runs the given callback in the tether thread.
     async fn run_sync_tx<T: Send + 'static>(
-        &self,
+        &mut self,
         callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
         policy: TransactionTrackingPolicy,
     ) -> StashResult<T> {
         let tx_lock = self.tx_lock.clone();
         let _guard = tx_lock.lock().await;
+        let span = tracing::Span::current();
         let closure = Box::new(move |tx: &rusqlite::Transaction| {
+            let _g = span.enter();
             callback(tx).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
 
@@ -1324,7 +1325,9 @@ impl<'tether> Bond<'tether> {
         &self,
         callback: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<T, StashError> + Send + 'static,
     ) -> Result<T, StashError> {
+        let span = tracing::Span::current();
         let closure = Box::new(move |conn: &rusqlite::Transaction| {
+            let _g = span.enter();
             callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
 
@@ -1758,9 +1761,20 @@ impl<'a> TetheredWorkerStateMachine<'a> {
 }
 
 /// Value record struct used to generate the `DbRecord` glue code.
-#[derive(Debug, DbRecord, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct ValueRecord<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static> {
-    /// Value we wish to read from the query.
-    #[DbField]
     value: V,
+}
+
+impl<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static> DbRecord
+    for ValueRecord<V>
+{
+    fn field_values(&self) -> impl Iterator<Item = &dyn ToSql> + '_ {
+        [&self.value as &dyn ToSql].into_iter()
+    }
+
+    fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, ConversionError> {
+        let value = row.get(0)?;
+        Ok(Self { value })
+    }
 }

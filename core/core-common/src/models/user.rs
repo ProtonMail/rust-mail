@@ -12,11 +12,11 @@ use proton_core_api::services::proton::UserId;
 use proton_core_api::services::proton::{DelinquentState as ApiDelinquentState, ProtonCore};
 use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
-use stash::exports::{FromSql, FromSqlError, SqliteError, ToSql, ToSqlOutput, Value};
+use stash::exports::{FromSql, FromSqlError, SqliteError, ToSql, ToSqlOutput, Transaction, Value};
 use stash::macros::Model;
 use stash::orm::Model;
+use stash::stash::Stash;
 use stash::stash::StashError;
-use stash::stash::{Bond, Stash};
 
 use super::{InitializationError, InitializationWatcher, InitializedComponent, UserSettings};
 
@@ -155,8 +155,8 @@ impl User {
             &[],
             stash.connection().await?,
             async move || Ok(Self::sync_user_and_settings(api).await?),
-            async |tx, res| {
-                res.store(tx).await?;
+            |tx, res| {
+                res.store(tx)?;
                 Ok(())
             },
         )
@@ -183,13 +183,13 @@ pub struct SyncedUserSettings {
 
 impl SyncedUserSettings {
     #[tracing::instrument(skip(tx))]
-    pub async fn store(self, tx: &Bond<'_>) -> Result<(), StashError> {
+    pub fn store(self, tx: &Transaction<'_>) -> Result<(), StashError> {
         let Self {
             mut user,
             mut settings,
         } = self;
-        user.save(tx).await?;
-        settings.save(tx).await?;
+        user.save_sync(tx)?;
+        settings.save_sync(tx)?;
         Ok(())
     }
 }
