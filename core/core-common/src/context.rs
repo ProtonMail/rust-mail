@@ -1273,6 +1273,7 @@ pub enum Platform {
 
 impl Platform {
     #[must_use]
+    #[allow(unreachable_code)]
     pub fn current() -> Self {
         #[cfg(target_os = "android")]
         return Self::Mobile;
