@@ -24,6 +24,7 @@ use crate::widgets::{Backdrop, ScrollableParagraph};
 use crate::widgets::{ScrollableListState, ScrollableParagraphState};
 use anyhow::anyhow;
 use chrono::Local;
+use crossterm::event::KeyModifiers;
 use futures::FutureExt;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::services::SessionObserverService;
@@ -31,6 +32,7 @@ use proton_core_common::{OnSessionDeletedResponse, Origin};
 use proton_log_service::LogService;
 use proton_log_service::WorkerGuard;
 use proton_mail_common::MailContext;
+use proton_network_monitor_service::{OsNetworkStatus, RequestNetworkStatus};
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Flex};
 use ratatui::prelude::*;
@@ -124,6 +126,8 @@ pub struct AppModel {
     display_log: bool,
     _log_guard: WorkerGuard,
     pending_popups: Vec<Box<dyn Popup>>,
+    os_network_status: OsNetworkStatus,
+    request_network_status: RequestNetworkStatus,
 }
 
 impl AppModel {
@@ -191,6 +195,8 @@ impl AppModel {
             display_log: false,
             _log_guard: log_guard,
             pending_popups: vec![],
+            os_network_status: OsNetworkStatus::Online,
+            request_network_status: RequestNetworkStatus::Online,
         })
     }
 
@@ -236,7 +242,49 @@ impl Model<Messages> for AppModel {
             .boxed()
         });
 
-        Command::batch([session_observer_cmd, ready_cmd])
+        let network_monitor = self.context.network_monitor_service();
+        let mut os_status_observer = network_monitor.os_network_status_observer();
+        let mut request_status_observer = network_monitor.network_status_observer();
+        let watch_os_network_status_cmd = Command::background_task(move |sender| {
+            async move {
+                loop {
+                    let status = os_status_observer.wait_for_change().await;
+                    if sender
+                        .send_async(Command::message(Messages::OsNetworkStatusUpdate(status)))
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }
+            .boxed()
+        });
+
+        let watch_network_status_cmd = Command::background_task(move |sender| {
+            async move {
+                loop {
+                    let status = request_status_observer.wait_for_change().await;
+                    if sender
+                        .send_async(Command::message(Messages::RequestNetworkStatusUpdate(
+                            status,
+                        )))
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }
+            .boxed()
+        });
+
+        Command::batch([
+            session_observer_cmd,
+            watch_network_status_cmd,
+            watch_os_network_status_cmd,
+            ready_cmd,
+        ])
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
@@ -249,6 +297,22 @@ impl Model<Messages> for AppModel {
             && key.code == KeyCode::F(2)
         {
             self.display_log = !self.display_log;
+            return Command::None;
+        }
+
+        if let Event::Key(key) = event
+            && key.kind == KeyEventKind::Press
+            && key.code == KeyCode::F(10)
+        {
+            if key.modifiers.contains(KeyModifiers::SHIFT) {
+                self.context
+                    .network_monitor_service()
+                    .update_os_network_status(OsNetworkStatus::Online);
+            } else {
+                self.context
+                    .network_monitor_service()
+                    .update_os_network_status(OsNetworkStatus::Offline);
+            }
             return Command::None;
         }
 
@@ -268,6 +332,14 @@ impl Model<Messages> for AppModel {
 
     fn update(&mut self, message: Messages) -> Command<Messages> {
         let message = match message {
+            Messages::OsNetworkStatusUpdate(status) => {
+                self.os_network_status = status;
+                return Command::None;
+            }
+            Messages::RequestNetworkStatusUpdate(status) => {
+                self.request_network_status = status;
+                return Command::None;
+            }
             Messages::DisplayBackgroundProgress(text) => {
                 self.bg_progress = Some(BackgroundProgress::new(text));
                 return Command::None;
@@ -365,10 +437,25 @@ impl Model<Messages> for AppModel {
         frame.render_widget(Block::new().style(Style::new().reversed()), status_bar_area);
 
         let [title_area, view_status_area] =
-            Layout::horizontal([Constraint::Length(18), Constraint::Fill(1)])
+            Layout::horizontal([Constraint::Length(31), Constraint::Fill(1)])
                 .areas(status_bar_area);
 
-        let text = Text::from("Proton Mail TUI | ".bold());
+        let span = Line::from(vec![
+            "Proton Mail TUI | ".bold(),
+            Span::from(if self.os_network_status.is_online() {
+                "OS: 1"
+            } else {
+                "OS: 0"
+            }),
+            Span::from(" "),
+            Span::from(if self.request_network_status.is_online() {
+                "R: 1"
+            } else {
+                "R: 0"
+            }),
+            Span::from(" | "),
+        ]);
+        let text = Text::from(span);
         frame.render_widget(text, title_area);
 
         if self.display_log {

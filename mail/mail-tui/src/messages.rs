@@ -4,6 +4,7 @@ use crate::app_model::{AppState, Popup};
 use anyhow::anyhow;
 use proton_mail_common::MailContextError;
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::UserId;
+use proton_network_monitor_service::{OsNetworkStatus, RequestNetworkStatus};
 use std::path::Path;
 
 /// Application messages.
@@ -34,6 +35,8 @@ pub enum Messages {
     /// Background worker messages
     BackgroundWorker(crate::app_model::background::Message),
     SessionExpired(UserId),
+    OsNetworkStatusUpdate(OsNetworkStatus),
+    RequestNetworkStatusUpdate(RequestNetworkStatus),
 }
 
 impl Messages {
