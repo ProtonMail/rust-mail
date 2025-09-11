@@ -171,7 +171,6 @@ impl InitializedComponent {
 
                 match store(tx, fetched) {
                     Ok(()) => {
-                        debug!("Stored OK in {time:?}", time = t1.elapsed());
                         Self {
                             key: key.into(),
                             state: InitializedComponentState::Succeeded,
@@ -180,7 +179,6 @@ impl InitializedComponent {
                         Ok(Ok(()))
                     }
                     Err(e) => {
-                        error!("Stored FAILED in {time:?}", time = t1.elapsed());
                         Self {
                             key: key.into(),
                             state: InitializedComponentState::Failed,
