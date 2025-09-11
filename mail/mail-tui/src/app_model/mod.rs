@@ -223,7 +223,8 @@ impl Model<Messages> for AppModel {
         let session_observer_cmd = Command::background_task(move |sender| {
             async move {
                 let session_service = ctx.core_context().get_service::<SessionObserverService>();
-                session_service.on_session_deleted(move |_, user_id| {
+                let event_service = ctx.core_context().event_service();
+                session_service.on_session_deleted(event_service, move |_, user_id| {
                     let sender = sender.clone();
                     async move {
                         let _ = sender

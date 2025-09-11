@@ -219,11 +219,10 @@ async fn create_mail_session_inner(
     let user_ctx_map = MailUserContextMap::new();
     let weak_user_ctx_map = Arc::downgrade(&user_ctx_map);
 
-    if let Some(session_service) = mail_ctx
-        .core_context()
-        .get_service_opt::<SessionObserverService>()
-    {
-        session_service.on_session_deleted(move |_session_id, user_id| {
+    let core_ctx = mail_ctx.core_context();
+    if let Some(session_service) = core_ctx.get_service_opt::<SessionObserverService>() {
+        let event_service = core_ctx.event_service();
+        session_service.on_session_deleted(event_service, move |_session_id, user_id| {
             let weak_user_ctx_map = weak_user_ctx_map.clone();
             async move {
                 tracing::warn!("Session ended. Removing from the map");

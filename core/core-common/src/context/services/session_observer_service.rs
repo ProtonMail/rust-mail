@@ -1,45 +1,30 @@
 use crate::app_events::{UserSessionCreatedEvent, UserSessionDeletedEvent};
 use crate::db::account::{CoreSessionObserver, CoreSessionObserverNotification};
 use crate::{Context, CoreContextError, OnSessionDeletedResponse};
-use proton_event_service::{Event, EventService, EventStream};
+use proton_event_service::{EventService, EventStream};
 use std::sync::Weak;
 
 pub struct SessionObserverService {
-    event_service: EventService,
     context: Weak<Context>,
     capacity: usize,
 }
 
 impl SessionObserverService {
-    pub fn new(event_service: EventService, context: Weak<Context>, capacity: usize) -> Self {
-        Self {
-            event_service,
-            context,
-            capacity,
-        }
+    #[must_use]
+    pub fn new(context: Weak<Context>, capacity: usize) -> Self {
+        Self { context, capacity }
     }
 
-    pub fn subscribe_to_session_deleted(&self) -> Option<EventStream<UserSessionDeletedEvent>> {
-        self.event_service.subscribe::<UserSessionDeletedEvent>()
+    pub fn subscribe_to_session_deleted(
+        &self,
+        event_service: &EventService,
+    ) -> Option<EventStream<UserSessionDeletedEvent>> {
+        event_service.subscribe::<UserSessionDeletedEvent>()
     }
 
-    pub fn register_session_events(&self, capacity: usize) {
-        self.event_service
-            .register_with_capacity::<UserSessionDeletedEvent>(capacity);
-        self.event_service
-            .register_with_capacity::<UserSessionCreatedEvent>(capacity);
-    }
-
-    pub fn publish(&self, event: impl Event) {
-        self.event_service.publish(event);
-    }
-
-    pub fn publish_session_created(&self, event: UserSessionCreatedEvent) {
-        self.event_service.publish(event);
-    }
-
-    pub fn publish_session_deleted(&self, event: UserSessionDeletedEvent) {
-        self.event_service.publish(event);
+    pub fn register_session_events(&self, event_service: &EventService, capacity: usize) {
+        event_service.register_with_capacity::<UserSessionDeletedEvent>(capacity);
+        event_service.register_with_capacity::<UserSessionCreatedEvent>(capacity);
     }
 
     #[tracing::instrument(skip_all)]
@@ -51,7 +36,7 @@ impl SessionObserverService {
                 return;
             };
             tracing::debug!("Task received: {:?}", notifications);
-            let event_service = ctx.session_observer_service();
+            let event_service = ctx.event_service();
             for notification in notifications {
                 match notification {
                     CoreSessionObserverNotification::Created(session_id, user_id) => {
@@ -73,7 +58,11 @@ impl SessionObserverService {
         tracing::debug!("Stopping task");
     }
 
-    pub async fn start(&self, capacity: usize) -> Result<(), CoreContextError> {
+    pub async fn start(
+        &self,
+        event_service: &EventService,
+        capacity: usize,
+    ) -> Result<(), CoreContextError> {
         let Some(ctx) = self.context.upgrade() else {
             return Err(CoreContextError::Other(anyhow::anyhow!(
                 "Context not available"
@@ -84,7 +73,7 @@ impl SessionObserverService {
             .await
             .inspect_err(|e| tracing::error!("Failed to create session observer: {e:?}"))?;
 
-        self.register_session_events(capacity);
+        self.register_session_events(event_service, capacity);
 
         let ctx_weak = self.context.clone();
         ctx.task_service()
@@ -93,8 +82,12 @@ impl SessionObserverService {
         Ok(())
     }
 
-    pub fn on_session_deleted(&self, hook: impl crate::OnSessionDeleted) {
-        let Some(mut receiver) = self.subscribe_to_session_deleted() else {
+    pub fn on_session_deleted(
+        &self,
+        event_service: &EventService,
+        hook: impl crate::OnSessionDeleted,
+    ) {
+        let Some(mut receiver) = self.subscribe_to_session_deleted(event_service) else {
             tracing::error!("User session deleted event not registered");
             return;
         };
@@ -123,10 +116,15 @@ impl Service for SessionObserverService {
     type Error = CoreContextError;
 
     async fn init(&self) -> Result<(), Self::Error> {
-        self.start(self.capacity).await?;
+        let ctx = self
+            .context
+            .upgrade()
+            .ok_or(CoreContextError::Other(anyhow::anyhow!("Context is dead")))?;
+        let event_service = ctx.event_service();
+        self.start(event_service, self.capacity).await?;
 
         let ctx_weak = self.context.clone();
-        self.on_session_deleted(move |_, user_id| {
+        self.on_session_deleted(event_service, move |_, user_id| {
             let ctx_weak = ctx_weak.clone();
 
             async move {

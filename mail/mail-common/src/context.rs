@@ -308,7 +308,8 @@ impl MailContext {
 
         if let Some(session_service) = ctx.core_context.get_service_opt::<SessionObserverService>()
         {
-            session_service.on_session_deleted(move |_, user_id| {
+            let event_service = ctx.core_context.event_service();
+            session_service.on_session_deleted(event_service, move |_, user_id| {
                 let ctx_weak = ctx_weak.clone();
                 async move {
                     let Some(ctx) = ctx_weak.upgrade() else {

@@ -32,23 +32,24 @@ async fn test_session_delete_subscriber() {
     let session_id = user_ctx.session_id().clone();
     let user_id = user_ctx.user_id().clone();
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<()>(1);
-    ctx.context
-        .get_service::<SessionObserverService>()
-        .on_session_deleted(
-            move |deleted_session_id: SessionId, deleted_user_id: UserId| {
-                let deleted_session_id = deleted_session_id.clone();
-                let deleted_user_id = deleted_user_id.clone();
-                let sender = sender.clone();
-                let user_id = user_id.clone();
-                let session_id = session_id.clone();
-                async move {
-                    assert_eq!(deleted_user_id, user_id);
-                    assert_eq!(deleted_session_id, session_id);
-                    sender.send(()).await.unwrap();
-                    OnSessionDeletedResponse::Terminate
-                }
-            },
-        );
+    let event_service = ctx.context().event_service();
+    let session_observer_service = ctx.context.get_service::<SessionObserverService>();
+    session_observer_service.on_session_deleted(
+        event_service,
+        move |deleted_session_id: SessionId, deleted_user_id: UserId| {
+            let deleted_session_id = deleted_session_id.clone();
+            let deleted_user_id = deleted_user_id.clone();
+            let sender = sender.clone();
+            let user_id = user_id.clone();
+            let session_id = session_id.clone();
+            async move {
+                assert_eq!(deleted_user_id, user_id);
+                assert_eq!(deleted_session_id, session_id);
+                sender.send(()).await.unwrap();
+                OnSessionDeletedResponse::Terminate
+            }
+        },
+    );
 
     real_ctx
         .account_stash()

@@ -23,7 +23,7 @@ use crate::nuke_utils::{
 };
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::pin_code::PinCode;
-use crate::services::NetworkMonitorService;
+use crate::services::{ContextEventService, NetworkMonitorService};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Context as _, Error as AnyhowError, anyhow};
 use async_trait::async_trait;
@@ -46,7 +46,6 @@ use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_event_loop::EventLoopError;
-use proton_event_service::EventService;
 use proton_log_service::LogService;
 use proton_network_monitor_service::{ConnectionMonitor, NetworkMonitorServiceError};
 use proton_sqlite3::MigratorError;
@@ -363,16 +362,13 @@ impl Context {
         builder = builder
             .with_service(CoreClock::default())
             .with_service(LoggingService::new(log_service))
+            .with_service(ContextEventService::new())
             .with_cyclic_service(|ctx| NetworkMonitorService::new(ctx, network_monitor_config));
 
         if matches!(origin, Origin::App) {
             builder = builder
                 .with_cyclic_service(|weak_ctx| {
-                    SessionObserverService::new(
-                        EventService::new(),
-                        weak_ctx,
-                        SESSION_OBSERVER_BROADCAST_CAPACITY,
-                    )
+                    SessionObserverService::new(weak_ctx, SESSION_OBSERVER_BROADCAST_CAPACITY)
                 })
                 .with_service(HvNotifierService::new(hv_notifier))
                 .with_service(DeviceInfoService::new(device_info_provider))
@@ -1200,6 +1196,11 @@ impl Context {
     #[allow(clippy::result_large_err)]
     pub fn session_observer_service(&self) -> &SessionObserverService {
         self.get_service::<SessionObserverService>()
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn event_service(&self) -> &ContextEventService {
+        self.get_service::<ContextEventService>()
     }
 
     /// Retrieves the passphrase for the current session by decrypting the session's key secret.
