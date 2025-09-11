@@ -1647,7 +1647,7 @@ impl ToSql for Timestamp {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct LabelColor(String);
 
 impl LabelColor {

@@ -12,19 +12,20 @@ use stash::orm::Model as _;
 use stash::stash::Tether;
 use tracing::warn;
 
-use core::fmt;
-use std::fmt::Display;
-
 use crate::UserContext;
-use crate::datatypes::{AvatarInformation, LocalContactId};
-use crate::models::Contact;
-use crate::utils::MapVec as _;
-use proton_core_api::services::proton::{ContactId, PrivateEmail};
+use crate::datatypes::{AvatarInformation, LabelColor, LabelType, LocalContactId};
+use crate::models::{Contact, ContactEmail, Label};
+use crate::utils::{MapVec as _, proton_color};
+use core::fmt;
+use proton_core_api::services::proton::{ContactId, LabelId, PrivateEmail};
 use proton_crypto::new_pgp_provider;
-use url::Url;
-
+use proton_vcard::categories::Category;
+use proton_vcard::email::Email;
 use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 use proton_vcard::values::uri::MaybeUri;
+use std::collections::HashSet;
+use std::fmt::Display;
+use url::Url;
 
 /// Represents some data known from the vCard in a form more suitable for human consumption than a
 /// raw vcard.
@@ -73,25 +74,35 @@ impl InspectableContactDetails {
                 warn!(
                     "Failed to get contact details from contact: {e:?}. Falling back to basic contact data"
                 );
+
                 let mut contact = Contact::load(contact_id, tether)
                     .await?
                     .context("Contact does not exist")?;
                 contact.emails(tether).await?;
+                let contact_groups = Label::find_by_kind(LabelType::ContactGroup, tether).await?;
 
-                Ok(Self::get_from_contact_basic(contact))
+                Ok(Self::get_from_contact_basic(contact, &contact_groups))
             }
         }
     }
 
-    fn get_from_contact_basic(contact: Contact) -> Self {
+    fn get_from_contact_basic(contact: Contact, contact_groups: &[Label]) -> Self {
+        debug_assert!(
+            contact_groups
+                .iter()
+                .all(|group| group.label_type == LabelType::ContactGroup)
+        );
+
         let id = contact.id();
         let remote_id = contact.remote_id;
+
         let emails = contact
             .contact_emails
             .into_iter()
-            .map(|em| ContactDetailsEmail {
+            .map(|contact_email| ContactDetailsEmail {
                 email_type: vec![],
-                email: em.email,
+                email: contact_email.email.clone(),
+                groups: Self::matching_contact_groups(contact_groups, &contact_email),
             })
             .collect();
 
@@ -105,6 +116,27 @@ impl InspectableContactDetails {
             },
             fields: vec![ContactField::Emails(emails)],
         }
+    }
+
+    fn matching_contact_groups(
+        contact_groups: &[Label],
+        contact_email: &ContactEmail,
+    ) -> Vec<ContactGroup> {
+        let id_set: HashSet<&str> = contact_email
+            .label_ids
+            .iter()
+            .map(LabelId::as_str)
+            .collect();
+        let groups: Vec<ContactGroup> = contact_groups
+            .iter()
+            .filter(|group| !cfg!(debug_assertions) || group.remote_id.is_some())
+            .filter(|group| id_set.contains(group.remote_id.as_deref().unwrap()))
+            .map(|group| ContactGroup {
+                name: group.name.clone(),
+                color: group.color.clone(),
+            })
+            .collect();
+        groups
     }
 
     async fn get_from_contact_full(
@@ -131,15 +163,12 @@ impl InspectableContactDetails {
 
     /// Transforms the data in the vCard struct to something suitable for human consumption
     pub(crate) fn from_vcard(contact: Contact, vcard: VCard) -> Self {
-        let mut res = Self::get_from_contact_basic(contact);
+        let mut res = Self::get_from_contact_basic(contact, &[]);
         let v = &mut res.fields;
 
         match &mut v[0] {
             ContactField::Emails(emails) => {
-                emails.extend(vcard.emails.to_sorted_iter(|email| ContactDetailsEmail {
-                    email_type: email.r#type.iter().cloned().map_vec(),
-                    email: email.value.value.into(),
-                }));
+                Self::emails(&vcard, emails);
             }
             _ => unreachable!("The first and only field should always be the emails field"),
         }
@@ -191,7 +220,7 @@ impl InspectableContactDetails {
 
         let logos = vcard
             .logos
-            .to_sorted_iter(|v| v.value)
+            .to_sorted_iter(|v| v.value.clone())
             .filter_map(|v| {
                 if is_safe_image_uri(&v.0) {
                     Some(v.0)
@@ -207,7 +236,7 @@ impl InspectableContactDetails {
 
         let photos = vcard
             .photos
-            .to_sorted_iter(|v| v.value)
+            .to_sorted_iter(|v| v.value.clone())
             .filter_map(|v| {
                 if is_safe_image_uri(&v.0) {
                     Some(v.0)
@@ -244,6 +273,32 @@ impl InspectableContactDetails {
         v.sort();
 
         res
+    }
+
+    fn emails(vcard: &VCard, emails: &mut Vec<ContactDetailsEmail>) {
+        emails.extend(vcard.emails.to_sorted_iter(|email| ContactDetailsEmail {
+            email_type: email.r#type.iter().cloned().map_vec(),
+            email: email.value.value.clone().into(),
+            groups: Self::groups(vcard, email),
+        }));
+    }
+
+    fn groups(vcard: &VCard, email: &Email) -> Vec<ContactGroup> {
+        let matching_categories: Vec<&Category> = vcard
+            .categories
+            .values()
+            .filter(|category| category.group == email.group)
+            .collect();
+        let matching_contact_groups: Vec<ContactGroup> = matching_categories
+            .iter()
+            .flat_map(|cat| {
+                cat.value.0.iter().map(|category_name| ContactGroup {
+                    name: category_name.value.clone(),
+                    color: proton_color(&category_name.value).into(),
+                })
+            })
+            .collect();
+        matching_contact_groups
     }
 }
 
@@ -330,6 +385,13 @@ impl From<MaybeUri> for VCardUrlValue {
 pub struct ContactDetailsEmail {
     pub email_type: Vec<VcardPropType>,
     pub email: PrivateEmail,
+    pub groups: Vec<ContactGroup>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ContactGroup {
+    pub name: String,
+    pub color: LabelColor,
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
@@ -442,13 +504,14 @@ impl From<GenderValue> for Gender {
 
 #[cfg(test)]
 pub(crate) mod test {
+    use super::*;
+    use crate::datatypes::Labels;
+    use crate::models::ContactEmail;
     use bytes::Buf as _;
     use ical::VcardParser;
     use insta::assert_snapshot;
-    use proton_core_api::services::proton::ContactId;
+    use proton_core_api::services::proton::{ContactId, LabelId};
     use proton_vcard::vcard::VCard;
-
-    use super::*;
 
     #[allow(unused, reason = "The fields are only used for their debug impl")]
     #[derive(Debug)]
@@ -469,6 +532,12 @@ pub(crate) mod test {
         }
     }
 
+    impl Display for InspectableContactDetails {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{:#?}", self)
+        }
+    }
+
     fn get_vcard(raw_vcard: &'static str) -> Snapshot {
         let mut r = VcardParser::new(raw_vcard.as_bytes().reader());
         let c = r.next().expect("Expected 1 card").unwrap();
@@ -483,6 +552,61 @@ pub(crate) mod test {
             vcard: raw_vcard,
             fields: InspectableContactDetails::from_vcard(contact, vcard).fields,
         }
+    }
+
+    fn test_contact_email(email: &str, label_ids: &[&str]) -> ContactEmail {
+        ContactEmail {
+            email: PrivateEmail::from(email),
+            label_ids: Labels::new(
+                label_ids
+                    .iter()
+                    .map(|label_id| LabelId::from(*label_id))
+                    .collect(),
+            ),
+            ..ContactEmail::test_default()
+        }
+    }
+
+    #[test]
+    fn get_from_contact_basic() {
+        let group_a_id = LabelId::from("<group_a_id>");
+        let group_b_id = LabelId::from("<group_b_id>");
+        let group_c_id = LabelId::from("<group_c_id>");
+        let contact = Contact {
+            local_id: Some(LocalContactId::from(1)),
+            remote_id: Some(ContactId::from("42")),
+            name: "Peter Parker".to_string(),
+            contact_emails: vec![
+                test_contact_email("peter@pm.me", &[group_a_id.as_str(), group_b_id.as_str()]),
+                test_contact_email("peter@gmail.com", &[group_c_id.as_str()]),
+                test_contact_email("peter.parker@proton.me", &[]),
+            ],
+            ..Contact::test_default()
+        };
+        let contact_groups: Vec<Label> = vec![
+            Label {
+                remote_id: Some(group_a_id.clone()),
+                name: "A".to_owned(),
+                label_type: LabelType::ContactGroup,
+                ..Label::test_default()
+            },
+            Label {
+                remote_id: Some(group_b_id.clone()),
+                name: "B".to_owned(),
+                label_type: LabelType::ContactGroup,
+                ..Label::test_default()
+            },
+            Label {
+                remote_id: Some(group_c_id.clone()),
+                name: "C".to_owned(),
+                label_type: LabelType::ContactGroup,
+                ..Label::test_default()
+            },
+        ];
+
+        let details = InspectableContactDetails::get_from_contact_basic(contact, &contact_groups);
+
+        assert_snapshot!(&details);
     }
 
     #[test]

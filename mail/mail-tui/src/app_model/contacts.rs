@@ -215,11 +215,22 @@ impl OpenedContactState {
                     }
                 }
                 ContactField::Emails(items) => {
-                    for ContactDetailsEmail { email_type, email } in items {
-                        let text = format!(
-                            "{} {email}",
-                            email_type.iter().map(ToString::to_string).join(", ")
-                        );
+                    for ContactDetailsEmail {
+                        email_type,
+                        email,
+                        groups,
+                    } in items
+                    {
+                        let types_str = email_type.iter().map(ToString::to_string).join(", ");
+                        let groups_str = if groups.is_empty() {
+                            String::new()
+                        } else {
+                            let group_names =
+                                groups.iter().map(|group| group.name.as_str()).join(", ");
+                            format!(" [groups: {group_names}]")
+                        };
+
+                        let text = format!("{types_str} {email}{groups_str}");
                         add_row("Email:", &text);
                     }
                 }
