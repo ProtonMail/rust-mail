@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- Missing Event Poll action migration
+
+
+## [mail-uniffi-v0.143.7] - 2025-09-10
+
 ### Changed
 
 - Change Event Poll queueing
