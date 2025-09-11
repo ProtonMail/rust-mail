@@ -238,10 +238,7 @@ impl StoredAction {
     /// Returns error if the query failed.
     pub async fn contains(tether: &Tether, id: ActionId) -> Result<bool, StashError> {
         match tether
-            .query_value::<_, ActionId>(
-                "SELECT id FROM action_queue WHERE id = ?",
-                params![id],
-            )
+            .query_value::<_, ActionId>("SELECT id FROM action_queue WHERE id = ?", params![id])
             .await
         {
             Ok(_) => Ok(true),

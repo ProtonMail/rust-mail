@@ -669,18 +669,19 @@ impl Message {
     ///
     fn set_coversation_before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         if self.local_conversation_id.is_none()
-            && let Some(remote_conversation_id) = &self.remote_conversation_id {
-                if let Some(conversation) =
-                    Conversation::find_by_remote_id_sync(remote_conversation_id, tx)?
-                {
-                    self.local_conversation_id = conversation.local_id;
-                } else {
-                    // Create an unknown entry.
-                    let mut conversation = Conversation::unknown(remote_conversation_id.clone());
-                    conversation.save_sync(tx)?;
-                    self.local_conversation_id = conversation.local_id;
-                }
+            && let Some(remote_conversation_id) = &self.remote_conversation_id
+        {
+            if let Some(conversation) =
+                Conversation::find_by_remote_id_sync(remote_conversation_id, tx)?
+            {
+                self.local_conversation_id = conversation.local_id;
+            } else {
+                // Create an unknown entry.
+                let mut conversation = Conversation::unknown(remote_conversation_id.clone());
+                conversation.save_sync(tx)?;
+                self.local_conversation_id = conversation.local_id;
             }
+        }
 
         Ok(())
     }
@@ -2563,9 +2564,10 @@ impl ModelHooks for Message {
 
     fn before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = &self.remote_id
-            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
-                self.local_id = existing.local_id;
-            }
+            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)?
+        {
+            self.local_id = existing.local_id;
+        }
 
         self.set_coversation_before_save(tx)?;
         Ok(())
@@ -2831,21 +2833,22 @@ impl MessageBodyMetadata {
 impl ModelHooks for MessageBodyMetadata {
     fn after_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         if self.local_message_id.is_none()
-            && let Some(remote_id) = &self.remote_message_id {
-                if let Some(existing) =
-                    Self::find_first_sync("WHERE remote_message_id=?", (remote_id,), tx)?
-                {
-                    self.local_message_id = existing.local_message_id;
-                } else {
-                    let Some(message) = Message::find_by_remote_id_sync(remote_id, tx)? else {
-                        return Err(StashError::Custom(anyhow!(
-                            "Failed to find message with remote id {}",
-                            self.remote_message_id.as_ref().unwrap()
-                        )));
-                    };
-                    self.local_message_id = message.local_id;
-                }
+            && let Some(remote_id) = &self.remote_message_id
+        {
+            if let Some(existing) =
+                Self::find_first_sync("WHERE remote_message_id=?", (remote_id,), tx)?
+            {
+                self.local_message_id = existing.local_message_id;
+            } else {
+                let Some(message) = Message::find_by_remote_id_sync(remote_id, tx)? else {
+                    return Err(StashError::Custom(anyhow!(
+                        "Failed to find message with remote id {}",
+                        self.remote_message_id.as_ref().unwrap()
+                    )));
+                };
+                self.local_message_id = message.local_id;
             }
+        }
         // Update all attachment links - When creating drafts we can update
         // and create new ones.
         // PGP attachments should never be deleted.
@@ -2889,9 +2892,10 @@ impl ModelHooks for MessageBodyMetadata {
     fn before_save(&mut self, bond: &Transaction<'_>) -> Result<(), StashError> {
         if self.local_message_id.is_none()
             && let Some(remote_id) = &self.remote_message_id
-                && let Some(message) = Message::find_by_remote_id_sync(remote_id, bond)? {
-                    self.local_message_id = message.local_id;
-                }
+            && let Some(message) = Message::find_by_remote_id_sync(remote_id, bond)?
+        {
+            self.local_message_id = message.local_id;
+        }
 
         Ok(())
     }

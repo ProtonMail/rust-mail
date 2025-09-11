@@ -128,7 +128,7 @@ where
     /// `via` attribute argument) will be converted to that type before being
     /// returned.
     ///
-    fn field_values(&self) -> impl Iterator<Item = &dyn ToSql>  + '_ ;
+    fn field_values(&self) -> impl Iterator<Item = &dyn ToSql> + '_;
 
     /// Converts a row from the database into a record.
     ///
@@ -459,7 +459,8 @@ where
     /// If it has a local id it will update the record, otherwise it will insert it.
     ///
     fn insert_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
-        let id: Self::IdType = tx.query_row_col(Self::INSERT_QUERY, params_from_iter(self.field_values()))?;
+        let id: Self::IdType =
+            tx.query_row_col(Self::INSERT_QUERY, params_from_iter(self.field_values()))?;
 
         self.set_id_value(id);
 
@@ -521,9 +522,10 @@ where
         // HACK: This is not great but we're forced to do it since there's no guarantee that the
         // row does or doesn't exist.
         if let Ok(id) = self.id_value()
-            && tx.query_row_col::<u64>(Self::COUNT_QUERY, (id,))? != 0 {
-                return self.update_sync(tx);
-            }
+            && tx.query_row_col::<u64>(Self::COUNT_QUERY, (id,))? != 0
+        {
+            return self.update_sync(tx);
+        }
         self.insert_sync(tx)
     }
 

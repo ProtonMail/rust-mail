@@ -244,7 +244,6 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         &db_fields
     };
     let (insert_query, update_query) = {
-
         let field_names = fields.iter().map(|x| x.to_string()).join(",");
         let mut placeholders = "?,".repeat(fields.len());
         _ = placeholders.pop();

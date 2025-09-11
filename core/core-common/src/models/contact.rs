@@ -556,14 +556,17 @@ impl Contact {
 
 impl ModelHooks for Contact {
     fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
+        // WARN: For perfomance reasons this will NOT be called in the initial sync. See `SyncedContacts::store`
+        // Any extra logic here should be copied there.
         if let Some(remote_id) = &self.remote_id {
             if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
                 self.local_id = existing.local_id;
             }
         } else if let Some(local_id) = self.local_id
-            && let Some(existing) = Self::load_by_id_sync(local_id, tx)? {
-                self.remote_id = existing.remote_id;
-            }
+            && let Some(existing) = Self::load_by_id_sync(local_id, tx)?
+        {
+            self.remote_id = existing.remote_id;
+        }
 
         Ok(())
     }

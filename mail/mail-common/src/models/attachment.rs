@@ -972,20 +972,23 @@ impl ModelHooks for Attachment {
         }
 
         if self.local_address_id.is_none()
-            && let Some(remote_address_id) = &self.remote_address_id {
-                self.local_address_id = Address::remote_id_counterpart_sync(remote_address_id, tx)?;
-            }
+            && let Some(remote_address_id) = &self.remote_address_id
+        {
+            self.local_address_id = Address::remote_id_counterpart_sync(remote_address_id, tx)?;
+        }
 
         if self.local_message_id.is_none()
-            && let Some(remote_message_id) = &self.remote_message_id {
-                self.local_message_id = Message::remote_id_counterpart_sync(remote_message_id, tx)?;
-            }
+            && let Some(remote_message_id) = &self.remote_message_id
+        {
+            self.local_message_id = Message::remote_id_counterpart_sync(remote_message_id, tx)?;
+        }
 
         if self.local_conversation_id.is_none()
-            && let Some(remote_conversation_id) = &self.remote_conversation_id {
-                self.local_conversation_id =
-                    Conversation::remote_id_counterpart_sync(remote_conversation_id, tx)?;
-            }
+            && let Some(remote_conversation_id) = &self.remote_conversation_id
+        {
+            self.local_conversation_id =
+                Conversation::remote_id_counterpart_sync(remote_conversation_id, tx)?;
+        }
 
         Ok(())
     }
