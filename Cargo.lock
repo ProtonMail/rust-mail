@@ -3516,7 +3516,7 @@ dependencies = [
 [[package]]
 name = "lightningcss"
 version = "1.0.0-alpha.66"
-source = "git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12#b9dc136b0b43220381965e5806903e7c31a3ca12"
+source = "git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
 dependencies = [
  "ahash",
  "bitflags 2.9.4",
@@ -3538,7 +3538,7 @@ dependencies = [
 [[package]]
 name = "lightningcss-derive"
 version = "1.0.0-alpha.43"
-source = "git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12#b9dc136b0b43220381965e5806903e7c31a3ca12"
+source = "git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
 dependencies = [
  "convert_case 0.6.0",
  "proc-macro2",
@@ -4382,7 +4382,7 @@ dependencies = [
 [[package]]
 name = "parcel_selectors"
 version = "0.28.2"
-source = "git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12#b9dc136b0b43220381965e5806903e7c31a3ca12"
+source = "git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
 dependencies = [
  "bitflags 2.9.4",
  "cssparser 0.33.0",

@@ -42,6 +42,7 @@ use std::io::Read;
 use transforms::{ColorMode, keep_spaces_and_escape_gt_and_lt, styles::BrowserCapabilities};
 
 // NOTE: each new transformation pass should be its own module.
+pub mod css_parser;
 pub mod ios;
 pub mod message_detector;
 pub mod remote_content;
