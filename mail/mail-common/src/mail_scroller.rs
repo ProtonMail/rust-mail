@@ -20,6 +20,7 @@ mod mail_scroller_watcher;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 pub use mail_scroller_source::*;
 pub use mail_scroller_watcher::*;
+use proton_core_common::app_events::OnEnterForegroundEvent;
 
 #[cfg(test)]
 #[path = "tests/mail_scroller/message_scroller.rs"]
@@ -211,7 +212,8 @@ impl MailScroller {
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<T::Item>), MailContextError> {
         let id = Uuid::new_v4();
-        let ctx = Arc::downgrade(&ctx);
+
+        let ctx_weak = Arc::downgrade(&ctx);
 
         tracing::debug!(?id, "Creating MailScroller");
 
@@ -221,7 +223,25 @@ impl MailScroller {
             updates,
             handle,
             aborts,
-        } = ScrollerWorker::run(ctx, source, page_size).await?;
+        } = ScrollerWorker::run(ctx_weak, source, page_size).await?;
+
+        let event_service = ctx.core_context().event_service();
+
+        let ordered_command_cloned = ordered_command.clone();
+        if let Some(mut event_subscriber) = event_service.subscribe::<OnEnterForegroundEvent>() {
+            ctx.spawn(async move {
+                loop {
+                    if event_subscriber.next().await.is_err() {
+                        return;
+                    }
+
+                    tracing::debug!("Scroller {id} fetch new after enter foreground");
+                    if Self::do_fetch_new(&ordered_command_cloned).is_err() {
+                        return;
+                    }
+                }
+            });
+        }
 
         Ok((
             Self {
@@ -258,15 +278,20 @@ impl MailScroller {
     }
 
     pub fn fetch_new(&self) -> Result<(), MailContextError> {
+        Self::do_fetch_new(&self.ordered_command)?;
+        Ok(())
+    }
+
+    fn do_fetch_new(
+        sender: &flume::Sender<ScrollerOrderedCommand>,
+    ) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
         tracing::trace!("Sending `FetchNew` command with uuid: {uuid}");
-        self.ordered_command
+        sender
             .send(ScrollerOrderedCommand::FetchNew(
                 ScrollerSource::ScrollEvent(uuid),
             ))
-            .map_err(|_| MailContextError::Other(anyhow!("Failed to send fetch new command")))?;
-
-        Ok(())
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to send fetch new command")))
     }
 
     pub fn refresh(&self) -> Result<(), MailContextError> {
