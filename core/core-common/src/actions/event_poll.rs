@@ -1,6 +1,9 @@
 use crate::UserContext;
 use crate::actions::dependency_builder::ActionDependencyKeysBuilder;
-use proton_action_queue::action::{ActionDependencyKey, ActionDependencyKeys};
+use proton_action_queue::action::{
+    ActionDependencyKey, ActionDependencyKeys, FactoryResult, VersionConverter,
+    VersionConverterError, deserialize,
+};
 use proton_action_queue::{
     action::{
         self, Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
@@ -20,6 +23,7 @@ use std::sync::Weak;
 /// the event loop as action in the queue.
 #[derive(Default, Serialize, Deserialize)]
 pub struct EventPoll {
+    #[serde(default)]
     force: bool,
 }
 
@@ -36,7 +40,7 @@ impl EventPoll {
 
 impl Action for EventPoll {
     const TYPE: Type = Type("event_poll");
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     const PRIORITY: Priority = Priority::Low;
 
     type VersionConverter = DefaultVersionConverter<Self>;
@@ -54,6 +58,20 @@ impl Action for EventPoll {
                 .with_optional(Self::dependency_key())
                 .build()
         }
+    }
+}
+
+struct EventPollVersionConverter;
+
+impl VersionConverter for EventPollVersionConverter {
+    type Output = EventPoll;
+
+    fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
+        if !(old_version <= 2 && current_version == 2) {
+            return Err(VersionConverterError::InvalidVersion(current_version).into());
+        }
+
+        Ok(deserialize::<EventPoll>(data)?)
     }
 }
 
