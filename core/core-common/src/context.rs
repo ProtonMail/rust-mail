@@ -8,6 +8,7 @@ use services::logging_service::LoggingService;
 use tokio::runtime;
 
 use crate::action_queue::CoreActionError;
+use crate::app_events::{OnEnterForegroundEvent, OnExitForegroundEvent};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::core_clock::CoreClock;
 use crate::datatypes::{
@@ -1233,6 +1234,16 @@ impl Context {
             .remote_id
             .clone();
         Ok(session_id)
+    }
+
+    pub fn on_enter_foreground(&self) {
+        self.event_service().publish(OnEnterForegroundEvent);
+        self.task_service().resume_main();
+    }
+
+    pub fn on_exit_foreground(&self) {
+        self.event_service().publish(OnExitForegroundEvent);
+        self.task_service().pause_main();
     }
 }
 

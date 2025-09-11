@@ -1,3 +1,4 @@
+use crate::app_events::OnEnterForegroundEvent;
 use crate::services::Service;
 use crate::{Context, CoreContextError};
 use anyhow::anyhow;
@@ -88,6 +89,26 @@ impl Service for NetworkMonitorService {
                 "Could not upgrade context"
             )));
         };
+
+        let mut event_subscriber = ctx
+            .event_service()
+            .subscribe::<OnEnterForegroundEvent>()
+            .ok_or(CoreContextError::Other(anyhow!("Missing event")))?;
+        let ctx_weak = self.ctx.clone();
+        ctx.spawn(async move {
+            loop {
+                if event_subscriber.next().await.is_err() {
+                    return;
+                }
+
+                tracing::info!("Checking for network status after enter foreground");
+                let Some(ctx) = ctx_weak.upgrade() else {
+                    return;
+                };
+
+                ctx.network_monitor_service().check_now().await;
+            }
+        });
 
         let connection_monitor = self.service.read().new_connection_monitor();
         let client = ctx
