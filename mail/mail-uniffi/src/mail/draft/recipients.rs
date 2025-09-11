@@ -1,4 +1,5 @@
 use crate::async_runtime;
+use crate::errors::DraftSaveError;
 use crate::mail::draft::CachedDraftData;
 use itertools::Itertools;
 use non_empty_string::NonEmptyString;
@@ -9,6 +10,7 @@ use proton_mail_common::draft::recipients::{
     ValidationState,
 };
 use proton_mail_common::draft::{Draft as RealDraft, Error, RecipientGroupId};
+use proton_mail_common::errors::ProtonMailError;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::error;
@@ -32,27 +34,27 @@ impl From<SingleRecipientEntry> for RecipientEntry {
 }
 
 /// Errors which occur when adding a single recipient
-#[derive(Clone, uniffi::Enum)]
+#[derive(uniffi::Enum)]
 pub enum AddSingleRecipientError {
     /// No errors occurred
     Ok,
     /// The current address already exists in the recipient list.
     Duplicate,
     /// Failed to queue save action for draft.
-    SaveFailed,
+    SaveFailed(DraftSaveError),
     /// Another error occurred
     Other,
 }
 
 /// Errors which occur when adding a recipients which are part of a group.
-#[derive(Clone, uniffi::Enum)]
+#[derive(uniffi::Enum)]
 pub enum AddGroupRecipientError {
     /// No errors occurred
     Ok,
     /// The current addresses already exist in the recipient list.
     Duplicate(Vec<String>),
     /// Failed to queue save action for draft.
-    SaveFailed,
+    SaveFailed(DraftSaveError),
     /// Empty group name
     EmptyGroupName,
     /// Another error occurred
@@ -60,14 +62,14 @@ pub enum AddGroupRecipientError {
 }
 
 /// Errors which occur when removing recipient from the draft
-#[derive(Clone, uniffi::Enum)]
+#[derive(uniffi::Enum)]
 pub enum RemoveRecipientError {
     /// No errors occurred
     Ok,
     /// Empty group name
     EmptyGroupName,
     /// Failed to queue save action for draft.
-    SaveFailed,
+    SaveFailed(DraftSaveError),
     /// Another error occurred
     Other,
 }
@@ -243,9 +245,10 @@ impl ComposerRecipientList {
                 Err(MailContextError::Draft(Error::Recipient(e))) => match e {
                     RecipientError::DuplicateAddress(_) => AddSingleRecipientError::Duplicate,
                 },
-                Err(MailContextError::Draft(Error::Save(e))) => {
+                Err(MailContextError::Draft(e)) => {
                     error!("Failed to queue draft save after recipient add: {e:?}");
-                    AddSingleRecipientError::SaveFailed
+                    let e = ProtonMailError::from(MailContextError::Draft(e));
+                    AddSingleRecipientError::SaveFailed(e.into())
                 }
                 Err(e) => {
                     error!("Failed to add recipient: {e:?}");
@@ -293,9 +296,10 @@ impl ComposerRecipientList {
                         )
                     }
                 }
-                Err(MailContextError::Draft(Error::Save(e))) => {
+                Err(MailContextError::Draft(e)) => {
                     error!("Failed to queue draft save after recipient add: {e:?}");
-                    AddGroupRecipientError::SaveFailed
+                    let e = ProtonMailError::from(MailContextError::Draft(e));
+                    AddGroupRecipientError::SaveFailed(e.into())
                 }
                 Err(e) => {
                     error!("Failed to add group recipient {e:?}");
@@ -314,9 +318,10 @@ impl ComposerRecipientList {
                 .await
             {
                 Ok(()) => RemoveRecipientError::Ok,
-                Err(MailContextError::Draft(Error::Save(e))) => {
+                Err(MailContextError::Draft(e)) => {
                     error!("Failed to queue draft save after recipient remove: {e:?}");
-                    RemoveRecipientError::SaveFailed
+                    let e = ProtonMailError::from(MailContextError::Draft(e));
+                    RemoveRecipientError::SaveFailed(e.into())
                 }
                 Err(e) => {
                     error!("Failed to remove recipient {e:?}");
@@ -339,9 +344,10 @@ impl ComposerRecipientList {
                 .await
             {
                 Ok(()) => RemoveRecipientError::Ok,
-                Err(MailContextError::Draft(Error::Save(e))) => {
+                Err(MailContextError::Draft(e)) => {
                     error!("Failed to queue draft save after removing group: {e:?}");
-                    RemoveRecipientError::SaveFailed
+                    let e = ProtonMailError::from(MailContextError::Draft(e));
+                    RemoveRecipientError::SaveFailed(e.into())
                 }
                 Err(e) => {
                     error!("Failed to remove recipient group {e:?}");
@@ -368,9 +374,10 @@ impl ComposerRecipientList {
                 .await
             {
                 Ok(()) => RemoveRecipientError::Ok,
-                Err(MailContextError::Draft(Error::Save(e))) => {
+                Err(MailContextError::Draft(e)) => {
                     error!("Failed to queue draft save after removing recipient from group: {e:?}");
-                    RemoveRecipientError::SaveFailed
+                    let e = ProtonMailError::from(MailContextError::Draft(e));
+                    RemoveRecipientError::SaveFailed(e.into())
                 }
                 Err(e) => {
                     error!("Failed to remove recipient from group {e:?}");
