@@ -15,7 +15,7 @@ use proton_mail_api::services::proton::response_data::IncomingDefault;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use proton_mail_api::{INCOMING_DEFAULTS_PAGE_SIZE, services::proton::ProtonMail};
 use stash::{
-    exports::{FromSql, FromSqlError, SqliteError, ToSql, ToSqlOutput, Value},
+    exports::{FromSql, FromSqlError, SqliteError, ToSql, ToSqlOutput, Transaction, Value},
     params,
     stash::{Bond, Stash, StashError, Tether},
 };
@@ -49,7 +49,7 @@ impl IncomingDefaultLocation {
     pub async fn find(email: String, tether: &Tether) -> Result<Option<Self>, StashError> {
         match tether
             .query_value::<_, Self>(
-                "SELECT location AS value FROM incoming_default WHERE email = ?",
+                "SELECT location FROM incoming_default WHERE email = ?",
                 params![email],
             )
             .await
@@ -74,8 +74,8 @@ impl IncomingDefaultLocation {
             &[Address::INIT_KEY],
             stash.connection().await?,
             async || Ok(Self::sync(api).await?),
-            async |tx, res| {
-                Self::store_by_email(res, tx).await?;
+            |tx, res| {
+                Self::store_by_email_sync(res, tx)?;
                 Ok(())
             },
         )
@@ -121,22 +121,27 @@ impl IncomingDefaultLocation {
 
     /// Stores all `IncomingDefault`s into the database
     pub async fn store_by_email(
-        defs: impl IntoIterator<Item = IncomingDefault>,
+        defs: impl IntoIterator<Item = IncomingDefault> + Send + 'static,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
+        bond.sync_bridge(move |tx| Self::store_by_email_sync(defs, tx))
+            .await
+    }
+
+    pub fn store_by_email_sync(
+        defs: impl IntoIterator<Item = IncomingDefault> + Send + 'static,
+        tx: &Transaction<'_>,
+    ) -> Result<(), StashError> {
+        let mut q = tx.prepare_cached(indoc! {"
+            INSERT INTO incoming_default 
+                (email, location, id, domain)
+            VALUES 
+              (?,?,?,?);"
+        })?;
         for def in defs {
             let location = def.location.map(IncomingDefaultLocation::from);
 
-            bond.execute(
-                indoc! {"
-                        INSERT INTO incoming_default 
-                            (email, location, id, domain)
-                        VALUES 
-                          (?,?,?,?);"
-                },
-                params![def.email, location, def.id, def.domain],
-            )
-            .await?;
+            q.execute((def.email, location, def.id, def.domain))?;
         }
         Ok(())
     }

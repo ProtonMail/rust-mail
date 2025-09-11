@@ -86,7 +86,7 @@ impl MessageOrConversationDependencyFetcher {
             let missing_labels =
                 Label::get_labels_by_ids(api, self.label_ids.iter().cloned().collect()).await?;
             tx.run_tx(async |tx| {
-                Label::store_labels(tx, missing_labels)
+                Label::store_labels_async(tx, missing_labels)
                     .await
                     .context("Failed to store missing labels")?;
                 // Create missing counters

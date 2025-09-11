@@ -9,6 +9,7 @@
 #[path = "tests/remote_content.rs"]
 mod tests;
 
+use crate::css_parser::{parse_style_attribute, parse_stylesheet};
 use html5ever::namespace_url;
 use html5ever::ns;
 use kuchikiki::iter::NodeEdge;
@@ -16,7 +17,6 @@ use kuchikiki::{Attribute, NodeRef};
 use kuchikiki::{ExpandedName, NodeData};
 use lightningcss::printer::PrinterOptions;
 use lightningcss::properties::custom::Function;
-use lightningcss::stylesheet::{ParserOptions, StyleAttribute, StyleSheet};
 use lightningcss::values::url::Url;
 use lightningcss::visitor::{Visit, VisitTypes, Visitor};
 use std::convert::Infallible;
@@ -68,6 +68,9 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
         ExpandedName::new("", "poster"),
         ExpandedName::new("", "data-src"),
         ExpandedName::new("", "href"),
+        ExpandedName::new("", "action"),
+        ExpandedName::new("", "formaction"),
+        ExpandedName::new("", "cite"),
         ExpandedName::new(ns!(xlink), "href"),
     ];
 
@@ -147,14 +150,7 @@ fn is_embedded_url_str(uri: &str) -> Result<bool, url::ParseError> {
         scheme.eq_ignore_ascii_case("data"))
 }
 fn handle_style_sheet(css: &mut String, disable_remote: bool, disable_embedded: bool) {
-    let Ok(mut sheet) = StyleSheet::parse(
-        css,
-        ParserOptions {
-            error_recovery: true,
-            ..Default::default()
-        },
-    )
-    .inspect_err(|e| {
+    let Ok(mut sheet) = parse_stylesheet(css).inspect_err(|e| {
         warn!("StyleSheet parsing failed: {}", e);
     }) else {
         return;
@@ -179,14 +175,7 @@ fn handle_style_sheet(css: &mut String, disable_remote: bool, disable_embedded: 
 }
 
 fn handle_style_attribute(css: &mut String, disable_remote: bool, disable_embedded: bool) {
-    let Ok(mut style_attribute) = StyleAttribute::parse(
-        css,
-        ParserOptions {
-            error_recovery: true,
-            ..Default::default()
-        },
-    )
-    .inspect_err(|e| {
+    let Ok(mut style_attribute) = parse_style_attribute(css).inspect_err(|e| {
         warn!("Style attribute parsing failed: {}", e);
     }) else {
         return;

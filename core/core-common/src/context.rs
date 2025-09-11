@@ -8,6 +8,7 @@ use services::logging_service::LoggingService;
 use tokio::runtime;
 
 use crate::action_queue::CoreActionError;
+use crate::app_events::{OnEnterForegroundEvent, OnExitForegroundEvent};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::core_clock::CoreClock;
 use crate::datatypes::{
@@ -23,7 +24,7 @@ use crate::nuke_utils::{
 };
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::pin_code::PinCode;
-use crate::services::NetworkMonitorService;
+use crate::services::{ContextEventService, NetworkMonitorService};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Context as _, Error as AnyhowError, anyhow};
 use async_trait::async_trait;
@@ -46,7 +47,6 @@ use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_event_loop::EventLoopError;
-use proton_event_service::EventService;
 use proton_log_service::LogService;
 use proton_network_monitor_service::{ConnectionMonitor, NetworkMonitorServiceError};
 use proton_sqlite3::MigratorError;
@@ -65,6 +65,7 @@ use std::fs;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
@@ -343,6 +344,7 @@ impl Context {
 
         let stash_config = StashConfiguration {
             path: Some(&account_stash_path),
+            pool_size: Some(12),
             ..Default::default()
         };
 
@@ -363,16 +365,13 @@ impl Context {
         builder = builder
             .with_service(CoreClock::default())
             .with_service(LoggingService::new(log_service))
+            .with_service(ContextEventService::new())
             .with_cyclic_service(|ctx| NetworkMonitorService::new(ctx, network_monitor_config));
 
         if matches!(origin, Origin::App) {
             builder = builder
                 .with_cyclic_service(|weak_ctx| {
-                    SessionObserverService::new(
-                        EventService::new(),
-                        weak_ctx,
-                        SESSION_OBSERVER_BROADCAST_CAPACITY,
-                    )
+                    SessionObserverService::new(weak_ctx, SESSION_OBSERVER_BROADCAST_CAPACITY)
                 })
                 .with_service(HvNotifierService::new(hv_notifier))
                 .with_service(DeviceInfoService::new(device_info_provider))
@@ -1202,6 +1201,11 @@ impl Context {
         self.get_service::<SessionObserverService>()
     }
 
+    #[allow(clippy::result_large_err)]
+    pub fn event_service(&self) -> &ContextEventService {
+        self.get_service::<ContextEventService>()
+    }
+
     /// Retrieves the passphrase for the current session by decrypting the session's key secret.
     pub async fn get_session_passphrase(&self) -> Result<SecretVec<u8>, PassphraseAcquireError> {
         let session_id = self.get_primary_session_id().await?;
@@ -1233,6 +1237,27 @@ impl Context {
             .clone();
         Ok(session_id)
     }
+
+    pub fn on_enter_foreground(&self) {
+        self.event_service().publish(OnEnterForegroundEvent);
+        self.task_service().resume_main();
+    }
+
+    pub async fn on_exit_foreground(&self) {
+        self.event_service().publish(OnExitForegroundEvent);
+        if let Err(e) = self
+            .task_service()
+            .pause_main_and_wait(Duration::from_millis(100))
+            .await
+        {
+            warn!("Failed to await all paused work: {e:?}");
+        }
+    }
+
+    pub fn on_exit_foreground_without_wait(&self) {
+        self.event_service().publish(OnExitForegroundEvent);
+        self.task_service().pause_main();
+    }
 }
 
 impl Spawner for Context {
@@ -1261,6 +1286,7 @@ pub enum Platform {
 
 impl Platform {
     #[must_use]
+    #[allow(unreachable_code)]
     pub fn current() -> Self {
         #[cfg(target_os = "android")]
         return Self::Mobile;

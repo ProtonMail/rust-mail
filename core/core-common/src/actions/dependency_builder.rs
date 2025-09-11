@@ -13,7 +13,7 @@ impl ActionDependencyKeysBuilder {
     #[must_use]
     pub fn new() -> Self {
         let mut keys = ActionDependencyKeys::default();
-        keys.optional.push(EventPoll::dependency_key());
+        keys.record.push(EventPoll::dependency_key());
         Self(keys)
     }
 

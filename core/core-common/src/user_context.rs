@@ -145,7 +145,8 @@ impl UserContext {
         let this_user_id = this.user_id.clone();
         let this_weak = Arc::downgrade(&this);
         if let Some(session_service) = this.context.get_service_opt::<SessionObserverService>() {
-            session_service.on_session_deleted(move |_, user_id| {
+            let event_service = this.context.event_service();
+            session_service.on_session_deleted(event_service, move |_, user_id| {
                 let this_user_id = this_user_id.clone();
                 let this_weak = this_weak.clone();
                 async move {

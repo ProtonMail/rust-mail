@@ -42,6 +42,10 @@ async fn auto_queued_on_pause() {
     auto_executor.pause();
     queue.queue_action(SuccessAction).await.unwrap();
 
+    assert!(matches!(
+        broadcast.recv().await.unwrap(),
+        BroadcastMessage::Queued(_, _)
+    ));
     sleep(Duration::from_secs(1)).await;
     assert!(broadcast.is_empty());
 
@@ -60,6 +64,11 @@ async fn auto_queued_on_multiple_resume() {
     let mut broadcast = queue.new_broadcast_receiver();
 
     queue.queue_action(SuccessAction).await.unwrap();
+
+    assert!(matches!(
+        broadcast.recv().await.unwrap(),
+        BroadcastMessage::Queued(_, _)
+    ));
 
     let task_spawner = TokioTaskSpawner;
 
@@ -100,7 +109,10 @@ async fn auto_queued_on_multiple_pause() {
     queue.queue_action(SuccessAction).await.unwrap();
 
     sleep(Duration::from_secs(1)).await;
-    assert!(broadcast.is_empty());
+    assert!(matches!(
+        broadcast.recv().await.unwrap(),
+        BroadcastMessage::Queued(_, _)
+    ));
 
     // Calling unpause multiple times should always end up in upaused state.
     auto_executor.resume();
@@ -130,6 +142,14 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
     queue.queue_action(SuccessAction).await.unwrap();
     queue.queue_action(SuccessAction).await.unwrap();
 
+    assert!(matches!(
+        broadcast.recv().await.unwrap(),
+        BroadcastMessage::Queued(_, _)
+    ));
+    assert!(matches!(
+        broadcast.recv().await.unwrap(),
+        BroadcastMessage::Queued(_, _)
+    ));
     sleep(Duration::from_secs(1)).await;
     assert!(broadcast.is_empty());
 

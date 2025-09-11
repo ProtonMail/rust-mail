@@ -159,6 +159,7 @@ async fn main() {
     let send_awaiter = ActionAwaiter::new(user_ctx.action_queue(), id);
 
     match send_awaiter.wait().await.unwrap() {
+        BroadcastMessage::Queued(_, _) => {}
         BroadcastMessage::Success(_) => {
             info!("Message successfully sent.");
         }

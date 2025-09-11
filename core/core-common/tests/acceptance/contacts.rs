@@ -85,14 +85,11 @@ async fn test_sync_and_load_contacts() {
 
     // Sync contacts
     let mut tether = user_ctx.stash().connection().await.unwrap();
+    let contacts = Contact::sync(user_ctx.session())
+        .await
+        .expect("failed to download contacts");
     tether
-        .tx(async |tx| {
-            Contact::sync(user_ctx.session())
-                .await
-                .expect("failed to download contacts")
-                .store(tx)
-                .await
-        })
+        .sync_tx(move |tx| contacts.store(tx))
         .await
         .expect("failed to load contacts in db");
 
@@ -408,14 +405,11 @@ async fn prepare_sync_test_data_contacts(
 
     // Sync contacts
     let mut tether = user_ctx.stash().connection().await.unwrap();
+    let contacts = Contact::sync(user_ctx.session())
+        .await
+        .expect("failed to download contacts");
     tether
-        .tx(async |tx| {
-            Contact::sync(user_ctx.session())
-                .await
-                .expect("failed to download contacts")
-                .store(tx)
-                .await
-        })
+        .sync_tx(move |tx| contacts.store(tx))
         .await
         .expect("failed to load contacts in db");
 

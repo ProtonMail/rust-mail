@@ -36,8 +36,9 @@ use proton_vcard::vcard::VCard;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::Transaction;
 use stash::macros::Model;
-use stash::orm::{Model, ModelHooks};
+use stash::orm::{DbRecord, Model, ModelHooks};
 use stash::params;
+use stash::rusqlite::params_from_iter;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
 use tracing::{debug, error, info};
@@ -323,8 +324,8 @@ impl Contact {
             &[Label::INIT_KEY],
             stash.connection().await?,
             async move || Ok(Self::sync(api).await?),
-            async |tx, res| {
-                res.store(tx).await?;
+            |tx, res| {
+                res.store(tx)?;
                 Ok(())
             },
         )
@@ -345,7 +346,7 @@ impl Contact {
         let c: u32 = tx
             .tether()
             .query_value(
-                "SELECT COUNT(*) AS value FROM contact_cards WHERE local_contact_id = ?",
+                "SELECT COUNT(*) FROM contact_cards WHERE local_contact_id = ?",
                 params![local_id],
             )
             .await?;
@@ -555,14 +556,16 @@ impl Contact {
 
 impl ModelHooks for Contact {
     fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
+        // WARN: For perfomance reasons this will NOT be called in the initial sync. See `SyncedContacts::store`
+        // Any extra logic here should be copied there.
         if let Some(remote_id) = &self.remote_id {
             if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
                 self.local_id = existing.local_id;
             }
-        } else if let Some(local_id) = self.local_id {
-            if let Some(existing) = Self::load_by_id_sync(local_id, tx)? {
-                self.remote_id = existing.remote_id;
-            }
+        } else if let Some(local_id) = self.local_id
+            && let Some(existing) = Self::load_by_id_sync(local_id, tx)?
+        {
+            self.remote_id = existing.remote_id;
         }
 
         Ok(())
@@ -688,17 +691,19 @@ pub struct SyncedContacts {
 
 impl SyncedContacts {
     #[tracing::instrument(skip_all)]
-    pub async fn store(self, tx: &Bond<'_>) -> Result<(), StashError> {
+    pub fn store(self, tx: &Transaction<'_>) -> Result<(), StashError> {
         let Self {
             contacts,
             mut emails,
         } = self;
         // Let's start with a clean database
-        tx.execute("DELETE FROM contacts", vec![]).await?;
-        tx.execute("DELETE FROM contact_emails", vec![]).await?;
-        tx.execute("DELETE FROM contact_cards", vec![]).await?;
-        tx.execute("DELETE FROM contact_email_labels", vec![])
-            .await?;
+        tx.execute_batch(
+            "
+        DELETE FROM contacts;
+        DELETE FROM contact_emails;
+        DELETE FROM contact_cards;
+        DELETE FROM contact_email_labels;",
+        )?;
 
         // We will use this to map the contact_emails to the contacts without having to
         // query the db each time we instert one.
@@ -706,9 +711,11 @@ impl SyncedContacts {
         let mut id_map = HashMap::new();
 
         let t1 = Instant::now();
-        for mut cont in contacts {
-            cont.save(tx).await?;
-            id_map.insert(cont.remote_id.clone().unwrap(), cont.id());
+        let mut q = tx.prepare(Contact::INSERT_QUERY)?;
+        for cont in contacts {
+            let params = params_from_iter(cont.field_values());
+            let id = q.query_row(params, |r| r.get(0))?;
+            id_map.insert(cont.remote_id.clone().unwrap(), id);
         }
         debug!(
             "Stored {} contacts to the db in {:?}",
@@ -730,9 +737,11 @@ impl SyncedContacts {
         });
 
         let t2 = Instant::now();
+        let mut q = tx.prepare(ContactEmail::INSERT_QUERY)?;
         let count = emails.len();
-        for mut em in emails {
-            em.save(tx).await?;
+        for em in emails {
+            let params = params_from_iter(em.field_values());
+            q.query(params)?.next()?;
         }
 
         debug!(

@@ -55,6 +55,7 @@ use crate::datatypes::LocalIdMarker;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use proton_core_api::services::proton::ProtonIdMarker;
+use stash::exports::Transaction;
 use stash::exports::{FromSql, SqliteError, ToSql};
 use stash::orm::Model;
 use stash::params;
@@ -164,52 +165,6 @@ pub trait ModelExtension: Model {
         Ok(self)
     }
 
-    /// Deletes a record by its ID.
-    ///
-    /// This method is a convenience method for deleting a record by its primary id.
-    ///
-    /// # Returns
-    ///
-    /// Returns the number of rows deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to delete the item from the database.
-    async fn delete_by_id(id: Self::IdType, bond: &Bond<'_>) -> Result<usize, StashError> {
-        let table = Self::table_name();
-        let query = format!("DELETE FROM {table} WHERE {} = ?", Self::id_field_name(),);
-
-        bond.execute(query, params![id]).await
-    }
-
-    /// Deletes records by its IDs.
-    ///
-    /// This method is a convenience method for deleting multiple records by its primary id.
-    ///
-    /// # Returns
-    ///
-    /// Returns the number of rows deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to delete the item from the database.
-    #[allow(trivial_casts)]
-    #[must_use]
-    async fn delete_by_ids(ids: Vec<Self::IdType>, bond: &Bond<'_>) -> Result<usize, StashError> {
-        let table = Self::table_name();
-        let params = ids
-            .into_iter()
-            .map(|param| Box::new(param) as Box<dyn ToSql + Send>)
-            .collect::<Vec<_>>();
-        let placeholders = placeholders(&params);
-        let query = format!(
-            "DELETE FROM {table} WHERE {} IN ({placeholders})",
-            Self::id_field_name(),
-        );
-
-        bond.execute(query, params).await
-    }
-
     /// Finds record IDs matching given criteria.
     ///
     /// This method is the counterpart to [`find()`](Model::find()), but where
@@ -253,7 +208,7 @@ pub trait ModelExtension: Model {
                 formatdoc!(
                     "
                     SELECT
-                        {} AS value
+                        {}
                     FROM
                         {}
                     {}
@@ -293,7 +248,7 @@ pub trait ModelExtension: Model {
         tether
             .query_values::<_, Self::IdType>(
                 formatdoc!(
-                    "SELECT {} AS value FROM {} WHERE {} = ? LIMIT 1",
+                    "SELECT {} FROM {} WHERE {} = ? LIMIT 1",
                     Self::id_field_name(),
                     Self::table_name(),
                     Self::id_field_name(),
@@ -310,8 +265,53 @@ pub trait ModelExtension: Model {
     ///
     /// When querying the database fails.
     ///
-    async fn delete(self, bond: &Bond<'_>) -> Result<usize, StashError> {
+    async fn delete(self, bond: &Bond<'_>) -> Result<bool, StashError> {
         Self::delete_by_id(self.id_value()?, bond).await
+    }
+
+    /// Deletes a record by its ID.
+    ///
+    /// This method is a convenience method for deleting a record by its primary id.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of rows deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to delete the item from the database.
+    async fn delete_by_id(id: Self::IdType, bond: &Bond<'_>) -> Result<bool, StashError> {
+        bond.sync_bridge(|tx| Self::delete_by_id_sync(id, tx)).await
+    }
+
+    /// Returns the number of rows deleted.
+    #[allow(trivial_casts)]
+    #[must_use]
+    async fn delete_by_ids(ids: Vec<Self::IdType>, bond: &Bond<'_>) -> Result<usize, StashError> {
+        bond.sync_bridge(move |tx| Self::delete_by_ids_sync(&ids, tx))
+            .await
+    }
+
+    fn delete_sync(self, tx: &Transaction<'_>) -> Result<bool, StashError> {
+        Self::delete_by_id_sync(self.id_value()?, tx)
+    }
+
+    /// Returns the number of rows deleted.
+    fn delete_by_id_sync(id: Self::IdType, tx: &Transaction<'_>) -> Result<bool, StashError> {
+        let mut query = tx.prepare_cached(Self::DELETE_BY_ID_QUERY)?;
+
+        Ok(query.execute((id,))? == 1)
+    }
+
+    fn delete_by_ids_sync(ids: &[Self::IdType], tx: &Transaction<'_>) -> Result<usize, StashError> {
+        let mut query = tx.prepare(&format!(
+            "DELETE FROM {table} WHERE {id} IN ({placeholders})",
+            table = Self::table_name(),
+            id = Self::id_field_name(),
+            placeholders = placeholders(ids)
+        ))?;
+
+        Ok(query.execute(params_from_iter(ids))?)
     }
 
     /// Deletes the model instance from database.
@@ -541,7 +541,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                 formatdoc!(
                     "
                             SELECT
-                                {} AS value
+                                {}
                             FROM
                                 {}
                             WHERE
@@ -571,7 +571,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                 formatdoc!(
                     "
                             SELECT
-                                {} AS value
+                                {}
                             FROM
                                 {}
                             WHERE
@@ -615,7 +615,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                 formatdoc!(
                     "
                             SELECT
-                                {} AS value
+                                {}
                             FROM
                                 {}
                             WHERE
@@ -678,7 +678,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                 formatdoc!(
                     "
                     SELECT
-                        {} AS value
+                        {}
                     FROM
                         {}
                     {}

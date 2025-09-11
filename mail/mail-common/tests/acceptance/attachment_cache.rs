@@ -330,7 +330,7 @@ async fn integration() -> anyhow::Result<()> {
         .await?;
 
     let files_before = tether
-        .query_values::<_, String>("SELECT path AS value FROM attachment_cache", vec![])
+        .query_values::<_, String>("SELECT path FROM attachment_cache", vec![])
         .await?
         .into_iter()
         .map(PathBuf::from)
@@ -346,7 +346,7 @@ async fn integration() -> anyhow::Result<()> {
     Attachment::do_cleanup_cache(&user_ctx).await?;
 
     let files_after = tether
-        .query_values::<_, String>("SELECT path AS value FROM attachment_cache", vec![])
+        .query_values::<_, String>("SELECT path FROM attachment_cache", vec![])
         .await?
         .into_iter()
         .map(PathBuf::from)

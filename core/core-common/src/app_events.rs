@@ -14,3 +14,9 @@ pub struct UserSessionCreatedEvent {
     pub session_id: SessionId,
     pub user_id: UserId,
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct OnEnterForegroundEvent;
+
+#[derive(Debug, Copy, Clone)]
+pub struct OnExitForegroundEvent;

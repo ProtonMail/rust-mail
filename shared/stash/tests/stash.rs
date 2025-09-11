@@ -549,7 +549,7 @@ mod orm_tests {
             } else {
                 panic!("unknown mascot {}", self.mascot);
             }
-            self.all_rustaceans = tx.query_row_col("SELECT COUNT(*) as value from my_model", ())?;
+            self.all_rustaceans = tx.query_row_col("SELECT COUNT(*) from my_model", ())?;
             Ok(())
         }
 

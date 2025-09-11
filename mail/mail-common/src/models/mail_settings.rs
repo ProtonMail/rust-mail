@@ -21,7 +21,7 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
-use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 
 impl ModelHooks for MailSettings {
     fn before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
@@ -196,8 +196,8 @@ impl MailSettings {
             &[],
             stash.connection().await?,
             async move || Self::sync_mail_settings(api).await,
-            async |tx, res| {
-                res.store(tx).await?;
+            |tx, res| {
+                res.store(tx)?;
                 Ok(())
             },
         )
@@ -387,8 +387,8 @@ pub struct SyncedMailSettings {
 
 impl SyncedMailSettings {
     #[tracing::instrument(skip_all)]
-    pub async fn store(mut self, tx: &Bond<'_>) -> Result<(), StashError> {
-        self.settings.save(tx).await?;
+    pub fn store(mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        self.settings.save_sync(tx)?;
 
         Ok(())
     }

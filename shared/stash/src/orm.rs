@@ -14,13 +14,11 @@
 
 use crate::params;
 use crate::stash::{Bond, StashError, StashResult, Tether};
-use crate::utils::{ConnectionExt, IterMapToSql};
-use anyhow::anyhow;
+use crate::utils::ConnectionExt;
 use core::any::Any;
 use core::fmt::{Debug, Display};
 use core::future::Future;
 use indoc::formatdoc;
-use itertools::Itertools as _;
 use rusqlite::types::FromSql;
 use rusqlite::{Connection, Error as SqliteError, Row, ToSql, Transaction};
 use rusqlite::{Params, params_from_iter};
@@ -121,9 +119,6 @@ pub trait DbRecord: Clone + Debug + PartialEq + Send + Sized + Sync
 where
     Self: 'static,
 {
-    /// Gets a list of field names for the record type.
-    fn field_names() -> Vec<&'static str>;
-
     /// Gets a list of field values for the record.
     ///
     /// The field values are returned in a form that is compatible with
@@ -133,7 +128,7 @@ where
     /// `via` attribute argument) will be converted to that type before being
     /// returned.
     ///
-    fn field_values(&self) -> Vec<Box<dyn ToSql + Send>>;
+    fn field_values(&self) -> impl Iterator<Item = &dyn ToSql> + '_;
 
     /// Converts a row from the database into a record.
     ///
@@ -208,6 +203,11 @@ where
     /// database. For an optional ID, this does *not* include the [`Option`] —
     /// for non-optional IDs, it is the same as [`Self::Id`].
     type IdType: Clone + Debug + FromSql + PartialEq + ToSql + Send + Sync;
+
+    const INSERT_QUERY: &str;
+    const UPDATE_QUERY: &str;
+    const COUNT_QUERY: &str;
+    const DELETE_BY_ID_QUERY: &str;
 
     /// Finds records in the database using specific query logic.
     ///
@@ -348,7 +348,7 @@ where
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<Vec<Self::IdType>, StashError> {
         let query = format!(
-            "SELECT {local_id} AS value FROM {table_name} {query_logic}",
+            "SELECT {local_id} FROM {table_name} {query_logic}",
             table_name = Self::table_name(),
             local_id = Self::id_field_name(),
             query_logic = query_logic.as_ref(),
@@ -459,33 +459,8 @@ where
     /// If it has a local id it will update the record, otherwise it will insert it.
     ///
     fn insert_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
-        let (fields, values) = if Self::id_is_autoincrementing() {
-            if Self::id_value(self).is_ok() {
-                // This should have been an upgrade
-                return Err(StashError::Critical(anyhow!(
-                    "Attempting to insert a record with id autoincrement whose id is set"
-                )));
-            }
-            (
-                Self::field_names_without_id(),
-                Self::field_values_without_id(self),
-            )
-        } else {
-            (Self::field_names(), Self::field_values(self))
-        };
-
-        let placeholders = crate::utils::placeholders(&fields);
-        let query = formatdoc! {"
-                    INSERT INTO {table} ({fields})
-                    VALUES ({placeholders})
-                    RETURNING {id} AS value
-                    ",
-            table = Self::table_name(),
-            fields = fields.join(", "),
-            id = Self::id_field_name(),
-        };
-
-        let id: Self::IdType = tx.query_row_col(&query, params_from_iter(values))?;
+        let id: Self::IdType =
+            tx.query_row_col(Self::INSERT_QUERY, params_from_iter(self.field_values()))?;
 
         self.set_id_value(id);
 
@@ -528,31 +503,11 @@ where
     }
 
     fn update_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
-        let id = self.id_value().map_err(|_| StashError::IdNotSet)?;
+        let mut query = tx.prepare_cached(Self::UPDATE_QUERY)?;
+        let id = self.id();
+        let params = self.field_values().chain([&id as &dyn ToSql]);
 
-        // If the ID field is auto-incrementing then it is fully managed by the
-        // database, and we exclude it from the list here.
-        let (fields, values) = if Self::id_is_autoincrementing() {
-            (
-                Self::field_names_without_id(),
-                Self::field_values_without_id(self),
-            )
-        } else {
-            (Self::field_names(), Self::field_values(self))
-        };
-
-        let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
-        let query = formatdoc!(
-            "UPDATE {table}
-                    SET {fields}
-                    WHERE {id} = ?",
-            table = Self::table_name(),
-            id = Self::id_field_name(),
-        );
-        let mut query = tx.prepare_cached(&query)?;
-
-        let values = values.bridge_sql_extend([id]);
-        let affected: usize = query.execute(params_from_iter(values))?;
+        let affected: usize = query.execute(params_from_iter(params))?;
 
         if affected == 0 {
             return Err(StashError::NoRowsUpdated);
@@ -566,19 +521,10 @@ where
         //
         // HACK: This is not great but we're forced to do it since there's no guarantee that the
         // row does or doesn't exist.
-        let query = formatdoc! {"
-                        SELECT COUNT(*)
-                        FROM {table}
-                        WHERE {id_name} = ?
-                        ",
-            table = Self::table_name(),
-            id_name = Self::id_field_name(),
-        };
-
-        if let Ok(id) = self.id_value() {
-            if tx.query_row_col::<u64>(&query, (id,))? != 0 {
-                return self.update_sync(tx);
-            }
+        if let Ok(id) = self.id_value()
+            && tx.query_row_col::<u64>(Self::COUNT_QUERY, (id,))? != 0
+        {
+            return self.update_sync(tx);
         }
         self.insert_sync(tx)
     }
@@ -625,7 +571,7 @@ where
     fn next_id(tether: &Tether) -> impl Future<Output = Result<Self::IdType, StashError>> + Send {
         async move {
             let query = formatdoc! {"
-                SELECT COALESCE(MAX({id}), 0) + 1 as value
+                SELECT COALESCE(MAX({id}), 0) + 1
                 FROM {table}
                 ",
                 table = Self::table_name(),
@@ -635,10 +581,6 @@ where
         }
     }
 
-    fn field_names_without_id() -> Vec<&'static str>;
-    fn field_values_without_id(&self) -> Vec<Box<dyn ToSql + Send>>;
-    fn id_is_autoincrementing() -> bool;
-    fn id_is_optional() -> bool;
     fn id_value(&self) -> Result<Self::IdType, StashError>;
     fn set_id_value(&mut self, id: Self::IdType);
 }

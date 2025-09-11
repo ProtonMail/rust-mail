@@ -4,6 +4,7 @@ use std::{cell::RefCell, collections::BTreeMap};
 
 pub use capabilities::BrowserCapabilities;
 
+use crate::css_parser::{parse_style_attribute, parse_stylesheet};
 use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
 use itertools::Itertools;
@@ -13,7 +14,7 @@ use lightningcss::values::color::{CssColor, HSL};
 use lightningcss::{
     printer::PrinterOptions,
     properties::Property,
-    stylesheet::{ParserOptions, StyleAttribute, StyleSheet},
+    stylesheet::{StyleAttribute, StyleSheet},
     values::color::RGBA,
     visitor::Visit,
 };
@@ -352,8 +353,8 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: &str) ->
     };
 
     for style in styles {
-        let text_content = style.text_contents();
-        let stylesheet = match StyleSheet::parse(&text_content, ParserOptions::default()) {
+        let mut text_content = style.text_contents();
+        let stylesheet = match parse_stylesheet(&mut text_content) {
             Ok(stylesheet) => stylesheet,
             Err(err) => {
                 tracing::warn!("Could not parse stylesheet content");
@@ -402,8 +403,8 @@ fn sanitize_dark_mode_in_inline_attributes(
 
     let mut overrides = BTreeMap::new();
 
-    for (tag, style) in styles {
-        let style_attribute = match StyleAttribute::parse(&style, ParserOptions::default()) {
+    for (tag, mut style) in styles {
+        let style_attribute = match parse_style_attribute(&mut style) {
             Ok(style_attribute) => style_attribute,
             Err(err) => {
                 let tag = tag.name.local.to_string();
@@ -742,7 +743,8 @@ mod tests {
         );
 
         let mut visitor = StylesheetVisitor::new("#protonmail-message".to_owned());
-        let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
+        let mut rule_string = rule.to_string();
+        let mut stylesheet = parse_stylesheet(&mut rule_string).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
 
         let expected = btree_map! {
@@ -882,7 +884,8 @@ mod tests {
 
         let printer_options = PrinterOptions::default();
         let mut visitor = StyleAttributeVisitor::default();
-        let mut attribute = StyleAttribute::parse(rule, ParserOptions::default()).unwrap();
+        let mut rule_string = rule.to_string();
+        let mut attribute = parse_style_attribute(&mut rule_string).unwrap();
         attribute.visit(&mut visitor).unwrap();
 
         let expected = {

@@ -61,7 +61,6 @@ pub use contextual_conversation::*;
 use derive_more::derive::TryFrom;
 pub use exclusive_location::ExclusiveLocation;
 pub use ids::*;
-use indoc::formatdoc;
 use proton_core_common::models::Label;
 pub use read_filter::ReadFilter;
 pub use rollback_item_type::RollbackItemType;
@@ -113,10 +112,10 @@ use proton_mail_api::services::proton::response_data::{
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
-    Connection, FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value,
-    ValueRef,
+    Connection, FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Transaction,
+    Value, ValueRef,
 };
-use stash::{params, sql_using_serde};
+use stash::sql_using_serde;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -996,28 +995,32 @@ impl ConversationLabelsCount {
         counts: Vec<Self>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
+        bond.sync_bridge(move |tx| Self::create_or_update_conversation_counts_sync(counts, tx))
+            .await
+    }
+
+    pub fn create_or_update_conversation_counts_sync(
+        counts: impl IntoIterator<Item = Self>,
+        tx: &Transaction<'_>,
+    ) -> Result<(), StashError> {
+        let q = r"
+                INSERT INTO conversation_counters(local_label_id, total, unread)
+                SELECT l.local_id, ?, ?
+                FROM labels AS l
+                WHERE l.remote_id = ?
+                ON CONFLICT(local_label_id) DO UPDATE
+                SET total = ?,
+                    unread = ?
+                    ";
+        let mut q = tx.prepare_cached(q)?;
         for count in counts {
-            bond.execute(
-                formatdoc!(
-                    r"
-                    INSERT INTO conversation_counters(local_label_id, total, unread)
-                    SELECT l.local_id, ?, ?
-                    FROM labels AS l
-                    WHERE l.remote_id = ?
-                    ON CONFLICT(local_label_id) DO UPDATE
-                    SET total = ?,
-                        unread = ?
-                    "
-                ),
-                params![
-                    count.total,
-                    count.unread,
-                    count.label_id,
-                    count.total,
-                    count.unread
-                ],
-            )
-            .await?;
+            q.execute((
+                count.total,
+                count.unread,
+                count.label_id,
+                count.total,
+                count.unread,
+            ))?;
         }
         Ok(())
     }
@@ -1650,28 +1653,33 @@ impl MessageLabelsCount {
         counts: Vec<Self>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
+        bond.sync_bridge(move |tx| Self::create_or_update_message_counts_sync(counts, tx))
+            .await
+    }
+
+    pub fn create_or_update_message_counts_sync(
+        counts: impl IntoIterator<Item = Self>,
+        tx: &Transaction<'_>,
+    ) -> Result<(), StashError> {
+        let q = r"
+                INSERT INTO message_counters(local_label_id, total, unread)
+                SELECT l.local_id, ?, ?
+                    FROM labels AS l
+                    WHERE l.remote_id = ?
+                ON CONFLICT(local_label_id) DO UPDATE
+                    SET total = ?,
+                        unread = ?
+                ";
+        let mut q = tx.prepare_cached(q)?;
+
         for count in counts {
-            bond.execute(
-                formatdoc!(
-                    r"
-                    INSERT INTO message_counters(local_label_id, total, unread)
-                    SELECT l.local_id, ?, ?
-                        FROM labels AS l
-                        WHERE l.remote_id = ?
-                    ON CONFLICT(local_label_id) DO UPDATE
-                        SET total = ?,
-                            unread = ?
-                    "
-                ),
-                params![
-                    count.total,
-                    count.unread,
-                    count.label_id,
-                    count.total,
-                    count.unread
-                ],
-            )
-            .await?;
+            q.execute((
+                count.total,
+                count.unread,
+                count.label_id,
+                count.total,
+                count.unread,
+            ))?;
         }
         Ok(())
     }

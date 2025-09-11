@@ -1,6 +1,9 @@
 use crate::UserContext;
 use crate::actions::dependency_builder::ActionDependencyKeysBuilder;
-use proton_action_queue::action::{ActionDependencyKey, ActionDependencyKeys};
+use proton_action_queue::action::{
+    ActionDependencyKey, ActionDependencyKeys, FactoryResult, VersionConverter,
+    VersionConverterError, deserialize,
+};
 use proton_action_queue::{
     action::{
         self, Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
@@ -18,10 +21,17 @@ use std::sync::Weak;
 ///
 /// Rather than control exclusive execution access between the queue and the event loop, run
 /// the event loop as action in the queue.
-#[derive(Serialize, Deserialize)]
-pub struct EventPoll {}
+#[derive(Default, Serialize, Deserialize)]
+pub struct EventPoll {
+    #[serde(default)]
+    force: bool,
+}
 
 impl EventPoll {
+    #[must_use]
+    pub fn forced() -> Self {
+        EventPoll { force: true }
+    }
     #[must_use]
     pub fn dependency_key() -> ActionDependencyKey {
         ActionDependencyKey::from("event-poll")
@@ -30,7 +40,7 @@ impl EventPoll {
 
 impl Action for EventPoll {
     const TYPE: Type = Type("event_poll");
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     const PRIORITY: Priority = Priority::Low;
 
     type VersionConverter = DefaultVersionConverter<Self>;
@@ -40,9 +50,28 @@ impl Action for EventPoll {
     type Error = ActionEventLoopError;
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
-        ActionDependencyKeysBuilder::new()
-            .record(Self::dependency_key())
-            .build()
+        if self.force {
+            ActionDependencyKeys::default()
+        } else {
+            ActionDependencyKeysBuilder::new()
+                .record(Self::dependency_key())
+                .with_optional(Self::dependency_key())
+                .build()
+        }
+    }
+}
+
+struct EventPollVersionConverter;
+
+impl VersionConverter for EventPollVersionConverter {
+    type Output = EventPoll;
+
+    fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
+        if !(old_version <= 2 && current_version == 2) {
+            return Err(VersionConverterError::InvalidVersion(current_version).into());
+        }
+
+        Ok(deserialize::<EventPoll>(data)?)
     }
 }
 

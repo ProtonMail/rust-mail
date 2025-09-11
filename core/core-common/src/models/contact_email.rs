@@ -155,7 +155,7 @@ impl ContactEmail {
         // to decode the raw json.
         // TODO(post-release): Transform into relational table.
         tether.query_value::<_, usize>(format!(
-            "SELECT DISTINCT COUNT(local_id) AS value FROM {}, json_each({}.label_ids) WHERE json_each.value = ?",
+            "SELECT DISTINCT COUNT(local_id) FROM {}, json_each({}.label_ids) WHERE json_each.value = ?",
             Self::table_name(),
             Self::table_name()
         ), params![contact_group_id]).await
@@ -167,10 +167,12 @@ impl ModelHooks for ContactEmail {
         &mut self,
         tx: &stash::exports::Transaction<'_>,
     ) -> stash::stash::StashResult<()> {
-        if let Some(remote_id) = &self.remote_id {
-            if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
-                self.local_id = existing.local_id;
-            }
+        // WARN: For perfomance reasons this will NOT be called in the initial sync. See `SyncedContacts::store`
+        // Any extra logic here should be copied there.
+        if let Some(remote_id) = &self.remote_id
+            && let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)?
+        {
+            self.local_id = existing.local_id;
         }
 
         if let Some(contact_remote_id) = &self.remote_contact_id {
