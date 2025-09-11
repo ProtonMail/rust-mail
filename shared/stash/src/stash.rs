@@ -62,7 +62,7 @@ use tracing::{debug, error, trace};
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The maximum number of simultaneous connections allowed to the database.
-const MAX_CONNECTIONS: u32 = 8;
+const MAX_CONNECTIONS: u32 = 24;
 
 #[derive(Debug)]
 /// These are all the operations allowed on a tether.
