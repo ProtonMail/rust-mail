@@ -207,7 +207,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    setup_api_sync_previous_page(&ctx, "myconv_9", 1).await;
+    setup_api_sync_previous_page(&ctx, "myconv_9", None, 1).await;
     let params = setup_api_conversation_pages(&ctx, page_size, 0, 1..=3).await;
     ctx.setup_user(params.clone()).await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
@@ -611,7 +611,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     };
     data.save_to_database(&mut tether).await;
 
-    setup_api_sync_previous_page(&ctx, "myconv_102", 2).await;
+    setup_api_sync_previous_page(&ctx, "myconv_102", None, 2).await;
     let params = setup_api_conversation_pages(&ctx, page_size, 0, 2).await;
     ctx.setup_user(params.clone()).await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
@@ -1111,10 +1111,53 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
     assert_eq!(next_items[0].time.as_u64(), 200);
 }
 
+#[tokio::test]
+async fn test_conversation_mail_scroller_fetch_new() {
+    let ctx = MailTestContext::new().await;
+    let params = TestParams::default_basic();
+    let conversations = params.conversations.clone();
+    let previous_page = conversations
+        .first()
+        .cloned()
+        .map(|mut conv| {
+            conv.id = "myconv_0".into();
+            conv
+        })
+        .into_iter()
+        .collect_vec();
+
+    setup_api_sync_previous_page(&ctx, "myconv", Some(previous_page), 1).await;
+    ctx.mock_get_conversations(conversations, 2).await;
+    ctx.mock_ping_success().await;
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let unread = ReadFilter::All;
+
+    let page_size = 5;
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    // Conversations can be accessed only when progressed.
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(actual.len(), 1);
+    assert_eq!(test_scroller.items().len(), 1);
+
+    let actual = test_scroller.fetch_new_and_wait().await.unwrap();
+    assert_eq!(actual.len(), 1);
+    assert_eq!(test_scroller.items().len(), 2);
+}
+
 #[function_name::named]
 async fn setup_api_sync_previous_page(
     ctx: &MailTestContext,
     first_id: &str,
+    conversations: Option<Vec<ApiConversation>>,
     expect: impl Into<Times>,
 ) {
     Mock::given(method("GET"))
@@ -1122,7 +1165,7 @@ async fn setup_api_sync_previous_page(
         .and(query_param_contains("BeginID", first_id))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
-                conversations: vec![],
+                conversations: conversations.unwrap_or_default(),
                 stale: false,
                 total: 0,
             }),
