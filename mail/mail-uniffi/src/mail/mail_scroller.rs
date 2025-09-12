@@ -571,6 +571,17 @@ impl SearchScroller {
             .map_err(Into::into)
     }
 
+    /// Retrieves the current items in the scroller, the items will be returned
+    /// in the callback with the `ReplaceFrom { idx: 0, items }` update.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn get_items(self: Arc<Self>) -> Result<(), MailScrollerError> {
+        self.scroller
+            .get_items()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     /// Retrieves the total number of records in the result set.
     #[must_use]
     pub async fn total(&self) -> Result<u64, MailScrollerError> {
