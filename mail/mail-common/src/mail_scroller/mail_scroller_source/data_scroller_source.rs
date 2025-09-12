@@ -40,7 +40,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             unread,
             page_size,
             invalidate: None,
-            new_data_callback: flume::bounded(0),
+            new_data_callback: flume::bounded(1),
             state: MailScrollerState::new_not_synced(
                 local_label_id,
                 unread,
