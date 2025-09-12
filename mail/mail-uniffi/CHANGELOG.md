@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- [ET-4011] Return Draft Save error in Recipient Errors
+
+### Fixes
+
+- [ET-4426] Disable table decoration and adjust image replace
+
+
+## [mail-uniffi-v0.143.9] - 2025-09-11
+
+### Changed
+
 - Tweak default db pool sizes
 
 ### Features
