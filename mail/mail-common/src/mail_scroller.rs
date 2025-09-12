@@ -426,12 +426,13 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         let (update_sender, update_receiver) = flume::unbounded();
         let (command_sender, command_receiver) = flume::unbounded();
         let (ordered_command_sender, ordered_command_receiver) = flume::unbounded();
+        let (invalidation_sender, invalidation_receiver) = flume::unbounded();
         let arc_ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let task = source.initialize(&arc_ctx).await?;
+        let task = source.initialize(&arc_ctx, invalidation_sender).await?;
         let tables = source.watched_tables();
 
         let WatcherHandle {
-            receiver: db_update,
+            receiver: db_receiver,
             handle,
             ..
         } = arc_ctx
@@ -451,7 +452,12 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             ordered_command_send: ordered_command_sender.clone(),
         };
 
-        let aborts = this.spawn(command_receiver, ordered_command_sender.clone(), db_update)?;
+        let aborts = this.spawn(
+            command_receiver,
+            ordered_command_sender.clone(),
+            db_receiver,
+            invalidation_receiver,
+        )?;
 
         Ok(ScrollerWorkerHandle {
             command: command_sender,
@@ -466,18 +472,17 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         mut self,
         command_receiver: flume::Receiver<ScrollerCommand>,
         ordered_command_sender: flume::Sender<ScrollerOrderedCommand>,
-        db_update: flume::Receiver<()>,
+        db_receiver: flume::Receiver<()>,
+        invalidation_receiver: flume::Receiver<()>,
     ) -> Result<Vec<AbortHandle>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let mut aborts = vec![];
         let source_clone = self.source.clone();
         let weak_ctx = self.ctx.clone();
-        let (invalidation_sender, invalidation_receiver) = flume::unbounded();
 
         // Ordered operations, these needs to be streamlined and not blocking other operations
         // thats why we are going to dedicate a separate task for them.
         let handle = ctx.spawn(async move {
-            self.source.write().await.set_notify(invalidation_sender);
             while let Ok(command) = self.ordered_command_recv.recv_async().await {
                 // This prevents abusing the scroller by sending multiple commands
                 // in a row. We do not want and need to handle all of them one by one.
@@ -509,7 +514,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                             .send_async(ScrollerOrderedCommand::Refresh(ScrollerSource::Invalidation)).await
                             .inspect_err(|e| tracing::error!("Failed to send refresh command: {e:?}"));
                     }
-                    r = db_update.recv_async() => {
+                    r = db_receiver.recv_async() => {
                         if let Err(e) = r {
                             tracing::error!("Failed to receive db update: {e:?}");
                             return;

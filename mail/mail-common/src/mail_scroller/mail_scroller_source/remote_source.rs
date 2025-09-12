@@ -51,6 +51,6 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        callback: flume::Sender<()>,
+        callback: Option<flume::Sender<()>>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 }

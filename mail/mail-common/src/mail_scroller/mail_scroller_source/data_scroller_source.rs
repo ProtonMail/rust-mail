@@ -21,7 +21,6 @@ pub struct DataScrollerSource<T: RemoteSource> {
     unread: ReadFilter,
     page_size: usize,
     invalidate: Option<flume::Sender<()>>,
-    new_data_callback: (flume::Sender<()>, flume::Receiver<()>),
     order_dir: ScrollOrderDir,
     order_field: ScrollOrderField,
     state: MailScrollerState<T>,
@@ -40,7 +39,6 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             unread,
             page_size,
             invalidate: None,
-            new_data_callback: flume::unbounded(),
             state: MailScrollerState::new_not_synced(
                 local_label_id,
                 unread,
@@ -78,8 +76,13 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             if let Some(scroll_data) = scroller.scroll_data_begin(&tether).await? {
                 debug!("Syncing previous page in background");
 
-                self.sync_previous_page(ctx, &scroll_data, remote_label_id.clone())
-                    .await?;
+                self.sync_previous_page(
+                    ctx,
+                    &scroll_data,
+                    remote_label_id.clone(),
+                    self.invalidate.clone(),
+                )
+                .await?;
                 let task = if is_online
                     && !scroller.has_next_page(&tether).await?
                     && total > self.page_size as u64
@@ -228,6 +231,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         ctx: &MailUserContext,
         scroller: &T,
         remote_label_id: LabelId,
+        invalidate: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let local_label_id = self.local_label_id;
         let unread = self.unread;
@@ -241,7 +245,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             page_size,
             self.order_dir,
             self.order_field,
-            self.new_data_callback.0.clone(),
+            invalidate,
         )
         .await?;
 
@@ -266,7 +270,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     async fn initialize(
         &mut self,
         ctx: &MailUserContext,
+        invalidate: flume::Sender<()>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        self.invalidate = Some(invalidate);
         self.initialize_impl(ctx, false).await
     }
 
@@ -345,8 +351,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let is_online = !is_offline;
 
         // If we have loaded previous page in background, we need to replace
-        let new_data_arrived = self.new_data_callback.1.drain().next().is_some();
-        let mut replace = new_data_arrived;
+        let mut replace = false;
 
         // Always sync the cache as there might be new data.
         // The sync has to be done after determining the previous
@@ -383,8 +388,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 let items = scroller.fetch_more(&tether).await?;
                 let items = if replace {
                     debug!(
-                        "Items displayed on the screen are unordered, new_data: {} notifying client to reload",
-                        new_data_arrived
+                        "Items displayed on the screen are not synced, notifying client to reload"
                     );
                     Self::notify_scroller_order_invalid(&self.invalidate).await?;
                     vec![]
@@ -444,7 +448,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 debug!("Syncing previous page in a task");
 
                 let task = self
-                    .sync_previous_page(ctx, &scroll_data, remote_label_id.clone())
+                    .sync_previous_page(ctx, &scroll_data, remote_label_id.clone(), None)
                     .await?;
                 let task = if is_online { task } else { None };
 
@@ -488,7 +492,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 .await?;
         debug!("Changed filter, new state: {}, initializing...", self.state);
 
-        let task = self.initialize(ctx).await?;
+        let task = self.initialize_impl(ctx, false).await?;
 
         Ok(task)
     }
@@ -504,16 +508,12 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             tether.tx(async |tx| cursor.delete(tx).await).await?;
         }
         self.clear_state();
-        let task = self.initialize(ctx).await?;
+        let task = self.initialize_impl(ctx, false).await?;
 
         Ok(task)
     }
 
     fn watched_tables(&self) -> Vec<String> {
         T::watched_tables()
-    }
-
-    fn set_notify(&mut self, sender: flume::Sender<()>) {
-        let _ = self.invalidate.insert(sender);
     }
 }

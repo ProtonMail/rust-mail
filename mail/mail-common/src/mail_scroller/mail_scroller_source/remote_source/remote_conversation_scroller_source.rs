@@ -107,7 +107,7 @@ impl RemoteSource for ConversationScrollData {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        sender: flume::Sender<()>,
+        sender: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let stash = ctx.user_stash().clone();
         let remote_id = scroller.remote_conversation_id.clone();
@@ -129,8 +129,8 @@ impl RemoteSource for ConversationScrollData {
             )
             .await?;
 
-            if !items.is_empty() {
-                sender.send_async(()).await.map_err(|e| {
+            if !items.is_empty() && sender.is_some() {
+                sender.unwrap().send_async(()).await.map_err(|e| {
                     MailContextError::Other(anyhow!(
                         "Could not notify about fetching previous page: {e}"
                     ))
