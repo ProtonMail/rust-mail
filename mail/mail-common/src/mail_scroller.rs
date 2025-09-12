@@ -716,14 +716,16 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(src=%src))]
     async fn fetch_new(
         &mut self,
         src: ScrollerSource,
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
-        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let mut task = self.source.write().await.sync_new(&ctx).await?;
-
-        Self::await_task(&mut task).await?;
+        {
+            let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+            let mut task = self.source.write().await.sync_new(&ctx).await?;
+            Self::await_task(&mut task).await?;
+        }
 
         self.refresh(false, src).await
     }
