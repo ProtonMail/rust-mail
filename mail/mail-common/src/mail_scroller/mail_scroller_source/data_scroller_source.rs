@@ -40,7 +40,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             unread,
             page_size,
             invalidate: None,
-            new_data_callback: flume::bounded(1),
+            new_data_callback: flume::unbounded(),
             state: MailScrollerState::new_not_synced(
                 local_label_id,
                 unread,
@@ -345,7 +345,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let is_online = !is_offline;
 
         // If we have loaded previous page in background, we need to replace
-        let new_data_arrived = self.new_data_callback.1.try_recv().is_ok();
+        let new_data_arrived = self.new_data_callback.1.drain().next().is_some();
         let mut replace = new_data_arrived;
 
         // Always sync the cache as there might be new data.
