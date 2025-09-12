@@ -31,7 +31,7 @@ use proton_core_api::service::{ApiServiceError, ApiServiceResult};
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
 use proton_core_api::session::Session;
-use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
+use proton_core_common::datatypes::{AccountDetails, AddressStatus, LocalAddressId};
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::services::{EventPollConfigService, NetworkMonitorService};
@@ -58,7 +58,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::join;
 use tokio::task::JoinHandle;
-use tracing::{error, instrument};
+use tracing::{debug, error, instrument};
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
 const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 2;
@@ -496,34 +496,39 @@ impl MailUserContext {
     {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
 
-        // If the email is from an owned address by the user, use the corresponding keys.
+        // If the email is from an owned address by the user and the address is active, use the corresponding keys.
         if let Some(address) = Address::by_email(email.as_clear_text_str(), tx.tether())
             .await
             .inspect_err(|err| {
                 error!("send preferences: failed to search address by email: {err:?}")
             })?
         {
-            let address_rid = address.remote_id.as_ref().ok_or_else(|| {
-                MailContextError::App(AppError::AddressHasNoRemoteId(
-                    address.local_id.unwrap_or(LocalAddressId::from(0)),
-                ))
-            })?;
+            if address.status == AddressStatus::Enabled {
+                debug!("send preferences: loading from self-owned address");
+                let address_rid = address.remote_id.as_ref().ok_or_else(|| {
+                    MailContextError::App(AppError::AddressHasNoRemoteId(
+                        address.local_id.unwrap_or(LocalAddressId::from(0)),
+                    ))
+                })?;
 
-            let address_keys = self
-                .unlocked_address_keys(pgp, tx.tether(), address_rid)
-                .await
+                let address_keys = self
+                    .unlocked_address_keys(pgp, tx.tether(), address_rid)
+                    .await
+                    .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
+
+                let send_preferences = SendPreferences::new_for_self(
+                    &address_keys,
+                    encryption_time,
+                    settings,
+                    composer_preference,
+                )
                 .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
 
-            let send_preferences = SendPreferences::new_for_self(
-                &address_keys,
-                encryption_time,
-                settings,
-                composer_preference,
-            )
-            .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
-
-            return Ok(send_preferences);
+                return Ok(send_preferences);
+            }
         }
+
+        debug!("send preferences: loading from contacts and key server");
 
         let user_keys = self.unlocked_user_keys(pgp, tx.tether()).await?;
 
