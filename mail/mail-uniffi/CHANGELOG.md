@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Search scroller should now expose `get_items` method in uniffi layer
+- Migration for Event Poll action was not hooked up
+
+
+## [mail-uniffi-v0.143.12] - 2025-09-12
+
+### Fixes
+
 - [ET-4720] Report missing send failure errors
 
 
