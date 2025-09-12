@@ -1452,8 +1452,9 @@ fn decode_action(
 ) -> QueuedResult<(Box<dyn ErasedQueuedAction>, Arc<QueuedMetadata>)> {
     let action_id = stored_action.id.unwrap();
 
+    let action_type = stored_action.action_type.clone();
     factory.read().decode(stored_action).map_err(|e| {
-        error!("Failed to decode action: {e:?}");
+        error!(?action_type, "Failed to decode action: {e:?}");
         QueuedError::Factory(action_id, e)
     })
 }

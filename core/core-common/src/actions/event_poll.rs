@@ -5,10 +5,7 @@ use proton_action_queue::action::{
     VersionConverterError, deserialize,
 };
 use proton_action_queue::{
-    action::{
-        self, Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
-        WriterGuardError,
-    },
+    action::{self, Action, ActionId, Handler, Priority, Type, WriterGuard, WriterGuardError},
     queue::ActionRequeueReason,
 };
 use proton_event_loop::EventLoopError;
@@ -43,7 +40,7 @@ impl Action for EventPoll {
     const VERSION: u32 = 2;
     const PRIORITY: Priority = Priority::Low;
 
-    type VersionConverter = DefaultVersionConverter<Self>;
+    type VersionConverter = EventPollVersionConverter;
     type Handler = EventPollHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
@@ -61,7 +58,7 @@ impl Action for EventPoll {
     }
 }
 
-struct EventPollVersionConverter;
+pub struct EventPollVersionConverter;
 
 impl VersionConverter for EventPollVersionConverter {
     type Output = EventPoll;
