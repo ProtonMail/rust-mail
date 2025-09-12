@@ -17,24 +17,11 @@ pub fn html2text(reader: impl Read, options: Html2TextOptions) -> Result<String,
     })
     .do_decorate();
 
-    config = config.link_footnotes(options.decorate_links);
+    config = config
+        .link_footnotes(options.decorate_links)
+        .no_table_borders();
 
-    config.string_from_read(reader, COLUMN_WIDTH).map(|s| {
-        if options.decorate_images {
-            s
-        } else {
-            //TODO(ET-4282): Returning empty string does not introduce a new line. There seems to
-            // no way to insert a new line at the time being. So we manually remove
-            // our custom tags for the time being.
-
-            // Web inserts this byte sequence where the image was supposed to be.
-            // Without it we can't correctly replace the signatures generated on web.
-            s.replace(
-                PROTON_IMAGE_DECORATION,
-                str::from_utf8(&[194, 160]).expect("should not fail"),
-            )
-        }
-    })
+    config.string_from_read(reader, COLUMN_WIDTH)
 }
 
 #[derive(Clone, Debug)]
@@ -43,7 +30,6 @@ struct Decorator {
     decorate_links: bool,
     decorate_images: bool,
 }
-const PROTON_IMAGE_DECORATION: &str = "[proton-image-replace]";
 #[allow(clippy::semicolon_if_nothing_returned)]
 impl TextDecorator for Decorator {
     type Annotation = <PlainDecorator as TextDecorator>::Annotation;
@@ -108,7 +94,7 @@ impl TextDecorator for Decorator {
         if self.decorate_images {
             self.parent.decorate_image(src, title)
         } else {
-            (String::from(PROTON_IMAGE_DECORATION), ())
+            (String::new(), ())
         }
     }
 
@@ -192,6 +178,20 @@ mod test {
             Html2TextOptions {
                 decorate_links: false,
                 decorate_images: true,
+            },
+        )
+        .unwrap();
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn newsletter_convert() {
+        let input = fs::read_to_string("src/tests/html/newsletter.html").unwrap();
+        let output = html2text(
+            Cursor::new(input),
+            Html2TextOptions {
+                decorate_links: false,
+                decorate_images: false,
             },
         )
         .unwrap();

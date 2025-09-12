@@ -321,6 +321,11 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         self.scroller.fetch_more()
     }
 
+    /// Send a fetch_new command to the scroller
+    pub fn fetch_new(&self) -> Result<(), MailContextError> {
+        self.scroller.fetch_new()
+    }
+
     /// Send a refresh command to the scroller
     pub fn refresh(&self) -> Result<(), MailContextError> {
         self.scroller.refresh()
@@ -369,6 +374,17 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
     /// Fetch more and wait for the update (or handle timeout gracefully)
     pub async fn fetch_more_and_wait(&mut self) -> Result<Vec<T>, MailContextError> {
         self.fetch_more()?;
+
+        // Try to get an update, but if none comes within reasonable time, return empty
+        match self.try_wait_for_update(TIMEOUT).await? {
+            Some(items) => Ok(items),
+            None => Ok(Vec::new()), // No update received, return empty
+        }
+    }
+
+    /// Fetch new and wait for the update (or handle timeout gracefully)
+    pub async fn fetch_new_and_wait(&mut self) -> Result<Vec<T>, MailContextError> {
+        self.fetch_new()?;
 
         // Try to get an update, but if none comes within reasonable time, return empty
         match self.try_wait_for_update(TIMEOUT).await? {

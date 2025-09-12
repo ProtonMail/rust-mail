@@ -1453,7 +1453,7 @@ fn html_to_text(message: &str) -> Result<String> {
     proton_mail_html_transformer::Transformer::html2text(
         cursor,
         Html2TextOptions {
-            decorate_links: true,
+            decorate_links: false,
             decorate_images: false,
         },
     )

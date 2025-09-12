@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Scroller auto calls fetch new when entering foreground
+
+### Features
+
+- Scroller.terminate()
+
+### Fixes
+
+- Fetch new should have task awaiting scoped
+- Only use active addresses in send preferences
+
+
+## [mail-uniffi-v0.143.10] - 2025-09-12
+
+### Changed
+
+- [ET-4011] Return Draft Save error in Recipient Errors
+
+### Fixes
+
+- [ET-4426] Disable table decoration and adjust image replace
+
+
+## [mail-uniffi-v0.143.9] - 2025-09-11
+
+### Changed
+
 - Tweak default db pool sizes
 
 ### Features

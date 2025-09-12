@@ -391,6 +391,10 @@ impl ConversationScroller {
             .await
             .map_err(Into::into)
     }
+
+    pub fn terminate(&self) {
+        self.scroller.terminate_workers();
+    }
 }
 
 /// Represents a paginated view of a result set.
@@ -501,6 +505,10 @@ impl MessageScroller {
             .await
             .map_err(Into::into)
     }
+
+    pub fn terminate(&self) {
+        self.scroller.terminate_workers();
+    }
 }
 
 /// Represents a paginated view of a result set.
@@ -579,5 +587,9 @@ impl SearchScroller {
         uniffi_async(async move { scroller.has_more().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
+    }
+
+    pub fn terminate(&self) {
+        self.scroller.terminate_workers();
     }
 }

@@ -326,6 +326,17 @@ impl MailboxModel {
         }
     }
 
+    fn scroller_fetch_new(&mut self) {
+        debug!("scrolling fetch_new");
+        if let State::Conversations(state) = &mut self.state {
+            let _ = state.paginator().clone_inner().fetch_new();
+        } else if let State::Messages(state) = &mut self.state {
+            let _ = state
+                .label_paginator()
+                .map(|paginator| paginator.clone_inner().fetch_new());
+        }
+    }
+
     fn clear_cursor(&mut self) {
         if let State::Conversations(state) = &mut self.state {
             let _ = state.paginator().clone_inner().clear_cursor();
@@ -404,6 +415,10 @@ impl AppStateHandler for MailboxModel {
                             }),
                         ),
                     )));
+                }
+                KeyCode::F(4) if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.scroller_fetch_new();
+                    return Command::None;
                 }
                 KeyCode::F(4) => {
                     self.clear_cursor();
