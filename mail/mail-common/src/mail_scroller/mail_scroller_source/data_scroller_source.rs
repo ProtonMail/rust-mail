@@ -4,7 +4,6 @@ use proton_core_common::{
     datatypes::LocalLabelId,
     models::{Label, ModelExtension},
 };
-use stash::orm::Model;
 use stash::stash::Tether;
 use tracing::{debug, warn};
 
@@ -61,7 +60,6 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         let label = self.get_label(&tether).await?;
         let remote_label_id = label.remote_id.clone().unwrap();
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
-        let unread = self.unread;
         let is_offline = ctx.network_monitor_service().is_os_offline();
         let is_online = !is_offline;
 
@@ -114,22 +112,26 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             self.clear_state();
         }
 
-        let local_label_id = label.id();
+        let has_more = self.state.has_more(&tether).await?;
         let remote_label_id = label.remote_id.clone().unwrap();
 
         let task = if check_for_total && total == 0 {
             None
-        } else {
-            Self::sync_first_page(
+        } else if has_more {
+            debug!("We have local data, running first page sync in background");
+            self.sync_first_page(
                 ctx,
-                local_label_id,
                 remote_label_id,
-                unread,
-                self.page_size,
                 self.order_dir,
                 self.order_field,
+                self.invalidate.clone(),
             )
-            .await?
+            .await?;
+            None
+        } else {
+            debug!("We have no local data, running first page sync in a task");
+            self.sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
+                .await?
         };
 
         Ok(task)
@@ -181,16 +183,19 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(label)
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[tracing::instrument(skip_all, fields(label_id=remote_label_id.as_str(), unread=?self.unread) )]
     async fn sync_first_page(
+        &self,
         ctx: &MailUserContext,
-        local_label_id: LocalLabelId,
         remote_label_id: LabelId,
-        unread: ReadFilter,
-        page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        invalidate: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let local_label_id = self.local_label_id;
+        let unread = self.unread;
+        let page_size = self.page_size;
+
         T::sync_first_page(
             ctx,
             local_label_id,
@@ -199,6 +204,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             page_size,
             order_dir,
             order_field,
+            invalidate,
         )
         .await
     }
@@ -432,7 +438,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let tether = ctx.user_stash().connection().await?;
         let label = self.get_label(&tether).await?;
         let remote_label_id = label.remote_id.clone().unwrap();
-        let unread = self.unread;
         let is_offline = ctx.network_monitor_service().is_os_offline();
         let is_online = !is_offline;
 
@@ -464,18 +469,10 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             if is_offline { "offline" } else { "online" }
         );
 
-        let local_label_id = label.id();
         let remote_label_id = label.remote_id.clone().unwrap();
-        let task = Self::sync_first_page(
-            ctx,
-            local_label_id,
-            remote_label_id,
-            unread,
-            self.page_size,
-            self.order_dir,
-            self.order_field,
-        )
-        .await?;
+        let task = self
+            .sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
+            .await?;
 
         Ok(task)
     }

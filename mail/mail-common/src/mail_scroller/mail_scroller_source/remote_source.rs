@@ -19,6 +19,7 @@ use crate::datatypes::labels::ScrollOrderDir;
 pub use search_scroller_source::SearchScrollerSource;
 
 pub trait RemoteSource: ScrollData + Send + Sync {
+    #[allow(clippy::too_many_arguments)]
     fn sync_first_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
@@ -27,6 +28,7 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        invalidate: Option<flume::Sender<()>>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     #[allow(clippy::too_many_arguments)]

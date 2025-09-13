@@ -37,6 +37,7 @@ impl RemoteSource for ConversationScrollData {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        invalidate: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let stash = ctx.user_stash().clone();
@@ -57,6 +58,16 @@ impl RemoteSource for ConversationScrollData {
                 order_field,
             )
             .await?;
+
+            if let Some(invalidate) = invalidate
+                && !items.is_empty()
+            {
+                invalidate.send_async(()).await.map_err(|e| {
+                    MailContextError::Other(anyhow!(
+                        "Could not notify about fetching first page: {e}"
+                    ))
+                })?;
+            }
 
             #[cfg(feature = "prefetch")]
             {
@@ -129,8 +140,10 @@ impl RemoteSource for ConversationScrollData {
             )
             .await?;
 
-            if !items.is_empty() && sender.is_some() {
-                sender.unwrap().send_async(()).await.map_err(|e| {
+            if let Some(sender) = sender
+                && !items.is_empty()
+            {
+                sender.send_async(()).await.map_err(|e| {
                     MailContextError::Other(anyhow!(
                         "Could not notify about fetching previous page: {e}"
                     ))

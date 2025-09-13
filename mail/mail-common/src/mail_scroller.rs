@@ -70,6 +70,10 @@ impl<T: Send + Sync + Clone + ScrollerEq + 'static> ScrollerUpdate<T> {
         matches!(self, ScrollerUpdate::None(_))
     }
 
+    pub fn is_error(&self) -> bool {
+        matches!(self, ScrollerUpdate::Error { .. })
+    }
+
     pub fn is_some(&self) -> bool {
         !self.is_none()
     }
@@ -815,7 +819,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing filter to {filter:?}");
-        self.wait_for_request().await?;
+        // We drop the previous task, we should not wait for it.
+        let _ = self.task.take();
         self.task = self
             .source
             .write()
@@ -835,7 +840,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         tracing::info!("Clearing cursor for current label");
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         // We drop the task, we cannot await it in offline mode.
-        self.wait_for_request().await?;
+        let _ = self.task.take();
         self.task = self.source.write().await.clear_cursor(&ctx).await?;
         self.items.clear();
         self.fetch_more(src).await?;
@@ -1041,6 +1046,41 @@ fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
                 to,
                 items,
             }
+        }
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl<T: Send + Sync + Clone + ScrollerEq + 'static> Clone for ScrollerUpdate<T> {
+    fn clone(&self) -> Self {
+        match self {
+            ScrollerUpdate::None(src) => ScrollerUpdate::None(*src),
+            ScrollerUpdate::Append { src, items } => ScrollerUpdate::Append {
+                src: *src,
+                items: items.clone(),
+            },
+            ScrollerUpdate::ReplaceFrom { src, idx, items } => ScrollerUpdate::ReplaceFrom {
+                src: *src,
+                idx: *idx,
+                items: items.clone(),
+            },
+            ScrollerUpdate::ReplaceBefore { src, idx, items } => ScrollerUpdate::ReplaceBefore {
+                src: *src,
+                idx: *idx,
+                items: items.clone(),
+            },
+            ScrollerUpdate::ReplaceRange {
+                src,
+                from,
+                to,
+                items,
+            } => ScrollerUpdate::ReplaceRange {
+                src: *src,
+                from: *from,
+                to: *to,
+                items: items.clone(),
+            },
+            ScrollerUpdate::Error { .. } => panic!("Cannot clone error update"),
         }
     }
 }
