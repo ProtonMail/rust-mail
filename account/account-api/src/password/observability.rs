@@ -1,5 +1,8 @@
 use super::PasswordError;
-use crate::password::{FlowAuthError, state::State};
+use crate::password::{
+    FlowAuthError,
+    state::{State, StateData},
+};
 use proton_core_api::{
     metric,
     services::observability::{
@@ -15,11 +18,12 @@ pub enum PasswordMode {
     Enabled,
 }
 
-impl From<Result<bool, PasswordError>> for PasswordMode {
-    fn from(value: Result<bool, PasswordError>) -> Self {
-        match value {
-            Ok(true) => PasswordMode::Enabled,
-            Ok(false) | Err(_) => PasswordMode::Disabled,
+impl From<bool> for PasswordMode {
+    fn from(value: bool) -> Self {
+        if value {
+            PasswordMode::Enabled
+        } else {
+            PasswordMode::Disabled
         }
     }
 }
@@ -32,18 +36,18 @@ pub struct ObservableData {
     fido: PasswordMode,
 }
 
-pub trait ObservableState {
-    fn observable_data(&self) -> ObservableData;
-}
-
-impl ObservableState for State {
+impl ObservableState for StateData {
     fn observable_data(&self) -> ObservableData {
         ObservableData {
-            mbp: self.has_mbp().into(),
-            totp: self.has_totp().into(),
-            fido: self.has_fido().into(),
+            mbp: self.mbp_mode.has_mbp().into(),
+            totp: self.tfa_mode.has_totp().into(),
+            fido: self.tfa_mode.has_fido().into(),
         }
     }
+}
+
+pub trait ObservableState {
+    fn observable_data(&self) -> ObservableData;
 }
 
 pub trait ObservableResult {
@@ -54,8 +58,8 @@ impl ObservableResult for Result<State, PasswordError> {
     fn observe(self, recorder: &ObservabilityRecorder, data: ObservableData) -> Self {
         let status = match &self {
             Ok(state) => match state {
-                State::Complete(_) => ApiServiceObservabilityResponse::Success,
-                State::WantPass(_) | State::WantTfa(_) | State::WantChange(_) | State::Invalid => {
+                State::Complete => ApiServiceObservabilityResponse::Success,
+                State::WantTfa(_) | State::WantChange | State::Invalid => {
                     // Only send observability event on completion or when first error occurs.
                     return self;
                 }

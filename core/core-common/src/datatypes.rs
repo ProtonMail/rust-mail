@@ -460,7 +460,6 @@ pub enum TfaStatus {
     /// TODO: Document this variant.
     TotpOrFido2 = 3,
 }
-
 impl TfaStatus {
     /// Returns true if any type of second factor auth method is active.
     #[must_use]

@@ -30,7 +30,7 @@ pub struct Cli {
     app_product: String,
 
     /// The app version to use. Used to identify the app in API.
-    #[arg(long, default_value = "7.0.0")]
+    #[arg(long, default_value = "7.1.0")]
     app_version: String,
 
     /// The environment to connect to.
