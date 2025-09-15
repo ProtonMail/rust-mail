@@ -120,4 +120,11 @@ impl<T: ScrollData> MailScrollerState<T> {
             _ => Ok(false),
         }
     }
+
+    pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
+        match self {
+            MailScrollerState::Online(ordered) => ordered.has_more(tether).await,
+            MailScrollerState::NotSynced(unordered) => unordered.has_more(tether).await,
+        }
+    }
 }

@@ -31,6 +31,7 @@ pub trait MailScrollerSource: Send + Sync {
     fn initialize(
         &mut self,
         ctx: &MailUserContext,
+        invalidate: flume::Sender<()>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     /// Return the items that fall into range of the synced data.
@@ -120,6 +121,4 @@ pub trait MailScrollerSource: Send + Sync {
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     fn watched_tables(&self) -> Vec<String>;
-
-    fn set_notify(&mut self, _: flume::Sender<()>) {}
 }

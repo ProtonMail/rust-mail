@@ -293,6 +293,7 @@ pub struct TestScroller<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 
     scroller: MailScroller,
     handle: MailScrollerHandle<T>,
     collected_items: Vec<T>,
+    updates: Vec<ScrollerUpdate<T>>,
 }
 
 impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroller<T> {
@@ -305,6 +306,7 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
             scroller,
             handle,
             collected_items: Vec::new(),
+            updates: Vec::new(),
         };
 
         // Wait for any initial updates that might be available immediately
@@ -404,6 +406,15 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         }
     }
 
+    pub async fn match_next_update(&mut self, expected: TestUpdate) {
+        self.wait_for_update().await.unwrap();
+        let actual = self.updates.last().unwrap();
+        assert!(
+            Self::assert_single_update(actual, &expected),
+            "Expected update: {expected:?}, actual: {actual:?}"
+        );
+    }
+
     /// Get the current collected items
     pub fn items(&self) -> &[T] {
         &self.collected_items
@@ -414,12 +425,89 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         assert!(self.collected_items.as_slice().scroller_eq(expected));
     }
 
+    pub fn assert_updates(&self, expected: &[TestUpdate]) {
+        assert_eq!(
+            self.updates.len(),
+            expected.len(),
+            "Expected {} updates, got {}. Updates received so far: {:#?}",
+            expected.len(),
+            self.updates.len(),
+            self.updates
+        );
+        for (actual, expected) in self.updates.iter().zip(expected.iter()) {
+            assert!(
+                Self::assert_single_update(actual, expected),
+                "Expected update: {expected:?}, got {actual:?}.\nAll updates received so far: {:?}",
+                self.updates
+            );
+        }
+    }
+
+    fn assert_single_update(actual: &ScrollerUpdate<T>, expected: &TestUpdate) -> bool {
+        match (actual, expected) {
+            (ScrollerUpdate::None(_), TestUpdate::None) => true,
+            (
+                ScrollerUpdate::Append {
+                    items: actual_items,
+                    ..
+                },
+                TestUpdate::Append {
+                    items: expected_items,
+                },
+            ) => actual_items.len() == *expected_items,
+            (
+                ScrollerUpdate::ReplaceFrom {
+                    idx: actual_idx,
+                    items: actual_items,
+                    ..
+                },
+                TestUpdate::ReplaceFrom {
+                    idx: expected_idx,
+                    items: expected_items,
+                },
+            ) => actual_idx == expected_idx && actual_items.len() == *expected_items,
+            (
+                ScrollerUpdate::ReplaceBefore {
+                    idx: actual_idx,
+                    items: actual_items,
+                    ..
+                },
+                TestUpdate::ReplaceBefore {
+                    idx: expected_idx,
+                    items: expected_items,
+                },
+            ) => actual_idx == expected_idx && actual_items.len() == *expected_items,
+            (
+                ScrollerUpdate::ReplaceRange {
+                    from: actual_from,
+                    to: actual_to,
+                    items: actual_items,
+                    ..
+                },
+                TestUpdate::ReplaceRange {
+                    from: expected_from,
+                    to: expected_to,
+                    items: expected_items,
+                },
+            ) => {
+                actual_from == expected_from
+                    && actual_to == expected_to
+                    && actual_items.len() == *expected_items
+            }
+            _ => false,
+        }
+    }
+
     /// Handle a scroller update and update the collected items accordingly
     fn handle_scroller_update(
         &mut self,
         update: ScrollerUpdate<T>,
     ) -> Result<Option<Vec<T>>, MailContextError> {
         tracing::info!("Scroller update: {update:?}");
+        if !update.is_error() {
+            self.updates.push(update.clone());
+        }
+
         match update {
             ScrollerUpdate::None(_) => Ok(None),
             ScrollerUpdate::Append { src: _, items } => {
@@ -487,4 +575,25 @@ impl TestScroller<crate::models::Message> {
             MailScroller::search(user_ctx.as_weak(), search_options, page_size).await?;
         Self::new(scroller, handle).await
     }
+}
+
+#[derive(Debug)]
+pub enum TestUpdate {
+    None,
+    Append {
+        items: usize,
+    },
+    ReplaceFrom {
+        idx: usize,
+        items: usize,
+    },
+    ReplaceBefore {
+        idx: usize,
+        items: usize,
+    },
+    ReplaceRange {
+        from: usize,
+        to: usize,
+        items: usize,
+    },
 }
