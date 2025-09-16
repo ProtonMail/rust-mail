@@ -163,10 +163,10 @@ impl InspectableContactDetails {
 
     /// Transforms the data in the vCard struct to something suitable for human consumption
     pub(crate) fn from_vcard(contact: Contact, vcard: VCard) -> Self {
-        let mut res = Self::get_from_contact_basic(contact, &[]);
-        let v = &mut res.fields;
+        let mut result = Self::get_from_contact_basic(contact, &[]);
+        let fields = &mut result.fields;
 
-        match &mut v[0] {
+        match &mut fields[0] {
             ContactField::Emails(emails) => {
                 Self::emails(&vcard, emails);
             }
@@ -175,17 +175,17 @@ impl InspectableContactDetails {
 
         vcard
             .telephones
-            .sorted_extend(v, ContactField::Phones, |tel| Telephone {
+            .sorted_extend(fields, ContactField::Phones, |tel| Telephone {
                 number: tel.value.to_string(),
                 tel_types: tel.tel_type.iter().cloned().map_vec(),
             });
 
         vcard
             .addresses
-            .sorted_extend(v, ContactField::Address, ContactDetailAddress::from);
+            .sorted_extend(fields, ContactField::Address, ContactDetailAddress::from);
 
         if let Some(name) = vcard.name {
-            res.extended_name = ExtendedName {
+            result.extended_name = ExtendedName {
                 last: name.last.concat_to_string(" "),
                 first: name.first.concat_to_string(" "),
                 additional: name.additional.concat_to_string(" "),
@@ -197,24 +197,24 @@ impl InspectableContactDetails {
         }
 
         if let Some(g) = vcard.gender {
-            v.push(ContactField::Gender(g.value.into()));
+            fields.push(ContactField::Gender(g.value.into()));
         }
         if let Some(g) = vcard.anniversary {
-            v.push(ContactField::Anniversary(g.value));
+            fields.push(ContactField::Anniversary(g.value));
         }
         if let Some(g) = vcard.birthday {
-            v.push(ContactField::Birthday(g.value));
+            fields.push(ContactField::Birthday(g.value));
         }
 
         vcard
             .urls
-            .sorted_extend(v, ContactField::Urls, |u| VCardUrl {
+            .sorted_extend(fields, ContactField::Urls, |u| VCardUrl {
                 url_type: u.r#type.into_iter().map_vec(),
                 url: u.value.into(),
             });
         vcard
             .organizations
-            .sorted_extend(v, ContactField::Organizations, |x| {
+            .sorted_extend(fields, ContactField::Organizations, |x| {
                 x.values.into_iter().join(", ")
             });
 
@@ -231,7 +231,7 @@ impl InspectableContactDetails {
             })
             .collect::<Vec<_>>();
         if !logos.is_empty() {
-            v.push(ContactField::Logos(logos));
+            fields.push(ContactField::Logos(logos));
         }
 
         let photos = vcard
@@ -247,32 +247,32 @@ impl InspectableContactDetails {
             })
             .collect::<Vec<_>>();
         if !photos.is_empty() {
-            v.push(ContactField::Photos(photos));
+            fields.push(ContactField::Photos(photos));
         }
 
         vcard
             .time_zones
-            .sorted_extend(v, ContactField::TimeZones, |x| x.value.to_string());
+            .sorted_extend(fields, ContactField::TimeZones, |x| x.value.to_string());
         vcard
             .notes
-            .sorted_extend(v, ContactField::Notes, |x| x.value.value);
+            .sorted_extend(fields, ContactField::Notes, |x| x.value.value);
         vcard
             .titles
-            .sorted_extend(v, ContactField::Titles, |x| x.value.value);
+            .sorted_extend(fields, ContactField::Titles, |x| x.value.value);
         vcard
             .roles
-            .sorted_extend(v, ContactField::Roles, |x| x.value.value);
+            .sorted_extend(fields, ContactField::Roles, |x| x.value.value);
         vcard
             .languages
-            .sorted_extend(v, ContactField::Languages, |x| x.value);
+            .sorted_extend(fields, ContactField::Languages, |x| x.value);
         vcard
             .members
-            .sorted_extend(v, ContactField::Members, |x| x.value.to_string());
+            .sorted_extend(fields, ContactField::Members, |x| x.value.to_string());
 
         // Very important that this is a stable sort!
-        v.sort();
+        fields.sort();
 
-        res
+        result
     }
 
     fn emails(vcard: &VCard, emails: &mut Vec<ContactDetailsEmail>) {
@@ -534,7 +534,7 @@ pub(crate) mod test {
 
     impl Display for InspectableContactDetails {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{:#?}", self)
+            write!(f, "{self:#?}")
         }
     }
 
@@ -554,19 +554,7 @@ pub(crate) mod test {
         }
     }
 
-    fn test_contact_email(email: &str, label_ids: &[&str]) -> ContactEmail {
-        ContactEmail {
-            email: PrivateEmail::from(email),
-            label_ids: Labels::new(
-                label_ids
-                    .iter()
-                    .map(|label_id| LabelId::from(*label_id))
-                    .collect(),
-            ),
-            ..ContactEmail::test_default()
-        }
-    }
-
+    #[allow(clippy::similar_names)]
     #[test]
     fn get_from_contact_basic() {
         let group_a_id = LabelId::from("<group_a_id>");
@@ -584,29 +572,37 @@ pub(crate) mod test {
             ..Contact::test_default()
         };
         let contact_groups: Vec<Label> = vec![
-            Label {
-                remote_id: Some(group_a_id.clone()),
-                name: "A".to_owned(),
-                label_type: LabelType::ContactGroup,
-                ..Label::test_default()
-            },
-            Label {
-                remote_id: Some(group_b_id.clone()),
-                name: "B".to_owned(),
-                label_type: LabelType::ContactGroup,
-                ..Label::test_default()
-            },
-            Label {
-                remote_id: Some(group_c_id.clone()),
-                name: "C".to_owned(),
-                label_type: LabelType::ContactGroup,
-                ..Label::test_default()
-            },
+            test_label_group(&group_a_id, "A"),
+            test_label_group(&group_b_id, "B"),
+            test_label_group(&group_c_id, "C"),
         ];
 
-        let details = InspectableContactDetails::get_from_contact_basic(contact, &contact_groups);
+        let contact_details =
+            InspectableContactDetails::get_from_contact_basic(contact, &contact_groups);
 
-        assert_snapshot!(&details);
+        assert_snapshot!(&contact_details);
+    }
+
+    fn test_contact_email(email: &str, label_ids: &[&str]) -> ContactEmail {
+        ContactEmail {
+            email: PrivateEmail::from(email),
+            label_ids: Labels::new(
+                label_ids
+                    .iter()
+                    .map(|label_id| LabelId::from(*label_id))
+                    .collect(),
+            ),
+            ..ContactEmail::test_default()
+        }
+    }
+
+    fn test_label_group(remote_id: &LabelId, name: &str) -> Label {
+        Label {
+            remote_id: Some(remote_id.clone()),
+            name: name.to_owned(),
+            label_type: LabelType::ContactGroup,
+            ..Label::test_default()
+        }
     }
 
     #[test]
