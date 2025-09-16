@@ -1,13 +1,15 @@
 use crate::app::Command;
 use crate::app_model::mailbox::{ConversationMessage, Items, Message, MessageMessage};
 use crate::messages::Messages;
-use crate::widgets::utils::ScrollableState;
-use crate::widgets::{AsList, ScrollableList, ScrollableListState};
-use proton_core_common::datatypes::{LabelType, LocalLabelId};
-use proton_core_common::models::Label;
+use crate::widgets::utils::{ScrollableState, parse_date_time};
+use crate::widgets::{AsList, ScrollableList, ScrollableListState, TextInput, TextInputState};
+use chrono::Local;
+use proton_core_common::datatypes::{LabelType, LocalLabelId, WeekStart};
+use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_common::actions::LabelAsAction;
-use proton_mail_common::datatypes::ViewMode;
+use proton_mail_common::datatypes::{LocalConversationId, ViewMode};
 use proton_mail_common::models::{Conversation, LabelWithCounters, MailLabel};
+use proton_mail_common::snooze::{SnoozeOptions, SnoozeTime};
 use proton_mail_common::{MailContextResult, MailUserContext, Sidebar};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -18,6 +20,198 @@ use stash::orm::Model;
 use std::sync::Arc;
 
 use super::LabelAs;
+
+pub struct CustomSnoozeOption {
+    items: Vec<LocalConversationId>,
+    text_input_state: TextInputState,
+    local_label_id: LocalLabelId,
+}
+
+impl CustomSnoozeOption {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(items: Vec<LocalConversationId>, local_label_id: LocalLabelId) -> Command<Messages> {
+        let now = Local::now();
+        let format = "%d/%m/%Y %H:%M";
+        let formatted_now = now.format(format).to_string();
+        let state = Self {
+            items,
+            text_input_state: TextInputState::with_value(formatted_now).selected(true),
+            local_label_id,
+        };
+
+        Command::Message(Messages::RaisePopup(Box::new(state)))
+    }
+}
+
+impl crate::app_model::Popup for CustomSnoozeOption {
+    fn title(&self) -> Option<String> {
+        Some("Choose custom snooze time".to_owned())
+    }
+
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        if let Event::Key(key) = event
+            && key.code == KeyCode::Enter
+        {
+            match key.code {
+                KeyCode::Enter => match parse_date_time(self.text_input_state.value()) {
+                    Ok(timestamp) => {
+                        let timestamp = timestamp.into();
+                        Command::batch([
+                            Command::message(Messages::DismissPopup),
+                            Command::message(ConversationMessage::Snooze(
+                                self.items.clone(),
+                                timestamp,
+                                self.local_label_id,
+                            )),
+                        ])
+                    }
+                    Err(e) => Command::message(Messages::DisplayError(
+                        Some("Failed to parse date time".to_owned()),
+                        anyhow::anyhow!("Failed to parse date time: {e}"),
+                    )),
+                },
+                _ => Command::None,
+            }
+        } else {
+            self.text_input_state.handle_event(&event);
+            Command::None
+        }
+    }
+
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
+        frame.render_stateful_widget(
+            TextInput::new("Choose time:  "),
+            area,
+            &mut self.text_input_state,
+        );
+    }
+}
+
+pub struct SnoozeItemPopup {
+    options: SnoozeOptions,
+    list_state: ScrollableListState,
+    items: Vec<LocalConversationId>,
+    local_label_id: LocalLabelId,
+}
+
+impl SnoozeItemPopup {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(
+        ctx: &Arc<MailUserContext>,
+        items: Items,
+        local_label_id: LocalLabelId,
+    ) -> Command<Messages> {
+        let ctx = ctx.clone();
+        Command::command_from_future(async move {
+            let Items::Conversation(items) = items else {
+                return Err(anyhow::anyhow!("Cannot snooze messages"));
+            };
+            let tether = ctx.user_stash().connection().await?;
+            let conversations =
+                <Conversation as ModelExtension>::find_by_ids(items.iter().copied(), &tether)
+                    .await?;
+            let is_snoozed = conversations
+                .iter()
+                .any(|item| item.snoozed_until.is_some() && !item.display_snooze_reminder);
+            let user = ctx.user().await?;
+            let options =
+                SnoozeOptions::new(Local::now(), WeekStart::Monday, &user, is_snoozed).unwrap();
+
+            let state = Self {
+                options,
+                items,
+                local_label_id,
+                list_state: ScrollableListState::new(Some(0)),
+            };
+
+            Ok(Command::Message(Messages::RaisePopup(Box::new(state))))
+        })
+    }
+
+    fn selected_snooze_time(&self) -> Option<SnoozeTime> {
+        let index = self.list_state.selected()?;
+        self.options.options.get(index).cloned()
+    }
+}
+
+impl crate::app_model::Popup for SnoozeItemPopup {
+    fn title(&self) -> Option<String> {
+        Some("Snooze".to_owned())
+    }
+
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        let Event::Key(key) = event else {
+            return Command::None;
+        };
+        if self.list_state.handle_event(key.code) {
+            return Command::None;
+        }
+
+        match key.code {
+            KeyCode::Enter => self
+                .selected_snooze_time()
+                .map(|snooze_time| match snooze_time {
+                    SnoozeTime::Tomorrow(timestamp)
+                    | SnoozeTime::LaterThisWeek(timestamp)
+                    | SnoozeTime::ThisWeekend(timestamp)
+                    | SnoozeTime::NextWeek(timestamp) => Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        Command::message(ConversationMessage::Snooze(
+                            self.items.clone(),
+                            timestamp,
+                            self.local_label_id,
+                        )),
+                    ]),
+                    SnoozeTime::Custom => Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        Command::message(Message::OpenCustomSnoozePopup(
+                            self.items.clone(),
+                            self.local_label_id,
+                        )),
+                    ]),
+                })
+                .or_else(|| {
+                    Some(Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        Command::message(ConversationMessage::Unsnooze(
+                            self.items.clone(),
+                            self.local_label_id,
+                        )),
+                    ]))
+                })
+                .unwrap_or_default(),
+            _ => Command::None,
+        }
+    }
+
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
+        let list = self
+            .options
+            .options
+            .iter()
+            .map(|x| {
+                let text = match x {
+                    SnoozeTime::Tomorrow(_timestamp) => "Tomorrow at 9:00 AM".to_string(),
+                    SnoozeTime::LaterThisWeek(_timestamp) => {
+                        "Later this week at 9:00 AM".to_string()
+                    }
+                    SnoozeTime::ThisWeekend(_timestamp) => "This weekend at 9:00 AM".to_string(),
+                    SnoozeTime::NextWeek(_timestamp) => "Next week at 9:00 AM".to_string(),
+                    SnoozeTime::Custom => "Custom".to_owned(),
+                };
+                ListItem::from(text)
+            })
+            .chain(if self.options.show_unsnooze {
+                vec![ListItem::from("Unsnooze")]
+            } else {
+                vec![]
+            })
+            .collect::<List<'_>>();
+
+        let list = ScrollableList::new(list);
+        frame.render_stateful_widget(list, area, &mut self.list_state);
+    }
+}
 
 pub struct MoveItemPopup {
     folders: Vec<Label>,

@@ -7,6 +7,7 @@ use crate::messages::Messages;
 use crate::widgets::utils::ScrollableState;
 use crate::widgets::{AsIntoTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::{Context, anyhow};
+use crossterm::event::KeyModifiers;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
@@ -248,18 +249,24 @@ impl ConversationsState {
             KeyCode::Char('l') => {
                 Message::OpenLabelItemPopup(Items::Conversation(self.convs())).into()
             }
-            KeyCode::Char('h') => ConversationMessage::HasMore.into(),
+            KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                ConversationMessage::HasMore.into()
+            }
             KeyCode::Char('u') => ConversationMessage::MarkUnread(self.convs()).into(),
             KeyCode::Char('r') => ConversationMessage::MarkRead(self.convs()).into(),
             KeyCode::Char('d') => ConversationMessage::DeletePermanently(self.convs()).into(),
             KeyCode::Char('f') => ConversationMessage::Star(self.convs()).into(),
             KeyCode::Char('F') => ConversationMessage::Unstar(self.convs()).into(),
             KeyCode::Char('E') => ConversationMessage::DeleteAll(self.opened_label).into(),
+            KeyCode::Char('z') => {
+                Message::OpenSnoozePopup(Items::Conversation(self.convs())).into()
+            }
             KeyCode::Enter => self.selected_id_and(|id| ConversationMessage::Open(id).into()),
             _ => Command::None,
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn update(
         &mut self,
         user_ctx: &Arc<MailUserContext>,
@@ -307,6 +314,33 @@ impl ConversationsState {
                     }
                     ConversationMessage::Star(id) => star_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::Unstar(id) => unstar_conversation(user_ctx.to_owned(), id),
+                    ConversationMessage::Snooze(id, timestamp, local_label_id) => {
+                        let user_ctx = user_ctx.clone();
+                        Command::command_from_future(async move {
+                            Conversation::action_snooze(
+                                user_ctx.action_queue(),
+                                local_label_id,
+                                id,
+                                timestamp,
+                            )
+                            .await
+                            .context("Failed to snooze conversation")
+                            .map(|_| Command::None)
+                        })
+                    }
+                    ConversationMessage::Unsnooze(id, local_label_id) => {
+                        let user_ctx = user_ctx.clone();
+                        Command::command_from_future(async move {
+                            Conversation::action_unsnooze(
+                                user_ctx.action_queue(),
+                                local_label_id,
+                                id,
+                            )
+                            .await
+                            .context("Failed to unsnooze conversation")
+                            .map(|_| Command::None)
+                        })
+                    }
                     ConversationMessage::NextPage(conversations) => {
                         self.on_next_page(conversations)
                     }
@@ -404,6 +438,7 @@ impl ConversationsState {
             message_state.help_options(vec);
         } else {
             vec.push(("E", "Permanently delete all messages here"));
+            vec.push(("z", "Snooze a conversation"));
         }
     }
 }

@@ -2032,7 +2032,7 @@ impl Conversation {
 
         let (has_label, is_unread) = if let Some(num_unread) = tx
             .query_row_col::<u64>(
-                "SELECT context_num_unread FROM conversation_labels 
+                "SELECT context_num_unread FROM conversation_labels
                             WHERE local_conversation_id=? AND local_label_id=?",
                 (conversation_id, label_id),
             )

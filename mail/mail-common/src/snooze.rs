@@ -115,6 +115,10 @@ impl SnoozeOptions {
             show_unsnooze: is_snoozed,
         })
     }
+
+    pub fn has_custom_option(&self) -> bool {
+        self.options.contains(&SnoozeTime::Custom)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

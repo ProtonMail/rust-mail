@@ -540,7 +540,9 @@ impl MessagesState {
 
             KeyCode::Char('l') => Message::OpenLabelItemPopup(Items::Message(self.msgs())).into(),
 
-            KeyCode::Char('h') => MessageMessage::HasMore.into(),
+            KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                MessageMessage::HasMore.into()
+            }
 
             KeyCode::Enter => {
                 self.selected_id_and(|_| MessageMessage::OpenBody { show_loading: true }.into())
