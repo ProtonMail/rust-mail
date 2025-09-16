@@ -291,8 +291,8 @@ impl InspectableContactDetails {
             .collect();
         let matching_contact_groups: Vec<ContactGroup> = matching_categories
             .iter()
-            .flat_map(|cat| {
-                cat.value.0.iter().map(|category_name| ContactGroup {
+            .flat_map(|category| {
+                category.value.0.iter().map(|category_name| ContactGroup {
                     name: category_name.value.clone(),
                     color: proton_color(&category_name.value).into(),
                 })

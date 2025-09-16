@@ -221,8 +221,8 @@ impl OpenedContactState {
                         groups,
                     } in items
                     {
-                        let types_str = email_type.iter().map(ToString::to_string).join(", ");
-                        let groups_str = if groups.is_empty() {
+                        let vcard_types = email_type.iter().map(ToString::to_string).join(", ");
+                        let contact_groups = if groups.is_empty() {
                             String::new()
                         } else {
                             let group_names =
@@ -230,7 +230,7 @@ impl OpenedContactState {
                             format!(" [groups: {group_names}]")
                         };
 
-                        let text = format!("{types_str} {email}{groups_str}");
+                        let text = format!("{vcard_types} {email}{contact_groups}");
                         add_row("Email:", &text);
                     }
                 }
