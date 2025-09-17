@@ -580,7 +580,7 @@ pub(crate) fn group_from_name(name: &str) -> Option<String> {
 
 /// This trait exists solely for convenience, to transform the fields in the vcard into others in an efficient manner.
 pub trait ToSorted<P> {
-    fn to_sorted_iter<T: Ord>(&self, f: impl FnMut(&P) -> T) -> impl Iterator<Item = T>
+    fn to_sorted_iter<T: Ord>(self, f: impl FnMut(P) -> T) -> impl Iterator<Item = T>
     where
         Self: Sized;
 
@@ -590,12 +590,11 @@ pub trait ToSorted<P> {
         self,
         vec: &mut Vec<U>,
         mut f1: impl FnMut(Vec<T>) -> U,
-        mut f2: impl FnMut(P) -> T,
+        f2: impl FnMut(P) -> T,
     ) where
-        P: Clone,
         Self: Sized,
     {
-        let vals = self.to_sorted_iter(|p| f2(p.clone())).collect_vec();
+        let vals = self.to_sorted_iter(f2).collect_vec();
         if !vals.is_empty() {
             vec.push(f1(vals));
         }
@@ -603,11 +602,11 @@ pub trait ToSorted<P> {
 }
 
 impl<_K, P: VcardProperty, S: BuildHasher> ToSorted<P> for HashMap<_K, P, S> {
-    fn to_sorted_iter<T: Ord>(&self, mut f: impl FnMut(&P) -> T) -> impl Iterator<Item = T>
+    fn to_sorted_iter<T: Ord>(self, mut f: impl FnMut(P) -> T) -> impl Iterator<Item = T>
     where
         Self: Sized,
     {
-        self.values()
+        self.into_values()
             .map(|property| {
                 let preference = property.get_preference().map_or(u32::MAX, |v| v.value);
                 (preference, f(property))

@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use itertools::Itertools as _;
 use proton_vcard::address::Address as VcardAddress;
-use proton_vcard::vcard::{ToSorted, VCard};
+use proton_vcard::vcard::{PropertyUid, ToSorted, VCard};
 
 use proton_vcard::gender::GenderValue;
 
@@ -23,7 +23,7 @@ use proton_vcard::categories::Category;
 use proton_vcard::email::Email;
 use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 use proton_vcard::values::uri::MaybeUri;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use url::Url;
 
@@ -167,9 +167,7 @@ impl InspectableContactDetails {
         let fields = &mut result.fields;
 
         match &mut fields[0] {
-            ContactField::Emails(emails) => {
-                Self::emails(&vcard, emails);
-            }
+            ContactField::Emails(emails) => Self::emails(vcard.emails, &vcard.categories, emails),
             _ => unreachable!("The first and only field should always be the emails field"),
         }
 
@@ -275,21 +273,27 @@ impl InspectableContactDetails {
         result
     }
 
-    fn emails(vcard: &VCard, emails: &mut Vec<ContactDetailsEmail>) {
-        emails.extend(vcard.emails.to_sorted_iter(|email| ContactDetailsEmail {
+    fn emails(
+        vcard_emails: HashMap<PropertyUid, Email>,
+        vcard_categories: &HashMap<PropertyUid, Category>,
+        emails: &mut Vec<ContactDetailsEmail>,
+    ) {
+        emails.extend(vcard_emails.to_sorted_iter(|email| ContactDetailsEmail {
             email_type: email.r#type.iter().cloned().map_vec(),
             email: email.value.value.clone().into(),
-            groups: Self::groups(vcard, email),
+            groups: Self::groups(vcard_categories, &email),
         }));
     }
 
-    fn groups(vcard: &VCard, email: &Email) -> Vec<ContactGroup> {
-        let matching_categories: Vec<&Category> = vcard
-            .categories
+    fn groups(
+        vcard_categories: &HashMap<PropertyUid, Category>,
+        email: &Email,
+    ) -> Vec<ContactGroup> {
+        let matching_categories: Vec<&Category> = vcard_categories
             .values()
             .filter(|category| category.group == email.group)
             .collect();
-        let matching_contact_groups: Vec<ContactGroup> = matching_categories
+        matching_categories
             .iter()
             .flat_map(|category| {
                 category.value.0.iter().map(|category_name| ContactGroup {
@@ -297,8 +301,7 @@ impl InspectableContactDetails {
                     color: proton_color(&category_name.value).into(),
                 })
             })
-            .collect();
-        matching_contact_groups
+            .collect()
     }
 }
 
