@@ -140,10 +140,10 @@ impl SignupFlow {
         let domains = client
             .get_available_domains(None)
             .inspect_ok(|_| {
-                recorder.record(DomainAvailability::success());
+                recorder.record(DomainAvailability::success(), true);
             })
             .inspect_err(|err| {
-                recorder.record(DomainAvailability::error(err));
+                recorder.record(DomainAvailability::error(err), true);
             })
             .await?
             .domains;

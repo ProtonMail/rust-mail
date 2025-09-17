@@ -1,3 +1,17 @@
+use proton_mail_common::MailUserContext;
+use std::sync::Arc;
+use tracing::error;
+
+pub async fn should_record_telemetry(user_context: &Arc<MailUserContext>) -> bool {
+    match user_context.user_settings().await {
+        Ok(settings) => settings.telemetry,
+        Err(err) => {
+            error!("Failed to get user settings for telemetry check: {err:?}");
+            false
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod test_helper {
     use proton_core_api::services::observability::{ObservabilityMetric, ObservabilityRecorder};

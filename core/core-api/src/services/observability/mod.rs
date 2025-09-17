@@ -130,7 +130,11 @@ impl ObservabilityRecorder {
     ///
     /// Serializes the metric and stores it asynchronously in the manager's
     /// store. Errors during serialization or storage are logged.
-    pub fn record<T: ObservabilityMetric>(&self, metric: T) {
+    pub fn record<T: ObservabilityMetric>(&self, metric: T, should_record: bool) {
+        if !should_record {
+            return;
+        }
+
         match Self::into_metrics_element(metric, Utc::now().timestamp(), 1) {
             Ok(element) => {
                 MANAGER.store.write().store(element);

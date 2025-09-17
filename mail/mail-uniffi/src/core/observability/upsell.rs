@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
+use super::common::should_record_telemetry;
 use crate::mail::MailUserSession;
 use proton_core_api::{
     metric,
@@ -207,6 +208,8 @@ pub async fn record_upsell_button_tapped(
         }
     };
 
+    let should_record = should_record_telemetry(&user_context).await;
+
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -218,12 +221,15 @@ pub async fn record_upsell_button_tapped(
             }
         };
 
-    ObservabilityRecorder::default().record(UpsellButtonTappedTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
-        days_since_account_creation,
-        modal_variant,
-    ));
+    ObservabilityRecorder::default().record(
+        UpsellButtonTappedTotal::new(
+            upsell_entry_point,
+            plan_before_upgrade,
+            days_since_account_creation,
+            modal_variant,
+        ),
+        should_record,
+    );
 }
 
 #[uniffi_export]
@@ -240,6 +246,8 @@ pub async fn record_drive_spotlight_mailbox_button_tapped(
         }
     };
 
+    let should_record = should_record_telemetry(&user_context).await;
+
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -251,10 +259,13 @@ pub async fn record_drive_spotlight_mailbox_button_tapped(
             }
         };
 
-    ObservabilityRecorder::default().record(DriveSpotlightMailboxButtonTappedTotal::new(
-        plan_before_upgrade,
-        days_since_account_creation,
-    ));
+    ObservabilityRecorder::default().record(
+        DriveSpotlightMailboxButtonTappedTotal::new(
+            plan_before_upgrade,
+            days_since_account_creation,
+        ),
+        should_record,
+    );
 }
 
 #[uniffi_export]
@@ -271,6 +282,8 @@ pub async fn record_drive_spotlight_cta_button_tapped(
         }
     };
 
+    let should_record = should_record_telemetry(&user_context).await;
+
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -282,10 +295,10 @@ pub async fn record_drive_spotlight_cta_button_tapped(
             }
         };
 
-    ObservabilityRecorder::default().record(DriveSpotlightCtaButtonTappedTotal::new(
-        plan_before_upgrade,
-        days_since_account_creation,
-    ));
+    ObservabilityRecorder::default().record(
+        DriveSpotlightCtaButtonTappedTotal::new(plan_before_upgrade, days_since_account_creation),
+        should_record,
+    );
 }
 
 #[uniffi_export]
@@ -308,6 +321,8 @@ pub async fn record_upgrade_attempt(
         }
     };
 
+    let should_record = should_record_telemetry(&user_context).await;
+
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -319,15 +334,18 @@ pub async fn record_upgrade_attempt(
             }
         };
 
-    ObservabilityRecorder::default().record(UpgradeAttemptTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
-        days_since_account_creation,
-        modal_variant,
-        selected_plan,
-        selected_cycle,
-        upsell_is_promotional,
-    ));
+    ObservabilityRecorder::default().record(
+        UpgradeAttemptTotal::new(
+            upsell_entry_point,
+            plan_before_upgrade,
+            days_since_account_creation,
+            modal_variant,
+            selected_plan,
+            selected_cycle,
+            upsell_is_promotional,
+        ),
+        should_record,
+    );
 }
 
 #[uniffi_export]
@@ -350,6 +368,8 @@ pub async fn record_upgrade_error(
         }
     };
 
+    let should_record = should_record_telemetry(&user_context).await;
+
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -361,15 +381,18 @@ pub async fn record_upgrade_error(
             }
         };
 
-    ObservabilityRecorder::default().record(UpgradeErrorTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
-        days_since_account_creation,
-        modal_variant,
-        selected_plan,
-        selected_cycle,
-        upsell_is_promotional,
-    ));
+    ObservabilityRecorder::default().record(
+        UpgradeErrorTotal::new(
+            upsell_entry_point,
+            plan_before_upgrade,
+            days_since_account_creation,
+            modal_variant,
+            selected_plan,
+            selected_cycle,
+            upsell_is_promotional,
+        ),
+        should_record,
+    );
 }
 
 #[uniffi_export]
@@ -392,6 +415,8 @@ pub async fn record_upgrade_cancelled_by_user(
         }
     };
 
+    let should_record = should_record_telemetry(&user_context).await;
+
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -403,15 +428,18 @@ pub async fn record_upgrade_cancelled_by_user(
             }
         };
 
-    ObservabilityRecorder::default().record(UpgradeCancelledByUserTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
-        days_since_account_creation,
-        modal_variant,
-        selected_plan,
-        selected_cycle,
-        upsell_is_promotional,
-    ));
+    ObservabilityRecorder::default().record(
+        UpgradeCancelledByUserTotal::new(
+            upsell_entry_point,
+            plan_before_upgrade,
+            days_since_account_creation,
+            modal_variant,
+            selected_plan,
+            selected_cycle,
+            upsell_is_promotional,
+        ),
+        should_record,
+    );
 }
 
 #[uniffi_export]
@@ -434,6 +462,8 @@ pub async fn record_upgrade_success(
         }
     };
 
+    let should_record = should_record_telemetry(&user_context).await;
+
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -445,15 +475,18 @@ pub async fn record_upgrade_success(
             }
         };
 
-    ObservabilityRecorder::default().record(UpgradeSuccessTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
-        days_since_account_creation,
-        modal_variant,
-        selected_plan,
-        selected_cycle,
-        upsell_is_promotional,
-    ));
+    ObservabilityRecorder::default().record(
+        UpgradeSuccessTotal::new(
+            upsell_entry_point,
+            plan_before_upgrade,
+            days_since_account_creation,
+            modal_variant,
+            selected_plan,
+            selected_cycle,
+            upsell_is_promotional,
+        ),
+        should_record,
+    );
 }
 
 #[cfg(test)]

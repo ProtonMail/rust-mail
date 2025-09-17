@@ -49,11 +49,11 @@ impl WantUsername {
                         self.recorder.record(UsernameAvailabilityStatus::error(
                             UsernameKind::Internal,
                             err,
-                        ));
+                        ), true);
                     })
                     .inspect_ok(|_| {
                         self.recorder
-                            .record(UsernameAvailabilityStatus::success(UsernameKind::Internal));
+                            .record(UsernameAvailabilityStatus::success(UsernameKind::Internal), true);
                     })
                     .map_err(|err| {
                         SignupError::UsernameUnavailable(err.err_info().and_then(|info| info.error))
@@ -68,11 +68,11 @@ impl WantUsername {
                         self.recorder.record(UsernameAvailabilityStatus::error(
                             UsernameKind::External,
                             err,
-                        ));
+                        ), true);
                     })
                     .inspect_ok(|_| {
                         self.recorder
-                            .record(UsernameAvailabilityStatus::success(UsernameKind::External));
+                            .record(UsernameAvailabilityStatus::success(UsernameKind::External), true);
                     })
                     .map_err(|err| {
                         SignupError::UsernameUnavailable(err.err_info().and_then(|info| info.error))

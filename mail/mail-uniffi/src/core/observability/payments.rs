@@ -54,19 +54,19 @@ impl PaymentObservabilityMetric {
     pub fn record(self, recorder: &ObservabilityRecorder) {
         match self {
             Self::IapSubscribe(response) => {
-                recorder.record(IapSubscribeMetric::new(response));
+                recorder.record(IapSubscribeMetric::new(response), true);
             }
             Self::SendPaymentToken(response) => {
-                recorder.record(SendPaymentTokenMetric::new(response));
+                recorder.record(SendPaymentTokenMetric::new(response), true);
             }
             Self::CreateSubscription(response) => {
-                recorder.record(CreateSubscriptionMetric::new(response));
+                recorder.record(CreateSubscriptionMetric::new(response), true);
             }
             Self::GetSubscription(response) => {
-                recorder.record(GetSubscriptionMetric::new(response));
+                recorder.record(GetSubscriptionMetric::new(response), true);
             }
             Self::GetPlans(response) => {
-                recorder.record(GetPlansMetric::new(response));
+                recorder.record(GetPlansMetric::new(response), true);
             }
         }
     }

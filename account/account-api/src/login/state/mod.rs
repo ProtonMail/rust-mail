@@ -459,21 +459,26 @@ impl State {
             salts
                 .salt_for_key(&srp, &key.id, pass.as_bytes())
                 .inspect_err(|_| {
-                    recorder.record(UnlockUserKeyResult::new(
-                        UnlockUserKeyStatus::NoKeySaltsForPrimaryKey,
-                    ));
+                    recorder.record(
+                        UnlockUserKeyResult::new(UnlockUserKeyStatus::NoKeySaltsForPrimaryKey),
+                        true,
+                    );
                 })?
         } else {
-            recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey));
+            recorder.record(
+                UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey),
+                true,
+            );
             return Err(LoginError::MissingPrimaryKey);
         };
 
         // Unlock the user keys.
         let user_keys = match user.keys.unlock(&pgp, &user_key_pass) {
             res if res.unlocked_keys.is_empty() => {
-                recorder.record(UnlockUserKeyResult::new(
-                    UnlockUserKeyStatus::PrimaryKeyInvalidPassphrase,
-                ));
+                recorder.record(
+                    UnlockUserKeyResult::new(UnlockUserKeyStatus::PrimaryKeyInvalidPassphrase),
+                    true,
+                );
                 Err(LoginError::KeySecretDecryption)?
             }
             res => res.unlocked_keys,
@@ -483,7 +488,10 @@ impl State {
         let user_key = (user.keys.primary())
             .and_then(|key| user_keys.iter().find(|k| k.id == key.id))
             .ok_or_else(|| {
-                recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey));
+                recorder.record(
+                    UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey),
+                    true,
+                );
                 LoginError::MissingPrimaryKey
             })?;
 
@@ -517,15 +525,15 @@ impl State {
         // the account itself remains in a "ready to use" state (e.g. is_ready flag is set) for later, when login rules are not violated anymore (e.g. logged-in free account count)
         match post_login_validator.validate(&user).await {
             Ok(()) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Success));
+                recorder.record(UserCheckResult::new(UserCheckStatus::Success), true);
             }
             Err(err) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Failure));
+                recorder.record(UserCheckResult::new(UserCheckStatus::Failure), true);
                 return Err(err.into());
             }
         }
 
-        recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::Success));
+        recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::Success), true);
         Ok(Complete::new(client, data, Some(user)).into())
     }
 

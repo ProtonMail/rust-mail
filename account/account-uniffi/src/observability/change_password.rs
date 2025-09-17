@@ -23,7 +23,7 @@ metric! {
 
 #[uniffi_export]
 pub fn record_change_password_screen_view(screen_id: ChangePasswordScreenId) {
-    ObservabilityRecorder::default().record(ChangePasswordScreenViewTotal::new(screen_id));
+    ObservabilityRecorder::default().record(ChangePasswordScreenViewTotal::new(screen_id), true);
 }
 
 #[cfg(test)]

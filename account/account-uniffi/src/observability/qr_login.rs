@@ -32,7 +32,7 @@ metric! {
 
 #[uniffi_export]
 pub fn qr_login_scan_screen_total(screen_id: QrLoginScanScreenViewTotalScreenId) {
-    ObservabilityRecorder::default().record(QrLoginScanScreenViewTotal::new(screen_id));
+    ObservabilityRecorder::default().record(QrLoginScanScreenViewTotal::new(screen_id), true);
 }
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -55,7 +55,7 @@ metric! {
 
 #[uniffi_export]
 pub fn qr_login_show_qr_screen_total(screen_id: QrLoginShowQrCodeScreenViewTotalScreenId) {
-    ObservabilityRecorder::default().record(QrLoginShowQrCodeScreenViewTotal::new(screen_id));
+    ObservabilityRecorder::default().record(QrLoginShowQrCodeScreenViewTotal::new(screen_id), true);
 }
 
 #[cfg(test)]
