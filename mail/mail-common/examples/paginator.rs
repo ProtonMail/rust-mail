@@ -7,6 +7,7 @@ use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
+use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use proton_mail_common::datatypes::ContextualConversation;
@@ -77,6 +78,7 @@ async fn main() {
         LogService::new(config),
         EventPollMode::Manual,
         Default::default(),
+        Arc::new(NoopIssueReporter),
     )
     .await
     .unwrap();

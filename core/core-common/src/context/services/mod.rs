@@ -2,6 +2,7 @@ pub mod context_event_service;
 pub mod device_info_service;
 pub mod event_poll_config_service;
 pub mod hv_notifier_service;
+pub mod issue_reporter_service;
 pub mod logging_service;
 mod network_monitor_service;
 pub mod service;

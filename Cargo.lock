@@ -4993,6 +4993,7 @@ dependencies = [
  "proton-core-common",
  "proton-crypto-account",
  "proton-crypto-subtle",
+ "proton-issue-reporter-service",
  "proton-log-service",
  "proton-task-service",
  "regex",
@@ -5194,6 +5195,7 @@ dependencies = [
  "proton-crypto-pin-hash",
  "proton-event-loop",
  "proton-event-service",
+ "proton-issue-reporter-service",
  "proton-log-service",
  "proton-network-monitor-service",
  "proton-sqlite3",
@@ -5410,6 +5412,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-issue-reporter-service"
+version = "0.1.0"
+
+[[package]]
+name = "proton-issue-reporter-service-uniffi"
+version = "0.1.0"
+dependencies = [
+ "proton-issue-reporter-service",
+ "uniffi",
+]
+
+[[package]]
 name = "proton-log-service"
 version = "0.1.0"
 dependencies = [
@@ -5435,6 +5449,7 @@ dependencies = [
  "proton-core-api",
  "proton-core-common",
  "proton-crypto-inbox",
+ "proton-issue-reporter-service",
  "proton-log-service",
  "proton-mail-api",
  "proton-task-service",
@@ -5494,6 +5509,7 @@ dependencies = [
  "proton-crypto-inbox",
  "proton-event-loop",
  "proton-ical",
+ "proton-issue-reporter-service",
  "proton-log-service",
  "proton-mail-api",
  "proton-mail-common",
@@ -5576,6 +5592,7 @@ dependencies = [
  "proton-calendar-api",
  "proton-calendar-common",
  "proton-core-common",
+ "proton-issue-reporter-service",
  "proton-log-service",
  "proton-mail-common",
  "proton-mail-html-transformer",
@@ -5621,6 +5638,7 @@ dependencies = [
  "proton-crypto-account",
  "proton-event-loop",
  "proton-ical",
+ "proton-issue-reporter-service-uniffi",
  "proton-log-service",
  "proton-mail-api",
  "proton-mail-common",

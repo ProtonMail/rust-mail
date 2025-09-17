@@ -26,6 +26,7 @@ use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::pin_code::{PinCode, PinError};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
+use proton_core_common::services::issue_reporter_service::IssueReporterService;
 use proton_core_common::services::{
     DeviceInfoService, NetworkMonitorService, SessionObserverService,
 };
@@ -37,6 +38,7 @@ use proton_core_common::{OnSessionDeletedResponse, UserDatabaseInitializer};
 use proton_crypto_inbox::attachment::AttachmentEncryptionError;
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
+use proton_issue_reporter_service::IssueReporter;
 use proton_log_service::LogService;
 use proton_network_monitor_service::NetworkMonitorServiceError;
 use proton_sqlite3::MigratorError;
@@ -272,6 +274,7 @@ impl MailContext {
         log_service: LogService,
         event_poll_mode: EventPollMode,
         network_monitor_config: proton_network_monitor_service::Config,
+        issue_reporter: Arc<dyn IssueReporter>,
     ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
@@ -293,6 +296,7 @@ impl MailContext {
             log_service,
             event_poll_mode,
             network_monitor_config,
+            issue_reporter,
         )
         .await?;
 
@@ -1008,6 +1012,9 @@ impl MailContext {
 
     pub fn network_monitor_service(&self) -> &NetworkMonitorService {
         self.core_context.network_monitor_service()
+    }
+    pub fn issue_reporter_service(&self) -> &IssueReporterService {
+        self.core_context.issue_reporter_service()
     }
 }
 

@@ -1,3 +1,6 @@
+use super::CoreContextError;
+use super::registry::ServiceRegistry;
+use super::services::Service;
 use crate::datatypes::ApiConfig;
 use crate::os::KeyChain;
 use crate::{Context, Origin, UserDatabaseInitializer};
@@ -10,10 +13,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-
-use super::CoreContextError;
-use super::registry::ServiceRegistry;
-use super::services::Service;
 
 enum ServiceUnderConstruction<Err> {
     Simple(Box<dyn Service<Error = Err>>),

@@ -26,6 +26,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
+use crate::services::user_issue_reporter_service::UserIssueReporterService;
 use proton_core_api::connection_status::ConnectionStatus;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -100,8 +101,16 @@ impl UserContext {
 
         let origin = context.origin();
 
+        let issue_reporter = context.issue_reporter_service();
+        let user_issue_reporter = issue_reporter
+            .reporter()
+            .new_user_reporter(user_id.clone().into_inner());
+
         let this = {
             let mut builder = builder::UserContextBuilder::new();
+            builder = builder.with_cyclic_service(|weak| {
+                UserIssueReporterService::new(weak, user_issue_reporter)
+            });
 
             if matches!(origin, Origin::App) {
                 builder = builder
@@ -379,6 +388,11 @@ impl UserContext {
 
     pub fn watch_labels(&self) -> Result<WatcherHandle, StashError> {
         TableWatcher::<Label>::watch(&self.user_stash)
+    }
+
+    #[must_use]
+    pub fn issue_reporter_service(&self) -> &UserIssueReporterService {
+        self.get_service::<UserIssueReporterService>()
     }
 }
 

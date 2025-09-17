@@ -29,6 +29,7 @@ use futures::FutureExt;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::services::SessionObserverService;
 use proton_core_common::{OnSessionDeletedResponse, Origin};
+use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::LogService;
 use proton_log_service::WorkerGuard;
 use proton_mail_common::MailContext;
@@ -181,6 +182,7 @@ impl AppModel {
             log_service,
             EventPollMode::Automatic(Duration::from_secs(CLI_ARGS.event_loop_time.unwrap_or(15))),
             proton_network_monitor_service::Config::default(),
+            Arc::new(NoopIssueReporter),
         )
         .await?;
 

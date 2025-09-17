@@ -28,6 +28,7 @@ use proton_core_common::models::{AppSettings as RealAppSettings, PinProtection};
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
 use proton_core_common::{CoreContextError, OnSessionDeletedResponse, Origin as RealOrigin};
+use proton_issue_reporter_service_uniffi::{IssueReporter, IssueReporterWrapper};
 use proton_log_service::LogService;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::errors::unexpected::Unexpected;
@@ -111,6 +112,7 @@ pub fn create_mail_session(
     key_chain: Box<dyn OSKeyChain>,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
+    issue_reporter: Arc<dyn IssueReporter>,
 ) -> Result<Arc<MailSession>, UserSessionError> {
     let runtime = match params.origin {
         Origin::App => async_runtime,
@@ -119,7 +121,14 @@ pub fn create_mail_session(
 
     runtime()
         .block_on(async move {
-            create_mail_session_inner(params, key_chain, hv_notifier, device_info_provider).await
+            create_mail_session_inner(
+                params,
+                key_chain,
+                hv_notifier,
+                device_info_provider,
+                issue_reporter,
+            )
+            .await
         })
         .map_err(UserSessionError::from)
 }
@@ -131,6 +140,7 @@ async fn create_mail_session_inner(
     key_chain: Box<dyn OSKeyChain>,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
+    issue_reporter: Arc<dyn IssueReporter>,
 ) -> Result<Arc<MailSession>, RealProtonMailError> {
     let log_path = PathBuf::from(&params.log_dir);
     std::fs::create_dir_all(&log_path)?;
@@ -213,6 +223,7 @@ async fn create_mail_session_inner(
         log_service,
         poll,
         proton_network_monitor_service::Config::default(),
+        IssueReporterWrapper::new(issue_reporter),
     )
     .await?;
 

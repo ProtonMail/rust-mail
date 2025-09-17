@@ -30,6 +30,7 @@ proton-event-loop = { workspace = true }
 proton-mail-api = { workspace = true }
 proton-mail-common = { workspace = true, features = ["proton_mail_error_log"] }
 proton-task-service = { workspace = true }
+proton-issue-reporter-service-uniffi = { workspace = true }
 proton-ical = { workspace = true }
 proton-vcard = { workspace = true }
 serde = { workspace = true }

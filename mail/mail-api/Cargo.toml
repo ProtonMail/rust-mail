@@ -36,6 +36,7 @@ proton-core-common = { workspace = true, features = ["test-utils"] }
 proton-mail-api = { path = ".", features = ["mocks"] }
 proton-log-service = { workspace = true }
 tempfile = { workspace = true }
+proton-issue-reporter-service = { workspace = true }
 
 
 [lints]

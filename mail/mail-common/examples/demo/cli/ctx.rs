@@ -8,6 +8,7 @@ use proton_core_common::db::account::CoreAccount;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::KeyChain;
 use proton_core_common::{CoreAccountState, Origin};
+use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::{Config as LogConfig, LogService};
 use proton_mail_common::context::ShouldInitializeMailUserContext as Init;
 use proton_mail_common::{MailContext, MailUserContext};
@@ -47,6 +48,7 @@ where
         LogService::new(config),
         EventPollMode::Automatic(30.s()),
         Default::default(),
+        Arc::new(NoopIssueReporter),
     )
     .await?)
 }

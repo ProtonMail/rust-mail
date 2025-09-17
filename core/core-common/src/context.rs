@@ -24,6 +24,7 @@ use crate::nuke_utils::{
 };
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::pin_code::PinCode;
+use crate::services::issue_reporter_service::IssueReporterService;
 use crate::services::{ContextEventService, NetworkMonitorService};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Context as _, Error as AnyhowError, anyhow};
@@ -47,6 +48,7 @@ use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_event_loop::EventLoopError;
+use proton_issue_reporter_service::IssueReporter;
 use proton_log_service::LogService;
 use proton_network_monitor_service::{ConnectionMonitor, NetworkMonitorServiceError};
 use proton_sqlite3::MigratorError;
@@ -313,6 +315,7 @@ impl Context {
         log_service: LogService,
         event_poll_mode: EventPollMode,
         network_monitor_config: proton_network_monitor_service::Config,
+        issue_reporter: Arc<dyn IssueReporter>,
     ) -> CoreContextResult<Arc<Self>> {
         let account_db_path = account_db_path.into();
         let user_db_path = user_db_path.into();
@@ -366,6 +369,7 @@ impl Context {
             .with_service(CoreClock::default())
             .with_service(LoggingService::new(log_service))
             .with_service(ContextEventService::new())
+            .with_service(IssueReporterService::new(issue_reporter))
             .with_cyclic_service(|ctx| NetworkMonitorService::new(ctx, network_monitor_config));
 
         if matches!(origin, Origin::App) {
@@ -1257,6 +1261,10 @@ impl Context {
     pub fn on_exit_foreground_without_wait(&self) {
         self.event_service().publish(OnExitForegroundEvent);
         self.task_service().pause_main();
+    }
+
+    pub fn issue_reporter_service(&self) -> &IssueReporterService {
+        self.get_service::<IssueReporterService>()
     }
 }
 
