@@ -112,7 +112,15 @@ impl CustomSettings {
             .tx(async move |tx| {
                 let mut this = Self::get_or_default(tx.tether()).await?;
 
-                this.mobile_signature = signature;
+                // TODO(ET-4743): Remove when the mobile signature editor
+                //                becomes WYSIWYG
+                this.mobile_signature = signature.map(|sig| {
+                    // From user's perspective inputting newlines is easier than
+                    // writing HTML tags, so for better UX let's convert plain
+                    // newlines into "HTML newlines"
+                    sig.trim().replace("\r\n", "<br />").replace("\n", "<br />")
+                });
+
                 this.save(tx).await?;
 
                 Ok(())
@@ -237,13 +245,13 @@ mod tests {
 
         CustomSettings::update_mobile_signature(
             &ctx,
-            Some("greetings from my oxidized mail".into()),
+            Some("greetings from my oxidized mail,\ncheers\n".into()),
         )
         .await
         .unwrap();
 
         assert_eq!(
-            Some("greetings from my oxidized mail".into()),
+            Some("greetings from my oxidized mail,<br />cheers".into()),
             CustomSettings::get_or_default(&ctx.user_stash().connection().await.unwrap())
                 .await
                 .unwrap()
