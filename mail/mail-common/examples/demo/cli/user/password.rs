@@ -36,13 +36,6 @@ impl Cmd {
                     bail!("password flow is in invalid state");
                 }
 
-                StateKind::WantPass => {
-                    let _ = flow
-                        .submit_pass(read("current password")?)
-                        .inspect_err(|e| warn!("{e}"))
-                        .await;
-                }
-
                 StateKind::WantTfa => {
                     let _ = flow
                         .submit_totp(read("2nd factor")?)
@@ -53,12 +46,15 @@ impl Cmd {
                 StateKind::WantChange => {
                     if self.mbp {
                         let _ = flow
-                            .change_mbox_pass(read("new mailbox password")?)
+                            .change_mbox_pass(
+                                read("current password")?,
+                                read("new mailbox password")?,
+                            )
                             .inspect_err(|e| warn!("{e}"))
                             .await;
                     } else {
                         let _ = flow
-                            .change_pass(read("new password")?)
+                            .change_pass(read("current password")?, read("new password")?)
                             .inspect_err(|e| warn!("{e}"))
                             .await;
                     }

@@ -1,7 +1,12 @@
 use crate::ApiError;
+use crate::password::api::PasswordScope;
 use crate::password::observability::{ObservableResult, ObservableState};
-use crate::password::state::{State, StateKind};
+
+use crate::password::state::want_tfa::WantTfa;
+use crate::password::state::{State, StateData, StateKind};
 use crate::shared::SecureString;
+use crate::shared::challenge::get_auth_info;
+use futures::TryFutureExt as _;
 use muon::Status;
 use muon::rest::auth::v4::fido2;
 use proton_core_api::auth::KeySecret;
@@ -13,7 +18,7 @@ use proton_core_api::session::Session;
 use proton_core_api::store::StoreError;
 use proton_core_common::datatypes::{PasswordMode, TfaStatus};
 use proton_crypto_account::keys::UserKeys;
-use proton_crypto_account::proton_crypto::CryptoError;
+use proton_crypto_account::proton_crypto::{CryptoError, new_srp_provider};
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::string::FromUtf8Error;
@@ -22,6 +27,7 @@ use thiserror::Error;
 /// Alias the `SaltError` as our own.
 pub type SaltError = proton_crypto_account::salts::SaltError;
 
+mod api;
 /// Implements the possible states that the password change flow can be in.
 pub mod state;
 
@@ -123,9 +129,9 @@ impl From<ApiError> for PasswordError {
 ///
 /// The flow is used to guide the user through the password change process,
 /// ensuring that all necessary steps are completed in the correct order.
-#[derive(Debug)]
 pub struct PasswordFlow {
-    state: Vec<State>,
+    state: State,
+    data: StateData,
     recorder: ObservabilityRecorder,
 }
 
@@ -150,40 +156,31 @@ impl PasswordFlow {
     ) -> Self {
         let (client, parts) = session.borrow().to_parts();
 
-        let state = State::new(
-            client, parts, username, user_keys, key_secret, tfa_mode, mbp_mode,
-        );
+        let data = StateData {
+            client,
+            parts,
+            username,
+            current_password: SecureString::from(String::new()),
+            new_password: SecureString::from(String::new()),
+            user_keys,
+            key_secret,
+            tfa_mode,
+            mbp_mode,
+            auth_info: None,
+        };
+
+        let state = State::WantChange;
 
         Self {
-            state: vec![state],
+            data,
+            state,
             recorder: ObservabilityRecorder::default(),
         }
     }
 
     /// Get the kind of the current state.
     pub fn kind(&self) -> Result<StateKind, PasswordError> {
-        Ok(self.state()?.kind())
-    }
-
-    /// Submit current password.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the password submission fails.
-    pub async fn submit_pass(
-        &mut self,
-        pass: impl Into<SecureString>,
-    ) -> Result<(), PasswordError> {
-        let state = self.state()?;
-        let observable_data = state.observable_data();
-        let next = state
-            .submit_pass(pass.into())
-            .await
-            .observe(&self.recorder, observable_data)?;
-
-        self.state.push(next);
-
-        Ok(())
+        Ok(self.state.kind())
     }
 
     /// Submit TOTP code for 2FA authentication.
@@ -192,15 +189,27 @@ impl PasswordFlow {
     ///
     /// Returns error if the TOTP code submission fails.
     pub async fn submit_totp(&mut self, totp: String) -> Result<(), PasswordError> {
-        let state = self.state()?;
-        let observable_data = state.observable_data();
-        let next = state
-            .submit_totp(totp)
-            .await
-            .observe(&self.recorder, observable_data)?;
+        match self.state {
+            State::WantTfa(want_tfa) => {
+                let pw_scope = submit_totp(&mut self.data, totp).await?;
 
-        self.state.push(next);
-
+                let observable_data = self.data.observable_data();
+                self.state = if want_tfa.change_master_password {
+                    pw_scope
+                        .change_mbox_pass(&self.data)
+                        .await
+                        .observe(&self.recorder, observable_data)?
+                } else {
+                    pw_scope
+                        .change_pass(&self.data)
+                        .await
+                        .observe(&self.recorder, observable_data)?
+                };
+            }
+            State::WantChange | State::Complete | State::Invalid => {
+                return Err(PasswordError::InvalidState);
+            }
+        }
         Ok(())
     }
 
@@ -210,9 +219,27 @@ impl PasswordFlow {
     ///
     /// Returns error if the FIDO2 submission fails.
     pub async fn submit_fido(&mut self, fido_data: fido2::Request) -> Result<(), PasswordError> {
-        let next = self.state()?.submit_fido(fido_data).await?;
+        match self.state {
+            State::WantTfa(want_tfa) => {
+                let pw_scope = submit_fido(&mut self.data, fido_data).await?;
 
-        self.state.push(next);
+                let observable_data = self.data.observable_data();
+                self.state = if want_tfa.change_master_password {
+                    pw_scope
+                        .change_mbox_pass(&self.data)
+                        .await
+                        .observe(&self.recorder, observable_data)?
+                } else {
+                    pw_scope
+                        .change_pass(&self.data)
+                        .await
+                        .observe(&self.recorder, observable_data)?
+                };
+            }
+            State::WantChange | State::Complete | State::Invalid => {
+                return Err(PasswordError::InvalidState);
+            }
+        }
 
         Ok(())
     }
@@ -224,16 +251,38 @@ impl PasswordFlow {
     /// Returns error if the password change request or crypto operations failed.
     pub async fn change_pass(
         &mut self,
+        current_pass: impl Into<SecureString>,
         new_pass: impl Into<SecureString>,
     ) -> Result<(), PasswordError> {
-        let state = self.state()?;
-        let observable_data = state.observable_data();
-        let next = state
-            .change_pass(new_pass.into())
-            .await
-            .observe(&self.recorder, observable_data)?;
+        let observable_data = self.data.observable_data();
+        self.data.current_password = current_pass.into();
+        self.data.new_password = new_pass.into();
 
-        self.state.push(next);
+        match self.state {
+            State::WantChange => {
+                self.state = if self.data.tfa_mode.has_tfa() {
+                    WantTfa::for_changing_password().into()
+                } else {
+                    let pw_scope = PasswordScope::acquire(
+                        &new_srp_provider(),
+                        &self.data.client,
+                        &self.data.username,
+                        &self.data.current_password,
+                        self.data.auth_info.take(),
+                        None,
+                        None,
+                    )
+                    .await?;
+                    pw_scope
+                        .change_pass(&self.data)
+                        .await
+                        .observe(&self.recorder, observable_data)?
+                }
+            }
+            State::WantTfa(_) | State::Complete | State::Invalid => {
+                return Err(PasswordError::InvalidState);
+            }
+        }
 
         Ok(())
     }
@@ -245,64 +294,115 @@ impl PasswordFlow {
     /// Returns error if the mailbox password change request or crypto operations failed.
     pub async fn change_mbox_pass(
         &mut self,
+        current_pass: impl Into<SecureString>,
         new_mbox_pass: impl Into<SecureString>,
     ) -> Result<(), PasswordError> {
-        let state = self.state()?;
-        let observable_data = state.observable_data();
-        let next = state
-            .change_mbox_pass(new_mbox_pass.into())
-            .await
-            .observe(&self.recorder, observable_data)?;
+        let observable_data = self.data.observable_data();
+        self.data.current_password = current_pass.into();
+        self.data.new_password = new_mbox_pass.into();
 
-        self.state.push(next);
+        match self.state {
+            State::WantChange => {
+                self.state = if self.data.tfa_mode.has_tfa() {
+                    WantTfa::for_changing_master_password().into()
+                } else {
+                    let pw_scope = PasswordScope::acquire(
+                        &new_srp_provider(),
+                        &self.data.client,
+                        &self.data.username,
+                        &self.data.current_password,
+                        self.data.auth_info.take(),
+                        None,
+                        None,
+                    )
+                    .await?;
+                    pw_scope
+                        .change_mbox_pass(&self.data)
+                        .await
+                        .observe(&self.recorder, observable_data)?
+                };
+            }
+            State::WantTfa(_) | State::Complete | State::Invalid => {
+                return Err(PasswordError::InvalidState);
+            }
+        }
 
         Ok(())
     }
 
     /// Get the FIDO2 details for authentication.
     pub async fn fido_details(&mut self) -> Result<Option<fido2::Response>, PasswordError> {
-        self.state_mut()?.fido_details().await
+        let info = if let Some(info) = &self.data.auth_info {
+            info
+        } else {
+            self.data.auth_info.insert(
+                get_auth_info(&self.data.client, &self.data.username)
+                    .map_err(PasswordError::ApiService)
+                    .await?,
+            )
+        };
+
+        Ok(info.fido_details())
     }
 
     /// Get whether the account has TOTP enabled.
-    pub fn has_totp(&self) -> Result<bool, PasswordError> {
-        self.state()?.has_totp()
+    #[must_use]
+    pub fn has_totp(&self) -> bool {
+        self.data.tfa_mode.has_totp()
     }
 
     /// Get whether the account has FIDO2 enabled.
-    pub fn has_fido(&self) -> Result<bool, PasswordError> {
-        self.state()?.has_fido()
+    #[must_use]
+    pub fn has_fido(&self) -> bool {
+        self.data.tfa_mode.has_fido()
     }
 
     /// Get whether the account has a mailbox password.
-    pub fn has_mbp(&self) -> Result<bool, PasswordError> {
-        self.state()?.has_mbp()
+    #[must_use]
+    pub fn has_mbp(&self) -> bool {
+        self.data.mbp_mode.has_mbp()
     }
 
     /// Get the API client for external operations.
-    pub fn api(&self) -> Result<muon::Client, PasswordError> {
-        Ok(self.state()?.api()?.to_owned())
+    #[must_use]
+    pub fn api(&self) -> muon::Client {
+        self.data.client.clone()
     }
 
-    /// Return to the previous state.
-    pub fn back(&mut self) -> Result<(), PasswordError> {
-        if self.state.len() < 2 {
-            return Err(PasswordError::InvalidState);
-        }
-
-        self.state.pop();
-
-        Ok(())
+    /// Return to the previous state. In case of this flow, it means
+    /// starting the flow from the beginning
+    pub fn back(&mut self) {
+        self.state = State::WantChange;
     }
+}
+pub async fn submit_totp(
+    data: &mut StateData,
+    code: String,
+) -> Result<PasswordScope, PasswordError> {
+    PasswordScope::acquire(
+        &new_srp_provider(),
+        &data.client,
+        &data.username,
+        &data.current_password,
+        data.auth_info.take(),
+        Some(code),
+        None,
+    )
+    .await
+}
 
-    fn state(&self) -> Result<State, PasswordError> {
-        self.state
-            .last()
-            .cloned()
-            .ok_or(PasswordError::InvalidState)
-    }
-
-    fn state_mut(&mut self) -> Result<&mut State, PasswordError> {
-        self.state.last_mut().ok_or(PasswordError::InvalidState)
-    }
+pub async fn submit_fido(
+    data: &mut StateData,
+    fido_data: fido2::Request,
+) -> Result<PasswordScope, PasswordError> {
+    PasswordScope::acquire(
+        &new_srp_provider(),
+        &data.client,
+        &data.username,
+        &data.current_password,
+        data.auth_info.take(),
+        None,
+        Some(fido_data),
+    )
+    .await
 }
