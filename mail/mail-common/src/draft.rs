@@ -143,6 +143,8 @@ pub enum SendError {
     EOPasswordDecrypt,
     #[error("Expiration time was too soon")]
     ExpirationTimeTooSoon,
+    #[error("Combined Message and Attachment size too large")]
+    MessageTooLarge,
 }
 
 impl From<SendError> for MailContextError {

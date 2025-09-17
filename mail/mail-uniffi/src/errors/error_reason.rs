@@ -154,6 +154,8 @@ pub enum DraftSendErrorReason {
     EOPasswordDecrypt,
     /// Expiration time is too soon
     ExpirationTimeTooSoon,
+    /// Message + Attachment size too large
+    MessageTooLarge,
 }
 
 impl From<RealDraftSaveErrorReason> for DraftSaveErrorReason {
@@ -196,6 +198,7 @@ impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
             }
             RealDraftSendErrorReason::EOPasswordDecrypt => Self::EOPasswordDecrypt,
             RealDraftSendErrorReason::ExpirationTimeTooSoon => Self::ExpirationTimeTooSoon,
+            RealDraftSendErrorReason::MessageTooLarge => Self::MessageTooLarge,
         }
     }
 }

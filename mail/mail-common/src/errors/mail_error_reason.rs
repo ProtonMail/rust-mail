@@ -174,6 +174,8 @@ pub enum DraftSendErrorReason {
     EOPasswordDecrypt,
     /// Failed to decrypt external encryption password
     ExpirationTimeTooSoon,
+    /// Message + Attachments size exceeds limit
+    MessageTooLarge,
 }
 
 /// Specific Reason when attempting to cancel sending of an already sent draft.

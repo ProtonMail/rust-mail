@@ -2,7 +2,7 @@ use super::mail_error_reason::*;
 use crate::actions::MailActionError;
 use crate::draft::{
     AttachmentRemoveError, AttachmentUploadError, CancelScheduleSendError, ExpirationError,
-    PackageError, PasswordError, SenderAddressChangeError,
+    PackageError, PasswordError, SendError, SenderAddressChangeError,
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
@@ -373,6 +373,9 @@ impl From<DraftSendError> for ProtonMailError {
             DraftSendError::ExpirationTimeTooSoon => Self::Reason(
                 MailErrorReason::DraftSendReason(DraftSendErrorReason::ExpirationTimeTooSoon),
             ),
+            SendError::MessageTooLarge => Self::Reason(MailErrorReason::DraftSendReason(
+                DraftSendErrorReason::MessageTooLarge,
+            )),
         }
     }
 }
