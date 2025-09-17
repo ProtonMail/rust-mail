@@ -67,7 +67,10 @@ impl ObservableResult for Result<State, PasswordError> {
             Err(error) => error.into(),
         };
 
-        recorder.record(ChangePasswordUpdateLoginPasswordTotal::new(status, data), true);
+        recorder.record(
+            ChangePasswordUpdateLoginPasswordTotal::new(status, data),
+            true,
+        );
 
         self
     }

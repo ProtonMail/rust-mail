@@ -91,18 +91,21 @@ impl WantLogin {
     ) -> Result<State, LoginError> {
         let flow = match self.client.auth().from_fork().with_code().await {
             WithCodeFlow::Poll(flow) => {
-                self.observability.record(QrLoginInitiateFork::success());
+                self.observability
+                    .record(QrLoginInitiateFork::success(), true);
                 flow
             }
             WithCodeFlow::Ok(_client, _vec) => {
-                self.observability.record(QrLoginInitiateFork::unknown());
+                self.observability
+                    .record(QrLoginInitiateFork::unknown(), true);
                 error!("Client is in invalid state, the fork must not be complete yet");
                 return Err(LoginError::InvalidState);
             }
             WithCodeFlow::Failed { reason, .. } => {
                 // `FlowErr` type is somehow not accessable, so cannot match on `reason`, so let's use a
                 // generic error variant
-                self.observability.record(QrLoginInitiateFork::error());
+                self.observability
+                    .record(QrLoginInitiateFork::error(), true);
                 error!("Failed to initiate client forking: {reason}");
                 return Err(LoginError::InvalidState);
             }
@@ -195,9 +198,10 @@ impl WantLogin {
                 check_store_auth(&self.parts, &data.user_id).await?;
 
                 info!("Login flow does not require 2FA");
-                self.observability.record(AuthV4RequestMetric::new(
-                    ApiServiceObservabilityResponse::Success,
-                ));
+                self.observability.record(
+                    AuthV4RequestMetric::new(ApiServiceObservabilityResponse::Success),
+                    true,
+                );
 
                 let LoginFlowData {
                     user_id,
@@ -225,9 +229,10 @@ impl WantLogin {
                 check_store_auth(&self.parts, &data.user_id).await?;
 
                 info!("Login flow requires 2FA");
-                self.observability.record(AuthV4RequestMetric::new(
-                    ApiServiceObservabilityResponse::Success,
-                ));
+                self.observability.record(
+                    AuthV4RequestMetric::new(ApiServiceObservabilityResponse::Success),
+                    true,
+                );
 
                 let LoginFlowData {
                     user_id,
@@ -264,7 +269,7 @@ impl WantLogin {
                 let api_service_err: ApiServiceError = muon::Error::from(reason).into();
                 let metric_response: ApiServiceObservabilityResponse = (&api_service_err).into();
                 self.observability
-                    .record(AuthV4RequestMetric::new(metric_response));
+                    .record(AuthV4RequestMetric::new(metric_response), true);
                 Err(LoginError::FlowLogin(api_service_err))
             }
         }

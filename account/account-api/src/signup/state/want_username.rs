@@ -46,14 +46,16 @@ impl WantUsername {
                 self.client
                     .check_username_availability(username, ParseDomain::NoEmail, None)
                     .inspect_err(|err| {
-                        self.recorder.record(UsernameAvailabilityStatus::error(
-                            UsernameKind::Internal,
-                            err,
-                        ), true);
+                        self.recorder.record(
+                            UsernameAvailabilityStatus::error(UsernameKind::Internal, err),
+                            true,
+                        );
                     })
                     .inspect_ok(|_| {
-                        self.recorder
-                            .record(UsernameAvailabilityStatus::success(UsernameKind::Internal), true);
+                        self.recorder.record(
+                            UsernameAvailabilityStatus::success(UsernameKind::Internal),
+                            true,
+                        );
                     })
                     .map_err(|err| {
                         SignupError::UsernameUnavailable(err.err_info().and_then(|info| info.error))
@@ -65,14 +67,16 @@ impl WantUsername {
                 self.client
                     .check_external_username_availability(email, None)
                     .inspect_err(|err| {
-                        self.recorder.record(UsernameAvailabilityStatus::error(
-                            UsernameKind::External,
-                            err,
-                        ), true);
+                        self.recorder.record(
+                            UsernameAvailabilityStatus::error(UsernameKind::External, err),
+                            true,
+                        );
                     })
                     .inspect_ok(|_| {
-                        self.recorder
-                            .record(UsernameAvailabilityStatus::success(UsernameKind::External), true);
+                        self.recorder.record(
+                            UsernameAvailabilityStatus::success(UsernameKind::External),
+                            true,
+                        );
                     })
                     .map_err(|err| {
                         SignupError::UsernameUnavailable(err.err_info().and_then(|info| info.error))

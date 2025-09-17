@@ -29,6 +29,10 @@ pub trait ObservabilityMetric: Serialize {
     const VERSION: u64;
 }
 
+/// Global singleton observability manager.
+///
+/// This manager is for recording events that happened before user logged in to any account.
+/// For events with logged-in user account, use `UserObservabilityService` instead via `user_context.observability_service()`.
 #[derive(Debug)]
 pub struct ObservabilityManager {
     store: RwLock<InMemoryMetricStore>,
@@ -120,6 +124,10 @@ impl ObservabilityManager {
     }
 }
 
+/// Records observability metrics to the global singleton store.
+///
+/// This recorder is for recording events that happened before user logged in to any account.
+/// For events with logged-in user account, use `UserObservabilityService` instead via `user_context.observability_service()`.
 #[derive(Clone, Debug, Default)]
 pub struct ObservabilityRecorder {
     _priv: (),

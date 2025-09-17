@@ -57,10 +57,10 @@ impl WantTfa {
 
         let result = flow.totp(&code).await;
 
-        data.observability
-            .record(metrics::SignInSubmitTotpTotal::new(
-                result.as_ref().err().into(),
-            ));
+        data.observability.record(
+            metrics::SignInSubmitTotpTotal::new(result.as_ref().err().into()),
+            true,
+        );
 
         match result {
             Ok(client) => {
@@ -95,10 +95,10 @@ impl WantTfa {
 
         let result = flow.fido(fido_request).await;
 
-        data.observability
-            .record(metrics::SignInSubmitFidoTotal::new(
-                result.as_ref().err().into(),
-            ));
+        data.observability.record(
+            metrics::SignInSubmitFidoTotal::new(result.as_ref().err().into()),
+            true,
+        );
 
         match result {
             Ok(client) => {

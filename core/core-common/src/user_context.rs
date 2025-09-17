@@ -2,7 +2,7 @@ pub use self::keys::*;
 use self::services::{EventLoopService, InitializationService};
 
 use crate::actions::event_poll::EventPoll as EventPollAction;
-use crate::context::services::SessionObserverService;
+use crate::context::services::{SessionObserverService, UserObservabilityService};
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_core_db, verify_core_db};
@@ -134,7 +134,8 @@ impl UserContext {
                         })
                         .with_service(InitializationService::new(InitializationWatcher::new(
                             &user_stash,
-                        )?));
+                        )?))
+                        .with_cyclic_service(UserObservabilityService::new);
                 }
 
                 builder.build(

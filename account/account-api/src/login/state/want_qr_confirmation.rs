@@ -49,27 +49,37 @@ impl WantQrConfirmation {
     /// This method checks for host device confirmation of the QR code login, decodes the payload using
     /// the provided encryption key, fetches user information, validates the passphrase, and stores user
     /// data. On success, it constructs a completed authentication state with session details.
+    #[allow(clippy::too_many_lines)]
     pub async fn check_host_device_confirmation(self) -> Result<State, LoginError> {
         let (client, payload) = match self.fork_flow.poll().await {
             WithCodeFlow::Poll(flow) => {
-                self.observability.record(QrLoginPullFork {
-                    status: QrLoginPullForkStatus::ForkPending,
-                });
+                self.observability.record(
+                    QrLoginPullFork {
+                        status: QrLoginPullForkStatus::ForkPending,
+                    },
+                    true,
+                );
                 return Ok(State::WantQrConfirmation(WantQrConfirmation {
                     fork_flow: flow,
                     ..self
                 }));
             }
             WithCodeFlow::Ok(client, payload) => {
-                self.observability.record(QrLoginPullFork {
-                    status: QrLoginPullForkStatus::Success,
-                });
+                self.observability.record(
+                    QrLoginPullFork {
+                        status: QrLoginPullForkStatus::Success,
+                    },
+                    true,
+                );
                 (client, payload)
             }
             WithCodeFlow::Failed { reason, .. } => {
-                self.observability.record(QrLoginPullFork {
-                    status: QrLoginPullForkStatus::Failure,
-                });
+                self.observability.record(
+                    QrLoginPullFork {
+                        status: QrLoginPullForkStatus::Failure,
+                    },
+                    true,
+                );
                 return Err(LoginError::WithCodePollFlowFailed(reason.into()));
             }
         };
@@ -77,9 +87,12 @@ impl WantQrConfirmation {
 
         let passphrase = Self::decode_payload(payload, &self.encryption_key)
             .inspect_err(|err| {
-                self.observability.record(QrLoginPostLogin {
-                    status: QrLoginPostLoginStatus::PayloadDecodeFailure,
-                });
+                self.observability.record(
+                    QrLoginPostLogin {
+                        status: QrLoginPostLoginStatus::PayloadDecodeFailure,
+                    },
+                    true,
+                );
                 error!("{err}");
             })
             .map_err(|_| LoginError::QRLoginEncoding)?;
@@ -87,9 +100,12 @@ impl WantQrConfirmation {
             .get_users()
             .await
             .inspect_err(|_| {
-                self.observability.record(QrLoginPostLogin {
-                    status: QrLoginPostLoginStatus::UserFetchFailure,
-                });
+                self.observability.record(
+                    QrLoginPostLogin {
+                        status: QrLoginPostLoginStatus::UserFetchFailure,
+                    },
+                    true,
+                );
             })
             .map(|res| res.user)
             .map_err(LoginError::UserFetch)?;
@@ -103,9 +119,12 @@ impl WantQrConfirmation {
         let pgp = proton_crypto::new_pgp_provider();
         let passphrase = KeySecret::new(passphrase);
         let key_secret = if user.keys.unlock(&pgp, &passphrase).unlocked_keys.is_empty() {
-            self.observability.record(QrLoginPostLogin {
-                status: QrLoginPostLoginStatus::KeySecretDecryptionFailure,
-            });
+            self.observability.record(
+                QrLoginPostLogin {
+                    status: QrLoginPostLoginStatus::KeySecretDecryptionFailure,
+                },
+                true,
+            );
             return Err(LoginError::KeySecretDecryption);
         } else {
             UserKeySecret(passphrase)
@@ -128,9 +147,12 @@ impl WantQrConfirmation {
 
         let auth = self.parts.store.write().await.get_auth().await;
 
-        self.observability.record(QrLoginPostLogin {
-            status: QrLoginPostLoginStatus::Success,
-        });
+        self.observability.record(
+            QrLoginPostLogin {
+                status: QrLoginPostLoginStatus::Success,
+            },
+            true,
+        );
 
         let data = super::StateData {
             parts: self.parts,
@@ -244,8 +266,8 @@ pub async fn process_target_device_qr_code(
     observability: ObservabilityRecorder,
 ) -> Result<(), ProcessTargetDeviceQrError> {
     let qr_data = parse_qr_string(qr_code)
-        .inspect(|_| observability.record(QrLoginDecodeQR::success()))
-        .inspect_err(|e| observability.record(QrLoginDecodeQR::failure(e)))?;
+        .inspect(|_| observability.record(QrLoginDecodeQR::success(), true))
+        .inspect_err(|e| observability.record(QrLoginDecodeQR::failure(e), true))?;
     let fork_confirmation =
         if let Some(encryption_key) = qr_data.encryption_key.filter(|it| !it.is_empty()) {
             // Encrypt this device's passphrase with the encryption key from the Target Device's QR code
@@ -275,15 +297,21 @@ pub async fn process_target_device_qr_code(
         .await
     {
         ForkFlowResult::Success(_client, _selector) => {
-            observability.record(QrLoginPushFork {
-                status: ApiServiceObservabilityResponse::Success,
-            });
+            observability.record(
+                QrLoginPushFork {
+                    status: ApiServiceObservabilityResponse::Success,
+                },
+                true,
+            );
             Ok(())
         }
         ForkFlowResult::Failure { reason, .. } => {
-            observability.record(QrLoginPushFork {
-                status: ApiServiceObservabilityResponse::NetworkError,
-            });
+            observability.record(
+                QrLoginPushFork {
+                    status: ApiServiceObservabilityResponse::NetworkError,
+                },
+                true,
+            );
             Err(ProcessTargetDeviceQrError::Api(ApiError::Muon(
                 reason.into(),
             )))

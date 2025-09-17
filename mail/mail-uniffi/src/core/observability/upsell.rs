@@ -1,11 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
-use super::common::should_record_telemetry;
 use crate::mail::MailUserSession;
-use proton_core_api::{
-    metric,
-    services::observability::{ObservabilityMetric, ObservabilityRecorder},
-};
+use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_mail_common::MailUserContext;
 use serde::{Deserialize, Serialize};
@@ -208,8 +204,6 @@ pub async fn record_upsell_button_tapped(
         }
     };
 
-    let should_record = should_record_telemetry(&user_context).await;
-
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -221,15 +215,20 @@ pub async fn record_upsell_button_tapped(
             }
         };
 
-    ObservabilityRecorder::default().record(
-        UpsellButtonTappedTotal::new(
-            upsell_entry_point,
-            plan_before_upgrade,
-            days_since_account_creation,
-            modal_variant,
-        ),
-        should_record,
+    let metric = UpsellButtonTappedTotal::new(
+        upsell_entry_point,
+        plan_before_upgrade,
+        days_since_account_creation,
+        modal_variant,
     );
+
+    if let Err(err) = user_context
+        .observability_service()
+        .record_metric_if_enabled(metric)
+        .await
+    {
+        error!("Failed to record upsell button tapped metric: {err:?}");
+    }
 }
 
 #[uniffi_export]
@@ -246,8 +245,6 @@ pub async fn record_drive_spotlight_mailbox_button_tapped(
         }
     };
 
-    let should_record = should_record_telemetry(&user_context).await;
-
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -259,13 +256,18 @@ pub async fn record_drive_spotlight_mailbox_button_tapped(
             }
         };
 
-    ObservabilityRecorder::default().record(
-        DriveSpotlightMailboxButtonTappedTotal::new(
-            plan_before_upgrade,
-            days_since_account_creation,
-        ),
-        should_record,
+    let metric = DriveSpotlightMailboxButtonTappedTotal::new(
+        plan_before_upgrade,
+        days_since_account_creation,
     );
+
+    if let Err(err) = user_context
+        .observability_service()
+        .record_metric_if_enabled(metric)
+        .await
+    {
+        error!("Failed to record drive spotlight mailbox button tapped metric: {err:?}");
+    }
 }
 
 #[uniffi_export]
@@ -282,8 +284,6 @@ pub async fn record_drive_spotlight_cta_button_tapped(
         }
     };
 
-    let should_record = should_record_telemetry(&user_context).await;
-
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -295,10 +295,16 @@ pub async fn record_drive_spotlight_cta_button_tapped(
             }
         };
 
-    ObservabilityRecorder::default().record(
-        DriveSpotlightCtaButtonTappedTotal::new(plan_before_upgrade, days_since_account_creation),
-        should_record,
-    );
+    let metric =
+        DriveSpotlightCtaButtonTappedTotal::new(plan_before_upgrade, days_since_account_creation);
+
+    if let Err(err) = user_context
+        .observability_service()
+        .record_metric_if_enabled(metric)
+        .await
+    {
+        error!("Failed to record drive spotlight cta button tapped metric: {err:?}");
+    }
 }
 
 #[uniffi_export]
@@ -321,8 +327,6 @@ pub async fn record_upgrade_attempt(
         }
     };
 
-    let should_record = should_record_telemetry(&user_context).await;
-
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -334,18 +338,23 @@ pub async fn record_upgrade_attempt(
             }
         };
 
-    ObservabilityRecorder::default().record(
-        UpgradeAttemptTotal::new(
-            upsell_entry_point,
-            plan_before_upgrade,
-            days_since_account_creation,
-            modal_variant,
-            selected_plan,
-            selected_cycle,
-            upsell_is_promotional,
-        ),
-        should_record,
+    let metric = UpgradeAttemptTotal::new(
+        upsell_entry_point,
+        plan_before_upgrade,
+        days_since_account_creation,
+        modal_variant,
+        selected_plan,
+        selected_cycle,
+        upsell_is_promotional,
     );
+
+    if let Err(err) = user_context
+        .observability_service()
+        .record_metric_if_enabled(metric)
+        .await
+    {
+        error!("Failed to record upgrade attempt metric: {err:?}");
+    }
 }
 
 #[uniffi_export]
@@ -368,8 +377,6 @@ pub async fn record_upgrade_error(
         }
     };
 
-    let should_record = should_record_telemetry(&user_context).await;
-
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -381,18 +388,23 @@ pub async fn record_upgrade_error(
             }
         };
 
-    ObservabilityRecorder::default().record(
-        UpgradeErrorTotal::new(
-            upsell_entry_point,
-            plan_before_upgrade,
-            days_since_account_creation,
-            modal_variant,
-            selected_plan,
-            selected_cycle,
-            upsell_is_promotional,
-        ),
-        should_record,
+    let metric = UpgradeErrorTotal::new(
+        upsell_entry_point,
+        plan_before_upgrade,
+        days_since_account_creation,
+        modal_variant,
+        selected_plan,
+        selected_cycle,
+        upsell_is_promotional,
     );
+
+    if let Err(err) = user_context
+        .observability_service()
+        .record_metric_if_enabled(metric)
+        .await
+    {
+        error!("Failed to record upgrade error metric: {err:?}");
+    }
 }
 
 #[uniffi_export]
@@ -415,8 +427,6 @@ pub async fn record_upgrade_cancelled_by_user(
         }
     };
 
-    let should_record = should_record_telemetry(&user_context).await;
-
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -428,18 +438,23 @@ pub async fn record_upgrade_cancelled_by_user(
             }
         };
 
-    ObservabilityRecorder::default().record(
-        UpgradeCancelledByUserTotal::new(
-            upsell_entry_point,
-            plan_before_upgrade,
-            days_since_account_creation,
-            modal_variant,
-            selected_plan,
-            selected_cycle,
-            upsell_is_promotional,
-        ),
-        should_record,
+    let metric = UpgradeCancelledByUserTotal::new(
+        upsell_entry_point,
+        plan_before_upgrade,
+        days_since_account_creation,
+        modal_variant,
+        selected_plan,
+        selected_cycle,
+        upsell_is_promotional,
     );
+
+    if let Err(err) = user_context
+        .observability_service()
+        .record_metric_if_enabled(metric)
+        .await
+    {
+        error!("Failed to record upgrade cancelled by user metric: {err:?}");
+    }
 }
 
 #[uniffi_export]
@@ -462,8 +477,6 @@ pub async fn record_upgrade_success(
         }
     };
 
-    let should_record = should_record_telemetry(&user_context).await;
-
     let days_since_account_creation =
         match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
             .await
@@ -475,18 +488,23 @@ pub async fn record_upgrade_success(
             }
         };
 
-    ObservabilityRecorder::default().record(
-        UpgradeSuccessTotal::new(
-            upsell_entry_point,
-            plan_before_upgrade,
-            days_since_account_creation,
-            modal_variant,
-            selected_plan,
-            selected_cycle,
-            upsell_is_promotional,
-        ),
-        should_record,
+    let metric = UpgradeSuccessTotal::new(
+        upsell_entry_point,
+        plan_before_upgrade,
+        days_since_account_creation,
+        modal_variant,
+        selected_plan,
+        selected_cycle,
+        upsell_is_promotional,
     );
+
+    if let Err(err) = user_context
+        .observability_service()
+        .record_metric_if_enabled(metric)
+        .await
+    {
+        error!("Failed to record upgrade success metric: {err:?}");
+    }
 }
 
 #[cfg(test)]

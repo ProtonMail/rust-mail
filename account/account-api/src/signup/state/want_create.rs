@@ -169,10 +169,10 @@ impl WantCreate {
         // the account itself remains in a "ready to use" state (e.g. is_ready flag is set) for later, when login rules are not violated anymore (e.g. logged-in free account count)
         match post_login_validator.validate(&user.clone().into()).await {
             Ok(()) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Success));
+                recorder.record(UserCheckResult::new(UserCheckStatus::Success), true);
             }
             Err(err) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Failure));
+                recorder.record(UserCheckResult::new(UserCheckStatus::Failure), true);
                 return Err(err.into());
             }
         }
@@ -226,11 +226,11 @@ impl WantCreate {
                     .create_user(req)
                     .inspect_err(|err| {
                         self.recorder
-                            .record(UserStatus::error(UserKind::Internal, err));
+                            .record(UserStatus::error(UserKind::Internal, err), true);
                     })
                     .inspect_ok(|_| {
                         self.recorder
-                            .record(UserStatus::success(UserKind::Internal));
+                            .record(UserStatus::success(UserKind::Internal), true);
                     })
                     .await?
             }
@@ -247,11 +247,11 @@ impl WantCreate {
                     .create_external_user(req)
                     .inspect_err(|err| {
                         self.recorder
-                            .record(UserStatus::error(UserKind::External, err));
+                            .record(UserStatus::error(UserKind::External, err), true);
                     })
                     .inspect_ok(|_| {
                         self.recorder
-                            .record(UserStatus::success(UserKind::External));
+                            .record(UserStatus::success(UserKind::External), true);
                     })
                     .await?
             }
