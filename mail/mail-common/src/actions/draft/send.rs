@@ -570,6 +570,14 @@ impl Send {
                     return Err(SendError::ExpirationTimeTooSoon.into());
                 } else if proton_error.code == Mail::MessageDoesNotExist as u32 {
                     return Err(SendError::DraftDoesNotExistOnServer.into());
+                } else if proton_error.code == Mail::TooManyAttachments as u32 {
+                    // Size of body + attachments > 25 mb - shares the same error
+                    // code but is return as `Message to large`
+                    // This can happen when we inherit attachment from a forwarded message
+                    // (e.g: 3x 16 mb attachments) or the body + attachment
+                    // size exceed this limit. In the former, the error is never reported
+                    // from backend on draft save, so we only see this during send.
+                    return Err(SendError::MessageTooLarge.into());
                 } else {
                     error!("Failed to send send email request: {err:?}");
                     return Err(err.into());

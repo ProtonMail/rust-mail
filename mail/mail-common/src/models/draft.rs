@@ -653,8 +653,11 @@ pub enum DraftSendFailureSend {
     PackageError(String),
     MessageDoesNotExist,
     ScheduleSendExpired,
+    ScheduleSendLimitExceeded,
     EOPasswordDecrypt,
     ExpirationTimeTooSoon,
+    MissingAttachmentUploads,
+    MessageTooLarge,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
@@ -718,7 +721,11 @@ impl DraftSendFailure {
                     DraftSendFailureSave::AddressDoesNotHavePrimaryKey(id.clone()),
                 ),
                 SaveError::AlreadySent => Self::Save(DraftSendFailureSave::AlreadySent),
-                _ => Self::Internal,
+                SaveError::AddressNotFound(_)
+                | SaveError::MessageNotADraft(_)
+                | SaveError::AttachmentDoesNotHaveKeyPackets(_)
+                | SaveError::MetadataNotFound(_)
+                | SaveError::DraftDoesNotExistOnServer => Self::Internal,
             },
             Error::Send(err) => match err {
                 SendError::SendMessage(package_error) => {
@@ -732,7 +739,18 @@ impl DraftSendFailure {
                     Self::Send(DraftSendFailureSend::ExpirationTimeTooSoon)
                 }
                 SendError::EOPasswordDecrypt => Self::Send(DraftSendFailureSend::EOPasswordDecrypt),
-                _ => Self::Internal,
+                SendError::MessageIsNotADraft(_)
+                | SendError::MetadataNotFound(_)
+                | SendError::LocalDraftWithoutMessage
+                | SendError::DraftDoesNotExistOnServer
+                | SendError::MessageBodyMissing(_) => Self::Internal,
+                SendError::ScheduleSendMessageLimitExceeded => {
+                    Self::Send(DraftSendFailureSend::ScheduleSendLimitExceeded)
+                }
+                SendError::MissingAttachmentUploads => {
+                    Self::Send(DraftSendFailureSend::MissingAttachmentUploads)
+                }
+                SendError::MessageTooLarge => Self::Send(DraftSendFailureSend::MessageTooLarge),
             },
             Error::AttachmentUpload(e) => match e {
                 AttachmentUploadError::MessageDoesNotExist
@@ -757,7 +775,14 @@ impl DraftSendFailure {
                 AttachmentUploadError::Timeout => {
                     Self::Attachment(DraftSendFailureAttachment::Timeout)
                 }
-                _ => Self::Internal,
+                AttachmentUploadError::MetadataNotFound(_)
+                | AttachmentUploadError::AttachmentMetadataNotFound(_)
+                | AttachmentUploadError::AttachmentMetadataNotFoundCid(_)
+                | AttachmentUploadError::AttachmentDataMissing(_)
+                | AttachmentUploadError::MissingContentId(_)
+                | AttachmentUploadError::ExistingUploadActionExist(_)
+                | AttachmentUploadError::MessageAlreadySent
+                | AttachmentUploadError::RetryInvalidState(_) => Self::Internal,
             },
             _ => Self::Internal,
         }
@@ -848,6 +873,13 @@ impl From<DraftSendFailure> for ProtonMailError {
                     }
                     DraftSendFailureSend::ExpirationTimeTooSoon => {
                         DraftSendErrorReason::ExpirationTimeTooSoon
+                    }
+                    DraftSendFailureSend::MissingAttachmentUploads => {
+                        DraftSendErrorReason::MissingAttachmentUploads
+                    }
+                    DraftSendFailureSend::MessageTooLarge => DraftSendErrorReason::MessageTooLarge,
+                    DraftSendFailureSend::ScheduleSendLimitExceeded => {
+                        DraftSendErrorReason::ScheduleSendMessageLimitExceeded
                     }
                 }))
             }
