@@ -34,6 +34,7 @@ pub struct SearchScrollerSource {
     initialized: bool,
     total: Arc<Mutex<u64>>,
     last: Option<SearchScrollData>,
+    invalidate: Option<flume::Sender<()>>,
 }
 
 impl SearchScrollerSource {
@@ -44,7 +45,35 @@ impl SearchScrollerSource {
             initialized: false,
             total: Arc::new(Mutex::new(0)),
             last: None,
+            invalidate: None,
         }
+    }
+
+    async fn initialize_impl(
+        &mut self,
+        ctx: &MailUserContext,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let mut tether = ctx.user_stash().connection().await?;
+        tether
+            .tx(async |tx| SearchScrollData::delete_all(tx).await)
+            .await?;
+
+        // Search will always operate on online data only
+        debug!("Paginating for the first time, getting first page & spawning sync task.");
+        let remote_label_id = SystemLabel::AllMail.label_id();
+        let page_size = self.page_size;
+
+        // Wait for the first page to be fetched
+        let task = Self::spawn_first_page_sync(
+            ctx,
+            self.total.clone(),
+            remote_label_id.clone(),
+            self.search.clone(),
+            page_size,
+        )
+        .await?;
+
+        Ok(task)
     }
 
     async fn total(&self, tether: &Tether) -> Result<u64, StashError> {
@@ -288,28 +317,10 @@ impl MailScrollerSource for SearchScrollerSource {
     async fn initialize(
         &mut self,
         ctx: &MailUserContext,
+        invalidate: flume::Sender<()>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        let mut tether = ctx.user_stash().connection().await?;
-        tether
-            .tx(async |tx| SearchScrollData::delete_all(tx).await)
-            .await?;
-
-        // Search will always operate on online data only
-        debug!("Paginating for the first time, getting first page & spawning sync task.");
-        let remote_label_id = SystemLabel::AllMail.label_id();
-        let page_size = self.page_size;
-
-        // Wait for the first page to be fetched
-        let task = Self::spawn_first_page_sync(
-            ctx,
-            self.total.clone(),
-            remote_label_id.clone(),
-            self.search.clone(),
-            page_size,
-        )
-        .await?;
-
-        Ok(task)
+        self.invalidate = Some(invalidate);
+        self.initialize_impl(ctx).await
     }
 
     async fn visible_items(
@@ -406,7 +417,7 @@ impl MailScrollerSource for SearchScrollerSource {
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        self.initialize(ctx).await
+        self.initialize_impl(ctx).await
     }
 
     fn watched_tables(&self) -> Vec<String> {

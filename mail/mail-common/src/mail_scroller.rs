@@ -70,6 +70,10 @@ impl<T: Send + Sync + Clone + ScrollerEq + 'static> ScrollerUpdate<T> {
         matches!(self, ScrollerUpdate::None(_))
     }
 
+    pub fn is_error(&self) -> bool {
+        matches!(self, ScrollerUpdate::Error { .. })
+    }
+
     pub fn is_some(&self) -> bool {
         !self.is_none()
     }
@@ -426,12 +430,13 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         let (update_sender, update_receiver) = flume::unbounded();
         let (command_sender, command_receiver) = flume::unbounded();
         let (ordered_command_sender, ordered_command_receiver) = flume::unbounded();
+        let (invalidation_sender, invalidation_receiver) = flume::unbounded();
         let arc_ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let task = source.initialize(&arc_ctx).await?;
+        let task = source.initialize(&arc_ctx, invalidation_sender).await?;
         let tables = source.watched_tables();
 
         let WatcherHandle {
-            receiver: db_update,
+            receiver: db_receiver,
             handle,
             ..
         } = arc_ctx
@@ -451,7 +456,12 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             ordered_command_send: ordered_command_sender.clone(),
         };
 
-        let aborts = this.spawn(command_receiver, ordered_command_sender.clone(), db_update)?;
+        let aborts = this.spawn(
+            command_receiver,
+            ordered_command_sender.clone(),
+            db_receiver,
+            invalidation_receiver,
+        )?;
 
         Ok(ScrollerWorkerHandle {
             command: command_sender,
@@ -466,18 +476,17 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         mut self,
         command_receiver: flume::Receiver<ScrollerCommand>,
         ordered_command_sender: flume::Sender<ScrollerOrderedCommand>,
-        db_update: flume::Receiver<()>,
+        db_receiver: flume::Receiver<()>,
+        invalidation_receiver: flume::Receiver<()>,
     ) -> Result<Vec<AbortHandle>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let mut aborts = vec![];
         let source_clone = self.source.clone();
         let weak_ctx = self.ctx.clone();
-        let (invalidation_sender, invalidation_receiver) = flume::unbounded();
 
         // Ordered operations, these needs to be streamlined and not blocking other operations
         // thats why we are going to dedicate a separate task for them.
         let handle = ctx.spawn(async move {
-            self.source.write().await.set_notify(invalidation_sender);
             while let Ok(command) = self.ordered_command_recv.recv_async().await {
                 // This prevents abusing the scroller by sending multiple commands
                 // in a row. We do not want and need to handle all of them one by one.
@@ -509,7 +518,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                             .send_async(ScrollerOrderedCommand::Refresh(ScrollerSource::Invalidation)).await
                             .inspect_err(|e| tracing::error!("Failed to send refresh command: {e:?}"));
                     }
-                    r = db_update.recv_async() => {
+                    r = db_receiver.recv_async() => {
                         if let Err(e) = r {
                             tracing::error!("Failed to receive db update: {e:?}");
                             return;
@@ -810,7 +819,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing filter to {filter:?}");
-        self.wait_for_request().await?;
+        // We drop the previous task, we should not wait for it.
+        let _ = self.task.take();
         self.task = self
             .source
             .write()
@@ -830,7 +840,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         tracing::info!("Clearing cursor for current label");
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         // We drop the task, we cannot await it in offline mode.
-        self.wait_for_request().await?;
+        let _ = self.task.take();
         self.task = self.source.write().await.clear_cursor(&ctx).await?;
         self.items.clear();
         self.fetch_more(src).await?;
@@ -1036,6 +1046,41 @@ fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
                 to,
                 items,
             }
+        }
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl<T: Send + Sync + Clone + ScrollerEq + 'static> Clone for ScrollerUpdate<T> {
+    fn clone(&self) -> Self {
+        match self {
+            ScrollerUpdate::None(src) => ScrollerUpdate::None(*src),
+            ScrollerUpdate::Append { src, items } => ScrollerUpdate::Append {
+                src: *src,
+                items: items.clone(),
+            },
+            ScrollerUpdate::ReplaceFrom { src, idx, items } => ScrollerUpdate::ReplaceFrom {
+                src: *src,
+                idx: *idx,
+                items: items.clone(),
+            },
+            ScrollerUpdate::ReplaceBefore { src, idx, items } => ScrollerUpdate::ReplaceBefore {
+                src: *src,
+                idx: *idx,
+                items: items.clone(),
+            },
+            ScrollerUpdate::ReplaceRange {
+                src,
+                from,
+                to,
+                items,
+            } => ScrollerUpdate::ReplaceRange {
+                src: *src,
+                from: *from,
+                to: *to,
+                items: items.clone(),
+            },
+            ScrollerUpdate::Error { .. } => panic!("Cannot clone error update"),
         }
     }
 }

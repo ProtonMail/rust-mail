@@ -20,7 +20,10 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::models::ConversationLabel;
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
-    scroller::{StoreLabeledModelMap, TestScroller, save_single_conversation, test_conversations},
+    scroller::{
+        StoreLabeledModelMap, TestScroller, TestUpdate, save_single_conversation,
+        test_conversations,
+    },
     test_context::MailUserContextTestExtension,
 };
 use proton_mail_common::{
@@ -407,16 +410,16 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
             .await
             .unwrap();
 
+    test_scroller.assert_updates(&[]);
     // The items will be read from cache as the API is unreachable
     let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 1);
-
     assert_eq!(test_scroller.items().len(), 1);
     assert!(test_scroller.has_more().await.unwrap());
+    test_scroller.assert_updates(&[TestUpdate::Append { items: 1 }]);
 
     // No more cached, no API connection, return error
-    test_scroller.fetch_more().unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap_err();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap_err();
     assert_eq!(
         actual.to_string(),
         "API Error: Network error: No connection".to_string()
@@ -477,6 +480,11 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         "API Error: Network error: No connection".to_string()
     );
 
+    test_scroller.assert_updates(&[
+        TestUpdate::Append { items: 5 },
+        TestUpdate::Append { items: 6 },
+    ]);
+
     // Go online suddenly
     ctx.mock_server().reset().await;
     ctx.mock_ping_success().await;
@@ -492,12 +500,14 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .await;
 
     // automatic fetch_more will be triggered by the online status change
-    test_scroller.wait_for_update().await.unwrap();
+    test_scroller.match_next_update(TestUpdate::None).await;
 
     // Wait for the second update containing the actual data replacement
     // In the new push-based model, fetch_more_and_wait() only waits for immediate feedback,
     // but the actual data replacement from the refresh comes in a second update
-    test_scroller.wait_for_update().await.unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 5 })
+        .await;
 
     assert_scroller_content!(
         &mut test_scroller,
@@ -1410,8 +1420,9 @@ async fn test_conversation_mail_scroller_handles_create_or_get_local_missing_lab
     };
     conv.labels = vec![inbox_label, archive_label];
     // 1 is first page
-    // then on fetch_more we will request next page
-    ctx.mock_get_conversations(vec![conv], 2).await;
+    // 2* is automatic next page
+    // 3 is user triggered fetch_more
+    ctx.mock_get_conversations(vec![conv], 2..=3).await;
     ctx.mock_ping_success().await;
     ctx.catch_all().await;
 
@@ -1431,14 +1442,19 @@ async fn test_conversation_mail_scroller_handles_create_or_get_local_missing_lab
         TestScroller::conversations(&user_ctx, inbox_local_label_id, unread, page_size)
             .await
             .unwrap();
-
-    // Verify conversation appears in inbox after fetching from API
-    let items = inbox_scroller.fetch_more_and_wait().await.unwrap();
+    // We should get one update immediately because we have total 1 and page size is 5
+    // This is a small label so it will trigger fetch_more internally
+    inbox_scroller.assert_updates(&[TestUpdate::Append { items: 1 }]);
+    let items = inbox_scroller.items();
     assert_eq!(items.len(), 1);
     assert_eq!(
         items[0].remote_id.as_ref().unwrap().to_string(),
         CONVERSATION_REMOTE_ID
     );
+    // and since we have the same item locally and fetched from API we should get no further updates
+    let items = inbox_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(items.len(), 0);
+    inbox_scroller.assert_updates(&[TestUpdate::Append { items: 1 }, TestUpdate::None]);
     // Check that the conversation has now both labels
     let conv =
         Conversation::find_by_remote_id(ConversationId::from(CONVERSATION_REMOTE_ID), &tether)
