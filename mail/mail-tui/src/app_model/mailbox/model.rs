@@ -3,12 +3,14 @@ use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
-use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
+use crate::app_model::mailbox::popups::{
+    CustomSnoozeOption, LabelItemPopup, LabelSelectPopup, MoveItemPopup, SnoozeItemPopup,
+};
 use crate::app_model::mailbox::{Items, Message, poll_event_loop, refresh};
 use crate::app_model::watcher::TuiWatchHandle;
-use crate::app_model::{AppState, AppStateHandler, YesNoPopup};
+use crate::app_model::{AppState, AppStateHandler, HelpPopup, YesNoPopup};
 use crate::messages::Messages;
-use crate::widgets::CenteredThrobber;
+use crate::widgets::{CenteredThrobber, ScrollableListState};
 use anyhow::anyhow;
 use crossterm::event::{KeyCode, KeyModifiers};
 use flume::Sender;
@@ -373,6 +375,12 @@ impl AppStateHandler for MailboxModel {
 
         if let Event::Key(key) = &event {
             match key.code {
+                KeyCode::Char('h') if key.modifiers.is_empty() => {
+                    return Command::Message(Messages::RaisePopup(Box::new(HelpPopup {
+                        items: self.help_options(),
+                        list_state: ScrollableListState::new(Some(0)),
+                    })));
+                }
                 KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     return Composer::empty(Arc::clone(&self.ctx));
                 }
@@ -484,6 +492,12 @@ impl AppStateHandler for MailboxModel {
             Message::SelectLabel(label_id) => self.select_label(label_id),
             Message::OpenMoveItemsPopup(item) => self.open_move_item_popup(item),
             Message::OpenLabelItemPopup(item) => self.open_label_popup(item),
+            Message::OpenSnoozePopup(item) => {
+                SnoozeItemPopup::new(&self.ctx, item, self.label.local_id.unwrap())
+            }
+            Message::OpenCustomSnoozePopup(item, local_label_id) => {
+                CustomSnoozeOption::new(item, local_label_id)
+            }
             Message::ConversationState(_) | Message::MessageState(_) => {
                 self.state.update(&self.ctx, message, &self.mailbox)
             }
@@ -545,6 +559,7 @@ impl AppStateHandler for MailboxModel {
             ("m", "Move the selected item"),
             ("r", "Mark a message as read"),
             ("u", "Mark a message as unread"),
+            ("f/F", "Star/Unstar the selected item"),
             ("l", "Label a message"),
             ("d", "Delete a message permanently"),
             ("Ctrl + n", "Create a new message"),
@@ -553,12 +568,11 @@ impl AppStateHandler for MailboxModel {
             ("Ctrl + a", "Show all messages"),
             ("/", "Open the search bar"),
             ("C", "Show the contact list"),
-            ("f/F", "Star/Unstar the selected item"),
             ("F4", "Clear cache"),
             ("Shift+F5", "Reload all data from server"),
             ("F5", "Refresh (Force event loop poll)"),
             ("F8", "[DEBUG]: Put app in background"),
-            ("h", "[DEBUG]: has more?"),
+            ("ctrl+h", "[DEBUG]: has more?"),
         ];
 
         self.state.help_options(&mut items);
@@ -578,7 +592,7 @@ impl AppStateHandler for MailboxModel {
         1
     }
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
-        frame.render_widget(Line::from("Press F1 to display the help popup"), area);
+        frame.render_widget(Line::from("Press F1/h to display the help popup"), area);
     }
 
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {

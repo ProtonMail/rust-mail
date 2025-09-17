@@ -16,7 +16,7 @@ use anyhow::Context;
 use chrono::{DateTime, Local};
 use messages::BlockOrUnblock;
 pub use model::MailboxModel;
-use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId, Refresh};
+use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId, Refresh, UnixTimestamp};
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
 };
@@ -42,6 +42,8 @@ pub enum Message {
     OpenLabelSelectPopup,
     OpenMoveItemsPopup(Items),
     OpenLabelItemPopup(Items),
+    OpenSnoozePopup(Items),
+    OpenCustomSnoozePopup(Vec<LocalConversationId>, LocalLabelId),
     SelectLabel(LocalLabelId),
     ConversationState(ConversationMessage),
     LabelRefreshed(LabelWithCounters),
@@ -70,6 +72,8 @@ pub struct LabelAs<T: LocalIdMarker> {
 pub enum ConversationMessage {
     MarkRead(Vec<LocalConversationId>),
     MarkUnread(Vec<LocalConversationId>),
+    Snooze(Vec<LocalConversationId>, UnixTimestamp, LocalLabelId),
+    Unsnooze(Vec<LocalConversationId>, LocalLabelId),
     DeletePermanently(Vec<LocalConversationId>),
     MoveTo(Vec<LocalConversationId>, LocalLabelId),
     LabelAs(Box<LabelAs<LocalConversationId>>),
