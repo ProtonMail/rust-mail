@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.145.0] - 2025-09-18
+
+### Changed
+
+- [Breaking] Remove unused draft errors
+
+### Features
+
+- [ET-3273] Expose `groups` in `ContactDetailsEmail` model for displaying group badges
+
+### Fixes
+
+- [ET-4170] Convert newlines in mobile signatures
+- [ET-10407] Password Flow refactor
+- [ET-4011] Message Too Large
+
+
 ## [mail-uniffi-v0.143.14] - 2025-09-15
 
 ### Changed
@@ -81,6 +98,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Missing Event Poll action migration
 
 
+## [mail-uniffi-v0.143.6] - 2025-09-10
+
+### Fixes
+
+- [ET-4637] Request new fido details after resume_login_flow
+- [ET-4637] Request new fido details after resume_login_flow
+
+
 ## [mail-uniffi-v0.143.7] - 2025-09-10
 
 ### Changed
@@ -93,14 +118,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4685] Fix form sanitization
 
 
-## [mail-uniffi-v0.143.6] - 2025-09-10
-
-### Fixes
-
-- [ET-4637] Request new fido details after resume_login_flow
-- [ET-4637] Request new fido details after resume_login_flow
-
-
 ## [mail-uniffi-v0.143.4] - 2025-09-09
 
 ### Fixes
@@ -108,6 +125,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scroller should spawn task on next page regardless of the online state
 - [ET-4011] Report attachment validation  errors on draft save
 - [ET-4426] Always disable image decoration
+
+
+## [mail-uniffi-v0.143.1] - 2025-09-08
+
+### Fixes
+
+- [ET-4529] Filter out snooze action on msg list even if its defined in the API that way
 
 
 ## [mail-uniffi-v0.143.2] - 2025-09-08
@@ -118,11 +142,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [draft] speed up {apply, remove}_label
 
 
-## [mail-uniffi-v0.143.1] - 2025-09-08
+## [mail-uniffi-v0.143.0] - 2025-09-05
+
+### Changed
+
+- [ET-4246] Tether Thread Pool
+- [ET-4247] Stash Connection Pool Limits
+
+### Features
+
+- Properly sync unsubscribed to newsletter with the backend
+- Add custom ScrollerEq derive macro for scroller list comparisons
+- [ET-4442] Implement `ReplaceRange` scroller update and eliminate double diff.
 
 ### Fixes
 
-- [ET-4529] Filter out snooze action on msg list even if its defined in the API that way
+- [ET-2062] Missing HTML wrap of undecryptable bodies
+- [ET-2062] Missing HTML wrap of undecryptable bodies
+- Scroller is allowed to schedule automatic `fetch_more` in certain circumstances
+- [ET-3829] Split addresses into TO & CC for reply all action
+- Scroller is not mixing oredered and unordered data and never return an empty update for first page in online env
 
 
 ## [mail-uniffi-v0.142.17] - 2025-09-05
@@ -138,29 +177,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Skip already deleted items which have expired
-
-
-## [mail-uniffi-v0.143.0] - 2025-09-05
-
-### Changed
-
-- [ET-4246] Tether Thread Pool
-- [ET-4247] Stash Connection Pool Limits
-
-### Features
-
-- Properly sync unsubscribed to newsletter with the backend
-- Add custom ScrollerEq derive macro for scroller list comparisons
-- Increase default request timeout from 30s to 60s (special case 120s)
-- [ET-4442] Implement `ReplaceRange` scroller update and eliminate double diff.
-
-### Fixes
-
-- [ET-2062] Missing HTML wrap of undecryptable bodies
-- [ET-2062] Missing HTML wrap of undecryptable bodies
-- Scroller is allowed to schedule automatic `fetch_more` in certain circumstances
-- [ET-3829] Split addresses into TO & CC for reply all action
-- Scroller is not mixing oredered and unordered data and never return an empty update for first page in online env
 
 
 ## [mail-uniffi-v0.142.14] - 2025-09-04
@@ -194,6 +210,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - [ET-4215] Add `conversation_wiht_sync` and `conversation_without_sync`
+- Increase default request timeout from 30s to 60s (special case 120s)
 
 ### Fixes
 
