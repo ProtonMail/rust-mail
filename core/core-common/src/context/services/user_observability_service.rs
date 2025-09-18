@@ -16,7 +16,7 @@ const OBSERVABILITY_SEND_INTERVAL_SECS: u64 = 60;
 const OBSERVABILITY_BATCH_SIZE: usize = 500;
 
 /// Per-account observability service that handles telemetry collection and transmission.
-/// 
+///
 /// For events that happened before user logged in to any account, use [`ObservabilityRecorder`] directly.
 /// For events with logged-in user account, use this service instead via `user_context.observability_service()`.
 pub struct UserObservabilityService {

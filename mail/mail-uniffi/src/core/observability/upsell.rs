@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_arguments)]
-
 use crate::mail::MailUserSession;
 use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_core_common::datatypes::UnixTimestamp;
@@ -63,7 +61,7 @@ pub async fn calculate_days_since_account_creation(
     calculate_days_from_timestamps(user.create_time, current_time)
 }
 
-#[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Enum)]
 #[serde(rename_all = "snake_case")]
 pub enum UpsellEntryPoint {
     AutoDeleteMessages,
@@ -98,9 +96,23 @@ pub enum DaysSinceAccountCreation {
     NotApplicable,
 }
 
-#[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Enum)]
 pub enum ModalVariant {
-    Carousel,
+    Comparison,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct GeneralDimensions {
+    pub upsell_entry_point: UpsellEntryPoint,
+    pub plan_before_upgrade: String,
+    pub modal_variant: ModalVariant,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PlanSpecificDimensions {
+    pub selected_plan: String,
+    pub selected_cycle: String,
+    pub upsell_is_promotional: bool,
 }
 
 metric! {
@@ -192,9 +204,7 @@ metric! {
 #[tracing::instrument(skip_all)]
 pub async fn record_upsell_button_tapped(
     user_session: Arc<MailUserSession>,
-    upsell_entry_point: UpsellEntryPoint,
-    plan_before_upgrade: String,
-    modal_variant: ModalVariant,
+    general: GeneralDimensions,
 ) {
     let user_context = match user_session.ctx() {
         Ok(ctx) => ctx,
@@ -216,10 +226,10 @@ pub async fn record_upsell_button_tapped(
         };
 
     let metric = UpsellButtonTappedTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
+        general.upsell_entry_point,
+        general.plan_before_upgrade,
         days_since_account_creation,
-        modal_variant,
+        general.modal_variant,
     );
 
     if let Err(err) = user_context
@@ -308,16 +318,11 @@ pub async fn record_drive_spotlight_cta_button_tapped(
 }
 
 #[uniffi_export]
-#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all)]
 pub async fn record_upgrade_attempt(
     user_session: Arc<MailUserSession>,
-    upsell_entry_point: UpsellEntryPoint,
-    plan_before_upgrade: String,
-    modal_variant: ModalVariant,
-    selected_plan: String,
-    selected_cycle: String,
-    upsell_is_promotional: bool,
+    general: GeneralDimensions,
+    plan_specific: PlanSpecificDimensions,
 ) {
     let user_context = match user_session.ctx() {
         Ok(ctx) => ctx,
@@ -339,13 +344,13 @@ pub async fn record_upgrade_attempt(
         };
 
     let metric = UpgradeAttemptTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
+        general.upsell_entry_point,
+        general.plan_before_upgrade,
         days_since_account_creation,
-        modal_variant,
-        selected_plan,
-        selected_cycle,
-        upsell_is_promotional,
+        general.modal_variant,
+        plan_specific.selected_plan,
+        plan_specific.selected_cycle,
+        plan_specific.upsell_is_promotional,
     );
 
     if let Err(err) = user_context
@@ -358,16 +363,11 @@ pub async fn record_upgrade_attempt(
 }
 
 #[uniffi_export]
-#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all)]
 pub async fn record_upgrade_error(
     user_session: Arc<MailUserSession>,
-    upsell_entry_point: UpsellEntryPoint,
-    plan_before_upgrade: String,
-    modal_variant: ModalVariant,
-    selected_plan: String,
-    selected_cycle: String,
-    upsell_is_promotional: bool,
+    general: GeneralDimensions,
+    plan_specific: PlanSpecificDimensions,
 ) {
     let user_context = match user_session.ctx() {
         Ok(ctx) => ctx,
@@ -389,13 +389,13 @@ pub async fn record_upgrade_error(
         };
 
     let metric = UpgradeErrorTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
+        general.upsell_entry_point,
+        general.plan_before_upgrade,
         days_since_account_creation,
-        modal_variant,
-        selected_plan,
-        selected_cycle,
-        upsell_is_promotional,
+        general.modal_variant,
+        plan_specific.selected_plan,
+        plan_specific.selected_cycle,
+        plan_specific.upsell_is_promotional,
     );
 
     if let Err(err) = user_context
@@ -408,16 +408,11 @@ pub async fn record_upgrade_error(
 }
 
 #[uniffi_export]
-#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all)]
 pub async fn record_upgrade_cancelled_by_user(
     user_session: Arc<MailUserSession>,
-    upsell_entry_point: UpsellEntryPoint,
-    plan_before_upgrade: String,
-    modal_variant: ModalVariant,
-    selected_plan: String,
-    selected_cycle: String,
-    upsell_is_promotional: bool,
+    general: GeneralDimensions,
+    plan_specific: PlanSpecificDimensions,
 ) {
     let user_context = match user_session.ctx() {
         Ok(ctx) => ctx,
@@ -439,13 +434,13 @@ pub async fn record_upgrade_cancelled_by_user(
         };
 
     let metric = UpgradeCancelledByUserTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
+        general.upsell_entry_point,
+        general.plan_before_upgrade,
         days_since_account_creation,
-        modal_variant,
-        selected_plan,
-        selected_cycle,
-        upsell_is_promotional,
+        general.modal_variant,
+        plan_specific.selected_plan,
+        plan_specific.selected_cycle,
+        plan_specific.upsell_is_promotional,
     );
 
     if let Err(err) = user_context
@@ -458,16 +453,11 @@ pub async fn record_upgrade_cancelled_by_user(
 }
 
 #[uniffi_export]
-#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all)]
 pub async fn record_upgrade_success(
     user_session: Arc<MailUserSession>,
-    upsell_entry_point: UpsellEntryPoint,
-    plan_before_upgrade: String,
-    modal_variant: ModalVariant,
-    selected_plan: String,
-    selected_cycle: String,
-    upsell_is_promotional: bool,
+    general: GeneralDimensions,
+    plan_specific: PlanSpecificDimensions,
 ) {
     let user_context = match user_session.ctx() {
         Ok(ctx) => ctx,
@@ -489,13 +479,13 @@ pub async fn record_upgrade_success(
         };
 
     let metric = UpgradeSuccessTotal::new(
-        upsell_entry_point,
-        plan_before_upgrade,
+        general.upsell_entry_point,
+        general.plan_before_upgrade,
         days_since_account_creation,
-        modal_variant,
-        selected_plan,
-        selected_cycle,
-        upsell_is_promotional,
+        general.modal_variant,
+        plan_specific.selected_plan,
+        plan_specific.selected_cycle,
+        plan_specific.upsell_is_promotional,
     );
 
     if let Err(err) = user_context
@@ -624,13 +614,13 @@ mod tests {
             UpsellEntryPoint::MailboxTopBar,
             "free".to_string(),
             DaysSinceAccountCreation::FourThroughTen,
-            ModalVariant::Carousel,
+            ModalVariant::Comparison,
         ));
 
         assert!(serialized.contains("mail_upsell_button_tapped_total"));
         assert!(serialized.contains("mailbox_top_bar"));
         assert!(serialized.contains("04-10"));
-        assert!(serialized.contains("Carousel"));
+        assert!(serialized.contains("Comparison"));
     }
 
     #[test]
@@ -639,7 +629,7 @@ mod tests {
             UpsellEntryPoint::NavbarUpsell,
             "free".to_string(),
             DaysSinceAccountCreation::Zero,
-            ModalVariant::Carousel,
+            ModalVariant::Comparison,
             "plus".to_string(),
             "12".to_string(),
             true,
@@ -648,7 +638,7 @@ mod tests {
         assert!(serialized.contains("mail_upgrade_attempt_total"));
         assert!(serialized.contains("navbar_upsell"));
         assert!(serialized.contains("\"0\""));
-        assert!(serialized.contains("Carousel"));
+        assert!(serialized.contains("Comparison"));
         assert!(serialized.contains("true"));
     }
 
