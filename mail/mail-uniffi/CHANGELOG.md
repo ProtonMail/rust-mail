@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Features
+
+- [ET-4721] Issue Reporter Service
+- [ET-4721] Hook up sentry reports for critical errors
+
+
 ## [mail-uniffi-v0.145.0] - 2025-09-18
 
 ### Changed
@@ -41,13 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migration for Event Poll action was not hooked up
 
 
-## [mail-uniffi-v0.143.12] - 2025-09-12
-
-### Fixes
-
-- [ET-4720] Report missing send failure errors
-
-
 ## [mail-uniffi-v0.143.11] - 2025-09-12
 
 ### Changed
@@ -62,6 +63,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fetch new should have task awaiting scoped
 - Only use active addresses in send preferences
+
+
+## [mail-uniffi-v0.143.12] - 2025-09-12
+
+### Fixes
+
+- [ET-4720] Report missing send failure errors
 
 
 ## [mail-uniffi-v0.143.10] - 2025-09-12
