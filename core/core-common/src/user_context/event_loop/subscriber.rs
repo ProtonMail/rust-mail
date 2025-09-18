@@ -67,7 +67,22 @@ pub mod macros {
             let max_attempts = 2;
             let mut attempts = 0;
 
-            while let Err(e) = $fn_name($ctx).await {
+            while let Err(e) = $fn_name($ctx).await.inspect_err(|e| {
+                match &e {
+                    SubscriberError::Api(e) => {
+                        if e.is_network_failure() {
+                            return;
+                        }
+                    }
+                    _ => {}
+                }
+
+                $ctx.issue_reporter_service().report(
+                    IssueLevel::Critical,
+                    format!("Failed to apply refresh event in {}", stringify!($fn_name)),
+                    issue_report_keys_from_error(e),
+                );
+            }) {
                 if attempts >= max_attempts {
                     return Err(e);
                 }
@@ -84,6 +99,7 @@ pub mod macros {
 // Re-export macros for easier access
 use crate::events::LabelEvent;
 pub use macros::*;
+use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 
 const CORE_EVENT_TYPE_ID: &str = "proton-core-event";
 
@@ -228,6 +244,13 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
             Ok(())
         })
         .await
+        .inspect_err(|e| {
+            ctx.issue_reporter_service().report(
+                IssueLevel::Critical,
+                "Failed to apply core event".into(),
+                issue_report_keys_from_error(e),
+            );
+        })
         .map_err(|e: StashError| SubscriberError::Other(anyhow!("Failed apply changes: {e}")))
     }
 

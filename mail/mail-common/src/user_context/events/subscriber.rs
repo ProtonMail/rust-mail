@@ -31,6 +31,7 @@ use tracing::{debug, error, info, warn};
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use proton_core_common::event_loop::{join_task, try_refresh};
+use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use stash::stash::Tether;
 
 pub struct MailEventSubscriber(Weak<MailUserContext>);
@@ -130,6 +131,13 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 Ok(())
             })
             .await
+            .inspect_err(|e| {
+                ctx.issue_reporter_service().report(
+                    IssueLevel::Error,
+                    "Failed to apply mail events".into(),
+                    issue_report_keys_from_error(e),
+                )
+            })
             .context("Failed to apply changes")?;
 
         #[cfg(feature = "prefetch")]
@@ -197,9 +205,7 @@ impl MailUserContext {
             Refresh::None => {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
             }
-            Refresh::Mail | Refresh::All => {
-                try_refresh!(refresh_mail, self);
-            }
+            Refresh::Mail | Refresh::All => try_refresh!(refresh_mail, self),
             Refresh::Contacts => {
                 // Contacts refresh is handled by the core event subscriber
             }
@@ -250,7 +256,7 @@ async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
                 DELETE from {};
                 DELETE from {};
                 DELETE from {};
-                ", 
+                ",
                 RollbackItem::table_name(),
                 ConversationScrollData::table_name(),
                 MessageScrollData::table_name(),
@@ -340,7 +346,6 @@ async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
             }
         }
     };
-
     Ok(())
 }
 

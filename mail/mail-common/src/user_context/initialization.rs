@@ -10,6 +10,7 @@ use proton_core_common::models::{
 
 use proton_core_common::services::{EventLoopService, InitializationService};
 use proton_event_loop::EventLoopError;
+use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use proton_task_service::TaskService;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -45,6 +46,15 @@ impl MailUserContext {
         ctx.get_service::<InitializationMediator>()
             .initialize(ctx_cloned)
             .await
+            .inspect_err(|err| {
+                if !err.is_network_failure() {
+                    ctx.issue_reporter_service().report(
+                        IssueLevel::Error,
+                        "Failed to initialize mail user context".into(),
+                        issue_report_keys_from_error(err),
+                    );
+                }
+            })
     }
 
     /// Checks whether initialization process finished suscesfully.

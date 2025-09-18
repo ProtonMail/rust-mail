@@ -28,6 +28,7 @@ use std::sync::{Arc, Weak};
 
 use crate::services::user_issue_reporter_service::UserIssueReporterService;
 use proton_core_api::connection_status::ConnectionStatus;
+use proton_issue_reporter_service::{IssueLevel, IssueReportKeys};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -94,87 +95,98 @@ impl UserContext {
         cache_path: PathBuf,
     ) -> CoreContextResult<Arc<Self>> {
         info!("Creating new user context");
-
-        let user_stash = Self::open_db(user_stash_path, db_initializers, context.origin()).await?;
-        let cancellation_token = context.new_child_cancellation_token();
-        let queue = Queue::new(user_stash.clone()).await?;
-
-        let origin = context.origin();
-
         let issue_reporter = context.issue_reporter_service();
         let user_issue_reporter = issue_reporter
             .reporter()
             .new_user_reporter(user_id.clone().into_inner());
+        let user_issue_reporter_cloned = user_issue_reporter.clone();
+        async {
+            let user_stash =
+                Self::open_db(user_stash_path, db_initializers, context.origin()).await?;
+            let cancellation_token = context.new_child_cancellation_token();
+            let queue = Queue::new(user_stash.clone()).await?;
 
-        let this = {
-            let mut builder = builder::UserContextBuilder::new();
-            builder = builder.with_cyclic_service(|weak| {
-                UserIssueReporterService::new(weak, user_issue_reporter)
-            });
+            let origin = context.origin();
 
-            if matches!(origin, Origin::App) {
-                builder = builder
-                    .with_cyclic_service(|weak_ref: Weak<UserContext>| {
-                        let event_ctx = CoreEventLoopContext::from(weak_ref);
-                        let event_loop = EventPoll::new(event_ctx.boxed(), event_ctx.boxed());
-                        EventLoopService::new(event_loop)
-                    })
-                    .with_service(InitializationService::new(InitializationWatcher::new(
-                        &user_stash,
-                    )?));
+            let this = {
+                let mut builder = builder::UserContextBuilder::new();
+                builder = builder.with_cyclic_service(|weak| {
+                    UserIssueReporterService::new(weak, user_issue_reporter)
+                });
+
+                if matches!(origin, Origin::App) {
+                    builder = builder
+                        .with_cyclic_service(|weak_ref: Weak<UserContext>| {
+                            let event_ctx = CoreEventLoopContext::from(weak_ref);
+                            let event_loop = EventPoll::new(event_ctx.boxed(), event_ctx.boxed());
+                            EventLoopService::new(event_loop)
+                        })
+                        .with_service(InitializationService::new(InitializationWatcher::new(
+                            &user_stash,
+                        )?));
+                }
+
+                builder.build(
+                    session,
+                    context,
+                    user_stash,
+                    queue,
+                    user_id,
+                    session_id,
+                    Arc::new(CryptoKeyManager::new()),
+                    cancellation_token,
+                    cache_path,
+                )
+            };
+
+            fs::create_dir_all(this.sender_images_cache_path())?;
+            fs::create_dir_all(this.trash_path())?;
+
+            if matches!(origin, Origin::App)
+                && let Some(init_service) = this.get_service_opt::<InitializationService>()
+            {
+                let init_watcher = init_service.initialization_watcher().clone();
+                this.spawn(async move {
+                    if let Err(e) = init_watcher.task().await {
+                        error!("Initialization watcher finished with error: {e:?}");
+                    }
+                });
             }
 
-            builder.build(
-                session,
-                context,
-                user_stash,
-                queue,
-                user_id,
-                session_id,
-                Arc::new(CryptoKeyManager::new()),
-                cancellation_token,
-                cache_path,
-            )
-        };
-
-        fs::create_dir_all(this.sender_images_cache_path())?;
-        fs::create_dir_all(this.trash_path())?;
-
-        if matches!(origin, Origin::App)
-            && let Some(init_service) = this.get_service_opt::<InitializationService>()
-        {
-            let init_watcher = init_service.initialization_watcher().clone();
-            this.spawn(async move {
-                if let Err(e) = init_watcher.task().await {
-                    error!("Initialization watcher finished with error: {e:?}");
-                }
-            });
-        }
-
-        let this_user_id = this.user_id.clone();
-        let this_weak = Arc::downgrade(&this);
-        if let Some(session_service) = this.context.get_service_opt::<SessionObserverService>() {
-            let event_service = this.context.event_service();
-            session_service.on_session_deleted(event_service, move |_, user_id| {
-                let this_user_id = this_user_id.clone();
-                let this_weak = this_weak.clone();
-                async move {
-                    if user_id == this_user_id {
-                        if let Some(ctx) = this_weak.upgrade() {
-                            ctx.cancel_all_tasks();
+            let this_user_id = this.user_id.clone();
+            let this_weak = Arc::downgrade(&this);
+            if let Some(session_service) = this.context.get_service_opt::<SessionObserverService>()
+            {
+                let event_service = this.context.event_service();
+                session_service.on_session_deleted(event_service, move |_, user_id| {
+                    let this_user_id = this_user_id.clone();
+                    let this_weak = this_weak.clone();
+                    async move {
+                        if user_id == this_user_id {
+                            if let Some(ctx) = this_weak.upgrade() {
+                                ctx.cancel_all_tasks();
+                            }
+                            return OnSessionDeletedResponse::Terminate;
                         }
-                        return OnSessionDeletedResponse::Terminate;
+                        OnSessionDeletedResponse::Continue
                     }
-                    OnSessionDeletedResponse::Continue
-                }
-            });
-        }
+                });
+            }
 
-        if matches!(origin, Origin::App) {
-            this.register_subscribers().await?;
-        }
+            if matches!(origin, Origin::App) {
+                this.register_subscribers().await?;
+            }
 
-        Ok(this)
+            Ok(this)
+        }
+        .await
+        .inspect_err(|e| {
+            user_issue_reporter_cloned.report(
+                IssueLevel::Critical,
+                format!("Failed to create user context: {e:?}"),
+                IssueReportKeys::default(),
+            );
+        })
     }
 
     #[must_use]

@@ -48,7 +48,7 @@ use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_event_loop::EventLoopError;
-use proton_issue_reporter_service::IssueReporter;
+use proton_issue_reporter_service::{IssueLevel, IssueReporter, issue_report_keys_from_error};
 use proton_log_service::LogService;
 use proton_network_monitor_service::{ConnectionMonitor, NetworkMonitorServiceError};
 use proton_sqlite3::MigratorError;
@@ -317,84 +317,95 @@ impl Context {
         network_monitor_config: proton_network_monitor_service::Config,
         issue_reporter: Arc<dyn IssueReporter>,
     ) -> CoreContextResult<Arc<Self>> {
-        let account_db_path = account_db_path.into();
-        let user_db_path = user_db_path.into();
+        let issue_reporter_cloned = issue_reporter.clone();
+        async {
+            let account_db_path = account_db_path.into();
+            let user_db_path = user_db_path.into();
 
-        match origin {
-            Origin::App => {
-                fs::create_dir_all(&account_db_path)?;
-                fs::create_dir_all(&user_db_path)?;
-            }
-
-            Origin::ShareExt => {
-                if !account_db_path.exists() {
-                    return Err(anyhow!(
-                        "Account database not found: {}",
-                        account_db_path.display()
-                    )
-                    .into());
+            match origin {
+                Origin::App => {
+                    fs::create_dir_all(&account_db_path)?;
+                    fs::create_dir_all(&user_db_path)?;
                 }
 
-                if !user_db_path.exists() {
-                    return Err(
-                        anyhow!("User database not found: {}", user_db_path.display()).into(),
-                    );
+                Origin::ShareExt => {
+                    if !account_db_path.exists() {
+                        return Err(anyhow!(
+                            "Account database not found: {}",
+                            account_db_path.display()
+                        )
+                        .into());
+                    }
+
+                    if !user_db_path.exists() {
+                        return Err(
+                            anyhow!("User database not found: {}", user_db_path.display()).into(),
+                        );
+                    }
                 }
             }
-        }
 
-        let account_stash_path = get_account_db_path(&account_db_path);
+            let account_stash_path = get_account_db_path(&account_db_path);
 
-        let stash_config = StashConfiguration {
-            path: Some(&account_stash_path),
-            pool_size: Some(12),
-            ..Default::default()
-        };
+            let stash_config = StashConfiguration {
+                path: Some(&account_stash_path),
+                pool_size: Some(12),
+                ..Default::default()
+            };
 
-        let account_stash = Stash::new(stash_config)?;
+            let account_stash = Stash::new(stash_config)?;
 
-        match origin {
-            Origin::App => {
-                migrate_account_db(&account_stash).await?;
+            match origin {
+                Origin::App => {
+                    migrate_account_db(&account_stash).await?;
+                }
+                Origin::ShareExt => {
+                    verify_account_db(&account_stash).await?;
+                }
             }
-            Origin::ShareExt => {
-                verify_account_db(&account_stash).await?;
-            }
-        }
 
-        let task_service = TaskService::new(runtime)?;
-        let background_task_service = BackgroundAwareTaskService::new(task_service);
+            let task_service = TaskService::new(runtime)?;
+            let background_task_service = BackgroundAwareTaskService::new(task_service);
 
-        builder = builder
-            .with_service(CoreClock::default())
-            .with_service(LoggingService::new(log_service))
-            .with_service(ContextEventService::new())
-            .with_service(IssueReporterService::new(issue_reporter))
-            .with_cyclic_service(|ctx| NetworkMonitorService::new(ctx, network_monitor_config));
-
-        if matches!(origin, Origin::App) {
             builder = builder
-                .with_cyclic_service(|weak_ctx| {
-                    SessionObserverService::new(weak_ctx, SESSION_OBSERVER_BROADCAST_CAPACITY)
-                })
-                .with_service(HvNotifierService::new(hv_notifier))
-                .with_service(DeviceInfoService::new(device_info_provider))
-                .with_service(EventPollConfigService::new(event_poll_mode));
-        }
+                .with_service(CoreClock::default())
+                .with_service(LoggingService::new(log_service))
+                .with_service(ContextEventService::new())
+                .with_service(IssueReporterService::new(issue_reporter))
+                .with_cyclic_service(|ctx| NetworkMonitorService::new(ctx, network_monitor_config));
 
-        builder
-            .build(
-                origin,
-                user_db_path,
-                account_db_path,
-                cache_path.into(),
-                api_config,
-                account_stash,
-                key_chain,
-                initializers,
-                background_task_service,
-            )
-            .await
+            if matches!(origin, Origin::App) {
+                builder = builder
+                    .with_cyclic_service(|weak_ctx| {
+                        SessionObserverService::new(weak_ctx, SESSION_OBSERVER_BROADCAST_CAPACITY)
+                    })
+                    .with_service(HvNotifierService::new(hv_notifier))
+                    .with_service(DeviceInfoService::new(device_info_provider))
+                    .with_service(EventPollConfigService::new(event_poll_mode));
+            }
+
+            builder
+                .build(
+                    origin,
+                    user_db_path,
+                    account_db_path,
+                    cache_path.into(),
+                    api_config,
+                    account_stash,
+                    key_chain,
+                    initializers,
+                    background_task_service,
+                )
+                .await
+        }
+        .await
+        .inspect_err(|e| {
+            issue_reporter_cloned.report(
+                IssueLevel::Critical,
+                "Failed to create core context".into(),
+                issue_report_keys_from_error(e),
+            );
+        })
     }
 
     #[must_use]

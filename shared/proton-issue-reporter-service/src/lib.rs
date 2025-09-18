@@ -15,6 +15,11 @@ pub enum IssueLevel {
 }
 
 pub type IssueReportKeys = HashMap<String, String>;
+
+pub fn issue_report_keys_from_error(e: impl std::fmt::Debug) -> IssueReportKeys {
+    IssueReportKeys::from([("error".into(), format!("{e:?}"))])
+}
+
 pub trait IssueReporter: Send + Sync {
     /// Report an issue not associate with any user.
     fn report(&self, level: IssueLevel, message: String, keys: IssueReportKeys);

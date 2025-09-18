@@ -55,6 +55,7 @@ use std::path::PathBuf;
 use url::Url;
 
 use proton_core_common::services::user_issue_reporter_service::UserIssueReporterService;
+use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::join;
@@ -180,111 +181,124 @@ impl MailUserContext {
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
-        let origin = mail_context.core_context().origin();
-        let mut builder = MailUserContextBuilder::new().with_service(AttachmentCacheState::new());
+        let user_context_cloned = user_context.clone();
+        async {
+            let origin = mail_context.core_context().origin();
+            let mut builder =
+                MailUserContextBuilder::new().with_service(AttachmentCacheState::new());
 
-        builder = match origin {
-            Origin::App => {
-                let builder = builder
+            builder = match origin {
+                Origin::App => {
+                    let builder = builder
+                        .with_service(SendQueueExecutorPool {
+                            pool: QueueAutoExecutorPool::new(
+                                user_context.queue(),
+                                &SEND_ACTION_GROUP,
+                                NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
+                                mail_context.core_context().as_ref(),
+                                true,
+                                user_context.as_ref(),
+                            ),
+                        })
+                        .with_service(DefaultQueueExecutor {
+                            default: QueueAutoExecutorPool::new(
+                                user_context.queue(),
+                                &ActionGroup::default(),
+                                NonZeroUsize::new(DEFAULT_DEFAULT_QUEUE_POOL_SIZE).unwrap(),
+                                mail_context.core_context().as_ref(),
+                                true,
+                                user_context.as_ref(),
+                            ),
+                            prefetch_rollback: QueueAutoExecutorPool::new(
+                                user_context.queue(),
+                                &PREFETCH_ROLLBACK_ACTION_GROUP,
+                                NonZeroUsize::new(DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE)
+                                    .unwrap(),
+                                mail_context.core_context().as_ref(),
+                                true,
+                                user_context.as_ref(),
+                            ),
+                        })
+                        .with_cyclic_service(QueuesService::new)
+                        .with_service(InitializationMediator::new(
+                            mail_context.core_context().task_service().task_service(),
+                        ))
+                        .with_service(RsvpService::new(user_context.stash()));
+
+                    #[cfg(feature = "prefetch")]
+                    let builder = { builder.with_service(PrefetchService::new()) };
+
+                    builder
+                }
+
+                Origin::ShareExt => builder
                     .with_service(SendQueueExecutorPool {
-                        pool: QueueAutoExecutorPool::new(
-                            user_context.queue(),
-                            &SEND_ACTION_GROUP,
-                            NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
-                            mail_context.core_context().as_ref(),
-                            true,
-                            user_context.as_ref(),
-                        ),
+                        pool: {
+                            if let Err(e) = Queue::delete_all_in_group(
+                                user_context.queue(),
+                                SHARE_EXT_ACTION_GROUP.clone(),
+                            )
+                            .await
+                            {
+                                tracing::warn!("Could not clear share extension queue: {}", e);
+                                tracing::warn!("Continuing with existing queue");
+                            };
+                            QueueAutoExecutorPool::new(
+                                user_context.queue(),
+                                &SHARE_EXT_ACTION_GROUP,
+                                NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
+                                mail_context.core_context().as_ref(),
+                                true,
+                                user_context.as_ref(),
+                            )
+                        },
                     })
-                    .with_service(DefaultQueueExecutor {
-                        default: QueueAutoExecutorPool::new(
-                            user_context.queue(),
-                            &ActionGroup::default(),
-                            NonZeroUsize::new(DEFAULT_DEFAULT_QUEUE_POOL_SIZE).unwrap(),
-                            mail_context.core_context().as_ref(),
-                            true,
-                            user_context.as_ref(),
-                        ),
-                        prefetch_rollback: QueueAutoExecutorPool::new(
-                            user_context.queue(),
-                            &PREFETCH_ROLLBACK_ACTION_GROUP,
-                            NonZeroUsize::new(DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE).unwrap(),
-                            mail_context.core_context().as_ref(),
-                            true,
-                            user_context.as_ref(),
-                        ),
-                    })
-                    .with_cyclic_service(QueuesService::new)
-                    .with_service(InitializationMediator::new(
-                        mail_context.core_context().task_service().task_service(),
-                    ))
-                    .with_service(RsvpService::new(user_context.stash()));
+                    .with_cyclic_service(QueuesService::new),
+            };
 
-                #[cfg(feature = "prefetch")]
-                let builder = { builder.with_service(PrefetchService::new()) };
+            let this = builder.build(mail_context, user_context).await?;
 
-                builder
+            // Catch invalid actions at this stage to interrupt the context creation
+            // and avoid infinite error loops.
+            if let Err(e) = this.user_context.queue().validate_queued_actions().await {
+                return Err(MailContextError::NonProcessableActions(e));
             }
 
-            Origin::ShareExt => builder
-                .with_service(SendQueueExecutorPool {
-                    pool: {
-                        if let Err(e) = Queue::delete_all_in_group(
-                            user_context.queue(),
-                            SHARE_EXT_ACTION_GROUP.clone(),
-                        )
-                        .await
-                        {
-                            tracing::warn!("Could not clear share extension queue: {}", e);
-                            tracing::warn!("Continuing with existing queue");
-                        };
-                        QueueAutoExecutorPool::new(
-                            user_context.queue(),
-                            &SHARE_EXT_ACTION_GROUP,
-                            NonZeroUsize::new(DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE).unwrap(),
-                            mail_context.core_context().as_ref(),
-                            true,
-                            user_context.as_ref(),
-                        )
-                    },
-                })
-                .with_cyclic_service(QueuesService::new),
-        };
+            match origin {
+                Origin::App => {
+                    DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;
+                    this.init_expiration_loop();
+                    this.register_subscribers().await?;
 
-        let this = builder.build(mail_context, user_context).await?;
+                    let config = this
+                        .mail_context()
+                        .core_context()
+                        .get_service::<EventPollConfigService>();
+                    if let EventPollMode::Automatic(interval) = config.mode() {
+                        this.init_event_loop_poll(interval);
+                    }
+                }
 
-        // Catch invalid actions at this stage to interrupt the context creation
-        // and avoid infinite error loops.
-        if let Err(e) = this.user_context.queue().validate_queued_actions().await {
-            return Err(MailContextError::NonProcessableActions(e));
-        }
-
-        match origin {
-            Origin::App => {
-                DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;
-                this.init_expiration_loop();
-                this.register_subscribers().await?;
-
-                let config = this
-                    .mail_context()
-                    .core_context()
-                    .get_service::<EventPollConfigService>();
-                if let EventPollMode::Automatic(interval) = config.mode() {
-                    this.init_event_loop_poll(interval);
+                Origin::ShareExt => {
+                    //
                 }
             }
 
-            Origin::ShareExt => {
-                //
-            }
+            // There's a race condition between initializing queues and `self` - to
+            // avoid it, we start our queues as paused and resume once everything
+            // has been initialized, i.e. here:
+            this.queues().resume();
+
+            Ok(this)
         }
-
-        // There's a race condition between initializing queues and `self` - to
-        // avoid it, we start our queues as paused and resume once everything
-        // has been initialized, i.e. here:
-        this.queues().resume();
-
-        Ok(this)
+        .await
+        .inspect_err(|e| {
+            user_context_cloned.issue_reporter_service().report(
+                IssueLevel::Critical,
+                "Failed to create new mail user context".into(),
+                issue_report_keys_from_error(e),
+            )
+        })
     }
 
     /// Get a mandatory service - returns error if service is not registered
