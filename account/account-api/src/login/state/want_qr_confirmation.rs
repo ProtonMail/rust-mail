@@ -5,17 +5,18 @@ use futures::TryFutureExt;
 use muon::client::flow::{ForkFlowResult, WithCodeFlow, WithCodePollFlow};
 use proton_core_api::{
     auth::{KeySecret, UserKeySecret},
-    metric,
     services::{
-        observability::{
-            ApiServiceObservabilityResponse, ObservabilityMetric, ObservabilityRecorder,
-        },
+        observability::ApiServiceObservabilityResponse,
         proton::{ProtonCore, SessionId},
     },
     session::SessionParts,
     store::{Store, UserData},
 };
 use proton_core_common::{Context, PassphraseAcquireError};
+use proton_core_common::{
+    metric,
+    observability::{ObservabilityMetric, ObservabilityRecorder},
+};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_subtle::aead::{AesGcmCiphertext, AesGcmKey};
 use regex::Regex;

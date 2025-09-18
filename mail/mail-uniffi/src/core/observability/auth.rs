@@ -1,6 +1,6 @@
-use proton_core_api::{
+use proton_core_common::{
     metric,
-    services::observability::{ObservabilityMetric, ObservabilityRecorder},
+    observability::{ObservabilityMetric, ObservabilityRecorder},
 };
 use serde::{Deserialize, Serialize};
 use uniffi_runtime::async_runtime;

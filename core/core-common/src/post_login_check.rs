@@ -3,9 +3,9 @@ use std::sync::Arc;
 use crate::datatypes::UserType;
 use crate::models::User as UserTable;
 use crate::{Context, CoreAccountState};
+use crate::{metric, observability::ObservabilityMetric};
 use async_trait::async_trait;
 use proton_core_api::services::proton::{DelinquentState, User, UserId};
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError};
@@ -185,9 +185,9 @@ pub enum UserCheckStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use crate::observability::ObservabilityRecorder;
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
     use serde_json::{self, json};
 

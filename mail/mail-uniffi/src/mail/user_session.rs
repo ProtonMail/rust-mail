@@ -19,9 +19,9 @@ use proton_account_api::login::state::want_qr_confirmation::process_target_devic
 use proton_account_uniffi::login::ProcessTargetDeviceQrError;
 use proton_account_uniffi::password::PasswordFlow;
 use proton_account_uniffi::password_validator::PasswordValidatorService;
-use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
 use proton_core_common::UserContext;
+use proton_core_common::observability::ObservabilityRecorder;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;

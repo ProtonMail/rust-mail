@@ -3,7 +3,7 @@ use crate::cli::read;
 use anyhow::Result;
 use futures::TryFutureExt;
 use proton_account_api::login::state::want_qr_confirmation::process_target_device_qr_code;
-use proton_core_api::services::observability::ObservabilityRecorder;
+use proton_core_common::observability::ObservabilityRecorder;
 use proton_mail_common::MailContext;
 use std::sync::Arc;
 use std::time::Duration;

@@ -20,18 +20,17 @@ use muon::Client;
 use muon::client::flow::LoginExtraInfo;
 use muon::client::flow::LoginFlow;
 use proton_core_api::auth::UserKeySecret;
-use proton_core_api::services::observability::{
-    ApiServiceObservabilityResponse, ObservabilityRecorder,
-};
+use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use proton_core_api::services::proton::SessionId;
 use proton_core_api::store::AuthInfo;
 use proton_core_api::store::DynStore;
 use proton_core_api::store::TfaMode;
 use proton_core_api::store::UserData;
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use proton_core_common::observability::ObservabilityRecorder;
 use proton_core_common::post_login_check::PostLoginValidator;
 use proton_core_common::post_login_check::UserCheckResult;
 use proton_core_common::post_login_check::UserCheckStatus;
+use proton_core_common::{metric, observability::ObservabilityMetric};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::proton_crypto::{new_pgp_provider, new_srp_provider};
@@ -324,10 +323,10 @@ impl UserStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_core_common::observability::ObservabilityRecorder;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(

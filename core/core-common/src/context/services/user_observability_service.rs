@@ -5,11 +5,11 @@ use std::time::Duration;
 use tracing::{debug, error, trace};
 
 use super::Service;
-use crate::{CoreContextError, UserContext};
-use proton_core_api::connection_status::ConnectionStatus;
-use proton_core_api::services::observability::{
+use crate::observability::{
     ObservabilityMetric, ObservabilityRecorder, store::InMemoryMetricStore,
 };
+use crate::{CoreContextError, UserContext};
+use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::ProtonData;
 
 const OBSERVABILITY_SEND_INTERVAL_SECS: u64 = 60;

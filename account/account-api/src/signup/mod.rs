@@ -6,12 +6,11 @@ use crate::shared::crypto::SharedCryptoError;
 use crate::signup::state::{Recovery, StateKind, Username};
 use crate::{AccountApi, ApiError};
 use futures::TryFutureExt;
-use proton_core_api::services::observability::{
-    ApiServiceObservabilityResponse, ObservabilityRecorder,
-};
+use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use proton_core_api::store::{DynStore, StoreError};
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use proton_core_common::observability::ObservabilityRecorder;
 use proton_core_common::post_login_check::{PostLoginValidationError, PostLoginValidator};
+use proton_core_common::{metric, observability::ObservabilityMetric};
 use proton_crypto_account::errors::{AccountCryptoError, SKLError};
 use proton_crypto_account::{proton_crypto::CryptoError, salts::SaltError};
 use serde::{Deserialize, Serialize};
@@ -327,10 +326,10 @@ impl DomainAvailability {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_core_common::observability::ObservabilityRecorder;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(

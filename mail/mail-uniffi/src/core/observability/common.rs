@@ -14,8 +14,8 @@ pub async fn should_record_telemetry(user_context: &Arc<MailUserContext>) -> boo
 
 #[cfg(test)]
 pub mod test_helper {
-    use proton_core_api::services::observability::{ObservabilityMetric, ObservabilityRecorder};
     use proton_core_api::services::proton::{PostMetricsRequestData, PostMetricsRequestElement};
+    use proton_core_common::observability::{ObservabilityMetric, ObservabilityRecorder};
     use serde_json::json;
 
     pub const TIMESTAMP: i64 = 1_741_021_308;

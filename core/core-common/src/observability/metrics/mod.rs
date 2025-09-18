@@ -1,6 +1,7 @@
+use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use serde::{Deserialize, Serialize};
 
-use super::{ApiServiceObservabilityResponse, ObservabilityMetric};
+use super::ObservabilityMetric;
 
 #[macro_export]
 macro_rules! metric {
@@ -84,9 +85,9 @@ metric! {
 
 #[cfg(test)]
 mod tests {
-    use crate::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use crate::observability::ObservabilityRecorder;
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
 
     use super::*;

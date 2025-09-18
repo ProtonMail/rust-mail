@@ -1,6 +1,6 @@
-use proton_core_api::{
+use proton_core_common::{
     metric,
-    services::observability::{ObservabilityMetric, ObservabilityRecorder},
+    observability::{ObservabilityMetric, ObservabilityRecorder},
 };
 use serde::{Deserialize, Serialize};
 
@@ -29,10 +29,10 @@ pub fn record_change_password_screen_view(screen_id: ChangePasswordScreenId) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_core_common::observability::ObservabilityRecorder;
     use serde_json::{self, json};
 
     #[test]

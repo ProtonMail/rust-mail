@@ -27,13 +27,17 @@ use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 
+use crate::observability::ObservabilityManager;
 use crate::services::user_issue_reporter_service::UserIssueReporterService;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_issue_reporter_service::{IssueLevel, IssueReportKeys};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
+
+const OBSERVABILITY_BATCH_SIZE: usize = 500;
 
 pub mod action_queue;
 pub mod builder;
@@ -97,6 +101,7 @@ impl UserContext {
         cache_path: PathBuf,
     ) -> CoreContextResult<Arc<Self>> {
         info!("Creating new user context");
+        let network_status_observer = context.network_monitor_service().network_status_observer();
         let issue_reporter = context.issue_reporter_service();
         let user_issue_reporter = issue_reporter
             .reporter()
@@ -187,6 +192,13 @@ impl UserContext {
 
             if matches!(origin, Origin::App) {
                 this.register_subscribers().await?;
+
+                ObservabilityManager::start(
+                    network_status_observer,
+                    &Arc::downgrade(&this),
+                    Duration::from_secs(60),
+                    OBSERVABILITY_BATCH_SIZE,
+                );
             }
 
             Ok(this)

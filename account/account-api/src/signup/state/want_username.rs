@@ -6,10 +6,9 @@ use crate::{AccountApi, ApiError, requests::ParseDomain};
 use derive_more::Display;
 use futures::TryFutureExt;
 use muon::Client;
-use proton_core_api::services::observability::{
-    ApiServiceObservabilityResponse, ObservabilityRecorder,
-};
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use proton_core_api::services::observability::ApiServiceObservabilityResponse;
+use proton_core_common::observability::ObservabilityRecorder;
+use proton_core_common::{metric, observability::ObservabilityMetric};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -126,10 +125,10 @@ impl UsernameAvailabilityStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_core_common::observability::ObservabilityRecorder;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(
