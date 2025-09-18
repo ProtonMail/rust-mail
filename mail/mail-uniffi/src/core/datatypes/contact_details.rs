@@ -7,6 +7,7 @@ use proton_core_api::services::proton::ContactId;
 use proton_core_common::datatypes::contact_details::ContactDetailAddress as RealAddress;
 use proton_core_common::datatypes::contact_details::ContactDetailsEmail as RealContactDetailsEmail;
 use proton_core_common::datatypes::contact_details::ContactField as RealContactField;
+use proton_core_common::datatypes::contact_details::ContactGroup as RealContactGroup;
 use proton_core_common::datatypes::contact_details::ExtendedName as RealExtendedName;
 use proton_core_common::datatypes::contact_details::Gender as RealGender;
 use proton_core_common::datatypes::contact_details::InspectableContactDetails as RealContactDetails;
@@ -195,9 +196,25 @@ impl From<RealVCardUrlValue> for VCardUrlValue {
 }
 
 #[derive(uniffi::Record)]
+pub struct ContactGroup {
+    pub name: String,
+    pub color: String,
+}
+
+impl From<RealContactGroup> for ContactGroup {
+    fn from(value: RealContactGroup) -> Self {
+        Self {
+            name: value.name,
+            color: value.color.to_string(),
+        }
+    }
+}
+
+#[derive(uniffi::Record)]
 pub struct ContactDetailsEmail {
     pub email_type: Vec<VcardPropType>,
     pub email: String,
+    pub groups: Vec<ContactGroup>,
 }
 
 impl From<RealContactDetailsEmail> for ContactDetailsEmail {
@@ -205,6 +222,7 @@ impl From<RealContactDetailsEmail> for ContactDetailsEmail {
         Self {
             email_type: value.email_type.map_vec(),
             email: value.email.into_clear_text_string(),
+            groups: value.groups.map_vec(),
         }
     }
 }

@@ -1,7 +1,6 @@
 ---
 source: core/core-common/src/datatypes/contact_details.rs
 expression: get_vcard(frodo)
-snapshot_kind: text
 ---
 VCARD:
 BEGIN:VCARD
@@ -36,13 +35,14 @@ ITEM1.EMAIL;PREF=1;TYPE=work:mateuszlovestesting_free@proton.me
 ITEM2.EMAIL;TYPE=home;PREF=2:mateuszlovestesting@gmail.com
 UID:proton-web-964e427a-4075-ac2e-9c04-c8cca3854d8a
 PRODID;VALUE=TEXT:-//ProtonMail//ProtonMail vCard 1.0.0//EN
-ITEM1.CATEGORIES:Test group
+ITEM1.CATEGORIES:Private,Friends
+ITEM2.CATEGORIES:Work
 END:VCARD
 
 ---------------------------
 
 Sorted fields:
-Emails([ContactDetailsEmail { email_type: [Work], email: mXXXXXXXXXXXXXXXXXXXXXXX@XXXXXXXXX }, ContactDetailsEmail { email_type: [Home], email: mXXXXXXXXXXXXXXXXXX@XXXXXXXXX }])
+Emails([ContactDetailsEmail { email_type: [Work], email: mXXXXXXXXXXXXXXXXXXXXXXX@XXXXXXXXX, groups: [ContactGroup { name: "Private", color: LabelColor("#4F66DF") }, ContactGroup { name: "Friends", color: LabelColor("#4F66DF") }] }, ContactDetailsEmail { email_type: [Home], email: mXXXXXXXXXXXXXXXXXX@XXXXXXXXX, groups: [ContactGroup { name: "Work", color: LabelColor("#9C89FF") }] }])
 Phones([Telephone { number: "+41772001010", tel_types: [Home] }, Telephone { number: "+41991009988", tel_types: [String("main")] }])
 Address([ContactDetailAddress { street: Some("Langstrasse 100"), city: Some("Zürich"), region: Some("Zürich"), postal_code: Some("8004"), country: Some("Switzerland"), addr_type: [] }, ContactDetailAddress { street: Some("Marszałkowska 33"), city: Some("Warsaw"), region: Some("Masovian"), postal_code: Some("01-000"), country: Some("Poland"), addr_type: [] }, ContactDetailAddress { street: Some("Hagenholzstrasse 2"), city: Some("Zürich"), region: Some("Zürich"), postal_code: Some("8205"), country: Some("Switzerland"), addr_type: [] }])
 Birthday(DateAndOrTime(DateAndOrTimeValue(DateTimeValue { year: Some(2005), month: Some(2), day: Some(9), hour: None, minute: None, second: None, zone: None })))

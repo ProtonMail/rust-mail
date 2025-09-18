@@ -30,5 +30,6 @@ ITEM1.EMAIL;PREF=1;TYPE=work:mateuszlovestesting_free@proton.me
 ITEM2.EMAIL;TYPE=home;PREF=2:mateuszlovestesting@gmail.com
 UID:proton-web-964e427a-4075-ac2e-9c04-c8cca3854d8a
 PRODID;VALUE=TEXT:-//ProtonMail//ProtonMail vCard 1.0.0//EN
-ITEM1.CATEGORIES:Test group
+ITEM1.CATEGORIES:Private,Friends
+ITEM2.CATEGORIES:Work
 END:VCARD

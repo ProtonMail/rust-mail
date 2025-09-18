@@ -1,7 +1,6 @@
 ---
 source: core/core-common/src/datatypes/contact_details.rs
 expression: get_vcard(frodo)
-snapshot_kind: text
 ---
 VCARD:
 BEGIN:VCARD
@@ -21,7 +20,7 @@ END:VCARD
 ---------------------------
 
 Sorted fields:
-Emails([ContactDetailsEmail { email_type: [], email: fXXXX@XXXXX }])
+Emails([ContactDetailsEmail { email_type: [], email: fXXXX@XXXXX, groups: [] }])
 Address([ContactDetailAddress { street: Some(""), city: Some("Hobbiton"), region: Some("The Shire"), postal_code: Some(""), country: Some("Middle earth"), addr_type: [] }])
 Languages(["Common", "co-HO"])
 TimeZones(["SMT"])

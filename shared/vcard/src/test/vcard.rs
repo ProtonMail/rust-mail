@@ -35,7 +35,7 @@ UID:proton-web-f0453472-e174-e4cf-428a-a3d72c0a4c80
 ITEM1.EMAIL;PREF=1:foo@bar.eu
 ITEM2.EMAIL;TYPE=;PREF=2:foo.bar@example.com
 PRODID;VALUE=TEXT:-//ProtonMail//ProtonMail vCard 1.0.0//EN
-ITEM2.CATEGORIES:Test Group
+ITEM2.CATEGORIES:Test group,Other group
 END:VCARD";
     let vcard = VcardParser::new(&vcard[..]);
     for card in vcard {

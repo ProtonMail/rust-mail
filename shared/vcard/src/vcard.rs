@@ -607,14 +607,11 @@ impl<_K, P: VcardProperty, S: BuildHasher> ToSorted<P> for HashMap<_K, P, S> {
         Self: Sized,
     {
         self.into_values()
-            .map(|this| {
-                let pref = match this.get_preference() {
-                    Some(v) => v.value,
-                    None => u32::MAX,
-                };
-                (pref, f(this))
+            .map(|property| {
+                let preference = property.get_preference().map_or(u32::MAX, |v| v.value);
+                (preference, f(property))
             })
             .sorted_unstable()
-            .map(|x| x.1)
+            .map(|(_, item)| item)
     }
 }

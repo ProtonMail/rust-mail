@@ -1,7 +1,6 @@
 ---
 source: core/core-common/src/datatypes/contact_details.rs
 expression: get_vcard(small)
-snapshot_kind: text
 ---
 VCARD:
 BEGIN:VCARD
@@ -15,4 +14,4 @@ END:VCARD
 ---------------------------
 
 Sorted fields:
-Emails([ContactDetailsEmail { email_type: [], email: aXXXXXXXX@XXXXX }])
+Emails([ContactDetailsEmail { email_type: [], email: aXXXXXXXX@XXXXX, groups: [] }])
