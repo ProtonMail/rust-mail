@@ -76,6 +76,7 @@ url = { workspace = true }
 uuid = { workspace = true }
 sqlite-watcher = { workspace = true }
 reqwest = { workspace = true }
+proton-issue-reporter-service = { workspace = true }
 
 # test-util option deps
 function_name = { workspace = true, optional = true }

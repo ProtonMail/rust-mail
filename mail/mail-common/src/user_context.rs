@@ -54,6 +54,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use url::Url;
 
+use proton_core_common::services::user_issue_reporter_service::UserIssueReporterService;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::join;
@@ -812,6 +813,10 @@ impl MailUserContext {
 
     pub fn network_monitor_service(&self) -> &NetworkMonitorService {
         self.mail_context.network_monitor_service()
+    }
+
+    pub fn issue_reporter_service(&self) -> &UserIssueReporterService {
+        self.user_context.issue_reporter_service()
     }
 }
 

@@ -42,6 +42,8 @@ members = [
   "uniffi/uniffi-runtime",
   "shared/proton-event-service",
   "shared/proton-network-monitor-service",
+  "shared/proton-issue-reporter-service",
+  "shared/proton-issue-reporter-service-uniffi",
 ]
 
 [workspace.package]
@@ -331,6 +333,16 @@ registry = "proton"
 [workspace.dependencies.proton-network-monitor-service]
 version = "0.1.0"
 path = "shared/proton-network-monitor-service"
+registry = "proton"
+
+[workspace.dependencies.proton-issue-reporter-service]
+version = "0.1.0"
+path = "shared/proton-issue-reporter-service"
+registry = "proton"
+
+[workspace.dependencies.proton-issue-reporter-service-uniffi]
+version = "0.1.0"
+path = "shared/proton-issue-reporter-service-uniffi"
 registry = "proton"
 
 [workspace.lints.rust]

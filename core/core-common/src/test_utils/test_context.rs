@@ -17,6 +17,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{AppVersion, Env, Server};
 use proton_core_api::session::{Endpoint, EnvId};
 use proton_event_loop::subscriber::SubscriberError;
+use proton_issue_reporter_service::{IssueReporter, NoopIssueReporter};
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
@@ -141,7 +142,7 @@ impl TestContext {
     }
 
     pub async fn new() -> Arc<Self> {
-        Self::_new(None, None, None).await
+        Self::_new(None, None, None, None).await
     }
 
     pub async fn with_user_secret_and_user_id(
@@ -149,19 +150,24 @@ impl TestContext {
         user_id: UserId,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
     ) -> Arc<Self> {
-        Self::_new(Some(user_key_secret), Some(user_id), initializers).await
+        Self::_new(Some(user_key_secret), Some(user_id), initializers, None).await
     }
 
     pub async fn with_initializers(
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
     ) -> Arc<Self> {
-        Self::_new(None, None, initializers).await
+        Self::_new(None, None, initializers, None).await
+    }
+
+    pub async fn with_issue_reporter(reporter: Arc<dyn IssueReporter>) -> Arc<Self> {
+        Self::_new(None, None, None, Some(reporter)).await
     }
 
     async fn _new(
         user_key_secret: Option<UserKeySecret>,
         user_id: Option<UserId>,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
+        issue_reporter: Option<Arc<dyn IssueReporter>>,
     ) -> Arc<Self> {
         _ = set_global_default(
             registry()
@@ -214,6 +220,7 @@ impl TestContext {
             LogService::new(log_config),
             EventPollMode::Manual,
             test_network_monitor_service_config(),
+            issue_reporter.unwrap_or(Arc::new(NoopIssueReporter)),
         )
         .await
         .expect("failed to create core context");
