@@ -129,8 +129,12 @@ impl InspectableContactDetails {
             .collect();
         let groups: Vec<ContactGroup> = contact_groups
             .iter()
-            .filter(|group| !cfg!(debug_assertions) || group.remote_id.is_some())
-            .filter(|group| id_set.contains(group.remote_id.as_deref().unwrap()))
+            .filter(|group| {
+                group
+                    .remote_id
+                    .as_deref()
+                    .is_some_and(|id| id_set.contains(id))
+            })
             .map(|group| ContactGroup {
                 name: group.name.clone(),
                 color: group.color.clone(),

@@ -46,7 +46,7 @@ impl GroupedContacts {
         let mut contact_group_items: HashMap<LabelId, (ContactGroupItem, Vec<ContactEmail>)> =
             contact_groups
                 .into_iter()
-                .filter(|group| !cfg!(debug_assertions) || group.remote_id.is_some())
+                .filter(|group| group.remote_id.is_some())
                 .filter(|group| group.label_type == LabelType::ContactGroup)
                 .map(|group| {
                     let local_id = group.id();
@@ -273,7 +273,7 @@ impl ContactSuggestions {
 
         let mut contact_groups: HashMap<LabelId, ContactGroup> = contact_groups
             .into_iter()
-            .filter(|group| !cfg!(debug_assertions) || group.remote_id.is_some())
+            .filter(|group| group.remote_id.is_some())
             .filter(|group| group.label_type == LabelType::ContactGroup)
             // TODO(ET-2030): We should not reference groups by remote ids, instead we should use local ids
             // This is to ensure the offline mode works with contacts and contact groups not synced with API
