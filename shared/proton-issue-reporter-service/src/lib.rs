@@ -16,7 +16,7 @@ pub enum IssueLevel {
 
 pub type IssueReportKeys = HashMap<String, String>;
 
-pub fn issue_report_keys_from_error(e: impl std::fmt::Debug) -> IssueReportKeys {
+pub fn issue_report_keys_from_error(e: impl std::error::Error) -> IssueReportKeys {
     IssueReportKeys::from([("error".into(), format!("{e:?}"))])
 }
 
@@ -48,5 +48,39 @@ pub struct NoopUserIssueReporter;
 impl UserIssueReporter for NoopUserIssueReporter {
     fn report(&self, _: IssueLevel, _: String, _: IssueReportKeys) {
         //do nothing
+    }
+}
+
+pub struct TracedIssueReporter(Arc<dyn IssueReporter>);
+
+impl TracedIssueReporter {
+    pub fn new(reporter: Arc<dyn IssueReporter>) -> Self {
+        TracedIssueReporter(reporter)
+    }
+}
+pub struct TracedUserIssueReporter {
+    user_id: String,
+    reporter: Arc<dyn UserIssueReporter>,
+}
+
+impl IssueReporter for TracedIssueReporter {
+    fn report(&self, level: IssueLevel, message: String, keys: IssueReportKeys) {
+        tracing::error!(?level, "Issue Report: {message}\n keys: {keys:?}");
+        self.0.report(level, message, keys);
+    }
+
+    fn new_user_reporter(&self, user_id: String) -> Arc<dyn UserIssueReporter> {
+        let user_id_cloned = user_id.clone();
+        Arc::new(TracedUserIssueReporter {
+            user_id: user_id_cloned,
+            reporter: self.0.new_user_reporter(user_id),
+        })
+    }
+}
+
+impl UserIssueReporter for TracedUserIssueReporter {
+    fn report(&self, level: IssueLevel, message: String, keys: IssueReportKeys) {
+        tracing::error!(?self.user_id, ?level,"Issue Report: {message}\n keys: {keys:?}");
+        self.reporter.report(level, message, keys);
     }
 }

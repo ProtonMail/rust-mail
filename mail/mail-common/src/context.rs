@@ -38,7 +38,9 @@ use proton_core_common::{OnSessionDeletedResponse, UserDatabaseInitializer};
 use proton_crypto_inbox::attachment::AttachmentEncryptionError;
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
-use proton_issue_reporter_service::{IssueLevel, IssueReportKeys, IssueReporter};
+use proton_issue_reporter_service::{
+    IssueLevel, IssueReportKeys, IssueReporter, TracedIssueReporter,
+};
 use proton_log_service::LogService;
 use proton_network_monitor_service::NetworkMonitorServiceError;
 use proton_sqlite3::MigratorError;
@@ -276,6 +278,7 @@ impl MailContext {
         network_monitor_config: proton_network_monitor_service::Config,
         issue_reporter: Arc<dyn IssueReporter>,
     ) -> Result<Arc<Self>, MailContextError> {
+        let issue_reporter = Arc::new(TracedIssueReporter::new(issue_reporter));
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
 

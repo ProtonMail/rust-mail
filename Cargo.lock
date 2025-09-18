@@ -5414,6 +5414,9 @@ dependencies = [
 [[package]]
 name = "proton-issue-reporter-service"
 version = "0.1.0"
+dependencies = [
+ "tracing",
+]
 
 [[package]]
 name = "proton-issue-reporter-service-uniffi"
