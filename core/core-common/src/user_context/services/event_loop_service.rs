@@ -9,6 +9,7 @@ pub struct EventLoopService {
 }
 
 impl EventLoopService {
+    #[must_use]
     pub fn new(event_loop: EventPoll) -> Self {
         Self {
             event_poll: event_loop,
@@ -16,10 +17,12 @@ impl EventLoopService {
         }
     }
 
+    #[must_use]
     pub fn event_poll(&self) -> &EventPoll {
         &self.event_poll
     }
 
+    #[must_use]
     pub fn last_event_loop_action_ids(&self) -> &Arc<Mutex<EventLoopActionIds>> {
         &self.last_event_loop_action_ids
     }
