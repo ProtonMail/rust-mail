@@ -580,9 +580,9 @@ where
                 // If there's no destination label, it means that this object is
                 // being moved into AllMail.
                 //
-                // This doesn't make sense as a action on its own[1], but it can
-                // happen when user undoes a move _from_ AllMail to Inbox, for
-                // example; this is simply a no-op then.
+                // This doesn't make sense as an action on its own[1], but it
+                // can happen when user undoes a move _from_ AllMail to Inbox,
+                // for example; this is simply a no-op then.
                 //
                 // [1] after all, by definition all mails are in AllMail anyway
             }
