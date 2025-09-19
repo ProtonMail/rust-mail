@@ -12,6 +12,14 @@ use serde::{Deserialize, Serialize};
 use stash::exports::Connection;
 use stash::stash::{StashError, Tether};
 
+/// Exclusive location is the place in which a conversation or a message rests,
+/// e.g. Inbox, Archive or a custom folder; it's materialized from labels.
+///
+/// Usually a message / a conversation will have one exclusive location, but
+/// under funky circumstances[1] it's also possible for an object to be in no
+/// specific exclusive location (you can then only see it in `All Mail`).
+///
+/// [1] if you delete a folder in which a msg / a conv rests, for instance
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ExclusiveLocation {
     System {
@@ -54,9 +62,8 @@ impl ExclusiveLocation {
             .find_map(|rid| find_label(labels, rid));
 
         match label {
-            // Get a System Label.
             Some(label) => ExclusiveLocation::new(label),
-            // Otherwise try to get a custom Folder.
+
             None => match labels
                 .iter()
                 .filter_map(ExclusiveLocation::new)
@@ -71,12 +78,6 @@ impl ExclusiveLocation {
         }
     }
 
-    /// Calculate exclusive location from a list of label ids.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
-    ///
     pub async fn from_label_ids(
         label_ids: &[LabelId],
         tether: &Tether,

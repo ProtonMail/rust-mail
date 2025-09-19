@@ -61,13 +61,6 @@ pub struct ContextualConversation {
     /// Order in the list this conversation should be displayed.
     pub display_order: u64,
 
-    /// Exclusive location of the [`Conversation`] (e.g. Inbox, Archive, Outbox
-    /// etc.). This field is auto-calculated, and not stored in the database.
-    /// When the model is read from database, this field should be calculated,
-    /// and always be [`Some`]. If it is [`None`], it means either that the
-    /// model is not fully initialized or there is very nasty bug. Failed
-    /// initialization is logged as an error, but flow is not impacted due to
-    /// the fact that this is not a critical field.
     #[scroller_eq(skip)]
     pub exclusive_location: Option<ExclusiveLocation>,
 

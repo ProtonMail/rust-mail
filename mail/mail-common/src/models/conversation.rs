@@ -96,13 +96,6 @@ pub struct Conversation {
     /// This is important for the client to know when to display the time of reminder.
     pub snoozed_until: Option<UnixTimestamp>,
 
-    /// Exclusive location of the [`Conversation`] (e.g. Inbox, Archive, Outbox
-    /// etc.). This field is auto-calculated, and not stored in the database.
-    /// When the model is read from database, this field should be calculated,
-    /// and always be [`Some`]. If it is [`None`], it means either that the
-    /// model is not fully initialized or there is very nasty bug. Failed
-    /// initialization is logged as an error, but flow is not impacted due to
-    /// the fact that this is not a critical field.
     pub exclusive_location: Option<ExclusiveLocation>,
 
     #[DbField]
@@ -2909,11 +2902,13 @@ impl ModelHooks for Conversation {
                 .filter_map(|label| label.remote_label_id.clone())
                 .map_into()
                 .collect_vec();
+
             self.exclusive_location = ExclusiveLocation::from_label_ids_sync(&label_ids, tx)?;
         }
 
         Ok(())
     }
+
     fn after_load(&mut self, conn: &Connection) -> Result<(), StashError> {
         self.labels = ConversationLabel::find_sync(
             "WHERE local_conversation_id = ?",
