@@ -977,6 +977,69 @@ async fn move_conversation_mix_unread() {
     }
 }
 
+#[tokio::test]
+async fn move_from_allmail() {
+    // Setup:
+    // * Message that's present only in AllMail, without any more labels.
+    //
+    // This can happen when you e.g. remove a folder with some messages inside
+    // it - all of those messages will then lose their exclusive location and
+    // will be accessible only from AllMail.
+
+    let ctx = MailTestContext::new().await;
+
+    let destination_label_id = LabelId::from("destination");
+    let destination_label = test_label(&destination_label_id, ApiLabelType::Folder, "destination");
+    let message = test_message(vec![], false);
+
+    let params = test_init_params_labels(hash_map! {
+        ApiLabelType::Folder: vec![ destination_label ]
+    });
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    // ---
+
+    let mailbox = Mailbox::with_remote_id(&tether, LabelId::all_mail())
+        .await
+        .unwrap();
+
+    mailbox
+        .sync(&mut tether, user_ctx.session(), 10)
+        .await
+        .unwrap();
+
+    // ---
+
+    let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+
+    assert!(message.label_ids.is_empty());
+
+    Message::action_move(
+        &tether,
+        user_ctx.action_queue(),
+        destination.id(),
+        vec![message.id()],
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+    message.reload(&tether).await.unwrap();
+
+    assert_eq!(message.label_ids, vec![destination_label_id.clone()]);
+}
+
 fn test_label(label_id: &LabelId, label_type: ApiLabelType, name: &str) -> ApiLabel {
     ApiLabel {
         id: label_id.clone(),

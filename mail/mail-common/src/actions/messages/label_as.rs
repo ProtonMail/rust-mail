@@ -4,7 +4,8 @@ use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::{Message, MessageCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionDependencyKeys, ActionId, Handler, Type, VersionConverter, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, FactoryResult, Handler, Type, VersionConverter,
+    WriterGuard,
 };
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
@@ -21,11 +22,7 @@ pub struct LabelAs(pub LabelAsData<Message>);
 impl VersionConverter for LabelAs {
     type Output = Self;
 
-    fn convert(
-        old_version: u32,
-        _: u32,
-        data: &[u8],
-    ) -> proton_action_queue::action::FactoryResult<Self::Output> {
+    fn convert(old_version: u32, _: u32, data: &[u8]) -> FactoryResult<Self::Output> {
         LabelAsData::convert(old_version, data).map(LabelAs)
     }
 }
