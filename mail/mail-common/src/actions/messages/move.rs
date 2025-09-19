@@ -5,7 +5,7 @@ use crate::models::Message;
 use anyhow::Context;
 use itertools::Itertools;
 use proton_action_queue::action::{
-    Action, ActionDependencyKeys, Type, VersionConverter, WriterGuard,
+    Action, ActionDependencyKeys, FactoryResult, Type, VersionConverter, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
 use proton_action_queue::enqueue;
@@ -20,11 +20,7 @@ pub struct Move(pub ActionMoveData<Message>);
 impl VersionConverter for Move {
     type Output = Self;
 
-    fn convert(
-        old_version: u32,
-        _: u32,
-        data: &[u8],
-    ) -> proton_action_queue::action::FactoryResult<Self::Output> {
+    fn convert(old_version: u32, _: u32, data: &[u8]) -> FactoryResult<Self::Output> {
         ActionMoveData::convert(old_version, data).map(Move)
     }
 }
