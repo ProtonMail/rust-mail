@@ -35,14 +35,13 @@ impl From<IssueLevel> for RealIssueLevel {
 
 #[uniffi::export(with_foreign)]
 pub trait IssueReporter: Sync + Send {
-    fn report(&self, level: IssueLevel, message: String, keys: IssueReportKeys);
-
-    fn new_user_reporter(&self, user_id: String) -> Arc<dyn UserIssueReporter>;
-}
-
-#[uniffi::export(with_foreign)]
-pub trait UserIssueReporter: Sync + Send {
-    fn report(&self, level: IssueLevel, message: String, keys: IssueReportKeys);
+    fn report(
+        &self,
+        level: IssueLevel,
+        user_id: Option<String>,
+        message: String,
+        keys: IssueReportKeys,
+    );
 }
 
 pub struct IssueReporterWrapper(Arc<dyn IssueReporter>);
@@ -54,19 +53,26 @@ impl IssueReporterWrapper {
 }
 impl RealIssueReporter for IssueReporterWrapper {
     fn report(&self, level: RealIssueLevel, message: String, keys: IssueReportKeys) {
-        self.0.report(level.into(), message, keys);
+        self.0.report(level.into(), None, message, keys);
     }
 
     fn new_user_reporter(&self, user_id: String) -> Arc<dyn RealUserIssueReporter> {
-        Arc::new(UserIssueReporterWrapper(self.0.new_user_reporter(user_id)))
+        Arc::new(UserIssueReporterWrapper {
+            user_id,
+            reporter: self.0.clone(),
+        })
     }
 }
 
-struct UserIssueReporterWrapper(Arc<dyn UserIssueReporter>);
+struct UserIssueReporterWrapper {
+    reporter: Arc<dyn IssueReporter>,
+    user_id: String,
+}
 
 impl RealUserIssueReporter for UserIssueReporterWrapper {
     fn report(&self, level: RealIssueLevel, message: String, keys: IssueReportKeys) {
-        self.0.report(level.into(), message, keys);
+        self.reporter
+            .report(level.into(), Some(self.user_id.clone()), message, keys);
     }
 }
 
