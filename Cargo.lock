@@ -5341,12 +5341,10 @@ version = "0.7.29"
 dependencies = [
  "anyhow",
  "async-trait",
- "flume",
- "futures",
  "indexmap 2.11.0",
  "mockall",
- "parking_lot",
  "proton-core-api",
+ "proton-task-service",
  "serde",
  "serde_json",
  "serde_with",

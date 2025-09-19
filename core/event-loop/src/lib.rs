@@ -96,6 +96,8 @@ pub enum EventLoopError {
     Register(&'static str),
     #[error("Failed to deserialize event: {0}")]
     Deserialize(AnyhowError),
+    #[error("Failed to communicate with actor")]
+    Actor,
 }
 
 /// This represents an event returned by the API.

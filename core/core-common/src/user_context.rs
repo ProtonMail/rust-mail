@@ -107,6 +107,8 @@ impl UserContext {
             let queue = Queue::new(user_stash.clone()).await?;
 
             let origin = context.origin();
+            let context_cloned = context.clone();
+            let cancellation_token_cloned = cancellation_token.clone();
 
             let this = {
                 let mut builder = builder::UserContextBuilder::new();
@@ -116,9 +118,14 @@ impl UserContext {
 
                 if matches!(origin, Origin::App) {
                     builder = builder
-                        .with_cyclic_service(|weak_ref: Weak<UserContext>| {
+                        .with_cyclic_service(move |weak_ref: Weak<UserContext>| {
                             let event_ctx = CoreEventLoopContext::from(weak_ref);
-                            let event_loop = EventPoll::new(event_ctx.boxed(), event_ctx.boxed());
+                            let event_loop = EventPoll::new(
+                                context_cloned.task_service().task_service(),
+                                cancellation_token_cloned,
+                                event_ctx.boxed(),
+                                event_ctx.boxed(),
+                            );
                             EventLoopService::new(event_loop)
                         })
                         .with_service(InitializationService::new(InitializationWatcher::new(

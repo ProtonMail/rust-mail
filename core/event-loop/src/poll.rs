@@ -5,39 +5,45 @@ use anyhow::anyhow;
 use indexmap::{IndexMap, map::Entry};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
+use proton_task_service::TaskService;
 use std::any::{Any, TypeId};
-use tokio::sync::Mutex;
-use tracing::{self, Level, debug, error, info};
+use tokio::sync::{mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
+use tracing::{self, Instrument, Level, debug, error, info};
 
 pub struct EventPoll {
-    epoll: EventPollInternal,
-    store: Box<dyn Store>,
-    provider: Box<dyn Provider>,
-    /// The subscribers are stored in a indexmap of boxed raw subscribers.
-    /// The indexmap was chosen to preserve the order of the subscribers to run - FIFO.
-    /// The indexmap stores the type id of the subscriber to allow for multiple subscribers
-    /// of the same type to prevent double deserialization of the same event.
-    subscribers: Mutex<IndexMap<TypeId, Box<dyn RawSubscriber>>>,
+    tx: mpsc::Sender<EventPollActorMessage>,
 }
 
 impl EventPoll {
     #[must_use]
-    pub fn new(store: Box<dyn Store>, provider: Box<dyn Provider>) -> Self {
+    pub fn new(
+        task_service: &TaskService,
+        cancellation_token: CancellationToken,
+        store: Box<dyn Store>,
+        provider: Box<dyn Provider>,
+    ) -> Self {
         let epoll = EventPollInternal::new();
 
-        Self {
+        // Allow some capacity for pull to refresh request to buffer up.
+        let (tx, rx) = mpsc::channel(8);
+        let actor = EventPollActor {
+            rx,
             epoll,
             store,
             provider,
-            subscribers: Mutex::new(IndexMap::new()),
-        }
+            subscribers: IndexMap::new(),
+        };
+
+        task_service.spawn_cancellable(cancellation_token, async move {
+            actor.run().await;
+        });
+
+        Self { tx }
     }
 
     pub async fn initialize(&self) -> Result<&Self, EventLoopError> {
-        self.epoll
-            .initialize(self.store.as_ref(), self.provider.as_ref())
-            .await?;
-
+        self.act(EventPollActorMessage::Initialize).await??;
         Ok(self)
     }
 
@@ -51,43 +57,45 @@ impl EventPoll {
         &self,
         subscriber: Box<dyn Subscriber<T>>,
     ) -> Result<&Self, EventLoopError> {
-        match self.subscribers.lock().await.entry(TypeId::of::<T>()) {
-            Entry::Occupied(mut entry) => {
-                let entry: &mut dyn RawSubscriber = &mut **entry.get_mut();
+        self.act(|tx| EventPollActorMessage::Register {
+            register: Box::new(|subscribers| match subscribers.entry(TypeId::of::<T>()) {
+                Entry::Occupied(mut entry) => {
+                    let entry: &mut dyn RawSubscriber = &mut **entry.get_mut();
 
-                if let Some(typed_subscribers) =
-                    <dyn Any>::downcast_mut::<TypedSubscribers<T>>(entry)
-                {
-                    typed_subscribers.add_subscriber(subscriber);
-                } else {
-                    unreachable!();
+                    if let Some(typed_subscribers) =
+                        <dyn Any>::downcast_mut::<TypedSubscribers<T>>(entry)
+                    {
+                        typed_subscribers.add_subscriber(subscriber);
+                    } else {
+                        unreachable!();
+                    }
                 }
-            }
 
-            Entry::Vacant(entry) => {
-                entry.insert(TypedSubscribers::<T>::new_raw(subscriber));
-            }
-        }
+                Entry::Vacant(entry) => {
+                    entry.insert(TypedSubscribers::<T>::new_raw(subscriber));
+                }
+            }),
+            sender: tx,
+        })
+        .await?;
 
         Ok(self)
     }
 
     pub async fn poll(&self) -> Result<(), EventLoopError> {
-        {
-            let mut l = self.subscribers.lock().await;
-            for s in l.values_mut() {
-                s.cleanup();
-            }
-        }
+        let span = tracing::Span::current();
+        self.act(|sender| EventPollActorMessage::Poll { span, sender })
+            .await?
+    }
 
-        self.epoll
-            .poll_raw(
-                self.store.as_ref(),
-                self.provider.as_ref(),
-                &*self.subscribers.lock().await,
-                MAX_EVENTS_PER_POLL,
-            )
-            .await
+    async fn act<T: Send + 'static>(
+        &self,
+        closure: impl FnOnce(oneshot::Sender<T>) -> EventPollActorMessage,
+    ) -> Result<T, EventLoopError> {
+        let (tx, rx) = oneshot::channel();
+        let msg = closure(tx);
+        self.tx.send(msg).await.map_err(|_| EventLoopError::Actor)?;
+        rx.await.map_err(|_| EventLoopError::Actor)
     }
 }
 
@@ -96,7 +104,7 @@ impl EventPoll {
 /// This version requires the user to call the [`EventLoop::poll`] function each time they wish to
 /// iterate the loop.
 #[derive(Debug, Default)]
-pub struct EventPollInternal;
+struct EventPollInternal;
 
 const MAX_EVENTS_PER_POLL: usize = 50;
 impl EventPollInternal {
@@ -257,6 +265,76 @@ impl EventPollInternal {
         }
 
         Ok(())
+    }
+}
+
+type RegisterFn =
+    Box<dyn FnOnce(&mut IndexMap<TypeId, Box<dyn RawSubscriber>>) + Send + Sync + 'static>;
+enum EventPollActorMessage {
+    Initialize(oneshot::Sender<Result<(), EventLoopError>>),
+    Register {
+        register: RegisterFn,
+        sender: oneshot::Sender<()>,
+    },
+    Poll {
+        span: tracing::span::Span,
+        sender: oneshot::Sender<Result<(), EventLoopError>>,
+    },
+}
+
+struct EventPollActor {
+    rx: mpsc::Receiver<EventPollActorMessage>,
+    epoll: EventPollInternal,
+    store: Box<dyn Store>,
+    provider: Box<dyn Provider>,
+    /// The subscribers are stored in a indexmap of boxed raw subscribers.
+    /// The indexmap was chosen to preserve the order of the subscribers to run - FIFO.
+    /// The indexmap stores the type id of the subscriber to allow for multiple subscribers
+    /// of the same type to prevent double deserialization of the same event.
+    subscribers: IndexMap<TypeId, Box<dyn RawSubscriber>>,
+}
+
+impl EventPollActor {
+    async fn initialize(&self) -> Result<(), EventLoopError> {
+        self.epoll
+            .initialize(self.store.as_ref(), self.provider.as_ref())
+            .await
+    }
+
+    async fn poll(&mut self) -> Result<(), EventLoopError> {
+        {
+            for s in self.subscribers.values_mut() {
+                s.cleanup();
+            }
+        }
+
+        self.epoll
+            .poll_raw(
+                self.store.as_ref(),
+                self.provider.as_ref(),
+                &self.subscribers,
+                MAX_EVENTS_PER_POLL,
+            )
+            .await
+    }
+
+    async fn run(mut self) {
+        while let Some(message) = self.rx.recv().await {
+            match message {
+                EventPollActorMessage::Initialize(tx) => {
+                    let r = self.initialize().await;
+                    let _ = tx.send(r);
+                }
+                EventPollActorMessage::Register { register, sender } => {
+                    register(&mut self.subscribers);
+                    let _ = sender.send(());
+                }
+                EventPollActorMessage::Poll { span, sender } => {
+                    let r = self.poll().instrument(span).await;
+                    let _ = sender.send(r);
+                }
+            }
+        }
     }
 }
 
@@ -599,7 +677,11 @@ mod tests {
             }
         }
 
+        let task_service = TaskService::new(tokio::runtime::Handle::current()).unwrap();
+        let cancel_token = CancellationToken::new();
         let target = EventPoll::new(
+            &task_service,
+            cancel_token.clone(),
             Box::new(InMemoryStore::default()),
             Box::new(MockProvider::new()),
         );
