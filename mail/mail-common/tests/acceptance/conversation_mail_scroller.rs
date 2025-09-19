@@ -1346,6 +1346,19 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
     assert_eq!(update[0].remote_id.as_ref(), Some(&conv_id_2));
 }
 
+// Tests the instance in which the cached data is equal to the API data in the time of first visit of that location.
+// To imagine how it could happen imagine the following scenario in quick succession:
+// - User creates a folder
+// - User moves 10 items to the folder (lets assume he waits till API is synced)
+// - User visits the folder
+// - User removes 1 item from the folder
+//
+// Most notable thing about the test is it triggers the `fetch_more` 3 times.
+// - 1st time by user which reads from cache and state is NotSynced
+// - 2nd time (auto) invalidation from the first_page sync state changes from NotSynced to Online
+// - 3rd time (auto) database refresh from the watcher state is Online
+//
+// Without ET-4791 fix this test would give 2 `Append` updates with the same data, esentially duplicating the page.
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 async fn test_conversation_mail_scroller_reads_non_empty_folder_for_the_first_time_and_api_data_is_equal_to_the_cache()
  {
@@ -1386,21 +1399,30 @@ async fn test_conversation_mail_scroller_reads_non_empty_folder_for_the_first_ti
 
     // The items will be read from cache as we have 9 items in cache
     // And the exact same data is in the API
-    test_scroller.fetch_more().unwrap();
+    test_scroller.fetch_more().unwrap(); // 1st fetch_more
     test_scroller
         .match_next_update(TestUpdate::Append { items: 9 })
         .await;
     assert!(test_scroller.has_more().await.unwrap());
-    // Trigger database update
-    // To make sure we won't give any updates from automatic fetch_more
+    // 2nd fetch_more goes when first_page sync finishes around here.
+    // |<-
+    // No update is expected as the data is the same
+    let update = test_scroller
+        .try_wait_for_update(Duration::from_secs(2))
+        .await
+        .unwrap();
+    assert!(update.is_none());
+    assert_eq!(test_scroller.items().len(), 9);
+
+    // 3rd fetch_more by triggering invisble database update.
     let mut new_data = hash_map! {
         vec!["rid2"]: test_conversations(1, 299),
     };
     new_data.save_to_database(&mut tether).await;
 
-    // We should get no update as the data is the same
+    // We shouldn't get any update as the data is still the same
     let update = test_scroller
-        .try_wait_for_update(Duration::from_secs(3))
+        .try_wait_for_update(Duration::from_secs(2))
         .await
         .unwrap();
     assert!(update.is_none());
