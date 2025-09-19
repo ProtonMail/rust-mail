@@ -61,7 +61,7 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::mem;
 use std::sync::Weak;
-use tracing::{error, warn};
+use tracing::error;
 
 pub const PREFETCH_ROLLBACK_ACTION_GROUP: ActionGroup = ActionGroup::new("MAIL_PREFETCH_ROLLBACK");
 
@@ -450,8 +450,8 @@ pub struct ActionMoveData<T>
 where
     T: ConversationOrMessage,
 {
-    sources: HashMap<LocalLabelId, Vec<T::IdType>>,
-    destination: LocalLabelId,
+    sources: HashMap<Option<LocalLabelId>, Vec<T::IdType>>,
+    destination: Option<LocalLabelId>,
 
     // These 2 exist solely for the revert and undo
     marked_read: Vec<LocalMessageId>,
@@ -467,15 +467,15 @@ where
             self,
             Self {
                 sources: Default::default(),
-                destination: 0.into(),
+                destination: Default::default(),
                 marked_read: Default::default(),
                 removed_labels: Default::default(),
             },
         )
     }
 
-    /// Create a new action which moves items with `target_ids` from `source_label_id` to
-    ///`destination_label_id`.
+    /// Creates an action that moves `target_ids` from their exclusive locations
+    /// into `destination`.
     pub async fn new(
         tether: &Tether,
         destination: LocalLabelId,
@@ -483,21 +483,15 @@ where
     ) -> Result<Option<Self>, StashError> {
         let mut sources = HashMap::<_, Vec<_>>::new();
 
-        for target in target_ids {
-            let m = T::load(target, tether)
+        for target_id in target_ids {
+            let target = T::load(target_id, tether)
                 .await?
                 .with_context(|| format!("Could not find {}", type_name::<T>()))?;
-            let Some(label) = m.get_exclusive_location() else {
-                error!(
-                    "{} with id {target:?} does not have an exclusive location, skipping...",
-                    type_name::<T>()
-                );
-                continue;
-            };
 
-            debug_assert_ne!(label, destination);
-
-            sources.entry(label).or_default().push(target);
+            sources
+                .entry(target.get_exclusive_location())
+                .or_default()
+                .push(target_id);
         }
 
         if sources.is_empty() {
@@ -506,7 +500,7 @@ where
 
         Ok(Some(Self {
             sources,
-            destination,
+            destination: Some(destination),
             marked_read: vec![],
             removed_labels: vec![],
         }))
@@ -531,38 +525,67 @@ where
         let trash = LabelId::trash().local_id(tx)?;
         let almost_all_mail = LabelId::almost_all_mail().local_id(tx)?;
 
-        if self.destination == trash {
+        if self.destination == Some(trash) {
             self.marked_read = T::mark_read(self.sources.values().flatten().copied(), tx)?;
         }
 
-        for (&source_id, ids) in &self.sources {
-            let source_label = Label::load_by_id_sync(source_id, tx)?.context(
-                "Failed to load source label. This should never happen because we have the local id.",
-            )?;
-
-            let is_snoozed =
-                SystemLabel::new(&source_label).is_some_and(|label| label.is_snoozed());
-
-            if [trash, spam].contains(&self.destination) {
-                // When moving to trash or spam we delete all labels except all mail.
-                self.removed_labels = T::remove_all_labels_except_all_mail(ids, tx)?;
-                self.removed_labels.retain(|x| x.label != source_id);
-            } else if source_label.is_movable_folder() || is_snoozed {
-                T::remove_label(source_id, ids.iter().cloned(), tx)
-                    .context("Failed to remove source label")?;
+        for (source_id, ids) in &self.sources {
+            let source_label = if let Some(source_id) = source_id {
+                Some(
+                    Label::load_by_id_sync(*source_id, tx)?
+                        .context("Failed to load source label")?,
+                )
             } else {
-                warn!("Source label {source_id} is not a movable folder, not removing...")
+                // If there's no source label, it means that this msg/conv is
+                // being moved from AllMail into somewhere else (e.g. because
+                // its parent folder got deleted and this object has no
+                // exclusive location anymore).
+                //
+                // In cases like these we don't want to remove the AllMail label
+                // since the object is not actually /moved/ out of AllMail.
+                None
+            };
+
+            let is_snoozed = source_label.as_ref().is_some_and(|source_label| {
+                SystemLabel::new(source_label).is_some_and(|label| label.is_snoozed())
+            });
+
+            if let Some(destination) = self.destination
+                && [trash, spam].contains(&destination)
+            {
+                self.removed_labels = T::remove_all_labels_except_all_mail(ids, tx)?;
+
+                if let Some(source_id) = source_id {
+                    self.removed_labels.retain(|x| x.label != *source_id);
+                }
+            } else if let Some(source_id) = source_id
+                && let Some(source_label) = source_label
+                && (source_label.is_movable_folder() || is_snoozed)
+            {
+                T::remove_label(*source_id, ids.iter().cloned(), tx)
+                    .context("Failed to remove source label")?;
             }
 
-            if [trash, spam].contains(&source_id) {
-                // When moving out of Trash or Spam, add AlmostAllMail label
-                T::apply_label(almost_all_mail, ids.iter().cloned(), tx).context(
-                    "Failed to add conversations to almost_all_mail when moving out of spam/trash",
-                )?;
+            if let Some(source_id) = source_id
+                && [trash, spam].contains(source_id)
+            {
+                T::apply_label(almost_all_mail, ids.iter().cloned(), tx)
+                    .context("Failed to add conversations to almost_all_mail")?;
             }
 
-            T::apply_label(self.destination, ids.clone(), tx)
-                .context("Failed to apply destination label")?;
+            if let Some(destination) = self.destination {
+                T::apply_label(destination, ids.clone(), tx)
+                    .context("Failed to apply destination label")?;
+            } else {
+                // If there's no destination label, it means that this object is
+                // being moved into AllMail.
+                //
+                // This doesn't make sense as a action on its own[1], but it can
+                // happen when user undoes a move _from_ AllMail to Inbox, for
+                // example; this is simply a no-op then.
+                //
+                // [1] after all, by definition all mails are in AllMail anyway
+            }
         }
 
         Ok(())
@@ -575,7 +598,11 @@ where
     ) -> Result<(), MailActionError> {
         let tether = guard.tether();
 
-        let dest_label = Label::resolve_remote_label_id(self.destination, tether).await?;
+        let Some(dest_label) = self.destination else {
+            return Ok(());
+        };
+
+        let dest_label = Label::resolve_remote_label_id(dest_label, tether).await?;
         let mut all_remote_ids = Vec::new();
         for ids in self.sources.values() {
             let remote_ids = T::local_ids_counterpart(ids.clone(), tether).await?;
@@ -640,9 +667,17 @@ where
     }
 
     pub fn action_dependency_keys(&self) -> ActionDependencyKeys {
-        let mut keys =
-            ActionDependencyKeysBuilder::default().with_required_related(self.destination);
+        let mut keys = ActionDependencyKeysBuilder::default();
+
+        if let Some(destination) = self.destination {
+            keys = keys.with_required_related(destination);
+        }
+
         for (source, ids) in &self.sources {
+            let Some(source) = source else {
+                continue;
+            };
+
             // We could also potentially have several moves interlinked
             // as a dependency where a move chain gets undoed, but it should
             // be okay to have the conversation move to the last operation that succeeded.
@@ -667,18 +702,21 @@ where
 
         match old_version {
             1 => {
-                let data = proton_action_queue::action::deserialize::<OldAction<T>>(data)?;
+                let data = action::deserialize::<OldAction<T>>(data)?;
 
                 let mut sources = HashMap::new();
-                sources.insert(data.source_label_id, data.target_ids);
+                sources.insert(Some(data.source_label_id), data.target_ids);
+
                 Ok(Self {
-                    destination: data.destination_label_id,
+                    destination: Some(data.destination_label_id),
                     sources,
                     marked_read: vec![],
                     removed_labels: vec![],
                 })
             }
-            2 => Ok(proton_action_queue::action::deserialize::<Self>(data)?),
+
+            2 => Ok(action::deserialize::<Self>(data)?),
+
             other_version => Err(FactoryError::InvalidVersion(other_version)),
         }
     }
