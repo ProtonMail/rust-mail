@@ -498,14 +498,13 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if action could not be executed locally.
-    #[tracing::instrument(skip(self, metadata, action), name = "queue::replace")]
     pub async fn replace_or_queue_action_with_metadata<T: Action>(
         &self,
         existing_id: ActionId,
         mut action: T,
         metadata: Metadata,
     ) -> LocalOutput<T> {
-        let span = tracing::trace_span!("queue::replace", type=T::TYPE.0);
+        let span = tracing::debug_span!("queue::replace", type=T::TYPE.0, existing_id=?existing_id);
         async {
             info!("Replacing {existing_id:?}");
             debug!("Dependencies: {:?}", metadata.dependencies);
@@ -757,7 +756,7 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
         tx: &'a Bond,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
-        let span = tracing::trace_span!("queue::revert", id=self.id.0, type=T::TYPE.0);
+        let span = tracing::debug_span!("queue::revert", id=self.id.0, type=T::TYPE.0);
 
         Box::pin(
             async move {
