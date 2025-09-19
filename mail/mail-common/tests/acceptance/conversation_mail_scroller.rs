@@ -1,3 +1,4 @@
+use core::ops::Range;
 use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{Action, EventId, LabelId};
@@ -1186,6 +1187,27 @@ async fn setup_api_sync_previous_page(
         .await;
 }
 
+fn create_api_conversation_page(
+    range: impl Into<Range<usize>>,
+    starting_display_order: u64,
+) -> Vec<ApiConversation> {
+    let params = TestParams::default_basic();
+    let test_conversation = params.conversations.clone().pop().unwrap();
+    // Conversations are returned and displayed in reversed order
+    range
+        .into()
+        .rev()
+        .map(|i| {
+            let order = starting_display_order + i as u64;
+            let mut new = test_conversation.clone();
+            new.id = format!("{}_{}", new.id, order).into();
+            new.order = order;
+            new.context_time = Some(order);
+            new
+        })
+        .collect_vec()
+}
+
 async fn setup_api_conversation_pages(
     ctx: &MailTestContext,
     page_size: usize,
@@ -1194,30 +1216,10 @@ async fn setup_api_conversation_pages(
 ) -> TestParams {
     ctx.mock_ping_success().await;
     let mut params = TestParams::default_basic();
-    let test_conversation = params.conversations.clone().pop().unwrap();
     // Conversations are returned and displayed in reversed order
-    let second_page = (0..page_size)
-        .rev()
-        .map(|i| {
-            let order = starting_display_order + i as u64;
-            let mut new = test_conversation.clone();
-            new.id = format!("{}_{}", new.id, order).into();
-            new.order = order;
-            new.context_time = Some(order);
-            new
-        })
-        .collect_vec();
-    let first_page = (page_size..(page_size * 2))
-        .rev()
-        .map(|i| {
-            let order = starting_display_order + i as u64;
-            let mut new = test_conversation.clone();
-            new.id = format!("{}_{}", new.id, order).into();
-            new.order = order;
-            new.context_time = Some(order);
-            new
-        })
-        .collect_vec();
+    let second_page = create_api_conversation_page(0..page_size, starting_display_order);
+    let first_page =
+        create_api_conversation_page(page_size..(page_size * 2), starting_display_order);
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
     let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
 
@@ -1342,6 +1344,67 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
         .unwrap();
     assert_eq!(update.len(), 1);
     assert_eq!(update[0].remote_id.as_ref(), Some(&conv_id_2));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+async fn test_conversation_mail_scroller_reads_non_empty_folder_for_the_first_time_and_api_data_is_equal_to_the_cache()
+ {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let unread = ReadFilter::All;
+    let api_page = create_api_conversation_page(0..9, 100);
+    let models = api_page
+        .iter()
+        .map(|conv| Conversation::from(conv.clone()))
+        .collect_vec();
+    // Set up cached data
+    let remote_label_id = SystemLabel::Inbox.remote_id();
+    let mut data = hash_map! {
+        vec![remote_label_id.as_str()]: models,
+        vec!["rid2"]: test_conversations(50, 0),
+    };
+    data.save_to_database(&mut tether).await;
+
+    ctx.mock_get_conversations(api_page, 4..=6).await;
+    ctx.mock_ping_success().await;
+    ctx.catch_all().await;
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 10;
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
+
+    let page_size = 10;
+    let mut test_scroller =
+        TestScroller::conversations_instant(&user_ctx, local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    // The items will be read from cache as we have 9 items in cache
+    // And the exact same data is in the API
+    test_scroller.fetch_more().unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::Append { items: 9 })
+        .await;
+    assert!(test_scroller.has_more().await.unwrap());
+    // Trigger database update
+    // To make sure we won't give any updates from automatic fetch_more
+    let mut new_data = hash_map! {
+        vec!["rid2"]: test_conversations(1, 299),
+    };
+    new_data.save_to_database(&mut tether).await;
+
+    // We should get no update as the data is the same
+    let update = test_scroller
+        .try_wait_for_update(Duration::from_secs(3))
+        .await
+        .unwrap();
+    assert!(update.is_none());
+    assert_eq!(test_scroller.items().len(), 9);
 }
 
 #[function_name::named]

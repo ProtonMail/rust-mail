@@ -302,13 +302,7 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         scroller: MailScroller,
         handle: MailScrollerHandle<T>,
     ) -> Result<Self, MailContextError> {
-        let mut test_scroller = Self {
-            scroller,
-            handle,
-            collected_items: Vec::new(),
-            updates: Vec::new(),
-        };
-
+        let mut test_scroller = Self::new_instant(scroller, handle);
         // Wait for any initial updates that might be available immediately
         // This handles cases where cached data is loaded during scroller initialization
         test_scroller
@@ -316,6 +310,16 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
             .await?;
 
         Ok(test_scroller)
+    }
+
+    /// Create a new TestScroller from a MailScroller and handle
+    pub fn new_instant(scroller: MailScroller, handle: MailScrollerHandle<T>) -> Self {
+        Self {
+            scroller,
+            handle,
+            collected_items: Vec::new(),
+            updates: Vec::new(),
+        }
     }
 
     /// Send a fetch_more command to the scroller
@@ -536,9 +540,7 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
     }
 }
 
-/// Convenience functions for creating TestScrollers for specific types
 impl TestScroller<crate::datatypes::ContextualConversation> {
-    /// Create a TestScroller for conversations
     pub async fn conversations(
         user_ctx: &std::sync::Arc<MailUserContext>,
         local_label_id: proton_core_common::datatypes::LocalLabelId,
@@ -549,6 +551,18 @@ impl TestScroller<crate::datatypes::ContextualConversation> {
             MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
                 .await?;
         Self::new(scroller, handle).await
+    }
+
+    pub async fn conversations_instant(
+        user_ctx: &std::sync::Arc<MailUserContext>,
+        local_label_id: proton_core_common::datatypes::LocalLabelId,
+        unread: crate::datatypes::ReadFilter,
+        page_size: usize,
+    ) -> Result<Self, MailContextError> {
+        let (scroller, handle) =
+            MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+                .await?;
+        Ok(Self::new_instant(scroller, handle))
     }
 }
 

@@ -127,4 +127,11 @@ impl<T: ScrollData> MailScrollerState<T> {
             MailScrollerState::NotSynced(unordered) => unordered.has_more(tether).await,
         }
     }
+
+    pub async fn seen_count(&self, tether: &Tether) -> Result<u64, StashError> {
+        match self {
+            MailScrollerState::Online(ordered) => ordered.seen_count(tether).await,
+            MailScrollerState::NotSynced(unordered) => unordered.seen_count(tether).await,
+        }
+    }
 }
