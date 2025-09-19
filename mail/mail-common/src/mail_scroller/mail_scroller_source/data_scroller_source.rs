@@ -356,14 +356,16 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let is_offline = ctx.network_monitor_service().is_os_offline();
         let is_online = !is_offline;
 
-        // If we have loaded previous page in background, we need to replace
-        let mut replace = false;
+        // If we have loaded first or previous page in background
+        // and we have seen some data already, we need to replace
+        let mut replace = self.state.is_not_synced() && self.state.seen_count(&tether).await? > 0;
 
         // Always sync the cache as there might be new data.
         // The sync has to be done after determining the previous
         // state. This is the soonest place it can be safely called.
         self.sync_scroller(&tether).await?;
 
+        // If we never synced this label before due to network issues now is the time to do it.
         if is_online
             && self.state.is_not_synced()
             && let Some(task) = self.initialize_impl(ctx, true).await?
