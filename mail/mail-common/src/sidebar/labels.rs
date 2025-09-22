@@ -19,8 +19,8 @@ use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
 impl Sidebar {
     pub async fn system_labels(&self, tether: &Tether) -> SidebarResult<Vec<SystemLabel>> {
         let settings = MailSettings::get_or_default(tether).await;
-
         let mut labels = vec![self.get_label(tether, LabelId::inbox()).await?];
+
         if settings.show_moved == ShowMoved::KeepInDrafts
             || settings.show_moved == ShowMoved::KeepBoth
         {
@@ -28,25 +28,33 @@ impl Sidebar {
         } else {
             labels.push(self.get_label(tether, LabelId::drafts()).await?);
         }
+
         let all_scheduled = self
             .get_label_with_counters(tether, LabelId::all_scheduled())
             .await?;
+
         if all_scheduled.total_msg != 0 || all_scheduled.total_conv != 0 {
             labels.push(all_scheduled.label());
         }
+
         let outbox = self
             .get_label_with_counters(tether, LabelId::outbox())
             .await?;
+
         if outbox.total_conv != 0 || outbox.total_msg != 0 {
             labels.push(outbox.label());
         }
+
         let snoozed = self
             .get_label_with_counters(tether, LabelId::snoozed())
             .await?;
+
         if snoozed.total_conv != 0 || snoozed.total_msg != 0 {
             labels.push(snoozed.label());
         }
+
         labels.push(self.get_label(tether, LabelId::starred()).await?);
+
         if settings.show_moved == ShowMoved::KeepInSent
             || settings.show_moved == ShowMoved::KeepBoth
         {
@@ -54,6 +62,7 @@ impl Sidebar {
         } else {
             labels.push(self.get_label(tether, LabelId::sent()).await?);
         }
+
         labels.push(self.get_label(tether, LabelId::spam()).await?);
         labels.push(self.get_label(tether, LabelId::archive()).await?);
         labels.push(self.get_label(tether, LabelId::trash()).await?);
@@ -62,6 +71,7 @@ impl Sidebar {
         } else {
             labels.push(self.get_label(tether, LabelId::almost_all_mail()).await?);
         }
+
         Ok(SystemLabel::from_labels(labels.as_slice(), tether).await?)
     }
 
