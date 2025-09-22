@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Limit background network test max timeout interval to 30 seconds
+
+
+## [mail-uniffi-v0.144.1] - 2025-09-22
+
+### Fixes
+
 - [ET-4668] Muon timeout failures
 
 
