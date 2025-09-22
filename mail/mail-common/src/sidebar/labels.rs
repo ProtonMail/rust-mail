@@ -17,15 +17,6 @@ use crate::models::{LabelWithCounters, MailSettings};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
 
 impl Sidebar {
-    /// Get the list of the System Folder to display in the sidebar.
-    ///
-    /// That list is filtered in function of [`MailSettings::almost_all_mail`],
-    /// [`MailSettings::show_moved`] and some are hidden when empty (`Scheduled`, `Outbox` and
-    /// `Snoozed`)
-    ///
-    /// # Errors
-    ///   * Database request fail
-    ///
     pub async fn system_labels(&self, tether: &Tether) -> SidebarResult<Vec<SystemLabel>> {
         let settings = MailSettings::get_or_default(tether).await;
 
@@ -74,43 +65,24 @@ impl Sidebar {
         Ok(SystemLabel::from_labels(labels.as_slice(), tether).await?)
     }
 
-    /// Get the list of Custom Folders to display in the sidebar.
-    ///
-    /// Use `None` to get the root `Folders`
-    /// Use the id of a `Folders` to get its children
-    ///
-    /// # Errors
-    ///   * Database request fail
-    ///
     pub async fn custom_folders(&self, tether: &Tether) -> SidebarResult<Vec<CustomFolder>> {
         let labels = self.all_custom_folders(tether).await?;
 
         Ok(custom_folder_hierarchy(&labels))
     }
 
-    /// Get all the [`CustomFolder`].
     pub async fn all_custom_folders(&self, tether: &Tether) -> SidebarResult<Vec<CustomFolder>> {
         let labels = Label::find_by_kind(LabelType::Folder, tether).await?;
 
         Ok(CustomFolder::from_labels(labels.as_slice(), tether).await?)
     }
 
-    /// Get the list of Custom Labels to display in the sidebar.
-    ///
-    /// # Errors
-    ///   * Database request fail
-    ///
     pub async fn custom_labels(&self, tether: &Tether) -> SidebarResult<Vec<CustomLabel>> {
         let labels = Label::find_by_kind(LabelType::Label, tether).await?;
 
         Ok(CustomLabel::from_labels(labels.as_slice(), tether).await?)
     }
 
-    /// Set folder `expanded` field to it's collapsed state
-    ///
-    /// # Errors
-    ///   * Database request fail
-    ///
     pub async fn collapse_folder(
         &self,
         ctx: &MailUserContext,
@@ -121,11 +93,6 @@ impl Sidebar {
         Ok(())
     }
 
-    /// Set folder `expanded` field to it's expanded state
-    ///
-    /// # Errors
-    ///   * Database request fail
-    ///
     pub async fn expand_folder(
         &self,
         ctx: &MailUserContext,
@@ -136,7 +103,6 @@ impl Sidebar {
         Ok(())
     }
 
-    /// Get a [`Label`] given a [`LabelId`]
     async fn get_label(&self, tether: &Tether, label_id: LabelId) -> SidebarResult<Label> {
         Label::find_first("WHERE remote_id = ?", params![label_id.clone()], tether)
             .await?
