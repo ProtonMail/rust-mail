@@ -54,10 +54,10 @@ impl Default for BackgroundConfig {
         Self {
             timeout: Duration::from_secs(20),
             retry_policy: RetryPolicy::default()
-                .max_delay(Duration::from_secs(3600))
+                .max_delay(Duration::from_secs(30))
                 .max_count(usize::MAX)
                 .iter_add(Duration::from_secs(1))
-                .iter_mul(2.0),
+                .iter_mul(1.5),
             infinite_checks: true,
         }
     }
