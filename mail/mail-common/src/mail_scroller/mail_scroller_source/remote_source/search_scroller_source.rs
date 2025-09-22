@@ -3,6 +3,7 @@ use std::{cmp, sync::Arc};
 use super::MailPaginatorJoinHandle;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::models::MailSettings;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, SearchOptions},
@@ -11,7 +12,7 @@ use crate::{
 };
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::UnixTimestamp;
-use proton_core_common::{datatypes::SystemLabel, models::ModelExtension};
+use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
 };
@@ -54,22 +55,21 @@ impl SearchScrollerSource {
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let mut tether = ctx.user_stash().connection().await?;
+
         tether
             .tx(async |tx| SearchScrollData::delete_all(tx).await)
             .await?;
 
-        // Search will always operate on online data only
         debug!("Paginating for the first time, getting first page & spawning sync task.");
-        let remote_label_id = SystemLabel::AllMail.label_id();
-        let page_size = self.page_size;
 
-        // Wait for the first page to be fetched
+        let remote_label_id = MailSettings::get_or_default(&tether).await.all_mail();
+
         let task = Self::spawn_first_page_sync(
             ctx,
             self.total.clone(),
-            remote_label_id.clone(),
+            remote_label_id,
             self.search.clone(),
-            page_size,
+            self.page_size,
         )
         .await?;
 
@@ -391,9 +391,11 @@ impl MailScrollerSource for SearchScrollerSource {
             let task = if items.is_empty() {
                 None
             } else {
+                let remote_label_id = MailSettings::get_or_default(&tether).await.all_mail();
+
                 Self::spawn_background_sync(
                     ctx,
-                    SystemLabel::AllMail.label_id(),
+                    remote_label_id,
                     self.search.clone(),
                     self.page_size,
                 )

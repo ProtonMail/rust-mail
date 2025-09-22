@@ -6,9 +6,10 @@ use crate::actions::mail_settings::{ToolbarType, UpdateMobileActions};
 use crate::datatypes::{
     AlmostAllMail, ComposerDirection, ComposerMode, MailSettingsId, MessageButtons, MimeType,
     MobileAction, MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved,
-    SpamAction, SwipeAction, ViewLayout, ViewMode,
+    SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
 };
 use proton_action_queue::queue::Queue;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{ImageProxy, InitializationKey};
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent,
@@ -305,6 +306,13 @@ impl MailSettings {
 
     pub fn is_proxy_enabled(&self) -> bool {
         self.image_proxy.contains(ImageProxy::ENABLED)
+    }
+
+    pub fn all_mail(&self) -> LabelId {
+        match self.almost_all_mail {
+            AlmostAllMail::AllMail => LabelId::all_mail(),
+            AlmostAllMail::AlmostAllMail => LabelId::almost_all_mail(),
+        }
     }
 }
 
