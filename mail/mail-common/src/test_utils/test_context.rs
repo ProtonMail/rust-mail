@@ -209,9 +209,14 @@ impl MailTestContext {
         Mock::given(any())
             .respond_with(|request: &Request| {
                 panic!(
-                    "Received unexpected {} request\n  Path: {}\n  Headers:\n{}\n  Body: {}\n",
+                    "Received unexpected {} request\n  Path: {}{}\n  Headers:\n{}\n  Body: {}\n",
                     request.method,
                     request.url.path(),
+                    request
+                        .url
+                        .query()
+                        .map(|query| format!("?{query}"))
+                        .unwrap_or_default(),
                     request
                         .headers
                         .iter()
