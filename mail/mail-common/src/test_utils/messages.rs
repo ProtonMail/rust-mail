@@ -31,7 +31,7 @@ use serde::Serialize;
 use serde_json::{Value as JsonValue, json};
 use serde_with::{BoolFromInt, serde_as};
 use std::collections::{HashMap, HashSet};
-use wiremock::matchers::{body_json, body_partial_json, method, path};
+use wiremock::matchers::{body_json, body_partial_json, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate, Times};
 
 impl MailTestContext {
@@ -73,32 +73,9 @@ impl MailTestContext {
             .await;
     }
 
-    pub async fn mock_get_messages(&self, messages: Vec<MessageMetadata>) {
-        let total = messages.len() as u64;
-        self.mock_get_messages_total_expect(messages, total, 1)
-            .await;
-    }
-
     #[function_name::named]
-    pub async fn mock_get_messages_total_expect(
-        &self,
-        messages: Vec<MessageMetadata>,
-        total: u64,
-        expect: impl Into<Times>,
-    ) {
-        let resp = GetMessagesResponse {
-            total,
-            messages,
-            stale: false,
-        };
-
-        Mock::given(method("GET"))
-            .and(path("/api/mail/v4/messages".to_string()))
-            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
-            .expect(expect)
-            .named(function_name!())
-            .mount(self.mock_server())
-            .await;
+    pub fn mock_get_messages(&self) -> GetMessagesMock {
+        GetMessagesMock::new(self, function_name!())
     }
 
     #[function_name::named]
@@ -762,5 +739,79 @@ impl From<AddressSubPackage> for TestDraftSendAddressSubPackage {
             address_type: value.address_type,
             auth: value.auth.map(Into::into),
         }
+    }
+}
+
+pub struct GetMessagesMock<'a> {
+    ctx: &'a MailTestContext,
+    name: &'static str,
+    label_id: Option<String>,
+    keyword: Option<String>,
+    end_id: Option<String>,
+    expect: Option<Times>,
+}
+
+impl<'a> GetMessagesMock<'a> {
+    fn new(ctx: &'a MailTestContext, name: &'static str) -> Self {
+        Self {
+            ctx,
+            name,
+            label_id: None,
+            keyword: None,
+            end_id: None,
+            expect: None,
+        }
+    }
+
+    pub fn given_label_id(mut self, label_id: &LabelId) -> Self {
+        self.label_id = Some(label_id.to_string());
+        self
+    }
+
+    pub fn given_keyword(mut self, keyword: &str) -> Self {
+        self.keyword = Some(keyword.into());
+        self
+    }
+
+    pub fn given_end_id(mut self, end_id: &str) -> Self {
+        self.end_id = Some(end_id.into());
+        self
+    }
+
+    pub fn expect(mut self, expect: impl Into<Times>) -> Self {
+        self.expect = Some(expect.into());
+        self
+    }
+
+    pub async fn respond_with(self, messages: Vec<MessageMetadata>) {
+        self.respond_with_ex(messages.len(), messages).await;
+    }
+
+    pub async fn respond_with_ex(self, total: usize, messages: Vec<MessageMetadata>) {
+        let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/messages"));
+
+        if let Some(label_id) = self.label_id {
+            mock = mock.and(query_param("LabelID[0]", label_id.to_string()));
+        }
+
+        if let Some(end_id) = self.end_id {
+            mock = mock.and(query_param("EndID", end_id));
+        }
+
+        if let Some(keyword) = self.keyword {
+            mock = mock.and(query_param("Keyword", keyword));
+        }
+
+        mock.respond_with(
+            ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
+                total: total.try_into().unwrap(),
+                messages,
+                stale: false,
+            }),
+        )
+        .expect(self.expect.unwrap_or_else(|| 1.into()))
+        .named(self.name)
+        .mount(self.ctx.mock_server())
+        .await;
     }
 }

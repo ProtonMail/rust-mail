@@ -44,9 +44,13 @@ async fn label_message() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_label_messages(&label_id.clone(), vec![message.metadata.id.clone()])
         .await;
+
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
@@ -108,12 +112,18 @@ async fn unlabel_message() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_label_messages(&label_id.clone(), vec![message.metadata.id.clone()])
         .await;
+
     ctx.mock_unlabel_messages(&label_id.clone(), vec![message.metadata.id.clone()], vec![])
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -180,9 +190,13 @@ async fn message_action_read_unread() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_messages_ok().await;
     ctx.catch_all().await;
+
     let user_context = ctx.mail_user_context().await;
     let tether = user_context.user_stash().connection().await.unwrap();
 
@@ -244,7 +258,10 @@ async fn message_action_delete() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_messages_ok().await;
     ctx.catch_all().await;
 
@@ -318,7 +335,11 @@ async fn message_action_ham() {
     // Initialize Mocking
     ctx.mock_label_messages(&LabelId::inbox(), vec![message.metadata.id.clone()])
         .await;
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_put_message_ham(&message.metadata.id).await;
     ctx.mock_empty_label().await;
 

@@ -71,13 +71,15 @@ async fn label_as_without_archive() {
     let params = test_init_params(labels);
     ctx.setup_user(params.clone()).await;
 
-    ctx.mock_get_messages(vec![
-        message1.metadata.clone(),
-        message2.metadata.clone(),
-        message3.metadata.clone(),
-        message4.metadata.clone(),
-    ])
-    .await;
+    ctx.mock_get_messages()
+        .respond_with(vec![
+            message1.metadata.clone(),
+            message2.metadata.clone(),
+            message3.metadata.clone(),
+            message4.metadata.clone(),
+        ])
+        .await;
+
     ctx.mock_label_messages(
         &label1_id,
         vec![message1.metadata.id.clone(), message2.metadata.id.clone()],
@@ -261,19 +263,23 @@ async fn label_as_with_archive() {
     let params = test_init_params(labels);
     ctx.setup_user(params.clone()).await;
 
-    ctx.mock_get_messages(vec![message1.metadata.clone(), message2.metadata.clone()])
+    ctx.mock_get_messages()
+        .respond_with(vec![message1.metadata.clone(), message2.metadata.clone()])
         .await;
+
     ctx.mock_label_messages(&label1_id, vec![message1.metadata.id.clone()])
         .await;
+
     ctx.mock_unlabel_messages(&label3_id, vec![message2.metadata.id.clone()], vec![])
         .await;
+
     ctx.mock_label_messages(
         &LabelId::archive(),
         vec![message1.metadata.id.clone(), message2.metadata.id.clone()],
     )
     .await;
-    ctx.catch_all().await;
 
+    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mailbox = Mailbox::with_remote_id(
@@ -282,6 +288,7 @@ async fn label_as_with_archive() {
     )
     .await
     .unwrap();
+
     mailbox
         .sync(
             &mut user_ctx.user_stash().connection().await.unwrap(),
