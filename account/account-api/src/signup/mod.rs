@@ -8,7 +8,7 @@ use crate::{AccountApi, ApiError};
 use futures::TryFutureExt;
 use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use proton_core_api::store::{DynStore, StoreError};
-use proton_core_common::observability::ObservabilityRecorder;
+use proton_core_common::observability::PreLoginMetricRecorder;
 use proton_core_common::post_login_check::{PostLoginValidationError, PostLoginValidator};
 use proton_core_common::{metric, observability::ObservabilityMetric};
 use proton_crypto_account::errors::{AccountCryptoError, SKLError};
@@ -134,15 +134,15 @@ impl SignupFlow {
         challenge_info: ChallengeInfo,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Result<Self, ApiError> {
-        let recorder = ObservabilityRecorder::default();
+        let recorder = PreLoginMetricRecorder::default();
 
         let domains = client
             .get_available_domains(None)
             .inspect_ok(|_| {
-                recorder.record(DomainAvailability::success(), true);
+                recorder.record(DomainAvailability::success());
             })
             .inspect_err(|err| {
-                recorder.record(DomainAvailability::error(err), true);
+                recorder.record(DomainAvailability::error(err));
             })
             .await?
             .domains;
@@ -329,19 +329,14 @@ mod tests {
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
-    use proton_core_common::observability::ObservabilityRecorder;
+    use proton_core_common::observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(
         status: ApiServiceObservabilityResponse,
         expected_status: &str,
     ) {
-        let metric = ObservabilityRecorder::into_metrics_element(
-            DomainAvailability { status },
-            1_741_021_308,
-            1,
-        )
-        .unwrap();
+        let metric = into_metrics_element(DomainAvailability { status }, 1_741_021_308, 1).unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
 

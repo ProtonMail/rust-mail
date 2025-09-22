@@ -19,7 +19,7 @@ use proton_core_api::services::proton::{
 };
 use proton_core_api::session::{Session, SessionParts};
 use proton_core_api::store::UserData;
-use proton_core_common::observability::ObservabilityRecorder;
+use proton_core_common::observability::PreLoginMetricRecorder;
 use proton_core_common::post_login_check::{UserCheckResult, UserCheckStatus};
 use proton_core_common::{metric, observability::ObservabilityMetric};
 use proton_crypto_account::keys::{LockedKey, UnlockedUserKey, UserKeys};
@@ -284,7 +284,7 @@ impl State {
             parts,
             user_id,
             session_id,
-            observability: ObservabilityRecorder::default(),
+            observability: PreLoginMetricRecorder::default(),
         };
 
         Self::want_new_password(client, data)
@@ -305,7 +305,7 @@ impl State {
             parts,
             user_id,
             session_id,
-            observability: ObservabilityRecorder::default(),
+            observability: PreLoginMetricRecorder::default(),
         };
 
         Self::want_tfa(client.auth().into(), data, username, pass, None)
@@ -323,7 +323,7 @@ impl State {
             parts,
             user_id,
             session_id,
-            observability: ObservabilityRecorder::default(),
+            observability: PreLoginMetricRecorder::default(),
         };
 
         Self::want_mbp(client, data)
@@ -424,7 +424,7 @@ impl State {
             .map_err(LoginError::UserFetch)
             .await?;
 
-        let recorder = ObservabilityRecorder::default();
+        let recorder = PreLoginMetricRecorder::default();
 
         // Fetch user addresses.
         let mut addr = ProtonCore::get_addresses(&client)
@@ -459,26 +459,21 @@ impl State {
             salts
                 .salt_for_key(&srp, &key.id, pass.as_bytes())
                 .inspect_err(|_| {
-                    recorder.record(
-                        UnlockUserKeyResult::new(UnlockUserKeyStatus::NoKeySaltsForPrimaryKey),
-                        true,
-                    );
+                    recorder.record(UnlockUserKeyResult::new(
+                        UnlockUserKeyStatus::NoKeySaltsForPrimaryKey,
+                    ));
                 })?
         } else {
-            recorder.record(
-                UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey),
-                true,
-            );
+            recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey));
             return Err(LoginError::MissingPrimaryKey);
         };
 
         // Unlock the user keys.
         let user_keys = match user.keys.unlock(&pgp, &user_key_pass) {
             res if res.unlocked_keys.is_empty() => {
-                recorder.record(
-                    UnlockUserKeyResult::new(UnlockUserKeyStatus::PrimaryKeyInvalidPassphrase),
-                    true,
-                );
+                recorder.record(UnlockUserKeyResult::new(
+                    UnlockUserKeyStatus::PrimaryKeyInvalidPassphrase,
+                ));
                 Err(LoginError::KeySecretDecryption)?
             }
             res => res.unlocked_keys,
@@ -488,10 +483,7 @@ impl State {
         let user_key = (user.keys.primary())
             .and_then(|key| user_keys.iter().find(|k| k.id == key.id))
             .ok_or_else(|| {
-                recorder.record(
-                    UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey),
-                    true,
-                );
+                recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::NoPrimaryKey));
                 LoginError::MissingPrimaryKey
             })?;
 
@@ -525,15 +517,15 @@ impl State {
         // the account itself remains in a "ready to use" state (e.g. is_ready flag is set) for later, when login rules are not violated anymore (e.g. logged-in free account count)
         match post_login_validator.validate(&user).await {
             Ok(()) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Success), true);
+                recorder.record(UserCheckResult::new(UserCheckStatus::Success));
             }
             Err(err) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Failure), true);
+                recorder.record(UserCheckResult::new(UserCheckStatus::Failure));
                 return Err(err.into());
             }
         }
 
-        recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::Success), true);
+        recorder.record(UnlockUserKeyResult::new(UnlockUserKeyStatus::Success));
         Ok(Complete::new(client, data, Some(user)).into())
     }
 
@@ -718,7 +710,7 @@ pub(crate) struct StateData {
     parts: SessionParts,
     user_id: UserId,
     session_id: SessionId,
-    observability: ObservabilityRecorder,
+    observability: PreLoginMetricRecorder,
 }
 
 /// A trait for states in which the user ID is known.
@@ -781,16 +773,12 @@ mod tests {
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
-    use proton_core_common::observability::ObservabilityRecorder;
+    use proton_core_common::observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(status: UnlockUserKeyStatus, expected_status: &str) {
-        let metric = ObservabilityRecorder::into_metrics_element(
-            UnlockUserKeyResult { status },
-            1_741_021_308,
-            1,
-        )
-        .unwrap();
+        let metric =
+            into_metrics_element(UnlockUserKeyResult { status }, 1_741_021_308, 1).unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
 

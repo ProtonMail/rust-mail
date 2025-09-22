@@ -185,19 +185,14 @@ pub enum UserCheckStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::observability::ObservabilityRecorder;
+    use crate::observability::into_metrics_element;
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(status: UserCheckStatus, expected_status: &str) {
-        let metric = ObservabilityRecorder::into_metrics_element(
-            UserCheckResult { status },
-            1_741_021_308,
-            1,
-        )
-        .unwrap();
+        let metric = into_metrics_element(UserCheckResult { status }, 1_741_021_308, 1).unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
 

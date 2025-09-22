@@ -37,7 +37,7 @@ use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::services::{EventPollConfigService, NetworkMonitorService};
 use proton_core_common::{
     ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
-    services::UserObservabilityService,
+    services::UserMetricService,
 };
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
@@ -412,8 +412,8 @@ impl MailUserContext {
         &self.user_context
     }
 
-    pub fn observability_service(&self) -> &UserObservabilityService {
-        self.user_context.get_service::<UserObservabilityService>()
+    pub fn observability_service(&self) -> &UserMetricService {
+        self.user_context.get_service::<UserMetricService>()
     }
 
     /// Get `MailUserContext` for each logged in account.

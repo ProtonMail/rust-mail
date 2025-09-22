@@ -1,6 +1,6 @@
 use proton_core_common::{
     metric,
-    observability::{ObservabilityMetric, ObservabilityRecorder},
+    observability::{ObservabilityMetric, PreLoginMetricRecorder},
 };
 use serde::{Deserialize, Serialize};
 
@@ -51,22 +51,22 @@ metric! {
 }
 
 impl PaymentObservabilityMetric {
-    pub fn record(self, recorder: &ObservabilityRecorder) {
+    pub fn record(self, recorder: &PreLoginMetricRecorder) {
         match self {
             Self::IapSubscribe(response) => {
-                recorder.record(IapSubscribeMetric::new(response), true);
+                recorder.record(IapSubscribeMetric::new(response));
             }
             Self::SendPaymentToken(response) => {
-                recorder.record(SendPaymentTokenMetric::new(response), true);
+                recorder.record(SendPaymentTokenMetric::new(response));
             }
             Self::CreateSubscription(response) => {
-                recorder.record(CreateSubscriptionMetric::new(response), true);
+                recorder.record(CreateSubscriptionMetric::new(response));
             }
             Self::GetSubscription(response) => {
-                recorder.record(GetSubscriptionMetric::new(response), true);
+                recorder.record(GetSubscriptionMetric::new(response));
             }
             Self::GetPlans(response) => {
-                recorder.record(GetPlansMetric::new(response), true);
+                recorder.record(GetPlansMetric::new(response));
             }
         }
     }
@@ -74,7 +74,7 @@ impl PaymentObservabilityMetric {
 
 #[uniffi_export]
 pub fn send_payment_observability_metric(metric: PaymentObservabilityMetric) {
-    let recorder = ObservabilityRecorder::default();
+    let recorder = PreLoginMetricRecorder::default();
     metric.record(&recorder);
 }
 

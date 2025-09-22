@@ -85,7 +85,7 @@ metric! {
 
 #[cfg(test)]
 mod tests {
-    use crate::observability::ObservabilityRecorder;
+    use crate::observability::into_metrics_element;
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn test_signin_submit_totp_total_serialization() {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             SignInSubmitTotpTotal {
                 status: ApiServiceObservabilityResponse::Success,
             },
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_signin_submit_fido_total_serialization() {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             SignInSubmitFidoTotal {
                 status: ApiServiceObservabilityResponse::Success,
             },
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_signin_submit_mailbox_pw_total_serialization() {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             SignInSubmitMailBoxPwTotal {
                 status: MailboxPasswordMetricStatus::ApiService(
                     ApiServiceObservabilityResponse::Success,
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_signin_auth_serialization() {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             AuthV4RequestMetric {
                 status: ApiServiceObservabilityResponse::Success,
             },

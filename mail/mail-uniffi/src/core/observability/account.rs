@@ -1,6 +1,6 @@
 use proton_core_common::{
     metric,
-    observability::{ObservabilityMetric, ObservabilityRecorder},
+    observability::{ObservabilityMetric, PreLoginMetricRecorder},
 };
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +24,7 @@ metric! {
 
 #[uniffi_export]
 pub fn record_account_recovery_screen_view(screen_id: AccountRecoveryScreenId) {
-    ObservabilityRecorder::default().record(AccountRecoveryScreenViewTotal::new(screen_id), true);
+    PreLoginMetricRecorder::default().record(AccountRecoveryScreenViewTotal::new(screen_id));
 }
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -48,7 +48,7 @@ metric! {
 
 #[uniffi_export]
 pub fn record_login_screen_view(screen_id: LoginScreenId) {
-    ObservabilityRecorder::default().record(LoginScreenViewTotal::new(screen_id), true);
+    PreLoginMetricRecorder::default().record(LoginScreenViewTotal::new(screen_id));
 }
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -72,7 +72,7 @@ metric! {
 
 #[uniffi_export]
 pub fn record_signup_screen_view(screen_id: SignupScreenId) {
-    ObservabilityRecorder::default().record(SignupScreenViewTotal::new(screen_id), true);
+    PreLoginMetricRecorder::default().record(SignupScreenViewTotal::new(screen_id));
 }
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -91,7 +91,7 @@ metric! {
 
 #[uniffi_export]
 pub fn record_human_verification_screen_view(screen_id: HumanVerificationScreenId) {
-    ObservabilityRecorder::default().record(HumanVerificationScreenViewTotal::new(screen_id), true);
+    PreLoginMetricRecorder::default().record(HumanVerificationScreenViewTotal::new(screen_id));
 }
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -112,7 +112,7 @@ metric! {
 
 #[uniffi_export]
 pub fn record_human_verification_result(status: HumanVerificationStatus) {
-    ObservabilityRecorder::default().record(HumanVerificationResultTotal::new(status), true);
+    PreLoginMetricRecorder::default().record(HumanVerificationResultTotal::new(status));
 }
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -138,6 +138,5 @@ metric! {
 
 #[uniffi_export]
 pub fn record_human_verification_view_loading_result(status: HumanVerificationViewLoadingStatus) {
-    ObservabilityRecorder::default()
-        .record(HumanVerificationViewLoadingResultTotal::new(status), true);
+    PreLoginMetricRecorder::default().record(HumanVerificationViewLoadingResultTotal::new(status));
 }

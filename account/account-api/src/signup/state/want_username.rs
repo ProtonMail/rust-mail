@@ -7,7 +7,7 @@ use derive_more::Display;
 use futures::TryFutureExt;
 use muon::Client;
 use proton_core_api::services::observability::ApiServiceObservabilityResponse;
-use proton_core_common::observability::ObservabilityRecorder;
+use proton_core_common::observability::PreLoginMetricRecorder;
 use proton_core_common::{metric, observability::ObservabilityMetric};
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -18,7 +18,7 @@ use tracing::info;
 pub struct WantUsername {
     client: Client,
     data: StateData,
-    recorder: ObservabilityRecorder,
+    recorder: PreLoginMetricRecorder,
 }
 
 impl WantUsername {
@@ -28,7 +28,7 @@ impl WantUsername {
         Self {
             client,
             data,
-            recorder: ObservabilityRecorder::default(),
+            recorder: PreLoginMetricRecorder::default(),
         }
     }
 
@@ -45,16 +45,14 @@ impl WantUsername {
                 self.client
                     .check_username_availability(username, ParseDomain::NoEmail, None)
                     .inspect_err(|err| {
-                        self.recorder.record(
-                            UsernameAvailabilityStatus::error(UsernameKind::Internal, err),
-                            true,
-                        );
+                        self.recorder.record(UsernameAvailabilityStatus::error(
+                            UsernameKind::Internal,
+                            err,
+                        ));
                     })
                     .inspect_ok(|_| {
-                        self.recorder.record(
-                            UsernameAvailabilityStatus::success(UsernameKind::Internal),
-                            true,
-                        );
+                        self.recorder
+                            .record(UsernameAvailabilityStatus::success(UsernameKind::Internal));
                     })
                     .map_err(|err| {
                         SignupError::UsernameUnavailable(err.err_info().and_then(|info| info.error))
@@ -66,16 +64,14 @@ impl WantUsername {
                 self.client
                     .check_external_username_availability(email, None)
                     .inspect_err(|err| {
-                        self.recorder.record(
-                            UsernameAvailabilityStatus::error(UsernameKind::External, err),
-                            true,
-                        );
+                        self.recorder.record(UsernameAvailabilityStatus::error(
+                            UsernameKind::External,
+                            err,
+                        ));
                     })
                     .inspect_ok(|_| {
-                        self.recorder.record(
-                            UsernameAvailabilityStatus::success(UsernameKind::External),
-                            true,
-                        );
+                        self.recorder
+                            .record(UsernameAvailabilityStatus::success(UsernameKind::External));
                     })
                     .map_err(|err| {
                         SignupError::UsernameUnavailable(err.err_info().and_then(|info| info.error))
@@ -128,7 +124,7 @@ mod tests {
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
-    use proton_core_common::observability::ObservabilityRecorder;
+    use proton_core_common::observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(
@@ -137,7 +133,7 @@ mod tests {
         kind: UsernameKind,
         expected_kind: &str,
     ) {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             UsernameAvailabilityStatus { status, kind },
             1_741_021_308,
             1,

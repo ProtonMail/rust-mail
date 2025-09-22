@@ -16,7 +16,7 @@ use proton_core_api::services::proton::prelude::*;
 use proton_core_api::session::Session;
 use proton_core_api::store::StoreError;
 use proton_core_common::datatypes::{PasswordMode, TfaStatus};
-use proton_core_common::observability::ObservabilityRecorder;
+use proton_core_common::observability::PreLoginMetricRecorder;
 use proton_crypto_account::keys::UserKeys;
 use proton_crypto_account::proton_crypto::{CryptoError, new_srp_provider};
 use serde::{Deserialize, Serialize};
@@ -132,7 +132,7 @@ impl From<ApiError> for PasswordError {
 pub struct PasswordFlow {
     state: State,
     data: StateData,
-    recorder: ObservabilityRecorder,
+    recorder: PreLoginMetricRecorder,
 }
 
 impl PasswordFlow {
@@ -174,7 +174,7 @@ impl PasswordFlow {
         Self {
             data,
             state,
-            recorder: ObservabilityRecorder::default(),
+            recorder: PreLoginMetricRecorder::default(),
         }
     }
 

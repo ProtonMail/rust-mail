@@ -1,6 +1,6 @@
 use proton_core_common::{
     metric,
-    observability::{ObservabilityMetric, ObservabilityRecorder},
+    observability::{ObservabilityMetric, PreLoginMetricRecorder},
 };
 use serde::{Deserialize, Serialize};
 use uniffi_runtime::async_runtime;
@@ -22,8 +22,7 @@ metric! {
 #[uniffi_export]
 pub fn record_fido_launch_result(result: FidoLaunchResultStatus) {
     async_runtime().block_on(async move {
-        ObservabilityRecorder::default()
-            .record(SecondFactorFidoLaunchResultTotal::new(result), true);
+        PreLoginMetricRecorder::default().record(SecondFactorFidoLaunchResultTotal::new(result));
     });
 }
 
@@ -59,6 +58,6 @@ metric! {
 #[uniffi_export]
 pub fn record_fido_sign_result(result: FidoSignResultStatus) {
     async_runtime().block_on(async move {
-        ObservabilityRecorder::default().record(SecondFactorFidoSignResultTotal::new(result), true);
+        PreLoginMetricRecorder::default().record(SecondFactorFidoSignResultTotal::new(result));
     });
 }

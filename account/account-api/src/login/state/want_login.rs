@@ -15,7 +15,7 @@ use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::SessionParts;
 use proton_core_api::store::{AuthInfo, TfaMode, UserData};
-use proton_core_common::observability::ObservabilityRecorder;
+use proton_core_common::observability::PreLoginMetricRecorder;
 use proton_core_common::observability::metrics::AuthV4RequestMetric;
 use proton_core_common::{metric, observability::ObservabilityMetric};
 use proton_crypto_account::proton_crypto::generate_secure_random_bytes;
@@ -35,7 +35,7 @@ pub struct WantLogin {
     client: muon::Client,
     flow: AuthFlow,
     parts: SessionParts,
-    observability: ObservabilityRecorder,
+    observability: PreLoginMetricRecorder,
     challenge_info: Option<ChallengeInfo>,
 }
 
@@ -51,7 +51,7 @@ impl WantLogin {
             client,
             flow,
             parts,
-            observability: ObservabilityRecorder::default(),
+            observability: PreLoginMetricRecorder::default(),
             challenge_info,
         }
     }
@@ -90,21 +90,18 @@ impl WantLogin {
     ) -> Result<State, LoginError> {
         let flow = match self.client.auth().from_fork().with_code().await {
             WithCodeFlow::Poll(flow) => {
-                self.observability
-                    .record(QrLoginInitiateFork::success(), true);
+                self.observability.record(QrLoginInitiateFork::success());
                 flow
             }
             WithCodeFlow::Ok(_client, _vec) => {
-                self.observability
-                    .record(QrLoginInitiateFork::unknown(), true);
+                self.observability.record(QrLoginInitiateFork::unknown());
                 error!("Client is in invalid state, the fork must not be complete yet");
                 return Err(LoginError::InvalidState);
             }
             WithCodeFlow::Failed { reason, .. } => {
                 // `FlowErr` type is somehow not accessable, so cannot match on `reason`, so let's use a
                 // generic error variant
-                self.observability
-                    .record(QrLoginInitiateFork::error(), true);
+                self.observability.record(QrLoginInitiateFork::error());
                 error!("Failed to initiate client forking: {reason}");
                 return Err(LoginError::InvalidState);
             }
@@ -197,10 +194,9 @@ impl WantLogin {
                 check_store_auth(&self.parts, &data.user_id).await?;
 
                 info!("Login flow does not require 2FA");
-                self.observability.record(
-                    AuthV4RequestMetric::new(ApiServiceObservabilityResponse::Success),
-                    true,
-                );
+                self.observability.record(AuthV4RequestMetric::new(
+                    ApiServiceObservabilityResponse::Success,
+                ));
 
                 let LoginFlowData {
                     user_id,
@@ -228,10 +224,9 @@ impl WantLogin {
                 check_store_auth(&self.parts, &data.user_id).await?;
 
                 info!("Login flow requires 2FA");
-                self.observability.record(
-                    AuthV4RequestMetric::new(ApiServiceObservabilityResponse::Success),
-                    true,
-                );
+                self.observability.record(AuthV4RequestMetric::new(
+                    ApiServiceObservabilityResponse::Success,
+                ));
 
                 let LoginFlowData {
                     user_id,
@@ -268,7 +263,7 @@ impl WantLogin {
                 let api_service_err: ApiServiceError = muon::Error::from(reason).into();
                 let metric_response: ApiServiceObservabilityResponse = (&api_service_err).into();
                 self.observability
-                    .record(AuthV4RequestMetric::new(metric_response), true);
+                    .record(AuthV4RequestMetric::new(metric_response));
                 Err(LoginError::FlowLogin(api_service_err))
             }
         }
@@ -335,6 +330,6 @@ fn get_state_data(user_id: &str, session_id: &str, parts: SessionParts) -> State
         parts,
         user_id: UserId::from(user_id.to_owned()),
         session_id: SessionId::from(session_id.to_owned()),
-        observability: ObservabilityRecorder::default(),
+        observability: PreLoginMetricRecorder::default(),
     }
 }

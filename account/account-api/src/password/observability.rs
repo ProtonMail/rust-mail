@@ -6,7 +6,7 @@ use crate::password::{
 use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use proton_core_common::{
     metric,
-    observability::{ObservabilityMetric, ObservabilityRecorder},
+    observability::{ObservabilityMetric, PreLoginMetricRecorder},
 };
 use serde::{Deserialize, Serialize};
 
@@ -50,11 +50,11 @@ pub trait ObservableState {
 }
 
 pub trait ObservableResult {
-    fn observe(self, recorder: &ObservabilityRecorder, data: ObservableData) -> Self;
+    fn observe(self, recorder: &PreLoginMetricRecorder, data: ObservableData) -> Self;
 }
 
 impl ObservableResult for Result<State, PasswordError> {
-    fn observe(self, recorder: &ObservabilityRecorder, data: ObservableData) -> Self {
+    fn observe(self, recorder: &PreLoginMetricRecorder, data: ObservableData) -> Self {
         let status = match &self {
             Ok(state) => match state {
                 State::Complete => ApiServiceObservabilityResponse::Success,
@@ -66,10 +66,7 @@ impl ObservableResult for Result<State, PasswordError> {
             Err(error) => error.into(),
         };
 
-        recorder.record(
-            ChangePasswordUpdateLoginPasswordTotal::new(status, data),
-            true,
-        );
+        recorder.record(ChangePasswordUpdateLoginPasswordTotal::new(status, data));
 
         self
     }
@@ -113,12 +110,12 @@ mod tests {
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
-    use proton_core_common::observability::ObservabilityRecorder;
+    use proton_core_common::observability::into_metrics_element;
     use serde_json::{self, json};
 
     #[test]
     fn test_change_password_update_login_password_total_serialization() {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             ChangePasswordUpdateLoginPasswordTotal {
                 status: ApiServiceObservabilityResponse::Success,
                 observable_data: ObservableData {
@@ -158,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_change_password_update_login_password_total_error_serialization() {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             ChangePasswordUpdateLoginPasswordTotal {
                 status: ApiServiceObservabilityResponse::NetworkError,
                 observable_data: ObservableData {

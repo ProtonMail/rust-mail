@@ -21,7 +21,7 @@ use proton_account_uniffi::password::PasswordFlow;
 use proton_account_uniffi::password_validator::PasswordValidatorService;
 use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
 use proton_core_common::UserContext;
-use proton_core_common::observability::ObservabilityRecorder;
+use proton_core_common::observability::PreLoginMetricRecorder;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
@@ -237,7 +237,7 @@ impl MailUserSession {
         let session = ctx.session().to_owned();
         let (client, _) = session.into_parts();
         let core_context = Arc::clone(ctx.core_context());
-        let observability = ObservabilityRecorder::default();
+        let observability = PreLoginMetricRecorder::default();
         uniffi_async::<_, ProcessTargetDeviceQrError, _>(async move {
             process_target_device_qr_code(&qr_code, client, core_context, observability)
                 .await

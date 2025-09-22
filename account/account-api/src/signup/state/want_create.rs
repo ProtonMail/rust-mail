@@ -26,7 +26,7 @@ use proton_core_api::store::AuthInfo;
 use proton_core_api::store::DynStore;
 use proton_core_api::store::TfaMode;
 use proton_core_api::store::UserData;
-use proton_core_common::observability::ObservabilityRecorder;
+use proton_core_common::observability::PreLoginMetricRecorder;
 use proton_core_common::post_login_check::PostLoginValidator;
 use proton_core_common::post_login_check::UserCheckResult;
 use proton_core_common::post_login_check::UserCheckStatus;
@@ -46,7 +46,7 @@ pub struct WantCreate {
     password: SecureString,
     recovery: Recovery,
     data: StateData,
-    recorder: ObservabilityRecorder,
+    recorder: PreLoginMetricRecorder,
 }
 
 impl WantCreate {
@@ -65,7 +65,7 @@ impl WantCreate {
             password,
             recovery,
             data,
-            recorder: ObservabilityRecorder::default(),
+            recorder: PreLoginMetricRecorder::default(),
         }
     }
 
@@ -163,15 +163,15 @@ impl WantCreate {
             .await
             .map_err(SignupError::SetUserDataFailed)?;
 
-        let recorder = ObservabilityRecorder::default();
+        let recorder = PreLoginMetricRecorder::default();
         // Validations are run after `set_user_data` is called, se even if the login flow is stopped and login is prevented for now,
         // the account itself remains in a "ready to use" state (e.g. is_ready flag is set) for later, when login rules are not violated anymore (e.g. logged-in free account count)
         match post_login_validator.validate(&user.clone().into()).await {
             Ok(()) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Success), true);
+                recorder.record(UserCheckResult::new(UserCheckStatus::Success));
             }
             Err(err) => {
-                recorder.record(UserCheckResult::new(UserCheckStatus::Failure), true);
+                recorder.record(UserCheckResult::new(UserCheckStatus::Failure));
                 return Err(err.into());
             }
         }
@@ -225,11 +225,11 @@ impl WantCreate {
                     .create_user(req)
                     .inspect_err(|err| {
                         self.recorder
-                            .record(UserStatus::error(UserKind::Internal, err), true);
+                            .record(UserStatus::error(UserKind::Internal, err));
                     })
                     .inspect_ok(|_| {
                         self.recorder
-                            .record(UserStatus::success(UserKind::Internal), true);
+                            .record(UserStatus::success(UserKind::Internal));
                     })
                     .await?
             }
@@ -246,11 +246,11 @@ impl WantCreate {
                     .create_external_user(req)
                     .inspect_err(|err| {
                         self.recorder
-                            .record(UserStatus::error(UserKind::External, err), true);
+                            .record(UserStatus::error(UserKind::External, err));
                     })
                     .inspect_ok(|_| {
                         self.recorder
-                            .record(UserStatus::success(UserKind::External), true);
+                            .record(UserStatus::success(UserKind::External));
                     })
                     .await?
             }
@@ -326,7 +326,7 @@ mod tests {
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
-    use proton_core_common::observability::ObservabilityRecorder;
+    use proton_core_common::observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(
@@ -335,12 +335,7 @@ mod tests {
         kind: UserKind,
         expected_kind: &str,
     ) {
-        let metric = ObservabilityRecorder::into_metrics_element(
-            UserStatus { status, kind },
-            1_741_021_308,
-            1,
-        )
-        .unwrap();
+        let metric = into_metrics_element(UserStatus { status, kind }, 1_741_021_308, 1).unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
 
