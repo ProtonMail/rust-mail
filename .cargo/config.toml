@@ -17,13 +17,13 @@ git = "https://github.com/frondeus/lightningcss"
 rev = "b9dc136b0b43220381965e5806903e7c31a3ca12"
 replace-with = "vendored-sources"
 
-[source."git+https://gitlab.protontech.ch/jhoulahan/muon.git?rev=12c57e6e79c023e5d14e75d6318a878491835c3d"]
-git = "https://gitlab.protontech.ch/jhoulahan/muon.git"
-rev = "12c57e6e79c023e5d14e75d6318a878491835c3d"
-replace-with = "vendored-sources"
-
 [source."sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"]
 registry = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+replace-with = "vendored-sources"
+
+[source."git+https://gitlab.protontech.ch/jhoulahan/muon.git?rev=d989ec037d500be4b3374df4b0465c7e39ca5d25"]
+git = "https://gitlab.protontech.ch/jhoulahan/muon.git"
+rev = "d989ec037d500be4b3374df4b0465c7e39ca5d25"
 replace-with = "vendored-sources"
 
 [source.vendored-sources]
