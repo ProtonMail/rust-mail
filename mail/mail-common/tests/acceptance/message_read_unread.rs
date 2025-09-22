@@ -121,12 +121,13 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     let messages = messages.iter().map(test_message(&params)).collect_vec();
 
     ctx.setup_user(params.clone()).await;
-    ctx.mock_get_messages(messages.clone()).await;
+    ctx.mock_get_messages().respond_with(messages.clone()).await;
+
     if !expected_to_mark.is_empty() {
         ctx.mock_put_messages_read(expected_to_mark, vec![]).await;
     }
-    ctx.catch_all().await;
 
+    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mailbox = Mailbox::with_remote_id(
@@ -205,12 +206,13 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     let messages = messages.iter().map(test_message(&params)).collect_vec();
 
     ctx.setup_user(params.clone()).await;
-    ctx.mock_get_messages(messages.clone()).await;
+    ctx.mock_get_messages().respond_with(messages).await;
+
     if !expected_to_mark.is_empty() {
         ctx.mock_put_messages_unread(expected_to_mark, vec![]).await;
     }
-    ctx.catch_all().await;
 
+    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mailbox = Mailbox::with_remote_id(

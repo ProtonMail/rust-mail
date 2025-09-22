@@ -1,26 +1,19 @@
 use itertools::Itertools;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
-use proton_mail_api::services::proton::{
-    common::MessageId, prelude::GetMessagesResponse,
-    response_data::MessageMetadata as ApiMessageMetadata,
-};
+use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_common::api_message_meta;
-use proton_mail_common::datatypes::SearchOptions;
+use proton_mail_common::datatypes::{SearchOptions, SystemLabelId};
 use proton_mail_common::models::Message;
 use proton_mail_common::msg_id;
 use proton_mail_common::test_utils::scroller::{TestScroller, save_single_message};
 use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
 use stash::stash::StashError;
-
 use std::time::Duration;
 use std::vec;
-use wiremock::{
-    Mock, ResponseTemplate,
-    matchers::{method, path, query_param_contains},
-};
 
 #[tokio::test]
-async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
+async fn reads_one_item_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
     let conversation = params.conversations.first().cloned().unwrap();
@@ -31,14 +24,20 @@ async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
         address_id: address.id,
         label_ids: vec![SystemLabel::AllMail.remote_id()]
     );
-    ctx.mock_get_messages_total_expect(vec![message], 1, 2)
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::all_mail())
+        .expect(2)
+        .respond_with(vec![message])
         .await;
+
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    let user_ctx = ctx.mail_user_context().await;
     let page_size = 5;
+
     let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
         .await
         .unwrap();
@@ -57,18 +56,20 @@ async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
 }
 
 #[tokio::test]
-async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
+async fn reads_two_pages_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
     let page_size = 5;
-    let search_phrase = "Invoice 2024";
-    let params = setup_api_message_pages(&ctx, page_size, search_phrase, 2).await;
+    let label = SystemLabelId::all_mail();
+    let keyword = "Invoice 2024";
+
+    let params = setup_api_message_pages(&ctx, page_size, &label, keyword, 2).await;
 
     ctx.setup_user(params.clone()).await;
     let user_ctx = ctx.mail_user_context().await;
 
     // Online
     let mut test_scroller =
-        TestScroller::search(&user_ctx, SearchOptions::from(search_phrase), page_size)
+        TestScroller::search(&user_ctx, SearchOptions::from(keyword), page_size)
             .await
             .unwrap();
 
@@ -121,7 +122,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
 
     // Search always relay on online data even for the same options used just before.
     let mut test_scroller =
-        TestScroller::search(&user_ctx, SearchOptions::from(search_phrase), page_size)
+        TestScroller::search(&user_ctx, SearchOptions::from(keyword), page_size)
             .await
             .unwrap();
 
@@ -172,7 +173,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
 }
 
 #[tokio::test]
-async fn test_search_mail_scroller_does_not_refresh_on_new_message_in_database() {
+async fn does_not_refresh_on_new_message_in_database() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
     let conversation = params.conversations.first().cloned().unwrap();
@@ -185,11 +186,17 @@ async fn test_search_mail_scroller_does_not_refresh_on_new_message_in_database()
     );
     let mut new_message = message.clone();
     new_message.id = "new_mymsg".into();
-    ctx.mock_get_messages_total_expect(vec![message], 1, 2)
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::all_mail())
+        .expect(2)
+        .respond_with(vec![message])
         .await;
+
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let new_message = Message::from_api_metadata(new_message, &tether)
@@ -235,7 +242,7 @@ async fn test_search_mail_scroller_does_not_refresh_on_new_message_in_database()
 }
 
 #[tokio::test]
-async fn test_search_mail_scroller_does_refresh_on_modified_message_in_database() {
+async fn does_refresh_on_modified_message_in_database() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
     let conversation = params.conversations.first().cloned().unwrap();
@@ -248,11 +255,17 @@ async fn test_search_mail_scroller_does_refresh_on_modified_message_in_database(
     );
     let mut new_message = message.clone();
     new_message.unread = true;
-    ctx.mock_get_messages_total_expect(vec![message], 1, 2)
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::all_mail())
+        .expect(2)
+        .respond_with(vec![message])
         .await;
+
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let new_message = Message::from_api_metadata(new_message, &tether)
@@ -294,13 +307,16 @@ async fn test_search_mail_scroller_does_refresh_on_modified_message_in_database(
 async fn setup_api_message_pages(
     ctx: &MailTestContext,
     page_size: usize,
-    search_phrase: &str,
+    label_id: &LabelId,
+    keyword: &str,
     expect: u64,
 ) -> TestParams {
     ctx.mock_ping_success().await;
+
     let params = TestParams::default_basic();
     let conversation = params.conversations.first().cloned().unwrap();
     let address = params.addresses.first().cloned().unwrap();
+
     let test_message = api_message_meta!(
         id: MessageId::from("mymsg"),
         conversation_id: conversation.id,
@@ -318,6 +334,7 @@ async fn setup_api_message_pages(
             new
         })
         .collect_vec();
+
     let first_page = (page_size..(page_size * 2))
         .rev()
         .map(|i| {
@@ -327,57 +344,31 @@ async fn setup_api_message_pages(
             new
         })
         .collect_vec();
+
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
     let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
-    let total = (page_size * 2) as u64;
+    let total = page_size * 2;
 
-    mock_get_messages_page(
-        ctx,
-        second_page,
-        total,
-        search_phrase,
-        &first_page_last_id,
-        expect,
-    )
-    .await;
-    // last page is empty
-    mock_get_messages_page(
-        ctx,
-        vec![],
-        total,
-        search_phrase,
-        &second_page_last_id,
-        expect,
-    )
-    .await;
-    ctx.mock_get_messages_total_expect(first_page, total, expect)
+    ctx.mock_get_messages()
+        .given_label_id(label_id)
+        .given_keyword(keyword)
+        .given_end_id(&first_page_last_id)
+        .expect(expect)
+        .respond_with_ex(total, second_page)
+        .await;
+
+    ctx.mock_get_messages()
+        .given_label_id(label_id)
+        .given_keyword(keyword)
+        .given_end_id(&second_page_last_id)
+        .expect(expect)
+        .respond_with_ex(total, Vec::new())
+        .await;
+
+    ctx.mock_get_messages()
+        .expect(expect)
+        .respond_with_ex(total, first_page)
         .await;
 
     params
-}
-
-#[function_name::named]
-pub async fn mock_get_messages_page(
-    ctx: &MailTestContext,
-    messages: Vec<ApiMessageMetadata>,
-    total: u64,
-    search_phrase: &str,
-    last_id: &str,
-    expect: u64,
-) {
-    Mock::given(method("GET"))
-        .and(path("/api/mail/v4/messages"))
-        .and(query_param_contains("EndID", last_id))
-        .and(query_param_contains("Keyword", search_phrase))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
-                total,
-                messages,
-                stale: false,
-            }),
-        )
-        .expect(expect)
-        .named(function_name!())
-        .mount(ctx.mock_server())
-        .await;
 }

@@ -125,11 +125,15 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
         label_ids: vec![SystemLabel::Inbox.remote_id()]
     );
 
-    ctx.mock_get_messages_total_expect(vec![message], 1, 1..=4)
+    ctx.mock_get_messages()
+        .expect(1..=4)
+        .respond_with(vec![message])
         .await;
+
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -595,8 +599,10 @@ async fn setup_api_message_pages_ext(
     mock_get_messages_page(ctx, second_page, &first_page_last_id, 1).await;
     // last page is empty
     mock_get_messages_page(ctx, vec![], &second_page_last_id, empty_pages_requests).await;
-    let first_page_total = first_page.len() as u64;
-    ctx.mock_get_messages_total_expect(first_page, first_page_total, 1..3)
+
+    ctx.mock_get_messages()
+        .expect(1..3)
+        .respond_with(first_page)
         .await;
 
     params

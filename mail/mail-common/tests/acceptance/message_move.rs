@@ -52,7 +52,10 @@ async fn move_between_folders() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
@@ -136,12 +139,16 @@ async fn move_between_folders_and_undo() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_label_messages(
         &destination_label_id.clone(),
         vec![message.metadata.id.clone()],
     )
     .await;
+
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
@@ -254,12 +261,16 @@ async fn move_from_label_does_not_unlabel() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_label_messages(
         &destination_label_id.clone(),
         vec![message.metadata.id.clone()],
     )
     .await;
+
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
@@ -341,13 +352,17 @@ async fn move_into_trash_remove_label_and_mark_read() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_label_messages(&LabelId::trash(), vec![message.metadata.id.clone()])
         .await;
+
     ctx.mock_label_messages(&LabelId::starred(), vec![message.metadata.id.clone()])
         .await;
-    ctx.catch_all().await;
 
+    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
@@ -453,11 +468,14 @@ async fn move_into_spam_remove_labels() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_label_messages(&spam.remote_id.unwrap(), vec![message.metadata.id.clone()])
         .await;
-    ctx.catch_all().await;
 
+    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
@@ -538,11 +556,14 @@ async fn move_out_of_spam_set_almost_all_mail() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.mock_label_messages(&inbox.remote_id.unwrap(), vec![message.metadata.id.clone()])
         .await;
-    ctx.catch_all().await;
 
+    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
@@ -997,7 +1018,11 @@ async fn move_from_allmail() {
     });
 
     ctx.setup_user(params.clone()).await;
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;

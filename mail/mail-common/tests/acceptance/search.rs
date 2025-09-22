@@ -42,16 +42,23 @@ async fn unsynced_messages() {
     let api = user_context.session();
 
     ctx.mock_get_labels_by_ids(ctx.get_test_labels()).await;
+
     let addrs = ctx.get_test_addrs();
+
     ctx.core_test_context
         .mock_get_address(addrs[0].clone())
         .await;
+
     ctx.core_test_context
         .mock_get_address(addrs[1].clone())
         .await;
-    ctx.mock_get_messages(ctx.get_test_msgs()).await;
+
+    ctx.mock_get_messages()
+        .respond_with(ctx.get_test_msgs())
+        .await;
 
     let options = GetMessagesOptions::default();
+
     Message::search(options, api, &mut tether)
         .await
         .expect("Error searching for messages");

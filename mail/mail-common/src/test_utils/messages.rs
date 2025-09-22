@@ -31,11 +31,10 @@ use serde::Serialize;
 use serde_json::{Value as JsonValue, json};
 use serde_with::{BoolFromInt, serde_as};
 use std::collections::{HashMap, HashSet};
-use wiremock::matchers::{body_json, body_partial_json, method, path};
+use wiremock::matchers::{body_json, body_partial_json, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate, Times};
 
 impl MailTestContext {
-    /// Generate new mock expectations for message fetch request for `message_id`.
     #[function_name::named]
     pub async fn mock_get_message_failure(
         &self,
@@ -50,15 +49,12 @@ impl MailTestContext {
             .mount(self.mock_server())
             .await;
     }
-    /// Generate new mock expectations for message fetch request for `message_id`.
+
     pub async fn mock_get_message(&self, message_id: &MessageId, message: ApiMessage) {
         self.mock_get_message_with_expected(message_id, message, 1)
             .await;
     }
 
-    /// Generate new mock expectations for message fetch request for `message_id`.
-    ///
-    /// This mock is expected to be called `expected` number of times.
     #[function_name::named]
     pub async fn mock_get_message_with_expected(
         &self,
@@ -77,41 +73,11 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectation for batch messages request
-    pub async fn mock_get_messages(&self, messages: Vec<MessageMetadata>) {
-        let total = messages.len() as u64;
-        self.mock_get_messages_total_expect(messages, total, 1)
-            .await;
-    }
-
-    /// Generate new mock expectation for batch messages request
     #[function_name::named]
-    pub async fn mock_get_messages_total_expect(
-        &self,
-        messages: Vec<MessageMetadata>,
-        total: u64,
-        expect: impl Into<Times>,
-    ) {
-        let resp = GetMessagesResponse {
-            total,
-            messages,
-            stale: false,
-        };
-
-        Mock::given(method("GET"))
-            .and(path("/api/mail/v4/messages".to_string()))
-            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
-            .expect(expect)
-            .named(function_name!())
-            .mount(self.mock_server())
-            .await;
+    pub fn mock_get_messages(&self) -> GetMessagesMock {
+        GetMessagesMock::new(self, function_name!())
     }
 
-    /// Generate new mock expectations for labeling messages.
-    ///
-    /// This function will mock the response for the given `ids` and `failed`
-    /// messages.
-    ///
     #[function_name::named]
     pub async fn mock_label_messages(&self, label_id: &LabelId, message_ids: Vec<MessageId>) {
         let ids = message_ids.clone();
@@ -136,12 +102,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Mock a delete message request
-    ///
-    /// # Params
-    /// * `message_ids`      - List of message ids to delete.
-    /// * `current_label_id` - Current label where the message is deleted from.
-    /// * `response`         - Response to the request.
     #[function_name::named]
     pub async fn mock_message_delete(
         &self,
@@ -161,12 +121,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Mock delete all messages in label
-    ///
-    /// # Params
-    /// * `message_ids`      - List of message ids to delete.
-    /// * `current_label_id` - Current label where the message is deleted from.
-    /// * `response`         - Response to the request.
     #[function_name::named]
     pub async fn mock_empty_label(&self) {
         Mock::given(method("DELETE"))
@@ -225,11 +179,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for marking messages as read.
-    ///
-    /// This function will mock the response for the given `ids` and `failed`
-    /// messages.
-    ///
     #[function_name::named]
     pub async fn mock_put_messages_read(
         &self,
@@ -254,11 +203,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for marking messages as unread.
-    ///
-    /// This function will mock the response for the given `ids` and `failed`
-    /// messages.
-    ///
     #[function_name::named]
     pub async fn mock_put_messages_unread(
         &self,
@@ -283,11 +227,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for unlabeling messages.
-    ///
-    /// This function will mock the response for the given `ids` and `failed`
-    /// messages.
-    ///
     #[function_name::named]
     pub async fn mock_unlabel_messages(
         &self,
@@ -315,8 +254,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for relabel message.
-    ///
     #[function_name::named]
     pub async fn mock_relabel_message(&self, id: &MessageId, message: MessageMetadata) {
         let response = PostMessagesRelabelResponse { message };
@@ -329,10 +266,7 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation for creating a draft.
-    ///
-    /// Note that this mock does not valid the draft body.
-    ///
+    /// Note that this mock does not validate the body.
     #[function_name::named]
     pub async fn mock_create_draft(
         &self,
@@ -360,10 +294,7 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation that a draft was created
-    ///
-    /// this does not validate anything.
-    ///
+    /// Note that this mock does not validate the body.
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_create_draft_no_validation(&self, reply: ApiMessage) {
@@ -377,10 +308,7 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation for a failed draft creation.
-    ///
-    /// Note that this mock does not valid the draft body.
-    ///
+    /// Note that this mock does not validate the body.
     #[function_name::named]
     pub async fn mock_create_draft_failure(
         &self,
@@ -412,11 +340,8 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation for sending a draft.
-    ///
     /// Note that this mock does not validate parameters that are cryptographically
     /// generated.
-    ///
     #[function_name::named]
     pub async fn mock_send_draft(
         &self,
@@ -441,8 +366,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock for draft send failures.
-    ///
     #[function_name::named]
     pub async fn mock_send_draft_failure(&self, message_id: MessageId, error: ApiErrorInfo) {
         Mock::given(method("POST"))
@@ -507,10 +430,7 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation for updating a draft.
-    ///
     /// Note that this mock does not valid the draft body.
-    ///
     #[function_name::named]
     pub async fn mock_update_draft(
         &self,
@@ -535,10 +455,7 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation for updating a draft.
-    ///
     /// Note that this mock does not valid the draft body.
-    ///
     #[function_name::named]
     pub async fn mock_update_draft_failure(
         &self,
@@ -562,11 +479,8 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation for cancelling a sent message.
-    ///
     /// Note that this mock does not validate parameters that are cryptographically
     /// generated.
-    ///
     #[function_name::named]
     pub async fn mock_undo_send(
         &self,
@@ -586,8 +500,6 @@ impl MailTestContext {
         .await;
     }
 
-    /// Generate a new mock expectation that accepts an incomingdefault PUT
-    /// but doesn't actually do anything
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_delete_incoming_default(&self) {
@@ -600,8 +512,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation that accepts an incomingdefault POST
-    /// but doesn't actually do anything
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_post_incoming_default(&self, incoming_default: IncomingDefault) {
@@ -615,7 +525,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation that accpets a mark as phishing POST request.
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_report_phishing(&self) {
@@ -830,5 +739,79 @@ impl From<AddressSubPackage> for TestDraftSendAddressSubPackage {
             address_type: value.address_type,
             auth: value.auth.map(Into::into),
         }
+    }
+}
+
+pub struct GetMessagesMock<'a> {
+    ctx: &'a MailTestContext,
+    name: &'static str,
+    label_id: Option<String>,
+    keyword: Option<String>,
+    end_id: Option<String>,
+    expect: Option<Times>,
+}
+
+impl<'a> GetMessagesMock<'a> {
+    fn new(ctx: &'a MailTestContext, name: &'static str) -> Self {
+        Self {
+            ctx,
+            name,
+            label_id: None,
+            keyword: None,
+            end_id: None,
+            expect: None,
+        }
+    }
+
+    pub fn given_label_id(mut self, label_id: &LabelId) -> Self {
+        self.label_id = Some(label_id.to_string());
+        self
+    }
+
+    pub fn given_keyword(mut self, keyword: &str) -> Self {
+        self.keyword = Some(keyword.into());
+        self
+    }
+
+    pub fn given_end_id(mut self, end_id: &str) -> Self {
+        self.end_id = Some(end_id.into());
+        self
+    }
+
+    pub fn expect(mut self, expect: impl Into<Times>) -> Self {
+        self.expect = Some(expect.into());
+        self
+    }
+
+    pub async fn respond_with(self, messages: Vec<MessageMetadata>) {
+        self.respond_with_ex(messages.len(), messages).await;
+    }
+
+    pub async fn respond_with_ex(self, total: usize, messages: Vec<MessageMetadata>) {
+        let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/messages"));
+
+        if let Some(label_id) = self.label_id {
+            mock = mock.and(query_param("LabelID[0]", label_id.to_string()));
+        }
+
+        if let Some(end_id) = self.end_id {
+            mock = mock.and(query_param("EndID", end_id));
+        }
+
+        if let Some(keyword) = self.keyword {
+            mock = mock.and(query_param("Keyword", keyword));
+        }
+
+        mock.respond_with(
+            ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
+                total: total.try_into().unwrap(),
+                messages,
+                stale: false,
+            }),
+        )
+        .expect(self.expect.unwrap_or_else(|| 1.into()))
+        .named(self.name)
+        .mount(self.ctx.mock_server())
+        .await;
     }
 }

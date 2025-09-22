@@ -37,8 +37,11 @@ async fn mailbox_message_body_simple() {
         .await;
 
     // Will be called only once
-    ctx.mock_get_messages_total_expect(vec![message.metadata.clone()], 1, 1)
+    ctx.mock_get_messages()
+        .expect(1)
+        .respond_with(vec![message.metadata.clone()])
         .await;
+
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
@@ -116,7 +119,10 @@ async fn mailbox_message_body_mime() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
 
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
@@ -240,7 +246,10 @@ async fn mailbox_message_retains_pgp_attachments() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
 
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
@@ -351,7 +360,10 @@ async fn pgp_mime_attachments_retrievable_via_get_attachments() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
 
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
