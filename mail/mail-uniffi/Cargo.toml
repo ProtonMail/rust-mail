@@ -51,9 +51,6 @@ sqlite-watcher = { workspace = true }
 non-empty-string = { workspace = true }
 proton-network-monitor-service = { workspace = true }
 
-[target.'cfg(target_os = "ios")'.dependencies]
-tracing-oslog = "0.3.0"
-
 [dev-dependencies]
 proton-mail-api = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
