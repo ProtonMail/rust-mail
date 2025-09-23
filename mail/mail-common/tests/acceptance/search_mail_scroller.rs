@@ -3,11 +3,12 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_common::api_message_meta;
-use proton_mail_common::datatypes::{SearchOptions, SystemLabelId};
-use proton_mail_common::models::Message;
+use proton_mail_common::datatypes::{AlmostAllMail, SearchOptions, SystemLabelId};
+use proton_mail_common::models::{MailSettings, Message};
 use proton_mail_common::msg_id;
 use proton_mail_common::test_utils::scroller::{TestScroller, save_single_message};
 use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
+use stash::orm::Model;
 use stash::stash::StashError;
 use std::time::Duration;
 use std::vec;
@@ -26,7 +27,7 @@ async fn reads_one_item_from_online_scroll_data() {
     );
 
     ctx.mock_get_messages()
-        .given_label_id(&LabelId::all_mail())
+        .given_label_id(&LabelId::almost_all_mail())
         .expect(2)
         .respond_with(vec![message])
         .await;
@@ -59,7 +60,7 @@ async fn reads_one_item_from_online_scroll_data() {
 async fn reads_two_pages_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
     let page_size = 5;
-    let label = SystemLabelId::all_mail();
+    let label = SystemLabelId::almost_all_mail();
     let keyword = "Invoice 2024";
 
     let params = setup_api_message_pages(&ctx, page_size, &label, keyword, 2).await;
@@ -188,7 +189,7 @@ async fn does_not_refresh_on_new_message_in_database() {
     new_message.id = "new_mymsg".into();
 
     ctx.mock_get_messages()
-        .given_label_id(&LabelId::all_mail())
+        .given_label_id(&LabelId::almost_all_mail())
         .expect(2)
         .respond_with(vec![message])
         .await;
@@ -257,7 +258,7 @@ async fn does_refresh_on_modified_message_in_database() {
     new_message.unread = true;
 
     ctx.mock_get_messages()
-        .given_label_id(&LabelId::all_mail())
+        .given_label_id(&LabelId::almost_all_mail())
         .expect(2)
         .respond_with(vec![message])
         .await;
@@ -302,6 +303,62 @@ async fn does_refresh_on_modified_message_in_database() {
     assert!(possible_update.is_some());
     assert_eq!(test_scroller.items().len(), 1);
     assert!(test_scroller.items()[0].unread);
+}
+
+#[tokio::test]
+async fn supports_all_mail() {
+    let ctx = MailTestContext::new().await;
+    let params = TestParams::default_basic();
+    let conversation = params.conversations.first().cloned().unwrap();
+    let address = params.addresses.first().cloned().unwrap();
+
+    // ---
+
+    let message = api_message_meta!(
+        id: MessageId::from("mymsg"),
+        conversation_id: conversation.id,
+        address_id: address.id,
+        label_ids: vec![SystemLabel::AllMail.remote_id()]
+    );
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::all_mail())
+        .expect(1..=2)
+        .respond_with(vec![message])
+        .await;
+
+    ctx.mock_ping_success().await;
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+
+    // ---
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let mut settings = MailSettings::get_or_default(&tether).await;
+
+    settings.almost_all_mail = AlmostAllMail::AllMail;
+
+    tether
+        .tx(async |bond| settings.save(bond).await)
+        .await
+        .unwrap();
+
+    // ---
+
+    let page_size = 5;
+
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
+
+    test_scroller.fetch_more_and_wait().await.unwrap();
+
+    let actual = test_scroller.items();
+
+    assert_eq!(actual.len(), 1);
+    assert_eq!(test_scroller.items().len(), 1);
+    assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg"));
 }
 
 async fn setup_api_message_pages(

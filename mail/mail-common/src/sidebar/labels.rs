@@ -8,11 +8,11 @@ use stash::params;
 use stash::{orm::Model, stash::Tether};
 use tracing::error;
 
+use crate::datatypes::ShowMoved;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::labels::custom_folder::CustomFolder;
 use crate::datatypes::labels::custom_labels::CustomLabel;
 use crate::datatypes::labels::system_labels::SystemLabel;
-use crate::datatypes::{AlmostAllMail, ShowMoved};
 use crate::models::{LabelWithCounters, MailSettings};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
 
@@ -66,11 +66,7 @@ impl Sidebar {
         labels.push(self.get_label(tether, LabelId::spam()).await?);
         labels.push(self.get_label(tether, LabelId::archive()).await?);
         labels.push(self.get_label(tether, LabelId::trash()).await?);
-        if settings.almost_all_mail == AlmostAllMail::AllMail {
-            labels.push(self.get_label(tether, LabelId::all_mail()).await?);
-        } else {
-            labels.push(self.get_label(tether, LabelId::almost_all_mail()).await?);
-        }
+        labels.push(self.get_label(tether, settings.all_mail()).await?);
 
         Ok(SystemLabel::from_labels(labels.as_slice(), tether).await?)
     }
