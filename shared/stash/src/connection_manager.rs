@@ -167,6 +167,12 @@ impl StashConnectionPool {
         loop {
             let mut connections = self.connections.lock();
             if connections.is_empty() {
+                let uuid = uuid::Uuid::new_v4();
+                let now = std::time::Instant::now();
+                tracing::info!(
+                    uuid = uuid.to_string(),
+                    "No connections available in the pool, waiting..."
+                );
                 if let Some(timeout) = timeout {
                     let result = self
                         .connections_cond_var
@@ -177,6 +183,12 @@ impl StashConnectionPool {
                 } else {
                     self.connections_cond_var.wait(&mut connections);
                 }
+                tracing::info!(
+                    uuid = uuid.to_string(),
+                    "Connections available: {}, elapsed: {:?}",
+                    connections.len(),
+                    now.elapsed(),
+                );
             }
 
             if let Some(connection) = connections.pop() {
