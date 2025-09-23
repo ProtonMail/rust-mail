@@ -275,7 +275,7 @@ impl MailUserContext {
                         .core_context()
                         .get_service::<EventPollConfigService>();
                     if let EventPollMode::Automatic(interval) = config.mode() {
-                        this.init_event_loop_poll(interval);
+                        this.init_event_loop_poll(interval)?;
                     }
                 }
 
