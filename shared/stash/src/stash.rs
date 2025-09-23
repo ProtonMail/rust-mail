@@ -716,7 +716,8 @@ impl Tether {
             query: query.into(),
         }));
         self.connection
-            .send(operation)
+            .send_async(operation)
+            .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
@@ -751,7 +752,8 @@ impl Tether {
             queries: queries.into(),
         }));
         self.connection
-            .send(operation)
+            .send_async(operation)
+            .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
@@ -806,7 +808,8 @@ impl Tether {
         };
         let operation = Operation::Execution(OperationExec::Query(query));
         self.connection
-            .send(operation)
+            .send_async(operation)
+            .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
         let item = receiver
@@ -1010,7 +1013,8 @@ impl Tether {
         let operation = Operation::Transaction(OperationTransaction::Start(policy, sender));
 
         self.connection
-            .send(operation)
+            .send_async(operation)
+            .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
@@ -1060,7 +1064,8 @@ impl Tether {
         let operation = Operation::Execution(OperationExec::Sync(sync_closure));
 
         self.connection
-            .send(operation)
+            .send_async(operation)
+            .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         let ret = receiver
             .await
@@ -1104,7 +1109,8 @@ impl Tether {
             Operation::Transaction(OperationTransaction::StartSync(sync_closure, policy));
 
         self.connection
-            .send(operation)
+            .send_async(operation)
+            .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         let ret = receiver
             .await
@@ -1183,6 +1189,10 @@ impl PooledTether {
 
     fn send(&self, operation: Operation) -> Result<(), flume::SendError<Operation>> {
         self.sender.send(operation)
+    }
+
+    async fn send_async(&self, operation: Operation) -> Result<(), flume::SendError<Operation>> {
+        self.sender.send_async(operation).await
     }
 }
 
@@ -1265,7 +1275,8 @@ impl<'tether> Bond<'tether> {
         let operation =
             Operation::Transaction(OperationTransaction::Commit(transaction_policy, sender));
         self.connection
-            .send(operation)
+            .send_async(operation)
+            .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
         if let Err(e) = receiver
@@ -1309,7 +1320,8 @@ impl<'tether> Bond<'tether> {
 
         let operation = Operation::Transaction(OperationTransaction::Rollback(sender));
         this.connection
-            .send(operation)
+            .send_async(operation)
+            .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
@@ -1336,7 +1348,8 @@ impl<'tether> Bond<'tether> {
         let operation = Operation::Transaction(OperationTransaction::Bridge(sync_closure));
 
         self.connection
-            .send(operation)
+            .send_async(operation)
+            .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         let ret = receiver
             .await
