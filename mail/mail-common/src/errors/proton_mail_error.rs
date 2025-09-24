@@ -279,7 +279,7 @@ impl From<MailScrollerError> for ProtonMailError {
     fn from(error: MailScrollerError) -> Self {
         let _guard = log_error(&error);
         match error {
-            MailScrollerError::Dirty => Self::reason(MailScrollerErrorReason::Dirty),
+            MailScrollerError::NotSynced => Self::reason(MailScrollerErrorReason::NotSynced),
         }
     }
 }

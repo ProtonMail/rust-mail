@@ -430,13 +430,13 @@ impl From<RealPinAuthErrorReason> for PinAuthErrorReason {
 
 #[derive(Debug, UniffiEnum)]
 pub enum MailScrollerErrorReason {
-    Dirty,
+    NotSynced,
 }
 
 impl From<RealMailScrollerErrorReason> for MailScrollerErrorReason {
     fn from(value: RealMailScrollerErrorReason) -> Self {
         match value {
-            RealMailScrollerErrorReason::Dirty => Self::Dirty,
+            RealMailScrollerErrorReason::NotSynced => Self::NotSynced,
         }
     }
 }

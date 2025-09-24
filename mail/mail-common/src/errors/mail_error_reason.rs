@@ -291,7 +291,7 @@ pub enum PinAuthErrorReason {
 /// information to the user.
 #[derive(Debug)]
 pub enum MailScrollerErrorReason {
-    Dirty,
+    NotSynced,
 }
 
 #[derive(Debug)]
