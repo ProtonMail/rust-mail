@@ -7,10 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Stash connection acquire timeouts
+- Fetch and apply events 1 by 1
+
 ### Fixes
 
 - [ET-4402] search: Respect the `MailSettings.almost_all_mail` setting
 - Schedule event pool when entering foreground
+
+
+## [mail-uniffi-v0.144.3] - 2025-09-24
+
+### Changed
+
+- Update account db connection limit
+
+### Fixes
+
+- Use async version of send, rather than sync
+
+
+## [mail-uniffi-v0.144.2] - 2025-09-22
+
+### Fixes
+
+- Limit background network test max timeout interval to 30 seconds
+
+
+## [mail-uniffi-v0.144.1] - 2025-09-22
+
+### Fixes
+
+- [ET-4668] Muon timeout failures
 
 
 ## [mail-uniffi-v0.147.0] - 2025-09-19
@@ -70,6 +100,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migration for Event Poll action was not hooked up
 
 
+## [mail-uniffi-v0.143.12] - 2025-09-12
+
+### Fixes
+
+- [ET-4720] Report missing send failure errors
+
+
 ## [mail-uniffi-v0.143.11] - 2025-09-12
 
 ### Changed
@@ -84,13 +121,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fetch new should have task awaiting scoped
 - Only use active addresses in send preferences
-
-
-## [mail-uniffi-v0.143.12] - 2025-09-12
-
-### Fixes
-
-- [ET-4720] Report missing send failure errors
 
 
 ## [mail-uniffi-v0.143.10] - 2025-09-12
