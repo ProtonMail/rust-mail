@@ -36,6 +36,7 @@ use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::PrivateEmail;
+use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{
@@ -1449,6 +1450,30 @@ pub async fn set_default_mobile_message_toolbar_actions(
         )
         .await
         .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Bulk check unread status for messages by remote IDs.
+///
+/// Takes a list of remote message IDs and returns a list of booleans indicating
+/// whether each message is unread. The result maintains the same order as the input.
+/// For messages that don't exist in the local database, returns true (unread).
+///
+/// This function is designed to work offline-only for iOS push notification clearing.
+#[uniffi_export]
+pub async fn bulk_message_unread_status(
+    session: Arc<MailUserSession>,
+    remote_ids: Vec<RemoteId>,
+) -> Result<Vec<bool>, ActionError> {
+    let stash = session.user_stash()?;
+    uniffi_async(async move {
+        let tether = stash.connection().await?;
+        let message_ids: Vec<MessageId> = remote_ids.into_iter().map(Into::into).collect();
+        RealMessage::bulk_unread_status_by_remote_ids(message_ids, &tether)
+            .await
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)

@@ -2028,6 +2028,58 @@ impl Message {
         Ok(result[0].id())
     }
 
+    /// Bulk check unread status for messages by remote IDs.
+    ///
+    /// Returns a Vec<bool> where each boolean corresponds to the unread status
+    /// of the message at the same index in the input remote_ids Vec.
+    /// For messages that don't exist in the database, returns true (treating them as unread).
+    ///
+    /// This method is designed to work offline-only and is primarily used for
+    /// iOS push notification clearing logic.
+    pub async fn bulk_unread_status_by_remote_ids(
+        remote_ids: Vec<MessageId>,
+        tether: &Tether,
+    ) -> Result<Vec<bool>, StashError> {
+        if remote_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let query = format!(
+            "SELECT remote_id, unread FROM messages WHERE remote_id IN ({}) AND deleted = 0",
+            placeholders(&remote_ids)
+        );
+
+        let remote_ids_for_query = remote_ids.clone();
+        let found_statuses: HashMap<MessageId, bool> = tether
+            .sync_query(move |conn| {
+                let mut stmt = conn.prepare(&query)?;
+                let params: Vec<&dyn ToSql> = remote_ids_for_query
+                    .iter()
+                    .map(|id| id as &dyn ToSql)
+                    .collect();
+                let rows = stmt.query_map(params.as_slice(), |row| {
+                    let remote_id: MessageId = row.get(0)?;
+                    let unread: bool = row.get(1)?;
+                    Ok((remote_id, unread))
+                })?;
+
+                let mut result = HashMap::new();
+                for row in rows {
+                    let (remote_id, unread) = row?;
+                    result.insert(remote_id, unread);
+                }
+                Ok(result)
+            })
+            .await?;
+
+        let results = remote_ids
+            .iter()
+            .map(|id| found_statuses.get(id).copied().unwrap_or(true))
+            .collect();
+
+        Ok(results)
+    }
+
     /// Set the flags without loading the whole model
     pub async fn set_flags(
         local_id: LocalMessageId,
