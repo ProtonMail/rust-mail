@@ -287,7 +287,7 @@ registry = "proton"
 
 [workspace.dependencies.muon]
 git = "https://gitlab.protontech.ch/jhoulahan/muon.git"
-rev = "12c57e6e79c023e5d14e75d6318a878491835c3d"
+rev = "d989ec037d500be4b3374df4b0465c7e39ca5d25"
 features = ["unsealed"]
 
 [workspace.dependencies.proton-log-service]
