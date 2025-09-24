@@ -344,7 +344,7 @@ impl Context {
 
         let stash_config = StashConfiguration {
             path: Some(&account_stash_path),
-            pool_size: Some(12),
+            pool_size: Some(24),
             ..Default::default()
         };
 
