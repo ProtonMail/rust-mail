@@ -231,6 +231,17 @@ impl StoredAction {
         Self::count("where action_type = ?", params![T::TYPE.as_ref()], tether).await
     }
 
+    pub async fn find_next_action<T: Action>(
+        tether: &Tether,
+    ) -> Result<Option<ActionId>, StashError> {
+        tether
+            .query_value_opt::<ActionId>(
+                "SELECT id FROM action_queue WHERE action_type = ? ORDER BY created ASC LIMIT 1",
+                params![T::TYPE.as_ref()],
+            )
+            .await
+    }
+
     /// Check whether the action with `id` is in the queue.
     ///
     /// # Errors
