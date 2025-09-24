@@ -61,6 +61,10 @@ use tracing::{debug, error, trace};
 /// access inside the same db process.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// If the connection are exhausted, wait up to 15 seconds before giving up, to prevent
+/// code from hanging indefinitely.
+const CONNECTION_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// The maximum number of simultaneous connections allowed to the database.
 const MAX_CONNECTIONS: u32 = 24;
 
@@ -1035,10 +1039,11 @@ impl Tether {
     async fn new(stash: &Stash) -> Result<Self, StashError> {
         let pool = stash.pool.clone();
         let connection = tokio::task::spawn_blocking(move || {
-            pool.acquire(None).map_err(|e| match e {
-                StashConnectionPoolError::Connection(e) => StashError::ExecutionError(e),
-                StashConnectionPoolError::TimedOut => StashError::ConnectionAcquireTimedOut,
-            })
+            pool.acquire(Some(CONNECTION_ACQUIRE_TIMEOUT))
+                .map_err(|e| match e {
+                    StashConnectionPoolError::Connection(e) => StashError::ExecutionError(e),
+                    StashConnectionPoolError::TimedOut => StashError::ConnectionAcquireTimedOut,
+                })
         })
         .await
         .map_err(|e| StashError::Custom(anyhow!("Failed to join blocking task: {e}")))??;
