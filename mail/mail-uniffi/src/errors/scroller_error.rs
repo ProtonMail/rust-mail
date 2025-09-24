@@ -25,8 +25,8 @@ impl From<RealProtonMailError> for MailScrollerError {
 impl From<RealMailErrorReason> for MailScrollerError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
-            RealMailErrorReason::MailScrollerReason(RealMailScrollerErrorReason::Dirty) => {
-                MailScrollerError::Reason(MailScrollerErrorReason::Dirty)
+            RealMailErrorReason::MailScrollerReason(RealMailScrollerErrorReason::NotSynced) => {
+                MailScrollerError::Reason(MailScrollerErrorReason::NotSynced)
             }
             other_reason => MailScrollerError::Other(ProtonError::from(other_reason)),
         }

@@ -411,7 +411,7 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
     }
 
     pub async fn match_next_update(&mut self, expected: TestUpdate) {
-        self.wait_for_update().await.unwrap();
+        let _ = self.wait_for_update().await;
         let actual = self.updates.last().unwrap();
         assert!(
             Self::assert_single_update(actual, &expected),
@@ -498,6 +498,14 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
                     && actual_to == expected_to
                     && actual_items.len() == *expected_items
             }
+            (ScrollerUpdate::Error { src: _, error }, TestUpdate::Error(expected_error)) => {
+                tracing::error!(
+                    "Comparing error,\nactual: {},\nexpected: {}",
+                    error.to_string(),
+                    expected_error
+                );
+                &error.to_string() == expected_error
+            }
             _ => false,
         }
     }
@@ -535,7 +543,11 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
                 self.collected_items.splice(from..to, items.clone());
                 Ok(Some(items))
             }
-            ScrollerUpdate::Error { src: _, error } => Err(error),
+            ScrollerUpdate::Error { src, error } => {
+                let err_str = error.to_string();
+                self.updates.push(ScrollerUpdate::Error { src, error });
+                Err(MailContextError::Other(anyhow::anyhow!("Error: {err_str}")))
+            }
         }
     }
 }
@@ -610,4 +622,5 @@ pub enum TestUpdate {
         to: usize,
         items: usize,
     },
+    Error(String),
 }

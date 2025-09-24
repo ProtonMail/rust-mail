@@ -32,8 +32,8 @@ mod conversation_scroller;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MailScrollerError {
-    #[error("MailScroller is dirty, invalidating")]
-    Dirty,
+    #[error("MailScroller cannot serve more data, counters seems not to be fulfillable")]
+    NotSynced,
 }
 
 #[derive(Debug)]
@@ -728,12 +728,21 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 self.execute_on_online = Some(handle.abort_handle());
             }
 
+            let is_offline = ctx.network_monitor_service().is_os_offline();
+
             if self.task.is_none() {
-                tracing::warn!("Scroller is offline, will not progress any further");
-                // We will not progress any further without task,
-                // and task will be spawned only when we are online,
-                // lets wait for another call.
-                return Err(MailContextError::no_connection());
+                if is_offline {
+                    tracing::warn!("Scroller is offline, will not progress any further");
+                    // We will not progress any further without task,
+                    // and task will be spawned only when we are online,
+                    // lets wait for another call.
+                    return Err(MailContextError::no_connection());
+                } else {
+                    tracing::warn!(
+                        "Scroller counters might be not synced, we have nothing more to show"
+                    );
+                    return Err(MailScrollerError::NotSynced.into());
+                }
             }
         }
 

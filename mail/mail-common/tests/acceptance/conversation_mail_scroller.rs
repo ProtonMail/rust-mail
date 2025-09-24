@@ -1,6 +1,5 @@
 use core::ops::Range;
 use itertools::Itertools;
-use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{Action, EventId, LabelId};
 use proton_core_common::models::ModelExtension;
 use proton_core_common::{
@@ -28,12 +27,11 @@ use proton_mail_common::test_utils::{
     test_context::MailUserContextTestExtension,
 };
 use proton_mail_common::{
-    MailContextError,
-    datatypes::{ContextualConversation, ReadFilter},
-    models::{Conversation, ConversationCounters, ConversationScrollData},
+    api_conversation, conv_id, conversation, lbl_id, test_utils::test_context::MailTestContext,
 };
 use proton_mail_common::{
-    api_conversation, conv_id, conversation, lbl_id, test_utils::test_context::MailTestContext,
+    datatypes::{ContextualConversation, ReadFilter},
+    models::{Conversation, ConversationCounters, ConversationScrollData},
 };
 use proton_network_monitor_service::OsNetworkStatus;
 use stash::orm::Model;
@@ -204,6 +202,45 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
 }
 
 #[tokio::test]
+async fn test_conversation_mail_scroller_try_to_read_one_item_from_api_when_it_does_not_exist_anymore()
+ {
+    let ctx = MailTestContext::new().await;
+    let mut params = TestParams::default_basic();
+    params.conversations = vec![];
+
+    ctx.mock_get_conversations(vec![], 3..5).await;
+    ctx.mock_ping_success().await;
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let unread = ReadFilter::All;
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 1;
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
+
+    let page_size = 5;
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    // Wait for the error update since we do not have any data in API response
+    test_scroller.fetch_more().unwrap();
+    test_scroller.match_next_update(TestUpdate::Error("MailScroller: MailScroller cannot serve more data, counters seems not to be fulfillable".to_string())).await;
+
+    // Verify we have nothing in the scroller
+    assert_eq!(test_scroller.items().len(), 0);
+    // However it will claim to have more data since the total is 1
+    assert!(test_scroller.has_more().await.unwrap());
+}
+
+#[tokio::test]
 async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
@@ -316,7 +353,7 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     let actual = result.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: Forbidden: 403 Forbidden. None".to_string()
+        "Error: API Error: Forbidden: 403 Forbidden. None".to_string()
     );
 
     assert_eq!(test_scroller.items().len(), 0);
@@ -328,7 +365,8 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     let actual = result.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: Network error: No connection".to_string()
+        "Error: MailScroller: MailScroller cannot serve more data, counters seems not to be fulfillable"
+            .to_string()
     );
 }
 
@@ -362,21 +400,21 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
 
     // The items can be read only when we progress with `fetch_more`
     test_scroller.fetch_more().unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap_err();
-    assert!(matches!(
-        actual,
-        MailContextError::Api(ApiServiceError::NetworkError(_))
-    ));
+    test_scroller
+        .match_next_update(TestUpdate::Error(
+            "API Error: Network error: No connection".to_string(),
+        ))
+        .await;
 
     assert_eq!(test_scroller.items().len(), 0);
     assert!(test_scroller.has_more().await.unwrap());
 
     test_scroller.fetch_more().unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap_err();
-    assert!(matches!(
-        actual,
-        MailContextError::Api(ApiServiceError::NetworkError(_))
-    ));
+    test_scroller
+        .match_next_update(TestUpdate::Error(
+            "API Error: Network error: No connection".to_string(),
+        ))
+        .await;
 }
 
 #[tokio::test]
@@ -423,7 +461,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     let actual = test_scroller.fetch_more_and_wait().await.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: Network error: No connection".to_string()
+        "Error: API Error: Network error: No connection".to_string()
     );
 }
 
@@ -478,12 +516,13 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     let actual = actual.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: Network error: No connection".to_string()
+        "Error: API Error: Network error: No connection".to_string()
     );
 
     test_scroller.assert_updates(&[
         TestUpdate::Append { items: 5 },
         TestUpdate::Append { items: 6 },
+        TestUpdate::Error("API Error: Network error: No connection".to_string()),
     ]);
 
     // Go online suddenly
@@ -604,7 +643,7 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
     let actual = test_scroller.wait_for_update().await.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: Network error: No connection".to_string()
+        "Error: API Error: Network error: No connection".to_string()
     );
 }
 
