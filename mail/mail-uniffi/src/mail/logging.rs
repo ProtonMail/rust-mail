@@ -20,20 +20,24 @@ pub(super) fn init_log(log_service: &LogService, debug: bool) -> std::io::Result
             app_tracing_env_filter_default()
         });
 
-    #[cfg(target_os = "ios")]
-    let os_log_subscriber =
-        tracing_oslog::OsLogger::new("ch.protonmail.protonmail", "[Proton] Rust").with_filter(
-            if debug {
-                app_tracing_env_filter_trace()
-            } else {
-                app_tracing_env_filter_default()
-            },
-        );
+    // TODO: Reintroduce tracing-oslog when this issue is resolved:
+    //  https://github.com/Absolucy/tracing-oslog/issues/20
+    // #[cfg(target_os = "ios", debug_assertions)]
+    // let os_log_subscriber =
+    //     tracing_oslog::OsLogger::new("ch.protonmail.protonmail", "[Proton] Rust").with_filter(
+    //         if debug {
+    //             app_tracing_env_filter_trace()
+    //         } else {
+    //             app_tracing_env_filter_default()
+    //         },
+    //     );
 
     let registry = tracing_subscriber::registry().with(file_subscriber);
 
-    #[cfg(target_os = "ios")]
-    let registry = { registry.with(os_log_subscriber) };
+    // TODO: Reintroduce tracing-oslog when this issue is resolved:
+    //  https://github.com/Absolucy/tracing-oslog/issues/20
+    // #[cfg(target_os = "ios", debug_assertions)]
+    // let registry = { registry.with(os_log_subscriber) };
 
     if let Err(e) = registry.try_init() {
         tracing::warn!("Failed to initialize logging: {e}");
