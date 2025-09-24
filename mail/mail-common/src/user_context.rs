@@ -187,6 +187,8 @@ impl MailUserContext {
             let mut builder =
                 MailUserContextBuilder::new().with_service(AttachmentCacheState::new());
 
+            let span =
+                tracing::debug_span!(parent: None, "qac", user_id = %user_context.user_id().short_id());
             builder = match origin {
                 Origin::App => {
                     let builder = builder
@@ -198,6 +200,7 @@ impl MailUserContext {
                                 mail_context.core_context().as_ref(),
                                 true,
                                 user_context.as_ref(),
+                                span.clone(),
                             ),
                         })
                         .with_service(DefaultQueueExecutor {
@@ -208,6 +211,7 @@ impl MailUserContext {
                                 mail_context.core_context().as_ref(),
                                 true,
                                 user_context.as_ref(),
+                                span.clone(),
                             ),
                             prefetch_rollback: QueueAutoExecutorPool::new(
                                 user_context.queue(),
@@ -217,6 +221,7 @@ impl MailUserContext {
                                 mail_context.core_context().as_ref(),
                                 true,
                                 user_context.as_ref(),
+                                span.clone(),
                             ),
                         })
                         .with_cyclic_service(QueuesService::new)
@@ -250,6 +255,7 @@ impl MailUserContext {
                                 mail_context.core_context().as_ref(),
                                 true,
                                 user_context.as_ref(),
+                                span.clone(),
                             )
                         },
                     })
