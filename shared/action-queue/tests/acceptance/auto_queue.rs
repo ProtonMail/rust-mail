@@ -37,6 +37,7 @@ async fn auto_queued_on_pause() {
         Box::new(NoopOnlineStatusWaiter),
         false,
         &task_spawner,
+        tracing::Span::current(),
     );
 
     auto_executor.pause();
@@ -76,6 +77,7 @@ async fn auto_queued_on_multiple_resume() {
         Box::new(NoopOnlineStatusWaiter),
         false,
         &task_spawner,
+        tracing::Span::current(),
     );
 
     // Calling resume should have no effect as auto executors starts active.
@@ -100,6 +102,7 @@ async fn auto_queued_on_multiple_pause() {
         Box::new(NoopOnlineStatusWaiter),
         false,
         &task_spawner,
+        tracing::Span::current(),
     );
 
     // Calling pause multiple times should still end up in paused state.
@@ -136,6 +139,7 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
         Box::new(NoopOnlineStatusWaiter),
         false,
         &task_spawner,
+        tracing::Span::current(),
     );
 
     auto_executor.pause();
@@ -217,6 +221,7 @@ async fn execute_all_waits_for_network_to_reoccur() {
         Box::new(TimedOnlineStatusWaiter(Duration::from_secs(2))),
         false,
         &task_spawner,
+        tracing::Span::current(),
     );
 
     auto_executor.pause();

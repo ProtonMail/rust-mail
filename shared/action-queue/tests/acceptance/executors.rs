@@ -37,6 +37,7 @@ async fn auto_execute_until_empty() {
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::Empty,
+        tracing::Span::current(),
     );
 
     executor.await_finished().await;
@@ -74,6 +75,7 @@ async fn auto_execute_until_network_failure() {
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::NetworkLoss,
+        tracing::Span::current(),
     );
 
     executor.await_finished().await;
@@ -112,6 +114,7 @@ async fn auto_execute_until_empty_or_network_failure() {
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
+        tracing::Span::current(),
     );
 
     executor.await_finished().await;
@@ -126,6 +129,7 @@ async fn auto_execute_until_empty_or_network_failure() {
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
+        tracing::Span::current(),
     );
 
     executor.await_finished().await;
@@ -156,6 +160,7 @@ async fn auto_execute_pool() {
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::Empty,
+        tracing::Span::current(),
     );
 
     // This test can take up to 1 min to complete due to the timeout while waiting for external
@@ -186,6 +191,7 @@ async fn auto_execute_forever() {
         false,
         &task_spawner,
         QueueAutoTerminationPolicy::Never,
+        tracing::Span::current(),
     );
 
     tokio::time::timeout(Duration::from_millis(100), executor.await_finished())

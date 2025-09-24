@@ -817,12 +817,14 @@ impl QueueExecutor {
         online: Box<dyn OnlineStatusWaiter>,
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
+        span: tracing::Span,
     ) -> QueueAutoExecutor {
         self.into_auto_executor_with_policy(
             online,
             start_paused,
             task_spawner,
             QueueAutoTerminationPolicy::Never,
+            span,
         )
     }
 
@@ -834,8 +836,16 @@ impl QueueExecutor {
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
+        span: tracing::Span,
     ) -> QueueAutoExecutor {
-        QueueAutoExecutor::new(self, online, start_paused, task_spawner, termination_policy)
+        QueueAutoExecutor::new(
+            self,
+            online,
+            start_paused,
+            task_spawner,
+            termination_policy,
+            span,
+        )
     }
 
     /// Execute one action from the queue.
@@ -1031,12 +1041,15 @@ impl QueueAutoExecutor {
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
+        span: tracing::Span,
     ) -> Self {
         let id = executor.id.clone();
         let (paused_tx, paused_rx) = watch::channel(start_paused);
 
         let task = task_spawner.spawn_task(async move {
-            Self::run(executor, paused_rx, online, termination_policy).await;
+            Self::run(executor, paused_rx, online, termination_policy)
+                .instrument(span)
+                .await;
         });
 
         QueueAutoExecutor {
@@ -1179,6 +1192,7 @@ impl QueueAutoExecutorPool {
         online: &impl OnlineStatusWaiterBuilder,
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
+        span: tracing::Span,
     ) -> Self {
         Self::with_termination_policy(
             queue,
@@ -1188,10 +1202,12 @@ impl QueueAutoExecutorPool {
             start_paused,
             task_spawner,
             QueueAutoTerminationPolicy::Never,
+            span,
         )
     }
 
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn with_termination_policy(
         queue: &Queue,
         action_group: &ActionGroup,
@@ -1200,6 +1216,7 @@ impl QueueAutoExecutorPool {
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
+        span: tracing::Span,
     ) -> Self {
         let executors = (0..count.get())
             .map(move |_| {
@@ -1210,6 +1227,7 @@ impl QueueAutoExecutorPool {
                         start_paused,
                         task_spawner,
                         termination_policy,
+                        span.clone(),
                     )
             })
             .collect::<Vec<_>>();

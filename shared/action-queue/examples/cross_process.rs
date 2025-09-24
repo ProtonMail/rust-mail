@@ -116,6 +116,7 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
             &online,
             false,
             &task_spawner,
+            tracing::Span::current(),
         );
         wait_on_queue_empty(&queue).await;
     } else {
@@ -169,6 +170,7 @@ async fn child_main(directory: &Path, action_count: Option<usize>) {
             &online,
             false,
             &task_spawner,
+            tracing::Span::current(),
         );
         notifier.notified().await;
     }
