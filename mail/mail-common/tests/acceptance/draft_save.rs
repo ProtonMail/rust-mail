@@ -1774,3 +1774,85 @@ async fn prepare_draft_reply_attach_public_key(
 
     closure(&draft, &tether).await;
 }
+
+#[tokio::test]
+async fn replying_to_expiring_message_inherits_expiration() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let mut params = draft_test_params_with_mime_type(MimeType::TextHtml);
+    params.addresses[0].status = AddressStatus::Disabled;
+
+    // Create one message we can reply to.
+    let mut remote_existing_message = draft_message_with_attachments();
+
+    let time = UnixTimestamp::now().saturating_add(100);
+    let expiration_time = UnixTimestamp::now().saturating_add(2000);
+
+    remote_existing_message.metadata.sender.address = "me@proton.me".into();
+    remote_existing_message.body.reply_to.address = "me@proton.me".into();
+    remote_existing_message.metadata.id = "FancyRemoteId".into();
+    remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+    remote_existing_message.metadata.expiration_time = expiration_time.as_u64();
+    remote_existing_message.metadata.time = time.as_u64();
+
+    ctx.setup_user(params.clone()).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let (mut existing_message, _, _) =
+        Message::from_api_data(remote_existing_message.clone(), &tether)
+            .await
+            .unwrap();
+
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
+
+    ctx.mock_get_message(
+        &remote_existing_message.metadata.id,
+        remote_existing_message.clone(),
+    )
+    .await;
+
+    ctx.catch_all().await;
+
+    // Get the message body - required to reply to draft.
+    Message::force_sync_message_and_body(
+        &user_ctx,
+        existing_message.remote_id.unwrap(),
+        false,
+        &mut tether,
+    )
+    .await
+    .unwrap();
+
+    let expected_expiration_time = UnixTimestamp::now()
+        .saturating_add(expiration_time.saturating_sub(time.as_u64()).as_u64())
+        .to_date_time()
+        .unwrap();
+
+    // Create draft.
+    let draft = Draft::reply(
+        &user_ctx,
+        existing_message.local_id.unwrap(),
+        ReplyMode::Sender,
+        true,
+    )
+    .await
+    .unwrap();
+
+    let DraftExpirationTime::Custom(expiration_time) = draft.expiration_time().await.unwrap()
+    else {
+        unreachable!()
+    };
+
+    // Due to this method relying on Unixtimestamp::now(), it should be higher or equal
+    assert!(expiration_time >= expected_expiration_time);
+}
