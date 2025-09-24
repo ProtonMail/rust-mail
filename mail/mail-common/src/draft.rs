@@ -2,7 +2,8 @@ use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalConversationId, LocalMessageId};
 use crate::ios_share_ext::IosShareExtension;
 use crate::models::{
-    Attachment, AttachmentData, DraftSendResult, MailSettings, MessageMimeType, MetadataId,
+    Attachment, AttachmentData, DraftMetadata, DraftSendResult, MailSettings, MessageMimeType,
+    MetadataId,
 };
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::{DateTime, Local};
@@ -1183,7 +1184,8 @@ impl DraftActor {
     pub async fn validate_expiration_feature(
         &self,
     ) -> Result<ExpirationFeatureSupportReport, MailContextError> {
-        self.act(DraftActorMessage::ValidateExpirationFeature).await
+        self.act(DraftActorMessage::ValidateExpirationFeature)
+            .await?
     }
 }
 
@@ -1381,7 +1383,9 @@ enum DraftActorMessage {
     #[display("ReValidateAllRecipients")]
     RevalidateAllRecipients,
     #[display("ValidateExpirationFeature")]
-    ValidateExpirationFeature(oneshot::Sender<ExpirationFeatureSupportReport>),
+    ValidateExpirationFeature(
+        oneshot::Sender<Result<ExpirationFeatureSupportReport, MailContextError>>,
+    ),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -1932,21 +1936,43 @@ impl DraftActor {
                     }
                 }
                 DraftActorMessage::ValidateExpirationFeature(sender) => {
-                    let report = if let Ok(true) = async {
+                    let r = async {
                         let tether = ctx.user_stash().connection().await?;
-                        draft.is_password_protected(&tether).await
+
+                        let metadata = DraftMetadata::find_by_id(draft.metadata_id, &tether)
+                            .await?
+                            .ok_or(Error::Expiration(ExpirationError::MetadataNotFound(
+                                draft.metadata_id,
+                            )))?;
+
+                        let report = if metadata.expiration_time() == DraftExpirationTime::Never
+                            || metadata.password.is_some()
+                        {
+                            // if we have password encryption or no expiration time is set, then
+                            // every validly formatted email address is supported.
+                            let mut report = ExpirationFeatureSupportReport::default();
+                            draft
+                                .to_list
+                                .fill_expiration_support_report_as_supported(&mut report);
+                            draft
+                                .cc_list
+                                .fill_expiration_support_report_as_supported(&mut report);
+                            draft
+                                .bcc_list
+                                .fill_expiration_support_report_as_supported(&mut report);
+                            report
+                        } else {
+                            let mut report = ExpirationFeatureSupportReport::default();
+                            draft.to_list.validate_expiration_feature(&mut report);
+                            draft.cc_list.validate_expiration_feature(&mut report);
+                            draft.bcc_list.validate_expiration_feature(&mut report);
+                            report
+                        };
+
+                        Ok(report)
                     }
-                    .await
-                    {
-                        ExpirationFeatureSupportReport::default()
-                    } else {
-                        let mut report = ExpirationFeatureSupportReport::default();
-                        draft.to_list.validate_expiration_feature(&mut report);
-                        draft.cc_list.validate_expiration_feature(&mut report);
-                        draft.bcc_list.validate_expiration_feature(&mut report);
-                        report
-                    };
-                    let _ = sender.send(report);
+                    .await;
+                    let _ = sender.send(r);
                 }
             }
         }
