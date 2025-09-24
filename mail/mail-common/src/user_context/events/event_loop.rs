@@ -1,9 +1,11 @@
-use crate::MailUserContext;
 use crate::actions::rollback::RollbackAction;
 use crate::models::RollbackItem;
+use crate::{MailContextError, MailUserContext};
+use anyhow::anyhow;
 use proton_action_queue::action::{Action, ActionGroup};
 use proton_action_queue::queue::{ActionError, BroadcastMessage};
 use proton_core_common::actions::event_poll::EventPoll;
+use proton_core_common::app_events::OnEnterForegroundEvent;
 use proton_core_common::services::EventLoopService;
 use proton_core_common::services::InitializationService;
 use proton_event_loop::EventLoopError;
@@ -16,7 +18,7 @@ use tracing::{Instrument, error};
 const EVENT_POLL_REPLACE_DELAY: Duration = Duration::from_secs(5);
 
 impl MailUserContext {
-    pub(crate) fn init_event_loop_poll(&self, duration: Duration) {
+    pub(crate) fn init_event_loop_poll(&self, duration: Duration) -> Result<(), MailContextError> {
         tracing::info!(
             "Initializing event loop poll with {} second interval",
             duration.as_secs()
@@ -31,6 +33,14 @@ impl MailUserContext {
             interval
         };
 
+        let mut on_enter_foreground_subscriber = self
+            .mail_context
+            .core_context()
+            .event_service()
+            .subscribe::<OnEnterForegroundEvent>()
+            .ok_or(MailContextError::Other(anyhow!(
+                "Missing on foreground event"
+            )))?;
         let mut queue_observer = self.user_context().queue().new_broadcast_receiver();
         let watcher = self
             .user_context
@@ -60,6 +70,13 @@ impl MailUserContext {
                 loop {
                     let delay = tokio::select! {
                         _ = interval.tick() => {
+                            None
+                        }
+                        event = on_enter_foreground_subscriber.next() => {
+                            if event.is_ok() {
+                               tracing::info!("Queuing event poll from enter foreground");
+                                interval.reset();
+                            }
                             None
                         }
                         r = queue_observer.recv() => {
@@ -109,6 +126,8 @@ impl MailUserContext {
             .instrument(tracing::debug_span!("event_loop"))
             .await;
         });
+
+        Ok(())
     }
 
     /// Queue an action to execute the event loop.
