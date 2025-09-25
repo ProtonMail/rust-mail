@@ -675,6 +675,7 @@ pub enum DraftSendFailureAttachment {
     TotalAttachmentsTooLarge,
     MessageDoesNotExist,
     Timeout,
+    StorageQuotaExceeded,
     Other(String),
 }
 
@@ -789,6 +790,9 @@ impl DraftSendFailure {
                 | AttachmentUploadError::ExistingUploadActionExist(_)
                 | AttachmentUploadError::MessageAlreadySent
                 | AttachmentUploadError::RetryInvalidState(_) => Self::Internal,
+                AttachmentUploadError::StorageQuotaExceeded => {
+                    Self::Attachment(DraftSendFailureAttachment::StorageQuotaExceeded)
+                }
             },
             _ => Self::Internal,
         }
@@ -922,6 +926,11 @@ impl From<DraftSendFailure> for ProtonMailError {
                 DraftSendFailureAttachment::Timeout => {
                     Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
                         DraftAttachmentUploadErrorReason::Timeout,
+                    ))
+                }
+                DraftSendFailureAttachment::StorageQuotaExceeded => {
+                    Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                        DraftAttachmentUploadErrorReason::StorageQuotaExceeded,
                     ))
                 }
             },

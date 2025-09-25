@@ -508,6 +508,11 @@ impl From<AttachmentUploadError> for ProtonMailError {
                     DraftAttachmentUploadErrorReason::Timeout,
                 ))
             }
+            AttachmentUploadError::StorageQuotaExceeded => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::StorageQuotaExceeded,
+                ))
+            }
         }
     }
 }

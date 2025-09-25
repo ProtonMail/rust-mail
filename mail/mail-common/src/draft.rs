@@ -214,6 +214,8 @@ pub enum AttachmentUploadError {
     TotalAttachmentSizeTooLarge,
     #[error("Attachment upload timed out")]
     Timeout,
+    #[error("Storage quota exceeded")]
+    StorageQuotaExceeded,
 }
 
 impl From<AttachmentUploadError> for MailContextError {
