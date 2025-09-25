@@ -105,18 +105,14 @@ impl PooledSender {
         if let Some(pool) = self.pool.upgrade() {
             trace!(server = %self.key, "repooling sender");
             pool.lock().await.extend(&self.key);
-        } else {
-            trace!(server = %self.key, "pool dropped; not repooling sender");
         }
     }
 
     /// Remove the sender from the pool.
     pub async fn unpool(self) {
         if let Some(pool) = self.pool.upgrade() {
-            trace!(server = %self.key, "unpooling sender");
+            warn!(server = %self.key, "unpooling sender");
             pool.lock().await.unpool(&self.key);
-        } else {
-            trace!(server = %self.key, "pool dropped; not unpooling sender");
         }
     }
 }

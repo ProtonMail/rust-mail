@@ -214,6 +214,10 @@ path = "examples/custom-tls.rs"
 name = "fallible-store"
 path = "examples/fallible-store.rs"
 
+[[example]]
+name = "pinger"
+path = "examples/pinger.rs"
+
 [[test]]
 name = "muon"
 path = "tests/muon/main.rs"
