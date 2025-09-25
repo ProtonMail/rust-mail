@@ -34,6 +34,7 @@ use std::sync::Weak;
 use std::time::{Duration, Instant};
 use tokio::fs;
 use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 
 pub mod attachments;
@@ -507,6 +508,8 @@ pub enum DraftEvent {
         cc: RecipientList,
         bcc: RecipientList,
     },
+    Sent,
+    Discarded,
 }
 
 #[derive(Clone)]
@@ -1414,6 +1417,7 @@ impl DraftActor {
         let (event_sender, _) = broadcast::channel(DRAFT_EVENT_CHANNEL_CAPACITY);
 
         let weak = ctx.as_weak();
+        let cancellation_token = ctx.core_context().cancellation_token().child_token();
         let cloned_event_sender = event_sender.clone();
         let cloned_sender = sender.clone();
         ctx.spawn(async move {
@@ -1424,6 +1428,7 @@ impl DraftActor {
                 draft,
                 cloned_event_sender,
                 options,
+                cancellation_token,
             )
             .await
         });
@@ -1455,6 +1460,7 @@ impl DraftActor {
         mut draft: draft_v1::Draft,
         event_sender: broadcast::Sender<DraftEvent>,
         options: DraftActorOptions,
+        cancellation_token: CancellationToken,
     ) {
         let publish_event = |event: DraftEvent| {
             // sending on broadcast only fails if there are no receivers
@@ -1621,6 +1627,11 @@ impl DraftActor {
                 }
                 DraftActorMessage::Discard { sender } => {
                     let r = draft.discard(ctx.action_queue(), ctx.origin()).await;
+                    if r.is_ok() {
+                        // cancel pending validation task
+                        cancellation_token.cancel();
+                        publish_event(DraftEvent::Discarded);
+                    }
                     let _ = sender.send(r);
                 }
                 DraftActorMessage::ScheduleSend {
@@ -1651,6 +1662,9 @@ impl DraftActor {
                     if r.is_ok() {
                         // sending currently always saves
                         auto_saver.reset_save_state();
+                        // cancel pending validation task
+                        cancellation_token.cancel();
+                        publish_event(DraftEvent::Sent);
                     }
                     let _ = sender.send(r);
                 }
@@ -1699,8 +1713,13 @@ impl DraftActor {
                     let r = {
                         let list = recipient_group_from_draft(&mut draft, group);
                         if options.address_validation_enabled {
-                            DraftOnRecipientValidation::new_list(group, actor_sender.clone(), list)
-                                .add_single(&ctx, recipient)
+                            DraftOnRecipientValidation::new_list(
+                                group,
+                                actor_sender.clone(),
+                                list,
+                                cancellation_token.clone(),
+                            )
+                            .add_single(&ctx, recipient)
                         } else {
                             match list.add_single(recipient) {
                                 Ok(_) => Ok(()),
@@ -1739,8 +1758,18 @@ impl DraftActor {
                     let duplicates = {
                         let list = recipient_group_from_draft(&mut draft, group);
                         if options.address_validation_enabled {
-                            DraftOnRecipientValidation::new_list(group, actor_sender.clone(), list)
-                                .add_group(&ctx, group_name.clone(), recipients, total_in_group)
+                            DraftOnRecipientValidation::new_list(
+                                group,
+                                actor_sender.clone(),
+                                list,
+                                cancellation_token.clone(),
+                            )
+                            .add_group(
+                                &ctx,
+                                group_name.clone(),
+                                recipients,
+                                total_in_group,
+                            )
                         } else {
                             let (_, duplicates) =
                                 list.add_group(group_name.clone(), recipients, total_in_group);
@@ -1781,8 +1810,13 @@ impl DraftActor {
                             RecipientGroupId::Bcc,
                         ] {
                             let list = recipient_group_from_draft(&mut draft, id);
-                            DraftOnRecipientValidation::new_list(id, actor_sender.clone(), list)
-                                .check_all(&ctx);
+                            DraftOnRecipientValidation::new_list(
+                                id,
+                                actor_sender.clone(),
+                                list,
+                                cancellation_token.clone(),
+                            )
+                            .check_all(&ctx);
                         }
                     }
                     let r = auto_saver.save(&ctx, &mut draft, &options).await;
@@ -1897,8 +1931,13 @@ impl DraftActor {
                         let list = recipient_group_from_draft(&mut draft, group);
                         std::mem::swap(list, &mut recipients);
                         if options.address_validation_enabled {
-                            DraftOnRecipientValidation::new_list(group, actor_sender.clone(), list)
-                                .check_all(&ctx);
+                            DraftOnRecipientValidation::new_list(
+                                group,
+                                actor_sender.clone(),
+                                list,
+                                cancellation_token.clone(),
+                            )
+                            .check_all(&ctx);
                         }
                     }
                     let r = auto_saver.save(&ctx, &mut draft, &options).await;
@@ -1930,8 +1969,13 @@ impl DraftActor {
                             RecipientGroupId::Bcc,
                         ] {
                             let list = recipient_group_from_draft(&mut draft, id);
-                            DraftOnRecipientValidation::new_list(id, actor_sender.clone(), list)
-                                .check_all(&ctx);
+                            DraftOnRecipientValidation::new_list(
+                                id,
+                                actor_sender.clone(),
+                                list,
+                                cancellation_token.clone(),
+                            )
+                            .check_all(&ctx);
                         }
                     }
                 }
@@ -2003,8 +2047,13 @@ impl DraftOnRecipientValidation {
         group: RecipientGroupId,
         sender: mpsc::Sender<DraftActorMessage>,
         list: &mut RecipientList,
+        cancellation_token: CancellationToken,
     ) -> DraftValidatingRecipientList<'_> {
-        ValidatingRecipientList::new(list, DraftOnRecipientValidation { group, sender })
+        ValidatingRecipientList::new(
+            cancellation_token,
+            list,
+            DraftOnRecipientValidation { group, sender },
+        )
     }
 }
 
