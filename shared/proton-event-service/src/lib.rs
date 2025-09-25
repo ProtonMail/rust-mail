@@ -32,7 +32,6 @@
 use parking_lot::RwLock;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use tracing::error;
 
 pub trait Event: Send + Sync + Clone + 'static {}
 impl<T: Send + Sync + Clone + 'static> Event for T {}
@@ -94,9 +93,7 @@ impl EventService {
         };
 
         // never fails since we always keep on receiver alive
-        if listener.sender.send(event).is_err() {
-            error!("Failed to publish event, all receivers must be dead");
-        }
+        let _ = listener.sender.send(event);
     }
 }
 
