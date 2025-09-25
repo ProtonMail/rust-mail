@@ -211,6 +211,17 @@ impl ExpirationFeatureSupportReport {
             }
         };
     }
+
+    fn add_as_supported(&mut self, email: PrivateEmailRef, validation_state: ValidationState) {
+        match validation_state {
+            ValidationState::Valid(_)
+            | ValidationState::Unchecked
+            | ValidationState::Validating => {
+                self.supported.insert(email.to_owned());
+            }
+            _ => {}
+        }
+    }
 }
 
 /// A list of email recipients.
@@ -641,6 +652,22 @@ impl RecipientList {
                 Recipient::Group(group) => {
                     for recipient in &group.recipients {
                         report.check(recipient.email.as_ref(), recipient.state)
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn fill_expiration_support_report_as_supported(
+        &self,
+        report: &mut ExpirationFeatureSupportReport,
+    ) {
+        for recipient in &self.recipients {
+            match recipient {
+                Recipient::Single(r) => report.add_as_supported(r.email.as_ref(), r.state),
+                Recipient::Group(group) => {
+                    for recipient in &group.recipients {
+                        report.add_as_supported(recipient.email.as_ref(), recipient.state)
                     }
                 }
             }
