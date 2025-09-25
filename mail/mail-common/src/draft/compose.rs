@@ -138,11 +138,6 @@ pub(super) fn get_full_signature(
 
     let mut signature = String::new();
 
-    let show_address_signature = match platform {
-        Platform::Desktop => true,
-        Platform::Mobile => custom_settings.address_signature_enabled(),
-    };
-
     let show_pm_signature = match platform {
         Platform::Desktop => mail_settings.pm_signature.is_enabled(),
         Platform::Mobile => mail_settings.pm_signature.is_locked(),
@@ -155,18 +150,16 @@ pub(super) fn get_full_signature(
         }
     };
 
-    if show_address_signature {
-        _ = write!(
-            signature,
-            "{}",
-            prepare_signature(&address.signature, mime_type)
-        );
+    _ = write!(
+        signature,
+        "{}",
+        prepare_signature(&address.signature, mime_type)
+    );
 
-        if mime_type == MessageMimeType::TextHtml {
-            // Wrap signature in a special `div` block so that we can replace
-            // the signature if user changes the `from` address
-            signature = format!("<div class=\"{PM_SIGNATURE_DIV_CLASS}\">{signature}</div>");
-        }
+    if mime_type == MessageMimeType::TextHtml {
+        // Wrap signature in a special `div` block so that we can replace
+        // the signature if user changes the `from` address
+        signature = format!("<div class=\"{PM_SIGNATURE_DIV_CLASS}\">{signature}</div>");
     }
 
     if show_pm_signature {

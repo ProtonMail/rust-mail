@@ -407,17 +407,6 @@ mod signatures {
         expected_mobile: "\n\ncheers, jerry",
     };
 
-    const TEST_DISABLED_ADDRESS_SIGNATURE: TestCase = TestCase {
-        given_custom_settings: || {
-            custom_settings()
-                .with_address_signature_enabled(false)
-                .with_mobile_signature_enabled(false)
-        },
-        expected_desktop: "\n\ncheers, jerry",
-        expected_mobile: "",
-        ..TEST_ADDRESS_SIGNATURE
-    };
-
     const TEST_MOBILE_SIGNATURE: TestCase = TestCase {
         given_address: address,
         given_mail_settings: mail_settings,
@@ -508,7 +497,6 @@ mod signatures {
     #[test_case(TEST_NO_SIGNATURES)]
     #[test_case(TEST_DEFAULT_CUSTOM_SETTINGS)]
     #[test_case(TEST_ADDRESS_SIGNATURE)]
-    #[test_case(TEST_DISABLED_ADDRESS_SIGNATURE)]
     #[test_case(TEST_MOBILE_SIGNATURE)]
     #[test_case(TEST_DISABLED_MOBILE_SIGNATURE)]
     #[test_case(TEST_ADDRESS_AND_MOBILE_SIGNATURE)]
