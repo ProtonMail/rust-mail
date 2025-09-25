@@ -1,6 +1,7 @@
 pub use self::keys::*;
 use self::services::{EventLoopService, InitializationService};
 
+use crate::actions::event_poll::EventPoll as EventPollAction;
 use crate::context::services::SessionObserverService;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
@@ -8,6 +9,7 @@ use crate::db::migrations::{migrate_core_db, verify_core_db};
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::subscriber::CoreEventLoopContext;
+use proton_action_queue::db::StoredAction;
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Session;
@@ -109,6 +111,8 @@ impl UserContext {
             let origin = context.origin();
             let context_cloned = context.clone();
             let cancellation_token_cloned = cancellation_token.clone();
+            let tether = user_stash.connection().await?;
+            let last_event = StoredAction::find_next_action::<EventPollAction>(&tether).await?;
 
             let this = {
                 let mut builder = builder::UserContextBuilder::new();
@@ -126,7 +130,7 @@ impl UserContext {
                                 event_ctx.boxed(),
                                 event_ctx.boxed(),
                             );
-                            EventLoopService::new(event_loop)
+                            EventLoopService::new(event_loop, last_event)
                         })
                         .with_service(InitializationService::new(InitializationWatcher::new(
                             &user_stash,
