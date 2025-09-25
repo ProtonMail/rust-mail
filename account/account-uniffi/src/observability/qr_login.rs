@@ -1,7 +1,4 @@
-use proton_core_common::{
-    metric,
-    observability::{ObservabilityMetric, PreLoginMetricRecorder},
-};
+use proton_observability::{PreLoginMetricRecorder, metric};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -61,7 +58,7 @@ pub fn qr_login_show_qr_screen_total(screen_id: QrLoginShowQrCodeScreenViewTotal
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_common::observability::into_metrics_element;
+    use proton_observability::into_metrics_element;
 
     #[test]
     fn test_qr_host_metric() {

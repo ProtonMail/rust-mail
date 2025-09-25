@@ -15,12 +15,10 @@ use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::SessionParts;
 use proton_core_api::store::{AuthInfo, TfaMode, UserData};
-use proton_core_common::observability::PreLoginMetricRecorder;
-use proton_core_common::observability::metrics::AuthV4RequestMetric;
-use proton_core_common::{metric, observability::ObservabilityMetric};
 use proton_crypto_account::proton_crypto::generate_secure_random_bytes;
+use proton_observability::metrics::AuthV4RequestMetric;
+use proton_observability::{PreLoginMetricRecorder, metric};
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
 use serde_json::to_value;
 use tracing::info;
 

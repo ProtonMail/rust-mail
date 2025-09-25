@@ -43,7 +43,7 @@ members = [
   "shared/proton-event-service",
   "shared/proton-network-monitor-service",
   "shared/proton-issue-reporter-service",
-  "shared/proton-issue-reporter-service-uniffi",
+  "shared/proton-issue-reporter-service-uniffi", "shared/proton-observability",
 ]
 
 [workspace.package]
@@ -344,6 +344,9 @@ registry = "proton"
 version = "0.1.0"
 path = "shared/proton-issue-reporter-service-uniffi"
 registry = "proton"
+
+[workspace.dependencies.proton-observability]
+path = "shared/proton-observability"
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"

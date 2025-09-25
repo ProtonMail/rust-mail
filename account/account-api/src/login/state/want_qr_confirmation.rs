@@ -13,12 +13,9 @@ use proton_core_api::{
     store::{Store, UserData},
 };
 use proton_core_common::{Context, PassphraseAcquireError};
-use proton_core_common::{
-    metric,
-    observability::{ObservabilityMetric, PreLoginMetricRecorder},
-};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_subtle::aead::{AesGcmCiphertext, AesGcmKey};
+use proton_observability::{PreLoginMetricRecorder, metric};
 use regex::Regex;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};

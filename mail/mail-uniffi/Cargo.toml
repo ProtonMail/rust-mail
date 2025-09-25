@@ -29,6 +29,7 @@ proton-crypto-account = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-mail-api = { workspace = true }
 proton-mail-common = { workspace = true, features = ["proton_mail_error_log"] }
+proton-observability = { workspace = true }
 proton-task-service = { workspace = true }
 proton-issue-reporter-service-uniffi = { workspace = true }
 proton-ical = { workspace = true }

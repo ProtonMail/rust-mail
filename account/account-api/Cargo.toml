@@ -11,6 +11,7 @@ proton-crypto-account = { workspace = true }
 proton-crypto-subtle = { workspace = true }
 proton-core-api = { workspace = true }
 proton-core-common = { workspace = true }
+proton-observability = { workspace = true }
 proton-task-service = { workspace = true }
 muon = { workspace = true }
 

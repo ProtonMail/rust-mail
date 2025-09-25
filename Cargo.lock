@@ -4995,6 +4995,7 @@ dependencies = [
  "proton-crypto-subtle",
  "proton-issue-reporter-service",
  "proton-log-service",
+ "proton-observability",
  "proton-task-service",
  "regex",
  "secrecy",
@@ -5036,6 +5037,7 @@ dependencies = [
  "proton-account-common",
  "proton-core-api",
  "proton-core-common",
+ "proton-observability",
  "secrecy",
  "serde",
  "serde_json",
@@ -5198,6 +5200,7 @@ dependencies = [
  "proton-issue-reporter-service",
  "proton-log-service",
  "proton-network-monitor-service",
+ "proton-observability",
  "proton-sqlite3",
  "proton-task-service",
  "proton-vcard",
@@ -5517,6 +5520,7 @@ dependencies = [
  "proton-mail-common-derive",
  "proton-mail-html-transformer",
  "proton-network-monitor-service",
+ "proton-observability",
  "proton-sqlite3",
  "proton-task-service",
  "reqwest",
@@ -5645,6 +5649,7 @@ dependencies = [
  "proton-mail-api",
  "proton-mail-common",
  "proton-network-monitor-service",
+ "proton-observability",
  "proton-task-service",
  "proton-vcard",
  "secrecy",
@@ -5676,6 +5681,18 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "proton-observability"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "parking_lot",
+ "proton-core-api",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

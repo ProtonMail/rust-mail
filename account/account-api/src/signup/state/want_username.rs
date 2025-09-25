@@ -7,8 +7,8 @@ use derive_more::Display;
 use futures::TryFutureExt;
 use muon::Client;
 use proton_core_api::services::observability::ApiServiceObservabilityResponse;
-use proton_core_common::observability::PreLoginMetricRecorder;
-use proton_core_common::{metric, observability::ObservabilityMetric};
+use proton_observability::PreLoginMetricRecorder;
+use proton_observability::metric;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -124,7 +124,7 @@ mod tests {
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
-    use proton_core_common::observability::into_metrics_element;
+    use proton_observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(

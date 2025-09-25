@@ -1,7 +1,4 @@
-use proton_core_common::{
-    metric,
-    observability::{ObservabilityMetric, PreLoginMetricRecorder},
-};
+use proton_observability::{PreLoginMetricRecorder, metric};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]

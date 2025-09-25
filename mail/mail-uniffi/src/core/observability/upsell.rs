@@ -1,7 +1,7 @@
 use crate::mail::MailUserSession;
 use proton_core_common::datatypes::UnixTimestamp;
-use proton_core_common::{metric, observability::ObservabilityMetric};
 use proton_mail_common::MailUserContext;
+use proton_observability::metric;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;

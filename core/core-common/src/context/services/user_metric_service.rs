@@ -5,13 +5,13 @@ use std::time::Duration;
 use tracing::{debug, error, trace};
 
 use super::Service;
-use crate::observability::{
-    ObservabilityMetric, into_metrics_element, steal_from_pre_login_metric_store,
-    store::InMemoryMetricStore,
-};
 use crate::{CoreContextError, UserContext};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::ProtonData;
+use proton_observability::{
+    ObservabilityMetric, into_metrics_element, steal_from_pre_login_metric_store,
+    store::InMemoryMetricStore,
+};
 
 const OBSERVABILITY_SEND_INTERVAL_SECS: u64 = 60;
 const OBSERVABILITY_BATCH_SIZE: usize = 500;

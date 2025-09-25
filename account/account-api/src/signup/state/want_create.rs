@@ -26,15 +26,15 @@ use proton_core_api::store::AuthInfo;
 use proton_core_api::store::DynStore;
 use proton_core_api::store::TfaMode;
 use proton_core_api::store::UserData;
-use proton_core_common::observability::PreLoginMetricRecorder;
 use proton_core_common::post_login_check::PostLoginValidator;
 use proton_core_common::post_login_check::UserCheckResult;
 use proton_core_common::post_login_check::UserCheckStatus;
-use proton_core_common::{metric, observability::ObservabilityMetric};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_account::salts::KeySecret;
+use proton_observability::PreLoginMetricRecorder;
+use proton_observability::metric;
 use serde::{Deserialize, Serialize};
 
 /// Represents the state where the user can provide recovery information.
@@ -326,7 +326,7 @@ mod tests {
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
-    use proton_core_common::observability::into_metrics_element;
+    use proton_observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(

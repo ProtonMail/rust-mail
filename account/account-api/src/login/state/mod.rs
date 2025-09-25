@@ -19,14 +19,13 @@ use proton_core_api::services::proton::{
 };
 use proton_core_api::session::{Session, SessionParts};
 use proton_core_api::store::UserData;
-use proton_core_common::observability::PreLoginMetricRecorder;
 use proton_core_common::post_login_check::{UserCheckResult, UserCheckStatus};
-use proton_core_common::{metric, observability::ObservabilityMetric};
 use proton_crypto_account::keys::{LockedKey, UnlockedUserKey, UserKeys};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::{Salt, Salts};
+use proton_observability::{PreLoginMetricRecorder, metric};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -773,7 +772,7 @@ mod tests {
     use proton_core_api::services::proton::prelude::{
         PostMetricsRequestData, PostMetricsRequestElement,
     };
-    use proton_core_common::observability::into_metrics_element;
+    use proton_observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(status: UnlockUserKeyStatus, expected_status: &str) {
