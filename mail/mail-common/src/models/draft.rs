@@ -154,8 +154,14 @@ impl DraftMetadata {
         reply_mode: ReplyMode,
         source_message_id: LocalMessageId,
         source_conversation_id: LocalConversationId,
+        expiration_time: Option<UnixTimestamp>,
         bond: &Bond<'_>,
     ) -> Result<Self, StashError> {
+        let expiration_option = if expiration_time.is_none() {
+            DraftExpirationOption::Never
+        } else {
+            DraftExpirationOption::Custom
+        };
         let mut metadata = Self {
             id: None,
             local_message_id: None,
@@ -164,10 +170,10 @@ impl DraftMetadata {
             reply_mode: Some(reply_mode),
             send_action_id: None,
             save_action_id: None,
-            expiration_time: None,
+            expiration_time,
             password: None,
             password_hint: None,
-            expiration_option: DraftExpirationOption::Never,
+            expiration_option,
         };
 
         metadata.save(bond).await?;

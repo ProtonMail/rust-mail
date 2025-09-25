@@ -475,12 +475,22 @@ impl Draft {
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
         let custom_settings = CustomSettings::get_or_default(&tether).await?;
 
+        let expiration_time = if source_message.expiration_time.as_u64() != 0 {
+            let delta = source_message
+                .expiration_time
+                .saturating_sub(source_message.time.as_u64());
+            Some(UnixTimestamp::now().saturating_add(delta.as_u64()))
+        } else {
+            None
+        };
+
         let draft = tether
             .tx::<_, _, MailContextError>(async |tx| {
                 let metadata = DraftMetadata::reply(
                     reply_mode,
                     source_message.local_id.unwrap(),
                     source_message.local_conversation_id.unwrap(),
+                    expiration_time,
                     tx,
                 )
                 .await
