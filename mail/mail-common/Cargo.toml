@@ -70,6 +70,7 @@ smart-default = { workspace = true }
 stash = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 typed-builder = { workspace = true }
 url = { workspace = true }

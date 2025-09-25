@@ -13,6 +13,7 @@ use stash::stash::Tether;
 use std::collections::HashSet;
 use std::future::Future;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 use tracing::error;
 
 #[cfg(test)]
@@ -723,14 +724,20 @@ impl OnBackgroundValidationComplete for ChannelBackgroundValidationComplete {
 /// types them.
 pub struct ValidatingRecipientList<'l, T: OnBackgroundValidationComplete> {
     list: &'l mut RecipientList,
+    cancellation_token: CancellationToken,
     cb: T,
 }
 impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
     /// Create a new instance.
-    pub fn new(list: &'l mut RecipientList, on_updated: T) -> Self {
+    pub fn new(
+        cancellation_token: CancellationToken,
+        list: &'l mut RecipientList,
+        on_updated: T,
+    ) -> Self {
         Self {
             list,
             cb: on_updated,
+            cancellation_token,
         }
     }
 
@@ -810,18 +817,22 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
         let cb = self.cb.clone();
         let ctx = ctx.as_arc();
         let ctx_cloned = Arc::clone(&ctx);
-        ctx_cloned.spawn(async move {
-            let mut update_statuses = Vec::with_capacity(to_validate.len());
-            for email in to_validate {
-                let status = validate_address(&ctx, email.clone()).await;
-                update_statuses.push((email, status));
-            }
+        ctx_cloned
+            .mail_context()
+            .core_context()
+            .task_service()
+            .spawn_cancellable(self.cancellation_token.clone(), async move {
+                let mut update_statuses = Vec::with_capacity(to_validate.len());
+                for email in to_validate {
+                    let status = validate_address(&ctx, email.clone()).await;
+                    update_statuses.push((email, status));
+                }
 
-            cb.recipients_validation_state_updated(RecipientValidationUpdate {
-                updates: update_statuses,
-            })
-            .await;
-        });
+                cb.recipients_validation_state_updated(RecipientValidationUpdate {
+                    updates: update_statuses,
+                })
+                .await;
+            });
     }
 }
 

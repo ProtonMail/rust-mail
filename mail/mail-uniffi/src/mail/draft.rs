@@ -269,6 +269,14 @@ impl Draft {
                         async_runtime().spawn_blocking(move || cb.on_update());
                     }
                 }
+                DraftEvent::Sent | DraftEvent::Discarded => {
+                    // disconnect callbacks after message sent
+                    let mut state = state.write().await;
+                    state.bcc_list_cb = None;
+                    state.cc_list_cb = None;
+                    state.to_list_cb = None;
+                    drop(state);
+                }
             }
         }
     }

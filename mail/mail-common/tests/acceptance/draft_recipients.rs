@@ -10,6 +10,7 @@ use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
 use proton_mail_common::test_utils::test_context::MailTestContext;
 use test_case::test_case;
+use tokio_util::sync::CancellationToken;
 
 #[test_case(TEST_EMAIL_1,
     success_response(false),
@@ -42,7 +43,8 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
 
     let mut recipient_list = RecipientList::new();
     let (cb, receiver) = ChannelBackgroundValidationComplete::new(1);
-    let mut list = ValidatingRecipientList::new(&mut recipient_list, cb);
+    let cancellation_token = CancellationToken::new();
+    let mut list = ValidatingRecipientList::new(cancellation_token, &mut recipient_list, cb);
 
     let params = Params::default_basic();
     ctx.setup_user(params).await;
@@ -118,7 +120,8 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
 
     let mut recipient_list = RecipientList::new();
     let (cb, receiver) = ChannelBackgroundValidationComplete::new(1);
-    let mut list = ValidatingRecipientList::new(&mut recipient_list, cb);
+    let cancellation_token = CancellationToken::new();
+    let mut list = ValidatingRecipientList::new(cancellation_token, &mut recipient_list, cb);
 
     let params = Params::default_basic();
     ctx.setup_user(params).await;
