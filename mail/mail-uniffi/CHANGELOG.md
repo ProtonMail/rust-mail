@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Assign as short user id to queue executor spans
+- [ET-4749] Cancel recipient validation task after send
+
+### Features
+
+- [ET-2269] Introduce bulk message unread status
+
+### Fixes
+
+- [ET-4800] [Breaking]: MailScrollerError::Dirty was changed to MailScrollerError::NotSynced and repurposed to signal not fully synced states
+- [ET-4806] Remove tracing-oslog until crash is fixed
+- [ET-4833] Add a migration for mobile signature newlines
+- [ET-4763] Report supported if there is no expiration time
+- [ET-4803] Prevent rogue event loop action to be executed at fresh start of the app when user takes action
+- [ET-4804] Inherit expiration time when replying to expiring message
+
+
+## [mail-uniffi-v0.148.0] - 2025-09-24
+
+### Changed
+
 - Stash connection acquire timeouts
 - Fetch and apply events 1 by 1
 
