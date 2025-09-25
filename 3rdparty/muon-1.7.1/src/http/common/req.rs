@@ -356,7 +356,7 @@ impl HttpReq {
         server: &Server,
         name: &Name,
     ) -> Result<http::Request<Body>> {
-        debug!(?version, %server, %name, "building request");
+        trace!(?version, %server, %name, "building request");
 
         self.build_uri(version, server, name)
             .map(|(uri, host)| self.build_req(version, uri, host))?

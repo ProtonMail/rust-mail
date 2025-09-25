@@ -49,25 +49,24 @@ impl HttpSender {
     async fn send_with(&self, sender: PooledSender, req: HttpReq) -> Result<HttpRes> {
         let timeout = req.get_allowed_time();
 
-        match sender.send(req).with_timeout(timeout).await {
+        match sender.send(req).with_timeout(timeout).map_err(ErrorKind::send).await {
             Ok(Ok(res)) => {
                 sender.repool().await;
                 Ok(res)
             }
 
-            Ok(Err(err)) => {
+            Ok(Err(err)) | Err(err) => {
                 sender.unpool().await;
-                Err(ErrorKind::send(err))
-            }
-
-            Err(Timeout) => {
-                sender.unpool().await;
-                Err(ErrorKind::send(Timeout))
+                Err(err)
             }
         }
     }
 
     async fn sender_for(&self, servers: Vec<Server>) -> Result<PooledSender> {
+        if servers.is_empty() {
+            return Err(ErrorKind::send(NoServers));
+        }
+
         let mut pool = self.pool.lock().await;
 
         for server in &servers {
@@ -87,11 +86,7 @@ impl HttpSender {
             );
         }
 
-        if !futs.is_empty() {
-            futs.try_race().map_ok(|(e, s)| pool.insert(e, s)).await
-        } else {
-            Err(ErrorKind::send(NoServers))
-        }
+        futs.try_race().map_ok(|(e, s)| pool.insert(e, s)).await
     }
 }
 
