@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- [ET-4836] Address signatures should always be present
+
+
+## [mail-uniffi-v0.149.0] - 2025-09-25
+
 ### Changed
 
 - Assign as short user id to queue executor spans
