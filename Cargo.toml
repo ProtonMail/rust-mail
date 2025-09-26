@@ -43,7 +43,8 @@ members = [
   "shared/proton-event-service",
   "shared/proton-network-monitor-service",
   "shared/proton-issue-reporter-service",
-  "shared/proton-issue-reporter-service-uniffi", "shared/proton-observability",
+  "shared/proton-issue-reporter-service-uniffi",
+  "shared/proton-observability",
 ]
 
 [workspace.package]
