@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Expose upsell telemetry endpoints
+- Make sure we send upsell events only when user allows it
+- Observability background task per user account
+- Make sure we respect user settings for pre-login events
+- Work stealing for pre-login metrics
+
+### Fixes
+
+- [ET-4839] Handle Storage quota exceeded error
+- [ET-4266] Proper validation of expiring message support
+
+
+## [mail-uniffi-v0.149.1] - 2025-09-25
+
 ### Fixes
 
 - [ET-4836] Address signatures should always be present
