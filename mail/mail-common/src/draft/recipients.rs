@@ -2,12 +2,13 @@ use crate::MailUserContext;
 use crate::datatypes::MessageRecipient;
 use crate::models::MessageReplyTo;
 use non_empty_string::NonEmptyString;
+use proton_core_api::consts::CoreBundle;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::{
-    GetKeysAllOptions, PrivateEmail, PrivateEmailRef, PrivateString,
-};
-use proton_core_api::{consts::CoreBundle, services::proton::ProtonCore};
+use proton_core_api::services::proton::{PrivateEmail, PrivateEmailRef, PrivateString};
+use proton_core_common::CoreContextError;
 use proton_core_common::models::ContactEmail;
+use proton_crypto_account::keys::RecipientType;
+use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
 use stash::stash::Tether;
 use std::collections::HashSet;
@@ -190,11 +191,9 @@ impl ExpirationFeatureSupportReport {
             ValidationState::Valid(false) => {
                 // API is currently returning `IsProton:0` for known official proton email addresses,
                 // so we have to manually match here to correctly detect this.
-                for domain in PROTON_EMAIL_DOMAINS {
-                    if email.as_clear_text_str().to_lowercase().ends_with(domain) {
-                        self.supported.insert(email.to_owned());
-                        return;
-                    }
+                if is_known_proton_domain(email.clone()) {
+                    self.supported.insert(email.to_owned());
+                    return;
                 }
                 self.unsupported.insert(email.to_owned());
             }
@@ -202,11 +201,9 @@ impl ExpirationFeatureSupportReport {
                 // If we are unable to validate at the moment, we can still
                 // quickly validate if some address ends in a known domain as they are
                 // always supported.
-                for domain in PROTON_EMAIL_DOMAINS {
-                    if email.as_clear_text_str().to_lowercase().ends_with(domain) {
-                        self.supported.insert(email.to_owned());
-                        return;
-                    }
+                if is_known_proton_domain(email.clone()) {
+                    self.supported.insert(email.to_owned());
+                    return;
                 }
                 self.unknown.insert(email.to_owned());
             }
@@ -841,15 +838,28 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
 /// Network failures do not result in errors, but return [`ValidationState::Unchecked`] instead.
 ///
 async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> ValidationState {
-    let options = GetKeysAllOptions {
-        email: email.clone(),
-        internal_only: Some(false),
+    let pgp_provider = new_pgp_provider();
+    let state = match ctx
+        .user_context()
+        .public_address_keys(&pgp_provider, email.as_ref(), false)
+        .await
+    {
+        Ok(keys) => ValidationState::Valid(
+            // if it's a known proton domain we can skip the key check
+            if is_known_proton_domain(email.as_ref()) {
+                true
+            } else {
+                // check whether this domain is actually a proton powered email account
+                keys.into_inbox_keys(true).recipient_type == RecipientType::Internal
+            },
+        ),
+        Err(CoreContextError::Api(e)) => ValidationState::from(e),
+        Err(e) => {
+            error!("Unknown validation error: {e:?}");
+            ValidationState::Unknown
+        }
     };
 
-    let state = match ctx.user_context().session().get_keys_all(options).await {
-        Ok(response) => ValidationState::Valid(response.is_proton),
-        Err(e) => ValidationState::from(e),
-    };
     tracing::debug!("Validation state updated for {email}: {state:?}");
     state
 }
@@ -862,3 +872,13 @@ const PROTON_EMAIL_DOMAINS: [&str; 6] = [
     "@proton.ch",
     "@external.proton.ch",
 ];
+
+fn is_known_proton_domain(email: PrivateEmailRef) -> bool {
+    for domain in PROTON_EMAIL_DOMAINS {
+        if email.as_clear_text_str().to_lowercase().ends_with(domain) {
+            return true;
+        }
+    }
+
+    false
+}
