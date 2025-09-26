@@ -260,7 +260,7 @@ async fn register_session(
     registered_sessions: &mut HashSet<SessionId>,
     device: &RegisteredDevice,
 ) -> Result<(), RegisteredDeviceTaskError> {
-    let api_session = ctx.new_api_session(Some(&session)).await?;
+    let session_ctx = ctx.user_context_from_session(&session).await?;
 
     let pgp = proton_crypto::new_pgp_provider();
 
@@ -286,7 +286,8 @@ async fn register_session(
         }
     };
 
-    api_session
+    session_ctx
+        .session()
         .register_device(RegisterDeviceRequest {
             device_token: device.device_token.clone(),
             environment: device.environment.into(),
