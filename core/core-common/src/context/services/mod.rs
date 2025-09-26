@@ -7,6 +7,7 @@ pub mod logging_service;
 mod network_monitor_service;
 pub mod service;
 pub mod session_observer_service;
+pub mod user_metric_service;
 
 pub use context_event_service::ContextEventService;
 pub use device_info_service::DeviceInfoService;
@@ -15,3 +16,4 @@ pub use hv_notifier_service::HvNotifierService;
 pub use network_monitor_service::NetworkMonitorService;
 pub use service::Service;
 pub use session_observer_service::SessionObserverService;
+pub use user_metric_service::UserMetricService;

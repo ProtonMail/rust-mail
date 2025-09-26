@@ -20,15 +20,12 @@ use muon::Client;
 use muon::client::flow::LoginExtraInfo;
 use muon::client::flow::LoginFlow;
 use proton_core_api::auth::UserKeySecret;
-use proton_core_api::services::observability::{
-    ApiServiceObservabilityResponse, ObservabilityRecorder,
-};
+use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use proton_core_api::services::proton::SessionId;
 use proton_core_api::store::AuthInfo;
 use proton_core_api::store::DynStore;
 use proton_core_api::store::TfaMode;
 use proton_core_api::store::UserData;
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_core_common::post_login_check::PostLoginValidator;
 use proton_core_common::post_login_check::UserCheckResult;
 use proton_core_common::post_login_check::UserCheckStatus;
@@ -36,6 +33,8 @@ use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_account::salts::KeySecret;
+use proton_observability::PreLoginMetricRecorder;
+use proton_observability::metric;
 use serde::{Deserialize, Serialize};
 
 /// Represents the state where the user can provide recovery information.
@@ -47,7 +46,7 @@ pub struct WantCreate {
     password: SecureString,
     recovery: Recovery,
     data: StateData,
-    recorder: ObservabilityRecorder,
+    recorder: PreLoginMetricRecorder,
 }
 
 impl WantCreate {
@@ -66,7 +65,7 @@ impl WantCreate {
             password,
             recovery,
             data,
-            recorder: ObservabilityRecorder::default(),
+            recorder: PreLoginMetricRecorder::default(),
         }
     }
 
@@ -164,7 +163,7 @@ impl WantCreate {
             .await
             .map_err(SignupError::SetUserDataFailed)?;
 
-        let recorder = ObservabilityRecorder::default();
+        let recorder = PreLoginMetricRecorder::default();
         // Validations are run after `set_user_data` is called, se even if the login flow is stopped and login is prevented for now,
         // the account itself remains in a "ready to use" state (e.g. is_ready flag is set) for later, when login rules are not violated anymore (e.g. logged-in free account count)
         match post_login_validator.validate(&user.clone().into()).await {
@@ -324,10 +323,10 @@ impl UserStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(
@@ -336,12 +335,7 @@ mod tests {
         kind: UserKind,
         expected_kind: &str,
     ) {
-        let metric = ObservabilityRecorder::into_metrics_element(
-            UserStatus { status, kind },
-            1_741_021_308,
-            1,
-        )
-        .unwrap();
+        let metric = into_metrics_element(UserStatus { status, kind }, 1_741_021_308, 1).unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
 

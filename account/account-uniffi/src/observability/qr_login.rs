@@ -1,7 +1,4 @@
-use proton_core_api::{
-    metric,
-    services::observability::{ObservabilityMetric, ObservabilityRecorder},
-};
+use proton_observability::{PreLoginMetricRecorder, metric};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -32,7 +29,7 @@ metric! {
 
 #[uniffi_export]
 pub fn qr_login_scan_screen_total(screen_id: QrLoginScanScreenViewTotalScreenId) {
-    ObservabilityRecorder::default().record(QrLoginScanScreenViewTotal::new(screen_id));
+    PreLoginMetricRecorder::default().record(QrLoginScanScreenViewTotal::new(screen_id));
 }
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -55,17 +52,17 @@ metric! {
 
 #[uniffi_export]
 pub fn qr_login_show_qr_screen_total(screen_id: QrLoginShowQrCodeScreenViewTotalScreenId) {
-    ObservabilityRecorder::default().record(QrLoginShowQrCodeScreenViewTotal::new(screen_id));
+    PreLoginMetricRecorder::default().record(QrLoginShowQrCodeScreenViewTotal::new(screen_id));
 }
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+    use proton_observability::into_metrics_element;
 
     #[test]
     fn test_qr_host_metric() {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             QrLoginScanScreenViewTotal {
                 screen_id: QrLoginScanScreenViewTotalScreenId::CameraAccessNotAllowed,
             },
@@ -83,7 +80,7 @@ mod tests {
 
     #[test]
     fn test_qr_target_metric() {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             QrLoginShowQrCodeScreenViewTotal {
                 screen_id: QrLoginShowQrCodeScreenViewTotalScreenId::Instructions,
             },

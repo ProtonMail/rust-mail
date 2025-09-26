@@ -5,7 +5,7 @@ use crate::models::User as UserTable;
 use crate::{Context, CoreAccountState};
 use async_trait::async_trait;
 use proton_core_api::services::proton::{DelinquentState, User, UserId};
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use proton_observability::metric;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError};
@@ -185,19 +185,14 @@ pub enum UserCheckStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(status: UserCheckStatus, expected_status: &str) {
-        let metric = ObservabilityRecorder::into_metrics_element(
-            UserCheckResult { status },
-            1_741_021_308,
-            1,
-        )
-        .unwrap();
+        let metric = into_metrics_element(UserCheckResult { status }, 1_741_021_308, 1).unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
 

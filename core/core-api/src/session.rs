@@ -8,13 +8,11 @@ use muon::{ProtonRequest, ProtonResponse, Result as MuonResult};
 use std::borrow::Borrow;
 use std::fmt::Formatter;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
 
 use crate::auth::UserKeySecret;
 use crate::crypto_clock::init_server_crypto_clock;
 use crate::service::ApiServiceResult;
-use crate::services::observability::ObservabilityManager;
 use crate::services::proton::{self, BuildError};
 use crate::store::{BoxStore, DynStore, Store, TempStore};
 use crate::verification::{DynChallengeNotifier, FailNotifier};
@@ -24,8 +22,6 @@ pub use muon::common::{Endpoint, Name, Server};
 pub use muon::env::{Env, EnvId};
 pub use muon::tls::TlsPinSet;
 use proton_network_monitor_service::{ConnectionMonitor, NetworkStatusObserver};
-
-const OBSERVABILITY_BATCH_SIZE: usize = 500;
 
 pub trait EnvIdExt: Sized {
     /// Create a new environment ID for a custom environment.
@@ -238,13 +234,6 @@ impl Builder {
             self.allow_doh,
         )
         .await?;
-
-        ObservabilityManager::start(
-            connection_monitor.network_status_observer(),
-            client.clone(),
-            Duration::from_secs(60),
-            OBSERVABILITY_BATCH_SIZE,
-        );
 
         Ok(Session {
             client,

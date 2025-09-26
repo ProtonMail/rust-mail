@@ -14,19 +14,18 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use muon::rest::auth::v4::fido2;
 use proton_core_api::auth::UserKeySecret;
-use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::{
     Address, AddressId, PasswordMode, ProtonCore, SessionId, User, UserId,
 };
 use proton_core_api::session::{Session, SessionParts};
 use proton_core_api::store::UserData;
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_core_common::post_login_check::{UserCheckResult, UserCheckStatus};
 use proton_crypto_account::keys::{LockedKey, UnlockedUserKey, UserKeys};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::{Salt, Salts};
+use proton_observability::{PreLoginMetricRecorder, metric};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -284,7 +283,7 @@ impl State {
             parts,
             user_id,
             session_id,
-            observability: ObservabilityRecorder::default(),
+            observability: PreLoginMetricRecorder::default(),
         };
 
         Self::want_new_password(client, data)
@@ -305,7 +304,7 @@ impl State {
             parts,
             user_id,
             session_id,
-            observability: ObservabilityRecorder::default(),
+            observability: PreLoginMetricRecorder::default(),
         };
 
         Self::want_tfa(client.auth().into(), data, username, pass, None)
@@ -323,7 +322,7 @@ impl State {
             parts,
             user_id,
             session_id,
-            observability: ObservabilityRecorder::default(),
+            observability: PreLoginMetricRecorder::default(),
         };
 
         Self::want_mbp(client, data)
@@ -424,7 +423,7 @@ impl State {
             .map_err(LoginError::UserFetch)
             .await?;
 
-        let recorder = ObservabilityRecorder::default();
+        let recorder = PreLoginMetricRecorder::default();
 
         // Fetch user addresses.
         let mut addr = ProtonCore::get_addresses(&client)
@@ -710,7 +709,7 @@ pub(crate) struct StateData {
     parts: SessionParts,
     user_id: UserId,
     session_id: SessionId,
-    observability: ObservabilityRecorder,
+    observability: PreLoginMetricRecorder,
 }
 
 /// A trait for states in which the user ID is known.
@@ -770,19 +769,15 @@ enum UnlockUserKeyStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(status: UnlockUserKeyStatus, expected_status: &str) {
-        let metric = ObservabilityRecorder::into_metrics_element(
-            UnlockUserKeyResult { status },
-            1_741_021_308,
-            1,
-        )
-        .unwrap();
+        let metric =
+            into_metrics_element(UnlockUserKeyResult { status }, 1_741_021_308, 1).unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
 

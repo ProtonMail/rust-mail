@@ -6,15 +6,12 @@ use crate::shared::crypto::SharedCryptoError;
 use crate::signup::state::{Recovery, StateKind, Username};
 use crate::{AccountApi, ApiError};
 use futures::TryFutureExt;
-use proton_core_api::services::observability::{
-    ApiServiceObservabilityResponse, ObservabilityRecorder,
-};
+use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use proton_core_api::store::{DynStore, StoreError};
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_core_common::post_login_check::{PostLoginValidationError, PostLoginValidator};
 use proton_crypto_account::errors::{AccountCryptoError, SKLError};
 use proton_crypto_account::{proton_crypto::CryptoError, salts::SaltError};
-use serde::{Deserialize, Serialize};
+use proton_observability::{PreLoginMetricRecorder, metric};
 use state::State;
 use std::fmt::Debug;
 use thiserror::Error;
@@ -135,7 +132,7 @@ impl SignupFlow {
         challenge_info: ChallengeInfo,
         post_login_validator: Box<dyn PostLoginValidator>,
     ) -> Result<Self, ApiError> {
-        let recorder = ObservabilityRecorder::default();
+        let recorder = PreLoginMetricRecorder::default();
 
         let domains = client
             .get_available_domains(None)
@@ -327,22 +324,17 @@ impl DomainAvailability {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(
         status: ApiServiceObservabilityResponse,
         expected_status: &str,
     ) {
-        let metric = ObservabilityRecorder::into_metrics_element(
-            DomainAvailability { status },
-            1_741_021_308,
-            1,
-        )
-        .unwrap();
+        let metric = into_metrics_element(DomainAvailability { status }, 1_741_021_308, 1).unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
 

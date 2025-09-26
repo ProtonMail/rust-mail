@@ -11,17 +11,14 @@ use muon::client::{Auth, Tokens};
 
 use proton_core_api::auth::KeySecret;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::observability::metrics::AuthV4RequestMetric;
-use proton_core_api::services::observability::{
-    ApiServiceObservabilityResponse, ObservabilityRecorder,
-};
+use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::SessionParts;
 use proton_core_api::store::{AuthInfo, TfaMode, UserData};
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_crypto_account::proton_crypto::generate_secure_random_bytes;
+use proton_observability::metrics::AuthV4RequestMetric;
+use proton_observability::{PreLoginMetricRecorder, metric};
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
 use serde_json::to_value;
 use tracing::info;
 
@@ -36,7 +33,7 @@ pub struct WantLogin {
     client: muon::Client,
     flow: AuthFlow,
     parts: SessionParts,
-    observability: ObservabilityRecorder,
+    observability: PreLoginMetricRecorder,
     challenge_info: Option<ChallengeInfo>,
 }
 
@@ -52,7 +49,7 @@ impl WantLogin {
             client,
             flow,
             parts,
-            observability: ObservabilityRecorder::default(),
+            observability: PreLoginMetricRecorder::default(),
             challenge_info,
         }
     }
@@ -331,6 +328,6 @@ fn get_state_data(user_id: &str, session_id: &str, parts: SessionParts) -> State
         parts,
         user_id: UserId::from(user_id.to_owned()),
         session_id: SessionId::from(session_id.to_owned()),
-        observability: ObservabilityRecorder::default(),
+        observability: PreLoginMetricRecorder::default(),
     }
 }

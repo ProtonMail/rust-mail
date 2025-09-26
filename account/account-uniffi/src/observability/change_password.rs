@@ -1,7 +1,4 @@
-use proton_core_api::{
-    metric,
-    services::observability::{ObservabilityMetric, ObservabilityRecorder},
-};
+use proton_observability::{PreLoginMetricRecorder, metric};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
@@ -23,21 +20,21 @@ metric! {
 
 #[uniffi_export]
 pub fn record_change_password_screen_view(screen_id: ChangePasswordScreenId) {
-    ObservabilityRecorder::default().record(ChangePasswordScreenViewTotal::new(screen_id));
+    PreLoginMetricRecorder::default().record(ChangePasswordScreenViewTotal::new(screen_id));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_observability::into_metrics_element;
     use serde_json::{self, json};
 
     #[test]
     fn test_change_password_screen_view_total_serialization() {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             ChangePasswordScreenViewTotal {
                 screen_id: ChangePasswordScreenId::ChangePassword2fa,
             },

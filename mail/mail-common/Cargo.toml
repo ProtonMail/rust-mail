@@ -31,6 +31,7 @@ prefetch = []
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 proton-log-service = { workspace = true }
+proton-observability = { workspace = true }
 bitflags = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }

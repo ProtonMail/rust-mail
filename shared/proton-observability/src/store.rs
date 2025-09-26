@@ -1,8 +1,6 @@
 use std::collections::VecDeque;
 
-use muon::util::IntoIterExt;
-
-use crate::services::proton::prelude::PostMetricsRequestElement;
+use proton_core_api::services::proton::prelude::PostMetricsRequestElement;
 
 const DEFAULT_STORE_CAPACITY: usize = 512;
 
@@ -30,7 +28,7 @@ impl InMemoryMetricStore {
     pub fn remove_first_n(&mut self, count: usize) -> Vec<PostMetricsRequestElement> {
         self.metrics
             .drain(0..count.min(self.metrics.len()))
-            .into_vec()
+            .collect()
     }
 }
 
@@ -54,7 +52,7 @@ impl Default for InMemoryMetricStore {
 mod tests {
     use serde_json::json;
 
-    use crate::services::proton::prelude::PostMetricsRequestData;
+    use proton_core_api::services::proton::prelude::PostMetricsRequestData;
 
     use super::*;
 

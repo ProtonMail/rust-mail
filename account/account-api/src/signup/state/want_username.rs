@@ -6,10 +6,9 @@ use crate::{AccountApi, ApiError, requests::ParseDomain};
 use derive_more::Display;
 use futures::TryFutureExt;
 use muon::Client;
-use proton_core_api::services::observability::{
-    ApiServiceObservabilityResponse, ObservabilityRecorder,
-};
-use proton_core_api::{metric, services::observability::ObservabilityMetric};
+use proton_core_api::services::observability::ApiServiceObservabilityResponse;
+use proton_observability::PreLoginMetricRecorder;
+use proton_observability::metric;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -19,7 +18,7 @@ use tracing::info;
 pub struct WantUsername {
     client: Client,
     data: StateData,
-    recorder: ObservabilityRecorder,
+    recorder: PreLoginMetricRecorder,
 }
 
 impl WantUsername {
@@ -29,7 +28,7 @@ impl WantUsername {
         Self {
             client,
             data,
-            recorder: ObservabilityRecorder::default(),
+            recorder: PreLoginMetricRecorder::default(),
         }
     }
 
@@ -122,10 +121,10 @@ impl UsernameAvailabilityStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proton_core_api::services::{
-        observability::ObservabilityRecorder,
-        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    use proton_core_api::services::proton::prelude::{
+        PostMetricsRequestData, PostMetricsRequestElement,
     };
+    use proton_observability::into_metrics_element;
     use serde_json::{self, json};
 
     fn assert_serialization_deserialization(
@@ -134,7 +133,7 @@ mod tests {
         kind: UsernameKind,
         expected_kind: &str,
     ) {
-        let metric = ObservabilityRecorder::into_metrics_element(
+        let metric = into_metrics_element(
             UsernameAvailabilityStatus { status, kind },
             1_741_021_308,
             1,
