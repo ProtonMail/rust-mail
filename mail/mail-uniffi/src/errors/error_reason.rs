@@ -270,6 +270,7 @@ pub enum DraftAttachmentUploadErrorReason {
     TotalAttachmentSizeTooLarge,
     /// Attachment upload timed out
     Timeout,
+    StorageQuotaExceeded,
 }
 
 impl From<RealDraftAttachmentErrorReason> for DraftAttachmentUploadErrorReason {
@@ -288,6 +289,7 @@ impl From<RealDraftAttachmentErrorReason> for DraftAttachmentUploadErrorReason {
             }
             RealDraftAttachmentErrorReason::RetryInvalidState => Self::RetryInvalidState,
             RealDraftAttachmentErrorReason::Timeout => Self::Timeout,
+            RealDraftAttachmentErrorReason::StorageQuotaExceeded => Self::StorageQuotaExceeded,
         }
     }
 }

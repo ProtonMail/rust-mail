@@ -369,6 +369,8 @@ async fn encrypt_and_upload_attachment(
             return Err(
                 if proton_error.code == Mail::AttachmentMessageAlreadySent as u32 {
                     AttachmentUploadError::MessageAlreadySent.into()
+                } else if proton_error.code == Mail::StorageQuotaExceeded as u32 {
+                    AttachmentUploadError::StorageQuotaExceeded.into()
                 } else if proton_error.code == Mail::TooManyAttachments as u32 {
                     // backend returns this error for these cases:
                     // * Attachment size > 25 mb

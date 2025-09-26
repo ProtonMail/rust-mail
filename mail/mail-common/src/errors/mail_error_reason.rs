@@ -214,6 +214,7 @@ pub enum DraftAttachmentUploadErrorReason {
     RetryInvalidState,
     /// Attachment upload timed out
     Timeout,
+    StorageQuotaExceeded,
 }
 
 /// Specific Reason when attempting to discard a draft.

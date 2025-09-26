@@ -211,6 +211,7 @@ pub enum Mail {
     ExpirationTimeTooSoon = 2023,
     MessageDoesNotExist = 2501,
     ConversationDoesNotExist = 20052,
+    StorageQuotaExceeded = 11100,
 }
 
 pub enum Payments {
