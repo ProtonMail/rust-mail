@@ -490,6 +490,13 @@ impl Save {
                         true
                     }
                 })
+                .inspect(|a| {
+                    tracing::debug!(
+                        "With {:?}:{:?}",
+                        a.id(),
+                        a.remote_id().expect("Should be set")
+                    )
+                })
                 .collect::<Vec<_>>();
 
         // Create draft on the server.
