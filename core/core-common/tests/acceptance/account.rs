@@ -36,10 +36,15 @@ async fn delete_account_does_not_preserve_account_metadata() {
     let user_id = user_ctx.user_id().clone();
 
     drop(user_ctx);
+
+    assert!(real_ctx.user_db_path(&user_id).exists());
+
     real_ctx
         .delete_account(user_id.clone(), vec![])
         .await
         .unwrap();
+
+    assert!(!real_ctx.user_db_path(&user_id).exists());
 
     let tether = real_ctx.account_stash().connection().await.unwrap();
     // No sessions exist
