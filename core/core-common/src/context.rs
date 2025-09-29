@@ -912,7 +912,7 @@ impl Context {
         self.key_chain.delete::<S>()
     }
 
-    pub(crate) fn user_db_path(&self, user_id: &UserId) -> PathBuf {
+    pub fn user_db_path(&self, user_id: &UserId) -> PathBuf {
         get_user_db_path(&self.user_db_path, user_id)
     }
 
