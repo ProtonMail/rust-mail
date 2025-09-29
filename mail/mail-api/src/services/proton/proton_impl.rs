@@ -119,6 +119,7 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
                 form
             })
             .await?
+            .allowed_time(2.m())
             .send_with(self)
             .await?
             .ok()?;
