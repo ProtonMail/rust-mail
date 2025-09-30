@@ -469,7 +469,7 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
 
         if encryption_preferences.encryption_disabled_mail {
             encrypt = false;
-            sign = composer_preferences.encrypt_to_outside;
+            sign = false;
         } else {
             encrypt = encryption_preferences.encrypt || composer_preferences.encrypt_to_outside;
             sign = composer_preferences.encrypt_to_outside || encryption_preferences.sign;
