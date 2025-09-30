@@ -63,7 +63,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument};
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
-const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 2;
+const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 1;
 
 const DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE: usize = 1;
 const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
