@@ -79,7 +79,7 @@ const PRIVATE_KEY_PASSWORD: &str = "password";
 fn test_verification_preferences() {
     let pgp = new_pgp_provider();
     let pinned_keys = create_test_pinned_key(&pgp, TEST_KEY);
-    let api_keys = create_test_public_key(&pgp);
+    let api_keys = create_test_public_key(&pgp, true);
     let verification_preferences =
         InboxVerificationPreferences::from_public_keys(api_keys, Some(pinned_keys));
     assert!(verification_preferences.compromised_fingerprints.is_empty());
@@ -91,7 +91,7 @@ fn test_verification_preferences() {
 #[test]
 fn test_verification_preferences_compromised() {
     let pgp = new_pgp_provider();
-    let mut api_keys = create_test_public_key(&pgp);
+    let mut api_keys = create_test_public_key(&pgp, true);
     let pinned_keys = create_test_pinned_key(&pgp, TEST_KEY);
     api_keys
         .address
@@ -138,7 +138,7 @@ fn test_sending_preferences() {
         .public_key_import(TEST_KEY, DataEncoding::Armor)
         .unwrap();
     let pinned_keys = create_test_pinned_key(&pgp, TEST_KEY);
-    let api_keys = create_test_public_key(&pgp);
+    let api_keys = create_test_public_key(&pgp, true);
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
         sign: true,
@@ -159,6 +159,7 @@ fn test_sending_preferences() {
         sending_preferences.encrypt
             && sending_preferences.sign
             && sending_preferences.is_selected_key_pinned
+            && !sending_preferences.encryption_disabled
     );
     assert_eq!(
         sending_preferences.selected_key.unwrap().key_fingerprint(),
@@ -186,6 +187,72 @@ fn test_sending_preferences() {
         sending_preferences.encrypt
             && sending_preferences.sign
             && !sending_preferences.is_selected_key_pinned
+            && !sending_preferences.encryption_disabled
+    );
+    assert_eq!(
+        sending_preferences.selected_key.unwrap().key_fingerprint(),
+        expected_key.key_fingerprint()
+    );
+    assert_eq!(
+        sending_preferences.mime_type,
+        composer_preference.composer_body_mime_type.into()
+    );
+}
+
+#[test]
+fn test_sending_preferences_internal_without_e2ee() {
+    let pgp = new_pgp_provider();
+    let expected_key = pgp
+        .public_key_import(TEST_KEY, DataEncoding::Armor)
+        .unwrap();
+    let pinned_keys = create_test_pinned_key(&pgp, TEST_KEY);
+    let api_keys = create_test_public_key(&pgp, false);
+    let mail_setting = CryptoMailSettings {
+        pgp_scheme: PGPScheme::PGPMime,
+        sign: true,
+    };
+
+    let composer_preference = ComposerPreference::new(EmailMimeType::Html);
+
+    let sending_preferences = SendPreferences::new(
+        api_keys.clone(),
+        Some(pinned_keys.clone()),
+        UnixTimestamp::new(1_723_459_962),
+        &mail_setting,
+        composer_preference,
+    )
+    .expect("should be able to extract sending preferences");
+
+    assert!(
+        !sending_preferences.encrypt
+            && !sending_preferences.sign
+            && sending_preferences.is_selected_key_pinned
+            && sending_preferences.encryption_disabled
+    );
+    assert_eq!(
+        sending_preferences.selected_key.unwrap().key_fingerprint(),
+        expected_key.key_fingerprint()
+    );
+    assert_eq!(sending_preferences.pgp_scheme, PackageCryptoType::Cleartext);
+    assert_eq!(
+        sending_preferences.mime_type,
+        pinned_keys.mime_type.unwrap().into()
+    );
+
+    let sending_preferences = SendPreferences::new(
+        api_keys,
+        None,
+        UnixTimestamp::new(1_723_459_962),
+        &mail_setting,
+        composer_preference,
+    )
+    .expect("should be able to extract sending preferences");
+
+    assert!(
+        !sending_preferences.encrypt
+            && !sending_preferences.sign
+            && !sending_preferences.is_selected_key_pinned
+            && sending_preferences.encryption_disabled
     );
     assert_eq!(
         sending_preferences.selected_key.unwrap().key_fingerprint(),
@@ -222,10 +289,12 @@ fn test_sending_preferences_external() {
         composer_preference,
     )
     .expect("should be able to extract sending preferences");
+
     assert!(
         sending_preferences.encrypt
             && sending_preferences.sign
             && sending_preferences.is_selected_key_pinned
+            && !sending_preferences.encryption_disabled
     );
     assert_eq!(
         sending_preferences.selected_key.unwrap().key_fingerprint(),
@@ -233,7 +302,9 @@ fn test_sending_preferences_external() {
     );
     assert_eq!(sending_preferences.pgp_scheme, PackageCryptoType::PgpMime);
     assert_eq!(sending_preferences.mime_type, PackageMimeType::Multipart);
+
     api_keys.unverified = None;
+
     let sending_preferences = SendPreferences::new(
         api_keys.clone(),
         Some(pinned_keys.clone()),
@@ -242,10 +313,12 @@ fn test_sending_preferences_external() {
         composer_preference,
     )
     .expect("should be able to extract sending preferences");
+
     assert!(
         sending_preferences.encrypt
             && sending_preferences.sign
             && sending_preferences.is_selected_key_pinned
+            && !sending_preferences.encryption_disabled
     );
 
     let sending_preferences = SendPreferences::new(
@@ -256,15 +329,18 @@ fn test_sending_preferences_external() {
         composer_preference,
     )
     .expect("should be able to extract sending preferences");
+
     assert!(
         !sending_preferences.encrypt
             && sending_preferences.sign
             && !sending_preferences.is_selected_key_pinned
+            && !sending_preferences.encryption_disabled
     );
     assert_eq!(sending_preferences.pgp_scheme, PackageCryptoType::ClearMime);
     assert_eq!(sending_preferences.mime_type, PackageMimeType::Multipart);
 
     mail_setting.sign = false;
+
     let sending_preferences = SendPreferences::new(
         api_keys.clone(),
         None,
@@ -273,10 +349,12 @@ fn test_sending_preferences_external() {
         composer_preference,
     )
     .expect("should be able to extract sending preferences");
+
     assert!(
         !sending_preferences.encrypt
             && !sending_preferences.sign
             && !sending_preferences.is_selected_key_pinned
+            && !sending_preferences.encryption_disabled
     );
     assert_eq!(sending_preferences.pgp_scheme, PackageCryptoType::Cleartext);
     assert_eq!(
@@ -295,6 +373,7 @@ fn test_sending_preferences_external() {
         },
     )
     .expect("should be able to extract sending preferences");
+
     assert_eq!(
         sending_preferences.pgp_scheme,
         PackageCryptoType::EncryptedOutside
@@ -306,7 +385,7 @@ fn test_sending_preferences_external() {
 fn test_sending_preferences_user_warning() {
     let pgp = new_pgp_provider();
     let pinned_keys = create_test_pinned_key(&pgp, TEST_VERIFICATION_KEY);
-    let mut api_keys = create_test_public_key(&pgp);
+    let mut api_keys = create_test_public_key(&pgp, true);
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
         sign: true,
@@ -321,6 +400,7 @@ fn test_sending_preferences_user_warning() {
         &mail_setting,
         composer_preference,
     );
+
     assert!(matches!(
         sending_preferences,
         Err(EncryptionPreferencesError::PinnedKeyNotProvidedByAPI(_))
@@ -336,6 +416,7 @@ fn test_sending_preferences_user_warning() {
         &mail_setting,
         ComposerPreference::default(),
     );
+
     assert!(matches!(
         sending_preferences,
         Err(EncryptionPreferencesError::ExternalUserNoValidPinnedKey(
@@ -373,10 +454,12 @@ fn test_sending_preferences_own() {
         },
     )
     .expect("should be able to extract sending preferences");
+
     assert!(
         sending_preferences.encrypt
             && sending_preferences.sign
             && !sending_preferences.is_selected_key_pinned
+            && !sending_preferences.encryption_disabled
     );
     assert_eq!(
         sending_preferences.selected_key.unwrap().key_fingerprint(),
@@ -411,10 +494,18 @@ fn create_test_pinned_key<T: PGPProviderSync>(
     }
 }
 
-fn create_test_public_key<T: PGPProviderSync>(provider: &T) -> PublicAddressKeys<T::PublicKey> {
+fn create_test_public_key<T: PGPProviderSync>(
+    provider: &T,
+    supports_encryption: bool,
+) -> PublicAddressKeys<T::PublicKey> {
+    let flags = if supports_encryption {
+        KeyFlag::from(1_u32 | 2) // not-compromised | not-obsolete
+    } else {
+        KeyFlag::from(1_u32 | 2 | 4) // not-compromised | not-obsolete | email-no-encrypt
+    };
     let address_keys = vec![APIPublicKey {
         source: APIPublicKeySource::Proton,
-        flags: KeyFlag::from(3_u32),
+        flags,
         primary: true,
         public_key: TEST_KEY.into(),
     }];

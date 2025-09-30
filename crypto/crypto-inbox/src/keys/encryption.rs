@@ -237,7 +237,6 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
             .pgp_scheme
             .unwrap_or(crypto_mail_settings.pgp_scheme);
         let mime_type = recipient_key_model.mime_type;
-        let mut encryption_disabled_mail = false;
 
         // Select the `OpenPGP` public key based on the recipient type.
         let (selected_key, is_selected_key_pinned) = match recipient_key_model.contact_type {
@@ -247,7 +246,6 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
                 Self::select_key_for_recipient_with_api_keys(&recipient_key_model)?
             }
             ContactType::ExternalWithApiKeys => {
-                encryption_disabled_mail = recipient_key_model.is_internal_with_disabled_e2ee;
                 Self::select_key_for_recipient_with_api_keys(&recipient_key_model)?
             }
             ContactType::ExternalWithNoApiKeys => {
@@ -263,7 +261,7 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
             mime_type,
             selected_key: selected_key.cloned(),
             is_selected_key_pinned,
-            encryption_disabled_mail,
+            encryption_disabled_mail: recipient_key_model.is_internal_with_disabled_e2ee,
             key_transparency_verification: recipient_key_model.key_transparency_verification,
         })
     }
@@ -466,32 +464,42 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
         encryption_preferences: EncryptionPreferences<Pub>,
         composer_preferences: ComposerPreference,
     ) -> Self {
-        let (encrypt, sign) = if encryption_preferences.encryption_disabled_mail {
-            (false, false)
-        } else {
-            (
-                encryption_preferences.encrypt || composer_preferences.encrypt_to_outside,
-                composer_preferences.encrypt_to_outside || encryption_preferences.sign,
-            )
-        };
+        let encrypt;
+        let sign;
 
-        // Select the encryption mode (PackageCryptoType) for the package sent to this recipient.
-        let pgp_scheme = match encryption_preferences.contact_type {
-            ContactType::Internal => PackageCryptoType::ProtonMail,
-            ContactType::ExternalWithApiKeys | ContactType::ExternalWithNoApiKeys => {
-                let scheme = PackageCryptoType::from_scheme(
-                    encryption_preferences.pgp_scheme,
-                    encrypt,
-                    sign,
-                    // Always use EO, even if it is external with encryption
-                    composer_preferences.encrypt_to_outside,
-                );
-                // Force PGP mime as inline pgp is not supported currently
-                if scheme == PackageCryptoType::PgpInline {
-                    PackageCryptoType::PgpMime
-                } else {
-                    scheme
-                }
+        if encryption_preferences.encryption_disabled_mail {
+            encrypt = false;
+            sign = composer_preferences.encrypt_to_outside;
+        } else {
+            encrypt = encryption_preferences.encrypt || composer_preferences.encrypt_to_outside;
+            sign = composer_preferences.encrypt_to_outside || encryption_preferences.sign;
+        }
+
+        // Select encryption mode for the package.
+        //
+        // Note that we can't dispatch `ProtonMail` packages if the encryption
+        // is disabled for that recipient - that's going to be the case for
+        // emails that are forwarded from a Proton address to a non-Proton one.
+        //
+        // (if we'd encrypted that message, the server wouldn't be able to
+        // forward it, since it wouldn't know how to perform the decryption.)
+        let pgp_scheme = if encryption_preferences.contact_type == ContactType::Internal
+            && !encryption_preferences.encryption_disabled_mail
+        {
+            PackageCryptoType::ProtonMail
+        } else {
+            let scheme = PackageCryptoType::from_scheme(
+                encryption_preferences.pgp_scheme,
+                encrypt,
+                sign,
+                composer_preferences.encrypt_to_outside,
+            );
+
+            // Force PGP mime as inline pgp is not supported currently
+            if scheme == PackageCryptoType::PgpInline {
+                PackageCryptoType::PgpMime
+            } else {
+                scheme
             }
         };
 
