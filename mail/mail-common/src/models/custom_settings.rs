@@ -51,7 +51,11 @@ impl CustomSettings {
 
         if let Some(payload) = payload {
             this.address_signature_enabled = payload.address_signature_enabled;
-            this.mobile_signature = payload.mobile_signature;
+
+            this.mobile_signature = payload
+                .mobile_signature
+                .map(|sig| Self::sanitize_mobile_signature(&sig));
+
             this.mobile_signature_enabled = payload.mobile_signature_enabled;
         }
 
@@ -112,15 +116,7 @@ impl CustomSettings {
             .tx(async move |tx| {
                 let mut this = Self::get_or_default(tx.tether()).await?;
 
-                // TODO(ET-4743): Remove when the mobile signature editor
-                //                becomes WYSIWYG
-                this.mobile_signature = signature.map(|sig| {
-                    // From user's perspective inputting newlines is easier than
-                    // writing HTML tags, so for better UX let's convert plain
-                    // newlines into "HTML newlines"
-                    sig.trim().replace("\r\n", "<br />").replace("\n", "<br />")
-                });
-
+                this.mobile_signature = signature.map(|sig| Self::sanitize_mobile_signature(&sig));
                 this.save(tx).await?;
 
                 Ok(())
@@ -156,6 +152,14 @@ impl CustomSettings {
                 Ok(())
             })
             .await
+    }
+
+    /// From user's perspective inputting newlines is easier than writing HTML
+    /// tags, so for better UX we convert plain newlines into "HTML newlines".
+    ///
+    /// TODO(ET-4743): Remove when the mobile signature editor becomes WYSIWYG
+    fn sanitize_mobile_signature(sig: &str) -> String {
+        sig.trim().replace("\r\n", "<br />").replace("\n", "<br />")
     }
 }
 
