@@ -1,16 +1,16 @@
 use crate::UserContext;
-use crate::actions::event_poll::{self};
-use proton_action_queue::action::{Metadata, Priority};
-use proton_action_queue::queue::Error;
+use proton_action_queue::action::{Action, Metadata, Priority};
+use proton_action_queue::queue::QueuedError;
 use proton_action_queue::{action::ActionId, queue::ActionError};
 use std::time::Duration;
+use tracing::error;
 
 pub mod subscriber;
 
 // Re-export common macros for easier access
-pub use subscriber::macros::*;
-
 use super::services::EventLoopService;
+use crate::actions::event_poll::EventPoll;
+pub use subscriber::macros::*;
 
 /// Defines how the event loop should be polled
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -40,9 +40,9 @@ impl UserContext {
     pub async fn poll_event_loop(
         &self,
         with_delay: Option<Duration>,
-    ) -> Result<(), ActionError<event_poll::EventPoll>> {
+    ) -> Result<(), ActionError<EventPoll>> {
         let event_loop_service = self.event_loop_service();
-        self.queue_poll_event_loop(event_loop_service, with_delay)
+        self.queue_poll_event_loop(event_loop_service, with_delay, None)
             .await
     }
 
@@ -53,13 +53,9 @@ impl UserContext {
     ///
     /// Returns error if the action failed to be queued.
     ///
-    pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<event_poll::EventPoll>> {
-        let event_poll_action = event_poll::EventPoll::forced();
-        let metadata = Metadata::builder()
-            .with_priority_override(Priority::Highest)
-            .build();
-        self.queue()
-            .queue_action_with_metadata(event_poll_action, metadata)
+    pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<EventPoll>> {
+        let event_loop_service = self.event_loop_service();
+        self.queue_poll_event_loop(event_loop_service, None, Some(Priority::Highest))
             .await?;
         Ok(())
     }
@@ -68,36 +64,31 @@ impl UserContext {
         &self,
         event_loop_service: &EventLoopService,
         with_delay: Option<Duration>,
-    ) -> Result<(), ActionError<event_poll::EventPoll>> {
+        priority: Option<Priority>,
+    ) -> Result<(), ActionError<EventPoll>> {
         let mut last_action_ids = event_loop_service.last_event_loop_action_ids().lock().await;
         let metadata = Metadata::builder()
             .with_delay(with_delay.unwrap_or(Duration::from_secs(0)))
+            .with_priority_override(priority.unwrap_or(EventPoll::PRIORITY))
             .build();
-        let event_poll_action = event_poll::EventPoll::default();
+        let event_poll_action = EventPoll::default();
         {
-            let output = if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
-                match self
-                    .queue()
-                    .replace_or_queue_action_with_metadata(
-                        last_action_id,
-                        event_poll_action,
-                        metadata.clone(),
-                    )
-                    .await
-                {
-                    Ok(output) => Ok(output),
-                    Err(ActionError::Queue(Error::CyclicDependency)) => {
-                        self.queue()
-                            .queue_action_with_metadata(event_poll::EventPoll::default(), metadata)
-                            .await
+            if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
+                if let Err(e) = self.queue().cancel(last_action_id).await {
+                    match e {
+                        QueuedError::ActionNotFound(_) | QueuedError::ActionInExecution(_) => {
+                            // nothing to do
+                        }
+                        e => {
+                            error!("Failed to cancel previous event loop: {e}");
+                        }
                     }
-                    Err(error) => Err(error),
-                }?
-            } else {
-                self.queue()
-                    .queue_action_with_metadata(event_poll_action, metadata)
-                    .await?
-            };
+                }
+            }
+            let output = self
+                .queue()
+                .queue_action_with_metadata(event_poll_action, metadata)
+                .await?;
             last_action_ids.last_event_loop_action_id = Some(output.id);
         }
         Ok(())

@@ -98,10 +98,13 @@ impl MailUserContext {
                             // that is not the event loop, reset the timer and replace
                             // the event poll so it runs after this action.
                             if let BroadcastMessage::Queued(_, metadata) = msg
-                                && metadata.action_group == ActionGroup::default().as_ref()
-                                && metadata.action_type != EventPoll::TYPE.as_ref() {
-                                tracing::debug!("replacing event poll due to new action");
+                                && metadata.action_group == ActionGroup::default().as_ref() {
                                 interval.reset();
+
+                                if metadata.action_type == EventPoll::TYPE.as_ref() {
+                                    continue;
+                                }
+                                tracing::debug!("replacing event poll due to new action");
                                 // Add a small delay to make sure the server had time
                                 // to process the last action.
                                 Some(EVENT_POLL_REPLACE_DELAY)
