@@ -1,7 +1,6 @@
 ---
 source: mail/mail-common/tests/acceptance/message_body.rs
 expression: body_output.body
-snapshot_kind: text
 ---
 <html data-protonmail-message="true"><head><style type="text/css">*,
 *::before,
@@ -64,7 +63,7 @@ pre,
 menu,
 td,
 th {
-    font-size: 1em;
+    font-size: 1rem;
     line-height: 1.5;
     margin-inline: 0;
 }
@@ -85,11 +84,11 @@ iframe {
 ul,
 ol,
 menu {
-    padding-inline-start: 2em;
+    padding-inline-start: 2rem;
 }
 
 dd {
-    margin-inline-start: 2em;
+    margin-inline-start: 2rem;
 }
 
 b,
@@ -102,7 +101,7 @@ code,
 kbd,
 samp {
     font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-    font-size: 1em;
+    font-size: 1rem;
 }
 
 pre {
@@ -167,40 +166,40 @@ h6 {
 }
 
 h1 {
-    font-size: 2em; /* equiv 32px */
+    font-size: 2rem; /* equiv 32px */
     line-height: 1.5;
-    margin-block: 0.75em;
+    margin-block: 0.75rem;
 }
 
 h2 {
-    font-size: 1.5em; /* equiv 24px */
+    font-size: 1.5rem; /* equiv 24px */
     line-height: 1;
-    margin-block: 0.5em;
+    margin-block: 0.5rem;
 }
 
 h3 {
-    font-size: 1.1875em; /* equiv 19px */
+    font-size: 1.1875rem; /* equiv 19px */
     line-height: 1.26316;
-    margin-block: 1.26316em;
+    margin-block: 1.26316rem;
 }
 
 h4 {
     display: block;
-    font-size: 1em; /* equiv 16px */
+    font-size: 1rem; /* equiv 16px */
     line-height: 1.5;
-    margin-block: 1.5em;
+    margin-block: 1.5rem;
 }
 
 h5 {
-    font-size: 0.8125em; /* equiv 13px */
+    font-size: 0.8125rem; /* equiv 13px */
     line-height: 1.84615;
-    margin-block: 1.84615em;
+    margin-block: 1.84615rem;
 }
 
 h6 {
-    font-size: 0.75em; /* equiv 12px */
+    font-size: 0.75rem; /* equiv 12px */
     line-height: 2;
-    margin-block: 2em;
+    margin-block: 2rem;
 }
 
 q {
@@ -231,8 +230,8 @@ table img {
 }
 
 blockquote {
-    padding-block: 0.2em !important;
-    padding-inline: 1.2em !important;
+    padding-block: 0.2rem !important;
+    padding-inline: 1.2rem !important;
     margin: 0 !important;
     border: 3px solid var(--primary) !important;
     border-block-width: 0 !important;
