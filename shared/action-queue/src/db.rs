@@ -2,7 +2,7 @@
 #[path = "tests/db.rs"]
 mod tests;
 
-use crate::action::{self, ActionGroup};
+use crate::action::{self, ActionGroup, Type};
 use crate::action::{
     Action, ActionDependencyKey, ActionDependencyKeys, ActionId, Metadata, Priority, Resources,
     WriterGuardError,
@@ -303,6 +303,14 @@ impl StoredAction {
             Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
             Err(e) => Err(e),
         }
+    }
+
+    pub async fn delete_by_type(bond: &Bond<'_>, action_type: &Type) -> Result<usize, StashError> {
+        bond.execute(
+            "DELETE FROM action_queue WHERE action_type = ?",
+            params![action_type.0],
+        )
+        .await
     }
 
     /// Get all the actions which depend on the action with `id`.
