@@ -445,6 +445,7 @@ fn test_sending_preferences_own() {
     };
 
     let sending_preferences = SendPreferences::new_for_self(
+        false,
         &address_keys,
         UnixTimestamp::new(1_723_459_962),
         mail_setting,
