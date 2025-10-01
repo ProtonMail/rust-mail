@@ -59,14 +59,25 @@ pub enum Action {
 }
 
 impl Action {
-    pub fn log_entry(self, id: &impl ProtonIdMarker) {
+    pub async fn log_entry<T: ProtonIdMarker>(
+        self,
+        id: &T,
+        local_id: impl AsyncFnOnce(&T) -> Option<u64>,
+    ) {
         let action_str = match self {
             Action::Delete => "Deleting",
             Action::Create => "Creating",
             Action::Update => "Updating",
             Action::UpdateFlags => "Updating (flags)",
         };
-        tracing::info!("{action_str} {id:?}");
+
+        if self != Action::Create
+            && let Some(local_id) = local_id(id).await
+        {
+            tracing::info!("{action_str} {id:?} -> {local_id}");
+        } else {
+            tracing::info!("{action_str} {id:?}");
+        }
     }
 }
 

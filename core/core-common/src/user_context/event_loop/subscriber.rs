@@ -98,6 +98,7 @@ pub mod macros {
 
 // Re-export macros for easier access
 use crate::events::LabelEvent;
+use crate::models::{ContactEmail, ModelIdExtension};
 pub use macros::*;
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 
@@ -580,7 +581,15 @@ async fn handle_address_event(
     address_events: &mut [AddressEvent],
 ) -> Result<(), StashError> {
     for event in address_events {
-        event.action.log_entry(&event.remote_id);
+        event
+            .action
+            .log_entry(&event.remote_id, async |remote_id| {
+                Address::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
         match event.action {
             Action::Delete => {
                 warn!("[ET-1461] Delete action not implemented for address event");
@@ -606,7 +615,15 @@ async fn handle_contact_event(
     contact_events: &mut [ContactEvent],
 ) -> Result<(), StashError> {
     for event in contact_events {
-        event.action.log_entry(&event.remote_id);
+        event
+            .action
+            .log_entry(&event.remote_id, async |remote_id| {
+                Contact::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
         match event.action {
             Action::Delete => tx
                 .execute(
@@ -638,7 +655,15 @@ async fn handle_contact_email_event(
     contact_email_events: &mut [ContactEmailEvent],
 ) -> Result<(), StashError> {
     for event in contact_email_events {
-        event.action.log_entry(&event.remote_id);
+        event
+            .action
+            .log_entry(&event.remote_id, async |remote_id| {
+                ContactEmail::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
         match event.action {
             Action::Delete => tx
                 .execute(
@@ -670,7 +695,15 @@ pub async fn handle_label_events(
     label_events: &[LabelEvent],
 ) -> Result<(), StashError> {
     for label_event in label_events {
-        label_event.action.log_entry(&label_event.remote_id);
+        label_event
+            .action
+            .log_entry(&label_event.remote_id, async |remote_id| {
+                Label::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
         match label_event.action {
             Action::Delete => {
                 tx.execute(
