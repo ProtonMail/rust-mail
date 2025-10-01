@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Log local ids of event updates
+
+### Fixes
+
+- [ET-4884] Support forwarding emails to non-Proton services
+- Do not report network issue to sentry
+- [ET-4863] Support sending messages to self-owned external addresses with no encryption
+
+
+## [mail-uniffi-v0.149.5] - 2025-09-30
+
 ### Fixes
 
 - [ET-4384] Only allow one event loop action to be queued
