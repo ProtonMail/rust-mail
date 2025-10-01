@@ -192,6 +192,13 @@ pub enum AddressType {
     External = 5,
 }
 
+impl AddressType {
+    #[must_use]
+    pub fn is_external(&self) -> bool {
+        matches!(self, Self::External)
+    }
+}
+
 impl From<ApiAddressType> for AddressType {
     fn from(value: ApiAddressType) -> Self {
         match value {

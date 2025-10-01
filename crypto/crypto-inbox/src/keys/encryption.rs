@@ -280,6 +280,7 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
     /// This function may return an [`EncryptionPreferencesError::NoPrimaryKey`] if no valid primary key
     /// is found in the user's address keys that meets the required conditions for encryption.
     fn from_unlocked_address_keys_and_settings<Priv: PrivateKey>(
+        is_address_external: bool,
         address_keys: &[DecryptedAddressKey<Priv, Pub>],
         mail_settings: CryptoMailSettings,
         encryption_time: UnixTimestamp,
@@ -301,11 +302,19 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
                 && address_key.public_key.can_encrypt(encryption_time)
                 && address_key.is_v6
         });
-        let selected_key = match (selected_key_v4_opt, selected_key_v6_opt) {
+
+        let (selected_key, selected_key_flags) = match (selected_key_v4_opt, selected_key_v6_opt) {
             (None, None) => return Err(EncryptionPreferencesError::NoPrimaryKey),
-            (None | Some(_), Some(selected_key_v6)) => &selected_key_v6.public_key,
-            (Some(selected_key_v4), None) => &selected_key_v4.public_key,
+            (None | Some(_), Some(selected_key_v6)) => {
+                (selected_key_v6.public_key.clone(), selected_key_v6.flags)
+            }
+            (Some(selected_key_v4), None) => {
+                (selected_key_v4.public_key.clone(), selected_key_v4.flags)
+            }
         };
+
+        let encryption_disabled_mail =
+            is_address_external && selected_key_flags.is_email_no_encryption();
 
         Ok(EncryptionPreferences {
             encrypt: true,
@@ -313,9 +322,9 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
             contact_type: ContactType::Internal,
             pgp_scheme: mail_settings.pgp_scheme,
             mime_type: None,
-            selected_key: Some(selected_key.clone()),
+            selected_key: Some(selected_key),
             is_selected_key_pinned: false,
-            encryption_disabled_mail: false,
+            encryption_disabled_mail,
             key_transparency_verification: Ok(()),
         })
     }
@@ -588,6 +597,7 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
     ///
     /// - [`EncryptionPreferencesError::NoPrimaryKey`] - If no valid primary key can be selected from the address keys.
     pub fn new_for_self<Priv: PrivateKey>(
+        is_address_external: bool,
         address_keys: &[DecryptedAddressKey<Priv, Pub>],
         encryption_time: UnixTimestamp,
         crypto_mail_settings: CryptoMailSettings,
@@ -595,6 +605,7 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
     ) -> Result<Self, EncryptionPreferencesError> {
         let encryption_preferences =
             EncryptionPreferences::from_unlocked_address_keys_and_settings(
+                is_address_external,
                 address_keys,
                 crypto_mail_settings,
                 encryption_time,

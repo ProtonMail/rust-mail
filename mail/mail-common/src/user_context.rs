@@ -528,6 +528,7 @@ impl MailUserContext {
         {
             if address.status == AddressStatus::Enabled {
                 debug!("send preferences: loading from self-owned address");
+
                 let address_rid = address.remote_id.as_ref().ok_or_else(|| {
                     MailContextError::App(AppError::AddressHasNoRemoteId(
                         address.local_id.unwrap_or(LocalAddressId::from(0)),
@@ -540,6 +541,7 @@ impl MailUserContext {
                     .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
 
                 let send_preferences = SendPreferences::new_for_self(
+                    address.address_type.is_external(),
                     &address_keys,
                     encryption_time,
                     settings,
