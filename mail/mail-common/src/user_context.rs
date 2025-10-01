@@ -299,11 +299,13 @@ impl MailUserContext {
         }
         .await
         .inspect_err(|e| {
-            user_context_cloned.issue_reporter_service().report(
-                IssueLevel::Critical,
-                "Failed to create new mail user context".into(),
-                issue_report_keys_from_error(e),
-            )
+            if !e.is_network_failure() {
+                user_context_cloned.issue_reporter_service().report(
+                    IssueLevel::Critical,
+                    "Failed to create new mail user context".into(),
+                    issue_report_keys_from_error(e),
+                )
+            }
         })
     }
 
