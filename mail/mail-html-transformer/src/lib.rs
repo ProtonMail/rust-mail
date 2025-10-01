@@ -45,6 +45,7 @@ use transforms::{ColorMode, keep_spaces_and_escape_gt_and_lt, styles::BrowserCap
 pub mod css_parser;
 pub mod ios;
 pub mod message_detector;
+pub mod proton_schemes;
 pub mod remote_content;
 pub mod sanitizer;
 pub mod transforms;
@@ -132,6 +133,18 @@ impl Transformer {
     #[tracing::instrument(skip_all)]
     pub fn disable_content(&mut self, no_remote: bool, no_embedded: bool) -> (u64, u64) {
         remote_content::disable_content(&self.document, no_remote, no_embedded)
+    }
+
+    /// Transform image URLs from HTTP/HTTPS to proton-http/proton-https schemes.
+    #[tracing::instrument(skip_all)]
+    pub fn transform_to_proton_schemes(&mut self) -> u64 {
+        proton_schemes::transform_to_proton_schemes(self.document.clone())
+    }
+
+    /// Transform image URLs from proton-http/proton-https schemes back to HTTP/HTTPS.
+    #[tracing::instrument(skip_all)]
+    pub fn transform_from_proton_schemes(&mut self) -> u64 {
+        proton_schemes::transform_from_proton_schemes(self.document.clone())
     }
 
     /// If true, inject metadata for iOS web view.
