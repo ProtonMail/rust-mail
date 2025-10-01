@@ -9,7 +9,6 @@ use crate::db::migrations::{migrate_core_db, verify_core_db};
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::subscriber::CoreEventLoopContext;
-use proton_action_queue::db::StoredAction;
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Session;
@@ -111,8 +110,15 @@ impl UserContext {
             let origin = context.origin();
             let context_cloned = context.clone();
             let cancellation_token_cloned = cancellation_token.clone();
-            let tether = user_stash.connection().await?;
-            let last_event = StoredAction::find_next_action::<EventPollAction>(&tether).await?;
+
+            // There was bug in previous versions that would allow the user to submit unlimited
+            // amount of event polls when using pull to refresh. We saw certain users with
+            // up to 100 pending event polls. We have address this in this patch, but
+            // we still need clean these up.
+            // There is no harm in doing this at startup since we will queue a new one
+            // on enter foreground.
+            let deleted_event_polls = queue.delete_all_by_type::<EventPollAction>().await?;
+            tracing::info!("Deleted {deleted_event_polls} event actions");
 
             let this = {
                 let mut builder = builder::UserContextBuilder::new();
@@ -130,7 +136,7 @@ impl UserContext {
                                 event_ctx.boxed(),
                                 event_ctx.boxed(),
                             );
-                            EventLoopService::new(event_loop, last_event)
+                            EventLoopService::new(event_loop, None)
                         })
                         .with_service(InitializationService::new(InitializationWatcher::new(
                             &user_stash,

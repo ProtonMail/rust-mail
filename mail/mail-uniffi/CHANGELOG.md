@@ -5,7 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.149.6] - 2025-10-01
+
+### Changed
+
+- Log local ids of event updates
+
+### Fixes
+
+- [ET-4884] Support forwarding emails to non-Proton services
+- Do not report network issue to sentry
+- [ET-4863] Support sending messages to self-owned external addresses with no encryption
+
+
+## [mail-uniffi-v0.149.5] - 2025-09-30
+
+### Fixes
+
+- [ET-4384] Only allow one event loop action to be queued
+- [ET-4384] Also update messages when opening converastion
+- [ET-4384] Revert default action queue to 1 worker
+
+
+## [mail-uniffi-v0.149.4] - 2025-09-30
+
+### Fixes
+
+- [ET-4833] Migrate mobile signature from prev-gen
+- [ET-4875] Styles - Use rem instead of em
+
+
+## [mail-uniffi-v0.149.3] - 2025-09-29
+
+### Fixes
+
+- Bump attachment upload timeout to 2 minutes
+
+
+## [mail-uniffi-v0.150.0] - 2025-09-26
 
 ### Features
 

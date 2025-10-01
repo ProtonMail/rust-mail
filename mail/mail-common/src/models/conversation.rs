@@ -2185,32 +2185,28 @@ impl Conversation {
                 conversation
             };
 
-            let mut message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
+            let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
             if had_messages {
                 info!("Messages were synced before");
-                let current_ids =
-                    Message::remote_ids_in_conversation_unordered(local_conversation_id, tx)
-                        .await?
-                        .into_iter()
-                        .collect::<HashSet<_>>();
-                message_metadata.retain(|v| !current_ids.contains(&v.id));
             } else {
                 info!("Never synced conversation messages before");
             }
-            if !message_metadata.is_empty() {
-                debug!(
-                    "Debug saving messages {:?}",
-                    message_metadata.iter().map(|v| &v.id).collect::<Vec<_>>()
-                );
-                Message::create_or_update_messages_from_metadata_vec(message_metadata, tx)
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to write message metadata: {e:?}");
-                        e
-                    })?;
-            } else {
-                debug!("No new messages to save");
-            }
+            // We need to always update the conversation and messages as it possible
+            // that some message state we have locally does not match the label context
+            // data downloaded from the newer conversation, which can lead to other
+            // action not behaving accordingly.
+            // Note that this does overwrite local state with new state, meaning local
+            // changes can temporarily be lost until the respective actions
+            // are executed on the server.
+            // This has been deemed more acceptable than the user complaining that their
+            // conversations can't  be marked as read after marking all
+            // conversations as read.
+            Message::create_or_update_messages_from_metadata_vec(message_metadata, tx)
+                .await
+                .map_err(|e| {
+                    error!("Failed to write message metadata: {e:?}");
+                    e
+                })?;
 
             Ok(new_conversation)
         })

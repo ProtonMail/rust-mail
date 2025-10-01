@@ -364,6 +364,17 @@ impl Queue {
         Ok(())
     }
 
+    /// # Warning
+    ///
+    /// This operation does not operate within execution guards. It is intended to be used
+    /// before queue executor is resumed (during app initialization). Use with caution.
+    pub async fn delete_all_by_type<T: Action>(&self) -> QueuedResult<usize> {
+        let mut tether = self.shared.stash.connection().await?;
+        Ok(tether
+            .tx(async |tx| StoredAction::delete_by_type(tx, &T::TYPE).await)
+            .await?)
+    }
+
     /// Queue an `action` for execution at a later time.
     ///
     /// A default [`Metadata`] type is assigned to this `action`.

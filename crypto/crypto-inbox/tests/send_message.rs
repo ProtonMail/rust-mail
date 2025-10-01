@@ -225,15 +225,20 @@ fn send_internal_v6() {
     );
 }
 
-/// Simulates sending an email internally to a self owned address.
+/// Make sure we can send an email to a self-owned, internal address with
+/// encryption enabled.
+///
+/// This happens when you send an email from `foo@protonmail.com` to
+/// `foo@pm.me`, for instance.
 #[test]
-fn send_internal_to_self() {
+fn send_to_internal_encrypted_self_address() {
     let pgp = new_pgp_provider();
 
     let (mail_settings, composer_preferences, draft, sender_keys) =
         send_logic::setup_test_environment(&pgp, models::DraftMessage::load_internal);
 
     let recipient_preferences = SendPreferences::new_for_self(
+        false,
         &sender_keys,
         UnixTimestamp::new(1_726_502_569),
         mail_settings,
@@ -245,6 +250,7 @@ fn send_internal_to_self() {
         EncryptedPackageBody::new_with_draft(&pgp, &draft, PackageMimeType::Html, &sender_keys)
             .expect("Failed to create encrypted package body");
 
+    assert!(!recipient_preferences.encryption_disabled);
     assert_eq!(draft.mime_type, "text/html");
 
     let package = send_logic::process_package(
@@ -257,6 +263,91 @@ fn send_internal_to_self() {
     );
 
     validate_decryption(&package, ADDRESS_KEY, EXPECTED_MESSAGE_INTERNAL);
+}
+
+/// Make sure we can send an email to a self-owned, internal address with
+/// encryption disabled.
+///
+/// This happens when you configure forwarding to an external servide provider,
+/// e.g. from `foo@pm.me` to `foo@gmail.com`, and then you send a message to
+/// `foo@pm.me`.
+///
+/// Confusingly enough, this actually *does* encrypt the message!
+///
+/// That's because we're sending a message to ourselves and so it does not get
+/// actually forwarded to `foo@gmail.com`, it appears only inside `foo@pm.me`.
+///
+/// This message would *not* be encrypted if we were sending it to somebody else
+/// (to an address we don't own), though; but in here we're testing just the
+/// self-sending scenario.
+#[test]
+fn send_to_internal_unencrypted_self_address() {
+    let pgp = new_pgp_provider();
+
+    let (mail_settings, composer_preferences, draft, mut sender_keys) =
+        send_logic::setup_test_environment(&pgp, models::DraftMessage::load_internal);
+
+    for key in &mut sender_keys.0 {
+        key.flags.set_email_no_encryption();
+    }
+
+    let recipient_preferences = SendPreferences::new_for_self(
+        false,
+        &sender_keys,
+        UnixTimestamp::new(1_726_502_569),
+        mail_settings,
+        composer_preferences,
+    )
+    .unwrap();
+
+    let encrypted_body =
+        EncryptedPackageBody::new_with_draft(&pgp, &draft, PackageMimeType::Html, &sender_keys)
+            .expect("Failed to create encrypted package body");
+
+    assert!(!recipient_preferences.encryption_disabled);
+    assert_eq!(draft.mime_type, "text/html");
+
+    let package = send_logic::process_package(
+        &pgp,
+        draft.to_list.first().unwrap(),
+        &draft.attachments,
+        &encrypted_body,
+        &sender_keys,
+        recipient_preferences,
+    );
+
+    validate_decryption(&package, ADDRESS_KEY, EXPECTED_MESSAGE_INTERNAL);
+}
+
+/// Make sure we can send an email to a self-owned, external address with
+/// encryption disabled.
+///
+/// This happens when you create an account on non-mail Proton service - say,
+/// Proton VPN - and later you "upgrade" to a Proton Mail account.
+///
+/// In cases like these, we will have keys for `foo@gmail.com` or whatever, but
+/// they cannot be used for mail encryption purposes.
+#[test]
+fn send_to_external_unencrypted_self_address() {
+    let pgp = new_pgp_provider();
+
+    let (mail_settings, composer_preferences, _, mut sender_keys) =
+        send_logic::setup_test_environment(&pgp, models::DraftMessage::load_internal);
+
+    for key in &mut sender_keys.0 {
+        key.flags.set_email_no_encryption();
+    }
+
+    let recipient_preferences = SendPreferences::new_for_self(
+        true,
+        &sender_keys,
+        UnixTimestamp::new(1_726_502_569),
+        mail_settings,
+        composer_preferences,
+    )
+    .unwrap();
+
+    assert!(recipient_preferences.encryption_disabled);
 }
 
 /// Simulates sending an email from a single internal sender to a single external recipient without keys.

@@ -64,7 +64,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument};
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
-const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 2;
+const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 1;
 
 const DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE: usize = 1;
 const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
@@ -300,11 +300,13 @@ impl MailUserContext {
         }
         .await
         .inspect_err(|e| {
-            user_context_cloned.issue_reporter_service().report(
-                IssueLevel::Critical,
-                "Failed to create new mail user context".into(),
-                issue_report_keys_from_error(e),
-            )
+            if !e.is_network_failure() {
+                user_context_cloned.issue_reporter_service().report(
+                    IssueLevel::Critical,
+                    "Failed to create new mail user context".into(),
+                    issue_report_keys_from_error(e),
+                )
+            }
         })
     }
 
@@ -531,6 +533,7 @@ impl MailUserContext {
         {
             if address.status == AddressStatus::Enabled {
                 debug!("send preferences: loading from self-owned address");
+
                 let address_rid = address.remote_id.as_ref().ok_or_else(|| {
                     MailContextError::App(AppError::AddressHasNoRemoteId(
                         address.local_id.unwrap_or(LocalAddressId::from(0)),
@@ -543,6 +546,7 @@ impl MailUserContext {
                     .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
 
                 let send_preferences = SendPreferences::new_for_self(
+                    address.address_type.is_external(),
                     &address_keys,
                     encryption_time,
                     settings,

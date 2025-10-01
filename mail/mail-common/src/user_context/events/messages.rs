@@ -14,7 +14,15 @@ pub async fn handle_message_events(
     data: &mut PostEventSyncData,
 ) -> Result<(), AppError> {
     for event in events {
-        event.action.log_entry(&event.remote_id);
+        event
+            .action
+            .log_entry(&event.remote_id, async |remote_id| {
+                Message::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
 
         match event.action {
             Action::Delete => {
@@ -34,6 +42,10 @@ pub async fn handle_message_events(
                 let ids =
                     Message::create_or_update_messages_from_metadata(vec![message.clone()], tx)
                         .await?;
+
+                if !ids.is_empty() {
+                    tracing::info!("Created with {:?}", ids[0]);
+                }
 
                 data.msg_for_prefetch.extend(ids);
             }
