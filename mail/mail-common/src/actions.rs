@@ -560,17 +560,16 @@ where
                 }
             } else if let Some(source_id) = source_id
                 && let Some(source_label) = source_label
-                && (source_label.is_movable_folder() || is_snoozed)
             {
-                T::remove_label(*source_id, ids.iter().cloned(), tx)
-                    .context("Failed to remove source label")?;
-            }
+                if source_label.is_movable_folder() || is_snoozed {
+                    T::remove_label(*source_id, ids.iter().cloned(), tx)
+                        .context("Failed to remove source label")?;
+                }
 
-            if let Some(source_id) = source_id
-                && [trash, spam].contains(source_id)
-            {
-                T::apply_label(almost_all_mail, ids.iter().cloned(), tx)
-                    .context("Failed to add conversations to almost_all_mail")?;
+                if [trash, spam].contains(source_id) {
+                    T::apply_label(almost_all_mail, ids.iter().cloned(), tx)
+                        .context("Failed to add conversations to almost_all_mail")?;
+                }
             }
 
             if let Some(destination) = self.destination {

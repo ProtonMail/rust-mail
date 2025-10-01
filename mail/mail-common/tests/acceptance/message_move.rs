@@ -5,6 +5,7 @@ use proton_core_api::services::proton::{
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId, LabelType as ApiLabelType, UserId};
+use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelExtension as _, ModelIdExtension as _};
 use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
@@ -605,6 +606,124 @@ async fn move_out_of_spam_set_almost_all_mail() {
         message.label_ids,
         vec![LabelId::inbox(), LabelId::almost_all_mail()]
     );
+}
+
+#[tokio::test]
+async fn move_from_spam_to_trash_do_not_remove_almost_all_mail_label() {
+    // Setup:
+    // * create a message in spam
+    // * the message doesn't have `almost_all_mail` label
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let spam = SystemLabel::Spam.load(&tether).await.unwrap().unwrap();
+
+    let mut spam_conv = ConversationCounters::new(spam.id());
+    spam_conv.total = 1;
+
+    let mut spam_msg = MessageCounters::new(spam.id());
+    spam_msg.total = 1;
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            spam_conv.save(tx).await.unwrap();
+            spam_msg.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let trash = SystemLabel::Trash.load(&tether).await.unwrap().unwrap();
+    let message = test_message(vec![LabelId::spam()], false);
+    let params = test_init_params_labels(HashMap::new());
+    ctx.setup_user(params.clone()).await;
+
+    // Initialize Mocking
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
+    ctx.mock_label_messages(
+        trash.remote_id.as_ref().unwrap(),
+        vec![message.metadata.id.clone()],
+    )
+    .await;
+
+    ctx.catch_all().await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
+
+    // Create a mailbox and sync.
+    let mailbox = Mailbox::with_remote_id(
+        &user_ctx.user_stash().connection().await.unwrap(),
+        LabelId::spam(),
+    )
+    .await
+    .unwrap();
+    mailbox
+        .sync(
+            &mut user_ctx.user_stash().connection().await.unwrap(),
+            user_ctx.session(),
+            10,
+        )
+        .await
+        .unwrap();
+
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+    assert_eq!(message.label_ids.len(), 1);
+    assert_eq!(message.label_ids[0].as_str(), "4");
+
+    // Action:
+    // * move message out from spam to trash
+    Message::action_move(
+        &tether,
+        user_ctx.action_queue(),
+        trash.id(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
+
+    // Validation:
+    // * the message should have `trash` label and `all_mail` label
+    message.reload(&tether).await.unwrap();
+    assert_eq!(
+        message.label_ids,
+        vec![LabelId::trash(), LabelId::all_mail()]
+    );
+
+    let counters = MessageCounters::find_by_id(spam.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(counters.total, 0);
+    assert_eq!(counters.unread, 0);
+
+    let almost_all_mail = SystemLabel::AlmostAllMail
+        .load(&tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let counters = MessageCounters::find_by_id(almost_all_mail.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(counters.total, 0);
+    assert_eq!(counters.unread, 0);
+
+    let counters = MessageCounters::find_by_id(trash.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(counters.total, 1);
+    assert_eq!(counters.unread, 0);
+    let all_mail = SystemLabel::AllMail.load(&tether).await.unwrap().unwrap();
+    let counters = MessageCounters::find_by_id(all_mail.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(counters.total, 1);
+    assert_eq!(counters.unread, 0);
 }
 
 #[tokio::test]
