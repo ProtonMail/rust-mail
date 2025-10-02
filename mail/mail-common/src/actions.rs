@@ -21,8 +21,8 @@ use crate::actions::messages::UndoMoveToMessages;
 use crate::actions::notifications_quick_actions::PushNotificationActionHandler;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::{RollbackItemType, SystemLabelId};
-use crate::models::Message;
-use crate::models::{MailLabel, RollbackItem};
+use crate::models::RollbackItem;
+use crate::models::{MailLabel, Message};
 use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
 use anyhow::Context;
@@ -561,7 +561,7 @@ where
             } else if let Some(source_id) = source_id
                 && let Some(source_label) = source_label
             {
-                if source_label.is_movable_folder() || is_snoozed {
+                if source_label.is_movable_out_of_folder(tx) || is_snoozed {
                     T::remove_label(*source_id, ids.iter().cloned(), tx)
                         .context("Failed to remove source label")?;
                 }

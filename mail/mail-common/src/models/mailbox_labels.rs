@@ -5,13 +5,13 @@
 #[path = "../tests/models/mailbox_labels.rs"]
 mod mailbox_labels;
 
+use crate::datatypes::{MessageRecipientDisplayMode, ShowMoved, SystemLabelId, ViewMode};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelType, SystemLabel};
 use proton_core_common::{datatypes::LocalLabelId, models::Label};
+use stash::exports::Connection;
 use stash::stash::Tether;
 use stash::{macros::Model, stash::StashError};
-
-use crate::datatypes::{MessageRecipientDisplayMode, SystemLabelId, ViewMode};
 
 use super::MailSettings;
 
@@ -46,7 +46,9 @@ pub trait MailLabel {
     ///
     async fn view_mode(&self, tether: &Tether) -> Result<ViewMode, StashError>;
 
-    fn is_movable_folder(&self) -> bool;
+    fn is_movable_into_folder(&self) -> bool;
+
+    fn is_movable_out_of_folder(&self, conn: &Connection) -> bool;
 
     fn recipient_display_mode(&self) -> MessageRecipientDisplayMode;
 
@@ -68,12 +70,39 @@ impl MailLabel for Label {
         Ok(MailSettings::get_or_default(tether).await.view_mode)
     }
 
-    fn is_movable_folder(&self) -> bool {
+    fn is_movable_into_folder(&self) -> bool {
         self.label_type == LabelType::Folder
             || self
                 .remote_id
                 .as_ref()
                 .is_some_and(|rid| LabelId::movable_sys_folder_list().contains(rid))
+    }
+
+    fn is_movable_out_of_folder(&self, conn: &Connection) -> bool {
+        let mail_settings = MailSettings::get_or_default_sync(conn);
+
+        let mut movable_folders = LabelId::movable_sys_folder_list().to_vec();
+        match mail_settings.show_moved {
+            ShowMoved::DoNotKeep => {
+                movable_folders.push(LabelId::drafts());
+                movable_folders.push(LabelId::sent());
+            }
+            ShowMoved::KeepInDrafts => {
+                movable_folders.push(LabelId::sent());
+            }
+            ShowMoved::KeepInSent => {
+                movable_folders.push(LabelId::drafts());
+            }
+            ShowMoved::KeepBoth => {
+                // Do nothing
+            }
+        }
+
+        self.label_type == LabelType::Folder
+            || self
+                .remote_id
+                .as_ref()
+                .is_some_and(|rid| movable_folders.contains(rid))
     }
 
     fn recipient_display_mode(&self) -> MessageRecipientDisplayMode {
