@@ -2291,6 +2291,29 @@ pub trait SystemLabelId: for<'a> From<&'a str> + ToSql {
         Self::from("24")
     }
 
+    fn category_newsletter() -> Self {
+        Self::from("25")
+    }
+
+    fn category_transactions() -> Self {
+        Self::from("26")
+    }
+
+    fn non_removable_system_labels() -> [Self; 10] {
+        [
+            Self::all_mail(),
+            Self::all_sent(),
+            Self::all_drafts(),
+            Self::category_social(),
+            Self::category_promotions(),
+            Self::category_updates(),
+            Self::category_forums(),
+            Self::category_default(),
+            Self::category_newsletter(),
+            Self::category_transactions(),
+        ]
+    }
+
     #[must_use]
     fn movable_sys_folder_list() -> [Self; 4] {
         [Self::inbox(), Self::archive(), Self::spam(), Self::trash()]
