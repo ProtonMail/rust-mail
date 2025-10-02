@@ -71,6 +71,7 @@ impl MailSession {
                 Ok(s) => s.into(),
                 Err(e) => BackgroundExecutionResult {
                     has_unsent_messages: false,
+                    has_pending_actions: false,
                     status: BackgroundExecutionStatus::Failed(e.to_string()),
                 },
             };
@@ -116,6 +117,7 @@ impl From<RealBackgroundExecutionStatus> for BackgroundExecutionStatus {
 pub struct BackgroundExecutionResult {
     pub status: BackgroundExecutionStatus,
     pub has_unsent_messages: bool,
+    pub has_pending_actions: bool,
 }
 
 impl From<RealBackgroundExecutionResult> for BackgroundExecutionResult {
@@ -123,6 +125,7 @@ impl From<RealBackgroundExecutionResult> for BackgroundExecutionResult {
         Self {
             status: value.status.into(),
             has_unsent_messages: value.has_unsent_messages,
+            has_pending_actions: value.has_pending_actions,
         }
     }
 }

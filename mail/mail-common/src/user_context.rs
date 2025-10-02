@@ -767,6 +767,10 @@ impl MailUserContext {
             != 0)
     }
 
+    pub async fn has_actions_in_queue(&self) -> Result<bool, MailContextError> {
+        Ok(self.action_queue().queued_actions_count().await? != 0)
+    }
+
     pub fn http_client(&self) -> &reqwest::Client {
         self.mail_context().http_client()
     }
