@@ -337,6 +337,7 @@ pub(super) fn prepare_text_reply(
 pub fn html_to_text(input: &str) -> String {
     let mut transformer = Transformer::new(input);
 
+    transformer.transform_from_proton_schemes();
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
@@ -407,6 +408,7 @@ pub fn maybe_sanitize(mime_type: MessageMimeType, body: &str) -> String {
         MessageMimeType::TextHtml => {
             let mut transformer = Transformer::new(body);
 
+            transformer.transform_from_proton_schemes();
             transformer.add_noreferrer();
             transformer.strip_utm();
             transformer.strip_whitelist();
