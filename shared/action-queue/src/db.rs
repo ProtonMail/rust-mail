@@ -118,6 +118,9 @@ pub struct StoredAction {
     #[DbField]
     pub version: u32,
 
+    #[DbField]
+    pub retries: u32,
+
     // Note this field is only used for storage into the db.
     pub dependency_keys: ActionDependencyKeys,
 }
@@ -167,6 +170,7 @@ impl StoredAction {
             version: T::VERSION,
             action_group: metadata.group_override.unwrap_or(T::GROUP).to_string(),
             dependency_keys,
+            retries: 0,
         }
     }
 
@@ -198,6 +202,36 @@ impl StoredAction {
         )
         .await?;
         Ok(())
+    }
+
+    /// Update the retries for the stored action with the given `id`.
+    ///
+    /// Should be called only when it can be "requeued".
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    ///
+    pub(crate) async fn update_retries(bond: &Bond<'_>, id: ActionId) -> Result<(), StashError> {
+        bond.execute(
+            format!(
+                "UPDATE {} SET retries=retries+1 WHERE id = ?",
+                Self::table_name()
+            ),
+            params![id],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub(crate) async fn get_retries(tether: &Tether, id: ActionId) -> Result<u32, StashError> {
+        let retries = tether
+            .query_value::<_, u32>(
+                format!("SELECT retries FROM {} WHERE id = ?", Self::table_name()),
+                params![id],
+            )
+            .await?;
+        Ok(retries)
     }
 
     pub(crate) fn short_dbg_str(&self) -> String {

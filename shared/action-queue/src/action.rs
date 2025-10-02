@@ -258,6 +258,7 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     ///
     /// Can be overridden with [`MetadataBuilder::with_priority_override`].
     const PRIORITY: Priority = Priority::Normal;
+    const MAX_RETRIES: Option<u32> = None;
 
     /// Associated version converter.
     ///

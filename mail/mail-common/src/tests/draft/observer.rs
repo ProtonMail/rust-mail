@@ -254,6 +254,7 @@ async fn draft_send_observer_only_triggers_when_send_action_is_queued() {
         resources: Default::default(),
         dependency_keys: Default::default(),
         version: 1,
+        retries: 0,
     };
     let mut conn = stash.connection().await.unwrap();
     let mut draft_metadata = DraftMetadata::builder()
