@@ -1371,9 +1371,20 @@ async fn execute_action_remote<T: Action>(
                         error!("Failed to apply on server: {e:?}");
 
                         if let Some(reason) = e.can_requeue() {
-                            debug!(?reason, "Action will be requeued");
+                            StoredAction::update_retries(tx, id).await?;
+                            let retries = StoredAction::get_retries(tx, id).await?;
+                            if let Some(max_retries) = T::MAX_RETRIES
+                                && retries >= max_retries
+                            {
+                                debug!(
+                                    ?reason,
+                                    "Action has reached max retries and will be cancelled"
+                                );
+                            } else {
+                                debug!(?reason, "Action will be requeued");
 
-                            return Ok(ActionRemoteOutput::Queued(id, reason));
+                                return Ok(ActionRemoteOutput::Queued(id, reason));
+                            }
                         }
 
                         match cancel_action_with_dependees(shared, tx, id).await {

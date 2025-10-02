@@ -1,0 +1,1 @@
+ALTER TABLE stored_action ADD COLUMN retries INTEGER NOT NULL DEFAULT 0;
