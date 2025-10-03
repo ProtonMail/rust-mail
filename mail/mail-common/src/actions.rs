@@ -561,7 +561,7 @@ where
             } else if let Some(source_id) = source_id
                 && let Some(source_label) = source_label
             {
-                if source_label.is_movable_out_of_folder(tx) || is_snoozed {
+                if source_label.is_movable_out_of_folder() || is_snoozed {
                     T::remove_label(*source_id, ids.iter().cloned(), tx)
                         .context("Failed to remove source label")?;
                 }

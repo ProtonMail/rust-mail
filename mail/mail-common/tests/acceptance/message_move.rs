@@ -1243,11 +1243,11 @@ async fn move_from_allmail() {
     assert_eq!(message.label_ids, vec![destination_label_id.clone()]);
 }
 
-#[tokio::test]
 #[test_case::test_case(LabelId::sent(), ShowMoved::KeepBoth; "KeepBoth with Sent")]
 #[test_case::test_case(LabelId::sent(), ShowMoved::DoNotKeep; "DoNotKeep with Sent")]
 #[test_case::test_case(LabelId::drafts(), ShowMoved::KeepBoth; "KeepBoth with Drafts")]
 #[test_case::test_case(LabelId::drafts(), ShowMoved::DoNotKeep; "DoNotKeep with Drafts")]
+#[tokio::test]
 async fn move_out_of_sent_drafts_with_keep_moved(label_id: LabelId, show_moved: ShowMoved) {
     let ctx = MailTestContext::new().await;
 
@@ -1312,14 +1312,7 @@ async fn move_out_of_sent_drafts_with_keep_moved(label_id: LabelId, show_moved: 
     .unwrap();
 
     message.reload(&tether).await.unwrap();
-    if show_moved == ShowMoved::KeepBoth {
-        assert_eq!(
-            message.label_ids,
-            vec![destination_label_id.clone(), label_id.clone()]
-        );
-    } else {
-        assert_eq!(message.label_ids, vec![destination_label_id.clone()]);
-    }
+    assert_eq!(message.label_ids, vec![destination_label_id.clone()]);
 }
 
 fn test_label(label_id: &LabelId, label_type: ApiLabelType, name: &str) -> ApiLabel {
