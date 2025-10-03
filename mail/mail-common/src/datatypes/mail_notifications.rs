@@ -25,7 +25,7 @@ use tracing::error;
 /// Quick actions available for mail related push notifications.
 /// It operates on remote ids since local ids are unknown at this point.
 ///
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum PushNotificationQuickAction {
     MarkAsRead { remote_id: MessageId },
     MoveToArchive { remote_id: MessageId },
