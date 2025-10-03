@@ -1,9 +1,10 @@
 use crate::actions::ConversationOrMessage;
 use crate::actions::draft::{
-    SEND_ACTION_GROUP, local_all_draft_label_id, local_draft_label_id, local_sent_label_id,
+    SEND_ACTION_GROUP, local_all_draft_label_id, local_all_sent_label_id, local_draft_label_id,
+    local_sent_label_id,
 };
 use crate::datatypes::LocalMessageId;
-use crate::datatypes::{MessageFlags, SystemLabelId};
+use crate::datatypes::MessageFlags;
 use crate::draft::UndoError;
 use crate::models::Message;
 use crate::{AppError, MailContextError};
@@ -11,7 +12,6 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_api::consts::Mail;
-use proton_core_api::services::proton::LabelId;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::ModelExtension;
@@ -87,15 +87,14 @@ impl Handler for UndoSendHandler {
 
         // Check that the message can actually be undo sent. It must be in the send folder
         // and have the SENT flag.
-        if !(message.label_ids.contains(&LabelId::sent())
-            && (message.flags & MessageFlags::SENT == MessageFlags::SENT))
-        {
+        if !message.is_sent() {
             return Err(UndoError::MessageCanNotBeUndoSent(action.id).into());
         }
 
         let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_sent_label_id = local_sent_label_id(tx).await?;
+        let local_all_sent_label_id = local_all_sent_label_id(tx).await?;
 
         message.flags.remove(MessageFlags::SENT);
         message
@@ -107,6 +106,10 @@ impl Handler for UndoSendHandler {
         Message::remove_label_async(local_sent_label_id, [action.id], tx)
             .await
             .inspect_err(|e| error!("Failed to remove sent label: {e:?}"))?;
+
+        Message::remove_label_async(local_all_sent_label_id, [action.id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove all sent label: {e:?}"))?;
 
         Message::apply_label_async(local_draft_label_id, [action.id], tx)
             .await
