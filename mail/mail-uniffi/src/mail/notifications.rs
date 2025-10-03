@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use proton_core_common::datatypes::EncryptedPushNotification as RealEncryptedPushNotification;
-use proton_mail_common::actions::notifications_quick_actions::execute_notification_quick_action;
+use proton_mail_common::actions::notifications_quick_actions;
 use proton_mail_common::datatypes::mail_notifications::{
     DecryptableInboxPushNotification,
     DecryptedEmailPushNotification as RealDecryptedEmailPushNotification,
@@ -262,8 +262,9 @@ impl MailUserSession {
         action: PushNotificationQuickAction,
     ) -> Result<(), ActionError> {
         let ctx = self.ctx()?;
+
         uniffi_async(async move {
-            execute_notification_quick_action(ctx.as_ref(), action.into())
+            notifications_quick_actions::exec(ctx.as_ref(), action.into())
                 .await
                 .map_err(RealProtonMailError::from)
         })
