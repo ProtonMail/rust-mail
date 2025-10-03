@@ -2145,7 +2145,8 @@ impl Message {
 
     #[must_use]
     pub fn is_sent(&self) -> bool {
-        self.label_ids.contains(&LabelId::sent()) && self.flags.is_sent()
+        (self.label_ids.contains(&LabelId::all_sent()) || self.label_ids.contains(&LabelId::sent()))
+            && self.flags.is_sent()
     }
 
     /// Returns whether this message contains an RSVP invitation.

@@ -61,6 +61,16 @@ async fn local_sent_label_id(tether: &Tether) -> Result<LocalLabelId, MailContex
     Ok(local_draft_label_id)
 }
 
+async fn local_all_sent_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
+    let Some(local_all_sent_label_id) =
+        Label::remote_id_counterpart(LabelId::all_sent(), tether).await?
+    else {
+        return Err(AppError::RemoteLabelDoesNotExist(LabelId::all_sent()).into());
+    };
+
+    Ok(local_all_sent_label_id)
+}
+
 async fn local_outbox_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
     let Some(local_draft_label_id) =
         Label::remote_id_counterpart(LabelId::outbox(), tether).await?

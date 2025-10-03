@@ -10,11 +10,13 @@ use proton_core_common::models::{Label, ModelExtension as _, ModelIdExtension as
 use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
+use proton_mail_api::services::proton::prelude::ShowMoved;
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
-    MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
-    MessageCount as ApiMessageCount, MessageFlags as ApiMessageFlags,
-    MessageMetadata as ApiMessageMetadata, MimeType as ApiMimeType, ViewMode as ApiViewMode,
+    MailSettings as ApiMailSettings, MailSettings, Message as ApiMessage,
+    MessageBody as ApiMessageBody, MessageCount as ApiMessageCount,
+    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
+    MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{
@@ -1238,6 +1240,78 @@ async fn move_from_allmail() {
 
     message.reload(&tether).await.unwrap();
 
+    assert_eq!(message.label_ids, vec![destination_label_id.clone()]);
+}
+
+#[test_case::test_case(LabelId::sent(), ShowMoved::KeepBoth; "KeepBoth with Sent")]
+#[test_case::test_case(LabelId::sent(), ShowMoved::DoNotKeep; "DoNotKeep with Sent")]
+#[test_case::test_case(LabelId::drafts(), ShowMoved::KeepBoth; "KeepBoth with Drafts")]
+#[test_case::test_case(LabelId::drafts(), ShowMoved::DoNotKeep; "DoNotKeep with Drafts")]
+#[tokio::test]
+async fn move_out_of_sent_drafts_with_keep_moved(label_id: LabelId, show_moved: ShowMoved) {
+    let ctx = MailTestContext::new().await;
+
+    let destination_label_id = LabelId::from("destination");
+    let destination_label = test_label(&destination_label_id, ApiLabelType::Folder, "destination");
+    let message = test_message(vec![label_id.clone()], false);
+    let labels = hash_map! {
+        ApiLabelType::Folder: vec![destination_label ]
+    };
+    let mut params = test_init_params_labels(labels);
+    params.mail_settings = Some(MailSettings {
+        show_moved,
+        ..MailSettings::default()
+    });
+
+    ctx.setup_user(params.clone()).await;
+
+    // Initialize Mocking
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let local_dst_label = Label::remote_id_counterpart(destination_label_id.clone(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Create a mailbox and sync.
+    let mailbox = Mailbox::with_remote_id(
+        &user_ctx.user_stash().connection().await.unwrap(),
+        label_id.clone(),
+    )
+    .await
+    .unwrap();
+    mailbox
+        .sync(
+            &mut user_ctx.user_stash().connection().await.unwrap(),
+            user_ctx.session(),
+            10,
+        )
+        .await
+        .unwrap();
+
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+    assert_eq!(message.label_ids, vec![label_id.clone()]);
+
+    // Action:
+    // * move message in the other folder
+    Message::action_move(
+        &tether,
+        user_ctx.action_queue(),
+        local_dst_label,
+        vec![message.id()],
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+    message.reload(&tether).await.unwrap();
     assert_eq!(message.label_ids, vec![destination_label_id.clone()]);
 }
 

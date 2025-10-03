@@ -224,9 +224,9 @@ impl MoveItemPopup {
         //TODO: improve
         let tether = ctx.user_stash().connection().await?;
         let mut folders = Label::find_by_kind(LabelType::Folder, &tether).await?;
-        folders.retain(MailLabel::is_movable_folder);
+        folders.retain(MailLabel::is_movable_into_folder);
         let mut system = Label::find_by_kind(LabelType::System, &tether).await?;
-        system.retain(MailLabel::is_movable_folder);
+        system.retain(MailLabel::is_movable_into_folder);
         folders.extend(system);
         Ok(Self {
             folders,
