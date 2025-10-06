@@ -13,6 +13,7 @@ use proton_mail_common::{MailContextError, MailUserContext};
 use std::sync::Arc;
 use tracing::instrument;
 use uniffi::{Enum, Object, Record};
+use uniffi_runtime::async_runtime;
 
 #[uniffi_export]
 pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserSessionError> {
@@ -24,7 +25,19 @@ pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserSe
         Ok(RealMailSettings::get_or_default(&tether).await.into())
     })
     .await
-    .unwrap_or(MailSettings::default()))
+    .unwrap_or_default())
+}
+
+#[uniffi_export]
+pub async fn mail_settings_sync(ctx: &MailUserSession) -> Result<MailSettings, UserSessionError> {
+    let stash = ctx.user_stash()?;
+    Ok(async_runtime()
+        .block_on(async move {
+            let tether = stash.connection().await?;
+
+            Ok(RealMailSettings::get_or_default(&tether).await.into())
+        })
+        .unwrap_or_default())
 }
 
 #[derive(Clone, Record)]
