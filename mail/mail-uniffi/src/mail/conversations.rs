@@ -24,12 +24,13 @@ use crate::mail::mail_scroller::{
 use crate::mail::{MailUserSession, Mailbox};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use itertools::Itertools;
-use proton_core_common::datatypes::WeekStart as RealWeekStart;
+use proton_core_common::datatypes::{SystemLabel, WeekStart as RealWeekStart};
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::datatypes::{
-    ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
-    MobileAction as RealMobileAction, OpenConversationOrigin as RealOpenConversationOrigin,
+    ContextualConversation, ContextualConversationAndMessages, ConversationViewOptions,
+    LocalConversationId, MobileAction as RealMobileAction,
+    OpenConversationOrigin as RealOpenConversationOrigin,
 };
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::{
@@ -339,18 +340,34 @@ pub async fn all_available_conversation_actions_for_conversation(
 pub async fn conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
+    show_all: bool,
 ) -> Result<Option<ConversationAndMessages>, ActionError> {
     let stash = mailbox.stash()?;
     let session = mailbox.session()?;
     let ctx = mailbox
         .ctx()
         .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Internal))?;
+
     uniffi_async(async move {
+        let trash_label_id = SystemLabel::Trash
+            .local_id(&stash.connection().await?)
+            .await?
+            .expect("Trash label ID should be present");
+        let view_options = if show_all {
+            ConversationViewOptions::All
+        } else {
+            if mailbox.mbox().label_id() == trash_label_id {
+                ConversationViewOptions::Trashed
+            } else {
+                ConversationViewOptions::NonTrashed
+            }
+        };
         Ok::<_, RealProtonMailError>(
             ContextualConversation::conversation_and_messages(
                 ctx.network_monitor_service(),
                 LocalConversationId::from(id),
                 mailbox.mbox().label_id(),
+                view_options,
                 &stash,
                 &session,
             )
@@ -705,9 +722,19 @@ pub async fn watch_conversation(
 
     uniffi_async(async move {
         let stash = ctx.user_stash();
+        let trash_label_id = SystemLabel::Trash
+            .local_id(&stash.connection().await?)
+            .await?
+            .expect("Trash label ID should be present");
+        let view_options = if label_id == trash_label_id.into() {
+            ConversationViewOptions::Trashed
+        } else {
+            ConversationViewOptions::NonTrashed
+        };
         let Some(conv_and_msgs) = ContextualConversation::open_conversation(
             id.into(),
             label_id.into(),
+            view_options.into(),
             &ctx,
             origin.into(),
         )

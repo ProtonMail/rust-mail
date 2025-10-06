@@ -40,7 +40,8 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{
-    LocalConversationId, MobileAction as RealMobileAction, ParsedHeaderValue,
+    ConversationViewOptions, LocalConversationId, MobileAction as RealMobileAction,
+    ParsedHeaderValue,
 };
 use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
@@ -499,7 +500,7 @@ pub async fn watch_message(
     .map_err(ActionError::from)
 }
 
-/// Get messages for the given conversation.
+/// Get all messages for the given conversation.
 ///
 /// # Errors
 ///
@@ -514,9 +515,13 @@ pub async fn messages_for_conversation(
     uniffi_async(async move {
         let tether = stash.connection().await?;
         Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_conversation(LocalConversationId::from(conversation_id), &tether)
-                .await?
-                .map_vec(),
+            RealMessage::in_conversation(
+                LocalConversationId::from(conversation_id),
+                ConversationViewOptions::All.into(),
+                &tether,
+            )
+            .await?
+            .map_vec(),
         )
     })
     .await

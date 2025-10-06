@@ -107,6 +107,10 @@ pub struct ContextualConversation {
     /// When this conversation is snoozed until - when present it is snoozed at the moment.
     pub snoozed_until: Option<UnixTimestamp>,
 
+    /// Whether the conversation has hidden messages.
+    #[scroller_eq(skip)]
+    pub hidden_messages_banner: Option<HiddenMessagesBanner>,
+
     #[scroller_eq(skip)]
     /// Whether the conversation has messages downloaded.
     pub has_messages: bool,
@@ -122,6 +126,29 @@ impl ContextualConversation {
         let label = conversation.label(local_label_id)?.clone();
         let is_starred = conversation.is_starred();
         let attachments_metadata = conversation.get_attachment_metadata();
+        // TODO move to standalone method
+        let hidden_messages_banner = match label.remote_label_id {
+            Some(id)
+                if id == LabelId::trash()
+                    && conversation
+                        .labels
+                        .iter()
+                        .any(|l| l.remote_label_id == Some(LabelId::almost_all_mail())) =>
+            {
+                Some(HiddenMessagesBanner::ContainsNonTrashedMessages)
+            }
+            _ => {
+                if conversation
+                    .labels
+                    .iter()
+                    .any(|l| l.remote_label_id == Some(LabelId::trash()))
+                {
+                    Some(HiddenMessagesBanner::ContainsTrashedMessages)
+                } else {
+                    None
+                }
+            }
+        };
 
         Some(Self {
             local_id: conversation.id(),
@@ -145,6 +172,7 @@ impl ContextualConversation {
             time: label.context_time,
             snooze_time: label.context_snooze_time,
             snoozed_until: conversation.snoozed_until,
+            hidden_messages_banner,
             has_messages: conversation.has_messages,
         })
     }
@@ -203,6 +231,7 @@ impl ContextualConversation {
     pub async fn open_conversation(
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
+        view_options: ConversationViewOptions,
         ctx: &MailUserContext,
         origin: OpenConversationOrigin,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
@@ -214,6 +243,7 @@ impl ContextualConversation {
                     ctx.network_monitor_service(),
                     local_conversation_id,
                     local_label_id,
+                    view_options,
                     stash,
                     api,
                 )
@@ -224,6 +254,7 @@ impl ContextualConversation {
                     ctx.network_monitor_service(),
                     local_conversation_id,
                     local_label_id,
+                    view_options,
                     stash,
                     api,
                 )
@@ -257,6 +288,7 @@ impl ContextualConversation {
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
+        view_options: ConversationViewOptions,
         stash: &Stash,
         api: &Session,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
@@ -293,7 +325,7 @@ impl ContextualConversation {
             )
         })?;
 
-        let messages = Message::in_conversation(local_conversation_id, &conn).await?;
+        let messages = Message::in_conversation(local_conversation_id, view_options, &conn).await?;
         tracing::info!("Conversation has {:02} messages", messages.len());
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
@@ -325,6 +357,7 @@ impl ContextualConversation {
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
+        view_options: ConversationViewOptions,
         stash: &Stash,
         api: &Session,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
@@ -356,7 +389,7 @@ impl ContextualConversation {
             warn!("Conversation could not be contextualized to label");
             return Ok(None);
         };
-        let messages = Message::in_conversation(local_conversation_id, &conn).await?;
+        let messages = Message::in_conversation(local_conversation_id, view_options, &conn).await?;
         tracing::info!("Conversation has {:02} messages", messages.len());
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
@@ -607,4 +640,17 @@ impl TableObserver for ContextualConversationWatcher {
             })
             .ok();
     }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum ConversationViewOptions {
+    All,
+    NonTrashed,
+    Trashed,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum HiddenMessagesBanner {
+    ContainsTrashedMessages,
+    ContainsNonTrashedMessages,
 }

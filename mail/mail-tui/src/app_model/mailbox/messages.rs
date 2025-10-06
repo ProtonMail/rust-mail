@@ -25,8 +25,8 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{
-    ContextualConversation, LocalConversationId, LocalMessageId, MessageRecipientDisplayMode,
-    ReadFilter, SearchOptions,
+    ContextualConversation, ConversationViewOptions, LocalConversationId, LocalMessageId,
+    MessageRecipientDisplayMode, ReadFilter, SearchOptions,
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::{Draft, ReplyMode};
@@ -238,6 +238,7 @@ impl MessagesState {
             ctx.network_monitor_service(),
             conversation_id,
             label_id,
+            ConversationViewOptions::All,
             ctx.user_stash(),
             ctx.session(),
         )
@@ -258,7 +259,13 @@ impl MessagesState {
                         ));
                     };
                     Some(
-                        match MailMessage::in_conversation(conversation_id, &tether).await {
+                        match MailMessage::in_conversation(
+                            conversation_id,
+                            ConversationViewOptions::All,
+                            &tether,
+                        )
+                        .await
+                        {
                             Ok(m) => MessageMessage::Refreshed(m).into(),
                             Err(e) => {
                                 let e = anyhow!("Message list Query error: {e}");
