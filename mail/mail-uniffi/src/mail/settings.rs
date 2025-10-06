@@ -29,13 +29,15 @@ pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserSe
 }
 
 #[uniffi_export]
-pub async fn mail_settings_sync(ctx: &MailUserSession) -> Result<MailSettings, UserSessionError> {
+pub fn mail_settings_sync(ctx: &MailUserSession) -> Result<MailSettings, UserSessionError> {
     let stash = ctx.user_stash()?;
     Ok(async_runtime()
         .block_on(async move {
             let tether = stash.connection().await?;
 
-            Ok(RealMailSettings::get_or_default(&tether).await.into())
+            Ok::<MailSettings, MailContextError>(
+                RealMailSettings::get_or_default(&tether).await.into(),
+            )
         })
         .unwrap_or_default())
 }
