@@ -15,8 +15,6 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::time;
 use tracing::{Instrument, error};
 
-const EVENT_POLL_REPLACE_DELAY: Duration = Duration::from_secs(5);
-
 impl MailUserContext {
     pub(crate) fn init_event_loop_poll(&self, duration: Duration) -> Result<(), MailContextError> {
         tracing::info!(
@@ -68,16 +66,16 @@ impl MailUserContext {
                 // `MailUserContext` is now initialized, we can proceed with the event poll.
 
                 loop {
-                    let delay = tokio::select! {
-                        _ = interval.tick() => {
-                            None
-                        }
+                    let Some(ctx) = ctx.upgrade() else {
+                        return;
+                    };
+                    tokio::select! {
+                        _ = interval.tick() => {}
                         event = on_enter_foreground_subscriber.next() => {
                             if event.is_ok() {
                                tracing::info!("Queuing event poll from enter foreground");
                                 interval.reset();
                             }
-                            None
                         }
                         r = queue_observer.recv() => {
                             let msg = match r {
@@ -96,28 +94,33 @@ impl MailUserContext {
 
                             // if we have queued an action in this process in the default group
                             // that is not the event loop, reset the timer and replace
-                            // the event poll so it runs after this action.
-                            if let BroadcastMessage::Queued(_, metadata) = msg
-                                && metadata.action_group == ActionGroup::default().as_ref() {
-                                interval.reset();
-
-                                if metadata.action_type == EventPoll::TYPE.as_ref() {
-                                    continue;
-                                }
-                                tracing::debug!("replacing event poll due to new action");
-                                // Add a small delay to make sure the server had time
-                                // to process the last action.
-                                Some(EVENT_POLL_REPLACE_DELAY)
-                            } else {
-                                continue;
+                            // the event poll so it runs after this action. We also want to
+                            // reset the timer and cancel the event poll after some action
+                            // has executed on the server to allow for more time to for the data
+                            // to be processed and not accidentally bring back old state.
+                            match msg {
+                                BroadcastMessage::Queued(_, metadata) | BroadcastMessage::Success(_, metadata) => {
+                                    if metadata.action_group == ActionGroup::default().as_ref() {
+                                        interval.reset();
+                                        if metadata.action_type == EventPoll::TYPE.as_ref() {
+                                            continue;
+                                        }
+                                        if let Err(e) = ctx.user_context().cancel_event_poll().await {
+                                            tracing::error!("Failed to cancel queued event poll: {e}");
+                                        }
+                                        continue;
+                                    } else {
+                                        continue;
+                                    }
+                                },
+                                _ => {
+                                    continue
+                                },
                             }
                         }
                     };
-                    let Some(ctx) = ctx.upgrade() else {
-                        return;
-                    };
 
-                    if let Err(e) = ctx.poll_event_loop(delay).await {
+                    if let Err(e) = ctx.poll_event_loop(None).await {
                         error!("Failed to queue poll event loop poll: {e:?}");
                     }
 

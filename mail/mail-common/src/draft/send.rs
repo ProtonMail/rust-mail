@@ -795,7 +795,7 @@ pub async fn cancel_schedule_send(
                         return Err(MailContextError::Other(anyhow!("Connection to queue lost")));
                     };
                     // If the action did not complete it means this message was not scheduled.
-                    if !matches!(message, BroadcastMessage::Success(_)) {
+                    if !matches!(message, BroadcastMessage::Success(_, _)) {
                         debug!("Action did not complete successfully");
                         return Err(
                             CancelScheduleSendError::MessageIsNotScheduled(message_id).into()

@@ -195,7 +195,7 @@ pub enum BroadcastMessage {
     /// A new action was queued in this process.
     Queued(ActionId, Arc<QueuedMetadata>),
     /// This queued action was executed successfully
-    Success(ActionId),
+    Success(ActionId, Arc<QueuedMetadata>),
     /// This queued action failed to execute.
     ///
     /// Id of the action is available in the metadata.
@@ -925,7 +925,7 @@ impl QueueExecutor {
             };
 
             let exec_output = decoded
-                .execute(&self.shared, tether, exec_guard, metadata)
+                .execute(&self.shared, tether, exec_guard, metadata.clone())
                 .await
                 .inspect_err(|e| {
                     if let QueuedError::Action(err, metadata) = e {
@@ -941,7 +941,7 @@ impl QueueExecutor {
             let _ = self
                 .shared
                 .broadcast_sender
-                .send(BroadcastMessage::Success(action_id));
+                .send(BroadcastMessage::Success(action_id, metadata));
 
             Ok(Some(exec_output))
         }
