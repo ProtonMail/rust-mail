@@ -162,7 +162,7 @@ async fn main() {
 
     match send_awaiter.wait().await.unwrap() {
         BroadcastMessage::Queued(_, _) => {}
-        BroadcastMessage::Success(_) => {
+        BroadcastMessage::Success(_, _) => {
             info!("Message successfully sent.");
         }
         BroadcastMessage::Error(err, _) => {

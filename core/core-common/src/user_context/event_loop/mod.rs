@@ -46,6 +46,22 @@ impl UserContext {
             .await
     }
 
+    pub async fn cancel_event_poll(&self) -> Result<(), QueuedError> {
+        let event_loop_service = self.event_loop_service();
+        let last_action_ids = event_loop_service.last_event_loop_action_ids().lock().await;
+        if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
+            if let Err(e) = self.queue().cancel(last_action_id).await {
+                match e {
+                    QueuedError::ActionNotFound(_) | QueuedError::ActionInExecution(_) => {
+                        // nothing to do
+                    }
+                    e => return Err(e),
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Queue an action to execute the event loop as soon as possible regardless of
     /// the selected polling mode.
     ///

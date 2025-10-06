@@ -54,7 +54,7 @@ async fn auto_queued_on_pause() {
 
     let output = broadcast.recv().await.unwrap();
 
-    assert!(matches!(output, BroadcastMessage::Success(_)));
+    assert!(matches!(output, BroadcastMessage::Success(_, _)));
     assert!(broadcast.is_empty());
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
@@ -87,7 +87,7 @@ async fn auto_queued_on_multiple_resume() {
 
     let output = broadcast.recv().await.unwrap();
 
-    assert!(matches!(output, BroadcastMessage::Success(_)));
+    assert!(matches!(output, BroadcastMessage::Success(_, _)));
     assert!(broadcast.is_empty());
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
@@ -124,7 +124,7 @@ async fn auto_queued_on_multiple_pause() {
 
     let output = broadcast.recv().await.unwrap();
 
-    assert!(matches!(output, BroadcastMessage::Success(_)));
+    assert!(matches!(output, BroadcastMessage::Success(_, _)));
     assert!(broadcast.is_empty());
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
@@ -163,13 +163,13 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
 
     let output = broadcast.recv().await.unwrap();
 
-    assert!(matches!(output, BroadcastMessage::Success(_)));
+    assert!(matches!(output, BroadcastMessage::Success(_, _)));
 
     auto_executor.resume();
 
     let output = broadcast.recv().await.unwrap();
 
-    assert!(matches!(output, BroadcastMessage::Success(_)));
+    assert!(matches!(output, BroadcastMessage::Success(_, _)));
     assert!(broadcast.is_empty());
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }

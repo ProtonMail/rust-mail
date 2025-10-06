@@ -213,7 +213,7 @@ async fn main() {
 
     match awaiter.wait().await.unwrap() {
         BroadcastMessage::Queued(_, _) => {}
-        BroadcastMessage::Success(_) => {
+        BroadcastMessage::Success(_, _) => {
             info!("Mobile settings successfully updated!");
 
             // Get the updated settings to confirm the change

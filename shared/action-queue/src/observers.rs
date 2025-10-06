@@ -98,7 +98,7 @@ impl ActionAwaiter {
         loop {
             match self.receiver.recv().await {
                 Ok(msg) => match &msg {
-                    BroadcastMessage::Success(id) | BroadcastMessage::Deleted(id, _)
+                    BroadcastMessage::Success(id, _) | BroadcastMessage::Deleted(id, _)
                         if *id == self.action_id =>
                     {
                         return Ok(msg);
