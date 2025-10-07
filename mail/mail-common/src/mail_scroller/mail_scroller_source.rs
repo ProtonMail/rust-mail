@@ -24,10 +24,6 @@ pub trait MailScrollerSource: Send + Sync {
     /// You can return an optional join handle that [`MailScroller`] will use on the first
     /// call to [`MailScroller::fetch_more()`] if you want to preload some data in
     /// a background task.
-    ///
-    /// # Errors
-    ///
-    /// Return errors if the initialization or setup failed.
     fn initialize(
         &mut self,
         ctx: &MailUserContext,
@@ -37,10 +33,6 @@ pub trait MailScrollerSource: Send + Sync {
     /// Return the items that fall into range of the synced data.
     ///
     /// If some item is outside that range and known to us, it should not be included.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     fn visible_items(
         &self,
         ctx: &MailUserContext,
@@ -49,10 +41,6 @@ pub trait MailScrollerSource: Send + Sync {
     /// Return the total number of items that fall into range of the synced data.
     ///
     /// If some item is outside that range and known to us, it should not be included.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     fn seen_total(
         &self,
         ctx: &MailUserContext,
@@ -61,30 +49,18 @@ pub trait MailScrollerSource: Send + Sync {
     /// Return the total number of items that fall into range of the synced data.
     ///
     /// If some item is outside that range and known to us, it should not be included.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     fn synced_total(
         &self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<u64, MailContextError>> + Send;
 
     /// Return the total number of items in the label.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     fn all_total(
         &self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<u64, MailContextError>> + Send;
 
     /// Return if there is more data available in the source.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     fn has_more(
         &self,
         ctx: &MailUserContext,
@@ -95,10 +71,6 @@ pub trait MailScrollerSource: Send + Sync {
     ///
     /// This method can await until the data is fetched and should return the
     /// new elements that are valid in this interval as well as the new total.
-    ///
-    /// # Errors
-    ///
-    /// Return error if something failed.
     fn sync_next(
         &mut self,
         ctx: &MailUserContext,
