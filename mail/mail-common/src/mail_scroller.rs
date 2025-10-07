@@ -214,7 +214,6 @@ impl MailScroller {
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<T::Item>), MailContextError> {
         let id = Uuid::new_v4();
-
         let ctx_weak = Arc::downgrade(&ctx);
 
         tracing::debug!(?id, "Creating MailScroller");
@@ -228,8 +227,8 @@ impl MailScroller {
         } = ScrollerWorker::run(ctx_weak, source, page_size).await?;
 
         let event_service = ctx.core_context().event_service();
-
         let ordered_command_cloned = ordered_command.clone();
+
         if let Some(mut event_subscriber) = event_service.subscribe::<OnEnterForegroundEvent>() {
             ctx.spawn(async move {
                 loop {
@@ -238,6 +237,7 @@ impl MailScroller {
                     }
 
                     tracing::debug!("Scroller {id} fetch new after enter foreground");
+
                     if Self::do_fetch_new(&ordered_command_cloned).is_err() {
                         return;
                     }
@@ -258,6 +258,7 @@ impl MailScroller {
 
     pub async fn has_more(&self) -> Result<bool, MailContextError> {
         let (sender, receiver) = oneshot::channel();
+
         self.command
             .send(ScrollerCommand::HasMore(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send has more command")))?;
@@ -269,7 +270,9 @@ impl MailScroller {
 
     pub fn fetch_more(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `FetchMore` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::FetchMore(
                 ScrollerSource::ScrollEvent(uuid),
@@ -281,6 +284,7 @@ impl MailScroller {
 
     pub fn fetch_new(&self) -> Result<(), MailContextError> {
         Self::do_fetch_new(&self.ordered_command)?;
+
         Ok(())
     }
 
@@ -288,7 +292,9 @@ impl MailScroller {
         sender: &flume::Sender<ScrollerOrderedCommand>,
     ) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `FetchNew` command with uuid: {uuid}");
+
         sender
             .send(ScrollerOrderedCommand::FetchNew(
                 ScrollerSource::ScrollEvent(uuid),
@@ -298,7 +304,9 @@ impl MailScroller {
 
     pub fn refresh(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `Refresh` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::Refresh(
                 ScrollerSource::ScrollEvent(uuid),
@@ -310,7 +318,9 @@ impl MailScroller {
 
     pub fn force_refresh(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `ForceRefresh` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::ForceRefresh(
                 ScrollerSource::ScrollEvent(uuid),
@@ -324,7 +334,9 @@ impl MailScroller {
 
     pub fn get_items(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `GetItems` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::GetItems(
                 ScrollerSource::ScrollEvent(uuid),
@@ -336,7 +348,9 @@ impl MailScroller {
 
     pub fn change_filter(&self, filter: ReadFilter) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `ChangeFilter` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::ChangeFilter {
                 src: ScrollerSource::ScrollEvent(uuid),
@@ -351,7 +365,9 @@ impl MailScroller {
 
     pub fn clear_cursor(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `ClearCursor` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::ClearCursor(
                 ScrollerSource::ScrollEvent(uuid),
@@ -363,6 +379,7 @@ impl MailScroller {
 
     pub async fn total(&self) -> Result<u64, MailContextError> {
         let (sender, receiver) = oneshot::channel();
+
         self.command
             .send(ScrollerCommand::GetTotal(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get total command")))?;
@@ -374,6 +391,7 @@ impl MailScroller {
 
     pub async fn seen(&self) -> Result<u64, MailContextError> {
         let (sender, receiver) = oneshot::channel();
+
         self.command
             .send(ScrollerCommand::GetSeen(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get seen command")))?;
@@ -385,6 +403,7 @@ impl MailScroller {
 
     pub async fn synced(&self) -> Result<u64, MailContextError> {
         let (sender, receiver) = oneshot::channel();
+
         self.command
             .send(ScrollerCommand::GetSynced(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get synced command")))?;
@@ -444,6 +463,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             .subscribe_to(move |sender| Box::new(MailScrollerWatcher { sender, tables }))?;
 
         let source = Arc::new(RwLock::new(source));
+
         let this = Self {
             ctx,
             source,
@@ -564,6 +584,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send fetch more update: {e:?}"))?;
                 }
             }
+
             ScrollerOrderedCommand::Refresh(source) => {
                 let result =
                     self.refresh(false, source)
@@ -580,6 +601,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send refresh update: {e:?}"))?;
                 }
             }
+
             ScrollerOrderedCommand::ForceRefresh(source) => {
                 let result =
                     self.refresh(true, source)
@@ -596,6 +618,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send force refresh update: {e:?}"))?;
                 }
             }
+
             ScrollerOrderedCommand::GetItems(src) => {
                 let items_update = self.get_items(src);
 
@@ -604,6 +627,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .await
                     .map_err(|e| anyhow!("Failed to send get items update: {e:?}"))?;
             }
+
             ScrollerOrderedCommand::FetchNew(src) => {
                 let result = self
                     .fetch_new(src)
@@ -615,6 +639,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .await
                     .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
             }
+
             ScrollerOrderedCommand::ChangeFilter { src, filter } => {
                 let result = self
                     .change_filter(src, filter)
@@ -628,6 +653,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send change filter update: {e:?}"))?;
                 }
             }
+
             ScrollerOrderedCommand::ClearCursor(src) => {
                 let result = self
                     .clear_cursor(src)
@@ -657,6 +683,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .send(total)
                     .map_err(|e| anyhow!("Failed to send total: {e:?}"))?;
             }
+
             ScrollerCommand::GetSeen(sender) => {
                 let seen = Self::seen(source, ctx).await;
 
@@ -664,6 +691,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .send(seen)
                     .map_err(|e| anyhow!("Failed to send seen: {e:?}"))?;
             }
+
             ScrollerCommand::GetSynced(sender) => {
                 let synced = Self::synced(source, ctx).await;
 
@@ -671,6 +699,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .send(synced)
                     .map_err(|e| anyhow!("Failed to send synced: {e:?}"))?;
             }
+
             ScrollerCommand::HasMore(sender) => {
                 let (total, seen) = (
                     Self::total(source, ctx).await,

@@ -56,6 +56,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         check_for_total: bool,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         tracing::info!("Initializing MailScroller Source");
+
         let mut tether = ctx.user_stash().connection().await?;
         let label = self.get_label(&tether).await?;
         let remote_label_id = label.remote_id.clone().unwrap();
@@ -71,6 +72,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 "We have paginated here before, try to sync data, status: {}",
                 if is_online { "online" } else { "offline" }
             );
+
             if let Some(scroll_data) = scroller.scroll_data_begin(&tether).await? {
                 debug!("Syncing previous page in background");
 
@@ -81,11 +83,13 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                     self.invalidate.clone(),
                 )
                 .await?;
+
                 let task = if is_online
                     && !scroller.has_next_page(&tether).await?
                     && total > self.page_size as u64
                 {
                     debug!("Syncing next page in a task");
+
                     self.sync_next_page(ctx, &scroll_data, remote_label_id)
                         .await?
                 } else {
@@ -94,7 +98,9 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 return Ok(task);
             } else {
                 debug!("Cursor points to empty scroll data, will sync first page instead");
+
                 let scroll_data = scroller.scroll_data_end(&tether).await?;
+
                 tether
                     .tx(async |bond| scroll_data.delete(bond).await)
                     .await?;
@@ -119,6 +125,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             None
         } else if has_more {
             debug!("We have local data, running first page sync in background");
+
             self.sync_first_page(
                 ctx,
                 remote_label_id,
@@ -127,9 +134,11 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 self.invalidate.clone(),
             )
             .await?;
+
             None
         } else {
             debug!("We have no local data, running first page sync in a task");
+
             self.sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
                 .await?
         };

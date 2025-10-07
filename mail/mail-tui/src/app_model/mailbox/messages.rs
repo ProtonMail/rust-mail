@@ -119,6 +119,7 @@ impl MessagesState {
             }
         })
     }
+
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
@@ -127,15 +128,15 @@ impl MessagesState {
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) =
             MailScroller::messages(ctx.as_weak(), label_id, filter, ITEM_LIMIT).await?;
+
         let (paginator, command) =
             Paginator::new::<MailMessage>(scroller, handle, handle_scroller_update);
 
         paginator.next_page_command();
-        let messages = vec![];
 
         Ok((
             Self {
-                messages,
+                messages: vec![],
                 table_state: ScrollableTableState::new(Some(0)),
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Label(paginator),
@@ -247,6 +248,7 @@ impl MessagesState {
         };
 
         let handle = ContextualConversation::watch(ctx.user_stash())?;
+
         let (watcher, background_command) =
             TuiWatchHandle::from_watcher_handle(handle, move || {
                 let ctx = ctx.clone();
@@ -483,18 +485,22 @@ impl MessagesState {
 
                 Command::None
             }
+
             KeyCode::Char(' ') => {
                 self.table_state.toggle();
                 Command::None
             }
+
             KeyCode::Char('g') => {
                 self.table_state.mark_many(0..self.messages.len());
                 Command::None
             }
+
             KeyCode::Char('G') => {
                 self.table_state.unmark_many(0..self.messages.len());
                 Command::None
             }
+
             KeyCode::F(3) => self.handle_download_attachments(ctx),
 
             KeyCode::Char('e') => self
@@ -507,7 +513,6 @@ impl MessagesState {
             }
 
             KeyCode::Char('r') => MessageMessage::MarkRead(self.msgs()).into(),
-
             KeyCode::Char('u') => MessageMessage::MarkUnread(self.msgs()).into(),
 
             KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -519,9 +524,7 @@ impl MessagesState {
             }
 
             KeyCode::Char('f') => MessageMessage::Star(self.msgs()).into(),
-
             KeyCode::Char('F') => MessageMessage::Unstar(self.msgs()).into(),
-
             KeyCode::Char('d') => MessageMessage::DeletePermanently(self.msgs()).into(),
 
             KeyCode::Char('b') => self
@@ -535,9 +538,7 @@ impl MessagesState {
                 .unwrap_or_default(),
 
             KeyCode::Char('s') => Message::OpenLabelSelectPopup.into(),
-
             KeyCode::Char('m') => Message::OpenMoveItemsPopup(Items::Message(self.msgs())).into(),
-
             KeyCode::Char('l') => Message::OpenLabelItemPopup(Items::Message(self.msgs())).into(),
 
             KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -807,9 +808,9 @@ impl MessagesState {
     }
 
     pub fn view(&mut self, frame: &mut Frame, area: Rect) {
-        let table_area = self.open_message.draw(frame, area);
+        let area = self.open_message.draw(frame, area);
 
-        if let Some(table_area) = table_area {
+        if let Some(area) = area {
             let table = crate::widgets::messages::message_as_table(
                 &self.messages,
                 self.recipient_display_mode,
@@ -817,7 +818,7 @@ impl MessagesState {
 
             let scrollable_table = ScrollableTable::new(table, self.messages.len());
 
-            frame.render_stateful_widget(scrollable_table, table_area, &mut self.table_state);
+            frame.render_stateful_widget(scrollable_table, area, &mut self.table_state);
         }
     }
 
