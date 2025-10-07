@@ -42,13 +42,17 @@ impl Search {
         if let Event::Key(key) = &event {
             match key.code {
                 KeyCode::Esc => return Command::message(Message::CloseSearchPopup),
+
                 KeyCode::Enter => {
                     return Command::message(Message::SearchSubmit(
                         self.search.value().trim().to_string(),
                     ));
                 }
-                _ => self.search.handle_event(event),
-            };
+
+                _ => {
+                    self.search.handle_event(event);
+                }
+            }
         }
 
         Command::none()
