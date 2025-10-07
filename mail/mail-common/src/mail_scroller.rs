@@ -141,7 +141,7 @@ impl Drop for MailScroller {
             self.aborts.len()
         );
 
-        self.terminate_workers()
+        self.terminate()
     }
 }
 
@@ -394,7 +394,7 @@ impl MailScroller {
             .map_err(|_| MailContextError::Other(anyhow!("Failed to receive synced response")))?
     }
 
-    pub fn terminate_workers(&self) {
+    pub fn terminate(&self) {
         for abort in &self.aborts {
             abort.abort();
         }

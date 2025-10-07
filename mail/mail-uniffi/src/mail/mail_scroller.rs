@@ -393,7 +393,7 @@ impl ConversationScroller {
     }
 
     pub fn terminate(&self) {
-        self.scroller.terminate_workers();
+        self.scroller.terminate();
     }
 }
 
@@ -507,7 +507,7 @@ impl MessageScroller {
     }
 
     pub fn terminate(&self) {
-        self.scroller.terminate_workers();
+        self.scroller.terminate();
     }
 }
 
@@ -599,6 +599,6 @@ impl SearchScroller {
     }
 
     pub fn terminate(&self) {
-        self.scroller.terminate_workers();
+        self.scroller.terminate();
     }
 }
