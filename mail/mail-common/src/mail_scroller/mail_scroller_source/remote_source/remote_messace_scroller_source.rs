@@ -1,4 +1,5 @@
 use super::{MailPaginatorJoinHandle, RemoteSource};
+use crate::datatypes::SystemLabelId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
@@ -209,7 +210,7 @@ impl RemoteMessageScrollerSource {
 
         let response = session
             .get_messages(GetMessagesOptions {
-                label_id: Some(vec![remote_label_id]),
+                label_id: Some(vec![remote_label_id.clone()]),
                 page_size: page_size as u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
@@ -218,13 +219,12 @@ impl RemoteMessageScrollerSource {
             })
             .await?;
 
-        debug!(
-            "Fetched {}/{} elements",
-            response.messages.len(),
-            response.total
-        );
+        log_response(&response);
+        let trash_or_spam =
+            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
+        let stale_in_trash_or_spam = response.stale && trash_or_spam;
 
-        if response.messages.is_empty() {
+        if response.messages.is_empty() || stale_in_trash_or_spam {
             return Ok(vec![]);
         }
 
@@ -265,7 +265,7 @@ impl RemoteMessageScrollerSource {
             .get_messages(GetMessagesOptions {
                 anchor: Some(last_element_time.as_u64()),
                 anchor_id: Some(last_element_id.clone()),
-                label_id: Some(vec![remote_label_id]),
+                label_id: Some(vec![remote_label_id.clone()]),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
@@ -285,13 +285,13 @@ impl RemoteMessageScrollerSource {
             }
         }
 
-        debug!(
-            "Fetched {}/{} elements",
-            response.messages.len(),
-            response.total
-        );
+        log_response(&response);
 
-        if response.messages.is_empty() {
+        let trash_or_spam =
+            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
+        let stale_in_trash_or_spam = response.stale && trash_or_spam;
+
+        if response.messages.is_empty() || stale_in_trash_or_spam {
             return Ok(vec![]);
         }
 
@@ -332,7 +332,7 @@ impl RemoteMessageScrollerSource {
             .get_messages(GetMessagesOptions {
                 anchor: Some(first_element_time.as_u64()),
                 anchor_id: Some(first_element_id.clone()),
-                label_id: Some(vec![remote_label_id]),
+                label_id: Some(vec![remote_label_id.clone()]),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
                 desc: order_dir.reverse().as_api_desc(),
@@ -341,13 +341,13 @@ impl RemoteMessageScrollerSource {
             })
             .await?;
 
-        debug!(
-            "Fetched {}/{} elements",
-            response.messages.len(),
-            response.total
-        );
+        log_response(&response);
 
-        if response.messages.is_empty() {
+        let trash_or_spam =
+            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
+        let stale_in_trash_or_spam = response.stale && trash_or_spam;
+
+        if response.messages.is_empty() || stale_in_trash_or_spam {
             return Ok(vec![]);
         }
 
@@ -472,4 +472,13 @@ impl RemoteMessageScrollerSource {
 
         Ok(msg_paginator)
     }
+}
+
+fn log_response(response: &GetMessagesResponse) {
+    debug!(
+        "Fetched {}/{} {} elements",
+        response.messages.len(),
+        response.total,
+        if response.stale { "stale" } else { "fresh" }
+    );
 }
