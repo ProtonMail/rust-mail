@@ -11,8 +11,6 @@ use crate::actions::{
     ActionMoveData, ConversationOrMessage, LabelAsAction, LabelAsData, LabelAsOutput, LabelPair,
     MailActionError, MoveAction, Undo, filter_responses,
 };
-use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
-use crate::datatypes::labels::ScrollOrderField;
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
     LocalMessageId, MessageAttachmentInfos, MessageLabelsCount, MessageRecipients, MessageSenders,
@@ -43,7 +41,6 @@ use proton_core_common::models::{
 };
 use proton_core_common::services::NetworkMonitorService;
 use proton_core_common::utils::MapVec as _;
-use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::requests::GetConversationsOptions;
@@ -1623,66 +1620,6 @@ impl Conversation {
         Ok(snooze_time)
     }
 
-    /// Given a list of conversations check if there are any missing dependencies like undownloaded
-    /// labels.
-    ///
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database.
-    ///
-    async fn sync_dependencies(
-        conversations: &[ApiConversation],
-        api: &Session,
-        tether: &mut Tether,
-    ) -> Result<(), MailContextError> {
-        let mut fetcher = MessageOrConversationDependencyFetcher::new();
-
-        for conversation in conversations {
-            fetcher.check_api_conversation(conversation, tether).await?
-        }
-
-        fetcher.fetch_and_store(api, tether).await?;
-
-        Ok(())
-    }
-    /// Search for conversations.
-    ///
-    /// This function accepts search options and calls the API to find any
-    /// conversations that fit the criteria. It operates globally and is not
-    /// based on a particular mailbox; this restriction can be applied via the
-    /// options.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database. Can also return an error if a found
-    /// conversation cannot be loaded, although this would indicate a
-    /// significant problem.
-    ///
-    pub async fn search(
-        options: GetConversationsOptions,
-        api: &Session,
-        tether: &mut Tether,
-    ) -> Result<Vec<Conversation>, MailContextError> {
-        // Fetch all the conversations from the API
-        let conversations = api.get_conversations(options).await?.conversations;
-
-        Self::sync_dependencies(&conversations, api, tether).await?;
-
-        let mut conversations = conversations
-            .into_iter()
-            .map(Conversation::from)
-            .collect_vec();
-        tether
-            .tx(async |tx| Self::create_or_update_conversations(conversations.clone(), tx).await)
-            .await?;
-        conversations.sort_unstable_by(|x, y| x.display_order.cmp(&y.display_order).reverse());
-
-        Ok(conversations)
-    }
-
     /// Sync only conversations metadata
     ///
     pub async fn sync_metadata<PM: ProtonMail>(
@@ -1710,53 +1647,6 @@ impl Conversation {
         .await?;
 
         Ok(local_convs)
-    }
-
-    /// Synchronize the first `count` conversations of the label with `label_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database.
-    ///
-    pub async fn sync_first_conversation_page<PM: ProtonMail>(
-        label_id: LabelId,
-        count: usize,
-        api: &PM,
-        tether: &mut Tether,
-    ) -> Result<(), AppError> {
-        let order_field = ScrollOrderField::for_label(&label_id);
-
-        let response = api
-            .get_conversations(GetConversationsOptions {
-                label_id: Some(label_id),
-                page: 0,
-                page_size: count.min(MAX_PAGE_ELEMENT_COUNT) as u64,
-                desc: Some(true),
-                sort: order_field.as_api_sort(),
-                ..Default::default()
-            })
-            .await?;
-
-        debug!(
-            "Fetched {} conversations TOTAL={}",
-            response.conversations.len(),
-            response.total
-        );
-        tether
-            .tx(async |tx| {
-                Self::create_or_update_conversations(
-                    response
-                        .conversations
-                        .into_iter()
-                        .map(Conversation::from)
-                        .collect(),
-                    tx,
-                )
-                .await
-            })
-            .await?;
-        Ok(())
     }
 
     /// Undelete multiple conversations.
@@ -3610,5 +3500,121 @@ impl TableObserver for ConversationCounterWatcher {
                 tracing::error!("Failed to send notification for ConversationCounterWatcher: {e:?}")
             })
             .ok();
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl Conversation {
+    /// Synchronize the first `count` conversations of the label with `label_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed or the data could not be
+    /// written to the database.
+    ///
+    pub async fn sync_first_conversation_page<PM: ProtonMail>(
+        label_id: LabelId,
+        count: usize,
+        api: &PM,
+        tether: &mut Tether,
+    ) -> Result<(), AppError> {
+        use crate::datatypes::labels::ScrollOrderField;
+        use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
+
+        let order_field = ScrollOrderField::for_label(&label_id);
+
+        let response = api
+            .get_conversations(GetConversationsOptions {
+                label_id: Some(label_id),
+                page: 0,
+                page_size: count.min(MAX_PAGE_ELEMENT_COUNT) as u64,
+                desc: Some(true),
+                sort: order_field.as_api_sort(),
+                ..Default::default()
+            })
+            .await?;
+
+        debug!(
+            "Fetched {} conversations TOTAL={}",
+            response.conversations.len(),
+            response.total
+        );
+        tether
+            .tx(async |tx| {
+                Self::create_or_update_conversations(
+                    response
+                        .conversations
+                        .into_iter()
+                        .map(Conversation::from)
+                        .collect(),
+                    tx,
+                )
+                .await
+            })
+            .await?;
+        Ok(())
+    }
+
+    /// Search for conversations.
+    ///
+    /// This function accepts search options and calls the API to find any
+    /// conversations that fit the criteria. It operates globally and is not
+    /// based on a particular mailbox; this restriction can be applied via the
+    /// options.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed or the data could not be
+    /// written to the database. Can also return an error if a found
+    /// conversation cannot be loaded, although this would indicate a
+    /// significant problem.
+    ///
+    pub async fn search(
+        options: GetConversationsOptions,
+        api: &Session,
+        tether: &mut Tether,
+    ) -> Result<Vec<Conversation>, MailContextError> {
+        // Fetch all the conversations from the API
+        let conversations = api.get_conversations(options).await?.conversations;
+
+        Self::sync_dependencies(&conversations, api, tether).await?;
+
+        let mut conversations = conversations
+            .into_iter()
+            .map(Conversation::from)
+            .collect_vec();
+        tether
+            .tx(async |tx| Self::create_or_update_conversations(conversations.clone(), tx).await)
+            .await?;
+        conversations.sort_unstable_by(|x, y| x.display_order.cmp(&y.display_order).reverse());
+
+        Ok(conversations)
+    }
+
+    /// Given a list of conversations check if there are any missing dependencies like undownloaded
+    /// labels.
+    ///
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed or the data could not be
+    /// written to the database.
+    ///
+    async fn sync_dependencies(
+        conversations: &[ApiConversation],
+        api: &Session,
+        tether: &mut Tether,
+    ) -> Result<(), MailContextError> {
+        use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+
+        let mut fetcher = MessageOrConversationDependencyFetcher::new();
+
+        for conversation in conversations {
+            fetcher.check_api_conversation(conversation, tether).await?
+        }
+
+        fetcher.fetch_and_store(api, tether).await?;
+
+        Ok(())
     }
 }
