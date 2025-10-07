@@ -50,7 +50,6 @@ use stash::stash::Tether;
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::{iter, thread};
 use throbber_widgets_tui::ThrobberState;
 use tokio::{fs, task};
@@ -64,7 +63,7 @@ pub struct MessagesState {
     open_message: DecryptedMessageStatus,
     mode: Mode,
     recipient_display_mode: MessageRecipientDisplayMode,
-    fetching: AtomicBool,
+    fetching: bool,
 }
 
 #[allow(dead_code)] // Watcher handle is needed to keep state
@@ -141,7 +140,7 @@ impl MessagesState {
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Label(paginator),
                 recipient_display_mode,
-                fetching: AtomicBool::new(false),
+                fetching: false,
             },
             command,
         ))
@@ -197,7 +196,7 @@ impl MessagesState {
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Search(paginator),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
-                fetching: AtomicBool::new(false),
+                fetching: false,
             },
             Command::batch(vec![
                 Command::message(Message::SearchStatusBar(SearchStatusBar {
@@ -286,7 +285,7 @@ impl MessagesState {
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Conversation(watcher),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
-                fetching: AtomicBool::new(false),
+                fetching: false,
             },
             background_command,
         ))
@@ -468,18 +467,18 @@ impl MessagesState {
                 if let Mode::Label(paginator) = &self.mode
                     && self.table_state.selected().unwrap_or_default()
                         >= self.messages.len().saturating_sub(1)
-                    && !self.fetching.load(Ordering::Acquire)
+                    && !self.fetching
                 {
-                    self.fetching.store(true, Ordering::Release);
+                    self.fetching = true;
                     return paginator.next_page_command();
                 }
 
                 if let Mode::Search(paginator) = &self.mode
                     && self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
-                    && !self.fetching.load(Ordering::Acquire)
+                    && !self.fetching
                 {
-                    self.fetching.store(true, Ordering::Release);
+                    self.fetching = true;
                     return paginator.next_page_command();
                 }
 
@@ -764,7 +763,7 @@ impl MessagesState {
                 return Command::message(Messages::raise_popup(popup));
             }
             MessageMessage::NextPage(messages) => {
-                self.fetching.store(false, Ordering::Release);
+                self.fetching = false;
                 self.messages.extend(messages);
                 self.try_select_non_empty_list();
             }
