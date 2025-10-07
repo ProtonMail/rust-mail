@@ -1,3 +1,4 @@
+use super::LabelAs;
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::messages::MessagesState;
@@ -18,10 +19,9 @@ use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
+use ratatui::widgets::Paragraph;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
-
-use super::LabelAs;
 
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
 /// will display the list of messages for said conversation.
@@ -65,6 +65,7 @@ impl ConversationsState {
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) =
             MailScroller::conversations(ctx.as_weak(), label_id, filter, ITEM_LIMIT).await?;
+
         let (paginator, command) = Paginator::new(scroller, handle, |update| match update {
             ScrollerUpdate::Append { src: _, items } => ConversationMessage::NextPage(items).into(),
             ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
@@ -88,14 +89,15 @@ impl ConversationsState {
         });
 
         let autodelete_banner = ContextualConversation::auto_delete_banner(label_id, &ctx).await?;
+
         paginator.next_page_command();
-        let conversations = vec![];
+
         Ok((
             Self {
                 paginator,
                 table_state: ScrollableTableState::new(Some(0)),
                 messages: MessagesStatus::None,
-                conversations,
+                conversations: vec![],
                 opened_label: label_id,
                 autodelete_banner,
                 fetching: false,
@@ -112,6 +114,7 @@ impl ConversationsState {
         id: LocalConversationId,
     ) -> Command<Messages> {
         self.messages = MessagesStatus::Loading(ThrobberState::default());
+
         MessagesState::from_conversation(ctx, mbox, id)
     }
 
@@ -287,6 +290,7 @@ impl ConversationsState {
             }
             m => m,
         };
+
         match &mut self.messages {
             MessagesStatus::None => {
                 let Message::ConversationState(message) = message else {
@@ -382,6 +386,7 @@ impl ConversationsState {
                 }
                 _ => Command::None,
             },
+
             MessagesStatus::Ready(state) => {
                 if let Message::ConversationState(ConversationMessage::Close) = &message {
                     self.close_conversation();
@@ -394,7 +399,7 @@ impl ConversationsState {
 
     pub fn view(&mut self, frame: &mut Frame, mut area: Rect) {
         if let Some(AutoDeleteBanner { state, folder }) = self.autodelete_banner {
-            let text = match state {
+            let banner = match state {
                 AutoDeleteState::AutoDeleteUpsell => format!(
                     "Upgrade to automatically remove emails that have been in {folder} for over 30 days."
                 ),
@@ -405,12 +410,14 @@ impl ConversationsState {
                     format!("Messages in {folder} will be automatically deleted after 30 days.")
                 }
             };
-            let [para_area, rest] = Layout::default()
+
+            let banner_area;
+
+            [banner_area, area] = Layout::default()
                 .constraints([Constraint::Length(1), Constraint::Percentage(100)])
                 .areas(area);
 
-            frame.render_widget(ratatui::widgets::Paragraph::new(text), para_area);
-            area = rest;
+            frame.render_widget(Paragraph::new(banner), banner_area);
         }
 
         match &mut self.messages {

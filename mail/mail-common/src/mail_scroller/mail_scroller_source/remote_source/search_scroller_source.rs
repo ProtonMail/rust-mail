@@ -328,6 +328,7 @@ impl MailScrollerSource for SearchScrollerSource {
         ctx: &MailUserContext,
     ) -> Result<Vec<Self::Item>, MailContextError> {
         let tether = ctx.user_stash().connection().await?;
+
         if !self.initialized {
             Ok(vec![])
         } else if let Some(ref last) = self.last {
