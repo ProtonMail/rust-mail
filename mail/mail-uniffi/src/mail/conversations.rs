@@ -14,8 +14,8 @@ use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, MobileActionsResult, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
     AllConversationActions, AllListActions, AutoDeleteBanner, Conversation,
-    ConversationActionSheet, ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message,
-    MobileAction, MoveAction, SnoozeActions, Undo,
+    ConversationActionSheet, LabelAsAction, LabelAsOutput, Message, MobileAction, MoveAction,
+    SnoozeActions, Undo,
 };
 use crate::mail::mail_scroller::{
     ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
@@ -568,41 +568,6 @@ pub async fn scroll_conversations_for_label(
             scroller: Arc::new(scroller),
             handle,
         }))
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-/// Filter or search conversations which match the specified options.
-///
-/// Note that search results are inserted into the database.
-///
-/// # Errors
-///
-/// Returns an error if the network request or database query fails.
-///
-#[uniffi_export]
-pub async fn search_for_conversations(
-    session: Arc<MailUserSession>,
-    local_label_id: Id,
-    options: ConversationSearchOptions,
-) -> Result<Vec<Conversation>, ActionError> {
-    let user_context = session.ctx()?;
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let mut tether = stash.connection().await?;
-        let conversations = RealConversation::search(
-            options.into_api_options(&tether).await?,
-            user_context.session(),
-            &mut tether,
-        )
-        .await?
-        .into_iter()
-        .filter_map(|c| ContextualConversation::new(c, local_label_id.into()))
-        .map(Into::into)
-        .collect();
-
-        Result::<_, RealProtonMailError>::Ok(conversations)
     })
     .await
     .map_err(ActionError::from)

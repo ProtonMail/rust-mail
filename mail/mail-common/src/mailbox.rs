@@ -107,7 +107,7 @@ impl Mailbox {
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(any(feature = "test-utils", test))]
 mod test_utils {
     use super::*;
     use crate::MailContextError;
