@@ -121,6 +121,36 @@ impl CustomSettings {
         .await
         .map_err(ProtonError::from)
     }
+
+    #[instrument(skip_all)]
+    pub async fn swipe_to_adjacent_conversation(&self) -> Result<bool, ProtonError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async::<_, RealProtonMailError, _>(async move {
+            let tether = ctx.user_stash().connection().await?;
+            let settings = RealCustomSettings::get_or_default(&tether).await?;
+
+            Ok(settings.swipe_to_adjacent_conversation())
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    #[instrument(skip_all)]
+    pub async fn set_swipe_to_adjacent_conversation(
+        &self,
+        enabled: bool,
+    ) -> Result<(), ProtonError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async::<_, RealProtonMailError, _>(async move {
+            RealCustomSettings::update_swipe_to_adjacent_conversation(&ctx, Some(enabled)).await?;
+
+            Ok(())
+        })
+        .await
+        .map_err(ProtonError::from)
+    }
 }
 
 #[derive(Clone, Record)]
