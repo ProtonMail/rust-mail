@@ -373,6 +373,10 @@ impl AppStateHandler for MailboxModel {
             return composer.handle_event(&self.ctx, &self.mailbox, event);
         }
 
+        if let Some(search) = &mut self.search {
+            return search.handle_event(&event);
+        }
+
         if let Event::Key(key) = &event {
             match key.code {
                 KeyCode::Char('h') if key.modifiers.is_empty() => {
@@ -440,10 +444,6 @@ impl AppStateHandler for MailboxModel {
                 }
                 _ => (),
             }
-        }
-
-        if let Some(search) = &mut self.search {
-            return search.handle_event(&event);
         }
 
         if let Event::Key(key) = &event
