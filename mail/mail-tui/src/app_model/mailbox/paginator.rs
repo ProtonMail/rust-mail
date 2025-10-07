@@ -8,21 +8,12 @@ use proton_mail_common::{
 };
 use std::sync::Arc;
 
-/// Paginator adapter.
 pub struct Paginator {
     paginator: Arc<MailScroller>,
     _watch_handle: TuiWatchHandle,
 }
 
 impl Paginator {
-    /// Create a new paginator instance.
-    ///
-    /// * `create_paginator` is a closure
-    ///   that should create a paginator with the given `sender`.
-    /// * `to_message` should convert the output of [`PaginatorCompat::reload`]
-    ///   into a message.
-    ///
-    /// Creates a paginator and watcher.
     pub fn new<T: Send + Sync + Clone + ScrollerEq + 'static>(
         paginator: MailScroller,
         handle: MailScrollerHandle<T>,
@@ -52,12 +43,9 @@ impl Paginator {
         self.paginator.total().await.unwrap()
     }
 
-    /// Get the next pagination page as series of background tasks which will
-    /// display a message while the data is syncing.
-    ///
-    /// `to_command` should convert the output of [`next_page()`] to a command.
     pub fn next_page_command(&self) -> Command<Messages> {
         let _ = self.paginator.fetch_more();
+
         Command::None
     }
 }
