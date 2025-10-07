@@ -580,7 +580,6 @@ impl SearchScroller {
             .map_err(Into::into)
     }
 
-    #[must_use]
     pub async fn total(&self) -> Result<u64, MailScrollerError> {
         let scroller = Arc::clone(&self.scroller);
 
@@ -589,7 +588,6 @@ impl SearchScroller {
             .map_err(Into::into)
     }
 
-    #[must_use]
     pub async fn has_more(&self) -> Result<bool, MailScrollerError> {
         let scroller = Arc::clone(&self.scroller);
 
