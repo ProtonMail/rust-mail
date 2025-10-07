@@ -1630,28 +1630,29 @@ impl Message {
         view_options: ConversationViewOptions,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
+        let template_query = if view_options.is_all() {
+            String::new()
+        } else {
+            let trash_id = SystemLabel::Trash.remote_id();
+            formatdoc!(
+                "(SELECT DISTINCT message_labels.local_message_id
+                    FROM message_labels
+                    WHERE message_labels.local_label_id == (SELECT local_id FROM labels WHERE remote_id = {trash_id}))"
+            )
+        };
         let view_options = match view_options {
-            ConversationViewOptions::All => String::new(),
+            ConversationViewOptions::All => template_query,
             ConversationViewOptions::NonTrashed => {
-                let trash_id = SystemLabel::Trash.remote_id();
-
-                format!(
-                    "AND message_labels.local_label_id NOT IN (SELECT local_id FROM labels WHERE remote_id = {trash_id})",
-                )
+                format!("AND local_id NOT IN {template_query}")
             }
             ConversationViewOptions::Trashed => {
-                let trash_id = SystemLabel::Trash.remote_id();
-                format!(
-                    "AND message_labels.local_label_id IN (SELECT local_id FROM labels WHERE remote_id = {trash_id})",
-                )
+                format!("AND local_id IN {template_query}")
             }
         };
 
         Message::find(
             formatdoc!(
-                "JOIN message_labels
-                ON messages.local_id = message_labels.local_message_id
-                WHERE local_conversation_id = ? AND messages.deleted = 0
+                "WHERE local_conversation_id = ? AND messages.deleted = 0
                 {view_options}
                 ORDER BY time ASC, display_order ASC",
             ),

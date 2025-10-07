@@ -126,29 +126,7 @@ impl ContextualConversation {
         let label = conversation.label(local_label_id)?.clone();
         let is_starred = conversation.is_starred();
         let attachments_metadata = conversation.get_attachment_metadata();
-        // TODO move to standalone method
-        let hidden_messages_banner = match label.remote_label_id {
-            Some(id)
-                if id == LabelId::trash()
-                    && conversation
-                        .labels
-                        .iter()
-                        .any(|l| l.remote_label_id == Some(LabelId::almost_all_mail())) =>
-            {
-                Some(HiddenMessagesBanner::ContainsNonTrashedMessages)
-            }
-            _ => {
-                if conversation
-                    .labels
-                    .iter()
-                    .any(|l| l.remote_label_id == Some(LabelId::trash()))
-                {
-                    Some(HiddenMessagesBanner::ContainsTrashedMessages)
-                } else {
-                    None
-                }
-            }
-        };
+        let hidden_messages_banner = Self::hidden_messages_banner(&conversation, &label);
 
         Some(Self {
             local_id: conversation.id(),
@@ -598,6 +576,37 @@ impl ContextualConversation {
         };
         Ok(Some(AutoDeleteBanner { state, folder }))
     }
+
+    pub fn hidden_messages_banner(
+        conversation: &Conversation,
+        label: &ConversationLabel,
+    ) -> Option<HiddenMessagesBanner> {
+        let trash_id = LabelId::trash();
+        let almost_all_mail_id = LabelId::almost_all_mail();
+
+        match label.remote_label_id.as_ref() {
+            Some(id)
+                if id == &trash_id
+                    && conversation
+                        .labels
+                        .iter()
+                        .any(|l| l.remote_label_id.as_ref() == Some(&almost_all_mail_id)) =>
+            {
+                Some(HiddenMessagesBanner::ContainsNonTrashedMessages)
+            }
+            _ => {
+                if conversation
+                    .labels
+                    .iter()
+                    .any(|l| l.remote_label_id.as_ref() == Some(&trash_id))
+                {
+                    Some(HiddenMessagesBanner::ContainsTrashedMessages)
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 
 /// Result of calling [`ContextualConversation::conversation_and_messages`];
@@ -647,6 +656,12 @@ pub enum ConversationViewOptions {
     All,
     NonTrashed,
     Trashed,
+}
+
+impl ConversationViewOptions {
+    pub fn is_all(&self) -> bool {
+        matches!(self, ConversationViewOptions::All)
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]

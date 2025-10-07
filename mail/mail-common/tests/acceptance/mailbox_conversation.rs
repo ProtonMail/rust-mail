@@ -328,7 +328,11 @@ async fn test_opening_conversation_with_trashed_message() {
             conversation_id: params.conversations[0].id.clone(),
             order: 2,
             address_id: params.addresses[0].id.clone(),
-            label_ids: vec![LabelId::trash()],
+            label_ids: vec![
+                LabelId::trash(),
+                LabelId::all_mail(),
+                LabelId::from("testlabel"),
+            ],
             ..ApiMessageMetadata::test_default()
         },
     ];
