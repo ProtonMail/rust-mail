@@ -18,6 +18,7 @@ use crate::actions::{
     ActionMoveData, AllListActions, AllMessageActions, LabelAsData, LabelAsOutput, LabelPair,
     MailActionError, MovableSystemFolderAction, Undo,
 };
+use crate::datatypes::ConversationViewOptions;
 use crate::datatypes::MimeType;
 use crate::models::*;
 use crate::{MailContextError, find_in_query};
@@ -1626,10 +1627,35 @@ impl Message {
     /// Returns error if the query failed
     pub async fn in_conversation(
         local_conversation_id: LocalConversationId,
+        view_options: ConversationViewOptions,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
+        let template_query = if view_options.is_all() {
+            String::new()
+        } else {
+            let trash_id = SystemLabel::Trash.remote_id();
+            formatdoc!(
+                "(SELECT DISTINCT message_labels.local_message_id
+                    FROM message_labels
+                    WHERE message_labels.local_label_id == (SELECT local_id FROM labels WHERE remote_id = {trash_id}))"
+            )
+        };
+        let view_options = match view_options {
+            ConversationViewOptions::All => template_query,
+            ConversationViewOptions::NonTrashed => {
+                format!("AND local_id NOT IN {template_query}")
+            }
+            ConversationViewOptions::Trashed => {
+                format!("AND local_id IN {template_query}")
+            }
+        };
+
         Message::find(
-            "WHERE local_conversation_id = ? AND messages.deleted = 0 ORDER BY time ASC, display_order ASC",
+            formatdoc!(
+                "WHERE local_conversation_id = ? AND messages.deleted = 0
+                {view_options}
+                ORDER BY time ASC, display_order ASC",
+            ),
             params![local_conversation_id],
             tether,
         )

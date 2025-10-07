@@ -1,6 +1,6 @@
 use crate::AppError;
 use crate::actions::MailActionError;
-use crate::datatypes::LocalConversationId;
+use crate::datatypes::{ConversationViewOptions, LocalConversationId};
 use crate::models::{Conversation, ConversationScrollData};
 use crate::{MailUserContext, models::Message};
 use anyhow::anyhow;
@@ -179,12 +179,13 @@ async fn refresh_conversation_messages(
             )
             .await
         });
-        let mut local_msgs: HashMap<_, _> = Message::in_conversation(local_id, guard.tether())
-            .await?
-            .into_iter()
-            .filter(|msg| msg.remote_id.is_some())
-            .map(|msg| (msg.remote_id.clone(), msg))
-            .collect();
+        let mut local_msgs: HashMap<_, _> =
+            Message::in_conversation(local_id, ConversationViewOptions::All, guard.tether())
+                .await?
+                .into_iter()
+                .filter(|msg| msg.remote_id.is_some())
+                .map(|msg| (msg.remote_id.clone(), msg))
+                .collect();
 
         let remote_msgs = match remote_msgs.await {
             Ok(msgs) => msgs.map_err(|e| anyhow!("Failed to download remote labels: `{e}`"))?,
