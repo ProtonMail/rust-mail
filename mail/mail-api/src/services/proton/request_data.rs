@@ -377,3 +377,11 @@ impl DirectAttachment {
         Self::new(Self::INVITE_ICS, "text/calendar; method=reply", ics)
     }
 }
+
+#[serde_as]
+#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutNextMessageOnMoveRequest {
+    #[serde_as(as = "BoolFromInt")]
+    pub next_message_on_move: bool,
+}

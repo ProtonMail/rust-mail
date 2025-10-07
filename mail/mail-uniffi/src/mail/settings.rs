@@ -149,6 +149,22 @@ impl From<RealMobileSignatureStatus> for MobileSignatureStatus {
 }
 
 #[uniffi_export]
+pub async fn update_next_message_on_move(
+    ctx: &MailUserSession,
+    enabled: bool,
+) -> Result<(), UserSessionError> {
+    let ctx = ctx.ctx()?;
+
+    uniffi_async::<_, RealProtonMailError, _>(async move {
+        RealMailSettings::action_update_next_message_on_move(&ctx.action_queue(), enabled).await?;
+
+        Ok(())
+    })
+    .await
+    .map_err(UserSessionError::from)
+}
+
+#[uniffi_export]
 #[must_use]
 pub fn custom_settings(ctx: &MailUserSession) -> Arc<CustomSettings> {
     Arc::new(CustomSettings { ctx: ctx.ptr() })
