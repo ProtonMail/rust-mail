@@ -1,5 +1,3 @@
-use std::{cmp, sync::Arc};
-
 use super::MailPaginatorJoinHandle;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
@@ -20,6 +18,7 @@ use stash::{
     orm::Model,
     stash::{StashError, Tether},
 };
+use std::{cmp, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::debug;
 

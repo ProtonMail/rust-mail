@@ -558,16 +558,15 @@ pub async fn scroll_conversations_for_label(
     callback: Box<dyn ConversationScrollerLiveQueryCallback>,
 ) -> Result<Arc<ConversationScroller>, ActionError> {
     let context = session.ctx()?;
+
     uniffi_async(async move {
         let (scroller, handle) =
             MailScroller::conversations(context.as_weak(), label_id.into(), filter.into(), 50)
                 .await?;
+
         let handle = spawn_conversation_scroller_watcher(&context, handle, callback);
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller {
-            scroller: Arc::new(scroller),
-            handle,
-        }))
+        Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller::new(scroller, handle)))
     })
     .await
     .map_err(ActionError::from)

@@ -1,23 +1,19 @@
-use std::{fmt::Debug, future::Future};
-
-use tokio::task::JoinHandle;
-
-use crate::datatypes::ReadFilter;
-use crate::traits::ScrollerEq;
-use crate::{MailContextError, MailUserContext};
-
 mod data_scroller_source;
-#[allow(clippy::wrong_self_convention)]
 mod mail_scroller_state;
 mod remote_source;
 
 pub use self::data_scroller_source::*;
 pub use self::remote_source::*;
+use crate::datatypes::ReadFilter;
+use crate::traits::ScrollerEq;
+use crate::{MailContextError, MailUserContext};
+use std::{fmt::Debug, future::Future};
+use tokio::task::JoinHandle;
 
 pub type MailPaginatorJoinHandle = Option<JoinHandle<Result<(), MailContextError>>>;
 
-pub trait MailScrollerSource: Send + Sync {
-    type Item: Send + Sync + Clone + Debug + ScrollerEq + 'static;
+pub trait MailScrollerSource: Send + Sync + 'static {
+    type Item: Send + Sync + Clone + Debug + ScrollerEq;
 
     /// Initialize the data source and retrieve up to `element_count` elements from the server.
     ///
