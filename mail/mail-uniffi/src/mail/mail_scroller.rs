@@ -255,16 +255,12 @@ pub(crate) fn spawn_message_scroller_watcher(
     Arc::new(WatchHandle::new(handle, &task_handle))
 }
 
-/// Conversation and message read filter.
 #[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy, uniffi::Enum)]
 #[repr(u8)]
 pub enum ReadFilter {
-    /// Return all messages/conversations.
     #[default]
     All = 0,
-    /// Return only unread messages/conversations.
     Unread = 1,
-    /// Return only read messages/conversations.
     Read = 2,
 }
 
