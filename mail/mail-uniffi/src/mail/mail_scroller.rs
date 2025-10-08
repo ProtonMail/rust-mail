@@ -1,8 +1,3 @@
-//! Paginator for managing large result sets with live updates.
-//!
-//! For more information, see the [`RealPaginator`] struct.
-//!
-
 use crate::errors::MailScrollerError;
 use crate::mail::datatypes::{Conversation, Message};
 use crate::{WatchHandle, async_runtime, uniffi_async};
@@ -283,17 +278,6 @@ impl From<ReadFilter> for RealReadFilter {
     }
 }
 
-/// Represents a paginated view of a result set.
-///
-/// The [`Paginator`] manages the result set, providing pagination capabilities
-/// and handling live updates. It can be used for both paginated and
-/// non-paginated result sets, offering a consistent interface for data access.
-///
-/// It manages a sliding window of results, pre-fetching adjacent pages for
-/// quick access while maintaining a consistent view of the data even as it
-/// changes. It handles live updates, cursor management, and provides an
-/// intuitive navigation experience through the result set.
-///
 #[derive(uniffi::Object)]
 pub struct ConversationScroller {
     scroller: Arc<RealMailScroller>,
@@ -388,17 +372,6 @@ impl ConversationScroller {
     }
 }
 
-/// Represents a paginated view of a result set.
-///
-/// The [`Paginator`] manages the result set, providing pagination capabilities
-/// and handling live updates. It can be used for both paginated and
-/// non-paginated result sets, offering a consistent interface for data access.
-///
-/// It manages a sliding window of results, pre-fetching adjacent pages for
-/// quick access while maintaining a consistent view of the data even as it
-/// changes. It handles live updates, cursor management, and provides an
-/// intuitive navigation experience through the result set.
-///
 #[derive(uniffi::Object)]
 pub struct MessageScroller {
     scroller: Arc<RealMailScroller>,
@@ -494,17 +467,6 @@ impl MessageScroller {
     }
 }
 
-/// Represents a paginated view of a result set.
-///
-/// The [`Paginator`] manages the result set, providing pagination capabilities
-/// and handling live updates. It can be used for both paginated and
-/// non-paginated result sets, offering a consistent interface for data access.
-///
-/// It manages a sliding window of results, pre-fetching adjacent pages for
-/// quick access while maintaining a consistent view of the data even as it
-/// changes. It handles live updates, cursor management, and provides an
-/// intuitive navigation experience through the result set.
-///
 #[derive(uniffi::Object)]
 pub struct SearchScroller {
     scroller: Arc<RealMailScroller>,
