@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.149.12] - 2025-10-08
+
+### Changed
+
+- Following methods `conversation`, `watch_conversation` and `messages_for_conversation` requires new parameter `show_trashed: bool`
+- Feature-gate some test only `Conversation` methods
+
+### Features
+
+- Add update_next_message_on_move action
+- Add swipe_to_adjacent_conversation setting
+
+### Fixes
+
+- [ET-168] Scroller does not store `stale` pages
+- Deleted trash should not reappear
+
+
+## [mail-uniffi-v0.149.11] - 2025-10-06
 
 ### Changed
 
