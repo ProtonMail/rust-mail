@@ -440,7 +440,6 @@ impl MessagesState {
                     });
                 }
                 KeyCode::Char('U') => {
-                    tracing::info!("foobar");
                     let ctx = ctx.clone();
                     match state.body.unsubscribe_from_newsletter() {
                         Ok(action) => {
