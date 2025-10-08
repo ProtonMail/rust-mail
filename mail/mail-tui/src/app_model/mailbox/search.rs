@@ -3,29 +3,28 @@ use crate::app_model::mailbox::Message;
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::KeyCode;
-use proton_mail_common::{MailUserContext, Mailbox};
+use proton_mail_common::datatypes::IncludeFilter;
 use ratatui::Frame;
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::Clear;
-use std::sync::Arc;
-
-use super::messages::MessagesState;
 
 pub struct SearchStatusBar {
-    pub search_phrase: String,
+    pub keywords: String,
     pub total: u64,
 }
 
 pub struct Search {
     search: TextInputState,
+    include: IncludeFilter,
 }
 
 impl Search {
-    pub fn new() -> Self {
+    pub fn new(include: IncludeFilter) -> Self {
         Self {
             search: TextInputState::new(),
+            include,
         }
     }
 }
@@ -46,6 +45,7 @@ impl Search {
                 KeyCode::Enter => {
                     return Command::message(Message::SearchSubmit(
                         self.search.value().trim().to_string(),
+                        self.include,
                     ));
                 }
 
@@ -56,20 +56,6 @@ impl Search {
         }
 
         Command::none()
-    }
-
-    pub fn update(
-        user_ctx: &Arc<MailUserContext>,
-        message: Message,
-        mbox: &Mailbox,
-    ) -> Command<Messages> {
-        match message {
-            Message::SearchSubmit(search_phrase) => Command::batch(vec![
-                Command::message(Message::CloseSearchPopup),
-                MessagesState::from_search(user_ctx.to_owned(), mbox.to_owned(), search_phrase),
-            ]),
-            _ => Command::none(),
-        }
     }
 
     pub fn help_options(vec: &mut Vec<(&'static str, &'static str)>) {

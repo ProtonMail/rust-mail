@@ -94,6 +94,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 } else {
                     None
                 };
+
                 return Ok(task);
             } else {
                 debug!("Cursor points to empty scroll data, will sync first page instead");

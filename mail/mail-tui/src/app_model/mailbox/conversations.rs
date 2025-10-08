@@ -11,7 +11,9 @@ use anyhow::{Context, anyhow};
 use crossterm::event::KeyModifiers;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
-use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
+use proton_mail_common::datatypes::{
+    ContextualConversation, IncludeFilter, LocalConversationId, ReadFilter,
+};
 use proton_mail_common::mail_scroller::{MailScroller, ScrollerUpdate};
 use proton_mail_common::models::{Conversation, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::{MailContextResult, MailUserContext, Mailbox};
@@ -27,6 +29,7 @@ use throbber_widgets_tui::ThrobberState;
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
     paginator: Paginator,
+    include: IncludeFilter,
     conversations: Vec<ContextualConversation>,
     table_state: ScrollableTableState,
     messages: MessagesStatus,
@@ -40,11 +43,13 @@ impl ConversationsState {
         ctx: Arc<MailUserContext>,
         mbox: Mailbox,
         label: LabelWithCounters,
-        filter: ReadFilter,
+        read: ReadFilter,
+        include: IncludeFilter,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();
+
         Command::task(async move {
-            match Self::new_impl(ctx, label_id, filter).await {
+            match Self::new_impl(ctx, label_id, read, include).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenConversationView(mbox, label, state)),
                     background_command,
@@ -61,10 +66,11 @@ impl ConversationsState {
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
-        filter: ReadFilter,
+        read: ReadFilter,
+        include: IncludeFilter,
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) =
-            MailScroller::conversations(ctx.as_weak(), label_id, filter, ITEM_LIMIT).await?;
+            MailScroller::conversations(ctx.as_weak(), label_id, read, include, ITEM_LIMIT).await?;
 
         let (paginator, command) = Paginator::new(scroller, handle, |update| match update {
             ScrollerUpdate::Append { src: _, items } => ConversationMessage::NextPage(items).into(),
@@ -95,6 +101,7 @@ impl ConversationsState {
         Ok((
             Self {
                 paginator,
+                include,
                 table_state: ScrollableTableState::new(Some(0)),
                 messages: MessagesStatus::None,
                 conversations: vec![],
@@ -222,8 +229,10 @@ impl ConversationsState {
                 self.table_state.prev();
                 Command::None
             }
+
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
+
                 if self.table_state.selected().unwrap_or_default()
                     >= self.conversations.len().saturating_sub(1)
                     && !self.fetching
@@ -231,40 +240,65 @@ impl ConversationsState {
                     self.fetching = true;
                     return self.paginator.next_page_command();
                 }
+
                 Command::None
             }
+
             KeyCode::Char(' ') => {
                 self.table_state.toggle();
                 Command::None
             }
+
             KeyCode::Char('a') => {
                 self.table_state.mark_many(0..self.conversations.len());
                 Command::None
             }
+
             KeyCode::Char('A') => {
                 self.table_state.unmark_many(0..self.conversations.len());
                 Command::None
             }
+
             KeyCode::Char('s') => Message::OpenLabelSelectPopup.into(),
+
             KeyCode::Char('m') => {
                 Message::OpenMoveItemsPopup(Items::Conversation(self.convs())).into()
             }
+
             KeyCode::Char('l') => {
                 Message::OpenLabelItemPopup(Items::Conversation(self.convs())).into()
             }
+
             KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 ConversationMessage::HasMore.into()
             }
+
             KeyCode::Char('u') => ConversationMessage::MarkUnread(self.convs()).into(),
             KeyCode::Char('r') => ConversationMessage::MarkRead(self.convs()).into(),
             KeyCode::Char('d') => ConversationMessage::DeletePermanently(self.convs()).into(),
             KeyCode::Char('f') => ConversationMessage::Star(self.convs()).into(),
             KeyCode::Char('F') => ConversationMessage::Unstar(self.convs()).into(),
-            KeyCode::Char('E') => ConversationMessage::DeleteAll(self.opened_label).into(),
+            KeyCode::Char('X') => ConversationMessage::DeleteAll(self.opened_label).into(),
+
+            KeyCode::Char(ch @ ('E' | 'I')) => {
+                let include = match ch {
+                    'E' => IncludeFilter::Default,
+                    'I' => IncludeFilter::WithSpamAndTrash,
+                    _ => unreachable!(),
+                };
+
+                Command::batch(vec![
+                    Command::message(Message::SetIncludeFilter(include)),
+                    Command::message(Message::Sync(mbox.clone())),
+                ])
+            }
+
             KeyCode::Char('z') => {
                 Message::OpenSnoozePopup(Items::Conversation(self.convs())).into()
             }
+
             KeyCode::Enter => self.selected_id_and(|id| ConversationMessage::Open(id).into()),
+
             _ => Command::None,
         }
     }
@@ -398,26 +432,36 @@ impl ConversationsState {
     }
 
     pub fn view(&mut self, frame: &mut Frame, mut area: Rect) {
+        let mut banner = None;
+
         if let Some(AutoDeleteBanner { state, folder }) = self.autodelete_banner {
-            let banner = match state {
+            banner = Some(match state {
                 AutoDeleteState::AutoDeleteUpsell => format!(
-                    "Upgrade to automatically remove emails that have been in {folder} for over 30 days."
+                    "> Upgrade to automatically remove emails that have been in {folder} for over 30 days."
                 ),
                 AutoDeleteState::AutoDeleteDisabled => format!(
-                    "Auto-delete is off. Messages in {folder} will remain until you delete them manually."
+                    "> Auto-delete is off. Messages in {folder} will remain until you delete them manually."
                 ),
                 AutoDeleteState::AutoDeleteEnabled => {
-                    format!("Messages in {folder} will be automatically deleted after 30 days.")
+                    format!("> Messages in {folder} will be automatically deleted after 30 days.")
                 }
-            };
+            });
+        } else if self.paginator.supports_include_filter() {
+            banner = Some(if self.include.has_spam_and_trash() {
+                "> Seeing too many messages? [E]xclude Spam/Trash.".into()
+            } else {
+                "> Can't find what you're looking for? [I]nclude Spam/Trash.".into()
+            });
+        }
 
+        if let Some(banner) = banner {
+            let banner = Paragraph::new(banner).cyan();
             let banner_area;
 
-            [banner_area, area] = Layout::default()
-                .constraints([Constraint::Length(1), Constraint::Percentage(100)])
-                .areas(area);
+            [banner_area, area] =
+                Layout::vertical([Constraint::Length(2), Constraint::Fill(1)]).areas(area);
 
-            frame.render_widget(Paragraph::new(banner), banner_area);
+            frame.render_widget(banner, banner_area);
         }
 
         match &mut self.messages {

@@ -4,7 +4,10 @@ mod mail_scroller_watcher;
 pub use self::mail_scroller_source::*;
 pub use self::mail_scroller_watcher::*;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
-use crate::datatypes::{ContextualConversation, ReadFilter, SearchOptions};
+use crate::datatypes::{
+    AlmostAllMail, ContextualConversation, IncludeFilter, ReadFilter, SearchOptions, SystemLabelId,
+};
+use crate::models::MailSettings;
 use crate::models::{ConversationScrollData, Message, MessageScrollData};
 use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
@@ -12,10 +15,13 @@ use anyhow::anyhow;
 use derive_more::Display;
 use futures::select;
 use itertools::Itertools;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::app_events::OnEnterForegroundEvent;
 use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::{Label, ModelIdExtension};
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
-use stash::stash::WatcherHandle;
+use stash::orm::Model;
+use stash::stash::{Tether, WatcherHandle};
 use std::sync::{Arc, Weak};
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::AbortHandle;
@@ -129,6 +135,7 @@ pub struct MailScroller {
     id: Uuid,
     command: flume::Sender<ScrollerCommand>,
     ordered_command: flume::Sender<ScrollerOrderedCommand>,
+    supports_include_filter: bool,
     aborts: Vec<AbortHandle>,
 }
 
@@ -152,65 +159,118 @@ pub struct MailScrollerHandle<T> {
 impl MailScroller {
     pub async fn conversations(
         ctx: Weak<MailUserContext>,
-        local_label_id: LocalLabelId,
-        unread: ReadFilter,
+        mut label: LocalLabelId,
+        read: ReadFilter,
+        include: IncludeFilter,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<ContextualConversation>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let tether = ctx.user_stash().connection().await?;
 
-        let order_dir = ScrollOrderDir::for_local_label(local_label_id, &tether).await?;
-        let order_field = ScrollOrderField::for_local_label(local_label_id, &tether).await?;
+        let alt_label = Self::alternative_label(label, &tether).await?;
+        let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
+        let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
+
+        if include.has_spam_and_trash()
+            && let Some(alt_label) = alt_label
+        {
+            label = alt_label;
+        }
 
         let source = DataScrollerSource::<ConversationScrollData>::new(
-            local_label_id,
-            unread,
+            label,
+            read,
             page_size,
             order_dir,
             order_field,
         );
 
-        MailScroller::new(ctx, source, page_size).await
+        Self::new(ctx, source, page_size, alt_label.is_some()).await
     }
 
     pub async fn messages(
         ctx: Weak<MailUserContext>,
-        local_label_id: LocalLabelId,
-        unread: ReadFilter,
+        mut label: LocalLabelId,
+        read: ReadFilter,
+        include: IncludeFilter,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let tether = ctx.user_stash().connection().await?;
 
-        let order_dir = ScrollOrderDir::for_local_label(local_label_id, &tether).await?;
-        let order_field = ScrollOrderField::for_local_label(local_label_id, &tether).await?;
+        let alt_label = Self::alternative_label(label, &tether).await?;
+        let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
+        let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
+
+        if include.has_spam_and_trash()
+            && let Some(alt_label) = alt_label
+        {
+            label = alt_label;
+        }
 
         let source = DataScrollerSource::<MessageScrollData>::new(
-            local_label_id,
-            unread,
+            label,
+            read,
             page_size,
             order_dir,
             order_field,
         );
 
-        MailScroller::new(ctx, source, page_size).await
+        Self::new(ctx, source, page_size, alt_label.is_some()).await
     }
 
     pub async fn search(
         ctx: Weak<MailUserContext>,
-        search: SearchOptions,
+        options: SearchOptions,
+        include: IncludeFilter,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let source = SearchScrollerSource::new(search, page_size);
+        let tether = ctx.user_stash().connection().await?;
+        let settings = MailSettings::get_or_default(&tether).await;
 
-        MailScroller::new(ctx, source, page_size).await
+        let label = if include.has_spam_and_trash() {
+            LabelId::all_mail()
+        } else {
+            settings.all_mail()
+        };
+
+        let alt_label = match settings.almost_all_mail {
+            AlmostAllMail::AllMail => None,
+            AlmostAllMail::AlmostAllMail => Some(LabelId::all_mail()),
+        };
+
+        let source = SearchScrollerSource::new(label, options, page_size);
+
+        Self::new(ctx, source, page_size, alt_label.is_some()).await
+    }
+
+    /// If `id` points at the `All Mail` label, this function returns id of the
+    /// `Almost All Mail` label; otherwise it returns `None`.
+    async fn alternative_label(
+        id: LocalLabelId,
+        tether: &Tether,
+    ) -> Result<Option<LocalLabelId>, MailContextError> {
+        let Some(id) = Label::local_id_counterpart(id, tether).await? else {
+            return Ok(None);
+        };
+
+        if id == LabelId::almost_all_mail() {
+            let id = Label::find_by_remote_id(LabelId::all_mail(), tether)
+                .await?
+                .map(|label| label.id());
+
+            Ok(id)
+        } else {
+            Ok(None)
+        }
     }
 
     async fn new<T>(
         ctx: Arc<MailUserContext>,
         source: T,
         page_size: usize,
+        supports_include_filter: bool,
     ) -> Result<(Self, MailScrollerHandle<T::Item>), MailContextError>
     where
         T: MailScrollerSource,
@@ -252,6 +312,7 @@ impl MailScroller {
                 id,
                 command,
                 ordered_command,
+                supports_include_filter,
                 aborts,
             },
             MailScrollerHandle { updates, handle },
@@ -413,6 +474,10 @@ impl MailScroller {
         receiver
             .await
             .map_err(|_| MailContextError::Other(anyhow!("Failed to receive synced response")))?
+    }
+
+    pub fn supports_include_filter(&self) -> bool {
+        self.supports_include_filter
     }
 
     pub fn terminate(&self) {

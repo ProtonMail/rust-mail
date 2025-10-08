@@ -2,7 +2,9 @@ use crate::errors::MailScrollerError;
 use crate::mail::datatypes::{Conversation, Message};
 use crate::{WatchHandle, async_runtime, uniffi_async};
 use proton_mail_common::MailUserContext;
-use proton_mail_common::datatypes::{ContextualConversation, ReadFilter as RealReadFilter};
+use proton_mail_common::datatypes::{
+    ContextualConversation, IncludeFilter as RealIncludeFilter, ReadFilter as RealReadFilter,
+};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::mail_scroller::{
     MailScroller as RealMailScroller, MailScrollerHandle, ScrollerUpdate,
@@ -274,6 +276,23 @@ impl From<ReadFilter> for RealReadFilter {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy, uniffi::Enum)]
+#[repr(u8)]
+pub enum IncludeFilter {
+    #[default]
+    Default,
+    WithSpamAndTrash,
+}
+
+impl From<IncludeFilter> for RealIncludeFilter {
+    fn from(value: IncludeFilter) -> Self {
+        match value {
+            IncludeFilter::Default => RealIncludeFilter::Default,
+            IncludeFilter::WithSpamAndTrash => RealIncludeFilter::WithSpamAndTrash,
+        }
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct ConversationScroller {
     scroller: Arc<RealMailScroller>,
@@ -361,6 +380,11 @@ impl ConversationScroller {
         uniffi_async(async move { scroller.has_more().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
+    }
+
+    #[must_use]
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
     }
 
     pub fn terminate(&self) {
@@ -458,6 +482,11 @@ impl MessageScroller {
             .map_err(Into::into)
     }
 
+    #[must_use]
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
+    }
+
     pub fn terminate(&self) {
         self.scroller.terminate();
     }
@@ -535,6 +564,11 @@ impl SearchScroller {
         uniffi_async(async move { scroller.has_more().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
+    }
+
+    #[must_use]
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
     }
 
     pub fn terminate(&self) {
