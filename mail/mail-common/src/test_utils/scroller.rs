@@ -289,7 +289,7 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 /// This provides a unified interface for testing any type of MailScroller
 /// (conversations, messages, search) with automatic update handling and
 /// convenient test methods.
-pub struct TestScroller<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> {
+pub struct TestScroller<T> {
     scroller: MailScroller,
     handle: MailScrollerHandle<T>,
     collected_items: Vec<T>,

@@ -16,8 +16,8 @@ pub use self::remote_source::*;
 
 pub type MailPaginatorJoinHandle = Option<JoinHandle<Result<(), MailContextError>>>;
 
-pub trait MailScrollerSource: Send + Sync {
-    type Item: Send + Sync + Clone + Debug + ScrollerEq + 'static;
+pub trait MailScrollerSource: Send + Sync + 'static {
+    type Item: Send + Sync + Clone + Debug + ScrollerEq;
 
     /// Initialize the data source and retrieve up to `element_count` elements from the server.
     ///

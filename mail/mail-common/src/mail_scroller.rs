@@ -37,7 +37,7 @@ pub enum MailScrollerError {
 }
 
 #[derive(Debug)]
-pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
+pub enum ScrollerUpdate<T> {
     None(ScrollerSource),
     Append {
         src: ScrollerSource,
@@ -65,7 +65,7 @@ pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
     },
 }
 
-impl<T: Send + Sync + Clone + ScrollerEq + 'static> ScrollerUpdate<T> {
+impl<T> ScrollerUpdate<T> {
     pub fn is_none(&self) -> bool {
         matches!(self, ScrollerUpdate::None(_))
     }
@@ -145,7 +145,7 @@ impl Drop for MailScroller {
     }
 }
 
-pub struct MailScrollerHandle<T: Send + Sync + Clone + ScrollerEq + 'static> {
+pub struct MailScrollerHandle<T> {
     pub updates: flume::Receiver<ScrollerUpdate<T>>,
     pub handle: DropRemoveTableObserverHandle,
 }
@@ -208,11 +208,14 @@ impl MailScroller {
         MailScroller::new(ctx, source, page_size).await
     }
 
-    async fn new<T: MailScrollerSource + 'static>(
+    async fn new<T>(
         ctx: Arc<MailUserContext>,
         source: T,
         page_size: usize,
-    ) -> Result<(Self, MailScrollerHandle<T::Item>), MailContextError> {
+    ) -> Result<(Self, MailScrollerHandle<T::Item>), MailContextError>
+    where
+        T: MailScrollerSource,
+    {
         let id = Uuid::new_v4();
         let ctx_weak = Arc::downgrade(&ctx);
 
@@ -420,7 +423,7 @@ impl MailScroller {
     }
 }
 
-pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
+pub struct ScrollerWorker<T: MailScrollerSource> {
     ctx: Weak<MailUserContext>,
     source: Arc<RwLock<T>>,
     task: MailPaginatorJoinHandle,
@@ -432,7 +435,7 @@ pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
     ordered_command_send: flume::Sender<ScrollerOrderedCommand>,
 }
 
-impl<T: MailScrollerSource + 'static> Drop for ScrollerWorker<T> {
+impl<T: MailScrollerSource> Drop for ScrollerWorker<T> {
     fn drop(&mut self) {
         if let Some(handle) = self.execute_on_online.take() {
             handle.abort();
@@ -440,7 +443,7 @@ impl<T: MailScrollerSource + 'static> Drop for ScrollerWorker<T> {
     }
 }
 
-impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
+impl<T: MailScrollerSource> ScrollerWorker<T> {
     async fn run(
         ctx: Weak<MailUserContext>,
         mut source: T,
@@ -1023,11 +1026,10 @@ enum ScrollerOrderedCommand {
     ClearCursor(ScrollerSource),
 }
 
-fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
-    old: &[T],
-    new: &[T],
-    src: ScrollerSource,
-) -> ScrollerUpdate<T> {
+fn calculate_scroller_update<T>(old: &[T], new: &[T], src: ScrollerSource) -> ScrollerUpdate<T>
+where
+    T: ScrollerEq + Clone,
+{
     let prefix_count = old
         .iter()
         .zip(new.iter())
@@ -1089,7 +1091,7 @@ fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
 }
 
 #[cfg(any(test, feature = "test-utils"))]
-impl<T: Send + Sync + Clone + ScrollerEq + 'static> Clone for ScrollerUpdate<T> {
+impl<T: Clone> Clone for ScrollerUpdate<T> {
     fn clone(&self) -> Self {
         match self {
             ScrollerUpdate::None(src) => ScrollerUpdate::None(*src),
