@@ -1,3 +1,9 @@
+mod mail_scroller_source;
+mod mail_scroller_watcher;
+
+pub use self::mail_scroller_source::*;
+pub use self::mail_scroller_watcher::*;
+use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::datatypes::{ContextualConversation, ReadFilter, SearchOptions};
 use crate::models::{ConversationScrollData, Message, MessageScrollData};
 use crate::traits::ScrollerEq;
@@ -6,6 +12,7 @@ use anyhow::anyhow;
 use derive_more::Display;
 use futures::select;
 use itertools::Itertools;
+use proton_core_common::app_events::OnEnterForegroundEvent;
 use proton_core_common::datatypes::LocalLabelId;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
@@ -13,14 +20,6 @@ use std::sync::{Arc, Weak};
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::AbortHandle;
 use uuid::Uuid;
-
-mod mail_scroller_source;
-mod mail_scroller_watcher;
-
-use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
-pub use mail_scroller_source::*;
-pub use mail_scroller_watcher::*;
-use proton_core_common::app_events::OnEnterForegroundEvent;
 
 #[cfg(test)]
 #[path = "tests/mail_scroller/message_scroller.rs"]

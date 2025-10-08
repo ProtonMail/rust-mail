@@ -1,3 +1,9 @@
+use super::{
+    MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
+    remote_source::RemoteSource,
+};
+use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
+use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 use anyhow::anyhow;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
@@ -6,13 +12,6 @@ use proton_core_common::{
 };
 use stash::stash::Tether;
 use tracing::{debug, warn};
-
-use super::{
-    MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
-    remote_source::RemoteSource,
-};
-use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
-use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 
 #[derive(Debug)]
 pub struct DataScrollerSource<T: RemoteSource> {
