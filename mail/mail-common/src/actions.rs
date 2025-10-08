@@ -208,6 +208,10 @@ pub(crate) fn register_actions(
                 queue,
                 mail_settings::UpdateMobileActionsHandler { api: api.clone() },
             );
+            reg(
+                queue,
+                mail_settings::UpdateNextMessageOnMoveHandler { api: api.clone() },
+            );
             reg(queue, PushNotificationActionHandler { api: api.clone() })
         }
 

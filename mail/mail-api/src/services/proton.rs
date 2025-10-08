@@ -187,6 +187,11 @@ pub trait ProtonMail {
         mobile_settings: PutMobileSettings,
     ) -> ApiServiceResult<PutMobileSettingsResponse>;
 
+    async fn put_next_message_on_move(
+        &self,
+        request: PutNextMessageOnMoveRequest,
+    ) -> ApiServiceResult<PutNextMessageOnMoveResponse>;
+
     /// TODO: Document this method.
     ///
     /// # Errors

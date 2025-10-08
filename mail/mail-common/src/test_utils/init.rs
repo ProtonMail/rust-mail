@@ -10,7 +10,9 @@ use proton_core_api::services::proton::{AddressId, EventId, LabelId, LabelType a
 use proton_core_api::services::proton::{GetEventsLatestResponse, GetKeysAllResponse};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::prelude::GetIncomingDefaultResponse;
-use proton_mail_api::services::proton::request_data::PutMobileSettings;
+use proton_mail_api::services::proton::request_data::{
+    PutMobileSettings, PutNextMessageOnMoveRequest,
+};
 use proton_mail_api::services::proton::response_data::MessageMetadata;
 use proton_mail_api::services::proton::response_data::{
     AlmostAllMail, Attachment as ApiAttachment, ComposerDirection, ComposerMode,
@@ -597,6 +599,23 @@ impl MailTestContext {
     ) {
         Mock::given(method("PUT"))
             .and(path("/api/mail/v4/settings/mobilesettings"))
+            .and(body_json(&expected_payload))
+            .respond_with(response)
+            .expect(expect)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    #[function_name::named]
+    pub async fn mock_put_next_message_on_move(
+        &self,
+        response: ResponseTemplate,
+        expected_payload: PutNextMessageOnMoveRequest,
+        expect: impl Into<Times>,
+    ) {
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/settings/next-message-on-move"))
             .and(body_json(&expected_payload))
             .respond_with(response)
             .expect(expect)

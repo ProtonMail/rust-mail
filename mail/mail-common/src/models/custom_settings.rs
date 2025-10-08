@@ -29,6 +29,9 @@ pub struct CustomSettings {
 
     #[DbField]
     pub mobile_signature_enabled: Option<bool>,
+
+    #[DbField]
+    pub swipe_to_adjacent_conversation: Option<bool>,
 }
 
 impl CustomSettings {
@@ -131,8 +134,23 @@ impl CustomSettings {
     }
 
     #[must_use]
+    pub fn with_swipe_to_adjacent_conversation(
+        mut self,
+        swipe_to_adjacent_conversation: bool,
+    ) -> Self {
+        self.swipe_to_adjacent_conversation = Some(swipe_to_adjacent_conversation);
+        self
+    }
+
+    #[must_use]
     pub fn mobile_signature_enabled(&self) -> bool {
         self.mobile_signature_enabled.unwrap_or(true)
+    }
+
+    #[must_use]
+    #[instrument(skip_all)]
+    pub fn swipe_to_adjacent_conversation(&self) -> bool {
+        self.swipe_to_adjacent_conversation.unwrap_or(false)
     }
 
     #[instrument(skip_all)]
@@ -147,6 +165,25 @@ impl CustomSettings {
                 let mut this = CustomSettings::get_or_default(tx.tether()).await?;
 
                 this.mobile_signature_enabled = enabled;
+                this.save(tx).await?;
+
+                Ok(())
+            })
+            .await
+    }
+
+    #[instrument(skip_all)]
+    pub async fn update_swipe_to_adjacent_conversation(
+        ctx: &MailUserContext,
+        enabled: Option<bool>,
+    ) -> Result<(), StashError> {
+        ctx.user_stash()
+            .connection()
+            .await?
+            .tx(async move |tx| {
+                let mut this = CustomSettings::get_or_default(tx.tether()).await?;
+
+                this.swipe_to_adjacent_conversation = enabled;
                 this.save(tx).await?;
 
                 Ok(())

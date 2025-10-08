@@ -226,6 +226,18 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
             .into_body_json()?)
     }
 
+    async fn put_next_message_on_move(
+        &self,
+        request: PutNextMessageOnMoveRequest,
+    ) -> ApiServiceResult<PutNextMessageOnMoveResponse> {
+        Ok(PUT!("{MAIL_V4}/settings/next-message-on-move")
+            .body_json(request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn put_conversations_delete(
         &self,
         ids: Vec<ConversationId>,

@@ -392,7 +392,7 @@ impl ToSql for MimeType {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom, Serialize, Deserialize)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum NextMessageOnMove {
