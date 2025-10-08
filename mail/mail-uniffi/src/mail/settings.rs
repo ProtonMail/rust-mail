@@ -122,7 +122,6 @@ impl CustomSettings {
         .map_err(ProtonError::from)
     }
 
-    #[instrument(skip_all)]
     pub async fn swipe_to_adjacent_conversation(&self) -> Result<bool, ProtonError> {
         let ctx = self.ctx()?;
 
@@ -136,7 +135,6 @@ impl CustomSettings {
         .map_err(Into::into)
     }
 
-    #[instrument(skip_all)]
     pub async fn set_swipe_to_adjacent_conversation(
         &self,
         enabled: bool,

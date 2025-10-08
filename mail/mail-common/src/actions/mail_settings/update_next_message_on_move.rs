@@ -49,7 +49,13 @@ impl Handler for UpdateNextMessageOnMoveHandler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let mut mail_settings = MailSettings::get_or_default(bond.tether()).await;
+        let mut mail_settings = match MailSettings::get(bond.tether()).await? {
+            Some(ms) => ms,
+            None => {
+                tracing::warn!("Failed to get mail settings");
+                MailSettings::default()
+            }
+        };
 
         action.old_next_message_on_move = mail_settings.next_message_on_move;
         mail_settings.next_message_on_move = Some(if action.next_message_on_move {
@@ -69,7 +75,13 @@ impl Handler for UpdateNextMessageOnMoveHandler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let mut mail_settings = MailSettings::get_or_default(bond.tether()).await;
+        let mut mail_settings = match MailSettings::get(bond.tether()).await? {
+            Some(ms) => ms,
+            None => {
+                tracing::warn!("Failed to get mail settings");
+                MailSettings::default()
+            }
+        };
         mail_settings.next_message_on_move = action.old_next_message_on_move;
         mail_settings.save(bond).await?;
 
