@@ -88,6 +88,14 @@ impl Handler for PrefetchHandler {
             return Ok(());
         };
 
+        if local_message.deleted {
+            tracing::debug!(
+                "Message is deleted, skipping prefetch action, message_id: `{}`",
+                action.local_id
+            );
+            return Ok(());
+        }
+
         if let Err(e) = local_message.prefetch_message_body(&ctx, &mut guard).await {
             match e {
                 MailContextError::Api(network_error) => {

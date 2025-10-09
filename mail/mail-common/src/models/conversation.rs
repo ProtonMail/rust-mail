@@ -541,6 +541,8 @@ impl Conversation {
         if let Some(remote_id) = self.remote_id.clone()
             && let Some(mut existing) = Self::find_by_remote_id(remote_id, bond).await?
         {
+            self.deleted = existing.deleted;
+
             if existing.is_known {
                 let existing_labels = existing
                     .labels
@@ -1045,6 +1047,19 @@ impl Conversation {
         }
 
         Ok(())
+    }
+
+    pub async fn is_deleted(id: LocalConversationId, tether: &Tether) -> Result<bool, StashError> {
+        Ok(tether
+            .query_value_opt(
+                format!(
+                    "SELECT deleted FROM {} WHERE local_id=? AND deleted=1",
+                    Self::table_name()
+                ),
+                params![id],
+            )
+            .await?
+            .unwrap_or(false))
     }
 
     /// Updates active label counters after undelete of conversation.

@@ -114,6 +114,10 @@ pub struct ContextualConversation {
     #[scroller_eq(skip)]
     /// Whether the conversation has messages downloaded.
     pub has_messages: bool,
+
+    #[scroller_eq(skip)]
+    /// Whether the conversation is deleted.
+    pub deleted: bool,
 }
 
 impl ContextualConversation {
@@ -152,6 +156,7 @@ impl ContextualConversation {
             snoozed_until: conversation.snoozed_until,
             hidden_messages_banner,
             has_messages: conversation.has_messages,
+            deleted: conversation.deleted,
         })
     }
 

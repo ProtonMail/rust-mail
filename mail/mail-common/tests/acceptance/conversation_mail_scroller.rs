@@ -1611,9 +1611,7 @@ async fn test_conversation_mail_scroller_handles_stale_data_on_next_and_previous
 
     // The location is trash so we should get no update as the data is stale
     test_scroller.fetch_more().unwrap(); // 1st fetch_more
-    test_scroller
-        .match_next_update(TestUpdate::Error("MailScroller: MailScroller cannot serve more data, counters seems not to be fulfillable".to_string()))
-        .await;
+    test_scroller.match_next_update(TestUpdate::None).await;
     assert!(test_scroller.has_more().await.unwrap());
 
     // Update the database should trigger a new fetch_more
@@ -1623,9 +1621,7 @@ async fn test_conversation_mail_scroller_handles_stale_data_on_next_and_previous
     new_data.save_to_database(&mut tether).await;
 
     // We shouldn't get any update as the data is still stale
-    test_scroller
-        .match_next_update(TestUpdate::Error("MailScroller: MailScroller cannot serve more data, counters seems not to be fulfillable".to_string()))
-        .await;
+    test_scroller.match_next_update(TestUpdate::None).await;
 
     // However, if we switch to a different location (not trash or spam), we should get an update despite the data being stale
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();

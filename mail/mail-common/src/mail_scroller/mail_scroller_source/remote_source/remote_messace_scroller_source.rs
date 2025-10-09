@@ -16,7 +16,7 @@ use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::{
-    ProtonMail, common::MessageId, prelude::GetMessagesOptions,
+    ProtonMail, common::MessageId, prelude::GetMessagesOptions, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,
 };
 use stash::stash::{Bond, Stash, Tether};
@@ -51,7 +51,7 @@ impl RemoteSource for MessageScrollData {
                 &session,
                 stash,
                 local_label_id,
-                remote_label_id,
+                remote_label_id.clone(),
                 unread,
                 page_size,
                 order_dir,
@@ -73,6 +73,7 @@ impl RemoteSource for MessageScrollData {
             {
                 let prefetch_jobs = items
                     .into_iter()
+                    .filter(|item| item.deleted)
                     .filter_map(|item| Some(PrefetchJob::Message(item.local_id?)))
                     .collect();
 

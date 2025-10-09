@@ -52,7 +52,7 @@ impl RemoteSource for ConversationScrollData {
                 &session,
                 stash,
                 local_label_id,
-                remote_label_id,
+                remote_label_id.clone(),
                 unread,
                 page_size,
                 order_dir,
@@ -75,6 +75,7 @@ impl RemoteSource for ConversationScrollData {
                 let prefetch_jobs = items
                     .into_iter()
                     .filter(|item| !item.has_messages)
+                    .filter(|item| item.deleted)
                     .map(|item| PrefetchJob::Conversation(item.local_id, local_label_id))
                     .collect();
 

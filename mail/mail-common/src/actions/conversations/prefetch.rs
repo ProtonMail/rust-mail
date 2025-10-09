@@ -82,6 +82,15 @@ impl Handler for PrefetchHandler {
         tracing::trace!("Prefetching {:?}", action.local_id);
 
         let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
+        let deleted = Conversation::is_deleted(action.local_id, guard.tether()).await?;
+
+        if deleted {
+            tracing::debug!(
+                "Conversation is deleted, skipping prefetch action, conversation_id: `{}`",
+                action.local_id
+            );
+            return Ok(());
+        }
 
         let _ = Conversation::sync_conversation_messages(
             ctx.network_monitor_service(),
