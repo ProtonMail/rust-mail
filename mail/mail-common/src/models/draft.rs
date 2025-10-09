@@ -1155,6 +1155,10 @@ impl DraftAttachmentMetadata {
         self.set_state(DraftAttachmentUploadState::Uploading);
     }
 
+    pub fn set_disposition_swap_state(&mut self) {
+        self.set_state(DraftAttachmentUploadState::DispositionSwap);
+    }
+
     /// Update to offline.
     pub fn set_offline_state(&mut self) {
         self.set_state(DraftAttachmentUploadState::Offline);
@@ -1393,16 +1397,12 @@ pub struct DraftAttachmentsTotalCountAndSize {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[repr(u8)]
 pub enum DraftAttachmentUploadState {
-    /// Attachment has not been uploaded.
     Uploading = 0,
-    /// Attachment has been uploaded to the server
     Uploaded = 1,
-    /// Attachment failed to upload or encrypt.
     Error = 2,
-    /// Could not upload due to lack of network,
     Offline = 3,
-    /// This attachment needs an upload triggered by a save action.
     Pending = 4,
+    DispositionSwap = 5,
 }
 
 impl ToSql for DraftAttachmentUploadState {
@@ -1419,6 +1419,7 @@ impl FromSql for DraftAttachmentUploadState {
             2 => Ok(DraftAttachmentUploadState::Error),
             3 => Ok(DraftAttachmentUploadState::Offline),
             4 => Ok(DraftAttachmentUploadState::Pending),
+            5 => Ok(DraftAttachmentUploadState::DispositionSwap),
             v => Err(FromSqlError::OutOfRange(v)),
         }
     }

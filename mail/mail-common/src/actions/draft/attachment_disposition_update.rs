@@ -4,7 +4,7 @@ use crate::datatypes::attachment::CombinedAttachmentDisposition;
 use crate::datatypes::{Disposition, LocalAttachmentId};
 use crate::draft::AttachmentDispositionSwapError;
 use crate::models::{
-    Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
+    Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
     DraftSendResultOrigin, MetadataId,
 };
 use proton_action_queue::action::{
@@ -134,7 +134,7 @@ impl Handler for AttachmentDispositionUpdateHandler {
         }
 
         // reset to uploaded state
-        metadata.set_uploading_state();
+        metadata.set_disposition_swap_state();
         metadata.action_id = Some(this_id);
         metadata.save(tx).await?;
         Ok(())
@@ -174,25 +174,45 @@ impl Handler for AttachmentDispositionUpdateHandler {
                         action.attachment_id,
                     ))?;
 
-            let Some(AttachmentType::Remote(Some(remote_id))) =
-                Attachment::local_id_counterpart(action.attachment_id, writer_guard.tether())
+            let mut attachment =
+                Attachment::find_by_id(action.attachment_id, writer_guard.tether())
                     .await?
-            else {
+                    .ok_or(AttachmentDispositionSwapError::AttachmentNotFound(
+                        action.attachment_id,
+                    ))?;
+            let Some(remote_id) = attachment.remote_id() else {
                 return Err(AttachmentDispositionSwapError::AttachmentHasNoRemoteId(
                     action.attachment_id,
                 )
                 .into());
             };
 
-            // reset state to uploading again. If the user adds an inline attachment and swaps
+            // reset state to disp. swap again. If the user adds an inline attachment and swaps
             // the disposition in quick succession, the state after upload will be Uploaded and
             // some events will not fire.
-            metadata.set_uploading_state();
+            metadata.set_disposition_swap_state();
             writer_guard
-                .tx(async |tx| Ok(metadata.save(tx).await?))
+                .tx(async |tx| {
+                    // we need to reset the attachment state here since it's possible that after attachment upload
+                    // the state will be rest after the attachment is uploaded to the server. If we don't
+                    // the client UI will not update correctly.
+                    if let DraftAttachmentDispositionUpdateMode::Swap(disp) = &action.mode {
+                        match disp {
+                            CombinedAttachmentDisposition::Attachment => {
+                                attachment.disposition = Disposition::Attachment;
+                            }
+                            CombinedAttachmentDisposition::Inline(cid) => {
+                                attachment.disposition = Disposition::Inline;
+                                attachment.content_id = Some(cid.clone());
+                            }
+                        }
+                        attachment.save(tx).await?;
+                    }
+                    Ok(metadata.save(tx).await?)
+                })
                 .await
                 .inspect_err(|e: &MailContextError| {
-                    tracing::error!("Failed to update attachment metadata: {e}")
+                    tracing::error!("Failed to update attachment metadata before request: {e}")
                 })?;
 
             let new_disposition = match action.mode.clone() {
