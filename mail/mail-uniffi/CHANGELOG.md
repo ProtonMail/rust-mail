@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Track transactions
+
+### Features
+
+- Introduce MailboxCursor
+
+### Fixes
+
+- Hidden message banner is not shown for all trashed messages
+- [ET-2816] Fix draft attachment list not updated
+
+
+## [mail-uniffi-v0.149.13] - 2025-10-09
+
 ### Features
 
 - Can't find what you're looking for? Include Spam/Trash.
