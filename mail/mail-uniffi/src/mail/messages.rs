@@ -886,6 +886,30 @@ pub async fn get_message_body(
     .map_err(ActionError::from)
 }
 
+/// Return the boolean value indicating if the message sender is blocked.
+///
+/// When message is not present in database, it will return `None`.
+/// Otherwise, it will return `Some(bool)` where `true` means the sender is blocked
+/// and `false` means the sender is not blocked.
+///
+/// Accepts message id as a parameter.
+///
+#[uniffi_export]
+pub async fn is_message_sender_blocked(
+    mbox: &Mailbox,
+    message_id: Id,
+) -> Result<Option<bool>, ActionError> {
+    let ctx = mbox.ctx()?;
+    uniffi_async(async move {
+        let tether = ctx.user_stash().connection().await?;
+        Ok::<_, RealProtonMailError>(
+            models::Message::is_sender_blocked(message_id.into(), &tether).await?,
+        )
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
 /// Data for watched messages.
 #[derive(uniffi::Record)]
 pub struct WatchedMessages {
