@@ -737,15 +737,6 @@ impl Message {
 
         for metadata in metadata {
             let mut message = Message::from_api_metadata(metadata, bond).await?;
-            let deleted = bond
-                .query_value_opt::<bool>(
-                    "SELECT deleted FROM messages WHERE remote_id = ?",
-                    params![message.remote_id.clone()],
-                )
-                .await?;
-            if let Some(deleted) = deleted {
-                message.deleted = deleted;
-            }
             Self::save(&mut message, bond).await?;
             messages.push(message);
         }
