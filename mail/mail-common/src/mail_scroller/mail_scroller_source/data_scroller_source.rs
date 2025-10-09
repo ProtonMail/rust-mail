@@ -94,6 +94,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 } else {
                     None
                 };
+
                 return Ok(task);
             } else {
                 debug!("Cursor points to empty scroll data, will sync first page instead");
@@ -490,12 +491,12 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     async fn change_filter(
         &mut self,
         ctx: &MailUserContext,
-        filter: ReadFilter,
+        unread: ReadFilter,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let tether = ctx.user_stash().connection().await?;
-        self.unread = filter;
+        self.unread = unread;
         self.state =
-            MailScrollerState::new_online(self.local_label_id, filter, self.page_size, &tether)
+            MailScrollerState::new_online(self.local_label_id, unread, self.page_size, &tether)
                 .await?;
         debug!("Changed filter, new state: {}, initializing...", self.state);
 

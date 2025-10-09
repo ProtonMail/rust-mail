@@ -18,7 +18,7 @@ use messages::BlockOrUnblock;
 pub use model::MailboxModel;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId, Refresh, UnixTimestamp};
 use proton_mail_common::datatypes::{
-    ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
+    ContextualConversation, IncludeSwitch, LocalAttachmentId, LocalConversationId, LocalMessageId,
 };
 use proton_mail_common::draft::attachments::DraftAttachment;
 use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
@@ -53,13 +53,15 @@ pub enum Message {
     CloseComposer,
     NewLabelWatcher(TuiWatchHandle),
     Composer(ComposerMessage),
-    SearchSubmit(String),
+    SearchSubmit(String, IncludeSwitch),
     SearchPopup(Search),
     CloseSearchPopup,
     SearchStatusBar(SearchStatusBar),
     ClearSearchStatusBar,
+    SetInclude(IncludeSwitch),
     OpenContacts,
 }
+
 pub struct LabelAs<T: LocalIdMarker> {
     pub source_label_id: LocalLabelId,
     pub item_ids: Vec<T>,

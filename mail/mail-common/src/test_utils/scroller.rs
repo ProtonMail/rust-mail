@@ -1,7 +1,10 @@
-use std::{collections::HashMap, fmt::Display, time::Duration};
+use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
 
 use proton_core_api::services::proton::LabelId;
-use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_core_common::{
+    datatypes::LocalLabelId,
+    models::{Label, ModelExtension, ModelIdExtension},
+};
 use stash::{
     orm::Model,
     params,
@@ -10,7 +13,9 @@ use stash::{
 
 use crate::{
     actions::ConversationOrMessage,
-    conv_id, conversation, label, lbl_id, message,
+    conv_id, conversation,
+    datatypes::{IncludeSwitch, ReadFilter, SearchOptions},
+    label, lbl_id, message,
     models::{Conversation, ConversationCounters, Message, MessageCounters},
     msg_id,
     traits::ScrollerEq,
@@ -532,53 +537,81 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
             }
         }
     }
+
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
+    }
 }
 
 impl TestScroller<crate::datatypes::ContextualConversation> {
     pub async fn conversations(
-        user_ctx: &std::sync::Arc<MailUserContext>,
-        local_label_id: proton_core_common::datatypes::LocalLabelId,
-        unread: crate::datatypes::ReadFilter,
+        user_ctx: &Arc<MailUserContext>,
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) =
-            MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
-                .await?;
+        let (scroller, handle) = MailScroller::conversations(
+            user_ctx.as_weak(),
+            local_label_id,
+            unread,
+            include,
+            page_size,
+        )
+        .await?;
+
         Self::new(scroller, handle).await
     }
 
     pub async fn conversations_instant(
-        user_ctx: &std::sync::Arc<MailUserContext>,
-        local_label_id: proton_core_common::datatypes::LocalLabelId,
-        unread: crate::datatypes::ReadFilter,
+        user_ctx: &Arc<MailUserContext>,
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) =
-            MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
-                .await?;
+        let (scroller, handle) = MailScroller::conversations(
+            user_ctx.as_weak(),
+            local_label_id,
+            unread,
+            include,
+            page_size,
+        )
+        .await?;
+
         Ok(Self::new_instant(scroller, handle))
     }
 }
 
 impl TestScroller<crate::models::Message> {
     pub async fn messages(
-        user_ctx: &std::sync::Arc<MailUserContext>,
-        local_label_id: proton_core_common::datatypes::LocalLabelId,
-        unread: crate::datatypes::ReadFilter,
+        user_ctx: &Arc<MailUserContext>,
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) =
-            MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size).await?;
+        let (scroller, handle) = MailScroller::messages(
+            user_ctx.as_weak(),
+            local_label_id,
+            unread,
+            include,
+            page_size,
+        )
+        .await?;
+
         Self::new(scroller, handle).await
     }
 
     pub async fn search(
-        user_ctx: &std::sync::Arc<MailUserContext>,
-        search_options: crate::datatypes::SearchOptions,
+        user_ctx: &Arc<MailUserContext>,
+        options: SearchOptions,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) =
-            MailScroller::search(user_ctx.as_weak(), search_options, page_size).await?;
+            MailScroller::search(user_ctx.as_weak(), options, include, page_size).await?;
+
         Self::new(scroller, handle).await
     }
 }

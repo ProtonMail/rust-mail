@@ -12,6 +12,7 @@ use super::datatypes::{
     AllListActions, AllMessageActions, Message, MessageActionSheet, MobileAction,
 };
 use super::datatypes::{LabelAsAction, MimeType, MoveAction};
+use super::mail_scroller::IncludeSwitch;
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::PaginatorSearchOptions;
@@ -566,14 +567,21 @@ pub async fn messages_for_label(
 pub async fn scroll_messages_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
-    filter: ReadFilter,
+    unread: ReadFilter,
+    include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = session.ctx()?;
 
     uniffi_async(async move {
-        let (scroller, handle) =
-            MailScroller::messages(context.as_weak(), label_id.into(), filter.into(), 50).await?;
+        let (scroller, handle) = MailScroller::messages(
+            context.as_weak(),
+            label_id.into(),
+            unread.into(),
+            include.into(),
+            50,
+        )
+        .await?;
 
         let handle = spawn_message_scroller_watcher(&context, handle, callback);
 
@@ -597,13 +605,14 @@ pub async fn scroll_messages_for_label(
 pub async fn scroller_search(
     session: Arc<MailUserSession>,
     options: PaginatorSearchOptions,
+    include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<SearchScroller>, ActionError> {
     let context = session.ctx()?;
 
     uniffi_async(async move {
         let (scroller, handle) =
-            MailScroller::search(context.as_weak(), options.into(), 50).await?;
+            MailScroller::search(context.as_weak(), options.into(), include.into(), 50).await?;
 
         let handle = spawn_message_scroller_watcher(&context, handle, callback);
         let scroller = SearchScroller::new(scroller, handle);

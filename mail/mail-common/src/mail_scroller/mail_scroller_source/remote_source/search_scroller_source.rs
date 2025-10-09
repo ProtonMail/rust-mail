@@ -1,7 +1,6 @@
 use super::MailPaginatorJoinHandle;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
-use crate::models::MailSettings;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, SearchOptions},
@@ -29,7 +28,8 @@ use tracing::debug;
 ///
 #[derive(Debug)]
 pub struct SearchScrollerSource {
-    search: SearchOptions,
+    remote_label_id: LabelId,
+    options: SearchOptions,
     page_size: usize,
     initialized: bool,
     total: Arc<Mutex<u64>>,
@@ -38,9 +38,10 @@ pub struct SearchScrollerSource {
 }
 
 impl SearchScrollerSource {
-    pub fn new(search: SearchOptions, page_size: usize) -> Self {
+    pub fn new(remote_label_id: LabelId, options: SearchOptions, page_size: usize) -> Self {
         Self {
-            search,
+            remote_label_id,
+            options,
             page_size,
             initialized: false,
             total: Arc::new(Mutex::new(0)),
@@ -61,22 +62,19 @@ impl SearchScrollerSource {
 
         debug!("Paginating for the first time, getting first page & spawning sync task.");
 
-        let remote_label_id = MailSettings::get_or_default(&tether).await.all_mail();
-
-        let task = Self::spawn_first_page_sync(
+        Self::spawn_first_page_sync(
             ctx,
             self.total.clone(),
-            remote_label_id,
-            self.search.clone(),
+            self.remote_label_id.clone(),
+            self.options.clone(),
             self.page_size,
         )
-        .await?;
-
-        Ok(task)
+        .await
     }
 
     async fn total(&self, tether: &Tether) -> Result<u64, StashError> {
         let total = *self.total.lock().await;
+
         Ok(match &self.last {
             Some(last) if last.has_more(tether).await? => cmp::max(
                 total,
@@ -391,12 +389,10 @@ impl MailScrollerSource for SearchScrollerSource {
             let task = if items.is_empty() {
                 None
             } else {
-                let remote_label_id = MailSettings::get_or_default(&tether).await.all_mail();
-
                 Self::spawn_background_sync(
                     ctx,
-                    remote_label_id,
-                    self.search.clone(),
+                    self.remote_label_id.clone(),
+                    self.options.clone(),
                     self.page_size,
                 )
                 .await?
@@ -433,7 +429,7 @@ impl MailScrollerSource for SearchScrollerSource {
     async fn change_filter(
         &mut self,
         _ctx: &MailUserContext,
-        _filter: ReadFilter,
+        _unread: ReadFilter,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         // Noop for search scroller
         Ok(None)

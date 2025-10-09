@@ -2,7 +2,9 @@ use crate::errors::MailScrollerError;
 use crate::mail::datatypes::{Conversation, Message};
 use crate::{WatchHandle, async_runtime, uniffi_async};
 use proton_mail_common::MailUserContext;
-use proton_mail_common::datatypes::{ContextualConversation, ReadFilter as RealReadFilter};
+use proton_mail_common::datatypes::{
+    ContextualConversation, IncludeSwitch as RealIncludeSwitch, ReadFilter as RealReadFilter,
+};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::mail_scroller::{
     MailScroller as RealMailScroller, MailScrollerHandle, ScrollerUpdate,
@@ -274,6 +276,23 @@ impl From<ReadFilter> for RealReadFilter {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy, uniffi::Enum)]
+#[repr(u8)]
+pub enum IncludeSwitch {
+    #[default]
+    Default,
+    WithSpamAndTrash,
+}
+
+impl From<IncludeSwitch> for RealIncludeSwitch {
+    fn from(value: IncludeSwitch) -> Self {
+        match value {
+            IncludeSwitch::Default => RealIncludeSwitch::Default,
+            IncludeSwitch::WithSpamAndTrash => RealIncludeSwitch::WithSpamAndTrash,
+        }
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct ConversationScroller {
     scroller: Arc<RealMailScroller>,
@@ -340,9 +359,9 @@ impl ConversationScroller {
             .map_err(Into::into)
     }
 
-    pub fn change_filter(self: Arc<Self>, filter: ReadFilter) -> Result<(), MailScrollerError> {
+    pub fn change_filter(self: Arc<Self>, unread: ReadFilter) -> Result<(), MailScrollerError> {
         self.scroller
-            .change_filter(filter.into())
+            .change_filter(unread.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -361,6 +380,11 @@ impl ConversationScroller {
         uniffi_async(async move { scroller.has_more().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
+    }
+
+    #[must_use]
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
     }
 
     pub fn terminate(&self) {
@@ -426,9 +450,9 @@ impl MessageScroller {
     }
 
     /// Changes the filter of the scroller.
-    pub fn change_filter(self: Arc<Self>, filter: ReadFilter) -> Result<(), MailScrollerError> {
+    pub fn change_filter(self: Arc<Self>, unread: ReadFilter) -> Result<(), MailScrollerError> {
         self.scroller
-            .change_filter(filter.into())
+            .change_filter(unread.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -456,6 +480,11 @@ impl MessageScroller {
         uniffi_async(async move { scroller.has_more().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
+    }
+
+    #[must_use]
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
     }
 
     pub fn terminate(&self) {
@@ -535,6 +564,11 @@ impl SearchScroller {
         uniffi_async(async move { scroller.has_more().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
+    }
+
+    #[must_use]
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
     }
 
     pub fn terminate(&self) {
