@@ -1,5 +1,4 @@
 use super::{MailPaginatorJoinHandle, RemoteSource};
-use crate::datatypes::SystemLabelId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
@@ -14,7 +13,7 @@ use anyhow::anyhow;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_mail_api::services::proton::{
-    ProtonMail, common::MessageId, prelude::GetMessagesOptions, prelude::GetMessagesResponse,
+    ProtonMail, common::MessageId, prelude::GetMessagesOptions,
 };
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
@@ -207,7 +206,7 @@ impl RemoteMessageScrollerSource {
 
         let response = session
             .get_messages(GetMessagesOptions {
-                label_id: Some(vec![remote_label_id.clone()]),
+                label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
@@ -216,12 +215,13 @@ impl RemoteMessageScrollerSource {
             })
             .await?;
 
-        log_response(&response);
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
+        debug!(
+            "Fetched {}/{} elements",
+            response.messages.len(),
+            response.total
+        );
 
-        if response.messages.is_empty() || stale_in_trash_or_spam {
+        if response.messages.is_empty() {
             return Ok(vec![]);
         }
 
@@ -269,7 +269,7 @@ impl RemoteMessageScrollerSource {
             .get_messages(GetMessagesOptions {
                 anchor: Some(last_element_time.as_u64()),
                 anchor_id: Some(last_element_id.clone()),
-                label_id: Some(vec![remote_label_id.clone()]),
+                label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
@@ -289,13 +289,13 @@ impl RemoteMessageScrollerSource {
             }
         }
 
-        log_response(&response);
+        debug!(
+            "Fetched {}/{} elements",
+            response.messages.len(),
+            response.total
+        );
 
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
-
-        if response.messages.is_empty() || stale_in_trash_or_spam {
+        if response.messages.is_empty() {
             return Ok(vec![]);
         }
 
@@ -344,7 +344,7 @@ impl RemoteMessageScrollerSource {
                 // time == 0 breaks the api query.
                 begin: Some(first_element_time.as_u64()),
                 begin_id: Some(first_element_id.clone()),
-                label_id: Some(vec![remote_label_id.clone()]),
+                label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
                 desc: order_dir.as_api_desc(),
@@ -353,13 +353,13 @@ impl RemoteMessageScrollerSource {
             })
             .await?;
 
-        log_response(&response);
+        debug!(
+            "Fetched {}/{} elements",
+            response.messages.len(),
+            response.total
+        );
 
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
-
-        if response.messages.is_empty() || stale_in_trash_or_spam {
+        if response.messages.is_empty() {
             return Ok(vec![]);
         }
 
@@ -474,13 +474,4 @@ impl RemoteMessageScrollerSource {
 
         Ok(msg_paginator)
     }
-}
-
-fn log_response(response: &GetMessagesResponse) {
-    debug!(
-        "Fetched {}/{} {} elements",
-        response.messages.len(),
-        response.total,
-        if response.stale { "stale" } else { "fresh" }
-    );
 }
