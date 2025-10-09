@@ -1,4 +1,4 @@
-use super::SystemLabelId as _;
+use super::SystemLabelId;
 use super::folder_banner::{AutoDeleteBanner, AutoDeleteState, SpamOrTrash};
 use crate::actions::{
     AllConversationActions, AllListActions, ConversationActionSheet, MovableSystemFolderAction,
@@ -594,6 +594,7 @@ impl ContextualConversation {
             {
                 Some(HiddenMessagesBanner::ContainsNonTrashedMessages)
             }
+            Some(id) if id == &trash_id => None,
             _ => {
                 if conversation
                     .labels
@@ -668,4 +669,31 @@ impl ConversationViewOptions {
 pub enum HiddenMessagesBanner {
     ContainsTrashedMessages,
     ContainsNonTrashedMessages,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ContextualConversation, HiddenMessagesBanner, LabelId, SystemLabelId};
+    use crate::{conv_label, conversation};
+    use test_case::test_case;
+
+    #[test_case(LabelId::trash(), vec![LabelId::trash()] => None; "TEST1 - trash")]
+    #[test_case(LabelId::trash(), vec![LabelId::trash(), LabelId::all_mail()] => None; "TEST2 - trash and all mail")]
+    #[test_case(LabelId::trash(), vec![LabelId::trash(), LabelId::all_mail(), LabelId::from("custom")] => None; "TEST3 - trash, all mail and custom")]
+    #[test_case(LabelId::trash(), vec![LabelId::almost_all_mail(), LabelId::trash()] => Some(HiddenMessagesBanner::ContainsNonTrashedMessages); "TEST4 - almost all mail and trash")]
+    #[test_case(LabelId::inbox(), vec![LabelId::almost_all_mail(), LabelId::trash(), LabelId::from("custom")] => Some(HiddenMessagesBanner::ContainsTrashedMessages); "TEST5 - almost all mail, trash and custom")]
+    #[test_case(LabelId::inbox(), vec![LabelId::inbox(), LabelId::almost_all_mail(), LabelId::from("custom")] => None; "TEST6 - inbox, almost all mail and custom")]
+    fn test_hidden_messages_banner(
+        context_label: LabelId,
+        conversation_labels: Vec<LabelId>,
+    ) -> Option<HiddenMessagesBanner> {
+        let label = conv_label!(remote_label_id: Some(context_label));
+        let labels: Vec<_> = conversation_labels
+            .iter()
+            .map(|id| conv_label!(remote_label_id: Some(id.clone())))
+            .collect();
+        let conversation = conversation!(labels);
+
+        ContextualConversation::hidden_messages_banner(&conversation, &label)
+    }
 }
