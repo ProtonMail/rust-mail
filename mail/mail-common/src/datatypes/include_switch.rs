@@ -1,9 +1,9 @@
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum IncludeFilter {
+pub enum IncludeSwitch {
     #[default]
     Default,
 
-    /// Force scroller to use the `Almost All Mail` label.
+    /// Force scroller to use the `All Mail` label.
     ///
     /// On web, this corresponds to the ...
     ///
@@ -13,7 +13,7 @@ pub enum IncludeFilter {
     WithSpamAndTrash,
 }
 
-impl IncludeFilter {
+impl IncludeSwitch {
     pub fn has_spam_and_trash(&self) -> bool {
         matches!(self, Self::WithSpamAndTrash)
     }

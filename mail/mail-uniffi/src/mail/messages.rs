@@ -12,7 +12,7 @@ use super::datatypes::{
     AllListActions, AllMessageActions, Message, MessageActionSheet, MobileAction,
 };
 use super::datatypes::{LabelAsAction, MimeType, MoveAction};
-use super::mail_scroller::IncludeFilter;
+use super::mail_scroller::IncludeSwitch;
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::PaginatorSearchOptions;
@@ -567,8 +567,8 @@ pub async fn messages_for_label(
 pub async fn scroll_messages_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
-    read: ReadFilter,
-    include: IncludeFilter,
+    unread: ReadFilter,
+    include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = session.ctx()?;
@@ -577,7 +577,7 @@ pub async fn scroll_messages_for_label(
         let (scroller, handle) = MailScroller::messages(
             context.as_weak(),
             label_id.into(),
-            read.into(),
+            unread.into(),
             include.into(),
             50,
         )
@@ -605,7 +605,7 @@ pub async fn scroll_messages_for_label(
 pub async fn scroller_search(
     session: Arc<MailUserSession>,
     options: PaginatorSearchOptions,
-    include: IncludeFilter,
+    include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<SearchScroller>, ActionError> {
     let context = session.ctx()?;

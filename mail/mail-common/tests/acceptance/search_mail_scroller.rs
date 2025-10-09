@@ -3,7 +3,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_common::api_message_meta;
-use proton_mail_common::datatypes::{AlmostAllMail, IncludeFilter, SearchOptions, SystemLabelId};
+use proton_mail_common::datatypes::{AlmostAllMail, IncludeSwitch, SearchOptions, SystemLabelId};
 use proton_mail_common::models::{MailSettings, Message};
 use proton_mail_common::msg_id;
 use proton_mail_common::test_utils::scroller::{TestScroller, save_single_message};
@@ -37,7 +37,7 @@ async fn reads_one_item_from_online_scroll_data() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let include = IncludeFilter::Default;
+    let include = IncludeSwitch::Default;
     let page_size = 5;
 
     let mut test_scroller =
@@ -67,7 +67,7 @@ async fn reads_one_item_from_online_scroll_data() {
 #[tokio::test]
 async fn reads_two_pages_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
-    let include = IncludeFilter::Default;
+    let include = IncludeSwitch::Default;
     let page_size = 5;
     let label = SystemLabelId::almost_all_mail();
     let keyword = "Invoice 2024";
@@ -214,7 +214,7 @@ async fn does_not_refresh_on_new_message_in_database() {
         .await
         .unwrap();
 
-    let include = IncludeFilter::Default;
+    let include = IncludeSwitch::Default;
     let page_size = 5;
 
     let mut test_scroller =
@@ -287,7 +287,7 @@ async fn does_refresh_on_modified_message_in_database() {
         .await
         .unwrap();
 
-    let include = IncludeFilter::Default;
+    let include = IncludeSwitch::Default;
     let page_size = 5;
 
     let mut test_scroller =
@@ -363,7 +363,7 @@ async fn all_mail() {
 
     // ---
 
-    let include = IncludeFilter::Default;
+    let include = IncludeSwitch::Default;
     let page_size = 5;
 
     let mut test_scroller =
@@ -427,7 +427,7 @@ async fn almost_all_mail_with_spam_and_trash() {
 
     // ---
 
-    let include = IncludeFilter::WithSpamAndTrash;
+    let include = IncludeSwitch::WithSpamAndTrash;
     let page_size = 5;
 
     let mut test_scroller =

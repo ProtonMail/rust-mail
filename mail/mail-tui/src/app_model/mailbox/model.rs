@@ -22,7 +22,7 @@ use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
-use proton_mail_common::datatypes::{IncludeFilter, ReadFilter, SystemLabelId, ViewMode};
+use proton_mail_common::datatypes::{IncludeSwitch, ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::observers::{DraftSendResultWatcher, DraftSendResultWatcherMode};
 use proton_mail_common::models::{
@@ -63,8 +63,8 @@ pub struct MailboxModel {
     composer: Option<Composer>,
     search: Option<Search>,
     search_status: Option<SearchStatusBar>,
-    read: ReadFilter,
-    include: IncludeFilter,
+    unread: ReadFilter,
+    include: IncludeSwitch,
     background_worker_initialized: bool,
 }
 
@@ -88,8 +88,8 @@ impl MailboxModel {
             composer: None,
             search: None,
             search_status: None,
-            read: ReadFilter::All,
-            include: IncludeFilter::Default,
+            unread: ReadFilter::All,
+            include: IncludeSwitch::Default,
             background_worker_initialized: false,
         })
     }
@@ -112,7 +112,7 @@ impl MailboxModel {
     fn sync_mailbox(&mut self, mbox: Mailbox) -> Command<Messages> {
         self.state = State::new_syncing();
 
-        let read = self.read;
+        let filter = self.unread;
         let include = self.include;
         let ctx = Arc::clone(&self.ctx);
 
@@ -145,9 +145,9 @@ impl MailboxModel {
                 };
 
                 if mbox.view_mode() == ViewMode::Conversations {
-                    ConversationsState::build(Arc::clone(&ctx), mbox, label, read, include)
+                    ConversationsState::build(Arc::clone(&ctx), mbox, label, filter, include)
                 } else {
-                    MessagesState::build(Arc::clone(&ctx), mbox, label, read, include)
+                    MessagesState::build(Arc::clone(&ctx), mbox, label, filter, include)
                 }
             }),
         ])
@@ -237,8 +237,8 @@ impl MailboxModel {
 
     fn open_search_view(&mut self, mbox: Mailbox, state: MessagesState) -> Command<Messages> {
         self.mailbox = mbox;
-        self.read = ReadFilter::default();
-        self.include = IncludeFilter::default();
+        self.unread = ReadFilter::default();
+        self.include = IncludeSwitch::default();
         self.state = State::Messages(state);
         self.build_item_count_query()
     }
@@ -304,8 +304,8 @@ impl MailboxModel {
     fn select_label(&mut self, label_id: LocalLabelId) -> Command<Messages> {
         let ctx = Arc::clone(&self.ctx);
 
-        self.read = ReadFilter::default();
-        self.include = IncludeFilter::default();
+        self.unread = ReadFilter::default();
+        self.include = IncludeSwitch::default();
 
         Command::task(async move {
             let stash = ctx.user_stash();
@@ -327,14 +327,14 @@ impl MailboxModel {
         })
     }
 
-    fn change_filter(&mut self, filter: ReadFilter) {
-        self.read = filter;
+    fn change_filter(&mut self, unread: ReadFilter) {
+        self.unread = unread;
         if let State::Conversations(state) = &mut self.state {
-            let _ = state.paginator().clone_inner().change_filter(filter);
+            let _ = state.paginator().clone_inner().change_filter(unread);
         } else if let State::Messages(state) = &mut self.state {
             state
                 .label_paginator()
-                .map(|paginator| paginator.clone_inner().change_filter(filter));
+                .map(|paginator| paginator.clone_inner().change_filter(unread));
         }
     }
 
@@ -538,7 +538,7 @@ impl AppStateHandler for MailboxModel {
                 self.search_status = None;
                 Command::None
             }
-            Message::SetIncludeFilter(include) => {
+            Message::SetInclude(include) => {
                 self.include = include;
                 Command::None
             }
@@ -654,7 +654,7 @@ impl AppStateHandler for MailboxModel {
             frame.render_widget(text, label_area);
             frame.render_widget(Text::from(counters), count_area);
             frame.render_widget(
-                Text::from(format!(" | {:?} | ", self.read).bold()),
+                Text::from(format!(" | {:?} | ", self.unread).bold()),
                 filter_area,
             );
             if let State::Conversations(state) = &mut self.state {

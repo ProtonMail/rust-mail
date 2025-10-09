@@ -48,7 +48,7 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
 
     #[allow(clippy::too_many_arguments)]
     fn query(
-        filter: ReadFilter,
+        unread: ReadFilter,
         limit: Option<usize>,
         offset: Option<u64>,
         require_remote_id: bool,
@@ -172,7 +172,7 @@ impl ScrollData for MessageScrollData {
     }
 
     fn query(
-        filter: ReadFilter,
+        unread: ReadFilter,
         limit: Option<usize>,
         offset: Option<u64>,
         require_remote_id: bool,
@@ -237,7 +237,7 @@ impl ScrollData for MessageScrollData {
             query += " AND messages.remote_id IS NOT NULL"
         }
 
-        match filter {
+        match unread {
             ReadFilter::All => {}
             ReadFilter::Unread => {
                 query += " AND messages.unread = 1 ";
@@ -439,7 +439,7 @@ impl ScrollData for ConversationScrollData {
     }
 
     fn query(
-        filter: ReadFilter,
+        unread: ReadFilter,
         limit: Option<usize>,
         offset: Option<u64>,
         require_remote_id: bool,
@@ -506,7 +506,7 @@ impl ScrollData for ConversationScrollData {
             query += " AND conversations.remote_id IS NOT NULL"
         }
 
-        match filter {
+        match unread {
             ReadFilter::All => {}
             ReadFilter::Unread => {
                 query += " AND conversation_labels.context_num_unread > 0 ";

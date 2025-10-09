@@ -14,7 +14,7 @@ use stash::{
 use crate::{
     actions::ConversationOrMessage,
     conv_id, conversation,
-    datatypes::{IncludeFilter, ReadFilter, SearchOptions},
+    datatypes::{IncludeSwitch, ReadFilter, SearchOptions},
     label, lbl_id, message,
     models::{Conversation, ConversationCounters, Message, MessageCounters},
     msg_id,
@@ -547,14 +547,14 @@ impl TestScroller<crate::datatypes::ContextualConversation> {
     pub async fn conversations(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
-        read: ReadFilter,
-        include: IncludeFilter,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) = MailScroller::conversations(
             user_ctx.as_weak(),
             local_label_id,
-            read,
+            unread,
             include,
             page_size,
         )
@@ -566,14 +566,14 @@ impl TestScroller<crate::datatypes::ContextualConversation> {
     pub async fn conversations_instant(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
-        read: ReadFilter,
-        include: IncludeFilter,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) = MailScroller::conversations(
             user_ctx.as_weak(),
             local_label_id,
-            read,
+            unread,
             include,
             page_size,
         )
@@ -587,13 +587,18 @@ impl TestScroller<crate::models::Message> {
     pub async fn messages(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
-        read: ReadFilter,
-        include: IncludeFilter,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) =
-            MailScroller::messages(user_ctx.as_weak(), local_label_id, read, include, page_size)
-                .await?;
+        let (scroller, handle) = MailScroller::messages(
+            user_ctx.as_weak(),
+            local_label_id,
+            unread,
+            include,
+            page_size,
+        )
+        .await?;
 
         Self::new(scroller, handle).await
     }
@@ -601,7 +606,7 @@ impl TestScroller<crate::models::Message> {
     pub async fn search(
         user_ctx: &Arc<MailUserContext>,
         options: SearchOptions,
-        include: IncludeFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) =

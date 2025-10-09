@@ -25,7 +25,7 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{
-    ContextualConversation, ConversationViewOptions, IncludeFilter, LocalConversationId,
+    ContextualConversation, ConversationViewOptions, IncludeSwitch, LocalConversationId,
     LocalMessageId, MessageRecipientDisplayMode, ReadFilter, SearchOptions,
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
@@ -67,8 +67,8 @@ pub struct MessagesState {
 }
 
 enum Mode {
-    Label(Paginator, IncludeFilter),
-    Search(Paginator, String, IncludeFilter),
+    Label(Paginator, IncludeSwitch),
+    Search(Paginator, String, IncludeSwitch),
 
     #[allow(dead_code)] // Watcher handle is needed to keep state
     Conversation(TuiWatchHandle),
@@ -82,7 +82,7 @@ impl Mode {
         }
     }
 
-    fn include_filter(&self) -> Option<IncludeFilter> {
+    fn include_filter(&self) -> Option<IncludeSwitch> {
         match self {
             Mode::Label(_, include) | Mode::Search(_, _, include) => Some(*include),
             Mode::Conversation(_) => None,
@@ -122,14 +122,14 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         mbox: Mailbox,
         label: LabelWithCounters,
-        read: ReadFilter,
-        include: IncludeFilter,
+        unread: ReadFilter,
+        include: IncludeSwitch,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();
         let recipient_display_mode = mbox.recipient_display_mode();
 
         Command::task(async move {
-            match Self::new_impl(ctx, label_id, read, include, recipient_display_mode).await {
+            match Self::new_impl(ctx, label_id, unread, include, recipient_display_mode).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenMessageView(mbox, label, state)),
                     background_command,
@@ -142,12 +142,12 @@ impl MessagesState {
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
-        read: ReadFilter,
-        include: IncludeFilter,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         recipient_display_mode: MessageRecipientDisplayMode,
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) =
-            MailScroller::messages(ctx.as_weak(), label_id, read, include, ITEM_LIMIT).await?;
+            MailScroller::messages(ctx.as_weak(), label_id, unread, include, ITEM_LIMIT).await?;
 
         let (paginator, command) =
             Paginator::new::<MailMessage>(scroller, handle, handle_scroller_update);
@@ -171,7 +171,7 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         mbox: Mailbox,
         keywords: String,
-        include: IncludeFilter,
+        include: IncludeSwitch,
     ) -> Command<Messages> {
         Command::task(async move {
             match Self::from_search_impl(ctx, keywords, include).await {
@@ -195,7 +195,7 @@ impl MessagesState {
     async fn from_search_impl(
         ctx: Arc<MailUserContext>,
         keywords: String,
-        include: IncludeFilter,
+        include: IncludeSwitch,
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) = MailScroller::search(
             ctx.as_weak(),
@@ -576,8 +576,8 @@ impl MessagesState {
 
             KeyCode::Char(ch @ ('E' | 'I')) => {
                 let include = match ch {
-                    'E' => IncludeFilter::Default,
-                    'I' => IncludeFilter::WithSpamAndTrash,
+                    'E' => IncludeSwitch::Default,
+                    'I' => IncludeSwitch::WithSpamAndTrash,
                     _ => unreachable!(),
                 };
 
@@ -593,7 +593,7 @@ impl MessagesState {
 
                 if let Some(refresh) = refresh {
                     Command::batch(vec![
-                        Command::message(Message::SetIncludeFilter(include)),
+                        Command::message(Message::SetInclude(include)),
                         Command::message(refresh),
                     ])
                 } else {

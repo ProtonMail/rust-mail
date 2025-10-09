@@ -3,7 +3,7 @@ use crate::mail::datatypes::{Conversation, Message};
 use crate::{WatchHandle, async_runtime, uniffi_async};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::{
-    ContextualConversation, IncludeFilter as RealIncludeFilter, ReadFilter as RealReadFilter,
+    ContextualConversation, IncludeSwitch as RealIncludeSwitch, ReadFilter as RealReadFilter,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::mail_scroller::{
@@ -278,17 +278,17 @@ impl From<ReadFilter> for RealReadFilter {
 
 #[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy, uniffi::Enum)]
 #[repr(u8)]
-pub enum IncludeFilter {
+pub enum IncludeSwitch {
     #[default]
     Default,
     WithSpamAndTrash,
 }
 
-impl From<IncludeFilter> for RealIncludeFilter {
-    fn from(value: IncludeFilter) -> Self {
+impl From<IncludeSwitch> for RealIncludeSwitch {
+    fn from(value: IncludeSwitch) -> Self {
         match value {
-            IncludeFilter::Default => RealIncludeFilter::Default,
-            IncludeFilter::WithSpamAndTrash => RealIncludeFilter::WithSpamAndTrash,
+            IncludeSwitch::Default => RealIncludeSwitch::Default,
+            IncludeSwitch::WithSpamAndTrash => RealIncludeSwitch::WithSpamAndTrash,
         }
     }
 }
@@ -359,9 +359,9 @@ impl ConversationScroller {
             .map_err(Into::into)
     }
 
-    pub fn change_filter(self: Arc<Self>, filter: ReadFilter) -> Result<(), MailScrollerError> {
+    pub fn change_filter(self: Arc<Self>, unread: ReadFilter) -> Result<(), MailScrollerError> {
         self.scroller
-            .change_filter(filter.into())
+            .change_filter(unread.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -450,9 +450,9 @@ impl MessageScroller {
     }
 
     /// Changes the filter of the scroller.
-    pub fn change_filter(self: Arc<Self>, filter: ReadFilter) -> Result<(), MailScrollerError> {
+    pub fn change_filter(self: Arc<Self>, unread: ReadFilter) -> Result<(), MailScrollerError> {
         self.scroller
-            .change_filter(filter.into())
+            .change_filter(unread.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }

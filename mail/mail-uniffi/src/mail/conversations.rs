@@ -9,7 +9,7 @@
 //! won't.
 //!
 
-use super::mail_scroller::IncludeFilter;
+use super::mail_scroller::IncludeSwitch;
 use super::messages::WatchedLabelAs;
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, MobileActionsResult, SnoozeError, VoidActionResult};
@@ -555,8 +555,8 @@ pub async fn move_conversations(
 pub async fn scroll_conversations_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
-    read: ReadFilter,
-    include: IncludeFilter,
+    unread: ReadFilter,
+    include: IncludeSwitch,
     callback: Box<dyn ConversationScrollerLiveQueryCallback>,
 ) -> Result<Arc<ConversationScroller>, ActionError> {
     let context = session.ctx()?;
@@ -565,7 +565,7 @@ pub async fn scroll_conversations_for_label(
         let (scroller, handle) = MailScroller::conversations(
             context.as_weak(),
             label_id.into(),
-            read.into(),
+            unread.into(),
             include.into(),
             50,
         )

@@ -12,7 +12,7 @@ use crossterm::event::KeyModifiers;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
 use proton_mail_common::datatypes::{
-    ContextualConversation, IncludeFilter, LocalConversationId, ReadFilter,
+    ContextualConversation, IncludeSwitch, LocalConversationId, ReadFilter,
 };
 use proton_mail_common::mail_scroller::{MailScroller, ScrollerUpdate};
 use proton_mail_common::models::{Conversation, LabelWithCounters, Message as MailMessage};
@@ -29,7 +29,7 @@ use throbber_widgets_tui::ThrobberState;
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
     paginator: Paginator,
-    include: IncludeFilter,
+    include: IncludeSwitch,
     conversations: Vec<ContextualConversation>,
     table_state: ScrollableTableState,
     messages: MessagesStatus,
@@ -43,13 +43,13 @@ impl ConversationsState {
         ctx: Arc<MailUserContext>,
         mbox: Mailbox,
         label: LabelWithCounters,
-        read: ReadFilter,
-        include: IncludeFilter,
+        unread: ReadFilter,
+        include: IncludeSwitch,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();
 
         Command::task(async move {
-            match Self::new_impl(ctx, label_id, read, include).await {
+            match Self::new_impl(ctx, label_id, unread, include).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenConversationView(mbox, label, state)),
                     background_command,
@@ -66,11 +66,12 @@ impl ConversationsState {
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
-        read: ReadFilter,
-        include: IncludeFilter,
+        unread: ReadFilter,
+        include: IncludeSwitch,
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) =
-            MailScroller::conversations(ctx.as_weak(), label_id, read, include, ITEM_LIMIT).await?;
+            MailScroller::conversations(ctx.as_weak(), label_id, unread, include, ITEM_LIMIT)
+                .await?;
 
         let (paginator, command) = Paginator::new(scroller, handle, |update| match update {
             ScrollerUpdate::Append { src: _, items } => ConversationMessage::NextPage(items).into(),
@@ -282,13 +283,13 @@ impl ConversationsState {
 
             KeyCode::Char(ch @ ('E' | 'I')) => {
                 let include = match ch {
-                    'E' => IncludeFilter::Default,
-                    'I' => IncludeFilter::WithSpamAndTrash,
+                    'E' => IncludeSwitch::Default,
+                    'I' => IncludeSwitch::WithSpamAndTrash,
                     _ => unreachable!(),
                 };
 
                 Command::batch(vec![
-                    Command::message(Message::SetIncludeFilter(include)),
+                    Command::message(Message::SetInclude(include)),
                     Command::message(Message::Sync(mbox.clone())),
                 ])
             }

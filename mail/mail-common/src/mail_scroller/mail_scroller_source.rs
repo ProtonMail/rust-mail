@@ -80,7 +80,7 @@ pub trait MailScrollerSource: Send + Sync + 'static {
     fn change_filter(
         &mut self,
         ctx: &MailUserContext,
-        filter: ReadFilter,
+        unread: ReadFilter,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     fn clear_cursor(

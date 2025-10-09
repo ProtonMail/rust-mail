@@ -11,7 +11,7 @@ use proton_mail_api::services::proton::{
 use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
 use proton_mail_common::{api_message_meta, datatypes::labels::ScrollOrderField};
 use proton_mail_common::{
-    datatypes::IncludeFilter,
+    datatypes::IncludeSwitch,
     test_utils::scroller::{
         StoreLabeledModelMap, TestScroller, save_single_message, test_messages,
     },
@@ -60,7 +60,7 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
     let local_label_id = Label::resolve_local_label_id(remote_label_id, &tether)
         .await
         .unwrap();
-    let read = ReadFilter::All;
+    let unread = ReadFilter::All;
     let last_message = Message::find_by_remote_id(MessageId::from("mymsg_150"), &tether)
         .await
         .unwrap()
@@ -68,7 +68,7 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
 
     let mut scroller = MessageScrollData::builder()
         .local_label_id(local_label_id)
-        .unread(read)
+        .unread(unread)
         .remote_message_id(last_message.remote_id.clone().unwrap())
         .message_time(last_message.time)
         .snooze_time(last_message.snooze_time)
@@ -83,10 +83,10 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
         .unwrap();
 
     let page_size = 5;
-    let include = IncludeFilter::Default;
+    let include = IncludeSwitch::Default;
 
     let mut test_scroller =
-        TestScroller::messages(&user_ctx, local_label_id, read, include, page_size)
+        TestScroller::messages(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -144,12 +144,12 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let read = ReadFilter::All;
-    let include = IncludeFilter::Default;
+    let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let page_size = 5;
 
     let mut test_scroller =
-        TestScroller::messages(&user_ctx, local_label_id, read, include, page_size)
+        TestScroller::messages(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -179,8 +179,8 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
-    let read = ReadFilter::All;
-    let include = IncludeFilter::Default;
+    let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     // mocks
     mock_api_sync_prevous_messages_page(&ctx, "mymsg_9", 1).await;
@@ -203,7 +203,7 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
 
     // Online
     let mut test_scroller =
-        TestScroller::messages(&user_ctx, local_label_id, read, include, page_size)
+        TestScroller::messages(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -260,7 +260,7 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     // This is because cursor have only two pages in cache, which means we will try to get new page evertime we fetch more
 
     let mut test_scroller =
-        TestScroller::messages(&user_ctx, local_label_id, read, include, page_size)
+        TestScroller::messages(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -316,8 +316,8 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
-    let read = ReadFilter::All;
-    let include = IncludeFilter::Default;
+    let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let params = setup_api_message_pages(&ctx, page_size, 1..=3).await;
 
@@ -337,7 +337,7 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         .unwrap();
 
     let mut test_scroller =
-        TestScroller::messages(&user_ctx, local_label_id, read, include, page_size)
+        TestScroller::messages(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -450,8 +450,8 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
-    let read = ReadFilter::All;
-    let include = IncludeFilter::Default;
+    let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let local_label_id = SystemLabel::Scheduled
         .local_id(&tether)
         .await
@@ -476,7 +476,7 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
 
     // Online
     let mut test_scroller =
-        TestScroller::messages(&user_ctx, local_label_id, read, include, page_size)
+        TestScroller::messages(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 

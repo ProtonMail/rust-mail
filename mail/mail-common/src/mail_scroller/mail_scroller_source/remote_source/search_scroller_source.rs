@@ -429,7 +429,7 @@ impl MailScrollerSource for SearchScrollerSource {
     async fn change_filter(
         &mut self,
         _ctx: &MailUserContext,
-        _filter: ReadFilter,
+        _unread: ReadFilter,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         // Noop for search scroller
         Ok(None)

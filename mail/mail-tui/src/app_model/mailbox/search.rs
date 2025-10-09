@@ -3,7 +3,7 @@ use crate::app_model::mailbox::Message;
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::KeyCode;
-use proton_mail_common::datatypes::IncludeFilter;
+use proton_mail_common::datatypes::IncludeSwitch;
 use ratatui::Frame;
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
@@ -17,11 +17,11 @@ pub struct SearchStatusBar {
 
 pub struct Search {
     search: TextInputState,
-    include: IncludeFilter,
+    include: IncludeSwitch,
 }
 
 impl Search {
-    pub fn new(include: IncludeFilter) -> Self {
+    pub fn new(include: IncludeSwitch) -> Self {
         Self {
             search: TextInputState::new(),
             include,

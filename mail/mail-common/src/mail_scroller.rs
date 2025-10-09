@@ -5,7 +5,7 @@ pub use self::mail_scroller_source::*;
 pub use self::mail_scroller_watcher::*;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::datatypes::{
-    AlmostAllMail, ContextualConversation, IncludeFilter, ReadFilter, SearchOptions, SystemLabelId,
+    AlmostAllMail, ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions, SystemLabelId,
 };
 use crate::models::MailSettings;
 use crate::models::{ConversationScrollData, Message, MessageScrollData};
@@ -160,8 +160,8 @@ impl MailScroller {
     pub async fn conversations(
         ctx: Weak<MailUserContext>,
         mut label: LocalLabelId,
-        read: ReadFilter,
-        include: IncludeFilter,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<ContextualConversation>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
@@ -179,7 +179,7 @@ impl MailScroller {
 
         let source = DataScrollerSource::<ConversationScrollData>::new(
             label,
-            read,
+            unread,
             page_size,
             order_dir,
             order_field,
@@ -191,8 +191,8 @@ impl MailScroller {
     pub async fn messages(
         ctx: Weak<MailUserContext>,
         mut label: LocalLabelId,
-        read: ReadFilter,
-        include: IncludeFilter,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
@@ -210,7 +210,7 @@ impl MailScroller {
 
         let source = DataScrollerSource::<MessageScrollData>::new(
             label,
-            read,
+            unread,
             page_size,
             order_dir,
             order_field,
@@ -222,7 +222,7 @@ impl MailScroller {
     pub async fn search(
         ctx: Weak<MailUserContext>,
         options: SearchOptions,
-        include: IncludeFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
@@ -409,7 +409,7 @@ impl MailScroller {
         Ok(())
     }
 
-    pub fn change_filter(&self, filter: ReadFilter) -> Result<(), MailContextError> {
+    pub fn change_filter(&self, unread: ReadFilter) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
 
         tracing::trace!("Sending `ChangeFilter` command with uuid: {uuid}");
@@ -417,7 +417,7 @@ impl MailScroller {
         self.ordered_command
             .send(ScrollerOrderedCommand::ChangeFilter {
                 src: ScrollerSource::ScrollEvent(uuid),
-                filter,
+                unread,
             })
             .map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send change filter command"))
@@ -707,7 +707,10 @@ impl<T: MailScrollerSource> ScrollerWorker<T> {
                     .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
             }
 
-            ScrollerOrderedCommand::ChangeFilter { src, filter } => {
+            ScrollerOrderedCommand::ChangeFilter {
+                src,
+                unread: filter,
+            } => {
                 let result = self
                     .change_filter(src, filter)
                     .await
@@ -920,17 +923,17 @@ impl<T: MailScrollerSource> ScrollerWorker<T> {
     async fn change_filter(
         &mut self,
         src: ScrollerSource,
-        filter: ReadFilter,
+        unread: ReadFilter,
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        tracing::debug!("Changing filter to {filter:?}");
+        tracing::debug!("Changing filter to {unread:?}");
         // We drop the previous task, we should not wait for it.
         let _ = self.task.take();
         self.task = self
             .source
             .write()
             .await
-            .change_filter(&ctx, filter)
+            .change_filter(&ctx, unread)
             .await?;
         self.items.clear();
         self.fetch_more(src).await?;
@@ -1085,7 +1088,7 @@ enum ScrollerOrderedCommand {
     GetItems(ScrollerSource),
     ChangeFilter {
         src: ScrollerSource,
-        filter: ReadFilter,
+        unread: ReadFilter,
     },
     ClearCursor(ScrollerSource),
 }

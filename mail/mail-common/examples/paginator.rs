@@ -11,7 +11,7 @@ use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::datatypes::IncludeFilter;
+use proton_mail_common::datatypes::IncludeSwitch;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
 use proton_mail_common::test_utils::scroller::TestScroller;
 use stash::orm::Model;
@@ -99,12 +99,11 @@ async fn main() {
         .unwrap();
 
     let page_count = 50_u32;
-
-    let read = ReadFilter::Unread;
-    let include = IncludeFilter::Default;
+    let unread = ReadFilter::Unread;
+    let include = IncludeSwitch::Default;
 
     let mut paginator =
-        TestScroller::conversations(&user_ctx, label.id(), read, include, page_count as usize)
+        TestScroller::conversations(&user_ctx, label.id(), unread, include, page_count as usize)
             .await
             .unwrap();
 
@@ -112,7 +111,7 @@ async fn main() {
         // We can only guarantee this for when no filter is applied.
         // See notes in [`MailConversationPaginatorSource`].
         // Messages don't have this issue.
-        if read != ReadFilter::All {
+        if unread != ReadFilter::All {
             return true;
         }
         // Due to a bug where attachment metadata local ids are not updated
