@@ -3,7 +3,7 @@ use super::drafts_common::{
     expected_create_draft_params, expected_create_reply_draft_params,
 };
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
-use proton_core_api::consts::Mail;
+use proton_core_api::consts::{General, Mail};
 use proton_core_api::services::proton::UserId;
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_common::models::ModelExtension;
@@ -12,17 +12,20 @@ use proton_crypto_inbox::attachment::{
 };
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{
-    AttachmentId, ContentDisposition, DraftAction, DraftAttachmentKeyPackets, DraftRecipient,
-    MessageAttachmentHeaders, MessageFlags, NewAttachmentDisposition, NewAttachmentResponse,
-    PostAttachmentResponse,
+    AttachmentId, ContentDisposition, Disposition as ApiDisposition, DraftAction,
+    DraftAttachmentKeyPackets, DraftRecipient, MessageAttachmentHeaders, MessageFlags,
+    NewAttachmentDisposition, NewAttachmentResponse, PostAttachmentResponse,
 };
 use proton_mail_api::services::proton::request_data::NewAttachmentParams;
 use proton_mail_api::services::proton::response_data::{MessageAttachment, MessageRecipient};
+use proton_mail_common::actions::draft::AttachmentDispositionUpdate;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::attachments::DraftAttachmentState;
 use proton_mail_common::draft::recipients::RecipientEntry;
-use proton_mail_common::draft::{Draft, DraftSyncStatus, RecipientGroupId, ReplyMode};
+use proton_mail_common::draft::{
+    AttachmentDispositionSwapError, Draft, DraftSyncStatus, RecipientGroupId, ReplyMode,
+};
 use proton_mail_common::models::{
     Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, Message,
 };
@@ -1293,6 +1296,239 @@ async fn total_attachment_count_exceeds_limit_local() {
     ));
 }
 
+#[tokio::test]
+async fn swap_attachment_disposition() {
+    // this test checks for 2 things
+    // * Pending attachment upload maintains the original values when uploading and is not affected
+    //   by the disposition swap action.
+    // * The disposition swap action correctly runs
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let attachment_id = AttachmentId::from("MY_ATTACHMENT");
+    let params = draft_test_params();
+    let attachment_file = tempfile::NamedTempFile::new().unwrap();
+    let message = draft_message();
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
+    draft.save().await.unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let local_attachment = create_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Inline,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+    let content_id = local_attachment.content_id.clone().unwrap();
+
+    ctx.mock_create_attachment(
+        new_attachment_params_with_disposition(
+            attachment_file.path(),
+            message.metadata.id.clone(),
+            NewAttachmentDisposition::Inline(content_id.clone().into_inner()),
+        ),
+        Ok(PostAttachmentResponse {
+            attachment: NewAttachmentResponse {
+                id: attachment_id.clone(),
+                disposition: ApiDisposition::Inline,
+                enc_signature: None,
+                key_packets: KeyPackets(String::new()),
+                file_name: local_attachment.filename.clone(),
+                signature: None,
+                file_size: local_attachment.size,
+                headers: MessageAttachmentHeaders {
+                    content_disposition: ContentDisposition::One("inline".into()),
+                    content_id: Some(content_id.clone().into_inner()),
+                    content_transfer_encoding: None,
+                    image_height: None,
+                    image_width: None,
+                },
+            },
+        }),
+    )
+    .await;
+
+    ctx.mock_put_attachment_disposition(
+        attachment_id.clone(),
+        NewAttachmentDisposition::Attachment,
+        Ok(()),
+    )
+    .await;
+    ctx.catch_all().await;
+
+    draft.add_attachment(&local_attachment).await.unwrap();
+
+    let attachments = draft.attachments().await.unwrap();
+    assert_eq!(attachments.len(), 1);
+    assert_eq!(attachments[0].metadata.disposition, Disposition::Inline);
+
+    draft
+        .swap_attachment_disposition_from_inline(content_id)
+        .await
+        .unwrap();
+
+    let attachments = draft.attachments().await.unwrap();
+    assert_eq!(attachments.len(), 1);
+    assert_eq!(attachments[0].metadata.disposition, Disposition::Attachment);
+
+    let count = user_ctx.execute_all_send_actions().await.unwrap();
+    assert_eq!(count, 2);
+}
+
+#[tokio::test]
+async fn swap_attachment_disposition_retry() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let attachment_id = AttachmentId::from("MY_ATTACHMENT");
+    let params = draft_test_params();
+    let attachment_file = tempfile::NamedTempFile::new().unwrap();
+    let message = draft_message();
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
+    draft.save().await.unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let local_attachment = create_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Inline,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+    let content_id = local_attachment.content_id.clone().unwrap();
+
+    ctx.mock_create_attachment(
+        new_attachment_params_with_disposition(
+            attachment_file.path(),
+            message.metadata.id.clone(),
+            NewAttachmentDisposition::Inline(content_id.clone().into_inner()),
+        ),
+        Ok(PostAttachmentResponse {
+            attachment: NewAttachmentResponse {
+                id: attachment_id.clone(),
+                disposition: ApiDisposition::Inline,
+                enc_signature: None,
+                key_packets: KeyPackets(String::new()),
+                file_name: local_attachment.filename.clone(),
+                signature: None,
+                file_size: local_attachment.size,
+                headers: MessageAttachmentHeaders {
+                    content_disposition: ContentDisposition::One("inline".into()),
+                    content_id: Some(content_id.clone().into_inner()),
+                    content_transfer_encoding: None,
+                    image_height: None,
+                    image_width: None,
+                },
+            },
+        }),
+    )
+    .await;
+
+    ctx.mock_put_attachment_disposition(
+        attachment_id.clone(),
+        NewAttachmentDisposition::Attachment,
+        Err(ApiErrorInfo {
+            code: General::InvalidRequirements as u32,
+            error: None,
+            details: None,
+        }),
+    )
+    .await;
+    ctx.catch_all().await;
+
+    draft.add_attachment(&local_attachment).await.unwrap();
+    draft
+        .swap_attachment_disposition_from_inline(content_id)
+        .await
+        .unwrap();
+
+    let QueuedError::Action(e, _) = user_ctx.execute_all_send_actions().await.unwrap_err() else {
+        unreachable!();
+    };
+
+    let e = e.as_action_error::<AttachmentDispositionUpdate>().unwrap();
+    assert!(matches!(
+        e,
+        ActionError::Action(MailContextError::Draft(
+            draft::Error::AttachmentDispositionSwap(
+                AttachmentDispositionSwapError::AttachmentDoesNotHaveValidCid(_)
+            )
+        ))
+    ));
+
+    ctx.mock_web_server.verify().await;
+    ctx.mock_web_server.reset().await;
+    ctx.mock_put_attachment_disposition(
+        attachment_id.clone(),
+        NewAttachmentDisposition::Attachment,
+        Ok(()),
+    )
+    .await;
+    ctx.catch_all().await;
+
+    draft
+        .retry_attachment_action(local_attachment.id())
+        .await
+        .unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
+}
+
 async fn create_and_add_attachment(
     ctx: &MailUserContext,
     path: &Path,
@@ -1332,11 +1568,23 @@ async fn create_attachment(
 }
 
 fn new_attachment_params(file_path: &Path, message_id: MessageId) -> NewAttachmentParams {
+    new_attachment_params_with_disposition(
+        file_path,
+        message_id,
+        NewAttachmentDisposition::Attachment,
+    )
+}
+
+fn new_attachment_params_with_disposition(
+    file_path: &Path,
+    message_id: MessageId,
+    disposition: NewAttachmentDisposition,
+) -> NewAttachmentParams {
     NewAttachmentParams {
         filename: file_path.file_name().unwrap().to_str().unwrap().to_owned(),
         message_id,
         mime_type: "text/plain".into(),
-        disposition: NewAttachmentDisposition::Attachment,
+        disposition,
         // these parameters are not checked and can be empty.
         key_packets: vec![],
         signature: Some(BinaryAttachmentSignature::from(vec![])),

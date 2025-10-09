@@ -211,6 +211,9 @@ pub enum Mail {
     ExpirationTimeTooSoon = 2023,
     MessageDoesNotExist = 2501,
     ConversationDoesNotExist = 20052,
+    AttachmentDoesNotExist = 11127,
+    AttachmentMessageDoesNotExist = 11125,
+    AttachmentMessageNotADraft = 11126,
 }
 
 pub enum Payments {

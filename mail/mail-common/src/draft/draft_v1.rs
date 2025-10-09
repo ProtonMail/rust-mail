@@ -1,9 +1,9 @@
 use crate::actions::draft;
 use crate::actions::draft::{
-    AttachmentRemove, AttachmentUpload, AttachmentUploadMode, Discard, SHARE_EXT_ACTION_GROUP,
-    Save, UndoSend,
+    AttachmentDispositionUpdate, AttachmentRemove, AttachmentUpload, AttachmentUploadMode, Discard,
+    SHARE_EXT_ACTION_GROUP, Save, UndoSend,
 };
-use crate::datatypes::attachment::ContentId;
+use crate::datatypes::attachment::{CombinedAttachmentDisposition, ContentId};
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalConversationId, LocalMessageId};
 use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
 use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
@@ -16,9 +16,10 @@ use crate::draft::compose::{
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::draft::{
-    AttachmentUploadError, DraftExpirationTime, DraftSyncStatus, EoData, Error, ExpirationError,
-    MIN_EXPIRATION_TIME_SECONDS, MIN_PASSWORD_LEN, OpenError, PasswordError, ReplyMode, SaveError,
-    ScheduleSendOptions, SendError, SenderAddressChangeError, compose, send,
+    AttachmentDispositionSwapError, AttachmentUploadError, DraftExpirationTime, DraftSyncStatus,
+    EoData, Error, ExpirationError, MIN_EXPIRATION_TIME_SECONDS, MIN_PASSWORD_LEN, OpenError,
+    PasswordError, ReplyMode, SaveError, ScheduleSendOptions, SendError, SenderAddressChangeError,
+    compose, send,
 };
 use crate::models::{
     Attachment, AttachmentData, AttachmentType, CustomSettings, DraftAttachmentMetadata,
@@ -26,7 +27,7 @@ use crate::models::{
     MailSettings, Message, MessageMimeType, MetadataId,
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use chrono::{DateTime, Local};
 use futures::future::join3;
 use proton_action_queue::action::{ActionId, MetadataBuilder};
@@ -1032,25 +1033,49 @@ impl Draft {
         DraftAttachmentRemovalQueuer::new(self.metadata_id, AttachmentRemovalId::Cid(content_id))
     }
 
-    pub async fn retry_attachment_upload(
+    pub async fn retry_attachment_operation(
         &mut self,
         ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
     ) -> Result<ActionId, MailContextError> {
-        let upload_action = self.to_retry_attachment_upload_action(attachment_id);
+        let tether = ctx.user_stash().connection().await?;
+
+        let metadata = DraftAttachmentMetadata::find_by_id(attachment_id, &tether)
+            .await?
+            .ok_or_else(|| MailContextError::Other(anyhow!("Attachment metadata not found")))?;
 
         let queue = ctx.action_queue();
-        let tether = ctx.user_stash().connection().await?;
-        let result = upload_action
-            .queue(
-                queue,
-                &tether,
-                ctx.origin(),
-                &mut self.last_draft_save_action_id,
-            )
-            .await?;
 
-        Ok(result.id)
+        let action_id = if metadata.is_upload_error() {
+            let upload_action = self.to_retry_attachment_upload_action(attachment_id);
+            let result = upload_action
+                .queue(
+                    queue,
+                    &tether,
+                    ctx.origin(),
+                    &mut self.last_draft_save_action_id,
+                )
+                .await?;
+            result.id
+        } else if metadata.is_disposition_swap_error() {
+            let mut metadata = MetadataBuilder::new()
+                .with_resource(&self.metadata_id)
+                .expect("This should never fail");
+
+            if let Origin::ShareExt = ctx.origin() {
+                metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
+            }
+            queue
+                .queue_action_with_metadata(
+                    draft::AttachmentDispositionUpdate::retry(self.metadata_id, attachment_id),
+                    metadata.build(),
+                )
+                .await?
+                .id
+        } else {
+            return Err(MailContextError::Other(anyhow!("Invalid Retry state")));
+        };
+        Ok(action_id)
     }
 
     /// Create action queuer where the attachment upload is retried.
@@ -1432,6 +1457,96 @@ impl Draft {
             .ok_or(PasswordError::MetadataNotFound(self.metadata_id))?;
 
         Ok(metadata.expiration_time())
+    }
+
+    pub async fn swap_attachment_disposition_from_inline(
+        &self,
+        ctx: &MailUserContext,
+        content_id: ContentId,
+    ) -> Result<(), MailContextError> {
+        let tether = ctx.user_stash().connection().await?;
+        let attachment = Attachment::find_by_content_id(content_id.clone(), &tether)
+            .await?
+            .ok_or(AttachmentDispositionSwapError::AttachmentNotFoundCid(
+                content_id,
+            ))?;
+
+        let queue = ctx.action_queue();
+        self.swap_attachment_disposition_impl(
+            &tether,
+            queue,
+            ctx.origin(),
+            attachment.id(),
+            CombinedAttachmentDisposition::Attachment,
+        )
+        .await
+    }
+    pub async fn swap_attachment_disposition(
+        &self,
+        ctx: &MailUserContext,
+        attachment_id: LocalAttachmentId,
+        new_attachment_disposition: CombinedAttachmentDisposition,
+    ) -> Result<(), MailContextError> {
+        let queue = ctx.action_queue();
+        let tether = ctx.user_stash().connection().await?;
+        self.swap_attachment_disposition_impl(
+            &tether,
+            queue,
+            ctx.origin(),
+            attachment_id,
+            new_attachment_disposition,
+        )
+        .await
+    }
+
+    async fn swap_attachment_disposition_impl(
+        &self,
+        tether: &Tether,
+        queue: &Queue,
+        origin: Origin,
+        attachment_id: LocalAttachmentId,
+        new_attachment_disposition: CombinedAttachmentDisposition,
+    ) -> Result<(), MailContextError> {
+        let attachment_metadata = DraftAttachmentMetadata::find_by_id(attachment_id, tether)
+            .await?
+            .ok_or(AttachmentDispositionSwapError::AttachmentNotFound(
+                attachment_id,
+            ))?;
+
+        let state = attachment_metadata.state();
+        if attachment_metadata.deleted
+            || matches!(
+                state,
+                DraftAttachmentUploadState::Error | DraftAttachmentUploadState::Pending
+            )
+        {
+            tracing::error!("Attachment is in invalid state {:?}", state);
+            return Err(AttachmentDispositionSwapError::InvalidState(attachment_id).into());
+        }
+
+        let mut metadata = MetadataBuilder::new()
+            .with_resource(&self.metadata_id)
+            .expect("Should not fail");
+
+        if let Some(action_id) = attachment_metadata.action_id {
+            metadata = metadata.with_dependency(action_id);
+        }
+
+        if let Origin::ShareExt = origin {
+            metadata = metadata.with_group_override(SHARE_EXT_ACTION_GROUP);
+        }
+
+        queue
+            .queue_action_with_metadata(
+                AttachmentDispositionUpdate::new(
+                    self.metadata_id,
+                    attachment_id,
+                    new_attachment_disposition,
+                ),
+                metadata.build(),
+            )
+            .await?;
+        Ok(())
     }
 }
 

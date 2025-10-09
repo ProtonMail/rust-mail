@@ -329,6 +329,9 @@ pub struct Attachment {
     /// See [`AttachmentSignature`]
     pub signature: Option<AttachmentSignature>,
 
+    #[serde(default, rename = "ContentID")]
+    pub content_id: Option<String>,
+
     /// The size of the attachment in bytes.
     pub size: u64,
 }

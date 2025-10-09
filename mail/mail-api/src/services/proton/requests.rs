@@ -517,3 +517,26 @@ impl From<NewAttachmentParams> for PostUploadAttachmentRequest {
         }
     }
 }
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutAttachmentDispositionRequest {
+    pub disposition: Disposition,
+    #[serde(rename = "ContentID")]
+    pub content_id: Option<String>,
+}
+
+impl From<NewAttachmentDisposition> for PutAttachmentDispositionRequest {
+    fn from(value: NewAttachmentDisposition) -> Self {
+        match value {
+            NewAttachmentDisposition::Attachment => Self {
+                disposition: Disposition::Attachment,
+                content_id: None,
+            },
+            NewAttachmentDisposition::Inline(id) => Self {
+                disposition: Disposition::Inline,
+                content_id: Some(id),
+            },
+        }
+    }
+}

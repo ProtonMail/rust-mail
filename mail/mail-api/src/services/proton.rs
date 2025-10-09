@@ -111,6 +111,12 @@ pub trait ProtonMail {
     /// This method will return an error if the request fails.
     async fn delete_attachment(&self, id: AttachmentId) -> ApiServiceResult<()>;
 
+    async fn put_attachment_disposition(
+        &self,
+        id: AttachmentId,
+        new_attachment_disposition: NewAttachmentDisposition,
+    ) -> ApiServiceResult<()>;
+
     /// TODO: Document this method.
     ///
     /// # Errors

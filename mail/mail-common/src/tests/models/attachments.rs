@@ -92,6 +92,7 @@ fn test_attachment() -> ApiAttachment {
         message_id: message_id(),
         conversation_id: conversation_id(),
         is_auto_forwardee: true,
+        content_id: None,
     }
 }
 

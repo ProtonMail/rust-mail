@@ -284,7 +284,7 @@ impl From<InboxSessionKey> for ExposedKey {
 }
 
 /// Defines newly created attachment disposition.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NewAttachmentDisposition {
     /// Regular mail attachment.
     Attachment,

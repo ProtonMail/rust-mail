@@ -1,8 +1,8 @@
 use super::{
-    DraftAttachmentUploadErrorReason, DraftCancelScheduleSendErrorReason, DraftDiscardErrorReason,
-    DraftExpirationErrorReason, DraftOpenErrorReason, DraftPasswordErrorReason,
-    DraftSaveErrorReason, DraftSendErrorReason, DraftSenderAddressChangeErrorReason,
-    DraftUndoSendErrorReason, ProtonError,
+    DraftAttachmentDispositionSwapErrorReason, DraftAttachmentUploadErrorReason,
+    DraftCancelScheduleSendErrorReason, DraftDiscardErrorReason, DraftExpirationErrorReason,
+    DraftOpenErrorReason, DraftPasswordErrorReason, DraftSaveErrorReason, DraftSendErrorReason,
+    DraftSenderAddressChangeErrorReason, DraftUndoSendErrorReason, ProtonError,
 };
 use crate::UniffiEnum;
 use derive_more::From;
@@ -265,6 +265,53 @@ impl From<RealMailErrorReason> for DraftExpirationError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
             RealMailErrorReason::DraftExpirationReason(reason) => Self::Reason(reason.into()),
+            other_reason => Self::Other(ProtonError::from(other_reason)),
+        }
+    }
+}
+
+#[derive(Debug, From, UniffiEnum)]
+pub enum DraftAttachmentDispositionSwapError {
+    Reason(DraftAttachmentDispositionSwapErrorReason),
+    Other(ProtonError),
+}
+
+impl From<RealProtonMailError> for DraftAttachmentDispositionSwapError {
+    fn from(error: RealProtonMailError) -> Self {
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            mail_error => Self::Other(ProtonError::from(mail_error)),
+        }
+    }
+}
+
+impl From<RealMailErrorReason> for DraftAttachmentDispositionSwapError {
+    fn from(reason: RealMailErrorReason) -> Self {
+        match reason {
+            RealMailErrorReason::DraftAttachmentDispositionSwapError(reason) => {
+                Self::Reason(reason.into())
+            }
+            other_reason => Self::Other(ProtonError::from(other_reason)),
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftAttachmentRetryError {
+    Upload(DraftAttachmentUploadErrorReason),
+    DispositionSwap(DraftAttachmentDispositionSwapErrorReason),
+    Other(ProtonError),
+}
+
+impl From<RealProtonMailError> for DraftAttachmentRetryError {
+    fn from(error: RealProtonMailError) -> Self {
+        match error {
+            RealProtonMailError::Reason(RealMailErrorReason::DraftAttachmentUploadReason(e)) => {
+                Self::Upload(e.into())
+            }
+            RealProtonMailError::Reason(
+                RealMailErrorReason::DraftAttachmentDispositionSwapError(e),
+            ) => Self::DispositionSwap(e.into()),
             other_reason => Self::Other(ProtonError::from(other_reason)),
         }
     }

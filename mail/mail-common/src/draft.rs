@@ -1,4 +1,4 @@
-use crate::datatypes::attachment::ContentId;
+use crate::datatypes::attachment::{CombinedAttachmentDisposition, ContentId};
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalConversationId, LocalMessageId};
 use crate::ios_share_ext::IosShareExtension;
 use crate::models::{
@@ -60,7 +60,7 @@ use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_core_api::session::Session;
 use proton_core_common::Origin;
 use proton_core_common::models::Address;
-use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::common::{AttachmentId, MessageId};
 use proton_mail_api::services::proton::prelude::DraftReplyOrForwardParams;
 use stash::stash::Tether;
 
@@ -93,6 +93,8 @@ pub enum Error {
     Expiration(ExpirationError),
     #[error(transparent)]
     Recipient(#[from] RecipientError),
+    #[error(transparent)]
+    AttachmentDispositionSwap(#[from] AttachmentDispositionSwapError),
     #[error("Failed to communicate with actor")]
     Actor,
 }
@@ -393,6 +395,42 @@ impl From<ExpirationError> for MailContextError {
 impl From<RecipientError> for MailContextError {
     fn from(err: RecipientError) -> Self {
         MailContextError::Draft(Error::Recipient(err))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AttachmentDispositionSwapError {
+    #[error("Metadata with Id {0} does not exist")]
+    MetadataNotFound(MetadataId),
+    #[error("Attachment {0} not found")]
+    AttachmentNotFound(LocalAttachmentId),
+    #[error("Attachment with cid:{0} not found")]
+    AttachmentNotFoundCid(ContentId),
+    #[error("Attachment {0} has no remote id")]
+    AttachmentHasNoRemoteId(LocalAttachmentId),
+    #[error("Draft attachment {0} metadata not found")]
+    AttachmentMetadataNotFound(LocalAttachmentId),
+    #[error("Attempting to swap disposition to the same state")]
+    Noop,
+    #[error("Draft {0} does not have local message id")]
+    NoMessageIdInDraftMetadata(MetadataId),
+    #[error("Invalid state for attachment {0}")]
+    InvalidState(LocalAttachmentId),
+    #[error("Attachment {0} has no content id")]
+    AttachmentHasNoContentId(LocalAttachmentId),
+    #[error("Attachment {0} does not exist on server")]
+    AttachmentDoesNotExistServer(AttachmentId),
+    #[error("Attachment {0} message does not exist on server")]
+    AttachmentMessageDoesNotExist(AttachmentId),
+    #[error("Attachment {0} message is not a draft")]
+    AttachmentMessageIsNotADraft(AttachmentId),
+    #[error("Attachment {0} does not have a valid cid")]
+    AttachmentDoesNotHaveValidCid(AttachmentId),
+}
+
+impl From<AttachmentDispositionSwapError> for MailContextError {
+    fn from(value: AttachmentDispositionSwapError) -> Self {
+        Self::Draft(Error::AttachmentDispositionSwap(value))
     }
 }
 
@@ -793,11 +831,11 @@ impl DraftActor {
         .await?
     }
 
-    pub async fn retry_attachment_upload(
+    pub async fn retry_attachment_action(
         &self,
         attachment_id: LocalAttachmentId,
     ) -> Result<ActionId, MailContextError> {
-        self.act(|sender| DraftActorMessage::RetryAttachmentUpload {
+        self.act(|sender| DraftActorMessage::RetryAttachmentOperation {
             attachment_id,
             sender,
         })
@@ -1190,6 +1228,29 @@ impl DraftActor {
         self.act(DraftActorMessage::ValidateExpirationFeature)
             .await?
     }
+
+    pub async fn swap_attachment_disposition(
+        &self,
+        attachment_id: LocalAttachmentId,
+        new_attachment_disposition: Disposition,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SwapAttachmentDisposition {
+            attachment_id,
+            new_disposition: match new_attachment_disposition {
+                Disposition::Attachment => CombinedAttachmentDisposition::Attachment,
+                Disposition::Inline => CombinedAttachmentDisposition::Inline(ContentId::new()),
+            },
+            sender,
+        })
+        .await?
+    }
+    pub async fn swap_attachment_disposition_from_inline(
+        &self,
+        content_id: ContentId,
+    ) -> Result<(), MailContextError> {
+        self.act(|sender| DraftActorMessage::SwapAttachmentDispositionCid { content_id, sender })
+            .await?
+    }
 }
 
 #[derive(Display)]
@@ -1243,7 +1304,7 @@ enum DraftActorMessage {
     #[display("GetAttachments")]
     GetAttachments(oneshot::Sender<Result<Vec<DraftAttachment>, MailContextError>>),
     #[display("RetryAttachmentUpload")]
-    RetryAttachmentUpload {
+    RetryAttachmentOperation {
         attachment_id: LocalAttachmentId,
         sender: oneshot::Sender<Result<ActionId, MailContextError>>,
     },
@@ -1389,6 +1450,17 @@ enum DraftActorMessage {
     ValidateExpirationFeature(
         oneshot::Sender<Result<ExpirationFeatureSupportReport, MailContextError>>,
     ),
+    #[display("SwapAttachmentDisposition")]
+    SwapAttachmentDisposition {
+        attachment_id: LocalAttachmentId,
+        new_disposition: CombinedAttachmentDisposition,
+        sender: oneshot::Sender<Result<(), MailContextError>>,
+    },
+    #[display("SwapAttachmentDispositionCid")]
+    SwapAttachmentDispositionCid {
+        content_id: ContentId,
+        sender: oneshot::Sender<Result<(), MailContextError>>,
+    },
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -1575,11 +1647,11 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r.map_err(Into::into));
                 }
-                DraftActorMessage::RetryAttachmentUpload {
+                DraftActorMessage::RetryAttachmentOperation {
                     attachment_id,
                     sender,
                 } => {
-                    let r = draft.retry_attachment_upload(&ctx, attachment_id).await;
+                    let r = draft.retry_attachment_operation(&ctx, attachment_id).await;
                     let _ = sender.send(r);
                 }
                 DraftActorMessage::RemoveAttachmentWithCid { content_id, sender } => {
@@ -2016,6 +2088,22 @@ impl DraftActor {
                         Ok(report)
                     }
                     .await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::SwapAttachmentDisposition {
+                    attachment_id,
+                    new_disposition,
+                    sender,
+                } => {
+                    let r = draft
+                        .swap_attachment_disposition(&ctx, attachment_id, new_disposition)
+                        .await;
+                    let _ = sender.send(r);
+                }
+                DraftActorMessage::SwapAttachmentDispositionCid { content_id, sender } => {
+                    let r = draft
+                        .swap_attachment_disposition_from_inline(&ctx, content_id)
+                        .await;
                     let _ = sender.send(r);
                 }
             }

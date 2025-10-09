@@ -936,6 +936,13 @@ impl Attachment {
             .as_ref()
             .map(|cid| format!(r#"<img src="cid:{cid}" style="max-width: 100%;"><br>"#))
     }
+
+    pub async fn find_by_content_id(
+        content_id: ContentId,
+        tether: &Tether,
+    ) -> Result<Option<Attachment>, MailContextError> {
+        Ok(Self::find_first("WHERE content_id=?", params![content_id.clone()], tether).await?)
+    }
 }
 
 impl ModelHooks for Attachment {

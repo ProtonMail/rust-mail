@@ -2,7 +2,8 @@ use crate::datatypes::AttachmentMetadata;
 use crate::datatypes::LocalAttachmentId;
 use crate::draft::SaveError;
 use crate::models::{
-    Attachment, DraftAttachmentMetadata, DraftAttachmentUploadError, DraftAttachmentUploadState,
+    Attachment, DraftAttachmentInternalDispositionError, DraftAttachmentInternalError,
+    DraftAttachmentInternalUploadError, DraftAttachmentMetadata, DraftAttachmentUploadState,
     DraftMetadata, MetadataId,
 };
 use crate::{MailContextError, MailContextResult, MailUserContext};
@@ -31,13 +32,80 @@ pub struct DraftAttachment {
 }
 
 #[derive(Debug)]
+pub enum DraftAttachmentError {
+    Upload(DraftAttachmentUploadError),
+    DispositionSwap(DraftAttachmentDispositionSwapError),
+}
+
+#[derive(Debug)]
+pub enum DraftAttachmentUploadError {
+    Crypto(String),
+    TooManyAttachments,
+    MessageAlreadySent,
+    Server(String),
+    AttachmentTooLarge,
+    TotalAttachmentsTooLarge,
+    Unexpected,
+}
+
+#[derive(Debug)]
+pub enum DraftAttachmentDispositionSwapError {
+    Server(String),
+    AttachmentNotFound,
+    AttachmentMessageNotFound,
+    AttachmentMessageIsNotADraft,
+    Unexpected,
+}
+
+impl From<DraftAttachmentInternalError> for DraftAttachmentError {
+    fn from(value: DraftAttachmentInternalError) -> Self {
+        match value {
+            DraftAttachmentInternalError::Upload(e) => Self::Upload(e.into()),
+            DraftAttachmentInternalError::DispositionSwap(e) => Self::DispositionSwap(e.into()),
+        }
+    }
+}
+
+impl From<DraftAttachmentInternalUploadError> for DraftAttachmentUploadError {
+    fn from(value: DraftAttachmentInternalUploadError) -> Self {
+        match value {
+            DraftAttachmentInternalUploadError::Crypto(v) => Self::Crypto(v),
+            DraftAttachmentInternalUploadError::TooManyAttachments => Self::TooManyAttachments,
+            DraftAttachmentInternalUploadError::MessageAlreadySent => Self::MessageAlreadySent,
+            DraftAttachmentInternalUploadError::Server(v) => Self::Server(v),
+            DraftAttachmentInternalUploadError::AttachmentTooLarge => Self::AttachmentTooLarge,
+            DraftAttachmentInternalUploadError::TotalAttachmentsTooLarge => {
+                Self::TotalAttachmentsTooLarge
+            }
+            DraftAttachmentInternalUploadError::Unexpected => Self::Unexpected,
+        }
+    }
+}
+
+impl From<DraftAttachmentInternalDispositionError> for DraftAttachmentDispositionSwapError {
+    fn from(value: DraftAttachmentInternalDispositionError) -> Self {
+        match value {
+            DraftAttachmentInternalDispositionError::Server(v) => Self::Server(v),
+            DraftAttachmentInternalDispositionError::AttachmentNotFound => Self::AttachmentNotFound,
+            DraftAttachmentInternalDispositionError::MessageIsNotDraft => {
+                Self::AttachmentMessageIsNotADraft
+            }
+            DraftAttachmentInternalDispositionError::MessageDoesNotExist => {
+                Self::AttachmentMessageNotFound
+            }
+            DraftAttachmentInternalDispositionError::Unexpected => Self::Unexpected,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum DraftAttachmentState {
     /// Attachment has not been uploaded.
     Uploading,
     /// Attachment has been uploaded to the server
     Uploaded,
     /// Attachment failed to upload or encrypt.
-    Error(DraftAttachmentUploadError),
+    Error(DraftAttachmentError),
     /// Could not upload due to lack of network,
     Offline,
     /// Attachment is awaiting upload.
@@ -54,8 +122,10 @@ impl DraftAttachmentState {
                 let error = metadata
                     .error
                     .clone()
-                    .unwrap_or(DraftAttachmentUploadError::Unexpected);
-                Self::Error(error)
+                    .unwrap_or(DraftAttachmentInternalError::Upload(
+                        DraftAttachmentInternalUploadError::Unexpected,
+                    ));
+                Self::Error(error.into())
             }
             DraftAttachmentUploadState::Offline => Self::Offline,
         }
