@@ -71,7 +71,7 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
             if std::env::var("STASH_SQL_DEBUG").is_ok() {
                 "trace"
             } else {
-                "error"
+                "debug"
             }
         ))
         .expect("bad log directives")
@@ -98,7 +98,7 @@ pub fn app_tracing_env_filter_trace() -> EnvFilter {
             if std::env::var("STASH_SQL_DEBUG").is_ok() {
                 "trace"
             } else {
-                "error"
+                "debug"
             }
         ))
         .expect("bad log directives")
