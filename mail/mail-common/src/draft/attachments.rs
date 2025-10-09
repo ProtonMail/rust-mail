@@ -115,7 +115,9 @@ pub enum DraftAttachmentState {
 impl DraftAttachmentState {
     pub fn from_draft_attachment_metadata(metadata: &DraftAttachmentMetadata) -> Self {
         match metadata.state() {
-            DraftAttachmentUploadState::Uploading => Self::Uploading,
+            DraftAttachmentUploadState::Uploading | DraftAttachmentUploadState::DispositionSwap => {
+                Self::Uploading
+            }
             DraftAttachmentUploadState::Uploaded => Self::Uploaded,
             DraftAttachmentUploadState::Pending => Self::Pending,
             DraftAttachmentUploadState::Error => {
