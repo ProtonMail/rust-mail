@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Features
+
+- Can't find what you're looking for? Include Spam/Trash.
+- New method `is_message_sender_blocked` for displaying `Block` button on the message details screen
+- [ET-2816] Attachment Disposition Swap
+
+
 ## [mail-uniffi-v0.149.12] - 2025-10-08
 
 ### Changed
