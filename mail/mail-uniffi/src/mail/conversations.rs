@@ -571,9 +571,11 @@ pub async fn scroll_conversations_for_label(
         )
         .await?;
 
-        let handle = spawn_conversation_scroller_watcher(&context, handle, callback);
+        let (handle, list) = spawn_conversation_scroller_watcher(&context, handle, callback);
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller::new(scroller, handle)))
+        Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller::new(
+            scroller, handle, list,
+        )))
     })
     .await
     .map_err(ActionError::from)
