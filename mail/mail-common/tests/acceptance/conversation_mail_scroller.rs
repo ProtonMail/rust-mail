@@ -1509,26 +1509,19 @@ async fn test_conversation_mail_scroller_handles_stale_data_on_next_and_previous
     let unread = ReadFilter::All;
     let include = IncludeSwitch::Default;
     let api_page = create_api_conversation_page(0..9, 100);
+    let models = api_page
+        .iter()
+        .map(|conv| Conversation::from(conv.clone()))
+        .collect_vec();
     // Set up cached data
     let remote_label_id = SystemLabel::Trash.remote_id();
     let mut data = hash_map! {
-        vec![remote_label_id.as_str()]: vec![],
+        vec![remote_label_id.as_str()]: models,
         vec!["rid2"]: test_conversations(50, 0),
     };
     data.save_to_database(&mut tether).await;
 
-    ctx.mock_get_conversations_with(move |builder| {
-        builder
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
-                    conversations: api_page.clone(),
-                    stale: true,
-                    total: 1,
-                }),
-            )
-            .expect(4..=7)
-    })
-    .await;
+    ctx.mock_get_conversations(api_page, 4..=7).await;
     ctx.mock_ping_success().await;
     ctx.catch_all().await;
 
@@ -1545,43 +1538,36 @@ async fn test_conversation_mail_scroller_handles_stale_data_on_next_and_previous
             .await
             .unwrap();
 
-    // The location is trash so we should get no update as the data is stale
+    // The items will be read from cache as we have 9 items in cache
+    // And the exact same data is in the API
     test_scroller.fetch_more().unwrap(); // 1st fetch_more
     test_scroller
-        .match_next_update(TestUpdate::Error("MailScroller: MailScroller cannot serve more data, counters seems not to be fulfillable".to_string()))
+        .match_next_update(TestUpdate::Append { items: 9 })
         .await;
     assert!(test_scroller.has_more().await.unwrap());
+    // 2nd fetch_more goes when first_page sync finishes around here.
+    // |<-
+    // No update is expected as the data is the same
+    let update = test_scroller
+        .try_wait_for_update(Duration::from_secs(2))
+        .await
+        .unwrap();
+    assert!(update.is_none());
+    assert_eq!(test_scroller.items().len(), 9);
 
-    // Update the database should trigger a new fetch_more
+    // 3rd fetch_more by triggering invisble database update.
     let mut new_data = hash_map! {
         vec!["rid2"]: test_conversations(1, 299),
     };
     new_data.save_to_database(&mut tether).await;
 
-    // We shouldn't get any update as the data is still stale
-    test_scroller
-        .match_next_update(TestUpdate::Error("MailScroller: MailScroller cannot serve more data, counters seems not to be fulfillable".to_string()))
-        .await;
-
-    // However, if we switch to a different location (not trash or spam), we should get an update despite the data being stale
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
-    counters.total = 10;
-    tether
-        .tx(async |bond| counters.save(bond).await)
+    // We shouldn't get any update as the data is still the same
+    let update = test_scroller
+        .try_wait_for_update(Duration::from_secs(2))
         .await
         .unwrap();
-
-    let mut test_scroller =
-        TestScroller::conversations_instant(&user_ctx, local_label_id, unread, include, page_size)
-            .await
-            .unwrap();
-
-    test_scroller.fetch_more().unwrap();
-    test_scroller
-        .match_next_update(TestUpdate::Append { items: 9 })
-        .await;
-    assert!(test_scroller.has_more().await.unwrap());
+    assert!(update.is_none());
+    assert_eq!(test_scroller.items().len(), 9);
 }
 
 #[function_name::named]
