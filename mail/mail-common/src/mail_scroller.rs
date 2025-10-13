@@ -16,7 +16,7 @@ use derive_more::Display;
 use futures::select;
 use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
-use proton_core_common::app_events::OnEnterForegroundEvent;
+use proton_core_common::app_events::{OnEnterForegroundEvent, OnForceEventPollEvent};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelIdExtension};
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
@@ -299,6 +299,23 @@ impl MailScroller {
                     }
 
                     tracing::debug!("Scroller {id} fetch new after enter foreground");
+
+                    if Self::do_fetch_new(&ordered_command_cloned).is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+
+        let ordered_command_cloned = ordered_command.clone();
+        if let Some(mut event_subscriber) = event_service.subscribe::<OnForceEventPollEvent>() {
+            ctx.spawn(async move {
+                loop {
+                    if event_subscriber.next().await.is_err() {
+                        return;
+                    }
+
+                    tracing::debug!("Scroller {id} fetch new after force refresh event");
 
                     if Self::do_fetch_new(&ordered_command_cloned).is_err() {
                         return;
