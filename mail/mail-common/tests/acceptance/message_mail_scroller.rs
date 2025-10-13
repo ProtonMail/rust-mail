@@ -181,9 +181,11 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let page_size = 5;
     let unread = ReadFilter::All;
     let include = IncludeSwitch::Default;
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let label = SystemLabel::Inbox;
+    let remote_label_id = label.remote_id();
+    let local_label_id = label.local_id(&tether).await.unwrap().unwrap();
     // mocks
-    mock_api_sync_prevous_messages_page(&ctx, "mymsg_9", 1).await;
+    mock_api_sync_previous_messages_page(&ctx, "mymsg_9", &remote_label_id, 1).await;
     let params = setup_api_message_pages(&ctx, page_size, 1..=5).await;
 
     ctx.setup_user(params.clone()).await;
@@ -610,9 +612,17 @@ async fn setup_api_message_pages_ext(
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
     let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
 
-    mock_get_messages_page(ctx, second_page, &first_page_last_id, 1).await;
+    let remote_label_id = system_label.remote_id();
+    mock_get_messages_page(ctx, second_page, &first_page_last_id, &remote_label_id, 1).await;
     // last page is empty
-    mock_get_messages_page(ctx, vec![], &second_page_last_id, empty_pages_requests).await;
+    mock_get_messages_page(
+        ctx,
+        vec![],
+        &second_page_last_id,
+        &remote_label_id,
+        empty_pages_requests,
+    )
+    .await;
 
     ctx.mock_get_messages()
         .expect(1..3)
@@ -623,14 +633,20 @@ async fn setup_api_message_pages_ext(
 }
 
 #[function_name::named]
-pub async fn mock_api_sync_prevous_messages_page(
+pub async fn mock_api_sync_previous_messages_page(
     ctx: &MailTestContext,
     first_id: &str,
+    label: &LabelId,
     expect: impl Into<Times>,
 ) {
+    let desc = ScrollOrderDir::for_label(label)
+        .reverse()
+        .as_api_desc()
+        .unwrap();
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))
-        .and(query_param_contains("BeginID", first_id))
+        .and(query_param_contains("AnchorID", first_id))
+        .and(query_param_contains("Desc", (desc as u8).to_string()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
                 total: 0,
@@ -649,11 +665,14 @@ pub async fn mock_get_messages_page(
     ctx: &MailTestContext,
     messages: Vec<ApiMessageMetadata>,
     last_id: &str,
+    label: &LabelId,
     expect: impl Into<Times>,
 ) {
+    let desc = ScrollOrderDir::for_label(label).as_api_desc().unwrap();
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))
         .and(query_param_contains("AnchorID", last_id))
+        .and(query_param_contains("Desc", (desc as u8).to_string()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
                 total: messages.len() as u64,
