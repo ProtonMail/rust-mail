@@ -1813,10 +1813,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         closure: Box<dyn FnOnce(&Transaction) -> SyncClosureRetTy + Send>,
         policy: TransactionTrackingPolicy,
     ) -> StashResult<Box<dyn Any + Send>> {
-        // In theory this should be impossible since we require a `&mut Tether` to start a
-        // transaction
-        assert!(self.transaction.is_none(), "Started transaction twice");
-
         let tx = self
             .start_transaction(policy)
             .map_err(StashError::ExecutionError)?;
