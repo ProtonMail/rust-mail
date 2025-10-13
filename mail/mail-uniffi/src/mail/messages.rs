@@ -490,7 +490,7 @@ pub async fn watch_message(
             return Ok(None);
         };
 
-        let handle = RealMessage::watch(&stash)?;
+        let handle = RealMessage::watch(&stash).await?;
         let handle = watch_channel(&*user_context, handle, callback);
         Result::<_, RealProtonMailError>::Ok(Some(WatchedMessage {
             message: message.into(),
@@ -949,7 +949,7 @@ pub async fn watch_messages_for_label(
     uniffi_async(async move {
         let tether = stash.connection().await?;
         let messages = RealMessage::in_label(label_id.into(), &tether).await?;
-        let handle = RealMessage::watch(&stash)?;
+        let handle = RealMessage::watch(&stash).await?;
         let watcher = watch_channel(&*user_context, handle, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedMessages {
             messages: messages.map_vec(),

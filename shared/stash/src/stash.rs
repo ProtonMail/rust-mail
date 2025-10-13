@@ -612,7 +612,29 @@ impl Stash {
     /// # Errors
     ///
     /// See [`Stash::subscribe()`].
-    pub fn subscribe_to<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
+    pub async fn subscribe_to<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
+    where
+        F: FnOnce(QueueSender<()>) -> Box<dyn TableObserver> + Send + 'static,
+    {
+        let (sender, receiver) = unbounded();
+        let watcher = self.watcher.clone();
+
+        let handle = tokio::task::spawn_blocking(move || {
+            watcher
+                .add_observer_with_drop_remove(observer(sender))
+                .map_err(|e| {
+                    StashError::WatcherError(format!(
+                        "Could not observe requested table, details: `{e}`"
+                    ))
+                })
+        })
+        .await
+        .map_err(|e| StashError::WatcherError(format!("Failed to join task: {e}")))??;
+
+        Ok(WatcherHandle { receiver, handle })
+    }
+
+    pub fn subscribe_to_sync<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
     where
         F: FnOnce(QueueSender<()>) -> Box<dyn TableObserver>,
     {

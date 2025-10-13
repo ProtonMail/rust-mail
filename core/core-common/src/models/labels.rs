@@ -254,8 +254,10 @@ impl Label {
         Self::find_by_kinds(&CONTACT_LABEL_TYPES, tether).await
     }
 
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(LabelWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(LabelWatcher { sender }))
+            .await
     }
 
     pub async fn resolve_remote_label_id(

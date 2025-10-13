@@ -273,7 +273,7 @@ impl MessagesState {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
-        let handle = ContextualConversation::watch(ctx.user_stash())?;
+        let handle = ContextualConversation::watch(ctx.user_stash()).await?;
 
         let (watcher, background_command) =
             TuiWatchHandle::from_watcher_handle(handle, move || {

@@ -563,7 +563,8 @@ impl<T: MailScrollerSource> ScrollerWorker<T> {
             ..
         } = arc_ctx
             .user_stash()
-            .subscribe_to(move |sender| Box::new(MailScrollerWatcher { sender, tables }))?;
+            .subscribe_to(move |sender| Box::new(MailScrollerWatcher { sender, tables }))
+            .await?;
 
         let source = Arc::new(RwLock::new(source));
 

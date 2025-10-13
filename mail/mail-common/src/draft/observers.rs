@@ -39,7 +39,7 @@ impl DraftSendResultWatcher {
 
         let all_unseen = Self::load_send_results(mode, &conn).await?;
 
-        let handle = DraftSendResult::watch(&stash)?;
+        let handle = DraftSendResult::watch(&stash).await?;
 
         Ok(Self {
             watcher_handle: handle,
@@ -119,7 +119,7 @@ impl DraftAttachmentObserver {
 
         let current = DraftAttachmentMetadata::find_by_metadata_id(metadata_id, &conn).await?;
 
-        let handle = DraftAttachmentMetadata::watch(&stash)?;
+        let handle = DraftAttachmentMetadata::watch(&stash).await?;
 
         Ok(Self {
             id: metadata_id,

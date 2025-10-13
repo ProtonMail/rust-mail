@@ -345,9 +345,10 @@ impl std::ops::DerefMut for InitializationWatcherHandle {
 }
 
 impl InitializationWatcher {
-    pub fn new(stash: &Stash) -> Result<Arc<Self>, StashError> {
+    pub async fn new(stash: &Stash) -> Result<Arc<Self>, StashError> {
         let handle = stash
-            .subscribe_to(|sender| Box::new(InitializedDependenciesTableWatcher { sender }))?;
+            .subscribe_to(|sender| Box::new(InitializedDependenciesTableWatcher { sender }))
+            .await?;
         let (tx, _rx) = tokio::sync::broadcast::channel(1);
 
         let this = Self { handle, sender: tx };

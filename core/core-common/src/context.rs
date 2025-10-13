@@ -455,7 +455,7 @@ impl Context {
     /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_accounts(&self) -> CoreContextResult<(Vec<CoreAccount>, WatcherHandle)> {
         let accounts = self.get_accounts().await?;
-        let handle = CoreAccount::watch(self.account_stash())?;
+        let handle = CoreAccount::watch(self.account_stash()).await?;
 
         Ok((accounts, handle))
     }
@@ -528,7 +528,7 @@ impl Context {
     pub async fn watch_sessions(&self) -> CoreContextResult<(Vec<CoreSession>, WatcherHandle)> {
         let tether = self.account_stash().connection().await?;
         let sessions = CoreSession::all(&tether).await?;
-        let handle = CoreSession::watch(self.account_stash())?;
+        let handle = CoreSession::watch(self.account_stash()).await?;
 
         Ok((sessions, handle))
     }
@@ -561,7 +561,7 @@ impl Context {
         user_id: UserId,
     ) -> CoreContextResult<(Vec<CoreSession>, WatcherHandle)> {
         let sessions = self.get_account_sessions(user_id).await?;
-        let handle = CoreSession::watch(self.account_stash())?;
+        let handle = CoreSession::watch(self.account_stash()).await?;
 
         Ok((sessions, handle))
     }

@@ -392,8 +392,10 @@ impl ContextualConversation {
     /// # Errors
     ///
     /// Returns error if the queries failed.
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(ContextualConversationWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(ContextualConversationWatcher { sender }))
+            .await
     }
 
     /// Get the available actions from bottom bar for given conversations
