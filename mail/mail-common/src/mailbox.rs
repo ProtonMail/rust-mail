@@ -99,15 +99,15 @@ impl Mailbox {
     ///
     pub async fn watch_unread_count(&self, stash: &Stash) -> MailContextResult<WatcherHandle> {
         let watcher = match self.view_mode {
-            ViewMode::Conversations => ConversationCounters::watch(stash)?,
-            ViewMode::Messages => MessageCounters::watch(stash)?,
+            ViewMode::Conversations => ConversationCounters::watch(stash).await?,
+            ViewMode::Messages => MessageCounters::watch(stash).await?,
         };
 
         Ok(watcher)
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(any(feature = "test-utils", test))]
 mod test_utils {
     use super::*;
     use crate::MailContextError;

@@ -1,7 +1,10 @@
-use std::{collections::HashMap, fmt::Display, time::Duration};
+use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
 
 use proton_core_api::services::proton::LabelId;
-use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_core_common::{
+    datatypes::LocalLabelId,
+    models::{Label, ModelExtension, ModelIdExtension},
+};
 use stash::{
     orm::Model,
     params,
@@ -10,7 +13,9 @@ use stash::{
 
 use crate::{
     actions::ConversationOrMessage,
-    conv_id, conversation, label, lbl_id, message,
+    conv_id, conversation,
+    datatypes::{IncludeSwitch, ReadFilter, SearchOptions},
+    label, lbl_id, message,
     models::{Conversation, ConversationCounters, Message, MessageCounters},
     msg_id,
     traits::ScrollerEq,
@@ -284,12 +289,13 @@ where
 }
 
 const TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Generic helper struct to manage scroller and its updates in tests
 ///
 /// This provides a unified interface for testing any type of MailScroller
 /// (conversations, messages, search) with automatic update handling and
 /// convenient test methods.
-pub struct TestScroller<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> {
+pub struct TestScroller<T> {
     scroller: MailScroller,
     handle: MailScrollerHandle<T>,
     collected_items: Vec<T>,
@@ -297,12 +303,12 @@ pub struct TestScroller<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 
 }
 
 impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroller<T> {
-    /// Create a new TestScroller from a MailScroller and handle
     pub async fn new(
         scroller: MailScroller,
         handle: MailScrollerHandle<T>,
     ) -> Result<Self, MailContextError> {
         let mut test_scroller = Self::new_instant(scroller, handle);
+
         // Wait for any initial updates that might be available immediately
         // This handles cases where cached data is loaded during scroller initialization
         test_scroller
@@ -312,7 +318,6 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         Ok(test_scroller)
     }
 
-    /// Create a new TestScroller from a MailScroller and handle
     pub fn new_instant(scroller: MailScroller, handle: MailScrollerHandle<T>) -> Self {
         Self {
             scroller,
@@ -322,42 +327,34 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         }
     }
 
-    /// Send a fetch_more command to the scroller
     pub fn fetch_more(&self) -> Result<(), MailContextError> {
         self.scroller.fetch_more()
     }
 
-    /// Send a fetch_new command to the scroller
     pub fn fetch_new(&self) -> Result<(), MailContextError> {
         self.scroller.fetch_new()
     }
 
-    /// Send a refresh command to the scroller
     pub fn refresh(&self) -> Result<(), MailContextError> {
         self.scroller.refresh()
     }
 
-    /// Send a force_refresh command to the scroller
     pub fn force_refresh(&self) -> Result<(), MailContextError> {
         self.scroller.force_refresh()
     }
 
-    /// Check if the scroller has more items available
     pub async fn has_more(&self) -> Result<bool, MailContextError> {
         self.scroller.has_more().await
     }
 
-    /// Get the total number of items available
     pub async fn total(&self) -> Result<u64, MailContextError> {
         self.scroller.total().await
     }
 
-    /// Get the number of items already seen
     pub async fn seen(&self) -> Result<u64, MailContextError> {
         self.scroller.seen().await
     }
 
-    /// Wait for and process the next update, returning the items that were added/changed
     pub async fn wait_for_update(&mut self) -> Result<Option<Vec<T>>, MailContextError> {
         let update = self.handle.updates.recv_async().await.map_err(|_| {
             MailContextError::Other(anyhow::anyhow!("Failed to receive scroller update"))
@@ -366,7 +363,6 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         self.handle_scroller_update(update)
     }
 
-    /// Try to wait for an update with a timeout, returning None if timeout is reached
     pub async fn try_wait_for_update(
         &mut self,
         timeout: Duration,
@@ -377,36 +373,30 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         }
     }
 
-    /// Fetch more and wait for the update (or handle timeout gracefully)
     pub async fn fetch_more_and_wait(&mut self) -> Result<Vec<T>, MailContextError> {
         self.fetch_more()?;
 
-        // Try to get an update, but if none comes within reasonable time, return empty
         match self.try_wait_for_update(TIMEOUT).await? {
             Some(items) => Ok(items),
-            None => Ok(Vec::new()), // No update received, return empty
+            None => Ok(Vec::new()),
         }
     }
 
-    /// Fetch new and wait for the update (or handle timeout gracefully)
     pub async fn fetch_new_and_wait(&mut self) -> Result<Vec<T>, MailContextError> {
         self.fetch_new()?;
 
-        // Try to get an update, but if none comes within reasonable time, return empty
         match self.try_wait_for_update(TIMEOUT).await? {
             Some(items) => Ok(items),
-            None => Ok(Vec::new()), // No update received, return empty
+            None => Ok(Vec::new()),
         }
     }
 
-    /// Refresh and wait for the update (or handle timeout gracefully)
     pub async fn refresh_and_wait(&mut self) -> Result<Vec<T>, MailContextError> {
         self.refresh()?;
 
-        // Try to get an update, but if none comes within reasonable time, return empty
         match self.try_wait_for_update(TIMEOUT).await? {
             Some(items) => Ok(items),
-            None => Ok(Vec::new()), // No update received, return empty
+            None => Ok(Vec::new()),
         }
     }
 
@@ -419,12 +409,10 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         );
     }
 
-    /// Get the current collected items
     pub fn items(&self) -> &[T] {
         &self.collected_items
     }
 
-    /// Assert that the current items match the expected items
     pub fn assert_items(&self, expected: &[T]) {
         assert!(self.collected_items.as_slice().scroller_eq(expected));
     }
@@ -510,7 +498,6 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         }
     }
 
-    /// Handle a scroller update and update the collected items accordingly
     fn handle_scroller_update(
         &mut self,
         update: ScrollerUpdate<T>,
@@ -550,55 +537,81 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
             }
         }
     }
+
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
+    }
 }
 
 impl TestScroller<crate::datatypes::ContextualConversation> {
     pub async fn conversations(
-        user_ctx: &std::sync::Arc<MailUserContext>,
-        local_label_id: proton_core_common::datatypes::LocalLabelId,
-        unread: crate::datatypes::ReadFilter,
+        user_ctx: &Arc<MailUserContext>,
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) =
-            MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
-                .await?;
+        let (scroller, handle) = MailScroller::conversations(
+            user_ctx.as_weak(),
+            local_label_id,
+            unread,
+            include,
+            page_size,
+        )
+        .await?;
+
         Self::new(scroller, handle).await
     }
 
     pub async fn conversations_instant(
-        user_ctx: &std::sync::Arc<MailUserContext>,
-        local_label_id: proton_core_common::datatypes::LocalLabelId,
-        unread: crate::datatypes::ReadFilter,
+        user_ctx: &Arc<MailUserContext>,
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) =
-            MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
-                .await?;
+        let (scroller, handle) = MailScroller::conversations(
+            user_ctx.as_weak(),
+            local_label_id,
+            unread,
+            include,
+            page_size,
+        )
+        .await?;
+
         Ok(Self::new_instant(scroller, handle))
     }
 }
 
 impl TestScroller<crate::models::Message> {
-    /// Create a TestScroller for messages
     pub async fn messages(
-        user_ctx: &std::sync::Arc<MailUserContext>,
-        local_label_id: proton_core_common::datatypes::LocalLabelId,
-        unread: crate::datatypes::ReadFilter,
+        user_ctx: &Arc<MailUserContext>,
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) =
-            MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size).await?;
+        let (scroller, handle) = MailScroller::messages(
+            user_ctx.as_weak(),
+            local_label_id,
+            unread,
+            include,
+            page_size,
+        )
+        .await?;
+
         Self::new(scroller, handle).await
     }
 
-    /// Create a TestScroller for search
     pub async fn search(
-        user_ctx: &std::sync::Arc<MailUserContext>,
-        search_options: crate::datatypes::SearchOptions,
+        user_ctx: &Arc<MailUserContext>,
+        options: SearchOptions,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) =
-            MailScroller::search(user_ctx.as_weak(), search_options, page_size).await?;
+            MailScroller::search(user_ctx.as_weak(), options, include, page_size).await?;
+
         Self::new(scroller, handle).await
     }
 }

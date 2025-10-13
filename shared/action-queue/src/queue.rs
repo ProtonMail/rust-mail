@@ -195,7 +195,7 @@ pub enum BroadcastMessage {
     /// A new action was queued in this process.
     Queued(ActionId, Arc<QueuedMetadata>),
     /// This queued action was executed successfully
-    Success(ActionId),
+    Success(ActionId, Arc<QueuedMetadata>),
     /// This queued action failed to execute.
     ///
     /// Id of the action is available in the metadata.
@@ -925,7 +925,7 @@ impl QueueExecutor {
             };
 
             let exec_output = decoded
-                .execute(&self.shared, tether, exec_guard, metadata)
+                .execute(&self.shared, tether, exec_guard, metadata.clone())
                 .await
                 .inspect_err(|e| {
                     if let QueuedError::Action(err, metadata) = e {
@@ -941,7 +941,7 @@ impl QueueExecutor {
             let _ = self
                 .shared
                 .broadcast_sender
-                .send(BroadcastMessage::Success(action_id));
+                .send(BroadcastMessage::Success(action_id, metadata));
 
             Ok(Some(exec_output))
         }
@@ -1371,9 +1371,20 @@ async fn execute_action_remote<T: Action>(
                         error!("Failed to apply on server: {e:?}");
 
                         if let Some(reason) = e.can_requeue() {
-                            debug!(?reason, "Action will be requeued");
+                            let retries = StoredAction::get_retries(tx, id).await?;
+                            if let Some(max_retries) = T::MAX_RETRIES
+                                && retries >= max_retries
+                            {
+                                debug!(
+                                    ?reason,
+                                    "Action has reached max retries and will be cancelled"
+                                );
+                            } else {
+                                debug!(?reason, "Action will be requeued");
+                                StoredAction::update_retries(tx, id).await?;
 
-                            return Ok(ActionRemoteOutput::Queued(id, reason));
+                                return Ok(ActionRemoteOutput::Queued(id, reason));
+                            }
                         }
 
                         match cancel_action_with_dependees(shared, tx, id).await {

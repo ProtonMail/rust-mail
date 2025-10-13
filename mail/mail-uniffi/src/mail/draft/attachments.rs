@@ -1,6 +1,10 @@
 use crate::core::datatypes::Id;
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{DraftAttachmentUploadError, DraftAttachmentUploadErrorReason, ProtonError};
+use crate::errors::{
+    DraftAttachmentDispositionSwapError, DraftAttachmentDispositionSwapErrorReason,
+    DraftAttachmentRetryError, DraftAttachmentUploadError, DraftAttachmentUploadErrorReason,
+    ProtonError, VoidDraftAttachmentDispositionSwapResult,
+};
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::state::MailUserContextPtr;
 use crate::{AsyncLiveQueryCallback, uniffi_async};
@@ -10,19 +14,35 @@ use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId};
 use proton_mail_common::draft::Draft as RealDraft;
 use proton_mail_common::draft::attachments::{
-    DraftAttachment as RealDraftAttachment, DraftAttachmentState as RealDraftAttachmentState,
+    DraftAttachment as RealDraftAttachment,
+    DraftAttachmentDispositionSwapError as RealDraftAttachmentDispositionSwapError,
+    DraftAttachmentError as RealDraftAttachmentError,
+    DraftAttachmentState as RealDraftAttachmentState,
+    DraftAttachmentUploadError as RealDraftAttachmentUploadError,
 };
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::{
-    Attachment as RealAttachment, DraftAttachmentUploadError as RealDraftAttachmentUploadError,
-};
+use proton_mail_common::models::Attachment as RealAttachment;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::task::AbortHandle;
 use tracing::error;
 use uniffi_common::errors::UserApiServiceError;
 
+#[derive(uniffi::Enum)]
+pub enum DraftAttachmentError {
+    Upload(DraftAttachmentUploadError),
+    DispositionSwap(DraftAttachmentDispositionSwapError),
+}
+
+impl From<RealDraftAttachmentError> for DraftAttachmentError {
+    fn from(err: RealDraftAttachmentError) -> Self {
+        match err {
+            RealDraftAttachmentError::Upload(e) => Self::Upload(e.into()),
+            RealDraftAttachmentError::DispositionSwap(e) => Self::DispositionSwap(e.into()),
+        }
+    }
+}
 /// State of the attachment
 #[derive(uniffi::Enum)]
 pub enum DraftAttachmentState {
@@ -33,7 +53,7 @@ pub enum DraftAttachmentState {
     /// Attachment has failed uploading
     Uploaded,
     /// An error occurred during upload.
-    Error(DraftAttachmentUploadError),
+    Error(DraftAttachmentError),
     /// Attachment is awaiting upload
     Pending,
 }
@@ -77,6 +97,32 @@ impl From<RealDraftAttachmentUploadError> for DraftAttachmentUploadError {
             }
             RealDraftAttachmentUploadError::TotalAttachmentsTooLarge => {
                 Self::Reason(DraftAttachmentUploadErrorReason::TotalAttachmentSizeTooLarge)
+            }
+        }
+    }
+}
+
+impl From<RealDraftAttachmentDispositionSwapError> for DraftAttachmentDispositionSwapError {
+    fn from(err: RealDraftAttachmentDispositionSwapError) -> Self {
+        match err {
+            RealDraftAttachmentDispositionSwapError::Server(e) => {
+                // There is no good conversion here, however it should be very rare as all
+                // the important cases are intercepted.
+                Self::Other(ProtonError::ServerError(
+                    UserApiServiceError::OtherHttpError(0, e),
+                ))
+            }
+            RealDraftAttachmentDispositionSwapError::AttachmentNotFound => {
+                Self::Reason(DraftAttachmentDispositionSwapErrorReason::AttachmentDoesNotExist)
+            }
+            RealDraftAttachmentDispositionSwapError::AttachmentMessageNotFound => Self::Reason(
+                DraftAttachmentDispositionSwapErrorReason::AttachmentMessageDoesNotExist,
+            ),
+            RealDraftAttachmentDispositionSwapError::AttachmentMessageIsNotADraft => Self::Reason(
+                DraftAttachmentDispositionSwapErrorReason::AttachmentMessageIsNotADraft,
+            ),
+            RealDraftAttachmentDispositionSwapError::Unexpected => {
+                Self::Other(ProtonError::Unexpected(UnexpectedError::Draft))
             }
         }
     }
@@ -244,15 +290,15 @@ impl AttachmentList {
     pub async fn retry(
         self: Arc<Self>,
         attachment_id: Id,
-    ) -> Result<(), DraftAttachmentUploadError> {
+    ) -> Result<(), DraftAttachmentRetryError> {
         uniffi_async::<(), RealProtonMailError, _>(async move {
             self.draft
-                .retry_attachment_upload(attachment_id.into())
+                .retry_attachment_action(attachment_id.into())
                 .await?;
             Ok(())
         })
         .await
-        .map_err(DraftAttachmentUploadError::from)
+        .map_err(DraftAttachmentRetryError::from)
     }
 
     /// Get the directory for attachment uploads.
@@ -307,6 +353,18 @@ impl AttachmentList {
         })
         .await
         .map_err(DraftAttachmentUploadError::from)
+    }
+
+    #[returns(VoidDraftAttachmentDispositionSwapResult)]
+    pub async fn swap_attachment_disposition(
+        &self,
+        content_id: String,
+    ) -> Result<(), DraftAttachmentDispositionSwapError> {
+        self.draft
+            .swap_attachment_disposition_from_inline(ContentId::from(content_id))
+            .await
+            .map_err(RealProtonMailError::from)?;
+        Ok(())
     }
 }
 

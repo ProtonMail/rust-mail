@@ -1,4 +1,13 @@
-use crate::datatypes::{ContextualConversation, ReadFilter, SearchOptions};
+mod mail_scroller_source;
+mod mail_scroller_watcher;
+
+pub use self::mail_scroller_source::*;
+pub use self::mail_scroller_watcher::*;
+use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
+use crate::datatypes::{
+    AlmostAllMail, ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions, SystemLabelId,
+};
+use crate::models::MailSettings;
 use crate::models::{ConversationScrollData, Message, MessageScrollData};
 use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
@@ -6,21 +15,17 @@ use anyhow::anyhow;
 use derive_more::Display;
 use futures::select;
 use itertools::Itertools;
+use proton_core_api::services::proton::LabelId;
+use proton_core_common::app_events::{OnEnterForegroundEvent, OnForceEventPollEvent};
 use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::{Label, ModelIdExtension};
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
-use stash::stash::WatcherHandle;
+use stash::orm::Model;
+use stash::stash::{Tether, WatcherHandle};
 use std::sync::{Arc, Weak};
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::AbortHandle;
 use uuid::Uuid;
-
-mod mail_scroller_source;
-mod mail_scroller_watcher;
-
-use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
-pub use mail_scroller_source::*;
-pub use mail_scroller_watcher::*;
-use proton_core_common::app_events::OnEnterForegroundEvent;
 
 #[cfg(test)]
 #[path = "tests/mail_scroller/message_scroller.rs"]
@@ -37,7 +42,7 @@ pub enum MailScrollerError {
 }
 
 #[derive(Debug)]
-pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
+pub enum ScrollerUpdate<T> {
     None(ScrollerSource),
     Append {
         src: ScrollerSource,
@@ -65,7 +70,7 @@ pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
     },
 }
 
-impl<T: Send + Sync + Clone + ScrollerEq + 'static> ScrollerUpdate<T> {
+impl<T> ScrollerUpdate<T> {
     pub fn is_none(&self) -> bool {
         matches!(self, ScrollerUpdate::None(_))
     }
@@ -130,6 +135,7 @@ pub struct MailScroller {
     id: Uuid,
     command: flume::Sender<ScrollerCommand>,
     ordered_command: flume::Sender<ScrollerOrderedCommand>,
+    supports_include_filter: bool,
     aborts: Vec<AbortHandle>,
 }
 
@@ -141,11 +147,11 @@ impl Drop for MailScroller {
             self.aborts.len()
         );
 
-        self.terminate_workers()
+        self.terminate()
     }
 }
 
-pub struct MailScrollerHandle<T: Send + Sync + Clone + ScrollerEq + 'static> {
+pub struct MailScrollerHandle<T> {
     pub updates: flume::Receiver<ScrollerUpdate<T>>,
     pub handle: DropRemoveTableObserverHandle,
 }
@@ -153,68 +159,125 @@ pub struct MailScrollerHandle<T: Send + Sync + Clone + ScrollerEq + 'static> {
 impl MailScroller {
     pub async fn conversations(
         ctx: Weak<MailUserContext>,
-        local_label_id: LocalLabelId,
+        mut label: LocalLabelId,
         unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<ContextualConversation>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let tether = ctx.user_stash().connection().await?;
 
-        let order_dir = ScrollOrderDir::for_local_label(local_label_id, &tether).await?;
-        let order_field = ScrollOrderField::for_local_label(local_label_id, &tether).await?;
+        let alt_label = Self::alternative_label(label, &tether).await?;
+        let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
+        let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
+
+        if include.has_spam_and_trash()
+            && let Some(alt_label) = alt_label
+        {
+            label = alt_label;
+        }
 
         let source = DataScrollerSource::<ConversationScrollData>::new(
-            local_label_id,
+            label,
+            alt_label,
             unread,
             page_size,
             order_dir,
             order_field,
         );
 
-        MailScroller::new(ctx, source, page_size).await
+        Self::new(ctx, source, page_size, alt_label.is_some()).await
     }
 
     pub async fn messages(
         ctx: Weak<MailUserContext>,
-        local_label_id: LocalLabelId,
+        mut label: LocalLabelId,
         unread: ReadFilter,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let tether = ctx.user_stash().connection().await?;
 
-        let order_dir = ScrollOrderDir::for_local_label(local_label_id, &tether).await?;
-        let order_field = ScrollOrderField::for_local_label(local_label_id, &tether).await?;
+        let alt_label = Self::alternative_label(label, &tether).await?;
+        let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
+        let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
+
+        if include.has_spam_and_trash()
+            && let Some(alt_label) = alt_label
+        {
+            label = alt_label;
+        }
 
         let source = DataScrollerSource::<MessageScrollData>::new(
-            local_label_id,
+            label,
+            alt_label,
             unread,
             page_size,
             order_dir,
             order_field,
         );
 
-        MailScroller::new(ctx, source, page_size).await
+        Self::new(ctx, source, page_size, alt_label.is_some()).await
     }
 
     pub async fn search(
         ctx: Weak<MailUserContext>,
-        search: SearchOptions,
+        options: SearchOptions,
+        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let source = SearchScrollerSource::new(search, page_size);
+        let tether = ctx.user_stash().connection().await?;
+        let settings = MailSettings::get_or_default(&tether).await;
 
-        MailScroller::new(ctx, source, page_size).await
+        let label = if include.has_spam_and_trash() {
+            LabelId::all_mail()
+        } else {
+            settings.all_mail()
+        };
+
+        let alt_label = match settings.almost_all_mail {
+            AlmostAllMail::AllMail => None,
+            AlmostAllMail::AlmostAllMail => Some(LabelId::all_mail()),
+        };
+
+        let source = SearchScrollerSource::new(label, options, page_size);
+
+        Self::new(ctx, source, page_size, alt_label.is_some()).await
     }
 
-    async fn new<T: MailScrollerSource + 'static>(
+    /// If `id` points at the `All Mail` label, this function returns id of the
+    /// `Almost All Mail` label; otherwise it returns `None`.
+    async fn alternative_label(
+        id: LocalLabelId,
+        tether: &Tether,
+    ) -> Result<Option<LocalLabelId>, MailContextError> {
+        let Some(id) = Label::local_id_counterpart(id, tether).await? else {
+            return Ok(None);
+        };
+
+        if id == LabelId::almost_all_mail() {
+            let id = Label::find_by_remote_id(LabelId::all_mail(), tether)
+                .await?
+                .map(|label| label.id());
+
+            Ok(id)
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn new<T>(
         ctx: Arc<MailUserContext>,
         source: T,
         page_size: usize,
-    ) -> Result<(Self, MailScrollerHandle<T::Item>), MailContextError> {
+        supports_include_filter: bool,
+    ) -> Result<(Self, MailScrollerHandle<T::Item>), MailContextError>
+    where
+        T: MailScrollerSource,
+    {
         let id = Uuid::new_v4();
-
         let ctx_weak = Arc::downgrade(&ctx);
 
         tracing::debug!(?id, "Creating MailScroller");
@@ -228,8 +291,8 @@ impl MailScroller {
         } = ScrollerWorker::run(ctx_weak, source, page_size).await?;
 
         let event_service = ctx.core_context().event_service();
-
         let ordered_command_cloned = ordered_command.clone();
+
         if let Some(mut event_subscriber) = event_service.subscribe::<OnEnterForegroundEvent>() {
             ctx.spawn(async move {
                 loop {
@@ -238,6 +301,24 @@ impl MailScroller {
                     }
 
                     tracing::debug!("Scroller {id} fetch new after enter foreground");
+
+                    if Self::do_fetch_new(&ordered_command_cloned).is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+
+        let ordered_command_cloned = ordered_command.clone();
+        if let Some(mut event_subscriber) = event_service.subscribe::<OnForceEventPollEvent>() {
+            ctx.spawn(async move {
+                loop {
+                    if event_subscriber.next().await.is_err() {
+                        return;
+                    }
+
+                    tracing::debug!("Scroller {id} fetch new after force refresh event");
+
                     if Self::do_fetch_new(&ordered_command_cloned).is_err() {
                         return;
                     }
@@ -250,6 +331,7 @@ impl MailScroller {
                 id,
                 command,
                 ordered_command,
+                supports_include_filter,
                 aborts,
             },
             MailScrollerHandle { updates, handle },
@@ -258,6 +340,7 @@ impl MailScroller {
 
     pub async fn has_more(&self) -> Result<bool, MailContextError> {
         let (sender, receiver) = oneshot::channel();
+
         self.command
             .send(ScrollerCommand::HasMore(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send has more command")))?;
@@ -269,7 +352,9 @@ impl MailScroller {
 
     pub fn fetch_more(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `FetchMore` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::FetchMore(
                 ScrollerSource::ScrollEvent(uuid),
@@ -281,6 +366,7 @@ impl MailScroller {
 
     pub fn fetch_new(&self) -> Result<(), MailContextError> {
         Self::do_fetch_new(&self.ordered_command)?;
+
         Ok(())
     }
 
@@ -288,7 +374,9 @@ impl MailScroller {
         sender: &flume::Sender<ScrollerOrderedCommand>,
     ) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `FetchNew` command with uuid: {uuid}");
+
         sender
             .send(ScrollerOrderedCommand::FetchNew(
                 ScrollerSource::ScrollEvent(uuid),
@@ -298,7 +386,9 @@ impl MailScroller {
 
     pub fn refresh(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `Refresh` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::Refresh(
                 ScrollerSource::ScrollEvent(uuid),
@@ -310,7 +400,9 @@ impl MailScroller {
 
     pub fn force_refresh(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `ForceRefresh` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::ForceRefresh(
                 ScrollerSource::ScrollEvent(uuid),
@@ -324,7 +416,9 @@ impl MailScroller {
 
     pub fn get_items(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `GetItems` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::GetItems(
                 ScrollerSource::ScrollEvent(uuid),
@@ -334,13 +428,15 @@ impl MailScroller {
         Ok(())
     }
 
-    pub fn change_filter(&self, filter: ReadFilter) -> Result<(), MailContextError> {
+    pub fn change_filter(&self, unread: ReadFilter) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `ChangeFilter` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::ChangeFilter {
                 src: ScrollerSource::ScrollEvent(uuid),
-                filter,
+                unread,
             })
             .map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send change filter command"))
@@ -349,9 +445,28 @@ impl MailScroller {
         Ok(())
     }
 
+    pub fn change_include(&self, include: IncludeSwitch) -> Result<(), MailContextError> {
+        let uuid = Uuid::new_v4();
+
+        tracing::trace!("Sending `ChangeInclude` command with uuid: {uuid}");
+
+        self.ordered_command
+            .send(ScrollerOrderedCommand::ChangeInclude {
+                src: ScrollerSource::ScrollEvent(uuid),
+                include,
+            })
+            .map_err(|_| {
+                MailContextError::Other(anyhow!("Failed to send change include command"))
+            })?;
+
+        Ok(())
+    }
+
     pub fn clear_cursor(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
+
         tracing::trace!("Sending `ClearCursor` command with uuid: {uuid}");
+
         self.ordered_command
             .send(ScrollerOrderedCommand::ClearCursor(
                 ScrollerSource::ScrollEvent(uuid),
@@ -363,6 +478,7 @@ impl MailScroller {
 
     pub async fn total(&self) -> Result<u64, MailContextError> {
         let (sender, receiver) = oneshot::channel();
+
         self.command
             .send(ScrollerCommand::GetTotal(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get total command")))?;
@@ -374,6 +490,7 @@ impl MailScroller {
 
     pub async fn seen(&self) -> Result<u64, MailContextError> {
         let (sender, receiver) = oneshot::channel();
+
         self.command
             .send(ScrollerCommand::GetSeen(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get seen command")))?;
@@ -385,6 +502,7 @@ impl MailScroller {
 
     pub async fn synced(&self) -> Result<u64, MailContextError> {
         let (sender, receiver) = oneshot::channel();
+
         self.command
             .send(ScrollerCommand::GetSynced(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get synced command")))?;
@@ -394,14 +512,18 @@ impl MailScroller {
             .map_err(|_| MailContextError::Other(anyhow!("Failed to receive synced response")))?
     }
 
-    pub fn terminate_workers(&self) {
+    pub fn supports_include_filter(&self) -> bool {
+        self.supports_include_filter
+    }
+
+    pub fn terminate(&self) {
         for abort in &self.aborts {
             abort.abort();
         }
     }
 }
 
-pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
+pub struct ScrollerWorker<T: MailScrollerSource> {
     ctx: Weak<MailUserContext>,
     source: Arc<RwLock<T>>,
     task: MailPaginatorJoinHandle,
@@ -413,7 +535,7 @@ pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
     ordered_command_send: flume::Sender<ScrollerOrderedCommand>,
 }
 
-impl<T: MailScrollerSource + 'static> Drop for ScrollerWorker<T> {
+impl<T: MailScrollerSource> Drop for ScrollerWorker<T> {
     fn drop(&mut self) {
         if let Some(handle) = self.execute_on_online.take() {
             handle.abort();
@@ -421,7 +543,7 @@ impl<T: MailScrollerSource + 'static> Drop for ScrollerWorker<T> {
     }
 }
 
-impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
+impl<T: MailScrollerSource> ScrollerWorker<T> {
     async fn run(
         ctx: Weak<MailUserContext>,
         mut source: T,
@@ -441,9 +563,11 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             ..
         } = arc_ctx
             .user_stash()
-            .subscribe_to(move |sender| Box::new(MailScrollerWatcher { sender, tables }))?;
+            .subscribe_to(move |sender| Box::new(MailScrollerWatcher { sender, tables }))
+            .await?;
 
         let source = Arc::new(RwLock::new(source));
+
         let this = Self {
             ctx,
             source,
@@ -564,6 +688,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send fetch more update: {e:?}"))?;
                 }
             }
+
             ScrollerOrderedCommand::Refresh(source) => {
                 let result =
                     self.refresh(false, source)
@@ -580,6 +705,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send refresh update: {e:?}"))?;
                 }
             }
+
             ScrollerOrderedCommand::ForceRefresh(source) => {
                 let result =
                     self.refresh(true, source)
@@ -596,6 +722,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send force refresh update: {e:?}"))?;
                 }
             }
+
             ScrollerOrderedCommand::GetItems(src) => {
                 let items_update = self.get_items(src);
 
@@ -604,6 +731,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .await
                     .map_err(|e| anyhow!("Failed to send get items update: {e:?}"))?;
             }
+
             ScrollerOrderedCommand::FetchNew(src) => {
                 let result = self
                     .fetch_new(src)
@@ -615,9 +743,10 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .await
                     .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
             }
-            ScrollerOrderedCommand::ChangeFilter { src, filter } => {
+
+            ScrollerOrderedCommand::ChangeFilter { src, unread } => {
                 let result = self
-                    .change_filter(src, filter)
+                    .change_filter(src, unread)
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
@@ -628,6 +757,21 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send change filter update: {e:?}"))?;
                 }
             }
+
+            ScrollerOrderedCommand::ChangeInclude { src, include } => {
+                self.change_include(src, include).await;
+
+                let result = self
+                    .clear_cursor(src)
+                    .await
+                    .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
+
+                self.update
+                    .send_async(result)
+                    .await
+                    .map_err(|e| anyhow!("Failed to send clear cursor update: {e:?}"))?;
+            }
+
             ScrollerOrderedCommand::ClearCursor(src) => {
                 let result = self
                     .clear_cursor(src)
@@ -657,6 +801,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .send(total)
                     .map_err(|e| anyhow!("Failed to send total: {e:?}"))?;
             }
+
             ScrollerCommand::GetSeen(sender) => {
                 let seen = Self::seen(source, ctx).await;
 
@@ -664,6 +809,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .send(seen)
                     .map_err(|e| anyhow!("Failed to send seen: {e:?}"))?;
             }
+
             ScrollerCommand::GetSynced(sender) => {
                 let synced = Self::synced(source, ctx).await;
 
@@ -671,6 +817,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .send(synced)
                     .map_err(|e| anyhow!("Failed to send synced: {e:?}"))?;
             }
+
             ScrollerCommand::HasMore(sender) => {
                 let (total, seen) = (
                     Self::total(source, ctx).await,
@@ -824,21 +971,28 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     async fn change_filter(
         &mut self,
         src: ScrollerSource,
-        filter: ReadFilter,
+        unread: ReadFilter,
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        tracing::debug!("Changing filter to {filter:?}");
+        tracing::debug!("Changing filter to {unread:?}");
         // We drop the previous task, we should not wait for it.
         let _ = self.task.take();
         self.task = self
             .source
             .write()
             .await
-            .change_filter(&ctx, filter)
+            .change_filter(&ctx, unread)
             .await?;
         self.items.clear();
         self.fetch_more(src).await?;
         self.refresh(true, src).await
+    }
+
+    #[tracing::instrument(skip_all, fields(src=%src))]
+    async fn change_include(&mut self, src: ScrollerSource, include: IncludeSwitch) {
+        tracing::debug!("Changing include to {include:?}");
+
+        self.source.write().await.change_include(include);
     }
 
     #[tracing::instrument(skip_all, fields(src=%src))]
@@ -989,16 +1143,19 @@ enum ScrollerOrderedCommand {
     GetItems(ScrollerSource),
     ChangeFilter {
         src: ScrollerSource,
-        filter: ReadFilter,
+        unread: ReadFilter,
+    },
+    ChangeInclude {
+        src: ScrollerSource,
+        include: IncludeSwitch,
     },
     ClearCursor(ScrollerSource),
 }
 
-fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
-    old: &[T],
-    new: &[T],
-    src: ScrollerSource,
-) -> ScrollerUpdate<T> {
+fn calculate_scroller_update<T>(old: &[T], new: &[T], src: ScrollerSource) -> ScrollerUpdate<T>
+where
+    T: ScrollerEq + Clone,
+{
     let prefix_count = old
         .iter()
         .zip(new.iter())
@@ -1060,7 +1217,7 @@ fn calculate_scroller_update<T: Clone + Send + Sync + 'static + ScrollerEq>(
 }
 
 #[cfg(any(test, feature = "test-utils"))]
-impl<T: Send + Sync + Clone + ScrollerEq + 'static> Clone for ScrollerUpdate<T> {
+impl<T: Clone> Clone for ScrollerUpdate<T> {
     fn clone(&self) -> Self {
         match self {
             ScrollerUpdate::None(src) => ScrollerUpdate::None(*src),

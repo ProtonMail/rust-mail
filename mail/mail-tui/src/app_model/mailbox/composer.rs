@@ -17,12 +17,14 @@ use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use crossterm::event::{KeyCode, KeyModifiers};
 use futures::FutureExt;
+use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, LocalMessageId};
 use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentState};
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::draft::recipients::RecipientList;
 use proton_mail_common::draft::{
-    Draft, DraftExpirationTime, DraftSyncStatus, ReplyMode, recipients,
+    AttachmentDispositionSwapError, Draft, DraftExpirationTime, DraftSyncStatus, ReplyMode,
+    recipients,
 };
 use proton_mail_common::models::{Attachment, MessageMimeType, MetadataId};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
@@ -452,6 +454,64 @@ impl Composer {
         ])
     }
 
+    fn retry_attachment_op(&mut self, id: LocalAttachmentId) -> Command<Messages> {
+        let draft = self.draft.clone();
+        // Note that we want to make sure the action is queued first
+        // before we allow the user to send or we can run into missing depencency issues.
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Retrying attachment op".to_owned(),
+            )),
+            Command::task(async move {
+                let cmd = if let Err(e) = draft.retry_attachment_action(id).await {
+                    e.into()
+                } else {
+                    Command::message(ComposerMessage::RefreshAttachmentList)
+                };
+
+                Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+            }),
+        ])
+    }
+
+    fn swap_attachment_disposition(
+        &mut self,
+        ctx: Arc<MailUserContext>,
+        id: LocalAttachmentId,
+    ) -> Command<Messages> {
+        let draft = self.draft.clone();
+        // Note that we want to make sure the action is queued first
+        // before we allow the user to send or we can run into missing depencency issues.
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Swapping attachment disposition".to_owned(),
+            )),
+            Command::task(async move {
+                let r = async {
+                    let tether = ctx.user_stash().connection().await?;
+                    let attachment = Attachment::find_by_id(id, &tether)
+                        .await?
+                        .ok_or(AttachmentDispositionSwapError::AttachmentNotFound(id))?;
+
+                    let new_disposition = match attachment.disposition {
+                        Disposition::Attachment => Disposition::Inline,
+                        Disposition::Inline => Disposition::Attachment,
+                    };
+                    draft.swap_attachment_disposition(id, new_disposition).await
+                }
+                .await;
+
+                let cmd = if let Err(e) = r {
+                    e.into()
+                } else {
+                    Command::message(ComposerMessage::RefreshAttachmentList)
+                };
+
+                Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+            }),
+        ])
+    }
+
     /// Add attachment to the draft
     fn refresh_attachment_list(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
         let metadata_id = self.draft.metadata_id;
@@ -791,7 +851,13 @@ impl Composer {
                     return Command::none();
                 }
                 KeyCode::Char('s') => {
-                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    if self.selected_input == SelectedInput::Attachments {
+                        if let Some(index) = self.attachment_list_state.selected() {
+                            return Command::message(ComposerMessage::SwapDisposition(
+                                self.attachment_infos[index].id,
+                            ));
+                        }
+                    } else if key.modifiers.contains(KeyModifiers::CONTROL) {
                         return Command::message(ComposerMessage::Save);
                     }
                 }
@@ -832,6 +898,15 @@ impl Composer {
                         }
                     } else if key.modifiers.contains(KeyModifiers::CONTROL) {
                         return Command::message(ComposerMessage::Discard);
+                    }
+                }
+                KeyCode::Char('r') => {
+                    if self.selected_input == SelectedInput::Attachments {
+                        if let Some(index) = self.attachment_list_state.selected() {
+                            return Command::message(ComposerMessage::RetryAttachmentOp(
+                                self.attachment_infos[index].id,
+                            ));
+                        }
                     }
                 }
                 KeyCode::Char('k') => {
@@ -914,6 +989,10 @@ impl Composer {
                 self.apply_password_protection(password, hint)
             }
             ComposerMessage::SetExpirationTime(dt) => self.set_expiration_time(dt),
+            ComposerMessage::RetryAttachmentOp(id) => self.retry_attachment_op(id),
+            ComposerMessage::SwapDisposition(id) => {
+                self.swap_attachment_disposition(user_ctx.to_owned(), id)
+            }
         }
     }
 

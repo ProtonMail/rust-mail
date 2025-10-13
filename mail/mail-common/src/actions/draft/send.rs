@@ -1,7 +1,7 @@
 use crate::actions::ConversationOrMessage;
 use crate::actions::draft::{
     SEND_ACTION_GROUP, local_all_draft_label_id, local_all_scheduled_label_id,
-    local_draft_label_id, local_outbox_label_id, local_sent_label_id,
+    local_all_sent_label_id, local_draft_label_id, local_outbox_label_id, local_sent_label_id,
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType};
 use crate::draft::send::{EoData, MailType, build_packages, load_prefs};
@@ -327,6 +327,7 @@ impl Send {
 
         let local_outbox_label_id = local_outbox_label_id(guard.tether()).await?;
         let local_sent_label_id = local_sent_label_id(guard.tether()).await?;
+        let local_all_sent_label_id = local_all_sent_label_id(guard.tether()).await?;
         let local_all_scheduled_id = local_all_scheduled_label_id(guard.tether()).await?;
 
         // Check if there are any new attachments that have not yet finished loading.
@@ -534,6 +535,9 @@ impl Send {
                             Message::apply_label_async(local_sent_label_id, [local_message_id], tx)
                                 .await
                                 .inspect_err(|e| error!("Failed to apply sent label: {e:?}"))?;
+                            Message::apply_label_async(local_all_sent_label_id, [local_message_id], tx)
+                                .await
+                                .inspect_err(|e| error!("Failed to apply all sent label: {e:?}"))?;
                         }
                         // Delete draft metadata
                         DraftMetadata::delete(action.metadata_id, tx)

@@ -212,6 +212,9 @@ pub enum Mail {
     MessageDoesNotExist = 2501,
     ConversationDoesNotExist = 20052,
     StorageQuotaExceeded = 11100,
+    AttachmentDoesNotExist = 11127,
+    AttachmentMessageDoesNotExist = 11125,
+    AttachmentMessageNotADraft = 11126,
 }
 
 pub enum Payments {

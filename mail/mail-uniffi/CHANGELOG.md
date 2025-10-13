@@ -7,6 +7,121 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.149.6] - 2025-10-01
 
+### Fixes
+
+- stash: Use `ManuallyDrop` inside `Bond::_commit()`
+- Move account updates to a separate event subscriber
+- Force event poll
+
+
+## [mail-uniffi-v0.149.15] - 2025-10-13
+
+### Changed
+
+- Subscribing to tables is now async
+
+### Features
+
+- scroller: Add `change_include()` operation
+- Invoke MailScroller::fetch_new on pull to refresh
+- [ET-5034] Add anchoring to the `fetch_new` underlying request
+
+### Fixes
+
+- Set 'Type=signup' for get_available_domains
+
+
+## [mail-uniffi-v0.149.14] - 2025-10-09
+
+### Changed
+
+- Track transactions
+
+### Features
+
+- Introduce MailboxCursor
+
+### Fixes
+
+- Hidden message banner is not shown for all trashed messages
+- [ET-2816] Fix draft attachment list not updated
+
+
+## [mail-uniffi-v0.149.13] - 2025-10-09
+
+### Features
+
+- Can't find what you're looking for? Include Spam/Trash.
+- New method `is_message_sender_blocked` for displaying `Block` button on the message details screen
+- [ET-2816] Attachment Disposition Swap
+
+
+## [mail-uniffi-v0.149.12] - 2025-10-08
+
+### Changed
+
+- Following methods `conversation`, `watch_conversation` and `messages_for_conversation` requires new parameter `show_trashed: bool`
+- Feature-gate some test only `Conversation` methods
+
+### Features
+
+- Add update_next_message_on_move action
+- Add swipe_to_adjacent_conversation setting
+
+### Fixes
+
+- [ET-168] Scroller does not store `stale` pages
+- Deleted trash should not reappear
+
+
+## [mail-uniffi-v0.149.11] - 2025-10-06
+
+### Changed
+
+- Delay event poll until all actions have executed
+
+### Features
+
+- mail_settings_sync
+
+
+## [mail-uniffi-v0.149.10] - 2025-10-03
+
+### Fixes
+
+- [ET-3605] Make notification actions more resilient
+
+
+## [mail-uniffi-v0.149.9] - 2025-10-03
+
+### Fixes
+
+- [ET-4867] Update move action to respect keep messages setting
+- Count action retries and give possibility to specify max_retries value
+
+
+## [mail-uniffi-v0.149.8] - 2025-10-02
+
+### Fixes
+
+- [SECBTY-1205] Transform HTTP(S) image sources into proton-http(s)
+- [SECBTY-1205] Enable proton-http(s) transformers for drafts and decrypted messages
+
+
+## [mail-uniffi-v0.149.7] - 2025-10-02
+
+### Features
+
+- Report if there are still actions in the queue
+
+### Fixes
+
+- Move from Spam to Trash should not add `almost_all_mail` label to the message
+- Do not remove category labels when moving to trash
+
+
+## [mail-uniffi-v0.149.6] - 2025-10-01
+
 ### Changed
 
 - Log local ids of event updates
@@ -18,6 +133,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4863] Support sending messages to self-owned external addresses with no encryption
 
 
+## [mail-uniffi-v0.149.4] - 2025-09-30
+
+### Fixes
+
+- [ET-4833] Migrate mobile signature from prev-gen
+- [ET-4875] Styles - Use rem instead of em
+
+
 ## [mail-uniffi-v0.149.5] - 2025-09-30
 
 ### Fixes
@@ -25,14 +148,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-4384] Only allow one event loop action to be queued
 - [ET-4384] Also update messages when opening converastion
 - [ET-4384] Revert default action queue to 1 worker
-
-
-## [mail-uniffi-v0.149.4] - 2025-09-30
-
-### Fixes
-
-- [ET-4833] Migrate mobile signature from prev-gen
-- [ET-4875] Styles - Use rem instead of em
 
 
 ## [mail-uniffi-v0.149.3] - 2025-09-29

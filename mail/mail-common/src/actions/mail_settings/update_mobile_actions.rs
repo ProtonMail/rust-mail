@@ -103,7 +103,14 @@ impl Handler for UpdateMobileActionsHandler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let mut mail_settings = MailSettings::get_or_default(bond.tether()).await;
+        let mut mail_settings = match MailSettings::get(bond.tether()).await? {
+            Some(ms) => ms,
+            None => {
+                tracing::warn!("Failed to get mail settings");
+                MailSettings::default()
+            }
+        };
+
         let mut mobile_settings = mail_settings.mobile_settings.unwrap_or_default();
 
         action.old_mobile_settings = Some(mobile_settings.clone());
@@ -140,7 +147,14 @@ impl Handler for UpdateMobileActionsHandler {
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         if let Some(old_mobile_settings) = action.old_mobile_settings.clone() {
-            let mut mail_settings = MailSettings::get_or_default(bond.tether()).await;
+            let mut mail_settings = match MailSettings::get(bond.tether()).await? {
+                Some(ms) => ms,
+                None => {
+                    tracing::warn!("Failed to get mail settings.");
+                    MailSettings::default()
+                }
+            };
+
             mail_settings.mobile_settings = Some(old_mobile_settings);
             mail_settings.save(bond).await?;
         } else {

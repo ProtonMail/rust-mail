@@ -121,7 +121,7 @@ async fn action_awaiter() {
         .await
         .expect("timed out")
         .unwrap();
-    assert!(matches!(result, BroadcastMessage::Success(_)));
+    assert!(matches!(result, BroadcastMessage::Success(_, _)));
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -1,19 +1,19 @@
-//! Paginator for managing large result sets with live updates.
-//!
-//! For more information, see the [`RealPaginator`] struct.
-//!
-
 use crate::errors::MailScrollerError;
 use crate::mail::datatypes::{Conversation, Message};
 use crate::{WatchHandle, async_runtime, uniffi_async};
+use parking_lot::Mutex;
 use proton_mail_common::MailUserContext;
-use proton_mail_common::datatypes::{ContextualConversation, ReadFilter as RealReadFilter};
+use proton_mail_common::datatypes::{
+    ContextualConversation, IncludeSwitch as RealIncludeSwitch, ReadFilter as RealReadFilter,
+};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::mail_scroller::{
     MailScroller as RealMailScroller, MailScrollerHandle, ScrollerUpdate,
 };
 use proton_mail_common::models::Message as RealMessage;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::sync::Notify;
 
 /// A callback interface for live queries.
 ///
@@ -146,19 +146,26 @@ pub(crate) fn spawn_conversation_scroller_watcher(
     user_ctx: &MailUserContext,
     handle: MailScrollerHandle<ContextualConversation>,
     callback: Box<dyn ConversationScrollerLiveQueryCallback>,
-) -> Arc<WatchHandle> {
+) -> (Arc<WatchHandle>, Arc<MailboxList>) {
     let MailScrollerHandle { updates, handle } = handle;
+    let mailbox_list = Arc::new(MailboxList::default());
+    let mailbox_list_clone = mailbox_list.clone();
     let task_handle = user_ctx.spawn(async move {
         let callback = Arc::new(callback);
 
         while let Ok(update) = updates.recv_async().await {
             let callback = callback.clone();
-            let callback = move || callback.on_update(update.into());
+            mailbox_list_clone.handle_update(&update);
+            let update = update.into();
+            let callback = move || callback.on_update(update);
             _ = async_runtime().spawn_blocking(callback).await;
         }
     });
 
-    Arc::new(WatchHandle::new(handle, &task_handle))
+    (
+        Arc::new(WatchHandle::new(handle, &task_handle)),
+        mailbox_list,
+    )
 }
 
 /// A callback interface for live queries.
@@ -245,31 +252,34 @@ pub(crate) fn spawn_message_scroller_watcher(
     user_ctx: &MailUserContext,
     handle: MailScrollerHandle<RealMessage>,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
-) -> Arc<WatchHandle> {
+) -> (Arc<WatchHandle>, Arc<MailboxList>) {
     let MailScrollerHandle { updates, handle } = handle;
+    let mailbox_list = Arc::new(MailboxList::default());
+    let mailbox_list_clone = mailbox_list.clone();
     let task_handle = user_ctx.spawn(async move {
         let callback = Arc::new(callback);
 
         while let Ok(update) = updates.recv_async().await {
             let callback = callback.clone();
-            let callback = move || callback.on_update(update.into());
+            mailbox_list_clone.handle_update(&update);
+            let update = update.into();
+            let callback = move || callback.on_update(update);
             _ = async_runtime().spawn_blocking(callback).await;
         }
     });
 
-    Arc::new(WatchHandle::new(handle, &task_handle))
+    (
+        Arc::new(WatchHandle::new(handle, &task_handle)),
+        mailbox_list,
+    )
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy, uniffi::Enum)]
 #[repr(u8)]
-/// Conversation and message read filter.
 pub enum ReadFilter {
-    /// Return all messages/conversations.
     #[default]
     All = 0,
-    /// Return only unread messages/conversations.
     Unread = 1,
-    /// Return only read messages/conversations.
     Read = 2,
 }
 
@@ -283,29 +293,47 @@ impl From<ReadFilter> for RealReadFilter {
     }
 }
 
-/// Represents a paginated view of a result set.
-///
-/// The [`Paginator`] manages the result set, providing pagination capabilities
-/// and handling live updates. It can be used for both paginated and
-/// non-paginated result sets, offering a consistent interface for data access.
-///
-/// It manages a sliding window of results, pre-fetching adjacent pages for
-/// quick access while maintaining a consistent view of the data even as it
-/// changes. It handles live updates, cursor management, and provides an
-/// intuitive navigation experience through the result set.
-///
+#[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy, uniffi::Enum)]
+#[repr(u8)]
+pub enum IncludeSwitch {
+    #[default]
+    Default,
+    WithSpamAndTrash,
+}
+
+impl From<IncludeSwitch> for RealIncludeSwitch {
+    fn from(value: IncludeSwitch) -> Self {
+        match value {
+            IncludeSwitch::Default => RealIncludeSwitch::Default,
+            IncludeSwitch::WithSpamAndTrash => RealIncludeSwitch::WithSpamAndTrash,
+        }
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct ConversationScroller {
-    /// The "real" paginator that does the heavy lifting.
-    pub(crate) scroller: Arc<RealMailScroller>,
+    scroller: Arc<RealMailScroller>,
+    handle: Arc<WatchHandle>,
+    list: Arc<MailboxList>,
+}
 
-    /// The handle to stop watching the data.
-    pub(crate) handle: Arc<WatchHandle>,
+impl ConversationScroller {
+    #[must_use]
+    pub(crate) fn new(
+        scroller: RealMailScroller,
+        handle: Arc<WatchHandle>,
+        list: Arc<MailboxList>,
+    ) -> Self {
+        Self {
+            scroller: Arc::new(scroller),
+            handle,
+            list,
+        }
+    }
 }
 
 #[uniffi_export]
 impl ConversationScroller {
-    /// Retrieves the handle to stop watching the data.
     #[must_use]
     pub fn handle(&self) -> Arc<WatchHandle> {
         Arc::clone(&self.handle)
@@ -313,8 +341,6 @@ impl ConversationScroller {
 
     /// Forces a refresh of the scroller. The callback will receive the full
     /// list of items.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn force_refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .force_refresh()
@@ -324,8 +350,6 @@ impl ConversationScroller {
 
     /// Refreshes the scroller, providing a smallest possible update
     /// to the client via the callback.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .refresh()
@@ -334,8 +358,6 @@ impl ConversationScroller {
     }
 
     /// Moves to the next page and retrieves its results.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .fetch_more()
@@ -344,8 +366,6 @@ impl ConversationScroller {
     }
 
     /// Tries to fetch the newest items.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn fetch_new(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .fetch_new()
@@ -355,8 +375,6 @@ impl ConversationScroller {
 
     /// Retrieves the current items in the scroller, the items will be returned
     /// in the callback with the `ReplaceFrom { idx: 0, items }` update.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn get_items(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .get_items()
@@ -364,62 +382,82 @@ impl ConversationScroller {
             .map_err(Into::into)
     }
 
-    /// Changes the filter of the scroller.
-    ///
-    /// The call is non-blocking and returns immediately.
-    pub fn change_filter(self: Arc<Self>, filter: ReadFilter) -> Result<(), MailScrollerError> {
+    pub fn change_filter(self: Arc<Self>, unread: ReadFilter) -> Result<(), MailScrollerError> {
         self.scroller
-            .change_filter(filter.into())
+            .change_filter(unread.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
 
-    /// Retrieves the total number of records in the result set.
-    #[must_use]
+    pub fn change_include(
+        self: Arc<Self>,
+        include: IncludeSwitch,
+    ) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_include(include.into())
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     pub async fn total(&self) -> Result<u64, MailScrollerError> {
         let scroller = Arc::clone(&self.scroller);
+
         uniffi_async(async move { scroller.total().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
     }
 
-    /// Checks if there is a next page available.
-    #[must_use]
     pub async fn has_more(&self) -> Result<bool, MailScrollerError> {
         let scroller = Arc::clone(&self.scroller);
+
         uniffi_async(async move { scroller.has_more().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
     }
 
+    #[must_use]
+    pub fn cursor(&self, index: u64) -> Arc<MailboxCursor> {
+        Arc::new(MailboxCursor::new(
+            index,
+            self.scroller.clone(),
+            self.list.clone(),
+        ))
+    }
+
+    #[must_use]
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
+    }
+
     pub fn terminate(&self) {
-        self.scroller.terminate_workers();
+        self.scroller.terminate();
     }
 }
 
-/// Represents a paginated view of a result set.
-///
-/// The [`Paginator`] manages the result set, providing pagination capabilities
-/// and handling live updates. It can be used for both paginated and
-/// non-paginated result sets, offering a consistent interface for data access.
-///
-/// It manages a sliding window of results, pre-fetching adjacent pages for
-/// quick access while maintaining a consistent view of the data even as it
-/// changes. It handles live updates, cursor management, and provides an
-/// intuitive navigation experience through the result set.
-///
 #[derive(uniffi::Object)]
 pub struct MessageScroller {
-    /// The "real" paginator that does the heavy lifting.
-    pub(crate) scroller: Arc<RealMailScroller>,
+    scroller: Arc<RealMailScroller>,
+    handle: Arc<WatchHandle>,
+    list: Arc<MailboxList>,
+}
 
-    /// The handle to stop watching the data.
-    pub(crate) handle: Arc<WatchHandle>,
+impl MessageScroller {
+    #[must_use]
+    pub(crate) fn new(
+        scroller: RealMailScroller,
+        handle: Arc<WatchHandle>,
+        list: Arc<MailboxList>,
+    ) -> Self {
+        Self {
+            scroller: Arc::new(scroller),
+            handle,
+            list,
+        }
+    }
 }
 
 #[uniffi_export]
 impl MessageScroller {
-    /// Retrieves the handle to stop watching the data.
     #[must_use]
     pub fn handle(&self) -> Arc<WatchHandle> {
         Arc::clone(&self.handle)
@@ -427,8 +465,6 @@ impl MessageScroller {
 
     /// Forces a refresh of the scroller. The callback will receive the full
     /// list of items.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn force_refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .force_refresh()
@@ -438,8 +474,6 @@ impl MessageScroller {
 
     /// Refreshes the scroller, providing a smallest possible update
     /// to the client via the callback.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .refresh()
@@ -448,8 +482,6 @@ impl MessageScroller {
     }
 
     /// Moves to the next page and retrieves its results.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .fetch_more()
@@ -458,8 +490,6 @@ impl MessageScroller {
     }
 
     /// Tries to fetch the newest items.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn fetch_new(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .fetch_new()
@@ -468,19 +498,25 @@ impl MessageScroller {
     }
 
     /// Changes the filter of the scroller.
-    ///
-    /// The call is non-blocking and returns immediately.
-    pub fn change_filter(self: Arc<Self>, filter: ReadFilter) -> Result<(), MailScrollerError> {
+    pub fn change_filter(self: Arc<Self>, unread: ReadFilter) -> Result<(), MailScrollerError> {
         self.scroller
-            .change_filter(filter.into())
+            .change_filter(unread.into())
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
+    pub fn change_include(
+        self: Arc<Self>,
+        include: IncludeSwitch,
+    ) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_include(include.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
 
     /// Retrieves the current items in the scroller, the items will be returned
     /// in the callback with the `ReplaceFrom { idx: 0, items }` update.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn get_items(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .get_items()
@@ -488,52 +524,65 @@ impl MessageScroller {
             .map_err(Into::into)
     }
 
-    /// Retrieves the total number of records in the result set.
-    #[must_use]
     pub async fn total(&self) -> Result<u64, MailScrollerError> {
         let scroller = Arc::clone(&self.scroller);
+
         uniffi_async(async move { scroller.total().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
     }
 
-    /// Checks if there is a next page available.
-    #[must_use]
     pub async fn has_more(&self) -> Result<bool, MailScrollerError> {
         let scroller = Arc::clone(&self.scroller);
+
         uniffi_async(async move { scroller.has_more().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
     }
 
+    #[must_use]
+    pub fn cursor(&self, index: u64) -> Arc<MailboxCursor> {
+        Arc::new(MailboxCursor::new(
+            index,
+            self.scroller.clone(),
+            self.list.clone(),
+        ))
+    }
+
+    #[must_use]
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
+    }
+
     pub fn terminate(&self) {
-        self.scroller.terminate_workers();
+        self.scroller.terminate();
     }
 }
 
-/// Represents a paginated view of a result set.
-///
-/// The [`Paginator`] manages the result set, providing pagination capabilities
-/// and handling live updates. It can be used for both paginated and
-/// non-paginated result sets, offering a consistent interface for data access.
-///
-/// It manages a sliding window of results, pre-fetching adjacent pages for
-/// quick access while maintaining a consistent view of the data even as it
-/// changes. It handles live updates, cursor management, and provides an
-/// intuitive navigation experience through the result set.
-///
 #[derive(uniffi::Object)]
 pub struct SearchScroller {
-    /// The "real" paginator that does the heavy lifting.
-    pub(crate) scroller: Arc<RealMailScroller>,
+    scroller: Arc<RealMailScroller>,
+    handle: Arc<WatchHandle>,
+    list: Arc<MailboxList>,
+}
 
-    /// The handle to stop watching the data.
-    pub(crate) handle: Arc<WatchHandle>,
+impl SearchScroller {
+    #[must_use]
+    pub(crate) fn new(
+        scroller: RealMailScroller,
+        handle: Arc<WatchHandle>,
+        list: Arc<MailboxList>,
+    ) -> Self {
+        Self {
+            scroller: Arc::new(scroller),
+            handle,
+            list,
+        }
+    }
 }
 
 #[uniffi_export]
 impl SearchScroller {
-    /// Retrieves the handle to stop watching the data.
     #[must_use]
     pub fn handle(&self) -> Arc<WatchHandle> {
         Arc::clone(&self.handle)
@@ -541,8 +590,6 @@ impl SearchScroller {
 
     /// Forces a refresh of the scroller. The callback will receive the full
     /// list of items.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn force_refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .force_refresh()
@@ -552,8 +599,6 @@ impl SearchScroller {
 
     /// Refreshes the scroller, providing a smallest possible update
     /// to the client via the callback.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .refresh()
@@ -562,8 +607,6 @@ impl SearchScroller {
     }
 
     /// Moves to the next page and retrieves its results.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .fetch_more()
@@ -571,10 +614,18 @@ impl SearchScroller {
             .map_err(Into::into)
     }
 
+    pub fn change_include(
+        self: Arc<Self>,
+        include: IncludeSwitch,
+    ) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_include(include.into())
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     /// Retrieves the current items in the scroller, the items will be returned
     /// in the callback with the `ReplaceFrom { idx: 0, items }` update.
-    ///
-    /// The call is non-blocking and returns immediately.
     pub fn get_items(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .get_items()
@@ -582,25 +633,188 @@ impl SearchScroller {
             .map_err(Into::into)
     }
 
-    /// Retrieves the total number of records in the result set.
-    #[must_use]
     pub async fn total(&self) -> Result<u64, MailScrollerError> {
         let scroller = Arc::clone(&self.scroller);
+
         uniffi_async(async move { scroller.total().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
     }
 
-    /// Checks if there is a next page available.
-    #[must_use]
     pub async fn has_more(&self) -> Result<bool, MailScrollerError> {
         let scroller = Arc::clone(&self.scroller);
+
         uniffi_async(async move { scroller.has_more().await.map_err(RealProtonMailError::from) })
             .await
             .map_err(Into::into)
     }
 
-    pub fn terminate(&self) {
-        self.scroller.terminate_workers();
+    #[must_use]
+    pub fn cursor(&self, index: u64) -> Arc<MailboxCursor> {
+        Arc::new(MailboxCursor::new(
+            index,
+            self.scroller.clone(),
+            self.list.clone(),
+        ))
     }
+
+    #[must_use]
+    pub fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter()
+    }
+
+    pub fn terminate(&self) {
+        self.scroller.terminate();
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct MailboxList {
+    items: Mutex<Vec<CursorEntry>>,
+    notify: Notify,
+}
+
+impl MailboxList {
+    fn get(&self, index: u64) -> Option<CursorEntry> {
+        let index = usize::try_from(index).ok()?;
+        self.items.lock().get(index).cloned()
+    }
+
+    async fn notify_when_changed(&self) {
+        self.notify.notified().await;
+    }
+
+    fn handle_update<T>(&self, update: &ScrollerUpdate<T>)
+    where
+        T: Clone + Into<CursorEntry>,
+    {
+        match update {
+            ScrollerUpdate::None(_) | ScrollerUpdate::Error { .. } => (),
+            ScrollerUpdate::Append { src: _, items } => {
+                self.items
+                    .lock()
+                    .extend(items.iter().map(|i| i.clone().into()));
+            }
+            ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
+                self.items
+                    .lock()
+                    .splice(idx.., items.iter().map(|i| i.clone().into()));
+            }
+            ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
+                self.items
+                    .lock()
+                    .splice(..idx, items.iter().map(|i| i.clone().into()));
+            }
+            ScrollerUpdate::ReplaceRange {
+                src: _,
+                from,
+                to,
+                items,
+            } => {
+                self.items
+                    .lock()
+                    .splice(from..to, items.iter().map(|i| i.clone().into()));
+            }
+        }
+
+        self.notify.notify_waiters();
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct MailboxCursor {
+    scroller: Arc<RealMailScroller>,
+    index: AtomicU64,
+    list: Arc<MailboxList>,
+}
+
+impl MailboxCursor {
+    #[must_use]
+    pub(crate) fn new(index: u64, scroller: Arc<RealMailScroller>, list: Arc<MailboxList>) -> Self {
+        Self {
+            scroller,
+            index: index.into(),
+            list,
+        }
+    }
+}
+
+#[uniffi_export]
+impl MailboxCursor {
+    pub fn get_previous(&self) -> Result<Option<CursorEntry>, MailScrollerError> {
+        let Some(index) = self.index.load(Ordering::Relaxed).checked_sub(1) else {
+            return Ok(None);
+        };
+
+        let Some(entry) = self.list.get(index) else {
+            return Ok(None);
+        };
+
+        Ok(Some(entry))
+    }
+
+    pub fn get_next(&self) -> Result<NextCursorEntry, MailScrollerError> {
+        let Some(index) = self.index.load(Ordering::Relaxed).checked_add(1) else {
+            return Ok(NextCursorEntry::None);
+        };
+
+        let Some(entry) = self.list.get(index) else {
+            return Ok(NextCursorEntry::CallAsync);
+        };
+
+        Ok(NextCursorEntry::Some(entry))
+    }
+
+    pub async fn fetch_next(&self) -> Result<Option<CursorEntry>, MailScrollerError> {
+        self.scroller
+            .fetch_more()
+            .map_err(RealProtonMailError::from)?;
+
+        self.list.notify_when_changed().await;
+        let Some(index) = self.index.load(Ordering::Relaxed).checked_add(1) else {
+            return Ok(None);
+        };
+
+        Ok(self.list.get(index))
+    }
+
+    pub fn go_forward(&self) {
+        self.index.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn go_backward(&self) {
+        _ = self
+            .index
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |i| {
+                Some(i.saturating_sub(1))
+            });
+    }
+}
+
+#[derive(uniffi::Enum, Clone)]
+pub enum CursorEntry {
+    ConversationEntry(Conversation),
+    MessageEntry(Message),
+}
+
+impl From<ContextualConversation> for CursorEntry {
+    fn from(value: ContextualConversation) -> Self {
+        CursorEntry::ConversationEntry(value.into())
+    }
+}
+
+impl From<RealMessage> for CursorEntry {
+    fn from(value: RealMessage) -> Self {
+        CursorEntry::MessageEntry(value.into())
+    }
+}
+
+#[derive(uniffi::Enum)]
+#[allow(clippy::large_enum_variant)]
+pub enum NextCursorEntry {
+    None,
+    Some(CursorEntry),
+    /// We don't know if there is anything or not,
+    /// you should call fetch_next function which is asynchronous
+    CallAsync,
 }

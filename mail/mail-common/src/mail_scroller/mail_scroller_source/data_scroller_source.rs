@@ -1,3 +1,10 @@
+use super::{
+    MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
+    remote_source::RemoteSource,
+};
+use crate::datatypes::IncludeSwitch;
+use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
+use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 use anyhow::anyhow;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
@@ -7,16 +14,10 @@ use proton_core_common::{
 use stash::stash::Tether;
 use tracing::{debug, warn};
 
-use super::{
-    MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
-    remote_source::RemoteSource,
-};
-use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
-use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
-
 #[derive(Debug)]
 pub struct DataScrollerSource<T: RemoteSource> {
     local_label_id: LocalLabelId,
+    local_label_ids: Option<(LocalLabelId, LocalLabelId)>,
     unread: ReadFilter,
     page_size: usize,
     invalidate: Option<flume::Sender<()>>,
@@ -28,13 +29,18 @@ pub struct DataScrollerSource<T: RemoteSource> {
 impl<T: RemoteSource> DataScrollerSource<T> {
     pub fn new(
         local_label_id: LocalLabelId,
+        alt_local_label_id: Option<LocalLabelId>,
         unread: ReadFilter,
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Self {
+        let local_label_ids =
+            alt_local_label_id.map(|alt_local_label_id| (local_label_id, alt_local_label_id));
+
         Self {
             local_label_id,
+            local_label_ids,
             unread,
             page_size,
             invalidate: None,
@@ -56,6 +62,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         check_for_total: bool,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         tracing::info!("Initializing MailScroller Source");
+
         let mut tether = ctx.user_stash().connection().await?;
         let label = self.get_label(&tether).await?;
         let remote_label_id = label.remote_id.clone().unwrap();
@@ -71,6 +78,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 "We have paginated here before, try to sync data, status: {}",
                 if is_online { "online" } else { "offline" }
             );
+
             if let Some(scroll_data) = scroller.scroll_data_begin(&tether).await? {
                 debug!("Syncing previous page in background");
 
@@ -81,20 +89,25 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                     self.invalidate.clone(),
                 )
                 .await?;
+
                 let task = if is_online
                     && !scroller.has_next_page(&tether).await?
                     && total > self.page_size as u64
                 {
                     debug!("Syncing next page in a task");
+
                     self.sync_next_page(ctx, &scroll_data, remote_label_id)
                         .await?
                 } else {
                     None
                 };
+
                 return Ok(task);
             } else {
                 debug!("Cursor points to empty scroll data, will sync first page instead");
+
                 let scroll_data = scroller.scroll_data_end(&tether).await?;
+
                 tether
                     .tx(async |bond| scroll_data.delete(bond).await)
                     .await?;
@@ -119,6 +132,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             None
         } else if has_more {
             debug!("We have local data, running first page sync in background");
+
             self.sync_first_page(
                 ctx,
                 remote_label_id,
@@ -127,9 +141,11 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 self.invalidate.clone(),
             )
             .await?;
+
             None
         } else {
             debug!("We have no local data, running first page sync in a task");
+
             self.sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
                 .await?
         };
@@ -482,18 +498,29 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     async fn change_filter(
         &mut self,
         ctx: &MailUserContext,
-        filter: ReadFilter,
+        unread: ReadFilter,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let tether = ctx.user_stash().connection().await?;
-        self.unread = filter;
+        self.unread = unread;
         self.state =
-            MailScrollerState::new_online(self.local_label_id, filter, self.page_size, &tether)
+            MailScrollerState::new_online(self.local_label_id, unread, self.page_size, &tether)
                 .await?;
         debug!("Changed filter, new state: {}, initializing...", self.state);
 
         let task = self.initialize_impl(ctx, false).await?;
 
         Ok(task)
+    }
+
+    fn change_include(&mut self, include: IncludeSwitch) {
+        if let Some((default_label, extended_label)) = self.local_label_ids {
+            self.local_label_id = match include {
+                IncludeSwitch::Default => default_label,
+                IncludeSwitch::WithSpamAndTrash => extended_label,
+            };
+        } else {
+            warn!(?include, "Unexpected change-include command");
+        }
     }
 
     async fn clear_cursor(

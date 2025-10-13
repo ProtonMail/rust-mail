@@ -432,7 +432,7 @@ impl ContactsModel {
         ctx: Arc<MailUserContext>,
     ) -> anyhow::Result<(TuiWatchHandle, Command<Messages>)> {
         let stash = ctx.user_stash();
-        let handle = stash.subscribe_to(|sender| Box::new(ContactListWatcher::new(sender)))?;
+        let handle = stash.subscribe_to_sync(|sender| Box::new(ContactListWatcher::new(sender)))?;
         let (watcher, background_command) =
             TuiWatchHandle::from_watcher_handle(handle, move || {
                 let ctx = ctx.clone();

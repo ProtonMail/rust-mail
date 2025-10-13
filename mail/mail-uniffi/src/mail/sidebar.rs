@@ -129,7 +129,7 @@ impl Sidebar {
         let stash = self.user_stash()?;
 
         uniffi_async(async move {
-            let handle = RealLabelWithCounters::watch(&stash)?;
+            let handle = RealLabelWithCounters::watch(&stash).await?;
             let handle = watch_channel(&*ctx, handle, callback);
 
             Result::<_, RealProtonMailError>::Ok(handle)

@@ -79,6 +79,7 @@ impl UnsubscribeNewsletter {
 impl Action for UnsubscribeNewsletter {
     const TYPE: Type = Type("unsubscribe_to_newsletter");
     const VERSION: u32 = 1;
+    const MAX_RETRIES: Option<u32> = Some(3);
 
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = UnsubscribeNewsletterHandler;

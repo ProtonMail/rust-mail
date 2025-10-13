@@ -13,6 +13,7 @@ use proton_mail_api::services::proton::{
     response_data::Conversation as ApiConversation,
     response_data::ConversationLabel as ApiConversationLabel,
 };
+use proton_mail_common::datatypes::IncludeSwitch;
 use proton_mail_common::datatypes::{
     SystemLabelId,
     labels::{ScrollOrderDir, ScrollOrderField},
@@ -126,9 +127,11 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
         .await
         .unwrap();
 
+    let include = IncludeSwitch::Default;
     let page_size = 5;
+
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -175,10 +178,11 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
-
+    let include = IncludeSwitch::Default;
     let page_size = 5;
+
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -224,9 +228,11 @@ async fn test_conversation_mail_scroller_try_to_read_one_item_from_api_when_it_d
         .await
         .unwrap();
 
+    let include = IncludeSwitch::Default;
     let page_size = 5;
+
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -247,9 +253,12 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
     let unread = ReadFilter::All;
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    setup_api_sync_previous_page(&ctx, "myconv_9", None, 1).await;
-    let params = setup_api_conversation_pages(&ctx, page_size, 0, 1..=3).await;
+    let include = IncludeSwitch::Default;
+    let label = SystemLabel::Inbox;
+    let remote_label_id = label.remote_id();
+    let local_label_id = label.local_id(&tether).await.unwrap().unwrap();
+    setup_api_sync_previous_page(&ctx, "myconv_9", None, &remote_label_id, 1).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 0, &remote_label_id, 1..=3).await;
     ctx.setup_user(params.clone()).await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -263,7 +272,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
 
     // Online
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -295,9 +304,10 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     // This is because cursor have only two pages in cache, which means we will try to get new page evertime we fetch more
 
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
+
     test_scroller.fetch_more().unwrap();
     let _ = test_scroller.wait_for_update().await.unwrap();
     assert_scroller_content!(
@@ -326,7 +336,6 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
-    let unread = ReadFilter::All;
 
     mock_api_forbidden(&ctx).await;
     ctx.catch_all().await;
@@ -339,9 +348,12 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
         .await
         .unwrap();
 
+    let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let page_size = 5;
+
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -389,9 +401,11 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .await
         .unwrap();
 
+    let include = IncludeSwitch::Default;
     let page_size = 5;
+
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -443,9 +457,11 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .await
         .unwrap();
 
+    let include = IncludeSwitch::Default;
     let page_size = 5;
+
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -491,9 +507,11 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .await
         .unwrap();
 
+    let include = IncludeSwitch::Default;
     let page_size = 5;
+
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -528,7 +546,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     // Go online suddenly
     ctx.mock_server().reset().await;
     ctx.mock_ping_success().await;
-    setup_api_conversation_pages(&ctx, page_size, 200, 2).await;
+    setup_api_conversation_pages(&ctx, page_size, 200, &remote_label_id, 2).await;
     user_ctx
         .network_monitor_service()
         .update_os_network_status(OsNetworkStatus::Online);
@@ -618,9 +636,11 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
         .await
         .unwrap();
 
+    let include = IncludeSwitch::Default;
     let page_size = 50;
+
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -654,6 +674,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
     let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let remote_label_id = SystemLabel::Inbox.remote_id();
     let mut data = hash_map! {
@@ -661,8 +682,8 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     };
     data.save_to_database(&mut tether).await;
 
-    setup_api_sync_previous_page(&ctx, "myconv_102", None, 2).await;
-    let params = setup_api_conversation_pages(&ctx, page_size, 0, 2).await;
+    setup_api_sync_previous_page(&ctx, "myconv_102", None, &remote_label_id, 2).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 0, &remote_label_id, 2).await;
     ctx.setup_user(params.clone()).await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -699,7 +720,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     // The scroller needs to fetch next page from the api due to insufficient amount
     // of items to be displayed as the first page.
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -752,7 +773,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
 
     // Lets try read it again from cache
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -811,6 +832,7 @@ async fn test_conversation_mail_scroller_database_refresh_will_not_triggers_fetc
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 10; // Larger than our test data
     let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
 
     // Set up cached data with fewer items than page size
@@ -832,7 +854,7 @@ async fn test_conversation_mail_scroller_database_refresh_will_not_triggers_fetc
         .unwrap();
 
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -873,6 +895,7 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_sma
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 10; // Larger than our test data
     let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
 
     // Set up cached data with fewer items than page size
@@ -894,7 +917,7 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_sma
         .unwrap();
 
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -937,6 +960,7 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_lar
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
     let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
 
     // Set up cached data
@@ -958,7 +982,7 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_lar
         .unwrap();
 
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -1026,9 +1050,15 @@ async fn snoozed_conversations() {
 
     // ---
 
-    let mut scroller = TestScroller::conversations(&user_ctx, label.id(), ReadFilter::All, 2)
-        .await
-        .unwrap();
+    let mut scroller = TestScroller::conversations(
+        &user_ctx,
+        label.id(),
+        ReadFilter::All,
+        IncludeSwitch::Default,
+        2,
+    )
+    .await
+    .unwrap();
 
     let convs = scroller.fetch_more_and_wait().await.unwrap();
 
@@ -1056,6 +1086,7 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let page_size = 3;
 
     // Create 3 test conversations for inbox with same snooze_time but different context_time
@@ -1106,7 +1137,7 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
 
     // Create scroller with SnoozeTime ordering
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -1165,19 +1196,39 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
 async fn test_conversation_mail_scroller_fetch_new() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let conversations = params.conversations.clone();
-    let previous_page = conversations
+    let label = SystemLabel::Inbox;
+    let conversations = params
+        .conversations
         .first()
         .cloned()
         .map(|mut conv| {
-            conv.id = "myconv_0".into();
+            conv.context_time = Some(100);
+            conv.order = 100;
             conv
         })
         .into_iter()
         .collect_vec();
 
-    setup_api_sync_previous_page(&ctx, "myconv", Some(previous_page), 1).await;
-    ctx.mock_get_conversations(conversations, 2).await;
+    let previous_page = conversations
+        .first()
+        .cloned()
+        .map(|mut conv| {
+            conv.id = "myconv_0".into();
+            conv.context_time = Some(110);
+            conv.order = 110;
+            conv
+        })
+        .into_iter()
+        .collect_vec();
+
+    let remote_label_id = label.remote_id();
+    // Mock previous page
+    setup_api_sync_previous_page(&ctx, "myconv_0", None, &remote_label_id, 1).await;
+    setup_api_sync_previous_page(&ctx, "myconv", Some(previous_page), &remote_label_id, 1).await;
+    // Mock next page
+    mock_get_conversations_page(&ctx, vec![], "myconv", &remote_label_id, 1).await;
+    // Mock first page
+    ctx.mock_get_conversations(conversations, 1).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -1186,10 +1237,11 @@ async fn test_conversation_mail_scroller_fetch_new() {
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
-
+    let include = IncludeSwitch::Default;
     let page_size = 5;
+
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -1201,6 +1253,10 @@ async fn test_conversation_mail_scroller_fetch_new() {
     let actual = test_scroller.fetch_new_and_wait().await.unwrap();
     assert_eq!(actual.len(), 1);
     assert_eq!(test_scroller.items().len(), 2);
+
+    let actual = test_scroller.fetch_new_and_wait().await.unwrap();
+    assert_eq!(actual.len(), 0);
+    assert_eq!(test_scroller.items().len(), 2);
 }
 
 #[function_name::named]
@@ -1208,11 +1264,17 @@ async fn setup_api_sync_previous_page(
     ctx: &MailTestContext,
     first_id: &str,
     conversations: Option<Vec<ApiConversation>>,
+    label: &LabelId,
     expect: impl Into<Times>,
 ) {
+    let desc = ScrollOrderDir::for_label(label)
+        .reverse()
+        .as_api_desc()
+        .unwrap();
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
-        .and(query_param_contains("BeginID", first_id))
+        .and(query_param_contains("AnchorID", first_id))
+        .and(query_param_contains("Desc", (desc as u8).to_string()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                 conversations: conversations.unwrap_or_default(),
@@ -1251,6 +1313,7 @@ async fn setup_api_conversation_pages(
     ctx: &MailTestContext,
     page_size: usize,
     starting_display_order: u64,
+    label: &LabelId,
     empty_pages_requests: impl Into<Times>,
 ) -> TestParams {
     ctx.mock_ping_success().await;
@@ -1262,9 +1325,16 @@ async fn setup_api_conversation_pages(
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
     let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
 
-    mock_get_conversations_page(ctx, second_page, &first_page_last_id, 1_u64).await;
+    mock_get_conversations_page(ctx, second_page, &first_page_last_id, label, 1_u64).await;
     // last page is empty
-    mock_get_conversations_page(ctx, vec![], &second_page_last_id, empty_pages_requests).await;
+    mock_get_conversations_page(
+        ctx,
+        vec![],
+        &second_page_last_id,
+        label,
+        empty_pages_requests,
+    )
+    .await;
     ctx.mock_get_conversations(first_page, 1_u64).await;
 
     // Do not download any conv on init
@@ -1279,6 +1349,7 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let page_size = 5;
     let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
 
     ctx.mock_ping_success().await;
@@ -1305,7 +1376,7 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
 
     // Online
     let mut test_scroller =
-        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -1405,6 +1476,7 @@ async fn test_conversation_mail_scroller_reads_non_empty_folder_for_the_first_ti
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let api_page = create_api_conversation_page(0..9, 100);
     let models = api_page
         .iter()
@@ -1432,7 +1504,7 @@ async fn test_conversation_mail_scroller_reads_non_empty_folder_for_the_first_ti
 
     let page_size = 10;
     let mut test_scroller =
-        TestScroller::conversations_instant(&user_ctx, local_label_id, unread, page_size)
+        TestScroller::conversations_instant(&user_ctx, local_label_id, unread, include, page_size)
             .await
             .unwrap();
 
@@ -1473,11 +1545,14 @@ pub async fn mock_get_conversations_page(
     ctx: &MailTestContext,
     conversations: Vec<ApiConversation>,
     last_id: &str,
+    label: &LabelId,
     expect: impl Into<Times>,
 ) {
+    let desc = ScrollOrderDir::for_label(label).as_api_desc().unwrap();
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
         .and(query_param_contains("AnchorID", last_id))
+        .and(query_param_contains("Desc", (desc as u8).to_string()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                 conversations,
@@ -1562,8 +1637,9 @@ async fn test_conversation_mail_scroller_handles_create_or_get_local_missing_lab
     // Set up scroller for inbox
     let page_size = 5;
     let unread = ReadFilter::All;
+    let include = IncludeSwitch::Default;
     let mut inbox_scroller =
-        TestScroller::conversations(&user_ctx, inbox_local_label_id, unread, page_size)
+        TestScroller::conversations(&user_ctx, inbox_local_label_id, unread, include, page_size)
             .await
             .unwrap();
     // We should get one update immediately because we have total 1 and page size is 5

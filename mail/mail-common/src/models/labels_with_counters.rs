@@ -279,8 +279,10 @@ impl LabelWithCounters {
         }
     }
 
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(LabelWithCountersWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(LabelWithCountersWatcher { sender }))
+            .await
     }
 }
 

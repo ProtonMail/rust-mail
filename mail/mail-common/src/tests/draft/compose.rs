@@ -85,7 +85,7 @@ async fn reply_all_draft_message_creation() {
 async fn reply_all_sent_by_me_takes_original_recipients() {
     let source_body_metadata = existing_message_body_metadata();
     let mut message = existing_message();
-    message.label_ids.push(LabelId::sent());
+    message.label_ids.push(LabelId::all_sent());
     message.flags |= MessageFlags::SENT;
 
     let (draft, _, _) = create_reply_with_mime_and_body_and_message(

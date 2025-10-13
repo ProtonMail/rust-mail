@@ -5,7 +5,9 @@ use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_common::test_utils::account::TEST_ADDRESS_ID;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
-use proton_mail_api::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
+use proton_mail_api::services::proton::prelude::{
+    NewAttachmentDisposition, NewAttachmentParams, PutAttachmentDispositionRequest,
+};
 use proton_mail_api::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
     Disposition as ApiDisposition,
@@ -13,7 +15,7 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_api::services::proton::responses::{
     GetAttachmentMetadataResponse, PostAttachmentResponse,
 };
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate, Times};
 
 const TEST_ATTACHMENT_ID: &str =
@@ -55,6 +57,7 @@ pub fn testdata_attachment_metadata_complete(
         address_id: AddressId::from(TEST_ADDRESS_ID),
         message_id,
         conversation_id,
+        content_id: None,
         is_auto_forwardee: false,
     }
 }
@@ -213,6 +216,30 @@ impl MailTestContext {
             Err((code, error)) => {
                 mock.respond_with(ResponseTemplate::new(code).set_body_json(error))
             }
+        }
+        .expect(1)
+        .named(function_name!())
+        .mount(self.mock_server())
+        .await;
+    }
+
+    #[function_name::named]
+    pub async fn mock_put_attachment_disposition(
+        &self,
+        attachment_id: AttachmentId,
+        new_attachment_disposition: NewAttachmentDisposition,
+        response: Result<(), ApiErrorInfo>,
+    ) {
+        let req = PutAttachmentDispositionRequest::from(new_attachment_disposition);
+        let mock = Mock::given(method("PUT"))
+            .and(path(format!(
+                "api/mail/v4/attachments/{attachment_id}/disposition"
+            )))
+            .and(body_json(&req));
+
+        match response {
+            Ok(_) => mock.respond_with(ResponseTemplate::new(200)),
+            Err(err) => mock.respond_with(ResponseTemplate::new(422).set_body_json(err)),
         }
         .expect(1)
         .named(function_name!())

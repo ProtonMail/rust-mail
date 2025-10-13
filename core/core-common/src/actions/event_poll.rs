@@ -116,9 +116,10 @@ impl Handler for EventPollHandler {
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &mut Self::Action,
+        action: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        tracing::info!("Forced={}", action.force);
         Ok(())
     }
 

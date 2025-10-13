@@ -44,6 +44,7 @@ pub mod dependencies;
 pub mod exclusive_location;
 pub mod folder_banner;
 mod ids;
+mod include_switch;
 pub mod labels;
 pub mod mail_notifications;
 pub mod message_banner;
@@ -61,6 +62,7 @@ pub use contextual_conversation::*;
 use derive_more::derive::TryFrom;
 pub use exclusive_location::ExclusiveLocation;
 pub use ids::*;
+pub use include_switch::IncludeSwitch;
 use proton_core_common::models::Label;
 pub use read_filter::ReadFilter;
 pub use rollback_item_type::RollbackItemType;
@@ -392,7 +394,7 @@ impl ToSql for MimeType {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom, Serialize, Deserialize)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum NextMessageOnMove {
@@ -2289,6 +2291,29 @@ pub trait SystemLabelId: for<'a> From<&'a str> + ToSql {
 
     fn category_default() -> Self {
         Self::from("24")
+    }
+
+    fn category_newsletter() -> Self {
+        Self::from("25")
+    }
+
+    fn category_transactions() -> Self {
+        Self::from("26")
+    }
+
+    fn non_removable_system_labels() -> [Self; 10] {
+        [
+            Self::all_mail(),
+            Self::all_sent(),
+            Self::all_drafts(),
+            Self::category_social(),
+            Self::category_promotions(),
+            Self::category_updates(),
+            Self::category_forums(),
+            Self::category_default(),
+            Self::category_newsletter(),
+            Self::category_transactions(),
+        ]
     }
 
     #[must_use]

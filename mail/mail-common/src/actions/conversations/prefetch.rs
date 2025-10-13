@@ -1,5 +1,5 @@
 use crate::actions::{MailActionError, PREFETCH_ROLLBACK_ACTION_GROUP};
-use crate::datatypes::LocalConversationId;
+use crate::datatypes::{ConversationViewOptions, LocalConversationId};
 use crate::models::{Conversation, Message};
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
@@ -91,7 +91,12 @@ impl Handler for PrefetchHandler {
         )
         .await;
 
-        let messages = Message::in_conversation(action.local_id, guard.tether()).await?;
+        let messages = Message::in_conversation(
+            action.local_id,
+            ConversationViewOptions::All,
+            guard.tether(),
+        )
+        .await?;
 
         let Some(label) = Label::load(action.local_label_id, guard.tether()).await? else {
             error!(

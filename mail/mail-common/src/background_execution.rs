@@ -21,6 +21,7 @@ pub enum BackgroundExecutionStatus {
 pub struct BackgroundExecutionResult {
     pub status: BackgroundExecutionStatus,
     pub has_unsent_messages: bool,
+    pub has_pending_actions: bool,
 }
 
 impl BackgroundExecutionResult {
@@ -28,6 +29,7 @@ impl BackgroundExecutionResult {
         Self {
             status: BackgroundExecutionStatus::SkippedNoActiveContexts,
             has_unsent_messages: false,
+            has_pending_actions: false,
         }
     }
 }
@@ -92,6 +94,7 @@ impl BackgroundExecutionContext {
         tracing::info!("Background execution finished");
 
         let mut has_unsent_messages = false;
+        let mut has_pending_actions = false;
         for ctx in &all_user_ctxs {
             has_unsent_messages = has_unsent_messages
                 || ctx
@@ -104,11 +107,23 @@ impl BackgroundExecutionContext {
                         )
                     })
                     .unwrap_or(false);
+            has_pending_actions = has_pending_actions
+                || ctx
+                    .has_actions_in_queue()
+                    .await
+                    .inspect_err(|e| {
+                        error!(
+                            "Failed to check {} for unprocessed actions: {e:?}",
+                            ctx.user_id()
+                        )
+                    })
+                    .unwrap_or(false);
         }
 
         Ok(BackgroundExecutionResult {
             status,
             has_unsent_messages,
+            has_pending_actions,
         })
     }
 }

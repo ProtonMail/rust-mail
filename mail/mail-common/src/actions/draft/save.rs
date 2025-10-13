@@ -258,7 +258,7 @@ impl Handler for SaveHandler {
 
             // A draft can only be updated if it is not in the outbox or sent folder.
             if message.label_ids.contains(&LabelId::outbox())
-                || message.label_ids.contains(&LabelId::sent())
+                || message.label_ids.contains(&LabelId::all_sent())
             {
                 error!("Can't update a draft that was already sent");
                 return Err(SaveError::AlreadySent.into());

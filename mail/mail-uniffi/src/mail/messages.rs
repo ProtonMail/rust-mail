@@ -12,6 +12,7 @@ use super::datatypes::{
     AllListActions, AllMessageActions, Message, MessageActionSheet, MobileAction,
 };
 use super::datatypes::{LabelAsAction, MimeType, MoveAction};
+use super::mail_scroller::IncludeSwitch;
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::PaginatorSearchOptions;
@@ -40,7 +41,8 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{
-    LocalConversationId, MobileAction as RealMobileAction, ParsedHeaderValue,
+    ConversationViewOptions, LocalConversationId, MobileAction as RealMobileAction,
+    ParsedHeaderValue,
 };
 use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
@@ -488,7 +490,7 @@ pub async fn watch_message(
             return Ok(None);
         };
 
-        let handle = RealMessage::watch(&stash)?;
+        let handle = RealMessage::watch(&stash).await?;
         let handle = watch_channel(&*user_context, handle, callback);
         Result::<_, RealProtonMailError>::Ok(Some(WatchedMessage {
             message: message.into(),
@@ -499,7 +501,7 @@ pub async fn watch_message(
     .map_err(ActionError::from)
 }
 
-/// Get messages for the given conversation.
+/// Get all messages for the given conversation.
 ///
 /// # Errors
 ///
@@ -514,9 +516,13 @@ pub async fn messages_for_conversation(
     uniffi_async(async move {
         let tether = stash.connection().await?;
         Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_conversation(LocalConversationId::from(conversation_id), &tether)
-                .await?
-                .map_vec(),
+            RealMessage::in_conversation(
+                LocalConversationId::from(conversation_id),
+                ConversationViewOptions::All.into(),
+                &tether,
+            )
+            .await?
+            .map_vec(),
         )
     })
     .await
@@ -561,19 +567,25 @@ pub async fn messages_for_label(
 pub async fn scroll_messages_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
-    filter: ReadFilter,
+    unread: ReadFilter,
+    include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = session.ctx()?;
-    uniffi_async(async move {
-        let (scroller, handle) =
-            MailScroller::messages(context.as_weak(), label_id.into(), filter.into(), 50).await?;
-        let handle = spawn_message_scroller_watcher(&context, handle, callback);
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller {
-            scroller: Arc::new(scroller),
-            handle,
-        }))
+    uniffi_async(async move {
+        let (scroller, handle) = MailScroller::messages(
+            context.as_weak(),
+            label_id.into(),
+            unread.into(),
+            include.into(),
+            50,
+        )
+        .await?;
+
+        let (handle, list) = spawn_message_scroller_watcher(&context, handle, callback);
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller::new(scroller, handle, list)))
     })
     .await
     .map_err(ActionError::from)
@@ -593,18 +605,19 @@ pub async fn scroll_messages_for_label(
 pub async fn scroller_search(
     session: Arc<MailUserSession>,
     options: PaginatorSearchOptions,
+    include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<SearchScroller>, ActionError> {
     let context = session.ctx()?;
+
     uniffi_async(async move {
         let (scroller, handle) =
-            MailScroller::search(context.as_weak(), options.into(), 50).await?;
-        let handle = spawn_message_scroller_watcher(&context, handle, callback);
+            MailScroller::search(context.as_weak(), options.into(), include.into(), 50).await?;
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(SearchScroller {
-            scroller: Arc::new(scroller),
-            handle,
-        }))
+        let (handle, list) = spawn_message_scroller_watcher(&context, handle, callback);
+        let scroller = SearchScroller::new(scroller, handle, list);
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(scroller))
     })
     .await
     .map_err(ActionError::from)
@@ -882,6 +895,30 @@ pub async fn get_message_body(
     .map_err(ActionError::from)
 }
 
+/// Return the boolean value indicating if the message sender is blocked.
+///
+/// When message is not present in database, it will return `None`.
+/// Otherwise, it will return `Some(bool)` where `true` means the sender is blocked
+/// and `false` means the sender is not blocked.
+///
+/// Accepts message id as a parameter.
+///
+#[uniffi_export]
+pub async fn is_message_sender_blocked(
+    mbox: &Mailbox,
+    message_id: Id,
+) -> Result<Option<bool>, ActionError> {
+    let ctx = mbox.ctx()?;
+    uniffi_async(async move {
+        let tether = ctx.user_stash().connection().await?;
+        Ok::<_, RealProtonMailError>(
+            models::Message::is_sender_blocked(message_id.into(), &tether).await?,
+        )
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
 /// Data for watched messages.
 #[derive(uniffi::Record)]
 pub struct WatchedMessages {
@@ -912,7 +949,7 @@ pub async fn watch_messages_for_label(
     uniffi_async(async move {
         let tether = stash.connection().await?;
         let messages = RealMessage::in_label(label_id.into(), &tether).await?;
-        let handle = RealMessage::watch(&stash)?;
+        let handle = RealMessage::watch(&stash).await?;
         let watcher = watch_channel(&*user_context, handle, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedMessages {
             messages: messages.map_vec(),

@@ -6,7 +6,6 @@ use std::{
 use crate::{
     UserContext,
     datatypes::Refresh,
-    db::account::CoreAccount,
     events::{Action, AddressEvent, ContactEmailEvent, ContactEvent, CoreEvent},
     models::{Address, Contact, Label, ModelExtension, User},
 };
@@ -97,6 +96,7 @@ pub mod macros {
 }
 
 // Re-export macros for easier access
+use crate::event_loop::account_subscriber::AccountEventSubscriber;
 use crate::events::LabelEvent;
 use crate::models::{ContactEmail, ModelIdExtension};
 pub use macros::*;
@@ -240,7 +240,7 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
         let mut conn = stash.connection().await?;
         conn.tx::<_, _, StashError>(async |tx| {
             for event in events.iter_mut() {
-                handle_event(&ctx, event, tx, &user_id).await?;
+                handle_event(event, tx, &user_id).await?;
             }
             Ok(())
         })
@@ -270,34 +270,12 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
 }
 
 async fn handle_event(
-    ctx: &Arc<UserContext>,
     event: &mut CoreEvent,
     tx: &Bond<'_>,
     user_id: &UserId,
 ) -> Result<(), StashError> {
     if let Some(user) = event.user.as_mut() {
         debug!("Handling user event");
-
-        // Update CoreAccount table:
-        ctx.context
-            .account_stash()
-            .connection()
-            .await?
-            .tx::<_, _, StashError>(async |account_tx| {
-                if let Some(account) = CoreAccount::load(user.id(), account_tx).await? {
-                    account
-                        .with_display_name(user.display_name.clone().unwrap_or_default())
-                        .with_name_or_addr(user.name.clone().unwrap_or_else(|| user.email.clone()))
-                        .with_primary_addr(user.email.clone())
-                        .with_username(user.name.clone().unwrap_or_default())
-                        .save(account_tx)
-                        .await
-                } else {
-                    Ok(())
-                }
-            })
-            .await?;
-
         // Update user:
         user.save(tx).await.map_err(|e| {
             error!("Failed to update user: {e:?}");
@@ -397,9 +375,12 @@ impl UserContext {
     pub(crate) async fn register_subscribers(self: &Arc<Self>) -> Result<(), EventLoopError> {
         let event_loop_service = self.event_loop_service();
 
-        event_loop_service
-            .event_poll()
+        let event_poll = event_loop_service.event_poll();
+        event_poll
             .register(Box::new(self.event_subscriber()))
+            .await?;
+        event_poll
+            .register(Box::new(self.account_event_subscriber()))
             .await?;
 
         Ok(())
@@ -424,6 +405,11 @@ impl UserContext {
     #[must_use]
     pub fn event_subscriber(self: &Arc<Self>) -> impl Subscriber<CoreEvent> + 'static {
         CoreEventSubscriber::from(Arc::downgrade(self))
+    }
+
+    #[must_use]
+    pub fn account_event_subscriber(self: &Arc<Self>) -> impl Subscriber<CoreEvent> + 'static {
+        AccountEventSubscriber::from(Arc::downgrade(self))
     }
 }
 

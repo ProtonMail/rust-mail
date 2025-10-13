@@ -21,8 +21,8 @@ use crate::actions::messages::UndoMoveToMessages;
 use crate::actions::notifications_quick_actions::PushNotificationActionHandler;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::{RollbackItemType, SystemLabelId};
-use crate::models::Message;
-use crate::models::{MailLabel, RollbackItem};
+use crate::models::RollbackItem;
+use crate::models::{MailLabel, Message};
 use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
 use anyhow::Context;
@@ -208,7 +208,15 @@ pub(crate) fn register_actions(
                 queue,
                 mail_settings::UpdateMobileActionsHandler { api: api.clone() },
             );
-            reg(queue, PushNotificationActionHandler { api: api.clone() })
+            reg(
+                queue,
+                mail_settings::UpdateNextMessageOnMoveHandler { api: api.clone() },
+            );
+            reg(queue, PushNotificationActionHandler { api: api.clone() });
+            reg(
+                queue,
+                draft::AttachmentDispositionUpdateHandler { api: api.clone() },
+            );
         }
 
         Origin::ShareExt => {
@@ -217,6 +225,10 @@ pub(crate) fn register_actions(
             reg(queue, draft::DiscardHandler { api: api.clone() });
             replace(queue, draft::AttachmentUploadHandler { ctx: ctx.clone() });
             reg(queue, draft::AttachmentRemoveHandler { api: api.clone() });
+            reg(
+                queue,
+                draft::AttachmentDispositionUpdateHandler { api: api.clone() },
+            );
         }
     }
 }
@@ -553,24 +565,23 @@ where
             if let Some(destination) = self.destination
                 && [trash, spam].contains(&destination)
             {
-                self.removed_labels = T::remove_all_labels_except_all_mail(ids, tx)?;
+                self.removed_labels = T::remove_all_removable_labels(ids, tx)?;
 
                 if let Some(source_id) = source_id {
                     self.removed_labels.retain(|x| x.label != *source_id);
                 }
             } else if let Some(source_id) = source_id
                 && let Some(source_label) = source_label
-                && (source_label.is_movable_folder() || is_snoozed)
             {
-                T::remove_label(*source_id, ids.iter().cloned(), tx)
-                    .context("Failed to remove source label")?;
-            }
+                if source_label.is_movable_out_of_folder() || is_snoozed {
+                    T::remove_label(*source_id, ids.iter().cloned(), tx)
+                        .context("Failed to remove source label")?;
+                }
 
-            if let Some(source_id) = source_id
-                && [trash, spam].contains(source_id)
-            {
-                T::apply_label(almost_all_mail, ids.iter().cloned(), tx)
-                    .context("Failed to add conversations to almost_all_mail")?;
+                if [trash, spam].contains(source_id) {
+                    T::apply_label(almost_all_mail, ids.iter().cloned(), tx)
+                        .context("Failed to add conversations to almost_all_mail")?;
+                }
             }
 
             if let Some(destination) = self.destination {
@@ -782,12 +793,23 @@ pub trait ConversationOrMessage:
     // the trait per se.
 
     // Returns the items that were removed
-    fn remove_all_labels_except_all_mail(
+    fn remove_all_removable_labels(
         ids: &[Self::IdType],
         bond: &Transaction<'_>,
     ) -> Result<Vec<LabelPair<Self::IdType>>, StashError> {
-        let all_mail_id = LabelId::all_mail().local_id(bond)?;
         let almost_all_mail_id = LabelId::almost_all_mail().local_id(bond)?;
+
+        let non_removable_labels = {
+            let non_removable_labels = LabelId::non_removable_system_labels();
+            let mut result = HashSet::with_capacity(non_removable_labels.len());
+            for label_id in LabelId::non_removable_system_labels() {
+                // In tests these labels may not be defined.
+                if let Some(local_id) = Label::remote_id_counterpart_sync(&label_id, bond)? {
+                    result.insert(local_id);
+                }
+            }
+            result
+        };
 
         // Not prepare cached because the query depends on the len (it has placeholders)
         let mut stmt = bond.prepare(&Self::grouped_labels_and_messages_query(ids.len()))?;
@@ -799,36 +821,16 @@ pub trait ConversationOrMessage:
         let mut labels_and_messages: Vec<(LocalLabelId, Vec<Self::IdType>)> = vec![];
         for row in rows {
             let (label, ser_ids) = row?;
+            if non_removable_labels.contains(&label) {
+                continue;
+            }
+
             let mut parsed_ids = vec![];
             for i in ser_ids.split(',') {
                 parsed_ids.push(i.parse::<u64>().context("sqlite returned bad data")?.into());
             }
-
             labels_and_messages.push((label, parsed_ids));
         }
-
-        let idx = labels_and_messages
-            .iter()
-            .position(|(label, _)| *label == all_mail_id);
-
-        // It's a good moment to apply all mail label to messages in the case that it slipped by
-        match idx {
-            Some(idx) => {
-                // Remove the matching entry and extract its messages
-                let (_, existing_messages) = labels_and_messages.swap_remove(idx);
-
-                // Find IDs that are missing from existing messages
-                let ids = ids
-                    .iter()
-                    .copied()
-                    .filter(|id| !existing_messages.contains(id));
-                Self::apply_label(all_mail_id, ids, bond)?;
-            }
-            None => {
-                // No matching label found, all IDs are missing
-                Self::apply_label(all_mail_id, ids.iter().copied(), bond)?;
-            }
-        };
 
         let mut res = vec![];
         for (label_id, parsed_ids) in labels_and_messages {

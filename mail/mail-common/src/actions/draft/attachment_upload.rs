@@ -1,16 +1,16 @@
-use crate::actions::draft::SEND_ACTION_GROUP;
+use crate::actions::draft::{SEND_ACTION_GROUP, save_attachment_error};
 use crate::datatypes::Disposition;
+use crate::datatypes::attachment::CombinedAttachmentDisposition;
 use crate::datatypes::{LocalAttachmentId, LocalMessageId};
 use crate::draft::AttachmentUploadError;
 use crate::models::{
-    Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentUploadError,
-    DraftAttachmentUploadState, DraftMetadata, DraftSendFailure, DraftSendResult,
+    Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
     DraftSendResultOrigin, Message, MetadataId,
 };
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
-    WriterGuardError,
+    Action, ActionGroup, ActionId, FactoryResult, Handler, Priority, Type, VersionConverter,
+    VersionConverterError, WriterGuard, deserialize,
 };
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
@@ -18,7 +18,7 @@ use proton_core_api::services::proton::AddressId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
-use proton_mail_api::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
+use proton_mail_api::services::proton::prelude::NewAttachmentParams;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
@@ -36,6 +36,8 @@ pub struct AttachmentUpload {
     attachment_id: LocalAttachmentId,
     local_message_id: Option<LocalMessageId>,
     mode: AttachmentUploadMode,
+    #[serde(default)]
+    new_disposition: Option<CombinedAttachmentDisposition>,
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, PartialEq)]
@@ -59,6 +61,7 @@ impl AttachmentUpload {
             attachment_id,
             local_message_id: None,
             mode,
+            new_disposition: None,
         }
     }
 
@@ -84,14 +87,28 @@ impl AttachmentUpload {
 impl Action for AttachmentUpload {
     const TYPE: Type = Type("attachment_upload");
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
-    const VERSION: u32 = 0;
+    const VERSION: u32 = 2;
     const PRIORITY: Priority = Priority::High;
 
-    type VersionConverter = DefaultVersionConverter<Self>;
+    type VersionConverter = AttachmentUploadVersionConverter;
     type Handler = AttachmentUploadHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailContextError;
+}
+
+pub struct AttachmentUploadVersionConverter {}
+
+impl VersionConverter for AttachmentUploadVersionConverter {
+    type Output = AttachmentUpload;
+
+    fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
+        if !(old_version <= 2 && current_version == 2) {
+            return Err(VersionConverterError::InvalidVersion(current_version).into());
+        }
+
+        Ok(deserialize::<AttachmentUpload>(data)?)
+    }
 }
 
 pub struct AttachmentUploadHandler {
@@ -173,6 +190,25 @@ impl Handler for AttachmentUploadHandler {
 
         let message_id = action.local_message_id(tx).await?;
 
+        let attachment = Attachment::find_by_id(action.attachment_id, tx)
+            .await?
+            .ok_or(AttachmentUploadError::AttachmentDataMissing(
+                action.attachment_id,
+            ))?;
+
+        // We need to preserve this disposition here in case the user queues a new disposition
+        // change action which can overwrite the local state by the time we execute this
+        // action.
+        let new_attachment_disposition = match attachment.disposition {
+            Disposition::Attachment => CombinedAttachmentDisposition::Attachment,
+            Disposition::Inline => {
+                let Some(content_id) = &attachment.content_id else {
+                    return Err(AttachmentUploadError::MissingContentId(attachment.id()).into());
+                };
+                CombinedAttachmentDisposition::Inline(content_id.clone())
+            }
+        };
+
         // assign attachment to message.
         tx.execute(
             "INSERT OR IGNORE INTO message_attachments (local_message_id, local_attachment_id) VALUES(?,?)",
@@ -181,6 +217,7 @@ impl Handler for AttachmentUploadHandler {
             .await.inspect_err(|e| error!("Failed to assign attachment to message: {e}"))?;
 
         action.local_message_id = Some(message_id);
+        action.new_disposition = Some(new_attachment_disposition);
         Ok(())
     }
 
@@ -221,9 +258,14 @@ impl Handler for AttachmentUploadHandler {
             });
 
         if let Err(e) = &r
-            && let Err(e) = action
-                .save_attachment_upload_result(&mut writer_guard, e)
-                .await
+            && let Err(e) = save_attachment_error(
+                action.local_message_id.expect("Should be set"),
+                action.attachment_id,
+                DraftSendResultOrigin::AttachmentUpload,
+                &mut writer_guard,
+                e,
+            )
+            .await
         {
             error!("Failed to save attachment upload result: {e:?}");
         }
@@ -267,51 +309,15 @@ impl AttachmentUpload {
             &remote_message_id,
             &mut attachment,
             writer_guard,
+            self.new_disposition.clone(),
         )
         .await?;
         Ok(())
     }
-
-    async fn save_attachment_upload_result(
-        &self,
-        writer_guard: &mut WriterGuard<'_>,
-        error: &MailContextError,
-    ) -> Result<(), WriterGuardError> {
-        writer_guard
-            .tx(async |tx| {
-                let mut send_result = DraftSendResult::failure(
-                    self.local_message_id.expect("Should be set by now"),
-                    DraftSendResultOrigin::AttachmentUpload,
-                    DraftSendFailure::from_mail_context_error(error),
-                );
-
-                send_result
-                    .save(tx)
-                    .await
-                    .inspect_err(|e| error!("Failed to save send result: {e:?}"))?;
-
-                if let Some(mut attachment_metadata) =
-                    DraftAttachmentMetadata::find_by_id(self.attachment_id, tx).await?
-                {
-                    if error.is_network_failure() {
-                        attachment_metadata.set_offline_state();
-                    } else {
-                        attachment_metadata.set_error_state(
-                            DraftAttachmentUploadError::from_mail_context_error(error),
-                        );
-                    }
-                    attachment_metadata.save(tx).await.inspect_err(|e| {
-                        error!("Failed to save draft attachment metadata: {e:?}")
-                    })?;
-                }
-
-                Ok(())
-            })
-            .await
-    }
 }
 
 #[tracing::instrument(skip_all, fields(attachment_id = %attachment.id()))]
+#[allow(clippy::too_many_arguments)]
 async fn encrypt_and_upload_attachment(
     ctx: &MailUserContext,
     metadata_id: MetadataId,
@@ -320,15 +326,20 @@ async fn encrypt_and_upload_attachment(
     message_id: &MessageId,
     attachment: &mut Attachment,
     writer_guard: &mut WriterGuard<'_>,
+    new_disposition: Option<CombinedAttachmentDisposition>,
 ) -> Result<(), MailContextError> {
     // Early check this requirement.
-    let new_attachment_disposition = match attachment.disposition {
-        Disposition::Attachment => NewAttachmentDisposition::Attachment,
-        Disposition::Inline => {
-            let Some(content_id) = &attachment.content_id else {
-                return Err(AttachmentUploadError::MissingContentId(attachment.id()).into());
-            };
-            NewAttachmentDisposition::Inline(content_id.clone().into_inner())
+    let new_attachment_disposition = if let Some(new_disposition) = new_disposition {
+        new_disposition
+    } else {
+        match attachment.disposition {
+            Disposition::Attachment => CombinedAttachmentDisposition::Attachment,
+            Disposition::Inline => {
+                let Some(content_id) = &attachment.content_id else {
+                    return Err(AttachmentUploadError::MissingContentId(attachment.id()).into());
+                };
+                CombinedAttachmentDisposition::Inline(content_id.clone())
+            }
         }
     };
 
@@ -351,7 +362,7 @@ async fn encrypt_and_upload_attachment(
         filename: attachment.filename.clone(),
         message_id: message_id.clone(),
         mime_type: attachment.mime_type.to_string(),
-        disposition: new_attachment_disposition,
+        disposition: new_attachment_disposition.into(),
         key_packets: encrypted_attachment.metadata.key_packets,
         signature: encrypted_attachment.metadata.signature,
         enc_signature: encrypted_attachment.metadata.encrypted_signature,

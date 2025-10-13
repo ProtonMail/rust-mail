@@ -20,3 +20,6 @@ pub struct OnEnterForegroundEvent;
 
 #[derive(Debug, Copy, Clone)]
 pub struct OnExitForegroundEvent;
+
+#[derive(Debug, Copy, Clone)]
+pub struct OnForceEventPollEvent;

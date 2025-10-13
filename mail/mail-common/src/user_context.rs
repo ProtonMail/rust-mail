@@ -772,6 +772,10 @@ impl MailUserContext {
             != 0)
     }
 
+    pub async fn has_actions_in_queue(&self) -> Result<bool, MailContextError> {
+        Ok(self.action_queue().queued_actions_count().await? != 0)
+    }
+
     pub fn http_client(&self) -> &reqwest::Client {
         self.mail_context().http_client()
     }
@@ -791,6 +795,18 @@ impl MailUserContext {
                 self.proxy_image(url).await?
             }
             "https" => self.proxy_image(url).await?,
+            "proton-http" | "proton-https" => {
+                // In that case we cannot use set_scheme.
+                // Because:
+                // > If either the old or new scheme is `http`, `https`,
+                // > `ws`,`wss` or `ftp` and the other is not one of these
+                // > then return Err.
+                let url = String::from(url);
+                let new_url = url.replacen("proton-", "", 1);
+                let new_url = Url::parse(&new_url).unwrap();
+
+                self.proxy_image(new_url).await?
+            }
             _ => {
                 return Err(MailContextError::Other(anyhow::anyhow!(
                     "invalid url scheme"
@@ -815,6 +831,7 @@ impl MailUserContext {
         } else {
             self.http_client()
                 .request(Method::GET, url)
+                .header("User-Agent", "proton-mail/7.0.0")
                 .send()
                 .await
                 .map_err(|e| ApiServiceError::ConnectionError(e.to_string()))?

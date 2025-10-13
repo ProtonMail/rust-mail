@@ -3,18 +3,14 @@ use crate::app_model::mailbox::Message;
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::KeyCode;
-use proton_mail_common::{MailUserContext, Mailbox};
 use ratatui::Frame;
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::Clear;
-use std::sync::Arc;
-
-use super::messages::MessagesState;
 
 pub struct SearchStatusBar {
-    pub search_phrase: String,
+    pub keywords: String,
     pub total: u64,
 }
 
@@ -42,30 +38,20 @@ impl Search {
         if let Event::Key(key) = &event {
             match key.code {
                 KeyCode::Esc => return Command::message(Message::CloseSearchPopup),
+
                 KeyCode::Enter => {
                     return Command::message(Message::SearchSubmit(
                         self.search.value().trim().to_string(),
                     ));
                 }
-                _ => self.search.handle_event(event),
-            };
+
+                _ => {
+                    self.search.handle_event(event);
+                }
+            }
         }
 
         Command::none()
-    }
-
-    pub fn update(
-        user_ctx: &Arc<MailUserContext>,
-        message: Message,
-        mbox: &Mailbox,
-    ) -> Command<Messages> {
-        match message {
-            Message::SearchSubmit(search_phrase) => Command::batch(vec![
-                Command::message(Message::CloseSearchPopup),
-                MessagesState::from_search(user_ctx.to_owned(), mbox.to_owned(), search_phrase),
-            ]),
-            _ => Command::none(),
-        }
     }
 
     pub fn help_options(vec: &mut Vec<(&'static str, &'static str)>) {

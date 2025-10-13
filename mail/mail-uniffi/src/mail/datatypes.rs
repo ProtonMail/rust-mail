@@ -94,6 +94,7 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
+    HiddenMessagesBanner as RealHiddenMessagesBanner,
 };
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::errors::ProtonMailError;
@@ -904,6 +905,9 @@ pub struct Conversation {
 
     /// Avatar to be displayed for the sender.
     pub avatar: AvatarInformation,
+
+    /// Whether the conversation has hidden messages.
+    pub hidden_messages_banner: Option<HiddenMessagesBanner>,
 }
 
 impl From<ContextualConversation> for Conversation {
@@ -948,6 +952,7 @@ impl From<ContextualConversation> for Conversation {
             },
             snoozed_until: value.snoozed_until.map(Into::into),
             avatar: avatar.into(),
+            hidden_messages_banner: value.hidden_messages_banner.map(Into::into),
         }
     }
 }
@@ -983,6 +988,25 @@ impl ConversationCount {
             total: value.total,
             unread: value.unread,
         })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
+pub enum HiddenMessagesBanner {
+    ContainsTrashedMessages,
+    ContainsNonTrashedMessages,
+}
+
+impl From<RealHiddenMessagesBanner> for HiddenMessagesBanner {
+    fn from(value: RealHiddenMessagesBanner) -> Self {
+        match value {
+            RealHiddenMessagesBanner::ContainsTrashedMessages => {
+                HiddenMessagesBanner::ContainsTrashedMessages
+            }
+            RealHiddenMessagesBanner::ContainsNonTrashedMessages => {
+                HiddenMessagesBanner::ContainsNonTrashedMessages
+            }
+        }
     }
 }
 

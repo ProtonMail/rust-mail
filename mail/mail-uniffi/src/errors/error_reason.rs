@@ -1,6 +1,7 @@
 use crate::{UniffiEnum, mail::Origin};
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ContextErrorReason as RealContextErrorReason,
+    DraftAttachmentDispositionSwapErrorReason as RealDraftAttachmentDispositionSwapErrorReason,
     DraftAttachmentUploadErrorReason as RealDraftAttachmentErrorReason,
     DraftCancelScheduleSendErrorReason as RealDraftCancelScheduleSendErrorReason,
     DraftDiscardErrorReason as RealDraftDiscardErrorReason,
@@ -367,6 +368,35 @@ impl From<RealDraftExpirationErrorReason> for DraftExpirationErrorReason {
             }
             RealDraftExpirationErrorReason::ExpirationTimeLessThan15Min => {
                 Self::ExpirationTimeLessThan15Min
+            }
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftAttachmentDispositionSwapErrorReason {
+    InvalidState,
+    Noop,
+    AttachmentDoesNotExist,
+    AttachmentMessageDoesNotExist,
+    AttachmentMessageIsNotADraft,
+}
+
+impl From<RealDraftAttachmentDispositionSwapErrorReason>
+    for DraftAttachmentDispositionSwapErrorReason
+{
+    fn from(value: RealDraftAttachmentDispositionSwapErrorReason) -> Self {
+        match value {
+            RealDraftAttachmentDispositionSwapErrorReason::InvalidState => Self::InvalidState,
+            RealDraftAttachmentDispositionSwapErrorReason::Noop => Self::Noop,
+            RealDraftAttachmentDispositionSwapErrorReason::AttachmentDoesNotExist => {
+                Self::AttachmentDoesNotExist
+            }
+            RealDraftAttachmentDispositionSwapErrorReason::AttachmentMessageDoesNotExist => {
+                Self::AttachmentMessageDoesNotExist
+            }
+            RealDraftAttachmentDispositionSwapErrorReason::AttachmentMessageIsNotADraft => {
+                Self::AttachmentMessageIsNotADraft
             }
         }
     }

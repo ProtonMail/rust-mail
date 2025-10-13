@@ -60,6 +60,7 @@ pub enum Message {
     ClearSearchStatusBar,
     OpenContacts,
 }
+
 pub struct LabelAs<T: LocalIdMarker> {
     pub source_label_id: LocalLabelId,
     pub item_ids: Vec<T>,
@@ -142,6 +143,8 @@ pub enum ComposerMessage {
     CreateAttachment(PathBuf),
     AddAttachment(Box<Attachment>),
     RemoveAttachment(LocalAttachmentId),
+    RetryAttachmentOp(LocalAttachmentId),
+    SwapDisposition(LocalAttachmentId),
     RefreshAttachmentList,
     AttachmentListRefreshed(Vec<DraftAttachment>),
     ScheduleSend(DateTime<Local>),

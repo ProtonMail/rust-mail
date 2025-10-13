@@ -111,6 +111,12 @@ pub trait ProtonMail {
     /// This method will return an error if the request fails.
     async fn delete_attachment(&self, id: AttachmentId) -> ApiServiceResult<()>;
 
+    async fn put_attachment_disposition(
+        &self,
+        id: AttachmentId,
+        new_attachment_disposition: NewAttachmentDisposition,
+    ) -> ApiServiceResult<()>;
+
     /// TODO: Document this method.
     ///
     /// # Errors
@@ -186,6 +192,11 @@ pub trait ProtonMail {
         &self,
         mobile_settings: PutMobileSettings,
     ) -> ApiServiceResult<PutMobileSettingsResponse>;
+
+    async fn put_next_message_on_move(
+        &self,
+        request: PutNextMessageOnMoveRequest,
+    ) -> ApiServiceResult<PutNextMessageOnMoveResponse>;
 
     /// TODO: Document this method.
     ///

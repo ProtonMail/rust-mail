@@ -575,6 +575,8 @@ mime_type: {mime_type:?}"
         transformer.inject_ios_content_size();
     }
 
+    transformer.transform_to_proton_schemes();
+
     transformer.inject_dark_mode(
         sender,
         theme.color_mode(),

@@ -63,7 +63,7 @@ pub struct MailboxModel {
     composer: Option<Composer>,
     search: Option<Search>,
     search_status: Option<SearchStatusBar>,
-    filter: ReadFilter,
+    unread: ReadFilter,
     background_worker_initialized: bool,
 }
 
@@ -87,7 +87,7 @@ impl MailboxModel {
             composer: None,
             search: None,
             search_status: None,
-            filter: ReadFilter::All,
+            unread: ReadFilter::All,
             background_worker_initialized: false,
         })
     }
@@ -109,7 +109,8 @@ impl MailboxModel {
     #[must_use]
     fn sync_mailbox(&mut self, mbox: Mailbox) -> Command<Messages> {
         self.state = State::new_syncing();
-        let filter = self.filter;
+
+        let filter = self.unread;
         let ctx = Arc::clone(&self.ctx);
 
         // Create the background worker.
@@ -160,7 +161,7 @@ impl MailboxModel {
                 ));
             };
             let label = Label::find_by_id(label_id, &tether).await;
-            let handle = LabelWithCounters::watch(&stash);
+            let handle = LabelWithCounters::watch(&stash).await;
             let label_and_recevier = label.and_then(|l| handle.map(|h| (l, h)));
             match label_and_recevier {
                 Ok((label, handle)) => {
@@ -233,6 +234,7 @@ impl MailboxModel {
 
     fn open_search_view(&mut self, mbox: Mailbox, state: MessagesState) -> Command<Messages> {
         self.mailbox = mbox;
+        self.unread = ReadFilter::default();
         self.state = State::Messages(state);
         self.build_item_count_query()
     }
@@ -297,6 +299,9 @@ impl MailboxModel {
 
     fn select_label(&mut self, label_id: LocalLabelId) -> Command<Messages> {
         let ctx = Arc::clone(&self.ctx);
+
+        self.unread = ReadFilter::default();
+
         Command::task(async move {
             let stash = ctx.user_stash();
             Command::message(
@@ -317,14 +322,14 @@ impl MailboxModel {
         })
     }
 
-    fn change_filter(&mut self, filter: ReadFilter) {
-        self.filter = filter;
+    fn change_filter(&mut self, unread: ReadFilter) {
+        self.unread = unread;
         if let State::Conversations(state) = &mut self.state {
-            let _ = state.paginator().clone_inner().change_filter(filter);
+            let _ = state.paginator().clone_inner().change_filter(unread);
         } else if let State::Messages(state) = &mut self.state {
             state
                 .label_paginator()
-                .map(|paginator| paginator.clone_inner().change_filter(filter));
+                .map(|paginator| paginator.clone_inner().change_filter(unread));
         }
     }
 
@@ -371,6 +376,10 @@ impl AppStateHandler for MailboxModel {
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         if let Some(composer) = &mut self.composer {
             return composer.handle_event(&self.ctx, &self.mailbox, event);
+        }
+
+        if let Some(search) = &mut self.search {
+            return search.handle_event(&event);
         }
 
         if let Event::Key(key) = &event {
@@ -442,10 +451,6 @@ impl AppStateHandler for MailboxModel {
             }
         }
 
-        if let Some(search) = &mut self.search {
-            return search.handle_event(&event);
-        }
-
         if let Event::Key(key) = &event
             && key.code == KeyCode::Char('/')
         {
@@ -471,12 +476,6 @@ impl AppStateHandler for MailboxModel {
 
         if let Some(composer) = &mut self.composer {
             return composer.update(&self.ctx, message);
-        }
-
-        if self.search.is_some() {
-            let Message::CloseSearchPopup = message else {
-                return Search::update(&self.ctx, message, &self.mailbox);
-            };
         }
 
         match message {
@@ -534,7 +533,11 @@ impl AppStateHandler for MailboxModel {
                 self.search_status = None;
                 Command::None
             }
-            Message::Composer(_) | Message::SearchSubmit(_) => Command::None,
+            Message::SearchSubmit(keywords) => Command::batch(vec![
+                Command::message(Message::CloseSearchPopup),
+                MessagesState::from_search(self.ctx.clone(), self.mailbox.clone(), keywords),
+            ]),
+            Message::Composer(_) => Command::None,
         }
     }
 
@@ -608,7 +611,7 @@ impl AppStateHandler for MailboxModel {
             let count = format!("Search T:{total:4}", total = status.total);
             frame.render_widget(Text::from(count), count_area);
 
-            let search = format!("phrase: `{}`, press ESC to go back.", status.search_phrase);
+            let search = format!("phrase: `{}`, press ESC to go back.", status.keywords);
             frame.render_widget(Text::from(search), other_area);
         } else {
             let label_name = self
@@ -637,7 +640,7 @@ impl AppStateHandler for MailboxModel {
             frame.render_widget(text, label_area);
             frame.render_widget(Text::from(counters), count_area);
             frame.render_widget(
-                Text::from(format!(" | {:?} | ", self.filter).bold()),
+                Text::from(format!(" | {:?} | ", self.unread).bold()),
                 filter_area,
             );
             if let State::Conversations(state) = &mut self.state {

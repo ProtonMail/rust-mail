@@ -284,7 +284,7 @@ impl From<InboxSessionKey> for ExposedKey {
 }
 
 /// Defines newly created attachment disposition.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NewAttachmentDisposition {
     /// Regular mail attachment.
     Attachment,
@@ -376,4 +376,12 @@ impl DirectAttachment {
     pub fn invite_reply(ics: &EncryptedAttachment) -> Self {
         Self::new(Self::INVITE_ICS, "text/calendar; method=reply", ics)
     }
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutNextMessageOnMoveRequest {
+    #[serde_as(as = "BoolFromInt")]
+    pub next_message_on_move: bool,
 }

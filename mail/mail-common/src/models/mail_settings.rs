@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use crate::AppError;
-use crate::actions::mail_settings::{ToolbarType, UpdateMobileActions};
+use crate::actions::mail_settings::{ToolbarType, UpdateMobileActions, UpdateNextMessageOnMove};
 use crate::datatypes::{
     AlmostAllMail, ComposerDirection, ComposerMode, MailSettingsId, MessageButtons, MimeType,
     MobileAction, MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved,
@@ -19,7 +19,7 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::MailSettings as ApiMailSettings;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
-use stash::exports::Transaction;
+use stash::exports::{Connection, Transaction};
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
@@ -217,11 +217,19 @@ impl MailSettings {
         Self::load(MailSettingsId, tether).await
     }
 
+    pub fn get_sync(conn: &Connection) -> Result<Option<Self>, StashError> {
+        Self::load_by_id_sync(MailSettingsId, conn)
+    }
+
     pub async fn get_or_default(tether: &Tether) -> Self {
         Self::get(tether)
             .await
             .unwrap_or_default()
             .unwrap_or_default()
+    }
+
+    pub fn get_or_default_sync(conn: &Connection) -> Self {
+        Self::get_sync(conn).unwrap_or_default().unwrap_or_default()
     }
 
     pub fn crypto_mail_settings(&self) -> CryptoMailSettings {
@@ -288,8 +296,22 @@ impl MailSettings {
         Ok(())
     }
 
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(MailSettingsWatcher { sender }))
+    pub async fn action_update_next_message_on_move(
+        queue: &Queue,
+        next_message_on_move: bool,
+    ) -> Result<(), AppError> {
+        let action = UpdateNextMessageOnMove::new(next_message_on_move);
+        queue
+            .queue_action(action)
+            .await
+            .map_err(|e| AppError::Other(e.into()))?;
+        Ok(())
+    }
+
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(MailSettingsWatcher { sender }))
+            .await
     }
 
     #[must_use]

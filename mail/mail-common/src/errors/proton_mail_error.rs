@@ -1,8 +1,9 @@
 use super::mail_error_reason::*;
 use crate::actions::MailActionError;
 use crate::draft::{
-    AttachmentRemoveError, AttachmentUploadError, CancelScheduleSendError, ExpirationError,
-    PackageError, PasswordError, SendError, SenderAddressChangeError,
+    AttachmentDispositionSwapError, AttachmentRemoveError, AttachmentUploadError,
+    CancelScheduleSendError, Error, ExpirationError, PackageError, PasswordError, SendError,
+    SenderAddressChangeError,
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
@@ -310,6 +311,7 @@ impl From<DraftError> for ProtonMailError {
                 // handle this later to avoid to many api breaks.
                 ProtonMailError::Unexpected(Unexpected::Draft)
             }
+            Error::AttachmentDispositionSwap(v) => v.into(),
         }
     }
 }
@@ -595,6 +597,51 @@ impl From<DraftPasswordError> for ProtonMailError {
             )),
             PasswordError::Encryption => Self::Unexpected(Unexpected::Crypto),
             PasswordError::Decryption => Self::Unexpected(Unexpected::Crypto),
+        }
+    }
+}
+
+impl From<AttachmentDispositionSwapError> for ProtonMailError {
+    fn from(value: AttachmentDispositionSwapError) -> Self {
+        let _guard = log_error(&value);
+        match value {
+            AttachmentDispositionSwapError::MetadataNotFound(_)
+            | AttachmentDispositionSwapError::AttachmentHasNoRemoteId(_)
+            | AttachmentDispositionSwapError::NoMessageIdInDraftMetadata(_)
+            | AttachmentDispositionSwapError::AttachmentHasNoContentId(_)
+            | AttachmentDispositionSwapError::AttachmentMetadataNotFound(_) => {
+                Self::Unexpected(Unexpected::Draft)
+            }
+            AttachmentDispositionSwapError::Noop => {
+                Self::Reason(MailErrorReason::DraftAttachmentDispositionSwapError(
+                    DraftAttachmentDispositionSwapErrorReason::Noop,
+                ))
+            }
+            AttachmentDispositionSwapError::InvalidState(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentDispositionSwapError(
+                    DraftAttachmentDispositionSwapErrorReason::InvalidState,
+                ))
+            }
+            AttachmentDispositionSwapError::AttachmentNotFound(_)
+            | AttachmentDispositionSwapError::AttachmentNotFoundCid(_)
+            | AttachmentDispositionSwapError::AttachmentDoesNotExistServer(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentDispositionSwapError(
+                    DraftAttachmentDispositionSwapErrorReason::AttachmentDoesNotExist,
+                ))
+            }
+            AttachmentDispositionSwapError::AttachmentMessageDoesNotExist(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentDispositionSwapError(
+                    DraftAttachmentDispositionSwapErrorReason::AttachmentMessageDoesNotExist,
+                ))
+            }
+            AttachmentDispositionSwapError::AttachmentMessageIsNotADraft(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentDispositionSwapError(
+                    DraftAttachmentDispositionSwapErrorReason::AttachmentMessageIsNotADraft,
+                ))
+            }
+            AttachmentDispositionSwapError::AttachmentDoesNotHaveValidCid(_) => {
+                Self::Unexpected(Unexpected::Draft)
+            }
         }
     }
 }

@@ -122,7 +122,7 @@ impl RemoteSource for ConversationScrollData {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let stash = ctx.user_stash().clone();
         let remote_id = scroller.remote_conversation_id.clone();
-        let conversation_time = scroller.conversation_time;
+        let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
         let task = Some(ctx.spawn(async move {
@@ -132,7 +132,7 @@ impl RemoteSource for ConversationScrollData {
                 local_label_id,
                 remote_label_id,
                 remote_id,
-                conversation_time,
+                context_time,
                 unread,
                 page_size,
                 order_dir,
@@ -279,13 +279,12 @@ impl RemoteConversationScrollerSource {
 
         let response = session
             .get_conversations(GetConversationsOptions {
-                // time == 0 breaks the api query.
-                begin: Some(first_element_time.as_u64()),
-                begin_id: Some(first_element_id.clone()),
+                anchor: Some(first_element_time.as_u64()),
+                anchor_id: Some(first_element_id.clone()),
                 label_id: Some(remote_label_id),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
-                desc: order_dir.as_api_desc(),
+                desc: order_dir.reverse().as_api_desc(),
                 sort: order_field.as_api_sort(),
                 ..Default::default()
             })

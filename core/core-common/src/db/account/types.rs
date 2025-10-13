@@ -188,8 +188,10 @@ impl CoreAccount {
         }
     }
 
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(CoreAccountWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(CoreAccountWatcher { sender }))
+            .await
     }
 
     #[must_use]
@@ -356,8 +358,10 @@ impl CoreSession {
         })
     }
 
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(CoreSessionWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(CoreSessionWatcher { sender }))
+            .await
     }
 }
 
@@ -715,7 +719,7 @@ impl CoreSessionObserver {
             .into_iter()
             .map(Into::into)
             .collect::<HashSet<_>>();
-        let watcher = CoreSession::watch(&stash)?;
+        let watcher = CoreSession::watch(&stash).await?;
 
         Ok(Self {
             sessions: existing,

@@ -18,7 +18,9 @@ use crate::actions::{
     ActionMoveData, AllListActions, AllMessageActions, LabelAsData, LabelAsOutput, LabelPair,
     MailActionError, MovableSystemFolderAction, Undo,
 };
+use crate::datatypes::ConversationViewOptions;
 use crate::datatypes::MimeType;
+use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::*;
 use crate::{MailContextError, find_in_query};
 use futures::try_join;
@@ -626,6 +628,47 @@ impl Message {
         Ok(actions)
     }
 
+    /// Get the sender address of the message.
+    ///
+    /// Helper method for getting just the sender information of the message.
+    ///
+    pub async fn get_sender_address(
+        id: LocalMessageId,
+        tether: &Tether,
+    ) -> Result<Option<MessageSender>, StashError> {
+        tether
+            .query_value_opt(
+                formatdoc!(
+                    "SELECT sender FROM {} WHERE local_id = ?",
+                    Self::table_name()
+                ),
+                params![id],
+            )
+            .await
+    }
+
+    /// Return the boolean value indicating if the message sender is blocked.
+    ///
+    /// When message is not present in database, it will return `None`.
+    /// Otherwise, it will return `Some(bool)` where `true` means the sender is blocked
+    /// and `false` means the sender is not blocked.
+    ///
+    pub async fn is_sender_blocked(
+        id: LocalMessageId,
+        tether: &Tether,
+    ) -> Result<Option<bool>, StashError> {
+        let message_sender = Self::get_sender_address(id, tether).await?;
+        let Some(message_sender) = message_sender else {
+            return Ok(None);
+        };
+        let incoming_default =
+            IncomingDefaultLocation::find(message_sender.address.into_clear_text_string(), tether)
+                .await?;
+        let is_blocked = incoming_default == Some(IncomingDefaultLocation::Blocked);
+
+        Ok(Some(is_blocked))
+    }
+
     /// Save a non existing message to the database.
     ///
     /// This method is complementary way to store message. It only will proceed
@@ -1106,8 +1149,10 @@ impl Message {
         Ok(res)
     }
 
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(MessageWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(MessageWatcher { sender }))
+            .await
     }
 
     /// Watches available `label as` actions for messages
@@ -1626,10 +1671,35 @@ impl Message {
     /// Returns error if the query failed
     pub async fn in_conversation(
         local_conversation_id: LocalConversationId,
+        view_options: ConversationViewOptions,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
+        let template_query = if view_options.is_all() {
+            String::new()
+        } else {
+            let trash_id = SystemLabel::Trash.remote_id();
+            formatdoc!(
+                "(SELECT DISTINCT message_labels.local_message_id
+                    FROM message_labels
+                    WHERE message_labels.local_label_id == (SELECT local_id FROM labels WHERE remote_id = {trash_id}))"
+            )
+        };
+        let view_options = match view_options {
+            ConversationViewOptions::All => template_query,
+            ConversationViewOptions::NonTrashed => {
+                format!("AND local_id NOT IN {template_query}")
+            }
+            ConversationViewOptions::Trashed => {
+                format!("AND local_id IN {template_query}")
+            }
+        };
+
         Message::find(
-            "WHERE local_conversation_id = ? AND messages.deleted = 0 ORDER BY time ASC, display_order ASC",
+            formatdoc!(
+                "WHERE local_conversation_id = ? AND messages.deleted = 0
+                {view_options}
+                ORDER BY time ASC, display_order ASC",
+            ),
             params![local_conversation_id],
             tether,
         )
@@ -2145,7 +2215,8 @@ impl Message {
 
     #[must_use]
     pub fn is_sent(&self) -> bool {
-        self.label_ids.contains(&LabelId::sent()) && self.flags.is_sent()
+        (self.label_ids.contains(&LabelId::all_sent()) || self.label_ids.contains(&LabelId::sent()))
+            && self.flags.is_sent()
     }
 
     /// Returns whether this message contains an RSVP invitation.
@@ -3067,8 +3138,10 @@ impl MessageCounters {
     /// # Errors
     /// Returns error if the query failed
     ///
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(MessageCounterWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(MessageCounterWatcher { sender }))
+            .await
     }
 }
 
