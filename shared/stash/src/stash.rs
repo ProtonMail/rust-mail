@@ -26,7 +26,6 @@ use anyhow::{Context, anyhow};
 use core::fmt;
 use core::fmt::Debug;
 use core::future::Future;
-use core::mem;
 use core::ops::Deref;
 use core::time::Duration;
 use derivative::Derivative;
@@ -1313,7 +1312,6 @@ impl<'tether> Bond<'tether> {
         Self { tether }
     }
 
-    #[allow(clippy::mem_forget)]
     /// Internal commit implementation.
     ///
     /// This method is used to commit a transaction without publishing changes.
@@ -1328,10 +1326,14 @@ impl<'tether> Bond<'tether> {
         transaction_policy: TransactionTrackingPolicy,
         span: tracing::Span,
     ) -> Result<(), StashError> {
+        // drop() has an auto-rollback code we don't want to run here:
+        let this = ManuallyDrop::new(self);
         let (sender, receiver) = oneshot::channel();
+
         let operation =
             Operation::Transaction(OperationTransaction::Commit(transaction_policy, sender));
-        self.connection
+
+        this.connection
             .send_async(TracedOperation::with(span.clone(), operation))
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
@@ -1341,11 +1343,9 @@ impl<'tether> Bond<'tether> {
             .map_err(|_| anyhow!("The stash worker dropped"))?
         {
             error!("Commit error: {e:}");
-            self.rollback(span).await?;
-            return Ok(());
+
+            return ManuallyDrop::into_inner(this).rollback(span).await;
         }
-        // Transaction commited, skip the drop logic
-        mem::forget(self);
 
         Ok(())
     }
@@ -1370,16 +1370,17 @@ impl<'tether> Bond<'tether> {
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///
-    #[allow(clippy::mem_forget)]
     async fn rollback(self, span: tracing::Span) -> Result<(), StashError> {
-        let this = ManuallyDrop::new(self); // The drop glue does an implicit rollback
+        // drop() has an auto-rollback code we don't want to run here:
+        let this = ManuallyDrop::new(self);
         let (sender, receiver) = oneshot::channel();
-
         let operation = Operation::Transaction(OperationTransaction::Rollback(sender));
+
         this.connection
             .send_async(TracedOperation::with(span, operation))
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         receiver
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))??;
