@@ -68,7 +68,7 @@ pub struct MessagesState {
 
 enum Mode {
     Label(Paginator, IncludeSwitch),
-    Search(Paginator, String, IncludeSwitch),
+    Search(Paginator, IncludeSwitch),
 
     #[allow(dead_code)] // Watcher handle is needed to keep state
     Conversation(TuiWatchHandle),
@@ -77,14 +77,14 @@ enum Mode {
 impl Mode {
     fn paginator(&self) -> Option<&Paginator> {
         match self {
-            Mode::Label(paginator, _) | Mode::Search(paginator, _, _) => Some(paginator),
+            Mode::Label(paginator, _) | Mode::Search(paginator, _) => Some(paginator),
             Mode::Conversation(_) => None,
         }
     }
 
-    fn include_filter(&self) -> Option<IncludeSwitch> {
+    fn include(&self) -> Option<IncludeSwitch> {
         match self {
-            Mode::Label(_, include) | Mode::Search(_, _, include) => Some(*include),
+            Mode::Label(_, include) | Mode::Search(_, include) => Some(*include),
             Mode::Conversation(_) => None,
         }
     }
@@ -123,13 +123,12 @@ impl MessagesState {
         mbox: Mailbox,
         label: LabelWithCounters,
         unread: ReadFilter,
-        include: IncludeSwitch,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();
         let recipient_display_mode = mbox.recipient_display_mode();
 
         Command::task(async move {
-            match Self::new_impl(ctx, label_id, unread, include, recipient_display_mode).await {
+            match Self::new_impl(ctx, label_id, unread, recipient_display_mode).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenMessageView(mbox, label, state)),
                     background_command,
@@ -143,11 +142,16 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
         unread: ReadFilter,
-        include: IncludeSwitch,
         recipient_display_mode: MessageRecipientDisplayMode,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let (scroller, handle) =
-            MailScroller::messages(ctx.as_weak(), label_id, unread, include, ITEM_LIMIT).await?;
+        let (scroller, handle) = MailScroller::messages(
+            ctx.as_weak(),
+            label_id,
+            unread,
+            IncludeSwitch::default(),
+            ITEM_LIMIT,
+        )
+        .await?;
 
         let (paginator, command) =
             Paginator::new::<MailMessage>(scroller, handle, handle_scroller_update);
@@ -159,7 +163,7 @@ impl MessagesState {
                 messages: vec![],
                 table_state: ScrollableTableState::new(Some(0)),
                 open_message: DecryptedMessageStatus::None,
-                mode: Mode::Label(paginator, include),
+                mode: Mode::Label(paginator, IncludeSwitch::default()),
                 recipient_display_mode,
                 fetching: false,
             },
@@ -171,10 +175,9 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         mbox: Mailbox,
         keywords: String,
-        include: IncludeSwitch,
     ) -> Command<Messages> {
         Command::task(async move {
-            match Self::from_search_impl(ctx, keywords, include).await {
+            match Self::from_search_impl(ctx, keywords).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenSearchView(mbox, state)),
                     background_command,
@@ -195,12 +198,11 @@ impl MessagesState {
     async fn from_search_impl(
         ctx: Arc<MailUserContext>,
         keywords: String,
-        include: IncludeSwitch,
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) = MailScroller::search(
             ctx.as_weak(),
             SearchOptions::from(&keywords),
-            include,
+            IncludeSwitch::default(),
             ITEM_LIMIT,
         )
         .await?;
@@ -218,7 +220,7 @@ impl MessagesState {
                 messages,
                 table_state: ScrollableTableState::new(Some(0)),
                 open_message: DecryptedMessageStatus::None,
-                mode: Mode::Search(paginator, keywords.clone(), include),
+                mode: Mode::Search(paginator, IncludeSwitch::default()),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
                 fetching: false,
             },
@@ -417,7 +419,7 @@ impl MessagesState {
             return Command::None;
         };
 
-        if matches!(self.mode, Mode::Search(_, _, _))
+        if matches!(self.mode, Mode::Search(_, _))
             && matches!(self.open_message, DecryptedMessageStatus::None)
             && key.code == KeyCode::Esc
         {
@@ -503,7 +505,7 @@ impl MessagesState {
                     return paginator.next_page_command();
                 }
 
-                if let Mode::Search(paginator, _, _) = &self.mode
+                if let Mode::Search(paginator, _) = &self.mode
                     && self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
                     && !self.fetching
@@ -581,24 +583,19 @@ impl MessagesState {
                     _ => unreachable!(),
                 };
 
-                let refresh = match &self.mode {
-                    Mode::Label(paginator, ..) if paginator.supports_include_filter() => {
-                        Some(Message::Sync(mbox.clone()))
+                let (paginator, curr_include) = match &mut self.mode {
+                    Mode::Label(paginator, include) | Mode::Search(paginator, include) => {
+                        (paginator, include)
                     }
-                    Mode::Search(paginator, keyword, _) if paginator.supports_include_filter() => {
-                        Some(Message::SearchSubmit(keyword.clone(), include))
+                    Mode::Conversation(_) => {
+                        return Command::None;
                     }
-                    _ => None,
                 };
 
-                if let Some(refresh) = refresh {
-                    Command::batch(vec![
-                        Command::message(Message::SetInclude(include)),
-                        Command::message(refresh),
-                    ])
-                } else {
-                    Command::None
-                }
+                _ = paginator.change_include(include);
+                *curr_include = include;
+
+                Command::None
             }
 
             KeyCode::Enter => {
@@ -838,7 +835,7 @@ impl MessagesState {
                         ))
                     });
                 }
-                if let Mode::Search(paginator, _, _) = &self.mode {
+                if let Mode::Search(paginator, _) = &self.mode {
                     let paginator = paginator.clone_inner();
                     return Command::task(async move {
                         let has_more = paginator.has_more().await.unwrap();
@@ -870,7 +867,7 @@ impl MessagesState {
             let mut banner = None;
 
             if let Some(paginator) = self.mode.paginator()
-                && let Some(include) = self.mode.include_filter()
+                && let Some(include) = self.mode.include()
                 && paginator.supports_include_filter()
             {
                 banner = Some(if include.has_spam_and_trash() {

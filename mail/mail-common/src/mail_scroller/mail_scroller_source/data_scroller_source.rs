@@ -2,6 +2,7 @@ use super::{
     MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
     remote_source::RemoteSource,
 };
+use crate::datatypes::IncludeSwitch;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 use anyhow::anyhow;
@@ -16,6 +17,7 @@ use tracing::{debug, warn};
 #[derive(Debug)]
 pub struct DataScrollerSource<T: RemoteSource> {
     local_label_id: LocalLabelId,
+    local_label_ids: Option<(LocalLabelId, LocalLabelId)>,
     unread: ReadFilter,
     page_size: usize,
     invalidate: Option<flume::Sender<()>>,
@@ -27,13 +29,18 @@ pub struct DataScrollerSource<T: RemoteSource> {
 impl<T: RemoteSource> DataScrollerSource<T> {
     pub fn new(
         local_label_id: LocalLabelId,
+        alt_local_label_id: Option<LocalLabelId>,
         unread: ReadFilter,
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Self {
+        let local_label_ids =
+            alt_local_label_id.map(|alt_local_label_id| (local_label_id, alt_local_label_id));
+
         Self {
             local_label_id,
+            local_label_ids,
             unread,
             page_size,
             invalidate: None,
@@ -503,6 +510,17 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let task = self.initialize_impl(ctx, false).await?;
 
         Ok(task)
+    }
+
+    fn change_include(&mut self, include: IncludeSwitch) {
+        if let Some((default_label, extended_label)) = self.local_label_ids {
+            self.local_label_id = match include {
+                IncludeSwitch::Default => default_label,
+                IncludeSwitch::WithSpamAndTrash => extended_label,
+            };
+        } else {
+            warn!(?include, "Unexpected change-include command");
+        }
     }
 
     async fn clear_cursor(

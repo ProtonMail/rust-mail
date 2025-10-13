@@ -179,6 +179,7 @@ impl MailScroller {
 
         let source = DataScrollerSource::<ConversationScrollData>::new(
             label,
+            alt_label,
             unread,
             page_size,
             order_dir,
@@ -210,6 +211,7 @@ impl MailScroller {
 
         let source = DataScrollerSource::<MessageScrollData>::new(
             label,
+            alt_label,
             unread,
             page_size,
             order_dir,
@@ -421,6 +423,23 @@ impl MailScroller {
             })
             .map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send change filter command"))
+            })?;
+
+        Ok(())
+    }
+
+    pub fn change_include(&self, include: IncludeSwitch) -> Result<(), MailContextError> {
+        let uuid = Uuid::new_v4();
+
+        tracing::trace!("Sending `ChangeInclude` command with uuid: {uuid}");
+
+        self.ordered_command
+            .send(ScrollerOrderedCommand::ChangeInclude {
+                src: ScrollerSource::ScrollEvent(uuid),
+                include,
+            })
+            .map_err(|_| {
+                MailContextError::Other(anyhow!("Failed to send change include command"))
             })?;
 
         Ok(())
@@ -707,12 +726,9 @@ impl<T: MailScrollerSource> ScrollerWorker<T> {
                     .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
             }
 
-            ScrollerOrderedCommand::ChangeFilter {
-                src,
-                unread: filter,
-            } => {
+            ScrollerOrderedCommand::ChangeFilter { src, unread } => {
                 let result = self
-                    .change_filter(src, filter)
+                    .change_filter(src, unread)
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
@@ -722,6 +738,20 @@ impl<T: MailScrollerSource> ScrollerWorker<T> {
                         .await
                         .map_err(|e| anyhow!("Failed to send change filter update: {e:?}"))?;
                 }
+            }
+
+            ScrollerOrderedCommand::ChangeInclude { src, include } => {
+                self.change_include(src, include).await;
+
+                let result = self
+                    .clear_cursor(src)
+                    .await
+                    .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
+
+                self.update
+                    .send_async(result)
+                    .await
+                    .map_err(|e| anyhow!("Failed to send clear cursor update: {e:?}"))?;
             }
 
             ScrollerOrderedCommand::ClearCursor(src) => {
@@ -941,6 +971,13 @@ impl<T: MailScrollerSource> ScrollerWorker<T> {
     }
 
     #[tracing::instrument(skip_all, fields(src=%src))]
+    async fn change_include(&mut self, src: ScrollerSource, include: IncludeSwitch) {
+        tracing::debug!("Changing include to {include:?}");
+
+        self.source.write().await.change_include(include);
+    }
+
+    #[tracing::instrument(skip_all, fields(src=%src))]
     async fn clear_cursor(
         &mut self,
         src: ScrollerSource,
@@ -1089,6 +1126,10 @@ enum ScrollerOrderedCommand {
     ChangeFilter {
         src: ScrollerSource,
         unread: ReadFilter,
+    },
+    ChangeInclude {
+        src: ScrollerSource,
+        include: IncludeSwitch,
     },
     ClearCursor(ScrollerSource),
 }

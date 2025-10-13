@@ -44,12 +44,11 @@ impl ConversationsState {
         mbox: Mailbox,
         label: LabelWithCounters,
         unread: ReadFilter,
-        include: IncludeSwitch,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();
 
         Command::task(async move {
-            match Self::new_impl(ctx, label_id, unread, include).await {
+            match Self::new_impl(ctx, label_id, unread).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenConversationView(mbox, label, state)),
                     background_command,
@@ -67,11 +66,15 @@ impl ConversationsState {
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
         unread: ReadFilter,
-        include: IncludeSwitch,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let (scroller, handle) =
-            MailScroller::conversations(ctx.as_weak(), label_id, unread, include, ITEM_LIMIT)
-                .await?;
+        let (scroller, handle) = MailScroller::conversations(
+            ctx.as_weak(),
+            label_id,
+            unread,
+            IncludeSwitch::default(),
+            ITEM_LIMIT,
+        )
+        .await?;
 
         let (paginator, command) = Paginator::new(scroller, handle, |update| match update {
             ScrollerUpdate::Append { src: _, items } => ConversationMessage::NextPage(items).into(),
@@ -102,7 +105,7 @@ impl ConversationsState {
         Ok((
             Self {
                 paginator,
-                include,
+                include: IncludeSwitch::default(),
                 table_state: ScrollableTableState::new(Some(0)),
                 messages: MessagesStatus::None,
                 conversations: vec![],
@@ -282,16 +285,15 @@ impl ConversationsState {
             KeyCode::Char('X') => ConversationMessage::DeleteAll(self.opened_label).into(),
 
             KeyCode::Char(ch @ ('E' | 'I')) => {
-                let include = match ch {
+                self.include = match ch {
                     'E' => IncludeSwitch::Default,
                     'I' => IncludeSwitch::WithSpamAndTrash,
                     _ => unreachable!(),
                 };
 
-                Command::batch(vec![
-                    Command::message(Message::SetInclude(include)),
-                    Command::message(Message::Sync(mbox.clone())),
-                ])
+                _ = self.paginator.change_include(self.include);
+
+                Command::None
             }
 
             KeyCode::Char('z') => {

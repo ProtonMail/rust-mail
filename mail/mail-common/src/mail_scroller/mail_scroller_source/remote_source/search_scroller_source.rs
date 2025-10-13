@@ -1,6 +1,7 @@
 use super::MailPaginatorJoinHandle;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::datatypes::{IncludeSwitch, SystemLabelId};
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, SearchOptions},
@@ -29,6 +30,7 @@ use tracing::debug;
 #[derive(Debug)]
 pub struct SearchScrollerSource {
     remote_label_id: LabelId,
+    orig_remote_label_id: LabelId,
     options: SearchOptions,
     page_size: usize,
     initialized: bool,
@@ -40,7 +42,8 @@ pub struct SearchScrollerSource {
 impl SearchScrollerSource {
     pub fn new(remote_label_id: LabelId, options: SearchOptions, page_size: usize) -> Self {
         Self {
-            remote_label_id,
+            remote_label_id: remote_label_id.clone(),
+            orig_remote_label_id: remote_label_id,
             options,
             page_size,
             initialized: false,
@@ -433,5 +436,12 @@ impl MailScrollerSource for SearchScrollerSource {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         // Noop for search scroller
         Ok(None)
+    }
+
+    fn change_include(&mut self, include: IncludeSwitch) {
+        self.remote_label_id = match include {
+            IncludeSwitch::Default => self.orig_remote_label_id.clone(),
+            IncludeSwitch::WithSpamAndTrash => LabelId::all_mail(),
+        };
     }
 }
