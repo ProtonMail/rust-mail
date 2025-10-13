@@ -254,9 +254,11 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     let page_size = 5;
     let unread = ReadFilter::All;
     let include = IncludeSwitch::Default;
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    setup_api_sync_previous_page(&ctx, "myconv_9", None, 1).await;
-    let params = setup_api_conversation_pages(&ctx, page_size, 0, 1..=3).await;
+    let label = SystemLabel::Inbox;
+    let remote_label_id = label.remote_id();
+    let local_label_id = label.local_id(&tether).await.unwrap().unwrap();
+    setup_api_sync_previous_page(&ctx, "myconv_9", None, &remote_label_id, 1).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 0, &remote_label_id, 1..=3).await;
     ctx.setup_user(params.clone()).await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -544,7 +546,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     // Go online suddenly
     ctx.mock_server().reset().await;
     ctx.mock_ping_success().await;
-    setup_api_conversation_pages(&ctx, page_size, 200, 2).await;
+    setup_api_conversation_pages(&ctx, page_size, 200, &remote_label_id, 2).await;
     user_ctx
         .network_monitor_service()
         .update_os_network_status(OsNetworkStatus::Online);
@@ -680,8 +682,8 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     };
     data.save_to_database(&mut tether).await;
 
-    setup_api_sync_previous_page(&ctx, "myconv_102", None, 2).await;
-    let params = setup_api_conversation_pages(&ctx, page_size, 0, 2).await;
+    setup_api_sync_previous_page(&ctx, "myconv_102", None, &remote_label_id, 2).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 0, &remote_label_id, 2).await;
     ctx.setup_user(params.clone()).await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -1194,19 +1196,39 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
 async fn test_conversation_mail_scroller_fetch_new() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let conversations = params.conversations.clone();
-    let previous_page = conversations
+    let label = SystemLabel::Inbox;
+    let conversations = params
+        .conversations
         .first()
         .cloned()
         .map(|mut conv| {
-            conv.id = "myconv_0".into();
+            conv.context_time = Some(100);
+            conv.order = 100;
             conv
         })
         .into_iter()
         .collect_vec();
 
-    setup_api_sync_previous_page(&ctx, "myconv", Some(previous_page), 1).await;
-    ctx.mock_get_conversations(conversations, 2).await;
+    let previous_page = conversations
+        .first()
+        .cloned()
+        .map(|mut conv| {
+            conv.id = "myconv_0".into();
+            conv.context_time = Some(110);
+            conv.order = 110;
+            conv
+        })
+        .into_iter()
+        .collect_vec();
+
+    let remote_label_id = label.remote_id();
+    // Mock previous page
+    setup_api_sync_previous_page(&ctx, "myconv_0", None, &remote_label_id, 1).await;
+    setup_api_sync_previous_page(&ctx, "myconv", Some(previous_page), &remote_label_id, 1).await;
+    // Mock next page
+    mock_get_conversations_page(&ctx, vec![], "myconv", &remote_label_id, 1).await;
+    // Mock first page
+    ctx.mock_get_conversations(conversations, 1).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -1231,6 +1253,10 @@ async fn test_conversation_mail_scroller_fetch_new() {
     let actual = test_scroller.fetch_new_and_wait().await.unwrap();
     assert_eq!(actual.len(), 1);
     assert_eq!(test_scroller.items().len(), 2);
+
+    let actual = test_scroller.fetch_new_and_wait().await.unwrap();
+    assert_eq!(actual.len(), 0);
+    assert_eq!(test_scroller.items().len(), 2);
 }
 
 #[function_name::named]
@@ -1238,11 +1264,17 @@ async fn setup_api_sync_previous_page(
     ctx: &MailTestContext,
     first_id: &str,
     conversations: Option<Vec<ApiConversation>>,
+    label: &LabelId,
     expect: impl Into<Times>,
 ) {
+    let desc = ScrollOrderDir::for_label(label)
+        .reverse()
+        .as_api_desc()
+        .unwrap();
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
-        .and(query_param_contains("BeginID", first_id))
+        .and(query_param_contains("AnchorID", first_id))
+        .and(query_param_contains("Desc", (desc as u8).to_string()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                 conversations: conversations.unwrap_or_default(),
@@ -1281,6 +1313,7 @@ async fn setup_api_conversation_pages(
     ctx: &MailTestContext,
     page_size: usize,
     starting_display_order: u64,
+    label: &LabelId,
     empty_pages_requests: impl Into<Times>,
 ) -> TestParams {
     ctx.mock_ping_success().await;
@@ -1292,9 +1325,16 @@ async fn setup_api_conversation_pages(
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
     let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
 
-    mock_get_conversations_page(ctx, second_page, &first_page_last_id, 1_u64).await;
+    mock_get_conversations_page(ctx, second_page, &first_page_last_id, label, 1_u64).await;
     // last page is empty
-    mock_get_conversations_page(ctx, vec![], &second_page_last_id, empty_pages_requests).await;
+    mock_get_conversations_page(
+        ctx,
+        vec![],
+        &second_page_last_id,
+        label,
+        empty_pages_requests,
+    )
+    .await;
     ctx.mock_get_conversations(first_page, 1_u64).await;
 
     // Do not download any conv on init
@@ -1505,11 +1545,14 @@ pub async fn mock_get_conversations_page(
     ctx: &MailTestContext,
     conversations: Vec<ApiConversation>,
     last_id: &str,
+    label: &LabelId,
     expect: impl Into<Times>,
 ) {
+    let desc = ScrollOrderDir::for_label(label).as_api_desc().unwrap();
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
         .and(query_param_contains("AnchorID", last_id))
+        .and(query_param_contains("Desc", (desc as u8).to_string()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                 conversations,

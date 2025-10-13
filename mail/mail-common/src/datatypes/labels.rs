@@ -91,6 +91,13 @@ impl ScrollOrderDir {
     pub fn as_api_desc(&self) -> Option<bool> {
         Some(*self == Self::Desc)
     }
+
+    pub fn reverse(&self) -> Self {
+        match self {
+            Self::Asc => Self::Desc,
+            Self::Desc => Self::Asc,
+        }
+    }
 }
 
 impl ToSql for ScrollOrderDir {
