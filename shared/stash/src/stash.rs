@@ -1622,6 +1622,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 };
             }
             OperationTransaction::StartSync(BridgeClosure { closure, sender }, policy) => {
+                assert!(self.transaction.is_none(), "Started transaction twice");
                 // Check whether we can start a new transaction or wait until we are allowed to.
                 pool.check_interrupted_or_wait_resume();
                 let res = self.handle_start_sync(closure, policy);

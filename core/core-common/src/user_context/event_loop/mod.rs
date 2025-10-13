@@ -5,6 +5,7 @@ use proton_action_queue::{action::ActionId, queue::ActionError};
 use std::time::Duration;
 use tracing::error;
 
+pub mod account_subscriber;
 pub mod subscriber;
 
 // Re-export common macros for easier access
