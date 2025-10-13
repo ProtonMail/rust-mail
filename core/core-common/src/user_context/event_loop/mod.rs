@@ -10,6 +10,7 @@ pub mod subscriber;
 // Re-export common macros for easier access
 use super::services::EventLoopService;
 use crate::actions::event_poll::EventPoll;
+use crate::app_events::OnForceEventPollEvent;
 pub use subscriber::macros::*;
 
 /// Defines how the event loop should be polled
@@ -73,6 +74,8 @@ impl UserContext {
         let event_loop_service = self.event_loop_service();
         self.queue_poll_event_loop(event_loop_service, None, Some(Priority::Highest))
             .await?;
+        let event_service = self.context.event_service();
+        event_service.publish(OnForceEventPollEvent);
         Ok(())
     }
 
