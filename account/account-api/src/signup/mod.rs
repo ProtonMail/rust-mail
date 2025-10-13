@@ -138,7 +138,7 @@ impl SignupFlow {
         let recorder = ObservabilityRecorder::default();
 
         let domains = client
-            .get_available_domains(None)
+            .get_available_domains(Some("signup".to_owned()))
             .inspect_ok(|_| {
                 recorder.record(DomainAvailability::success());
             })
