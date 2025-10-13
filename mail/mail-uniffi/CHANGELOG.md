@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- stash: Use `ManuallyDrop` inside `Bond::_commit()`
+- Move account updates to a separate event subscriber
+- Force event poll
+
+
+## [mail-uniffi-v0.149.15] - 2025-10-13
+
 ### Changed
 
 - Subscribing to tables is now async
