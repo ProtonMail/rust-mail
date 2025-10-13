@@ -41,12 +41,14 @@ impl<M: Model> TableObserver for TableWatcher<M> {
 }
 
 impl<M: Model> TableWatcher<M> {
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| {
-            Box::new(Self {
-                sender,
-                typ: PhantomData,
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| {
+                Box::new(Self {
+                    sender,
+                    typ: PhantomData,
+                })
             })
-        })
+            .await
     }
 }

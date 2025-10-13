@@ -2816,7 +2816,7 @@ async fn watch_messages_in_label() {
     .await
     .unwrap();
 
-    let handle = Message::watch(&stash).unwrap();
+    let handle = Message::watch(&stash).await.unwrap();
     let watch_result = &handle.receiver;
 
     tokio::spawn(async move {

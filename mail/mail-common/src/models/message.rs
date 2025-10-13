@@ -1149,8 +1149,10 @@ impl Message {
         Ok(res)
     }
 
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(MessageWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(MessageWatcher { sender }))
+            .await
     }
 
     /// Watches available `label as` actions for messages
@@ -3136,8 +3138,10 @@ impl MessageCounters {
     /// # Errors
     /// Returns error if the query failed
     ///
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(MessageCounterWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(MessageCounterWatcher { sender }))
+            .await
     }
 }
 

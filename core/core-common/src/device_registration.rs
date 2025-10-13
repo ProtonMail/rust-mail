@@ -40,11 +40,11 @@ const MISSING_SCOPES_ERROR_CODE: u32 = 9100;
 ///
 #[allow(clippy::result_large_err)]
 #[tracing::instrument(err, skip_all)]
-pub fn spawn_registered_device_task(
+pub async fn spawn_registered_device_task(
     ctx: Arc<Context>,
     device_rx: watch::Receiver<Option<RegisteredDevice>>,
 ) -> Result<JoinHandle<()>, RegisteredDeviceTaskError> {
-    let sessions_watcher = CoreSession::watch(ctx.account_stash())?;
+    let sessions_watcher = CoreSession::watch(ctx.account_stash()).await?;
     let ctx_clone = ctx.clone();
     let handle = ctx.spawn(async move {
         if let Err(e) = registered_device_task(ctx_clone, sessions_watcher, device_rx).await {

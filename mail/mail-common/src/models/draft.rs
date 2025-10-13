@@ -549,8 +549,10 @@ impl DraftSendResult {
     /// # Errors
     ///
     /// Returns error if the subscription failed.
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(DraftSendResultTableObserver { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(DraftSendResultTableObserver { sender }))
+            .await
     }
 
     /// Set the send results for the messages with `ids` as seen.
@@ -1216,8 +1218,10 @@ impl DraftAttachmentMetadata {
     /// # Errors
     ///
     /// Returns error if the subscription failed.
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(DraftAttachmentMetadataTableObserver { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(DraftAttachmentMetadataTableObserver { sender }))
+            .await
     }
 
     /// Get all metadata for a given `metadata_id`.

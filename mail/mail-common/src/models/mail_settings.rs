@@ -308,8 +308,10 @@ impl MailSettings {
         Ok(())
     }
 
-    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
-        stash.subscribe_to(|sender| Box::new(MailSettingsWatcher { sender }))
+    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash
+            .subscribe_to(|sender| Box::new(MailSettingsWatcher { sender }))
+            .await
     }
 
     #[must_use]

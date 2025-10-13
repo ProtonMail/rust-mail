@@ -164,7 +164,7 @@ impl MailboxModel {
                 ));
             };
             let label = Label::find_by_id(label_id, &tether).await;
-            let handle = LabelWithCounters::watch(&stash);
+            let handle = LabelWithCounters::watch(&stash).await;
             let label_and_recevier = label.and_then(|l| handle.map(|h| (l, h)));
             match label_and_recevier {
                 Ok((label, handle)) => {

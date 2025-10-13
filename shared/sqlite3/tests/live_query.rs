@@ -46,6 +46,7 @@ async fn test_tracker() {
 
     let receiver = stash
         .subscribe_to(|sender| Box::new(FooWatcher { sender }))
+        .await
         .unwrap()
         .receiver;
 

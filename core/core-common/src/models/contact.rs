@@ -549,7 +549,9 @@ impl Contact {
     ) -> Result<(Vec<GroupedContacts>, WatcherHandle), StashError> {
         let tether = stash.connection().await?;
         let contacts = Contact::contact_list(&tether).await?;
-        let handle = stash.subscribe_to(|sender| Box::new(ContactListWatcher { sender }))?;
+        let handle = stash
+            .subscribe_to(|sender| Box::new(ContactListWatcher { sender }))
+            .await?;
         Ok((contacts, handle))
     }
 }

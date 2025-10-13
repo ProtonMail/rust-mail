@@ -2635,7 +2635,7 @@ async fn test_conversation_watcher() {
         .await
         .unwrap();
 
-    let handle = ContextualConversation::watch(&stash).unwrap();
+    let handle = ContextualConversation::watch(&stash).await.unwrap();
     let watch_result = &handle.receiver;
 
     tokio::spawn(async move {
@@ -2673,7 +2673,7 @@ async fn test_contextual_conversation_messages() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
 
-    let handle = ContextualConversation::watch(&stash).unwrap();
+    let handle = ContextualConversation::watch(&stash).await.unwrap();
     let watch_result = &handle.receiver;
 
     tether

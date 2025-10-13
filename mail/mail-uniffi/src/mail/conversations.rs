@@ -716,7 +716,7 @@ pub async fn watch_conversation(
             return Ok(None);
         };
 
-        let receiver = ContextualConversation::watch(&stash)?;
+        let receiver = ContextualConversation::watch(&stash).await?;
         let watcher = watch_channel(&*ctx, receiver, callback);
 
         Result::<_, RealProtonMailError>::Ok(Some(WatchedConversation {
@@ -760,7 +760,7 @@ pub async fn watch_conversations_for_label(
     uniffi_async(async move {
         let tether = stash.connection().await?;
         let conversations = RealConversation::in_label(label_id.into(), &tether).await?;
-        let receiver = ContextualConversation::watch(&stash)?;
+        let receiver = ContextualConversation::watch(&stash).await?;
         let watcher = watch_channel(&*user_context, receiver, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedConversations {
             conversations: conversations
@@ -829,7 +829,7 @@ pub async fn watch_available_move_to_actions(
     let ctx = mailbox.ctx()?;
     let stash = mailbox.stash()?;
     uniffi_async(async move {
-        let handle = RealLabel::watch(&stash)?;
+        let handle = RealLabel::watch(&stash).await?;
         let handle = watch_channel(&*ctx, handle, callback);
         Result::<_, RealProtonMailError>::Ok(handle)
     })

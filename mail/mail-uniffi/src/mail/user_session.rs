@@ -79,13 +79,14 @@ impl MailUserSession {
         Ok(self.ctx()?.user_stash().to_owned())
     }
 
-    pub fn watch_table(
+    pub async fn watch_table(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
-        watch_fn: fn(&UserContext) -> Result<WatcherHandle, StashError>,
+        watch_fn: impl AsyncFnOnce(&UserContext) -> Result<WatcherHandle, StashError>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
         let ctx = self.ctx()?;
         let watcher_handle = watch_fn(ctx.user_context())
+            .await
             .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
             .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
         let watch_handle = watch_channel_async(&*ctx, watcher_handle, callback);
@@ -129,28 +130,36 @@ impl MailUserSession {
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
-        self.watch_table(callback, UserContext::watch_addresses)
+        async_runtime().block_on(async {
+            self.watch_table(callback, UserContext::watch_addresses)
+                .await
+        })
     }
 
     pub fn watch_user(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
-        self.watch_table(callback, UserContext::watch_user)
+        async_runtime()
+            .block_on(async { self.watch_table(callback, UserContext::watch_user).await })
     }
 
     pub fn watch_user_settings(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
-        self.watch_table(callback, UserContext::watch_user_settings)
+        async_runtime().block_on(async {
+            self.watch_table(callback, UserContext::watch_user_settings)
+                .await
+        })
     }
 
     pub fn watch_labels(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
-        self.watch_table(callback, UserContext::watch_labels)
+        async_runtime()
+            .block_on(async { self.watch_table(callback, UserContext::watch_labels).await })
     }
 }
 

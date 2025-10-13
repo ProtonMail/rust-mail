@@ -138,9 +138,9 @@ impl UserContext {
                             );
                             EventLoopService::new(event_loop, None)
                         })
-                        .with_service(InitializationService::new(InitializationWatcher::new(
-                            &user_stash,
-                        )?));
+                        .with_service(InitializationService::new(
+                            InitializationWatcher::new(&user_stash).await?,
+                        ));
                 }
 
                 builder.build(
@@ -403,20 +403,20 @@ impl UserContext {
         }
     }
 
-    pub fn watch_addresses(&self) -> Result<WatcherHandle, StashError> {
-        TableWatcher::<Address>::watch(&self.user_stash)
+    pub async fn watch_addresses(&self) -> Result<WatcherHandle, StashError> {
+        TableWatcher::<Address>::watch(&self.user_stash).await
     }
 
-    pub fn watch_user(&self) -> Result<WatcherHandle, StashError> {
-        TableWatcher::<User>::watch(&self.user_stash)
+    pub async fn watch_user(&self) -> Result<WatcherHandle, StashError> {
+        TableWatcher::<User>::watch(&self.user_stash).await
     }
 
-    pub fn watch_user_settings(&self) -> Result<WatcherHandle, StashError> {
-        TableWatcher::<UserSettings>::watch(&self.user_stash)
+    pub async fn watch_user_settings(&self) -> Result<WatcherHandle, StashError> {
+        TableWatcher::<UserSettings>::watch(&self.user_stash).await
     }
 
-    pub fn watch_labels(&self) -> Result<WatcherHandle, StashError> {
-        TableWatcher::<Label>::watch(&self.user_stash)
+    pub async fn watch_labels(&self) -> Result<WatcherHandle, StashError> {
+        TableWatcher::<Label>::watch(&self.user_stash).await
     }
 
     #[must_use]

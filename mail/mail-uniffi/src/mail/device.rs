@@ -7,6 +7,7 @@ use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+use uniffi_runtime::async_runtime;
 
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct RegisteredDevice {
@@ -72,11 +73,15 @@ impl MailSession {
     /// This method may fail if connection to the account database cannot be reached.
     ///
     pub fn register_device_task(&self) -> Result<Arc<RegisterDeviceTaskHandle>, ActionError> {
-        let ctx = self.ctx().core_context().clone();
-        let (tx, rx) = watch::channel(None);
-        let handle = spawn_registered_device_task(ctx, rx).map_err(RealProtonMailError::from)?;
+        async_runtime().block_on(async {
+            let ctx = self.ctx().core_context().clone();
+            let (tx, rx) = watch::channel(None);
+            let handle = spawn_registered_device_task(ctx, rx)
+                .await
+                .map_err(RealProtonMailError::from)?;
 
-        Ok(Arc::new(RegisterDeviceTaskHandle { sender: tx, handle }))
+            Ok(Arc::new(RegisterDeviceTaskHandle { sender: tx, handle }))
+        })
     }
 }
 
