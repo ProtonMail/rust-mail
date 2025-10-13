@@ -120,7 +120,7 @@ impl MailUserContext {
                         }
                     };
 
-                    if let Err(e) = ctx.poll_event_loop(None).await {
+                    if let Err(e) = ctx.poll_event_loop().await {
                         error!("Failed to queue poll event loop poll: {e:?}");
                     }
 
@@ -144,12 +144,9 @@ impl MailUserContext {
     ///
     /// Returns error if the action failed to be queued.
     ///
-    pub async fn poll_event_loop(
-        &self,
-        with_delay: Option<Duration>,
-    ) -> Result<(), ActionError<EventPoll>> {
+    pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
         // Delegate to UserContext
-        self.user_context().poll_event_loop(with_delay).await
+        self.user_context().poll_event_loop().await
     }
 
     /// Queue an action to execute the event loop as soon as possible regardless of

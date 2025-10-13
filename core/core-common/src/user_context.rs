@@ -136,7 +136,7 @@ impl UserContext {
                                 event_ctx.boxed(),
                                 event_ctx.boxed(),
                             );
-                            EventLoopService::new(event_loop, None)
+                            EventLoopService::new(event_loop)
                         })
                         .with_service(InitializationService::new(
                             InitializationWatcher::new(&user_stash).await?,
