@@ -140,7 +140,7 @@ impl UserContext {
                         })
                         .with_service(InitializationService::new(
                             InitializationWatcher::new(&user_stash).await?,
-                        ));
+                        ))
                         .with_cyclic_service(UserMetricService::new);
                 }
 
