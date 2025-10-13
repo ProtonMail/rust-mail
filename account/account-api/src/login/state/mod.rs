@@ -619,7 +619,7 @@ impl State {
     async fn setup_address(client: &muon::Client, user: &User) -> Result<(), LoginError> {
         use crate::requests::PostAddressesSetupRequest;
 
-        let domains = AccountApi::get_available_domains(client, None)
+        let domains = AccountApi::get_available_domains(client, Some("signup".to_owned()))
             .map_err(|e| LoginError::AddressSetup(e.to_string()))
             .await?
             .domains;
