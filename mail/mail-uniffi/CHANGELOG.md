@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Subscribing to tables is now async
+
+### Features
+
+- scroller: Add `change_include()` operation
+- Invoke MailScroller::fetch_new on pull to refresh
+- [ET-5034] Add anchoring to the `fetch_new` underlying request
+
+### Fixes
+
+- Set 'Type=signup' for get_available_domains
+
+
+## [mail-uniffi-v0.149.14] - 2025-10-09
+
+### Changed
+
 - Track transactions
 
 ### Features
