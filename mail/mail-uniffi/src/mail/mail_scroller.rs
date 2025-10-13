@@ -389,6 +389,16 @@ impl ConversationScroller {
             .map_err(Into::into)
     }
 
+    pub fn change_include(
+        self: Arc<Self>,
+        include: IncludeSwitch,
+    ) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_include(include.into())
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     pub async fn total(&self) -> Result<u64, MailScrollerError> {
         let scroller = Arc::clone(&self.scroller);
 
@@ -495,6 +505,16 @@ impl MessageScroller {
             .map_err(Into::into)
     }
 
+    pub fn change_include(
+        self: Arc<Self>,
+        include: IncludeSwitch,
+    ) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_include(include.into())
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     /// Retrieves the current items in the scroller, the items will be returned
     /// in the callback with the `ReplaceFrom { idx: 0, items }` update.
     pub fn get_items(self: Arc<Self>) -> Result<(), MailScrollerError> {
@@ -590,6 +610,16 @@ impl SearchScroller {
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .fetch_more()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
+    pub fn change_include(
+        self: Arc<Self>,
+        include: IncludeSwitch,
+    ) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_include(include.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }

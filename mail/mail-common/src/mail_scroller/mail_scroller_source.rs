@@ -4,6 +4,7 @@ mod remote_source;
 
 pub use self::data_scroller_source::*;
 pub use self::remote_source::*;
+use crate::datatypes::IncludeSwitch;
 use crate::datatypes::ReadFilter;
 use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
@@ -82,6 +83,8 @@ pub trait MailScrollerSource: Send + Sync + 'static {
         ctx: &MailUserContext,
         unread: ReadFilter,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
+
+    fn change_include(&mut self, include: IncludeSwitch);
 
     fn clear_cursor(
         &mut self,

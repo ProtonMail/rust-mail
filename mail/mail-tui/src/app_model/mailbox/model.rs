@@ -22,7 +22,7 @@ use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
-use proton_mail_common::datatypes::{IncludeSwitch, ReadFilter, SystemLabelId, ViewMode};
+use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::observers::{DraftSendResultWatcher, DraftSendResultWatcherMode};
 use proton_mail_common::models::{
@@ -64,7 +64,6 @@ pub struct MailboxModel {
     search: Option<Search>,
     search_status: Option<SearchStatusBar>,
     unread: ReadFilter,
-    include: IncludeSwitch,
     background_worker_initialized: bool,
 }
 
@@ -89,7 +88,6 @@ impl MailboxModel {
             search: None,
             search_status: None,
             unread: ReadFilter::All,
-            include: IncludeSwitch::Default,
             background_worker_initialized: false,
         })
     }
@@ -113,7 +111,6 @@ impl MailboxModel {
         self.state = State::new_syncing();
 
         let filter = self.unread;
-        let include = self.include;
         let ctx = Arc::clone(&self.ctx);
 
         // Create the background worker.
@@ -145,9 +142,9 @@ impl MailboxModel {
                 };
 
                 if mbox.view_mode() == ViewMode::Conversations {
-                    ConversationsState::build(Arc::clone(&ctx), mbox, label, filter, include)
+                    ConversationsState::build(Arc::clone(&ctx), mbox, label, filter)
                 } else {
-                    MessagesState::build(Arc::clone(&ctx), mbox, label, filter, include)
+                    MessagesState::build(Arc::clone(&ctx), mbox, label, filter)
                 }
             }),
         ])
@@ -238,7 +235,6 @@ impl MailboxModel {
     fn open_search_view(&mut self, mbox: Mailbox, state: MessagesState) -> Command<Messages> {
         self.mailbox = mbox;
         self.unread = ReadFilter::default();
-        self.include = IncludeSwitch::default();
         self.state = State::Messages(state);
         self.build_item_count_query()
     }
@@ -305,7 +301,6 @@ impl MailboxModel {
         let ctx = Arc::clone(&self.ctx);
 
         self.unread = ReadFilter::default();
-        self.include = IncludeSwitch::default();
 
         Command::task(async move {
             let stash = ctx.user_stash();
@@ -459,7 +454,7 @@ impl AppStateHandler for MailboxModel {
         if let Event::Key(key) = &event
             && key.code == KeyCode::Char('/')
         {
-            return Command::Message(Message::SearchPopup(Search::new(self.include)).into());
+            return Command::Message(Message::SearchPopup(Search::new()).into());
         }
 
         match &mut self.state {
@@ -538,18 +533,9 @@ impl AppStateHandler for MailboxModel {
                 self.search_status = None;
                 Command::None
             }
-            Message::SetInclude(include) => {
-                self.include = include;
-                Command::None
-            }
-            Message::SearchSubmit(keywords, expanded) => Command::batch(vec![
+            Message::SearchSubmit(keywords) => Command::batch(vec![
                 Command::message(Message::CloseSearchPopup),
-                MessagesState::from_search(
-                    self.ctx.clone(),
-                    self.mailbox.clone(),
-                    keywords,
-                    expanded,
-                ),
+                MessagesState::from_search(self.ctx.clone(), self.mailbox.clone(), keywords),
             ]),
             Message::Composer(_) => Command::None,
         }
