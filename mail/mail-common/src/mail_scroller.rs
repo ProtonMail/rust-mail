@@ -885,10 +885,7 @@ impl<T: MailScrollerSource> ScrollerWorker<T> {
                     // lets wait for another call.
                     return Err(MailContextError::no_connection());
                 } else {
-                    tracing::warn!(
-                        "Scroller counters might be not synced, we have nothing more to show"
-                    );
-                    return Err(MailScrollerError::NotSynced.into());
+                    tracing::warn!("We couldn't sync new items");
                 }
             }
         }

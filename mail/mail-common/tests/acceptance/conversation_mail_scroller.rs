@@ -236,9 +236,9 @@ async fn test_conversation_mail_scroller_try_to_read_one_item_from_api_when_it_d
             .await
             .unwrap();
 
-    // Wait for the error update since we do not have any data in API response
+    // Wait for the none update since we do not have any data in API response
     test_scroller.fetch_more().unwrap();
-    test_scroller.match_next_update(TestUpdate::Error("MailScroller: MailScroller cannot serve more data, counters seems not to be fulfillable".to_string())).await;
+    test_scroller.match_next_update(TestUpdate::None).await;
 
     // Verify we have nothing in the scroller
     assert_eq!(test_scroller.items().len(), 0);
@@ -372,14 +372,35 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     // It has more as the total is 1
     assert!(test_scroller.has_more().await.unwrap());
 
-    let result = test_scroller.fetch_more_and_wait().await;
-    assert!(result.is_err());
-    let actual = result.unwrap_err();
-    assert_eq!(
-        actual.to_string(),
-        "Error: MailScroller: MailScroller cannot serve more data, counters seems not to be fulfillable"
-            .to_string()
-    );
+    test_scroller.fetch_more().unwrap();
+    test_scroller.match_next_update(TestUpdate::None).await;
+    test_scroller.fetch_more().unwrap();
+    test_scroller.match_next_update(TestUpdate::None).await;
+    test_scroller.match_next_update(TestUpdate::None).await;
+
+    test_scroller.assert_updates(&[
+        TestUpdate::Error("API Error: Forbidden: 403 Forbidden. None".to_string()),
+        TestUpdate::None,
+        TestUpdate::None,
+        TestUpdate::None,
+    ]);
+
+    // Lets test recovery from the error
+    let params = TestParams::default_basic();
+    let conversation = params.conversations.first().cloned().unwrap();
+    ctx.mock_server().reset().await;
+    ctx.mock_ping_success().await;
+    ctx.mock_get_conversations(vec![conversation.clone()], 2)
+        .await;
+    test_scroller.fetch_more().unwrap();
+    // None because we have no data
+    test_scroller.match_next_update(TestUpdate::None).await;
+    // However we will spin next request to fetch the data
+    test_scroller
+        .match_next_update(TestUpdate::Append { items: 1 })
+        .await;
+
+    assert_scroller_content!(&mut test_scroller, 1, &[conversation.id]);
 }
 
 #[tokio::test]
