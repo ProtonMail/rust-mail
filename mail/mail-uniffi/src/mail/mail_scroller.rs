@@ -1,6 +1,8 @@
+use crate::core::datatypes::Id;
 use crate::errors::MailScrollerError;
 use crate::mail::datatypes::{Conversation, Message};
 use crate::{WatchHandle, async_runtime, uniffi_async};
+use itertools::Itertools;
 use parking_lot::Mutex;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::{
@@ -12,7 +14,6 @@ use proton_mail_common::mail_scroller::{
 };
 use proton_mail_common::models::Message as RealMessage;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Notify;
 
 /// A callback interface for live queries.
@@ -675,9 +676,53 @@ pub(crate) struct MailboxList {
 }
 
 impl MailboxList {
-    fn get(&self, index: u64) -> Option<CursorEntry> {
-        let index = usize::try_from(index).ok()?;
-        self.items.lock().get(index).cloned()
+    fn get(&self, id: CursorEntryId) -> Option<CursorEntry> {
+        let items = self.items.lock();
+
+        if let Some(item) = items.iter().find(|item| item.id() == id.id) {
+            Some(item.clone())
+        } else {
+            items.get(id.idx).cloned()
+        }
+    }
+
+    fn siblings_at(&self, idx: usize) -> (PrevSibling, NextSibling) {
+        Self::siblings_inner(&self.items.lock(), idx)
+    }
+
+    fn siblings_of(&self, id: CursorEntryId) -> (PrevSibling, NextSibling) {
+        let items = self.items.lock();
+
+        let idx = items
+            .iter()
+            .find_position(|item| item.id() == id.id)
+            .map_or(id.idx, |(idx, _)| idx);
+
+        Self::siblings_inner(&items, idx)
+    }
+
+    fn siblings_inner(items: &[CursorEntry], idx: usize) -> (PrevSibling, NextSibling) {
+        let idx_to_id = |idx| {
+            items.get(idx).map(|entry: &CursorEntry| CursorEntryId {
+                id: entry.id(),
+                idx,
+            })
+        };
+
+        let prev = match idx.checked_sub(1).and_then(idx_to_id) {
+            Some(prev) => PrevSibling::Some(prev),
+            None => PrevSibling::None,
+        };
+
+        let next = match idx.checked_add(1).and_then(idx_to_id) {
+            Some(next) => NextSibling::Some(next),
+            None => match idx_to_id(idx) {
+                Some(id) => NextSibling::Maybe(id),
+                None => NextSibling::None,
+            },
+        };
+
+        (prev, next)
     }
 
     async fn notify_when_changed(&self) {
@@ -724,16 +769,18 @@ impl MailboxList {
 #[derive(uniffi::Object)]
 pub struct MailboxCursor {
     scroller: Arc<RealMailScroller>,
-    index: AtomicU64,
+    siblings: Mutex<(PrevSibling, NextSibling)>,
     list: Arc<MailboxList>,
 }
 
 impl MailboxCursor {
     #[must_use]
-    pub(crate) fn new(index: u64, scroller: Arc<RealMailScroller>, list: Arc<MailboxList>) -> Self {
+    pub(crate) fn new(idx: u64, scroller: Arc<RealMailScroller>, list: Arc<MailboxList>) -> Self {
+        let siblings = list.siblings_at(usize::try_from(idx).unwrap());
+
         Self {
             scroller,
-            index: index.into(),
+            siblings: Mutex::new(siblings),
             list,
         }
     }
@@ -742,27 +789,23 @@ impl MailboxCursor {
 #[uniffi_export]
 impl MailboxCursor {
     pub fn get_previous(&self) -> Result<Option<CursorEntry>, MailScrollerError> {
-        let Some(index) = self.index.load(Ordering::Relaxed).checked_sub(1) else {
-            return Ok(None);
-        };
-
-        let Some(entry) = self.list.get(index) else {
-            return Ok(None);
-        };
-
-        Ok(Some(entry))
+        match self.siblings.lock().0 {
+            PrevSibling::None => Ok(None),
+            PrevSibling::Some(id) => Ok(self.list.get(id)),
+        }
     }
 
     pub fn get_next(&self) -> Result<NextCursorEntry, MailScrollerError> {
-        let Some(index) = self.index.load(Ordering::Relaxed).checked_add(1) else {
-            return Ok(NextCursorEntry::None);
-        };
+        match self.siblings.lock().1 {
+            NextSibling::None => Ok(NextCursorEntry::None),
 
-        let Some(entry) = self.list.get(index) else {
-            return Ok(NextCursorEntry::CallAsync);
-        };
+            NextSibling::Some(id) => Ok(self
+                .list
+                .get(id)
+                .map_or(NextCursorEntry::None, NextCursorEntry::Some)),
 
-        Ok(NextCursorEntry::Some(entry))
+            NextSibling::Maybe(_) => Ok(NextCursorEntry::CallAsync),
+        }
     }
 
     pub async fn fetch_next(&self) -> Result<Option<CursorEntry>, MailScrollerError> {
@@ -771,30 +814,65 @@ impl MailboxCursor {
             .map_err(RealProtonMailError::from)?;
 
         self.list.notify_when_changed().await;
-        let Some(index) = self.index.load(Ordering::Relaxed).checked_add(1) else {
+
+        let mut siblings = self.siblings.lock();
+
+        let NextSibling::Maybe(id) = siblings.1 else {
             return Ok(None);
         };
 
-        Ok(self.list.get(index))
+        *siblings = self.list.siblings_of(id);
+
+        if let NextSibling::Some(id) = siblings.1 {
+            Ok(self.list.get(id))
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn go_forward(&self) {
-        self.index.fetch_add(1, Ordering::Relaxed);
+        let mut siblings = self.siblings.lock();
+
+        if let NextSibling::Some(id) = siblings.1 {
+            *siblings = self.list.siblings_of(id);
+        }
     }
 
     pub fn go_backward(&self) {
-        _ = self
-            .index
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |i| {
-                Some(i.saturating_sub(1))
-            });
+        let mut siblings = self.siblings.lock();
+
+        if let PrevSibling::Some(id) = siblings.0 {
+            *siblings = self.list.siblings_of(id);
+        }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum PrevSibling {
+    None,
+    Some(CursorEntryId),
+}
+
+#[derive(Clone, Copy, Debug)]
+enum NextSibling {
+    None,
+    Some(CursorEntryId),
+    Maybe(CursorEntryId),
 }
 
 #[derive(uniffi::Enum, Clone)]
 pub enum CursorEntry {
     ConversationEntry(Conversation),
     MessageEntry(Message),
+}
+
+impl CursorEntry {
+    fn id(&self) -> Id {
+        match self {
+            CursorEntry::ConversationEntry(conv) => conv.id,
+            CursorEntry::MessageEntry(msg) => msg.id,
+        }
+    }
 }
 
 impl From<ContextualConversation> for CursorEntry {
@@ -809,11 +887,18 @@ impl From<RealMessage> for CursorEntry {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct CursorEntryId {
+    id: Id,
+    idx: usize,
+}
+
 #[derive(uniffi::Enum)]
 #[allow(clippy::large_enum_variant)]
 pub enum NextCursorEntry {
     None,
     Some(CursorEntry),
+
     /// We don't know if there is anything or not,
     /// you should call fetch_next function which is asynchronous
     CallAsync,
