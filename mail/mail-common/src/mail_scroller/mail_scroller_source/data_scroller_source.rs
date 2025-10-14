@@ -468,14 +468,17 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 if is_online { "online" } else { "offline" }
             );
             if let Some(scroll_data) = scroller.scroll_data_begin(&tether).await? {
-                debug!("Syncing previous page in a task");
+                debug!("Syncing previous page in background");
 
-                let task = self
-                    .sync_previous_page(ctx, &scroll_data, remote_label_id.clone(), None)
-                    .await?;
-                let task = if is_online { task } else { None };
+                self.sync_previous_page(
+                    ctx,
+                    &scroll_data,
+                    remote_label_id.clone(),
+                    self.invalidate.clone(),
+                )
+                .await?;
 
-                return Ok(task);
+                return Ok(None);
             } else {
                 debug!("Cursor points to empty scroll data, will sync first page instead");
             };

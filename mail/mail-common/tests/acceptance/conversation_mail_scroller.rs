@@ -1250,12 +1250,15 @@ async fn test_conversation_mail_scroller_fetch_new() {
     assert_eq!(actual.len(), 1);
     assert_eq!(test_scroller.items().len(), 1);
 
-    let actual = test_scroller.fetch_new_and_wait().await.unwrap();
-    assert_eq!(actual.len(), 1);
+    test_scroller.fetch_new().unwrap();
+    test_scroller.match_next_update(TestUpdate::None).await;
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceBefore { idx: 0, items: 1 })
+        .await;
     assert_eq!(test_scroller.items().len(), 2);
 
-    let actual = test_scroller.fetch_new_and_wait().await.unwrap();
-    assert_eq!(actual.len(), 0);
+    test_scroller.fetch_new().unwrap();
+    test_scroller.match_next_update(TestUpdate::None).await;
     assert_eq!(test_scroller.items().len(), 2);
 }
 
