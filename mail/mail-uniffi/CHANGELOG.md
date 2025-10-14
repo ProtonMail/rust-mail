@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.149.17] - 2025-10-14
+
+### Changed
+
+- Remove NotSynced error usage from scroller and extend error test with recovery scenario
+
+### Fixes
+
+- `fetch_new` spawns previous page rq in background so it doesn't block scroller updates while offline
+
+
+## [mail-uniffi-v0.149.16] - 2025-10-13
 
 ### Fixes
 
