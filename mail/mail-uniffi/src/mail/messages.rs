@@ -565,14 +565,13 @@ pub async fn messages_for_label(
 ///
 #[uniffi_export]
 pub async fn scroll_messages_for_label(
-    session: Arc<MailUserSession>,
     mailbox: Arc<Mailbox>,
     label_id: Id,
     unread: ReadFilter,
     include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<MessageScroller>, ActionError> {
-    let context = session.ctx()?;
+    let context = mailbox.ctx()?;
 
     uniffi_async(async move {
         let (scroller, handle) = MailScroller::messages(
@@ -607,13 +606,12 @@ pub async fn scroll_messages_for_label(
 ///
 #[uniffi_export]
 pub async fn scroller_search(
-    session: Arc<MailUserSession>,
     mailbox: Arc<Mailbox>,
     options: PaginatorSearchOptions,
     include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<SearchScroller>, ActionError> {
-    let context = session.ctx()?;
+    let context = mailbox.ctx()?;
 
     uniffi_async(async move {
         let (scroller, handle) = MailScroller::search(

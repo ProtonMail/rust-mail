@@ -553,14 +553,13 @@ pub async fn move_conversations(
 ///
 #[uniffi_export]
 pub async fn scroll_conversations_for_label(
-    session: Arc<MailUserSession>,
     mailbox: Arc<Mailbox>,
     label_id: Id,
     unread: ReadFilter,
     include: IncludeSwitch,
     callback: Box<dyn ConversationScrollerLiveQueryCallback>,
 ) -> Result<Arc<ConversationScroller>, ActionError> {
-    let context = session.ctx()?;
+    let context = mailbox.ctx()?;
 
     uniffi_async(async move {
         let (scroller, handle) = MailScroller::conversations(
