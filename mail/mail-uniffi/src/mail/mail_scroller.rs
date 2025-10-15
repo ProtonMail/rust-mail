@@ -697,13 +697,19 @@ impl MailboxList {
         Self::siblings_inner(&self.items.lock(), idx)
     }
 
-    fn siblings_of(&self, id: CursorEntryId) -> (PrevSibling, NextSibling) {
+    fn siblings_of(&self, id: CursorEntryId, dir: CursorDirection) -> (PrevSibling, NextSibling) {
         let items = self.items.lock();
 
         let idx = items
             .iter()
             .find_position(|item| item.id() == id.id)
-            .map_or(id.idx, |(idx, _)| idx);
+            .map_or_else(
+                || match dir {
+                    CursorDirection::Forward => id.idx,
+                    CursorDirection::Backward => id.idx.checked_sub(1).unwrap_or(usize::MAX),
+                },
+                |(idx, _)| idx,
+            );
 
         Self::siblings_inner(&items, idx)
     }
@@ -828,7 +834,7 @@ impl MailboxCursor {
             return Ok(None);
         };
 
-        *siblings = self.list.siblings_of(id);
+        *siblings = self.list.siblings_of(id, CursorDirection::Forward);
 
         if let NextSibling::Some(id) = siblings.1 {
             Ok(self.list.get(id, CursorDirection::Forward))
@@ -841,7 +847,7 @@ impl MailboxCursor {
         let mut siblings = self.siblings.lock();
 
         if let NextSibling::Some(id) = siblings.1 {
-            *siblings = self.list.siblings_of(id);
+            *siblings = self.list.siblings_of(id, CursorDirection::Forward);
         }
     }
 
@@ -849,7 +855,7 @@ impl MailboxCursor {
         let mut siblings = self.siblings.lock();
 
         if let PrevSibling::Some(id) = siblings.0 {
-            *siblings = self.list.siblings_of(id);
+            *siblings = self.list.siblings_of(id, CursorDirection::Backward);
         }
     }
 }
