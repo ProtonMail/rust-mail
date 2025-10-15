@@ -32,6 +32,17 @@ use serde::Deserialize;
 #[cfg(feature = "mocks")]
 use serde::Serialize;
 
+/// The response containing payment method status for the all available vendors.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct GetPaymentsStatusResponse {
+    /// Location for this request.
+    pub location: Location,
+    /// Status of supported vendors.
+    pub payment_methods: PaymentMethods,
+}
+
 /// The response containing plans available to the user.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]

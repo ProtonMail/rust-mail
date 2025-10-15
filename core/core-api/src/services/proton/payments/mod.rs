@@ -14,8 +14,21 @@ use bytes::Bytes;
 /// The Proton Payments API base path (v5).
 pub const PAYMENTS_V5: &str = "/payments/v5";
 
+/// The Proton Payments API base path (v6).
+pub const PAYMENTS_V6: &str = "/payments/v6";
+
 #[allow(async_fn_in_trait)]
 pub trait ProtonPayments {
+    /// Get the payment status. Checks what payment methods are enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn get_payments_status(
+        &self,
+        vendor: String,
+    ) -> ApiServiceResult<GetPaymentsStatusResponse>;
+
     /// Get the payment plans available to the user.
     ///
     /// # Errors

@@ -192,6 +192,49 @@ pub struct Subscription {
     pub decorations: Vec<PlanDecoration>,
 }
 
+/// User location.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Location {
+    pub country_code: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+}
+
+/// Supported vendors.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PaymentMethods {
+    pub bitcoin: PaymentVendor,
+    pub card: PaymentVendor,
+    pub in_app: PaymentVendor,
+    pub paypal: PaymentVendor,
+}
+
+/// Status of a vendor.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PaymentVendor {
+    /// Whether the vendor is enabled/disabled for this user & location.
+    pub state: PaymentVendorState,
+    /// Reason when a vendor is disabled.
+    pub reason: Option<String>,
+}
+
+/// Vendor state.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
+#[repr(u8)]
+pub enum PaymentVendorState {
+    /// Vendor is disabled.
+    Disabled = 0,
+    /// Vendor is enabled.
+    Enabled = 1,
+}
+
 declare_proton_id! {
     pub PlanId
 }

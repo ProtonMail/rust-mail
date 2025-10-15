@@ -1697,9 +1697,13 @@ impl From<RealUserSettings> for UserSettings {
 use proton_core_api::services::proton::AppleRecurringReceiptDetails as RealAppleRecurringReceiptDetails;
 use proton_core_api::services::proton::GetPaymentsPlansOptions as RealGetPaymentsPlansOptions;
 use proton_core_api::services::proton::GoogleRecurringReceiptDetails as RealGoogleRecurringReceiptDetails;
+use proton_core_api::services::proton::Location as RealLocation;
 use proton_core_api::services::proton::NewSubscription as RealNewSubscription;
 use proton_core_api::services::proton::NewSubscriptionValues as RealNewSubscriptionValues;
+use proton_core_api::services::proton::PaymentMethods as RealPaymentMethods;
 use proton_core_api::services::proton::PaymentReceipt as RealPaymentReceipt;
+use proton_core_api::services::proton::PaymentVendor as RealPaymentVendor;
+use proton_core_api::services::proton::PaymentVendorState as RealPaymentVendorState;
 use proton_core_api::services::proton::Plan as RealPlan;
 use proton_core_api::services::proton::PlanDecoration as RealPlanDecoration;
 use proton_core_api::services::proton::PlanEntitlement as RealPlanEntitlement;
@@ -2197,4 +2201,82 @@ pub struct PaymentToken {
 pub struct Subscriptions {
     pub current: Vec<Subscription>,
     pub upcoming: Vec<Subscription>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct PaymentsStatus {
+    /// Geolocation for this request.
+    pub location: Location,
+    /// Status of supported vendors.
+    pub payment_methods: PaymentMethods,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct Location {
+    pub country_code: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+}
+
+impl From<RealLocation> for Location {
+    fn from(location: RealLocation) -> Self {
+        Self {
+            country_code: location.country_code,
+            state: location.state,
+            zip_code: location.zip_code,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct PaymentMethods {
+    pub bitcoin: PaymentVendor,
+    pub card: PaymentVendor,
+    pub in_app: PaymentVendor,
+    pub paypal: PaymentVendor,
+}
+
+impl From<RealPaymentMethods> for PaymentMethods {
+    fn from(methods: RealPaymentMethods) -> Self {
+        Self {
+            bitcoin: methods.bitcoin.into(),
+            card: methods.card.into(),
+            in_app: methods.in_app.into(),
+            paypal: methods.paypal.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct PaymentVendor {
+    /// Whether the vendor is enabled/disabled for this user & location.
+    pub state: PaymentVendorState,
+    /// Reason when a vendor is disabled.
+    pub reason: Option<String>,
+}
+
+impl From<RealPaymentVendor> for PaymentVendor {
+    fn from(vendor: RealPaymentVendor) -> Self {
+        Self {
+            state: vendor.state.into(),
+            reason: vendor.reason,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
+pub enum PaymentVendorState {
+    /// Vendor is disabled.
+    Disabled = 0,
+    /// Vendor is enabled.
+    Enabled = 1,
+}
+
+impl From<RealPaymentVendorState> for PaymentVendorState {
+    fn from(state: RealPaymentVendorState) -> Self {
+        match state {
+            RealPaymentVendorState::Disabled => PaymentVendorState::Disabled,
+            RealPaymentVendorState::Enabled => PaymentVendorState::Enabled,
+        }
+    }
 }
