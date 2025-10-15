@@ -8,8 +8,9 @@ use crate::{
     mail_scroller::MailScrollerSource,
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
 };
+use itertools::Either;
 use proton_core_api::{services::proton::LabelId, session::Session};
-use proton_core_common::datatypes::UnixTimestamp;
+use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
@@ -438,10 +439,12 @@ impl MailScrollerSource for SearchScrollerSource {
         Ok(None)
     }
 
-    fn change_include(&mut self, include: IncludeSwitch) {
+    fn change_include(&mut self, include: IncludeSwitch) -> Either<LocalLabelId, LabelId> {
         self.remote_label_id = match include {
             IncludeSwitch::Default => self.orig_remote_label_id.clone(),
             IncludeSwitch::WithSpamAndTrash => LabelId::all_mail(),
         };
+
+        Either::Right(self.remote_label_id.clone())
     }
 }

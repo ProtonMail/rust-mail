@@ -48,7 +48,7 @@ impl ConversationsState {
         let label_id = mbox.label_id();
 
         Command::task(async move {
-            match Self::new_impl(ctx, label_id, unread).await {
+            match Self::new_impl(ctx, &mbox, label_id, unread).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenConversationView(mbox, label, state)),
                     background_command,
@@ -64,11 +64,13 @@ impl ConversationsState {
 
     async fn new_impl(
         ctx: Arc<MailUserContext>,
+        mbox: &Mailbox,
         label_id: LocalLabelId,
         unread: ReadFilter,
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) = RealMailScroller::conversations(
             ctx.as_weak(),
+            Some(mbox),
             label_id,
             unread,
             IncludeSwitch::default(),
@@ -291,7 +293,7 @@ impl ConversationsState {
                     _ => unreachable!(),
                 };
 
-                _ = self.scroller.change_include(self.include);
+                _ = self.scroller.change_include(mbox, self.include);
 
                 Command::None
             }

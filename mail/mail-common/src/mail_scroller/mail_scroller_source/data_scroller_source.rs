@@ -6,6 +6,7 @@ use crate::datatypes::IncludeSwitch;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 use anyhow::anyhow;
+use itertools::Either;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::LocalLabelId,
@@ -515,7 +516,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         Ok(task)
     }
 
-    fn change_include(&mut self, include: IncludeSwitch) {
+    fn change_include(&mut self, include: IncludeSwitch) -> Either<LocalLabelId, LabelId> {
         if let Some((default_label, extended_label)) = self.local_label_ids {
             self.local_label_id = match include {
                 IncludeSwitch::Default => default_label,
@@ -524,6 +525,8 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         } else {
             warn!(?include, "Unexpected change-include command");
         }
+
+        Either::Left(self.local_label_id)
     }
 
     async fn reset(

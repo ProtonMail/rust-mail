@@ -10,6 +10,9 @@ use crate::datatypes::{
 use crate::models::Message;
 use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
+use itertools::Either;
+use proton_core_api::services::proton::LabelId;
+use proton_core_common::datatypes::LocalLabelId;
 use stash::orm::Model;
 use std::hash::Hash;
 use std::{fmt::Debug, future::Future};
@@ -91,7 +94,7 @@ where
         unread: ReadFilter,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
-    fn change_include(&mut self, include: IncludeSwitch);
+    fn change_include(&mut self, include: IncludeSwitch) -> Either<LocalLabelId, LabelId>;
 
     fn reset(
         &mut self,

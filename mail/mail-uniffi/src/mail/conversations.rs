@@ -554,6 +554,7 @@ pub async fn move_conversations(
 #[uniffi_export]
 pub async fn scroll_conversations_for_label(
     session: Arc<MailUserSession>,
+    mailbox: Arc<Mailbox>,
     label_id: Id,
     unread: ReadFilter,
     include: IncludeSwitch,
@@ -564,6 +565,7 @@ pub async fn scroll_conversations_for_label(
     uniffi_async(async move {
         let (scroller, handle) = MailScroller::conversations(
             context.as_weak(),
+            Some(mailbox.get()),
             label_id.into(),
             unread.into(),
             include.into(),
@@ -572,7 +574,7 @@ pub async fn scroll_conversations_for_label(
         .await?;
 
         let handle = spawn_conversation_scroller_watcher(&context, handle, callback);
-        let scroller = ConversationScroller::new(scroller, handle);
+        let scroller = ConversationScroller::new(mailbox, scroller, handle);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(scroller))
     })
