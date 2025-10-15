@@ -91,6 +91,9 @@ const FOO_ATTENDEE_TOKEN: &str = "245902dc";
 const ZAR_ATTENDEE_ID: &str = "m4x8IpHm";
 const ZAR_ATTENDEE_TOKEN: &str = "fdec9604";
 
+const XAR_ATTENDEE_ID: &str = "bnkeT2C8";
+const XAR_ATTENDEE_TOKEN: &str = "8CDyJHVR";
+
 const ATTENDEES: fn() -> Vec<CalendarAttendee> = || {
     vec![
         CalendarAttendee {
@@ -455,6 +458,7 @@ impl RsvpContacts for DummyRsvpContacts {
         match email {
             "bar@pm.me" => Some("Bar Localhosty".into()),
             "foo@pm.me" => Some("Foo Localhosty".into()),
+            "xar@pm.me" => Some("xar@pm.me".into()),
             _ => None,
         }
     }

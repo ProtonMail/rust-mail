@@ -1018,11 +1018,17 @@ where
 {
     debug!("Extracting event's attendees");
 
-    if let (Some(event), Some(decryptor)) = (source.raw_event(), decryptor) {
-        extract_attendees_from_event(pgp, contacts, event, decryptor, organizer).await
+    let attendees = if let (Some(event), Some(decryptor)) = (source.raw_event(), decryptor) {
+        extract_attendees_from_event(pgp, contacts, event, decryptor, organizer).await?
     } else {
-        Ok(extract_attendees_from_invite(contacts, source.invite_or_event()).await)
-    }
+        extract_attendees_from_invite(contacts, source.invite_or_event()).await
+    };
+
+    attendees
+        .into_iter()
+        .map(sanitize_attendee)
+        .map(Ok)
+        .collect()
 }
 
 async fn extract_attendees_from_event<P>(
@@ -1131,6 +1137,24 @@ async fn extract_attendees_from_invite(
     }
 
     attendees
+}
+
+fn sanitize_attendee(mut attendee: RsvpAttendee) -> RsvpAttendee {
+    // If the attendee's name is the same as its email, let's drop the name -
+    // otherwise the UI is mildly confusing, since you see two equal strings:
+    //
+    // ```
+    // Participants:
+    //
+    // [ ] someone@pm.me * someone@pm.me
+    // ```
+    if let Some(name) = &attendee.name {
+        if *name == attendee.email {
+            attendee.name = None;
+        }
+    }
+
+    attendee
 }
 
 fn extract_calendar(calendar: Option<CalendarBootstrap>, source: &Source) -> Option<RsvpCalendar> {
