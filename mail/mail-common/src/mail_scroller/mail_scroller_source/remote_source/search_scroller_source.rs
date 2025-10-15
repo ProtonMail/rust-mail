@@ -41,10 +41,15 @@ pub struct SearchScrollerSource {
 }
 
 impl SearchScrollerSource {
-    pub fn new(remote_label_id: LabelId, options: SearchOptions, page_size: usize) -> Self {
+    pub fn new(
+        remote_label_id: LabelId,
+        orig_remote_label_id: LabelId,
+        options: SearchOptions,
+        page_size: usize,
+    ) -> Self {
         Self {
-            remote_label_id: remote_label_id.clone(),
-            orig_remote_label_id: remote_label_id,
+            remote_label_id,
+            orig_remote_label_id,
             options,
             page_size,
             initialized: false,

@@ -253,7 +253,8 @@ impl MailScroller<Message> {
             AlmostAllMail::AlmostAllMail => Some(LabelId::all_mail()),
         };
 
-        let source = SearchScrollerSource::new(label.clone(), options, page_size);
+        let source =
+            SearchScrollerSource::new(label.clone(), settings.all_mail(), options, page_size);
 
         if let Some(mailbox) = mailbox {
             let label = Label::remote_id_counterpart(label.clone(), &tether)
