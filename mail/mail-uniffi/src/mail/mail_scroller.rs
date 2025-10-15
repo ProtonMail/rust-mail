@@ -676,13 +676,20 @@ pub(crate) struct MailboxList {
 }
 
 impl MailboxList {
-    fn get(&self, id: CursorEntryId) -> Option<CursorEntry> {
+    fn get(&self, id: CursorEntryId, dir: CursorDirection) -> Option<CursorEntry> {
         let items = self.items.lock();
 
         if let Some(item) = items.iter().find(|item| item.id() == id.id) {
             Some(item.clone())
         } else {
-            items.get(id.idx).cloned()
+            items
+                .get(match dir {
+                    CursorDirection::Forward => id.idx,
+                    // TODO (ET-5057): This assumes that if the item is missing, then only one item was removed.
+                    // Create a better approach to this problem and test it thoroughly.
+                    CursorDirection::Backward => id.idx.checked_sub(1)?,
+                })
+                .cloned()
         }
     }
 
@@ -791,7 +798,7 @@ impl MailboxCursor {
     pub fn get_previous(&self) -> Result<Option<CursorEntry>, MailScrollerError> {
         match self.siblings.lock().0 {
             PrevSibling::None => Ok(None),
-            PrevSibling::Some(id) => Ok(self.list.get(id)),
+            PrevSibling::Some(id) => Ok(self.list.get(id, CursorDirection::Backward)),
         }
     }
 
@@ -801,7 +808,7 @@ impl MailboxCursor {
 
             NextSibling::Some(id) => Ok(self
                 .list
-                .get(id)
+                .get(id, CursorDirection::Forward)
                 .map_or(NextCursorEntry::None, NextCursorEntry::Some)),
 
             NextSibling::Maybe(_) => Ok(NextCursorEntry::CallAsync),
@@ -824,7 +831,7 @@ impl MailboxCursor {
         *siblings = self.list.siblings_of(id);
 
         if let NextSibling::Some(id) = siblings.1 {
-            Ok(self.list.get(id))
+            Ok(self.list.get(id, CursorDirection::Forward))
         } else {
             Ok(None)
         }
@@ -845,6 +852,12 @@ impl MailboxCursor {
             *siblings = self.list.siblings_of(id);
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum CursorDirection {
+    Forward,
+    Backward,
 }
 
 #[derive(Clone, Copy, Debug)]
