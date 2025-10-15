@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Swipe to adjacent conversations is now true by default
+- Temporary - prevent getPrevious from showing the same item if the item was removed
+- rsvp: Sanitize attendees
+
+
+## [mail-uniffi-v0.149.18] - 2025-10-14
+
+### Fixes
+
 - uniffi: Improve MailboxCursor's recovery
 
 
