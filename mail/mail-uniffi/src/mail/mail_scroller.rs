@@ -439,7 +439,7 @@ impl MessageScroller {
     pub(crate) fn new(
         mailbox: Arc<Mailbox>,
         scroller: RealMailScroller<RealMessage>,
-        handle: Arc<WatchHandle>
+        handle: Arc<WatchHandle>,
     ) -> Self {
         Self {
             mailbox,
@@ -564,7 +564,7 @@ impl SearchScroller {
     pub(crate) fn new(
         mailbox: Arc<Mailbox>,
         scroller: RealMailScroller<RealMessage>,
-        handle: Arc<WatchHandle>
+        handle: Arc<WatchHandle>,
     ) -> Self {
         Self {
             mailbox,

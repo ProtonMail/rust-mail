@@ -587,7 +587,7 @@ pub async fn scroll_messages_for_label(
         let handle = spawn_message_scroller_watcher(&context, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller::new(
-            mailbox, scroller, handle
+            mailbox, scroller, handle,
         )))
     })
     .await
