@@ -427,7 +427,7 @@ impl MailUserSession {
     ) -> Result<PaymentsStatus, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
-            let res = ctx.session().get_payments_status(vendor).await?;
+            let res = ctx.user_context().get_payments_status(vendor).await?;
 
             Result::<_, RealProtonMailError>::Ok(PaymentsStatus {
                 location: res.location.into(),
