@@ -7,6 +7,17 @@ use muon::{GET, POST, serde_to_query, util::ProtonRequestExt};
 use muon::{ProtonRequest, ProtonResponse};
 
 impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonPayments for This {
+    async fn get_payments_status(
+        &self,
+        vendor: String,
+    ) -> ApiServiceResult<GetPaymentsStatusResponse> {
+        Ok(GET!("{PAYMENTS_V6}/status/{vendor}")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn get_payments_plans(
         &self,
         options: GetPaymentsPlansOptions,

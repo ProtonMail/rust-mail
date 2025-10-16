@@ -4,8 +4,8 @@ mod labels;
 
 use crate::core::datatypes::{
     AccountDetails, ConnectionStatus, GetPaymentsPlansOptions, Id, NewSubscription,
-    NewSubscriptionValues, PaymentReceipt, PaymentToken, PaymentsPlans, Subscriptions, User,
-    UserSettings,
+    NewSubscriptionValues, PaymentReceipt, PaymentToken, PaymentsPlans, PaymentsStatus,
+    Subscriptions, User, UserSettings,
 };
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
@@ -418,6 +418,24 @@ impl MailUserSession {
                 .await;
             callback.on_online().await;
         });
+    }
+
+    /// Get the status of any vendor (activated or not).
+    pub async fn get_payments_status(
+        &self,
+        vendor: String,
+    ) -> Result<PaymentsStatus, UserSessionError> {
+        let ctx = self.ctx()?;
+        uniffi_async(async move {
+            let res = ctx.user_context().get_payments_status(vendor).await?;
+
+            Result::<_, RealProtonMailError>::Ok(PaymentsStatus {
+                location: res.location.into(),
+                payment_methods: res.payment_methods.into(),
+            })
+        })
+        .await
+        .map_err(UserSessionError::from)
     }
 
     /// Get the payment plans available for the current user.
