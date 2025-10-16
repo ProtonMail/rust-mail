@@ -11,6 +11,7 @@ use crate::models::Message;
 use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
 use stash::orm::Model;
+use std::hash::Hash;
 use std::{fmt::Debug, future::Future};
 use tokio::task::JoinHandle;
 
@@ -104,7 +105,7 @@ pub trait MailScrollerItem
 where
     Self: Clone + Debug + ScrollerEq + Send + Sync + 'static,
 {
-    type Id: Clone + Copy + Debug + PartialEq + Send + Sync;
+    type Id: Clone + Copy + Debug + Hash + Eq + PartialEq + Send + Sync;
 
     // A bit more awkward name to avoid clashing with `Model::id()`
     fn item_id(&self) -> Self::Id;

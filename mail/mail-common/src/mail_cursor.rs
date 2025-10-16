@@ -3,21 +3,21 @@ use crate::{
     mail_scroller::{MailScroller, MailScrollerItem},
 };
 use derive_more::Debug;
+use itertools::Itertools;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use tracing::{debug, info, instrument, warn};
+use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
-/// Cursor over [`MailScroller`], used for the left/right swiping feature on
-/// mobiles.
+/// Cursor over [`MailScroller`], used for the left/right swiping feature.
 pub struct MailCursor<T>
 where
     T: MailScrollerItem,
 {
     id: Uuid,
     parent: Arc<MailScroller<T>>,
-    siblings: RwLock<Siblings<T>>,
+    state: RwLock<Option<State<T>>>,
 }
 
 impl<T> MailCursor<T>
@@ -27,82 +27,97 @@ where
     #[instrument(skip_all)]
     pub(crate) fn new(parent: Arc<MailScroller<T>>, looking_at: T::Id) -> Self {
         let id = Uuid::new_v4();
-        let siblings = Siblings::of(&parent.items().read(), looking_at);
 
-        info!(?id, ?looking_at, ?siblings, "Creating MailCursor");
+        info!(?id, ?looking_at, "Creating MailCursor");
 
-        if let PrevSibling::None = siblings.prev
-            && let NextSibling::None = siblings.next
-        {
-            warn!("Created a cursor for an item that's not present on the list");
-        }
+        let mut prevs: Vec<_> = parent
+            .items()
+            .read()
+            .iter()
+            .map(|item| item.item_id())
+            .take_while_inclusive(|id| *id != looking_at)
+            .collect();
+
+        let state = if prevs.contains(&looking_at) {
+            prevs.pop();
+
+            Some(State {
+                prevs,
+                curr: looking_at,
+                next: None,
+            })
+        } else {
+            None
+        };
 
         Self {
             id,
             parent,
-            siblings: RwLock::new(siblings),
+            state: RwLock::new(state),
         }
     }
 
-    /// Returns the item that's right before the cursor.
+    /// Returns the item that's before the cursor.
     ///
-    /// This function does retreat the cursor, see [`Self::goto_prev()`].
-    #[instrument(skip_all)]
+    /// This function does not retreat the cursor, see [`Self::goto_prev()`].
     pub fn peek_prev(&self) -> Option<T> {
-        let mut siblings = self.siblings.upgradable_read();
+        let mut state = self.state.write();
+        let state = state.as_mut()?;
 
-        match siblings.prev {
-            PrevSibling::None => None,
+        let items = self.parent.items().read();
 
-            PrevSibling::Some(prev) => {
-                let items = self.parent.items().read();
-
-                if let Some(prev) = Self::find(&items, prev) {
-                    Some(prev)
-                } else {
-                    siblings.with_upgraded(|siblings| {
-                        siblings.recover_prev(prev, |id| Self::find(&items, id))
-                    })
-                }
+        while let Some(prev) = state.prevs.last() {
+            if let Some(prev) = Self::find(&items, *prev) {
+                return Some(prev.clone());
             }
+
+            state.prevs.pop();
         }
+
+        None
     }
 
-    /// Returns the item that's right after the cursor.
+    /// Returns the item that's after the cursor.
     ///
     /// This function does not advance the cursor, see [`Self::goto_next()`].
-    #[instrument(skip_all)]
     pub fn peek_next(&self) -> NextMailCursorItem<T> {
-        let mut siblings = self.siblings.upgradable_read();
+        let mut state = self.state.write();
 
-        match siblings.next {
-            NextSibling::None => NextMailCursorItem::None,
+        let Some(state) = state.as_mut() else {
+            return NextMailCursorItem::None;
+        };
 
-            NextSibling::Some(next) => {
-                let items = self.parent.items().read();
+        let items = self.parent.items().read();
 
-                if let Some(next) = Self::find(&items, next) {
-                    NextMailCursorItem::Some(next)
-                } else {
-                    siblings.with_upgraded(|siblings| {
-                        let next = siblings.recover_next(next, |id| Self::find(&items, id));
-
-                        match next {
-                            Some(next) => NextMailCursorItem::Some(next),
-                            None => NextMailCursorItem::None,
-                        }
-                    })
-                }
+        if let Some(next) = state.next {
+            if let Some(next) = Self::find(&items, next) {
+                return NextMailCursorItem::Some(next);
             }
 
-            NextSibling::Maybe(_) => NextMailCursorItem::Maybe,
+            state.next = None;
         }
+
+        for item in items.iter() {
+            if state.prevs.contains(&item.item_id()) {
+                continue;
+            }
+
+            if state.curr == item.item_id() {
+                continue;
+            }
+
+            state.next = Some(item.item_id());
+
+            return NextMailCursorItem::Some(item.clone());
+        }
+
+        NextMailCursorItem::Maybe
     }
 
     /// Advances the cursor and returns the next item.
     ///
     /// This function should be called only if [`Self::peek_next()`] returned
-    /// [`NextMailCursorItem::Maybe`], otherwise you should call
+    /// [`NextMailCursorItem::Maybe`], otherwise you should just call
     /// [`Self::goto_next()`].
     #[instrument(skip_all, fields(id = ?self.id))]
     pub async fn fetch_next(&self) -> Result<Option<T>, MailContextError> {
@@ -115,30 +130,14 @@ where
 
         // ---
 
-        let mut siblings = self.siblings.write();
-        let items = self.parent.items().read();
+        match self.peek_next() {
+            NextMailCursorItem::Some(item) => {
+                self.goto_next();
 
-        match siblings.next {
-            NextSibling::None => Ok(None),
-            NextSibling::Some(next) => Ok(Self::find(&items, next)),
-
-            NextSibling::Maybe(next) => {
-                *siblings = Siblings::of(&items, next);
-
-                if let NextSibling::Some(next) = siblings.next {
-                    Ok(Self::find(&items, next))
-                } else {
-                    // `Siblings::of()` assumes that if the next sibling is
-                    // missing, we just have to fetch the next page to get it.
-                    //
-                    // In here we've just fetched the next page - if the sibling
-                    // is still missing, it means we must've reached end of the
-                    // folder / search, so we might as well note it down:
-                    siblings.next = NextSibling::None;
-
-                    Ok(None)
-                }
+                Ok(Some(item))
             }
+
+            _ => Ok(None),
         }
     }
 
@@ -149,18 +148,18 @@ where
     pub fn goto_prev(&self) {
         info!("Moving backwards");
 
-        let mut siblings = self.siblings.write();
-        let items = self.parent.items().read();
+        let mut state = self.state.write();
 
-        if let PrevSibling::Some(prev) = siblings.prev {
-            if Self::find(&items, prev).is_none() {
-                siblings.recover_prev(prev, |id| Self::find(&items, id));
-            } else {
-                *siblings = Siblings::of(&items, prev);
-            }
+        let Some(state) = state.as_mut() else {
+            return;
+        };
 
-            debug!(?siblings, "Siblings updated");
+        if state.prevs.is_empty() {
+            return;
         }
+
+        state.next = Some(state.curr);
+        state.curr = state.prevs.pop().unwrap();
     }
 
     /// Moves cursor one item forward.
@@ -170,18 +169,18 @@ where
     pub fn goto_next(&self) {
         info!("Moving forwards");
 
-        let mut siblings = self.siblings.write();
-        let items = self.parent.items().read();
+        let mut state = self.state.write();
 
-        if let NextSibling::Some(next) = siblings.next {
-            if Self::find(&items, next).is_none() {
-                siblings.recover_next(next, |id| Self::find(&items, id));
-            } else {
-                *siblings = Siblings::of(&items, next);
-            }
+        let Some(state) = state.as_mut() else {
+            return;
+        };
 
-            debug!(?siblings, "Siblings updated");
+        if state.next.is_none() {
+            return;
         }
+
+        state.prevs.push(state.curr);
+        state.curr = state.next.take().unwrap();
     }
 
     fn find(items: &[T], id: T::Id) -> Option<T> {
@@ -197,6 +196,15 @@ where
     fn drop(&mut self) {
         info!("Dropping MailCursor");
     }
+}
+
+struct State<T>
+where
+    T: MailScrollerItem,
+{
+    prevs: Vec<T::Id>,
+    curr: T::Id,
+    next: Option<T::Id>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -223,136 +231,6 @@ where
             _ => false,
         }
     }
-}
-
-#[derive(Debug)]
-struct Siblings<T>
-where
-    T: MailScrollerItem,
-{
-    prev: PrevSibling<T::Id>,
-    next: NextSibling<T::Id>,
-
-    /// Ids of all of the items we've seen - used for the recovery mechanism.
-    ///
-    /// See [`Self::recover_prev()`] and [`Self::recover_next()`].
-    #[debug(skip)]
-    witnesses: Vec<T::Id>,
-}
-
-impl<T> Siblings<T>
-where
-    T: MailScrollerItem,
-{
-    /// Returns siblings of `id`, i.e. the items right before and right after
-    /// `id`.
-    fn of(items: &[T], id: T::Id) -> Self {
-        let witnesses: Vec<_> = items.iter().map(|item| item.item_id()).collect();
-
-        let Some(idx) = witnesses.iter().position(|witness| *witness == id) else {
-            return Self {
-                prev: PrevSibling::None,
-                next: NextSibling::None,
-                witnesses,
-            };
-        };
-
-        let idx_to_id = |idx| witnesses.get(idx).copied();
-
-        let prev = match idx.checked_sub(1).and_then(idx_to_id) {
-            Some(prev) => PrevSibling::Some(prev),
-            None => PrevSibling::None,
-        };
-
-        let next = match idx.checked_add(1).and_then(idx_to_id) {
-            Some(next) => NextSibling::Some(next),
-
-            // Compared to `prev` above, when the `next` item is missing we
-            // can't distinguish between:
-            //
-            // - there's nothing more because we're reached the end of the list,
-            // - there's nothing more because we've reached the end of the page.
-            //
-            // Let's optimistically assume it's the latter, i.e. more elements
-            // will arrive when user calls `fetch_next()`.
-            None => NextSibling::Maybe(id),
-        };
-
-        Self {
-            prev,
-            next,
-            witnesses,
-        }
-    }
-
-    /// Adjusts `self.prev` so that it points at a new item if the previous one
-    /// has disappeared.
-    ///
-    /// Let's say we're given:
-    ///
-    /// ```
-    /// A B C D E F G  -- items
-    ///       < . >    -- cursor (prev, curr, next)
-    /// ```
-    ///
-    /// ... and let's say that `C` and `D` now disappear:
-    ///
-    /// ```
-    /// A B E F G
-    /// ```
-    ///
-    /// At this point `self.prev` points at a non-existing item `D` - the way we
-    /// recover is by TODO
-    fn recover_prev(&mut self, id: T::Id, f: impl Fn(T::Id) -> Option<T>) -> Option<T> {
-        debug!("Lost prev-sibling, recovering");
-
-        let idx = self.witnesses.iter().position(|id2| *id2 == id)?;
-
-        for &id in self.witnesses.iter().take(idx).rev() {
-            if let Some(item) = f(id) {
-                debug!(?id, "Prev-sibling recovered");
-
-                self.prev = PrevSibling::Some(id);
-
-                return Some(item);
-            }
-        }
-
-        self.prev = PrevSibling::None;
-
-        None
-    }
-
-    fn recover_next(&mut self, id: T::Id, f: impl Fn(T::Id) -> Option<T>) -> Option<T> {
-        debug!("Lost next-sibling, recovering");
-
-        for &id in self.witnesses.iter().skip_while(|id2| **id2 != id) {
-            if let Some(item) = f(id) {
-                debug!(?id, "Next-sibling recovered");
-
-                self.next = NextSibling::Some(id);
-
-                return Some(item);
-            }
-        }
-
-        self.next = NextSibling::None;
-
-        None
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum PrevSibling<Id> {
-    None,
-    Some(Id),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum NextSibling<Id> {
-    None,
-    Some(Id),
-    Maybe(Id),
 }
 
 #[cfg(test)]
@@ -517,28 +395,6 @@ mod tests {
         pub fn small_without(id: u64) -> Vec<FakeItem> {
             small().into_iter().filter(|item| item.id != id).collect()
         }
-
-        pub fn large() -> Vec<FakeItem> {
-            vec![
-                FakeItem::new(1, "the fate of ophelia"),
-                FakeItem::new(2, "elizabeth taylor"),
-                FakeItem::new(3, "opalite"),
-                FakeItem::new(4, "father figure"),
-                FakeItem::new(5, "eldest daughter"),
-                FakeItem::new(6, "ruin the friendship"),
-                FakeItem::new(7, "actually romantic"),
-                FakeItem::new(8, "wi$h li$t"),
-                FakeItem::new(9, "wood"),
-                FakeItem::new(10, "cancelled"),
-            ]
-        }
-
-        pub fn large_without(ids: &[u64]) -> Vec<FakeItem> {
-            large()
-                .into_iter()
-                .filter(|item| !ids.contains(&item.id))
-                .collect()
-        }
     }
 
     #[tokio::test]
@@ -578,7 +434,7 @@ mod tests {
         assert_eq!(NextMailCursorItem::Maybe, cursor.peek_next());
 
         // ---
-        // Create a cursor for a non-existing item (legal, but suspicious)
+        // Create a cursor for a non-existing item
 
         let cursor = scroller.clone().cursor(69420);
 
@@ -721,7 +577,6 @@ mod tests {
         // Fetch next page, since `peek_next()` reported `Maybe`
 
         assert_eq!(None, cursor.fetch_next().await.unwrap());
-        assert_eq!(None, cursor.peek_next());
     }
 
     /// Make sure the cursor behaves correctly when the item it's looking at
@@ -868,72 +723,5 @@ mod tests {
             cursor.peek_next(),
             "there's no id=4 anymore, so we 'fall forwards' to id=5"
         );
-    }
-
-    #[test]
-    fn recover_prev() {
-        let items = datasets::large();
-        let mut target = Siblings::of(&items, 5);
-
-        assert_eq!(PrevSibling::Some(4), target.prev);
-        assert_eq!(NextSibling::Some(6), target.next);
-
-        // ---
-        // `prev` points at id=4 - now we're going to remove that item from the
-        // list and the expectation is that `recover_prev()` replaces that id=4
-        // with the closest item "to the left", which in this case is id=1.
-        //
-        // (considering that id=2 and id=3 get removed from the list as well.)
-
-        let items = datasets::large_without(&[2, 3, 4]);
-
-        let new_prev =
-            target.recover_prev(4, |id| items.iter().find(|item| item.id == id).cloned());
-
-        assert_eq!(Some(FakeItem::new(1, "the fate of ophelia")), new_prev);
-        assert_eq!(PrevSibling::Some(1), target.prev);
-        assert_eq!(NextSibling::Some(6), target.next);
-
-        // ---
-
-        let items = datasets::large_without(&[1, 2, 3, 4]);
-
-        let new_prev =
-            target.recover_prev(4, |id| items.iter().find(|item| item.id == id).cloned());
-
-        assert_eq!(None, new_prev);
-        assert_eq!(PrevSibling::None, target.prev);
-        assert_eq!(NextSibling::Some(6), target.next);
-    }
-
-    #[test]
-    fn recover_next() {
-        let items = datasets::large();
-        let mut target = Siblings::of(&items, 5);
-
-        assert_eq!(PrevSibling::Some(4), target.prev);
-        assert_eq!(NextSibling::Some(6), target.next);
-
-        // ---
-
-        let items = datasets::large_without(&[6, 7, 8]);
-
-        let new_next =
-            target.recover_next(6, |id| items.iter().find(|item| item.id == id).cloned());
-
-        assert_eq!(Some(FakeItem::new(9, "wood")), new_next);
-        assert_eq!(PrevSibling::Some(4), target.prev);
-        assert_eq!(NextSibling::Some(9), target.next);
-
-        // ---
-
-        let items = datasets::large_without(&[6, 7, 8, 9, 10]);
-
-        let new_next =
-            target.recover_next(6, |id| items.iter().find(|item| item.id == id).cloned());
-
-        assert_eq!(None, new_next);
-        assert_eq!(PrevSibling::Some(4), target.prev);
-        assert_eq!(NextSibling::None, target.next);
     }
 }
