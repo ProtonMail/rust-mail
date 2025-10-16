@@ -678,16 +678,12 @@ impl From<OpenConversationOrigin> for RealOpenConversationOrigin {
 ///
 /// Watches the specified conversation for changes. When the conversation's
 /// messages change, the callback will be invoked.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn watch_conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
     origin: OpenConversationOrigin,
+    show_all: bool,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Option<WatchedConversation>, ActionError> {
     let ctx = mailbox.ctx()?;
@@ -699,7 +695,9 @@ pub async fn watch_conversation(
             .local_id(&stash.connection().await?)
             .await?
             .expect("Trash label ID should be present");
-        let view_options = if label_id == trash_label_id.into() {
+        let view_options = if show_all {
+            ConversationViewOptions::All
+        } else if label_id == trash_label_id.into() {
             ConversationViewOptions::Trashed
         } else {
             ConversationViewOptions::NonTrashed
