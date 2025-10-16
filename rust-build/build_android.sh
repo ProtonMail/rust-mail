@@ -34,15 +34,14 @@ cargo run \
 
 # Strip symbols
 OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
-STRIP_BIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/${OS_NAME}-x86_64/bin/llvm-strip
-$STRIP_BIN target/aarch64-linux-android/$PROFILE/$LIB_NAME -o $OUT_DIR/jniLibs/arm64-v8a/$LIB_NAME
-$STRIP_BIN target/armv7-linux-androideabi/$PROFILE/$LIB_NAME -o $OUT_DIR/jniLibs/armeabi-v7a/$LIB_NAME
-$STRIP_BIN target/x86_64-linux-android/$PROFILE/$LIB_NAME -o $OUT_DIR/jniLibs/x86_64/$LIB_NAME
+cp target/aarch64-linux-android/$PROFILE/$LIB_NAME $OUT_DIR/jniLibs/arm64-v8a/$LIB_NAME
+cp target/armv7-linux-androideabi/$PROFILE/$LIB_NAME $OUT_DIR/jniLibs/armeabi-v7a/$LIB_NAME
+cp target/x86_64-linux-android/$PROFILE/$LIB_NAME  $OUT_DIR/jniLibs/x86_64/$LIB_NAME
 
 
 PGP_SYS_LIB="libgopenpgp-sys.so"
 if [[ -f "target/aarch64-linux-android/$PROFILE/$PGP_SYS_LIB" ]]; then
-    $STRIP_BIN target/aarch64-linux-android/$PROFILE/$PGP_SYS_LIB -o $OUT_DIR/jniLibs/arm64-v8a/$PGP_SYS_LIB
-    $STRIP_BIN target/armv7-linux-androideabi/$PROFILE/$PGP_SYS_LIB -o $OUT_DIR/jniLibs/armeabi-v7a/$PGP_SYS_LIB
-    $STRIP_BIN target/x86_64-linux-android/$PROFILE/$PGP_SYS_LIB -o $OUT_DIR/jniLibs/x86_64/$PGP_SYS_LIB
+    cp target/aarch64-linux-android/$PROFILE/$PGP_SYS_LIB $OUT_DIR/jniLibs/arm64-v8a/$PGP_SYS_LIB
+    cp target/armv7-linux-androideabi/$PROFILE/$PGP_SYS_LIB $OUT_DIR/jniLibs/armeabi-v7a/$PGP_SYS_LIB
+    cp target/x86_64-linux-android/$PROFILE/$PGP_SYS_LIB $OUT_DIR/jniLibs/x86_64/$PGP_SYS_LIB
 fi
