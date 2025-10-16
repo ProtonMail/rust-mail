@@ -526,7 +526,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         }
     }
 
-    async fn clear_cursor(
+    async fn reset(
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {

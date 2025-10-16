@@ -2,8 +2,8 @@ mod composer;
 mod conversations;
 mod messages;
 mod model;
-mod paginator;
 mod popups;
+mod scroller;
 mod search;
 
 use crate::app::Command;
