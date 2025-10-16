@@ -325,32 +325,32 @@ impl MailboxModel {
     fn change_filter(&mut self, unread: ReadFilter) {
         self.unread = unread;
         if let State::Conversations(state) = &mut self.state {
-            let _ = state.paginator().clone_inner().change_filter(unread);
+            let _ = state.scroller().clone_inner().change_filter(unread);
         } else if let State::Messages(state) = &mut self.state {
             state
-                .label_paginator()
-                .map(|paginator| paginator.clone_inner().change_filter(unread));
+                .label_scroller()
+                .map(|scroller| scroller.clone_inner().change_filter(unread));
         }
     }
 
     fn scroller_fetch_new(&mut self) {
         debug!("scrolling fetch_new");
         if let State::Conversations(state) = &mut self.state {
-            let _ = state.paginator().clone_inner().fetch_new();
+            let _ = state.scroller().clone_inner().fetch_new();
         } else if let State::Messages(state) = &mut self.state {
             let _ = state
-                .label_paginator()
-                .map(|paginator| paginator.clone_inner().fetch_new());
+                .label_scroller()
+                .map(|scroller| scroller.clone_inner().fetch_new());
         }
     }
 
     fn clear_cursor(&mut self) {
         if let State::Conversations(state) = &mut self.state {
-            let _ = state.paginator().clone_inner().clear_cursor();
+            let _ = state.scroller().clone_inner().reset();
         } else if let State::Messages(state) = &mut self.state {
             state
-                .label_paginator()
-                .map(|paginator| paginator.clone_inner().clear_cursor());
+                .label_scroller()
+                .map(|scroller| scroller.clone_inner().reset());
         }
     }
 }

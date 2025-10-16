@@ -2,19 +2,18 @@ use crate::core::datatypes::Id;
 use crate::errors::MailScrollerError;
 use crate::mail::datatypes::{Conversation, Message};
 use crate::{WatchHandle, async_runtime, uniffi_async};
-use itertools::Itertools;
-use parking_lot::Mutex;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::{
-    ContextualConversation, IncludeSwitch as RealIncludeSwitch, ReadFilter as RealReadFilter,
+    ContextualConversation as RealContextualConversation, IncludeSwitch as RealIncludeSwitch,
+    ReadFilter as RealReadFilter,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::mail_cursor::{MailCursor as RealMailCursor, NextMailCursorItem};
 use proton_mail_common::mail_scroller::{
     MailScroller as RealMailScroller, MailScrollerHandle, ScrollerUpdate,
 };
 use proton_mail_common::models::Message as RealMessage;
 use std::sync::Arc;
-use tokio::sync::Notify;
 
 /// A callback interface for live queries.
 ///
@@ -107,8 +106,8 @@ pub enum ConversationScrollerUpdate {
     Error { error: MailScrollerError },
 }
 
-impl From<ScrollerUpdate<ContextualConversation>> for ConversationScrollerUpdate {
-    fn from(update: ScrollerUpdate<ContextualConversation>) -> Self {
+impl From<ScrollerUpdate<RealContextualConversation>> for ConversationScrollerUpdate {
+    fn from(update: ScrollerUpdate<RealContextualConversation>) -> Self {
         match update {
             ScrollerUpdate::None(_) => ConversationScrollerUpdate::None,
             ScrollerUpdate::Append { src: _, items } => ConversationScrollerUpdate::Append(
@@ -145,28 +144,24 @@ impl From<ScrollerUpdate<ContextualConversation>> for ConversationScrollerUpdate
 
 pub(crate) fn spawn_conversation_scroller_watcher(
     user_ctx: &MailUserContext,
-    handle: MailScrollerHandle<ContextualConversation>,
+    handle: MailScrollerHandle<RealContextualConversation>,
     callback: Box<dyn ConversationScrollerLiveQueryCallback>,
-) -> (Arc<WatchHandle>, Arc<MailboxList>) {
+) -> Arc<WatchHandle> {
     let MailScrollerHandle { updates, handle } = handle;
-    let mailbox_list = Arc::new(MailboxList::default());
-    let mailbox_list_clone = mailbox_list.clone();
-    let task_handle = user_ctx.spawn(async move {
+
+    let task = user_ctx.spawn(async move {
         let callback = Arc::new(callback);
 
         while let Ok(update) = updates.recv_async().await {
             let callback = callback.clone();
-            mailbox_list_clone.handle_update(&update);
-            let update = update.into();
-            let callback = move || callback.on_update(update);
-            _ = async_runtime().spawn_blocking(callback).await;
+
+            _ = async_runtime()
+                .spawn_blocking(move || callback.on_update(update.into()))
+                .await;
         }
     });
 
-    (
-        Arc::new(WatchHandle::new(handle, &task_handle)),
-        mailbox_list,
-    )
+    Arc::new(WatchHandle::new(handle, &task))
 }
 
 /// A callback interface for live queries.
@@ -253,26 +248,22 @@ pub(crate) fn spawn_message_scroller_watcher(
     user_ctx: &MailUserContext,
     handle: MailScrollerHandle<RealMessage>,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
-) -> (Arc<WatchHandle>, Arc<MailboxList>) {
+) -> Arc<WatchHandle> {
     let MailScrollerHandle { updates, handle } = handle;
-    let mailbox_list = Arc::new(MailboxList::default());
-    let mailbox_list_clone = mailbox_list.clone();
-    let task_handle = user_ctx.spawn(async move {
+
+    let task = user_ctx.spawn(async move {
         let callback = Arc::new(callback);
 
         while let Ok(update) = updates.recv_async().await {
             let callback = callback.clone();
-            mailbox_list_clone.handle_update(&update);
-            let update = update.into();
-            let callback = move || callback.on_update(update);
-            _ = async_runtime().spawn_blocking(callback).await;
+
+            _ = async_runtime()
+                .spawn_blocking(move || callback.on_update(update.into()))
+                .await;
         }
     });
 
-    (
-        Arc::new(WatchHandle::new(handle, &task_handle)),
-        mailbox_list,
-    )
+    Arc::new(WatchHandle::new(handle, &task))
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy, uniffi::Enum)]
@@ -313,22 +304,19 @@ impl From<IncludeSwitch> for RealIncludeSwitch {
 
 #[derive(uniffi::Object)]
 pub struct ConversationScroller {
-    scroller: Arc<RealMailScroller>,
+    scroller: Arc<RealMailScroller<RealContextualConversation>>,
     handle: Arc<WatchHandle>,
-    list: Arc<MailboxList>,
 }
 
 impl ConversationScroller {
     #[must_use]
     pub(crate) fn new(
-        scroller: RealMailScroller,
+        scroller: RealMailScroller<RealContextualConversation>,
         handle: Arc<WatchHandle>,
-        list: Arc<MailboxList>,
     ) -> Self {
         Self {
             scroller: Arc::new(scroller),
             handle,
-            list,
         }
     }
 }
@@ -361,7 +349,7 @@ impl ConversationScroller {
     /// Moves to the next page and retrieves its results.
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
-            .fetch_more()
+            .fetch_more(None)
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -417,12 +405,12 @@ impl ConversationScroller {
     }
 
     #[must_use]
-    pub fn cursor(&self, index: u64) -> Arc<MailboxCursor> {
-        Arc::new(MailboxCursor::new(
-            index,
-            self.scroller.clone(),
-            self.list.clone(),
-        ))
+    pub fn cursor(&self, looking_at: Id) -> Arc<MailConversationCursor> {
+        let cursor = self.scroller.clone().cursor(looking_at.into());
+
+        Arc::new(MailConversationCursor {
+            cursor: Arc::new(cursor),
+        })
     }
 
     #[must_use]
@@ -437,22 +425,16 @@ impl ConversationScroller {
 
 #[derive(uniffi::Object)]
 pub struct MessageScroller {
-    scroller: Arc<RealMailScroller>,
+    scroller: Arc<RealMailScroller<RealMessage>>,
     handle: Arc<WatchHandle>,
-    list: Arc<MailboxList>,
 }
 
 impl MessageScroller {
     #[must_use]
-    pub(crate) fn new(
-        scroller: RealMailScroller,
-        handle: Arc<WatchHandle>,
-        list: Arc<MailboxList>,
-    ) -> Self {
+    pub(crate) fn new(scroller: RealMailScroller<RealMessage>, handle: Arc<WatchHandle>) -> Self {
         Self {
             scroller: Arc::new(scroller),
             handle,
-            list,
         }
     }
 }
@@ -485,7 +467,7 @@ impl MessageScroller {
     /// Moves to the next page and retrieves its results.
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
-            .fetch_more()
+            .fetch_more(None)
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -542,12 +524,12 @@ impl MessageScroller {
     }
 
     #[must_use]
-    pub fn cursor(&self, index: u64) -> Arc<MailboxCursor> {
-        Arc::new(MailboxCursor::new(
-            index,
-            self.scroller.clone(),
-            self.list.clone(),
-        ))
+    pub fn cursor(&self, looking_at: Id) -> Arc<MailMessageCursor> {
+        let cursor = self.scroller.clone().cursor(looking_at.into());
+
+        Arc::new(MailMessageCursor {
+            cursor: Arc::new(cursor),
+        })
     }
 
     #[must_use]
@@ -562,22 +544,16 @@ impl MessageScroller {
 
 #[derive(uniffi::Object)]
 pub struct SearchScroller {
-    scroller: Arc<RealMailScroller>,
+    scroller: Arc<RealMailScroller<RealMessage>>,
     handle: Arc<WatchHandle>,
-    list: Arc<MailboxList>,
 }
 
 impl SearchScroller {
     #[must_use]
-    pub(crate) fn new(
-        scroller: RealMailScroller,
-        handle: Arc<WatchHandle>,
-        list: Arc<MailboxList>,
-    ) -> Self {
+    pub(crate) fn new(scroller: RealMailScroller<RealMessage>, handle: Arc<WatchHandle>) -> Self {
         Self {
             scroller: Arc::new(scroller),
             handle,
-            list,
         }
     }
 }
@@ -610,7 +586,7 @@ impl SearchScroller {
     /// Moves to the next page and retrieves its results.
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
-            .fetch_more()
+            .fetch_more(None)
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -651,12 +627,12 @@ impl SearchScroller {
     }
 
     #[must_use]
-    pub fn cursor(&self, index: u64) -> Arc<MailboxCursor> {
-        Arc::new(MailboxCursor::new(
-            index,
-            self.scroller.clone(),
-            self.list.clone(),
-        ))
+    pub fn cursor(&self, looking_at: Id) -> Arc<MailMessageCursor> {
+        let cursor = self.scroller.clone().cursor(looking_at.into());
+
+        Arc::new(MailMessageCursor {
+            cursor: Arc::new(cursor),
+        })
     }
 
     #[must_use]
@@ -669,256 +645,104 @@ impl SearchScroller {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct MailboxList {
-    items: Mutex<Vec<CursorEntry>>,
-    notify: Notify,
-}
-
-impl MailboxList {
-    fn get(&self, id: CursorEntryId, dir: CursorDirection) -> Option<CursorEntry> {
-        let items = self.items.lock();
-
-        if let Some(item) = items.iter().find(|item| item.id() == id.id) {
-            Some(item.clone())
-        } else {
-            items
-                .get(match dir {
-                    CursorDirection::Forward => id.idx,
-                    // TODO (ET-5057): This assumes that if the item is missing, then only one item was removed.
-                    // Create a better approach to this problem and test it thoroughly.
-                    CursorDirection::Backward => id.idx.checked_sub(1)?,
-                })
-                .cloned()
-        }
-    }
-
-    fn siblings_at(&self, idx: usize) -> (PrevSibling, NextSibling) {
-        Self::siblings_inner(&self.items.lock(), idx)
-    }
-
-    fn siblings_of(&self, id: CursorEntryId, dir: CursorDirection) -> (PrevSibling, NextSibling) {
-        let items = self.items.lock();
-
-        let idx = items
-            .iter()
-            .find_position(|item| item.id() == id.id)
-            .map_or_else(
-                || match dir {
-                    CursorDirection::Forward => id.idx,
-                    CursorDirection::Backward => id.idx.checked_sub(1).unwrap_or(usize::MAX),
-                },
-                |(idx, _)| idx,
-            );
-
-        Self::siblings_inner(&items, idx)
-    }
-
-    fn siblings_inner(items: &[CursorEntry], idx: usize) -> (PrevSibling, NextSibling) {
-        let idx_to_id = |idx| {
-            items.get(idx).map(|entry: &CursorEntry| CursorEntryId {
-                id: entry.id(),
-                idx,
-            })
-        };
-
-        let prev = match idx.checked_sub(1).and_then(idx_to_id) {
-            Some(prev) => PrevSibling::Some(prev),
-            None => PrevSibling::None,
-        };
-
-        let next = match idx.checked_add(1).and_then(idx_to_id) {
-            Some(next) => NextSibling::Some(next),
-            None => match idx_to_id(idx) {
-                Some(id) => NextSibling::Maybe(id),
-                None => NextSibling::None,
-            },
-        };
-
-        (prev, next)
-    }
-
-    async fn notify_when_changed(&self) {
-        self.notify.notified().await;
-    }
-
-    fn handle_update<T>(&self, update: &ScrollerUpdate<T>)
-    where
-        T: Clone + Into<CursorEntry>,
-    {
-        match update {
-            ScrollerUpdate::None(_) | ScrollerUpdate::Error { .. } => (),
-            ScrollerUpdate::Append { src: _, items } => {
-                self.items
-                    .lock()
-                    .extend(items.iter().map(|i| i.clone().into()));
-            }
-            ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
-                self.items
-                    .lock()
-                    .splice(idx.., items.iter().map(|i| i.clone().into()));
-            }
-            ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
-                self.items
-                    .lock()
-                    .splice(..idx, items.iter().map(|i| i.clone().into()));
-            }
-            ScrollerUpdate::ReplaceRange {
-                src: _,
-                from,
-                to,
-                items,
-            } => {
-                self.items
-                    .lock()
-                    .splice(from..to, items.iter().map(|i| i.clone().into()));
-            }
-        }
-
-        self.notify.notify_waiters();
-    }
-}
-
 #[derive(uniffi::Object)]
-pub struct MailboxCursor {
-    scroller: Arc<RealMailScroller>,
-    siblings: Mutex<(PrevSibling, NextSibling)>,
-    list: Arc<MailboxList>,
-}
-
-impl MailboxCursor {
-    #[must_use]
-    pub(crate) fn new(idx: u64, scroller: Arc<RealMailScroller>, list: Arc<MailboxList>) -> Self {
-        let siblings = list.siblings_at(usize::try_from(idx).unwrap());
-
-        Self {
-            scroller,
-            siblings: Mutex::new(siblings),
-            list,
-        }
-    }
+pub struct MailConversationCursor {
+    cursor: Arc<RealMailCursor<RealContextualConversation>>,
 }
 
 #[uniffi_export]
-impl MailboxCursor {
-    pub fn get_previous(&self) -> Result<Option<CursorEntry>, MailScrollerError> {
-        match self.siblings.lock().0 {
-            PrevSibling::None => Ok(None),
-            PrevSibling::Some(id) => Ok(self.list.get(id, CursorDirection::Backward)),
+impl MailConversationCursor {
+    pub fn peek_prev(&self) -> Option<Conversation> {
+        self.cursor.peek_prev().map(Into::into)
+    }
+
+    #[must_use]
+    pub fn peek_next(&self) -> NextMailCursorConversation {
+        match self.cursor.peek_next() {
+            NextMailCursorItem::None => NextMailCursorConversation::None,
+            NextMailCursorItem::Some(item) => NextMailCursorConversation::Some(item.into()),
+            NextMailCursorItem::Maybe => NextMailCursorConversation::Maybe,
         }
     }
 
-    pub fn get_next(&self) -> Result<NextCursorEntry, MailScrollerError> {
-        match self.siblings.lock().1 {
-            NextSibling::None => Ok(NextCursorEntry::None),
+    pub async fn fetch_next(&self) -> Result<Option<Conversation>, MailScrollerError> {
+        let cursor = self.cursor.clone();
 
-            NextSibling::Some(id) => Ok(self
-                .list
-                .get(id, CursorDirection::Forward)
-                .map_or(NextCursorEntry::None, NextCursorEntry::Some)),
-
-            NextSibling::Maybe(_) => Ok(NextCursorEntry::CallAsync),
-        }
+        uniffi_async(async move {
+            cursor
+                .fetch_next()
+                .await
+                .map(|item| item.map(Into::into))
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(Into::into)
     }
 
-    pub async fn fetch_next(&self) -> Result<Option<CursorEntry>, MailScrollerError> {
-        self.scroller
-            .fetch_more()
-            .map_err(RealProtonMailError::from)?;
-
-        self.list.notify_when_changed().await;
-
-        let mut siblings = self.siblings.lock();
-
-        let NextSibling::Maybe(id) = siblings.1 else {
-            return Ok(None);
-        };
-
-        *siblings = self.list.siblings_of(id, CursorDirection::Forward);
-
-        if let NextSibling::Some(id) = siblings.1 {
-            Ok(self.list.get(id, CursorDirection::Forward))
-        } else {
-            Ok(None)
-        }
+    pub fn goto_prev(&self) {
+        self.cursor.goto_prev();
     }
 
-    pub fn go_forward(&self) {
-        let mut siblings = self.siblings.lock();
-
-        if let NextSibling::Some(id) = siblings.1 {
-            *siblings = self.list.siblings_of(id, CursorDirection::Forward);
-        }
-    }
-
-    pub fn go_backward(&self) {
-        let mut siblings = self.siblings.lock();
-
-        if let PrevSibling::Some(id) = siblings.0 {
-            *siblings = self.list.siblings_of(id, CursorDirection::Backward);
-        }
+    pub fn goto_next(&self) {
+        self.cursor.goto_next();
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-enum CursorDirection {
-    Forward,
-    Backward,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum PrevSibling {
-    None,
-    Some(CursorEntryId),
-}
-
-#[derive(Clone, Copy, Debug)]
-enum NextSibling {
-    None,
-    Some(CursorEntryId),
-    Maybe(CursorEntryId),
-}
-
-#[derive(uniffi::Enum, Clone)]
-pub enum CursorEntry {
-    ConversationEntry(Conversation),
-    MessageEntry(Message),
-}
-
-impl CursorEntry {
-    fn id(&self) -> Id {
-        match self {
-            CursorEntry::ConversationEntry(conv) => conv.id,
-            CursorEntry::MessageEntry(msg) => msg.id,
-        }
-    }
-}
-
-impl From<ContextualConversation> for CursorEntry {
-    fn from(value: ContextualConversation) -> Self {
-        CursorEntry::ConversationEntry(value.into())
-    }
-}
-
-impl From<RealMessage> for CursorEntry {
-    fn from(value: RealMessage) -> Self {
-        CursorEntry::MessageEntry(value.into())
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct CursorEntryId {
-    id: Id,
-    idx: usize,
-}
-
-#[derive(uniffi::Enum)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
 #[allow(clippy::large_enum_variant)]
-pub enum NextCursorEntry {
+pub enum NextMailCursorConversation {
     None,
-    Some(CursorEntry),
+    Some(Conversation),
+    Maybe,
+}
 
-    /// We don't know if there is anything or not,
-    /// you should call fetch_next function which is asynchronous
-    CallAsync,
+#[derive(uniffi::Object)]
+pub struct MailMessageCursor {
+    cursor: Arc<RealMailCursor<RealMessage>>,
+}
+
+#[uniffi_export]
+impl MailMessageCursor {
+    pub fn peek_prev(&self) -> Option<Message> {
+        self.cursor.peek_prev().map(Into::into)
+    }
+
+    #[must_use]
+    pub fn peek_next(&self) -> NextMailCursorMessage {
+        match self.cursor.peek_next() {
+            NextMailCursorItem::None => NextMailCursorMessage::None,
+            NextMailCursorItem::Some(item) => NextMailCursorMessage::Some(item.into()),
+            NextMailCursorItem::Maybe => NextMailCursorMessage::Maybe,
+        }
+    }
+
+    pub async fn fetch_next(&self) -> Result<Option<Message>, MailScrollerError> {
+        let cursor = self.cursor.clone();
+
+        uniffi_async(async move {
+            cursor
+                .fetch_next()
+                .await
+                .map(|item| item.map(Into::into))
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    pub fn goto_prev(&self) {
+        self.cursor.goto_prev();
+    }
+
+    pub fn goto_next(&self) {
+        self.cursor.goto_next();
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
+#[allow(clippy::large_enum_variant)]
+pub enum NextMailCursorMessage {
+    None,
+    Some(Message),
+    Maybe,
 }

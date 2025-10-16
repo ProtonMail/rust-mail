@@ -4,17 +4,23 @@ mod remote_source;
 
 pub use self::data_scroller_source::*;
 pub use self::remote_source::*;
-use crate::datatypes::IncludeSwitch;
-use crate::datatypes::ReadFilter;
+use crate::datatypes::{
+    ContextualConversation, IncludeSwitch, LocalConversationId, LocalMessageId, ReadFilter,
+};
+use crate::models::Message;
 use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
+use stash::orm::Model;
 use std::{fmt::Debug, future::Future};
 use tokio::task::JoinHandle;
 
 pub type MailPaginatorJoinHandle = Option<JoinHandle<Result<(), MailContextError>>>;
 
-pub trait MailScrollerSource: Send + Sync + 'static {
-    type Item: Send + Sync + Clone + Debug + ScrollerEq;
+pub trait MailScrollerSource
+where
+    Self: Send + Sync + 'static,
+{
+    type Item: MailScrollerItem;
 
     /// Initialize the data source and retrieve up to `element_count` elements from the server.
     ///
@@ -86,10 +92,36 @@ pub trait MailScrollerSource: Send + Sync + 'static {
 
     fn change_include(&mut self, include: IncludeSwitch);
 
-    fn clear_cursor(
+    fn reset(
         &mut self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     fn watched_tables(&self) -> Vec<String>;
+}
+
+pub trait MailScrollerItem
+where
+    Self: Clone + Debug + ScrollerEq + Send + Sync + 'static,
+{
+    type Id: Clone + Copy + Debug + PartialEq + Send + Sync;
+
+    // A bit more awkward name to avoid clashing with `Model::id()`
+    fn item_id(&self) -> Self::Id;
+}
+
+impl MailScrollerItem for Message {
+    type Id = LocalMessageId;
+
+    fn item_id(&self) -> Self::Id {
+        self.id()
+    }
+}
+
+impl MailScrollerItem for ContextualConversation {
+    type Id = LocalConversationId;
+
+    fn item_id(&self) -> Self::Id {
+        self.local_id
+    }
 }

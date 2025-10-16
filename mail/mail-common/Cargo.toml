@@ -34,6 +34,7 @@ proton-log-service = { workspace = true }
 bitflags = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
+derivative = { workspace = true }
 non-empty-string = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }

@@ -3,7 +3,7 @@ use super::search::SearchStatusBar;
 use crate::CLI_ARGS;
 use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
-use crate::app_model::mailbox::paginator::Paginator;
+use crate::app_model::mailbox::scroller::MailScroller;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Items, Message, MessageMessage};
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::app_model::{ChoosePopup, YesNoPopup};
@@ -30,7 +30,7 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::{Draft, ReplyMode};
-use proton_mail_common::mail_scroller::{MailScroller, ScrollerUpdate};
+use proton_mail_common::mail_scroller::{MailScroller as RealMailScroller, ScrollerUpdate};
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
     Attachment, LabelWithCounters, Message as MailMessage, MessageBodyMetadata,
@@ -67,15 +67,15 @@ pub struct MessagesState {
 }
 
 enum Mode {
-    Label(Paginator, IncludeSwitch),
-    Search(Paginator, IncludeSwitch),
+    Label(MailScroller<MailMessage>, IncludeSwitch),
+    Search(MailScroller<MailMessage>, IncludeSwitch),
 
     #[allow(dead_code)] // Watcher handle is needed to keep state
     Conversation(TuiWatchHandle),
 }
 
 impl Mode {
-    fn paginator(&self) -> Option<&Paginator> {
+    fn paginator(&self) -> Option<&MailScroller<MailMessage>> {
         match self {
             Mode::Label(paginator, _) | Mode::Search(paginator, _) => Some(paginator),
             Mode::Conversation(_) => None,
@@ -144,7 +144,7 @@ impl MessagesState {
         unread: ReadFilter,
         recipient_display_mode: MessageRecipientDisplayMode,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let (scroller, handle) = MailScroller::messages(
+        let (scroller, handle) = RealMailScroller::messages(
             ctx.as_weak(),
             label_id,
             unread,
@@ -153,17 +153,17 @@ impl MessagesState {
         )
         .await?;
 
-        let (paginator, command) =
-            Paginator::new::<MailMessage>(scroller, handle, handle_scroller_update);
+        let (scroller, command) =
+            MailScroller::new::<MailMessage>(scroller, handle, handle_scroller_update);
 
-        paginator.next_page_command();
+        scroller.fetch_more();
 
         Ok((
             Self {
                 messages: vec![],
                 table_state: ScrollableTableState::new(Some(0)),
                 open_message: DecryptedMessageStatus::None,
-                mode: Mode::Label(paginator, IncludeSwitch::default()),
+                mode: Mode::Label(scroller, IncludeSwitch::default()),
                 recipient_display_mode,
                 fetching: false,
             },
@@ -187,9 +187,9 @@ impl MessagesState {
         })
     }
 
-    pub fn label_paginator(&self) -> Option<&Paginator> {
-        if let Mode::Label(paginator, _) = &self.mode {
-            Some(paginator)
+    pub fn label_scroller(&self) -> Option<&MailScroller<MailMessage>> {
+        if let Mode::Label(scroller, _) = &self.mode {
+            Some(scroller)
         } else {
             None
         }
@@ -199,7 +199,7 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         keywords: String,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let (scroller, handle) = MailScroller::search(
+        let (scroller, handle) = RealMailScroller::search(
             ctx.as_weak(),
             SearchOptions::from(&keywords),
             IncludeSwitch::default(),
@@ -207,20 +207,20 @@ impl MessagesState {
         )
         .await?;
 
-        let (paginator, command) =
-            Paginator::new::<MailMessage>(scroller, handle, handle_scroller_update);
+        let (scroller, command) =
+            MailScroller::new::<MailMessage>(scroller, handle, handle_scroller_update);
 
-        paginator.next_page_command();
+        scroller.fetch_more();
 
         let messages = vec![];
-        let total = paginator.total().await;
+        let total = scroller.total().await;
 
         Ok((
             Self {
                 messages,
                 table_state: ScrollableTableState::new(Some(0)),
                 open_message: DecryptedMessageStatus::None,
-                mode: Mode::Search(paginator, IncludeSwitch::default()),
+                mode: Mode::Search(scroller, IncludeSwitch::default()),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
                 fetching: false,
             },
@@ -496,22 +496,22 @@ impl MessagesState {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
 
-                if let Mode::Label(paginator, _) = &self.mode
+                if let Mode::Label(scroller, _) = &self.mode
                     && self.table_state.selected().unwrap_or_default()
                         >= self.messages.len().saturating_sub(1)
                     && !self.fetching
                 {
                     self.fetching = true;
-                    return paginator.next_page_command();
+                    scroller.fetch_more();
                 }
 
-                if let Mode::Search(paginator, _) = &self.mode
+                if let Mode::Search(scroller, _) = &self.mode
                     && self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
                     && !self.fetching
                 {
                     self.fetching = true;
-                    return paginator.next_page_command();
+                    scroller.fetch_more();
                 }
 
                 Command::None
@@ -583,16 +583,16 @@ impl MessagesState {
                     _ => unreachable!(),
                 };
 
-                let (paginator, curr_include) = match &mut self.mode {
-                    Mode::Label(paginator, include) | Mode::Search(paginator, include) => {
-                        (paginator, include)
+                let (scroller, curr_include) = match &mut self.mode {
+                    Mode::Label(scroller, include) | Mode::Search(scroller, include) => {
+                        (scroller, include)
                     }
                     Mode::Conversation(_) => {
                         return Command::None;
                     }
                 };
 
-                _ = paginator.change_include(include);
+                _ = scroller.change_include(include);
                 *curr_include = include;
 
                 Command::None
@@ -803,6 +803,7 @@ impl MessagesState {
             MessageMessage::Unstar(id) => {
                 return unstar_message(user_ctx.to_owned(), id);
             }
+
             MessageMessage::ReportPhishing(id) => {
                 let ctx = user_ctx.to_owned();
                 let popup = YesNoPopup::new(
@@ -816,31 +817,37 @@ impl MessagesState {
                 }));
                 return Command::message(Messages::raise_popup(popup));
             }
+
             MessageMessage::NextPage(messages) => {
                 self.fetching = false;
                 self.messages.extend(messages);
                 self.try_select_non_empty_list();
             }
+
             MessageMessage::HasMore => {
-                if let Mode::Label(paginator, _) = &self.mode {
-                    let paginator = paginator.clone_inner();
+                if let Mode::Label(scroller, _) = &self.mode {
+                    let scroller = scroller.clone_inner();
+
                     return Command::task(async move {
-                        let has_more = paginator.has_more().await.unwrap();
-                        let seen = paginator.seen().await.unwrap();
-                        let synced = paginator.synced().await.unwrap();
-                        let total = paginator.total().await.unwrap();
+                        let has_more = scroller.has_more().await.unwrap();
+                        let seen = scroller.seen().await.unwrap();
+                        let synced = scroller.synced().await.unwrap();
+                        let total = scroller.total().await.unwrap();
                         Command::message(Messages::DisplayInfo(
                             Some("Has more".to_owned()),
                             format!("Loaded: {seen}/{synced}/{total}, Has more: {has_more}"),
                         ))
                     });
                 }
-                if let Mode::Search(paginator, _) = &self.mode {
-                    let paginator = paginator.clone_inner();
+
+                if let Mode::Search(scroller, _) = &self.mode {
+                    let scroller = scroller.clone_inner();
+
                     return Command::task(async move {
-                        let has_more = paginator.has_more().await.unwrap();
-                        let total = paginator.total().await.unwrap();
-                        let seen = paginator.seen().await.unwrap();
+                        let has_more = scroller.has_more().await.unwrap();
+                        let total = scroller.total().await.unwrap();
+                        let seen = scroller.seen().await.unwrap();
+
                         Command::message(Messages::DisplayInfo(
                             Some("Has more".to_owned()),
                             format!("Loaded: {seen}/{total}, Has more: {has_more}"),
@@ -848,15 +855,18 @@ impl MessagesState {
                     });
                 }
             }
+
             MessageMessage::CancelScheduleSend(id) => {
                 return cancel_scheduled_send(user_ctx.to_owned(), id);
             }
+
             MessageMessage::UpdateRsvp(rsvp) => {
                 if let DecryptedMessageStatus::Success(msg) = &mut self.open_message {
                     msg.rsvp = Rsvp::Success(rsvp);
                 }
             }
         }
+
         Command::None
     }
 

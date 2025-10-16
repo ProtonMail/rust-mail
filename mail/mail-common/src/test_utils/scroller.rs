@@ -14,8 +14,10 @@ use stash::{
 use crate::{
     actions::ConversationOrMessage,
     conv_id, conversation,
-    datatypes::{IncludeSwitch, ReadFilter, SearchOptions},
-    label, lbl_id, message,
+    datatypes::{ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions},
+    label, lbl_id,
+    mail_scroller::MailScrollerItem,
+    message,
     models::{Conversation, ConversationCounters, Message, MessageCounters},
     msg_id,
     traits::ScrollerEq,
@@ -295,16 +297,22 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 /// This provides a unified interface for testing any type of MailScroller
 /// (conversations, messages, search) with automatic update handling and
 /// convenient test methods.
-pub struct TestScroller<T> {
-    scroller: MailScroller,
+pub struct TestScroller<T>
+where
+    T: MailScrollerItem,
+{
+    scroller: MailScroller<T>,
     handle: MailScrollerHandle<T>,
     collected_items: Vec<T>,
     updates: Vec<ScrollerUpdate<T>>,
 }
 
-impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroller<T> {
+impl<T> TestScroller<T>
+where
+    T: MailScrollerItem,
+{
     pub async fn new(
-        scroller: MailScroller,
+        scroller: MailScroller<T>,
         handle: MailScrollerHandle<T>,
     ) -> Result<Self, MailContextError> {
         let mut test_scroller = Self::new_instant(scroller, handle);
@@ -318,7 +326,7 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         Ok(test_scroller)
     }
 
-    pub fn new_instant(scroller: MailScroller, handle: MailScrollerHandle<T>) -> Self {
+    pub fn new_instant(scroller: MailScroller<T>, handle: MailScrollerHandle<T>) -> Self {
         Self {
             scroller,
             handle,
@@ -328,7 +336,7 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
     }
 
     pub fn fetch_more(&self) -> Result<(), MailContextError> {
-        self.scroller.fetch_more()
+        self.scroller.fetch_more(None)
     }
 
     pub fn fetch_new(&self) -> Result<(), MailContextError> {
@@ -543,7 +551,7 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
     }
 }
 
-impl TestScroller<crate::datatypes::ContextualConversation> {
+impl TestScroller<ContextualConversation> {
     pub async fn conversations(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
@@ -583,7 +591,7 @@ impl TestScroller<crate::datatypes::ContextualConversation> {
     }
 }
 
-impl TestScroller<crate::models::Message> {
+impl TestScroller<Message> {
     pub async fn messages(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,

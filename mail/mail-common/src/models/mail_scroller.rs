@@ -3,8 +3,8 @@ use crate::AppError;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::datatypes::{ContextualConversation, ReadFilter};
+use crate::mail_scroller::MailScrollerItem;
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
-use crate::traits::ScrollerEq;
 use anyhow::anyhow;
 use indoc::formatdoc;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
@@ -20,9 +20,12 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use typed_builder::TypedBuilder;
 
-pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
+pub trait ScrollData
+where
+    Self: Model + Into<ScrollCursor<Self>>,
+{
     type Model: ModelExtension;
-    type Item: Send + Sync + ScrollerEq + Clone + Debug;
+    type Item: MailScrollerItem;
 
     fn find_with_key(
         local_label_id: LocalLabelId,

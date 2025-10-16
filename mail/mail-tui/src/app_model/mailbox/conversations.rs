@@ -2,7 +2,7 @@ use super::LabelAs;
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::messages::MessagesState;
-use crate::app_model::mailbox::paginator::Paginator;
+use crate::app_model::mailbox::scroller::MailScroller;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Items, Message};
 use crate::messages::Messages;
 use crate::widgets::utils::ScrollableState;
@@ -14,7 +14,7 @@ use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteS
 use proton_mail_common::datatypes::{
     ContextualConversation, IncludeSwitch, LocalConversationId, ReadFilter,
 };
-use proton_mail_common::mail_scroller::{MailScroller, ScrollerUpdate};
+use proton_mail_common::mail_scroller::{MailScroller as RealMailScroller, ScrollerUpdate};
 use proton_mail_common::models::{Conversation, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::{MailContextResult, MailUserContext, Mailbox};
 use ratatui::Frame;
@@ -28,7 +28,7 @@ use throbber_widgets_tui::ThrobberState;
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
-    paginator: Paginator,
+    scroller: MailScroller<ContextualConversation>,
     include: IncludeSwitch,
     conversations: Vec<ContextualConversation>,
     table_state: ScrollableTableState,
@@ -58,8 +58,8 @@ impl ConversationsState {
         })
     }
 
-    pub fn paginator(&self) -> &Paginator {
-        &self.paginator
+    pub fn scroller(&self) -> &MailScroller<ContextualConversation> {
+        &self.scroller
     }
 
     async fn new_impl(
@@ -67,7 +67,7 @@ impl ConversationsState {
         label_id: LocalLabelId,
         unread: ReadFilter,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let (scroller, handle) = MailScroller::conversations(
+        let (scroller, handle) = RealMailScroller::conversations(
             ctx.as_weak(),
             label_id,
             unread,
@@ -76,7 +76,7 @@ impl ConversationsState {
         )
         .await?;
 
-        let (paginator, command) = Paginator::new(scroller, handle, |update| match update {
+        let (scroller, command) = MailScroller::new(scroller, handle, |update| match update {
             ScrollerUpdate::Append { src: _, items } => ConversationMessage::NextPage(items).into(),
             ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
                 ConversationMessage::ReplaceFrom(idx, items).into()
@@ -100,11 +100,11 @@ impl ConversationsState {
 
         let autodelete_banner = ContextualConversation::auto_delete_banner(label_id, &ctx).await?;
 
-        paginator.next_page_command();
+        scroller.fetch_more();
 
         Ok((
             Self {
-                paginator,
+                scroller,
                 include: IncludeSwitch::default(),
                 table_state: ScrollableTableState::new(Some(0)),
                 messages: MessagesStatus::None,
@@ -242,7 +242,7 @@ impl ConversationsState {
                     && !self.fetching
                 {
                     self.fetching = true;
-                    return self.paginator.next_page_command();
+                    self.scroller.fetch_more();
                 }
 
                 Command::None
@@ -291,7 +291,7 @@ impl ConversationsState {
                     _ => unreachable!(),
                 };
 
-                _ = self.paginator.change_include(self.include);
+                _ = self.scroller.change_include(self.include);
 
                 Command::None
             }
@@ -394,20 +394,25 @@ impl ConversationsState {
                     ConversationMessage::ReplaceRange(from, to, conversations) => {
                         self.on_replace_range(from, to, conversations)
                     }
+
                     ConversationMessage::HasMore => {
-                        let paginator = self.paginator.clone_inner();
+                        let scroller = self.scroller.clone_inner();
+
                         Command::task(async move {
-                            let has_more = paginator.has_more().await.unwrap();
-                            let seen = paginator.seen().await.unwrap();
-                            let synced = paginator.synced().await.unwrap();
-                            let total = paginator.total().await.unwrap();
+                            let has_more = scroller.has_more().await.unwrap();
+                            let seen = scroller.seen().await.unwrap();
+                            let synced = scroller.synced().await.unwrap();
+                            let total = scroller.total().await.unwrap();
+
                             Command::message(Messages::DisplayInfo(
                                 Some("Has more".to_owned()),
                                 format!("Loaded: {seen}/{synced}/{total}, Has more: {has_more}"),
                             ))
                         })
                     }
+
                     ConversationMessage::DeleteAll(id) => delete_all(user_ctx.to_owned(), id),
+
                     _ => Command::None,
                 }
             }
@@ -429,6 +434,7 @@ impl ConversationsState {
                     self.close_conversation();
                     return Command::None;
                 }
+
                 state.update(user_ctx, message, mbox)
             }
         }
@@ -449,7 +455,7 @@ impl ConversationsState {
                     format!("> Messages in {folder} will be automatically deleted after 30 days.")
                 }
             });
-        } else if self.paginator.supports_include_filter() {
+        } else if self.scroller.supports_include_filter() {
             banner = Some(if self.include.has_spam_and_trash() {
                 "> Seeing too many messages? [E]xclude Spam/Trash.".into()
             } else {
