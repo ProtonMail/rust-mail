@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-5068] Remigrate signatures on Android
+
+
+## [mail-uniffi-v0.149.21] - 2025-10-16
+
+### Fixes
+
 - Resync conversation if message count does not match
 
 
