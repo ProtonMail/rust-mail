@@ -555,9 +555,9 @@ impl Conversation {
                 let no_new_labels = new_labels.is_empty();
                 existing.labels.extend(new_labels);
 
-                if no_new_labels {
-                    *self = existing;
+                *self = existing;
 
+                if no_new_labels {
                     tracing::trace!(
                         remote_id = ?self.remote_id,
                         "Skipping saving conversation, we already have it in the local DB"
@@ -2118,14 +2118,11 @@ impl Conversation {
             return Err(AppError::ConversationNotFound(local_conversation_id));
         };
 
-        let total_message_count =
-            Conversation::message_count(local_conversation_id, tx.tether()).await?;
-        let has_new_messages = total_message_count != conversation.num_messages;
         if !conversation.has_messages {
             let Some(ref rid) = conversation.remote_id else {
                 return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
             };
-            info!("Syncing {rid:?}'s messages (has_new_messages={has_new_messages})");
+            info!("Syncing {rid:?}'s messages");
 
             if network_monitor_service.check_now().await.is_offline() {
                 debug!("No connection, skipping sync");
@@ -2189,16 +2186,6 @@ impl Conversation {
             })
             .await
             .map_err(AppError::Other)?;
-        } else if has_new_messages {
-            info!("Message total mismatch, syncing conversation from server");
-            Self::sync_conversation_messages_from_push_notification(
-                network_monitor_service,
-                local_conversation_id,
-                tx,
-                session,
-            )
-            .await?;
-            return Ok(());
         } else {
             info!("Conversation messages already synced")
         }
