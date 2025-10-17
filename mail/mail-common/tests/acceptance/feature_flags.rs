@@ -66,13 +66,11 @@ async fn test_feature_flags_warm_start_immediate_return() {
             .await
             .unwrap();
         let mut cached_x = FeatureFlag {
-            id: None,
             name: "CachedFeatureX".to_string(),
             enabled: true,
             modify_time: past,
         };
         let mut cached_y = FeatureFlag {
-            id: None,
             name: "CachedFeatureY".to_string(),
             enabled: true,
             modify_time: past,
@@ -137,7 +135,6 @@ async fn test_feature_flags_warm_start_background_refresh() {
             .await
             .unwrap();
         let mut existing_flag = FeatureFlag {
-            id: None,
             name: "ExistingFeature".to_string(),
             enabled: true,
             modify_time: past,
@@ -227,7 +224,6 @@ async fn test_feature_flags_network_failure_preserves_cache() {
             .await
             .unwrap();
         let mut cached_flag = FeatureFlag {
-            id: None,
             name: "CachedFlag".to_string(),
             enabled: true,
             modify_time: past,

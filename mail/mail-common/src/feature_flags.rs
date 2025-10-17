@@ -57,7 +57,6 @@ impl FeatureFlagsService {
             let flag = flags
                 .entry(toggle.name.clone())
                 .or_insert_with(|| FeatureFlag {
-                    id: None,
                     name: toggle.name,
                     enabled: false,
                     modify_time,

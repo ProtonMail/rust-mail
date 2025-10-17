@@ -2,19 +2,16 @@ use smart_default::SmartDefault;
 use stash::{
     macros::Model,
     orm::Model,
-    params,
     stash::{Bond, StashError, Tether},
 };
 
 use crate::datatypes::UnixTimestamp;
+use crate::models::ModelExtension;
 
 #[derive(Debug, Clone, PartialEq, Model, SmartDefault)]
 #[TableName("feature_flags")]
 pub struct FeatureFlag {
-    #[IdField(autoincrement)]
-    pub id: Option<u64>,
-
-    #[DbField]
+    #[IdField]
     pub name: String,
 
     #[DbField]
@@ -25,8 +22,11 @@ pub struct FeatureFlag {
 }
 
 impl FeatureFlag {
-    pub async fn by_name(name: &str, tether: &Tether) -> Result<Option<Self>, StashError> {
-        Self::find_first("WHERE name = ?", params![name.to_owned()], tether).await
+    pub async fn by_name(
+        name: impl Into<String>,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        Self::find_by_id(name.into(), tether).await
     }
 
     pub async fn save_all(new: Vec<Self>, tx: &Bond<'_>) -> Result<(), StashError> {
