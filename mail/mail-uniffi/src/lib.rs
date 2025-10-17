@@ -289,3 +289,8 @@ impl From<PaginatorSearchOptions> for RealSearchOptions {
         }
     }
 }
+
+#[uniffi::export]
+fn make_me_crash() {
+    panic!("I will crash");
+}

@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Resync conversation if message count does not match
+
+
+## [mail-uniffi-v0.142.20] - 2025-10-16
+
+### Features
+
+- Make Cursor Great Again (Again)
+
+
+## [mail-uniffi-v0.149.19] - 2025-10-15
+
+### Fixes
+
+- Swipe to adjacent conversations is now true by default
+- Temporary - prevent getPrevious from showing the same item if the item was removed
+- rsvp: Sanitize attendees
+
+
+## [mail-uniffi-v0.149.18] - 2025-10-14
+
+### Fixes
+
+- uniffi: Improve MailboxCursor's recovery
+
+
+## [mail-uniffi-v0.149.17] - 2025-10-14
+
+### Changed
+
+- Remove NotSynced error usage from scroller and extend error test with recovery scenario
+
+### Fixes
+
+- `fetch_new` spawns previous page rq in background so it doesn't block scroller updates while offline
+
+
+## [mail-uniffi-v0.149.16] - 2025-10-13
+
+### Fixes
+
 - stash: Use `ManuallyDrop` inside `Bond::_commit()`
 - Move account updates to a separate event subscriber
 - Force event poll

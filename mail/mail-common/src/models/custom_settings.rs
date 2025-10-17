@@ -150,7 +150,7 @@ impl CustomSettings {
     #[must_use]
     #[instrument(skip_all)]
     pub fn swipe_to_adjacent_conversation(&self) -> bool {
-        self.swipe_to_adjacent_conversation.unwrap_or(false)
+        self.swipe_to_adjacent_conversation.unwrap_or(true)
     }
 
     #[instrument(skip_all)]

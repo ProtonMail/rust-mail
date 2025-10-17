@@ -583,9 +583,9 @@ pub async fn scroll_messages_for_label(
         )
         .await?;
 
-        let (handle, list) = spawn_message_scroller_watcher(&context, handle, callback);
+        let handle = spawn_message_scroller_watcher(&context, handle, callback);
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller::new(scroller, handle, list)))
+        Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller::new(scroller, handle)))
     })
     .await
     .map_err(ActionError::from)
@@ -614,8 +614,8 @@ pub async fn scroller_search(
         let (scroller, handle) =
             MailScroller::search(context.as_weak(), options.into(), include.into(), 50).await?;
 
-        let (handle, list) = spawn_message_scroller_watcher(&context, handle, callback);
-        let scroller = SearchScroller::new(scroller, handle, list);
+        let handle = spawn_message_scroller_watcher(&context, handle, callback);
+        let scroller = SearchScroller::new(scroller, handle);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(scroller))
     })

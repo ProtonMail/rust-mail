@@ -19,6 +19,8 @@ pub mod background_execution;
 pub mod draft;
 pub mod feature_flags;
 #[allow(clippy::result_large_err)]
+pub mod mail_cursor;
+#[allow(clippy::result_large_err)]
 pub mod mail_scroller;
 pub mod rsvp;
 mod send_queries;

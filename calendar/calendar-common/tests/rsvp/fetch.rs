@@ -1,7 +1,7 @@
 use crate::{
     BAR_ATTENDEE_ID, BAR_ATTENDEE_TOKEN, CALENDAR_ID, EVENT_ID, EVENT_UID, FOO_ATTENDEE_ID,
-    FOO_ATTENDEE_TOKEN, INVITE, RsvpEventIdExt, SHARED_EVENT, expected_event,
-    expected_offline_event, world,
+    FOO_ATTENDEE_TOKEN, INVITE, RsvpEventIdExt, SHARED_EVENT, XAR_ATTENDEE_ID, XAR_ATTENDEE_TOKEN,
+    expected_event, expected_offline_event, world,
 };
 use indoc::indoc;
 use jiff::{Zoned, civil::Weekday};
@@ -533,6 +533,63 @@ async fn user_is_party_crasher() {
     assert!(!actual.can_be_answered());
     assert_eq!(None, actual.user_attendee());
     assert_eq!(RsvpRelation::PartyCrasher, actual.relation);
+}
+
+#[tokio::test]
+async fn user_has_same_name_and_mail() {
+    const ATTENDEES_EVENT: &str = indoc! {"
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        ATTENDEE;CN=foo@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@pm.me
+        ATTENDEE;CN=xar@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=8CDyJHVR:mailto:xar@pm.me
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
+    let world = world().await;
+
+    let event = world.event(|event| {
+        event
+            .basic()
+            .with_attendees_event(ATTENDEES_EVENT)
+            .with_attendee(
+                XAR_ATTENDEE_ID,
+                XAR_ATTENDEE_TOKEN,
+                CalendarAttendeeStatus::Maybe,
+            )
+    });
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_event(EVENT_UID, EVENT_ID, event.clone())
+        .await;
+
+    let actual = RsvpEventId::reminder(EVENT_UID, EVENT_ID)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "foo@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!("xar@pm.me", actual.attendees[0].email);
+    assert_eq!(None, actual.attendees[0].name);
 }
 
 /// Make sure we fall back to organizer's another email address if the one

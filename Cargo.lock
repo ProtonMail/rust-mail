@@ -5485,6 +5485,7 @@ dependencies = [
  "clap",
  "color-backtrace",
  "criterion 0.7.0",
+ "derivative",
  "derive_more 2.0.1",
  "fallible-iterator",
  "file-format",
