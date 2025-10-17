@@ -29,13 +29,11 @@ impl FeatureFlag {
         Self::find_first("WHERE name = ?", params![name.to_owned()], tether).await
     }
 
-    pub async fn replace(new: Vec<Self>, tx: &Bond<'_>) -> Result<(), StashError> {
-        tx.execute("DELETE FROM feature_flags", params![]).await?;
+    pub async fn save_all(new: Vec<Self>, tx: &Bond<'_>) -> Result<(), StashError> {
         for mut flag in new {
             Self::save(&mut flag, tx).await?;
         }
-        let len = Self::count("", params![], tx).await?;
-        tracing::info!("Replaced {} feature flags", len);
+
         Ok(())
     }
 }

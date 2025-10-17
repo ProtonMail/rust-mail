@@ -29,32 +29,50 @@ impl FeatureFlagsService {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
 
         let response = api.get_unleash_feature_flags().await?;
-
-        let new_map: BTreeMap<String, bool> = response
-            .toggles
-            .into_iter()
-            // Currently we are ignoring variants, and Unleash API says that feature is always enabled
-            .map(|toggle| (toggle.name, true))
-            .collect();
-
-        tracing::info!("Fetched {} featured flags from API", new_map.len());
-
-        let modify_time = UnixTimestamp::now();
-
-        let flags = new_map
-            .into_iter()
-            .map(|(name, enabled)| FeatureFlag {
-                id: None,
-                name,
-                enabled,
-                modify_time,
-            })
-            .collect();
+        tracing::info!("Fetched {} featured flags from API", response.toggles.len());
 
         let mut tether = ctx.account_stash().connection().await?;
 
+        let mut flags = FeatureFlag::all(&tether)
+            .await
+            .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|flag| {
+                (
+                    flag.name.clone(),
+                    FeatureFlag {
+                        // If the flag is not fetched from API but exists in the database,
+                        // we mark it as disabled.
+                        enabled: false,
+                        ..flag
+                    },
+                )
+            })
+            .collect::<BTreeMap<String, FeatureFlag>>();
+
+        let modify_time = UnixTimestamp::now();
+
+        for toggle in response.toggles {
+            let flag = flags
+                .entry(toggle.name.clone())
+                .or_insert_with(|| FeatureFlag {
+                    id: None,
+                    name: toggle.name,
+                    enabled: false,
+                    modify_time,
+                });
+
+            // Currently we are ignoring variants,
+            // and Unleash API says that feature is always enabled
+            flag.enabled = true;
+            flag.modify_time = modify_time;
+        }
+
+        let flags = flags.into_values().collect();
+
         tether
-            .tx(async |tx| FeatureFlag::replace(flags, tx).await)
+            .tx(async |tx| FeatureFlag::save_all(flags, tx).await)
             .await?;
 
         Ok(())
@@ -122,15 +140,11 @@ impl Service for FeatureFlagsService {
         let task_service = ctx.task_service();
         let self_clone = self.clone();
         task_service.spawn(async move {
-            if let Err(error) = self_clone.refresh().await {
-                error!(%error, "Failed to refresh feature flags");
-            };
-
             loop {
-                tokio::time::sleep(Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
                 if let Err(error) = self_clone.refresh().await {
                     error!(%error, "Failed to refresh feature flags");
                 };
+                tokio::time::sleep(Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
             }
         });
         Ok(())
