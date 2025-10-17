@@ -10,8 +10,8 @@ use crate::models::{Attachment, Conversation, ConversationLabel, MailSettings, M
 use crate::test_utils::db::new_test_connection_file;
 use crate::test_utils::db_states::{
     new_conversation_snooze_db_state, new_test_delete_db_state, new_test_label_db_state,
-    new_test_label_db_state_label_with_existing_labels, new_test_unread_db_state,
-    new_test_unread_db_state_unread_label_in_folder,
+    new_test_label_db_state_label_with_existing_labels, new_test_label_expiration_db_state,
+    new_test_unread_db_state, new_test_unread_db_state_unread_label_in_folder,
 };
 use crate::test_utils::search::{
     MY_ATTACHMENT_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels, test_conversation,
@@ -2452,7 +2452,7 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
     assert_eq!(db_conversation.size, conv_label.context_size);
     assert_eq!(
         db_conversation.expiration_time,
-        conv_label.context_expiration_time
+        conv_label.context_expiration_time.into()
     );
 
     // Check conversation counts have the new conversation.
@@ -3148,4 +3148,49 @@ async fn conversation_expiration() {
 
     local_conv.reload(&tether).await.unwrap();
     assert!(local_conv.deleted);
+}
+
+#[tokio::test]
+async fn test_conversation_label_set_lowest_expiration_time_in_label_context() {
+    // Label conversation with a label that was never assigned to the conversation.
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut conn = stash.connection().await.unwrap();
+    let mut state = new_test_label_expiration_db_state();
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
+
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        Conversation::apply_label_async(local_label_id1, vec![local_conv_id], tx)
+            .await
+            .expect("failed to label");
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    let conv = Conversation::load(local_conv_id, &conn)
+        .await
+        .expect("failed to get conversation")
+        .unwrap();
+
+    let conv_label = conv
+        .labels
+        .iter()
+        .find(|&l| l.local_label_id.unwrap() == local_label_id1)
+        .unwrap();
+    let lowest_expiration_time = state
+        .messages
+        .iter()
+        .fold(UnixTimestamp::new(u64::MAX), |v1, v2| {
+            v1.min(v2.expiration_time)
+        });
+    assert_eq!(
+        conv_label.context_expiration_time,
+        lowest_expiration_time.into()
+    );
 }

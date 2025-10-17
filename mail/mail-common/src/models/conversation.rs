@@ -49,6 +49,7 @@ use proton_mail_api::services::proton::response_data::{
     ConversationLabel as ApiConversationLabel, MessageMetadata as ApiMessageMetadata,
     OperationResult,
 };
+use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::{Connection, ToSql};
 use stash::exports::{SqliteError, Transaction};
@@ -62,7 +63,7 @@ use stash::utils::{ConnectionExt, IterMapToSql, MapToSql as _, placeholders, pla
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
-use std::ops::AddAssign;
+use std::ops::{AddAssign, Deref, DerefMut};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
@@ -1937,8 +1938,9 @@ impl Conversation {
         )? {
             label.context_time = label.context_time.max(stats.time);
             label.context_snooze_time = label.context_snooze_time.max(stats.snooze_time);
-            label.context_expiration_time =
-                label.context_expiration_time.max(stats.expiration_time);
+            label
+                .context_expiration_time
+                .merge_self(stats.expiration_time);
             label.context_size += stats.size;
             label.context_num_unread += stats.unread;
             label.context_num_attachments += stats.num_attachments as u64;
@@ -2433,7 +2435,7 @@ impl ConversationOrMessage for Conversation {
                 local_conversation_id: Some(conv_id),
                 local_label_id: Some(label_id),
                 remote_label_id: label.remote_id.clone(),
-                context_expiration_time: 0.into(),
+                context_expiration_time: UnixTimestamp::new(0).into(),
                 context_num_attachments: 0,
                 context_num_messages: 0,
                 context_num_unread: 0,
@@ -2445,9 +2447,14 @@ impl ConversationOrMessage for Conversation {
             let conversation_labels =
                 ConversationLabel::find_sync("WHERE local_conversation_id=?", (conv_id,), tx)?;
             for conversation_label in conversation_labels {
-                new_label.context_expiration_time = conversation_label
-                    .context_expiration_time
-                    .max(new_label.context_expiration_time);
+                new_label.context_expiration_time =
+                    if new_label.context_expiration_time.as_u64() == 0 {
+                        conversation_label.context_expiration_time
+                    } else {
+                        conversation_label
+                            .context_expiration_time
+                            .min(new_label.context_expiration_time)
+                    };
                 new_label.context_num_attachments = conversation_label
                     .context_num_attachments
                     .max(new_label.context_num_attachments);
@@ -2947,7 +2954,7 @@ pub struct ConversationLabel {
     pub remote_label_id: Option<LabelId>,
 
     #[DbField]
-    pub context_expiration_time: UnixTimestamp,
+    pub context_expiration_time: ContextExpirationTime,
 
     #[DbField]
     pub context_num_attachments: u64,
@@ -2969,6 +2976,75 @@ pub struct ConversationLabel {
 
     #[DbField]
     pub deleted: bool,
+}
+
+#[derive(Debug, Copy, Clone, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct ContextExpirationTime(UnixTimestamp);
+
+impl Default for ContextExpirationTime {
+    fn default() -> Self {
+        Self(UnixTimestamp::new(0))
+    }
+}
+
+impl ContextExpirationTime {
+    pub fn merge(&mut self, other: UnixTimestamp) {
+        self.0 = if self.0.as_u64() == 0 {
+            other
+        } else {
+            self.0.min(other)
+        }
+    }
+
+    pub fn merge_self(&mut self, other: Self) {
+        self.0 = if self.0.as_u64() == 0 {
+            other.0
+        } else {
+            self.0.min(other.0)
+        }
+    }
+}
+
+impl Deref for ContextExpirationTime {
+    type Target = UnixTimestamp;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ContextExpirationTime {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl stash::exports::ToSql for ContextExpirationTime {
+    fn to_sql(&self) -> Result<stash::exports::ToSqlOutput<'_>, stash::exports::SqliteError> {
+        self.0.to_sql()
+    }
+}
+
+impl stash::exports::FromSql for ContextExpirationTime {
+    fn column_result(value: stash::exports::ValueRef<'_>) -> stash::exports::FromSqlResult<Self> {
+        u64::column_result(value).map(|v| Self(UnixTimestamp::new(v)))
+    }
+}
+
+impl From<UnixTimestamp> for ContextExpirationTime {
+    fn from(timestamp: UnixTimestamp) -> Self {
+        Self(timestamp)
+    }
+}
+
+impl From<ContextExpirationTime> for UnixTimestamp {
+    fn from(timestamp: ContextExpirationTime) -> Self {
+        timestamp.0
+    }
+}
+
+impl From<u64> for ContextExpirationTime {
+    fn from(timestamp: u64) -> Self {
+        Self(UnixTimestamp::new(timestamp))
+    }
 }
 
 impl ModelHooks for ConversationLabel {
@@ -3007,7 +3083,7 @@ impl ConversationLabel {
             local_conversation_id: None,
             local_label_id: None,
             remote_label_id: None,
-            context_expiration_time: UnixTimestamp::new(0),
+            context_expiration_time: UnixTimestamp::new(0).into(),
             context_num_attachments: 0,
             context_num_messages: 0,
             context_num_unread: 0,
@@ -3227,7 +3303,7 @@ impl AddAssign<ConversationMessageLabelStats> for ConversationLabel {
     fn add_assign(&mut self, rhs: ConversationMessageLabelStats) {
         self.context_size += rhs.size;
         self.context_time = self.context_time.max(rhs.time);
-        self.context_expiration_time = self.context_expiration_time.max(rhs.expiration_time);
+        self.context_expiration_time.merge_self(rhs.expiration_time);
         self.context_num_messages += rhs.count;
         self.context_num_unread += rhs.unread;
         self.context_num_attachments += rhs.num_attachments as u64;
@@ -3279,7 +3355,7 @@ impl From<ApiConversationLabel> for ConversationLabel {
 pub struct ConversationMessageLabelStats {
     pub size: u64,
     pub time: UnixTimestamp,
-    pub expiration_time: UnixTimestamp,
+    pub expiration_time: ContextExpirationTime,
     // How many messages exist
     pub count: u64,
     pub unread: u64,
@@ -3329,7 +3405,9 @@ impl ConversationMessageLabelStats {
         for message in messages {
             stats.size += message.size;
             stats.time = stats.time.max(message.time);
-            stats.expiration_time = stats.expiration_time.max(message.expiration_time);
+            if message.expiration_time.as_u64() > 0 && message.expiration_time != message.time {
+                stats.expiration_time.merge(message.expiration_time);
+            }
             stats.count += 1;
             if message.unread {
                 stats.unread += 1

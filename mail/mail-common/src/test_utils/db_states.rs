@@ -167,6 +167,33 @@ pub fn new_test_label_db_state() -> TestDBState {
     }
 }
 
+pub fn new_test_label_expiration_db_state() -> TestDBState {
+    TestDBState {
+        addresses: vec![test_address()],
+        labels: vec![test_label1()],
+        conversations: vec![Conversation {
+            remote_id: Some(DELETE_DB_CONV1.clone()),
+            labels: vec![],
+            expiration_time: UnixTimestamp::new(0),
+            ..Conversation::test_default()
+        }],
+        messages: vec![
+            Message {
+                expiration_time: UnixTimestamp::new(1000),
+                ..CONV1_MSG1.to_owned()
+            },
+            Message {
+                expiration_time: UnixTimestamp::new(700),
+                ..CONV1_MSG2.to_owned()
+            },
+            Message {
+                expiration_time: UnixTimestamp::new(200),
+                ..CONV1_MSG3.to_owned()
+            },
+        ],
+    }
+}
+
 #[must_use]
 pub fn new_message_id(num: usize) -> MessageId {
     MessageId::from(format!("RemoteId{num}"))

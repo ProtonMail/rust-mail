@@ -136,7 +136,7 @@ impl ContextualConversation {
             display_order: conversation.display_order,
             display_snooze_reminder: conversation.display_snooze_reminder,
             exclusive_location: conversation.exclusive_location,
-            expiration_time: label.context_expiration_time,
+            expiration_time: label.context_expiration_time.into(),
             is_starred,
             num_attachments: label.context_num_attachments,
             num_messages: label.context_num_messages,
