@@ -99,7 +99,6 @@ pub struct MailSessionParams {
     pub log_debug: bool,
     pub api_env_config: Option<ApiConfig>,
     pub app_details: AppDetails,
-    pub event_poll_duration_seconds: Option<u64>,
 }
 
 // NOTE: Callbacks can not be stored in record types, which is why they are still in the
@@ -205,9 +204,7 @@ async fn create_mail_session_inner(
     debug!(origin = ?params.origin, "Creating Context");
 
     let poll = match params.origin {
-        Origin::App => EventPollMode::Automatic(Duration::from_secs(
-            params.event_poll_duration_seconds.unwrap_or(30),
-        )),
+        Origin::App => EventPollMode::Automatic(Duration::from_secs(30)),
         Origin::IosShareExt => EventPollMode::Manual,
     };
 
