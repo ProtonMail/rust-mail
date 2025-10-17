@@ -1221,8 +1221,24 @@ impl MailSession {
     /// * Returns Some(true) if feature is present
     ///
     /// NOTE: It never returns Some(false) as in this stage of the implementation.
-    pub async fn is_feature_enabled(&self, feature_id: String) -> Option<bool> {
-        self.mail_ctx.feature_flags().get(&feature_id).await
+    pub async fn is_feature_enabled(
+        &self,
+        feature_id: String,
+    ) -> Result<Option<bool>, ProtonError> {
+        let mail_ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let flag = mail_ctx
+                .feature_flags()
+                .get(&feature_id)
+                .await
+                .map_err(MailContextError::from)?;
+
+            Ok::<_, RealProtonMailError>(flag)
+        })
+        .await
+        .map_err(ProtonError::from)
+        .into()
     }
 
     pub fn update_os_network_status(&self, os_network_status: OsNetworkStatus) {

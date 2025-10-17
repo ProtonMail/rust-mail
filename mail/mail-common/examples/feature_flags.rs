@@ -114,7 +114,7 @@ async fn list_feature_flags(ctx: &Arc<MailContext>) -> Result<()> {
 
 async fn check_feature_flag(ctx: &Arc<MailContext>, flag_name: &str) -> Result<()> {
     let service = ctx.feature_flags();
-    match service.get(flag_name).await {
+    match service.get(flag_name).await? {
         Some(true) => info!("✅ {} is ENABLED", flag_name),
         Some(false) => info!("❌ {} is DISABLED", flag_name),
         None => warn!("❓ {} is UNKNOWN", flag_name),

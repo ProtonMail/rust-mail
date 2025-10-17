@@ -1,46 +1,25 @@
 use std::collections::BTreeMap;
-use std::sync::{Arc, Weak};
+use std::sync::Weak;
+use std::time::Duration;
 
 use anyhow::{Context as _, Result};
 use proton_core_api::session::Session;
-use proton_core_common::{Context, models::AppSettings, services::Service};
+use proton_core_common::datatypes::UnixTimestamp;
+use proton_core_common::models::{FeatureFlag, ModelExtension};
+use proton_core_common::{Context, services::Service};
 use proton_core_common::{CoreContextError, CoreContextResult};
 use proton_mail_api::services::proton::ProtonMail;
 
-use stash::orm::Model;
-use tokio::sync::RwLock;
-use tracing::{debug, error};
+use tracing::error;
 
 #[derive(Clone)]
 pub struct FeatureFlagsService {
-    flags: Arc<RwLock<BTreeMap<String, bool>>>,
     ctx: Weak<Context>,
 }
 
 impl FeatureFlagsService {
     pub fn new(ctx: Weak<Context>) -> Self {
-        Self {
-            flags: Arc::new(RwLock::new(BTreeMap::new())),
-            ctx,
-        }
-    }
-
-    async fn load_from_cache(&self, ctx: &Context) {
-        let app_settings = async {
-            let Ok(tether) = ctx.account_stash().connection().await else {
-                return AppSettings::default();
-            };
-            AppSettings::get_or_default(&tether).await
-        }
-        .await;
-
-        {
-            let mut guard = self.flags.write().await;
-            *guard = app_settings.app_features.features;
-        }
-
-        let count = self.flags.read().await.len();
-        debug!(%count, "Loaded feature flags from cache");
+        Self { ctx }
     }
 
     #[tracing::instrument(skip_all, name = "FeatureFlagsFetchAndUpdate")]
@@ -58,24 +37,34 @@ impl FeatureFlagsService {
 
         tracing::info!("Fetched {} featured flags from API", new_map.len());
 
+        let modify_time = UnixTimestamp::now();
+
+        let flags = new_map
+            .into_iter()
+            .map(|(name, enabled)| FeatureFlag {
+                id: None,
+                name,
+                enabled,
+                modify_time,
+            })
+            .collect();
+
         let mut tether = ctx.account_stash().connection().await?;
 
         tether
-            .tx(async |tx| {
-                let mut app_settings = AppSettings::get_or_default(tx).await;
-                app_settings.app_features.features = new_map.clone();
-                app_settings.save(tx).await
-            })
+            .tx(async |tx| FeatureFlag::replace(flags, tx).await)
             .await?;
-
-        let mut guard = self.flags.write().await;
-        *guard = new_map;
 
         Ok(())
     }
 
-    pub async fn get(&self, key: &str) -> Option<bool> {
-        self.flags.read().await.get(key).copied()
+    pub async fn get(&self, key: &str) -> CoreContextResult<Option<bool>> {
+        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
+        let feature_flag = {
+            let tether = ctx.account_stash().connection().await?;
+            FeatureFlag::by_name(key, &tether).await?
+        };
+        Ok(feature_flag.map(|flag| flag.enabled))
     }
 
     pub async fn refresh(&self) -> CoreContextResult<()> {
@@ -85,10 +74,22 @@ impl FeatureFlagsService {
     }
 
     pub async fn list_all(&self) -> Vec<(String, bool)> {
-        let flags = self.flags.read().await;
-        flags.iter().map(|(k, v)| (k.clone(), *v)).collect()
+        let Some(ctx) = self.ctx.upgrade() else {
+            return vec![];
+        };
+        let Ok(tether) = ctx.account_stash().connection().await else {
+            return vec![];
+        };
+        let flags = FeatureFlag::all(&tether).await.unwrap_or_default();
+
+        flags
+            .iter()
+            .map(|flag| (flag.name.clone(), flag.enabled))
+            .collect()
     }
 }
+
+const REFRESH_INTERVAL_SECS: u64 = 600; // 10 minutes
 
 #[async_trait::async_trait]
 impl Service for FeatureFlagsService {
@@ -100,14 +101,19 @@ impl Service for FeatureFlagsService {
             .upgrade()
             .expect("Context to be there during initialization");
 
-        self.load_from_cache(&ctx).await;
-
         let task_service = ctx.task_service();
         let self_clone = self.clone();
         task_service.spawn(async move {
             if let Err(error) = self_clone.refresh().await {
                 error!(%error, "Failed to refresh feature flags");
             };
+
+            loop {
+                tokio::time::sleep(Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
+                if let Err(error) = self_clone.refresh().await {
+                    error!(%error, "Failed to refresh feature flags");
+                };
+            }
         });
         Ok(())
     }

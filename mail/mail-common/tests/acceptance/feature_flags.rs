@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use proton_core_common::models::AppSettings;
+use proton_core_common::datatypes::UnixTimestamp;
+use proton_core_common::models::FeatureFlag;
 use proton_core_common::services::Service;
 use proton_mail_api::services::proton::response_data::{UnleashToggle, UnleashToggleVariant};
 use proton_mail_api::services::proton::responses::GetUnleashFeaturesResponse;
@@ -42,14 +43,14 @@ async fn test_feature_flags_cold_start_background_fetch() {
 
     let feature_flags = setup_feature_flags_service(&ctx).await;
 
-    assert_eq!(feature_flags.get("TestFeatureA").await, None);
-    assert_eq!(feature_flags.get("TestFeatureB").await, None);
+    assert_eq!(feature_flags.get("TestFeatureA").await.unwrap(), None);
+    assert_eq!(feature_flags.get("TestFeatureB").await.unwrap(), None);
 
     wait_for_flag(&feature_flags, "TestFeatureA", 4, 250).await;
 
-    assert_eq!(feature_flags.get("TestFeatureA").await, Some(true));
-    assert_eq!(feature_flags.get("TestFeatureB").await, Some(true));
-    assert_eq!(feature_flags.get("NonExistentFeature").await, None);
+    assert_eq!(feature_flags.get("TestFeatureA").await.unwrap(), Some(true));
+    assert_eq!(feature_flags.get("TestFeatureB").await.unwrap(), Some(true));
+    assert_eq!(feature_flags.get("NonExistentFeature").await.unwrap(), None);
 }
 
 #[tokio::test]
@@ -57,24 +58,31 @@ async fn test_feature_flags_warm_start_immediate_return() {
     let ctx = MailTestContext::new().await;
 
     {
+        let past = UnixTimestamp::new(12);
         let mut tether = ctx
             .core_context()
             .account_stash()
             .connection()
             .await
             .unwrap();
-        let mut app_settings = AppSettings::get_or_default(&tether).await;
-        app_settings
-            .app_features
-            .features
-            .insert("CachedFeatureX".to_string(), true);
-        app_settings
-            .app_features
-            .features
-            .insert("CachedFeatureY".to_string(), true);
+        let mut cached_x = FeatureFlag {
+            id: None,
+            name: "CachedFeatureX".to_string(),
+            enabled: true,
+            modify_time: past,
+        };
+        let mut cached_y = FeatureFlag {
+            id: None,
+            name: "CachedFeatureY".to_string(),
+            enabled: true,
+            modify_time: past,
+        };
 
         tether
-            .tx(async move |tx| app_settings.save(tx).await)
+            .tx(async move |tx| {
+                cached_x.save(tx).await?;
+                cached_y.save(tx).await
+            })
             .await
             .unwrap();
     }
@@ -105,9 +113,15 @@ async fn test_feature_flags_warm_start_immediate_return() {
 
     let feature_flags = setup_feature_flags_service(&ctx).await;
 
-    assert_eq!(feature_flags.get("CachedFeatureX").await, Some(true));
-    assert_eq!(feature_flags.get("CachedFeatureY").await, Some(true));
-    assert_eq!(feature_flags.get("UpdatedFeatureZ").await, None); // Not yet refreshed
+    assert_eq!(
+        feature_flags.get("CachedFeatureX").await.unwrap(),
+        Some(true)
+    );
+    assert_eq!(
+        feature_flags.get("CachedFeatureY").await.unwrap(),
+        Some(true)
+    );
+    assert_eq!(feature_flags.get("UpdatedFeatureZ").await.unwrap(), None); // Not yet refreshed
 }
 
 #[tokio::test]
@@ -115,20 +129,22 @@ async fn test_feature_flags_warm_start_background_refresh() {
     let ctx = MailTestContext::new().await;
 
     {
+        let past = UnixTimestamp::new(10);
         let mut tether = ctx
             .core_context()
             .account_stash()
             .connection()
             .await
             .unwrap();
-        let mut app_settings = AppSettings::get_or_default(&tether).await;
-        app_settings
-            .app_features
-            .features
-            .insert("ExistingFeature".to_string(), true);
+        let mut existing_flag = FeatureFlag {
+            id: None,
+            name: "ExistingFeature".to_string(),
+            enabled: true,
+            modify_time: past,
+        };
 
         tether
-            .tx(async move |tx| app_settings.save(tx).await)
+            .tx(async move |tx| existing_flag.save(tx).await)
             .await
             .unwrap();
     }
@@ -159,13 +175,25 @@ async fn test_feature_flags_warm_start_background_refresh() {
 
     let feature_flags = setup_feature_flags_service(&ctx).await;
 
-    assert_eq!(feature_flags.get("ExistingFeature").await, Some(true));
-    assert_eq!(feature_flags.get("NewFeatureFromRefresh").await, None);
+    assert_eq!(
+        feature_flags.get("ExistingFeature").await.unwrap(),
+        Some(true)
+    );
+    assert_eq!(
+        feature_flags.get("NewFeatureFromRefresh").await.unwrap(),
+        None
+    );
 
     wait_for_flag(&feature_flags, "NewFeatureFromRefresh", 4, 250).await;
 
-    assert_eq!(feature_flags.get("ExistingFeature").await, Some(true));
-    assert_eq!(feature_flags.get("NewFeatureFromRefresh").await, Some(true));
+    assert_eq!(
+        feature_flags.get("ExistingFeature").await.unwrap(),
+        Some(true)
+    );
+    assert_eq!(
+        feature_flags.get("NewFeatureFromRefresh").await.unwrap(),
+        Some(true)
+    );
 
     {
         let tether = ctx
@@ -174,19 +202,15 @@ async fn test_feature_flags_warm_start_background_refresh() {
             .connection()
             .await
             .unwrap();
-        let app_settings = AppSettings::get_or_default(&tether).await;
+        let existing_flag = FeatureFlag::by_name("ExistingFeature", &tether)
+            .await
+            .unwrap();
+        let new_flag = FeatureFlag::by_name("NewFeatureFromRefresh", &tether)
+            .await
+            .unwrap();
 
-        assert_eq!(
-            app_settings.app_features.features.get("ExistingFeature"),
-            Some(&true)
-        );
-        assert_eq!(
-            app_settings
-                .app_features
-                .features
-                .get("NewFeatureFromRefresh"),
-            Some(&true)
-        );
+        assert!(existing_flag.unwrap().enabled);
+        assert!(new_flag.unwrap().enabled,);
     }
 }
 
@@ -195,20 +219,22 @@ async fn test_feature_flags_network_failure_preserves_cache() {
     let ctx = MailTestContext::new().await;
 
     {
+        let past = UnixTimestamp::new(5);
         let mut tether = ctx
             .core_context()
             .account_stash()
             .connection()
             .await
             .unwrap();
-        let mut app_settings = AppSettings::get_or_default(&tether).await;
-        app_settings
-            .app_features
-            .features
-            .insert("CachedFlag".to_string(), true);
+        let mut cached_flag = FeatureFlag {
+            id: None,
+            name: "CachedFlag".to_string(),
+            enabled: true,
+            modify_time: past,
+        };
 
         tether
-            .tx(async move |tx| app_settings.save(tx).await)
+            .tx(async move |tx| cached_flag.save(tx).await)
             .await
             .unwrap();
     }
@@ -225,13 +251,13 @@ async fn test_feature_flags_network_failure_preserves_cache() {
 
     let feature_flags = setup_feature_flags_service(&ctx).await;
 
-    assert_eq!(feature_flags.get("CachedFlag").await, Some(true));
-    assert_eq!(feature_flags.get("NonExistentFlag").await, None);
+    assert_eq!(feature_flags.get("CachedFlag").await.unwrap(), Some(true));
+    assert_eq!(feature_flags.get("NonExistentFlag").await.unwrap(), None);
 
     // To simulate that some time passed, we still get cached result.
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
-    assert_eq!(feature_flags.get("CachedFlag").await, Some(true));
+    assert_eq!(feature_flags.get("CachedFlag").await.unwrap(), Some(true));
 }
 
 #[tokio::test]
@@ -270,8 +296,11 @@ async fn test_feature_flags_handle_network_failure() {
 
     wait_for_flag(&feature_flags, "TestFeatureRetry", 10, 1000).await;
 
-    assert_eq!(feature_flags.get("TestFeatureRetry").await, Some(true));
-    assert_eq!(feature_flags.get("NonExistentFeature").await, None);
+    assert_eq!(
+        feature_flags.get("TestFeatureRetry").await.unwrap(),
+        Some(true)
+    );
+    assert_eq!(feature_flags.get("NonExistentFeature").await.unwrap(), None);
 }
 
 async fn wait_for_flag(
@@ -282,7 +311,7 @@ async fn wait_for_flag(
 ) {
     let initial = attempts;
     while attempts > 0 {
-        if service.get(key).await.is_some() {
+        if service.get(key).await.unwrap().is_some() {
             return;
         }
         tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
