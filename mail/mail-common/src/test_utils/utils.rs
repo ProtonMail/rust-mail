@@ -188,9 +188,9 @@ pub async fn prepare_and_patch_db_state_and_skip(
             conv_label.context_size += message.size;
             conv_label.context_num_attachments += u64::from(message.num_attachments);
             conv_label.context_time = conv_label.context_time.max(message.time);
-            conv_label.context_expiration_time = conv_label
+            conv_label
                 .context_expiration_time
-                .max(message.expiration_time);
+                .merge(message.expiration_time);
             conv_label.context_snooze_time =
                 conv_label.context_snooze_time.max(message.snooze_time);
             if message.unread {
