@@ -10,6 +10,8 @@ use proton_core_common::{Context, services::Service};
 use proton_core_common::{CoreContextError, CoreContextResult};
 use proton_mail_api::services::proton::ProtonMail;
 
+use stash::stash::WatcherHandle;
+use stash::watcher::TableWatcher;
 use tracing::error;
 
 #[derive(Clone)]
@@ -86,6 +88,15 @@ impl FeatureFlagsService {
             .iter()
             .map(|flag| (flag.name.clone(), flag.enabled))
             .collect()
+    }
+
+    pub async fn watch(&self) -> CoreContextResult<WatcherHandle> {
+        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
+
+        let stash = ctx.account_stash();
+        TableWatcher::<FeatureFlag>::watch(stash)
+            .await
+            .map_err(CoreContextError::from)
     }
 }
 
