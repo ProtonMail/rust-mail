@@ -77,12 +77,19 @@ impl FeatureFlagsService {
 
     pub async fn list_all(&self) -> Vec<(String, bool)> {
         let Some(ctx) = self.ctx.upgrade() else {
+            tracing::warn!("Failed to upgrade context");
             return vec![];
         };
         let Ok(tether) = ctx.account_stash().connection().await else {
+            tracing::warn!("Failed to connect to account stash");
             return vec![];
         };
-        let flags = FeatureFlag::all(&tether).await.unwrap_or_default();
+        let flags = FeatureFlag::all(&tether)
+            .await
+            .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
+            .unwrap_or_default();
+
+        tracing::info!("Retrieved {} feature flags", flags.len());
 
         flags
             .iter()

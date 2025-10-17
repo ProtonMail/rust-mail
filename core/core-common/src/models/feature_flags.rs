@@ -34,6 +34,8 @@ impl FeatureFlag {
         for mut flag in new {
             Self::save(&mut flag, tx).await?;
         }
+        let len = Self::count("", params![], tx).await?;
+        tracing::info!("Replaced {} feature flags", len);
         Ok(())
     }
 }
