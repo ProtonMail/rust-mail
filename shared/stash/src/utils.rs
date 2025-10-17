@@ -21,6 +21,7 @@ use tracing::warn;
 ///
 #[macro_export]
 macro_rules! params {
+    () => { vec![] };
     ($($param:expr),+) => {
         vec![$(Box::new($param) as _),+]
     };

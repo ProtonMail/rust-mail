@@ -11,7 +11,6 @@ use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use std::sync::Arc;
 use std::time::Duration;
-use tempfile::TempDir;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -51,8 +50,13 @@ async fn main() -> Result<()> {
 }
 
 async fn create_mail_context() -> Result<Arc<MailContext>> {
-    let temp_dir = TempDir::new()?;
-    let temp_path = temp_dir.path();
+    // We dont use TempDir because we want to reuse the directory between
+    // executions.
+    let temp_dir = std::env::temp_dir();
+    let temp_path = temp_dir.join("proton-mail-feature-flags");
+    std::fs::create_dir_all(&temp_path)?;
+
+    tracing::info!("Creating mail context at {:?}", temp_path);
 
     let session_path = temp_path.join("session");
     let user_path = temp_path.join("user");
@@ -70,7 +74,7 @@ async fn create_mail_context() -> Result<Arc<MailContext>> {
 
     let config = proton_log_service::Config::builder()
         .name("log".into())
-        .directory(temp_path.into())
+        .directory(temp_path)
         .build();
 
     let ctx = MailContext::new(
@@ -114,7 +118,7 @@ async fn list_feature_flags(ctx: &Arc<MailContext>) -> Result<()> {
 
 async fn check_feature_flag(ctx: &Arc<MailContext>, flag_name: &str) -> Result<()> {
     let service = ctx.feature_flags();
-    match service.get(flag_name).await {
+    match service.get(flag_name).await? {
         Some(true) => info!("✅ {} is ENABLED", flag_name),
         Some(false) => info!("❌ {} is DISABLED", flag_name),
         None => warn!("❓ {} is UNKNOWN", flag_name),

@@ -1224,8 +1224,62 @@ impl MailSession {
     /// * Returns Some(true) if feature is present
     ///
     /// NOTE: It never returns Some(false) as in this stage of the implementation.
-    pub async fn is_feature_enabled(&self, feature_id: String) -> Option<bool> {
-        self.mail_ctx.feature_flags().get(&feature_id).await
+    pub async fn is_feature_enabled(
+        &self,
+        feature_id: String,
+    ) -> Result<Option<bool>, ProtonError> {
+        let mail_ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let flag = mail_ctx
+                .feature_flags()
+                .get(&feature_id)
+                .await
+                .map_err(MailContextError::from)?;
+
+            Ok::<_, RealProtonMailError>(flag)
+        })
+        .await
+        .map_err(ProtonError::from)
+        .into()
+    }
+
+    pub async fn watch_feature_flags(
+        &self,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> Result<WatchedFeatureFlags, ProtonError> {
+        let ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let rx = ctx
+                .feature_flags()
+                .watch()
+                .await
+                .map_err(MailContextError::from)?;
+
+            Ok::<_, RealProtonMailError>(WatchedFeatureFlags::new_sync(&*ctx, rx, callback))
+        })
+        .await
+        .map_err(ProtonError::from)
+    }
+
+    pub async fn watch_feature_flags_async(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> Result<WatchedFeatureFlags, ProtonError> {
+        let ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let rx = ctx
+                .feature_flags()
+                .watch()
+                .await
+                .map_err(MailContextError::from)?;
+
+            Ok::<_, RealProtonMailError>(WatchedFeatureFlags::new_async(&*ctx, rx, callback))
+        })
+        .await
+        .map_err(ProtonError::from)
     }
 
     pub fn update_os_network_status(&self, os_network_status: OsNetworkStatus) {
@@ -1335,5 +1389,32 @@ impl WatchedSessions {
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> WatchedSessions {
         WatchedSessions::new(sessions, watch_channel_async(ctx, handle, callback))
+    }
+}
+
+#[derive(uniffi::Record)]
+pub struct WatchedFeatureFlags {
+    pub handle: Arc<WatchHandle>,
+}
+
+impl WatchedFeatureFlags {
+    fn new(handle: Arc<WatchHandle>) -> Self {
+        Self { handle }
+    }
+
+    fn new_sync(
+        ctx: &MailContext,
+        handle: WatcherHandle,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> WatchedFeatureFlags {
+        WatchedFeatureFlags::new(watch_channel(ctx, handle, callback))
+    }
+
+    fn new_async(
+        ctx: &MailContext,
+        handle: WatcherHandle,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> WatchedFeatureFlags {
+        WatchedFeatureFlags::new(watch_channel_async(ctx, handle, callback))
     }
 }
