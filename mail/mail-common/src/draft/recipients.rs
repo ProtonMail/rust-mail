@@ -111,7 +111,7 @@ pub enum Recipient {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct RecipientEntry {
-    pub display_name: Option<PrivateString>,
+    pub name: Option<PrivateString>,
     pub email: PrivateEmail,
 }
 
@@ -230,7 +230,7 @@ impl RecipientList {
         for recipient in recipients {
             let entry = RecipientEntry {
                 email: recipient.address,
-                display_name: if recipient.name.is_empty() {
+                name: if recipient.name.is_empty() {
                     None
                 } else {
                     Some(recipient.name)
@@ -263,7 +263,7 @@ impl RecipientList {
         for recipient in reply_tos {
             let entry = RecipientEntry {
                 email: recipient.address,
-                display_name: if recipient.name.is_empty() {
+                name: if recipient.name.is_empty() {
                     None
                 } else {
                     Some(recipient.name)
@@ -299,7 +299,7 @@ impl RecipientList {
         };
 
         self.recipients.push(Recipient::Single(SingleRecipient {
-            display_name: entry.display_name,
+            display_name: entry.name,
             email: entry.email,
             state,
         }));
@@ -373,7 +373,7 @@ impl RecipientList {
             };
 
             recipients.push(SingleRecipient {
-                display_name: recipient.display_name,
+                display_name: recipient.name,
                 email: recipient.email,
                 state,
             });

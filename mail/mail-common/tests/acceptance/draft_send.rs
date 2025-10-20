@@ -165,7 +165,7 @@ async fn basic_send_check() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -355,7 +355,7 @@ async fn basic_schedule_send_check() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -488,7 +488,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -660,7 +660,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -715,7 +715,7 @@ async fn save_after_send_is_an_error() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -810,7 +810,7 @@ async fn already_sent_error_does_not_produce_error() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -928,7 +928,7 @@ async fn cancel_schedule_send_on_queued_send() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -1150,7 +1150,7 @@ async fn schedule_send_message_limit() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -1422,7 +1422,7 @@ async fn already_sent_from_even_update() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -1576,7 +1576,7 @@ async fn send_external_with_password() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -1711,7 +1711,7 @@ async fn send_with_expiration() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -1925,7 +1925,7 @@ async fn send_external_with_password_even_if_contact_has_pgp_mime_encryption() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await
@@ -2016,7 +2016,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await

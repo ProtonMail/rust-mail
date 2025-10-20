@@ -212,7 +212,7 @@ pub fn new_recipient_list_with_single_address(email: String) -> RecipientList {
     let mut list = RecipientList::new();
     list.add_single(RecipientEntry {
         email: email.into(),
-        display_name: None,
+        name: None,
     })
     .unwrap();
     list

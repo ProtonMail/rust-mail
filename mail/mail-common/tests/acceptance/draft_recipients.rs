@@ -66,7 +66,7 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     list.add_single(
         &user_ctx,
         RecipientEntry {
-            display_name: None,
+            name: None,
             email: email.into(),
         },
     )
@@ -144,7 +144,7 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
         &user_ctx,
         "my_group".to_owned().try_into().unwrap(),
         [RecipientEntry {
-            display_name: None,
+            name: None,
             email: email.into(),
         }],
         1,
