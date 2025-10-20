@@ -1,4 +1,5 @@
 mod acceptance {
+    mod action_block_sender;
     mod action_label;
     mod action_label_as;
     mod actions_read_unread;

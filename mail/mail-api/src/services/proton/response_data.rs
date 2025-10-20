@@ -1368,11 +1368,11 @@ pub struct NewAttachmentResponse {
 /// The response from an incoming default, can come either in the event loop or by calling
 /// `incomingdefaults`
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(feature = "mocks", derive(Serialize, Default))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct IncomingDefault {
     /// Which label messages from this address go to
-    pub location: Option<IncomingDefaultLocation>,
+    pub location: IncomingDefaultLocation,
     /// What to do with this response
     #[serde(rename = "Type")]
     pub action: Option<Action>,

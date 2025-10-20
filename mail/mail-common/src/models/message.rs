@@ -20,7 +20,6 @@ use crate::actions::{
 };
 use crate::datatypes::ConversationViewOptions;
 use crate::datatypes::MimeType;
-use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::*;
 use crate::{MailContextError, find_in_query};
 use futures::try_join;
@@ -662,8 +661,9 @@ impl Message {
             return Ok(None);
         };
         let incoming_default =
-            IncomingDefaultLocation::find(message_sender.address.into_clear_text_string(), tether)
-                .await?;
+            IncomingDefault::by_email(message_sender.address.into_clear_text_string(), tether)
+                .await?
+                .map(|i| i.location);
         let is_blocked = incoming_default == Some(IncomingDefaultLocation::Blocked);
 
         Ok(Some(is_blocked))

@@ -1,5 +1,6 @@
-use crate::models::default_location::IncomingDefaultLocation;
-use crate::models::{CustomSettings, LabelWithCounters, MailSettings, StoreLabelCounters};
+use crate::models::{
+    CustomSettings, IncomingDefault, LabelWithCounters, MailSettings, StoreLabelCounters,
+};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use futures::try_join;
 use proton_core_common::datatypes::{InitializationKey, InitializedComponentState};
@@ -267,7 +268,13 @@ impl InitializationMediator {
             Address::initialize(watcher, ctx.session(), ctx.user_stash()).await
         });
         let inc_defs = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            IncomingDefaultLocation::initialize(watcher, ctx.session(), ctx.user_stash()).await
+            IncomingDefault::initialize(
+                watcher,
+                ctx.session(),
+                ctx.user_stash(),
+                ctx.core_context().task_service(),
+            )
+            .await
         });
 
         let abort_handles = vec![

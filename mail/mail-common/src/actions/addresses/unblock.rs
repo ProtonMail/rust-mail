@@ -1,21 +1,34 @@
 use crate::actions::MailActionError;
 use crate::actions::addresses::incoming_defaults_dependency_key;
-use crate::models::default_location::IncomingDefaultLocation;
+use crate::datatypes::LocalIncomingDefaultId;
+use crate::models::IncomingDefault;
+use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
-use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail};
+use proton_core_api::services::proton::PrivateEmail;
 use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
+use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
-use stash::params;
+use stash::orm::Model;
 use stash::stash::Bond;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Unblock {
     pub email: PrivateEmail,
+    removed: Option<LocalIncomingDefaultId>,
+}
+
+impl Unblock {
+    pub fn new(email: PrivateEmail) -> Self {
+        Self {
+            email,
+            removed: None,
+        }
+    }
 }
 
 impl Action for Unblock {
@@ -50,11 +63,19 @@ impl Handler for UnblockHandler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Unblocking {}", action.email);
 
-        bond.execute(
-            "UPDATE incoming_default SET location = NULL WHERE email = ?",
-            params![action.email.clone()],
-        )
-        .await?;
+        let Some(mut incoming) =
+            IncomingDefault::by_email(action.email.clone().as_clear_text_str(), bond).await?
+        else {
+            tracing::error!(
+                "Unable to unblock address that is not registered as blocked: {}",
+                action.email
+            );
+            // Let's make this action idempotent.
+            return Ok(());
+        };
+        action.removed = incoming.local_id;
+        incoming.deleted = true;
+        incoming.save(bond).await?;
 
         Ok(())
     }
@@ -67,11 +88,16 @@ impl Handler for UnblockHandler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Restoring block for {}", action.email);
 
-        bond.execute(
-            "UPDATE incoming_default SET location = ? WHERE email = ?",
-            params![IncomingDefaultLocation::Blocked, action.email.clone()],
-        )
-        .await?;
+        let Some(incoming_id) = action.removed else {
+            return Err(anyhow!("Missing incoming default ID for: {}", action.email).into());
+        };
+
+        let Some(mut incoming) = IncomingDefault::find_by_id(incoming_id, bond).await? else {
+            return Err(anyhow!("Missing incoming default for: {}", action.email).into());
+        };
+
+        incoming.deleted = false;
+        incoming.save(bond).await?;
 
         Ok(())
     }
@@ -80,19 +106,30 @@ impl Handler for UnblockHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        guard: WriterGuard<'_>,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         tracing::info!("Unblocking {}", action.email);
 
-        let id = guard
-            .tether()
-            .query_value::<_, IncomingDefaultId>(
-                "SELECT id FROM incoming_default WHERE email = ?",
-                params![action.email.clone()],
-            )
-            .await?;
+        let Some(local_removed_id) = action.removed else {
+            tracing::error!("Missing incoming default ID for: {}", action.email);
+            return Ok(());
+        };
 
-        self.api.delete_incoming_default(&id).await?;
+        let Some(incoming) = IncomingDefault::find_by_id(local_removed_id, guard.tether()).await?
+        else {
+            return Err(anyhow!("Missing incoming default for: {}", action.email).into());
+        };
+
+        if let Some(id) = incoming.remote_id.as_ref() {
+            self.api.delete_incoming_default(id).await?;
+        }
+
+        guard
+            .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                incoming.delete(tx).await?;
+                Ok(())
+            })
+            .await?;
 
         Ok(())
     }

@@ -52,9 +52,8 @@ use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
 use proton_mail_common::mail_scroller::MailScroller;
-use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
-    self, Message as RealMessage, MessageBodyMetadata, MessageMimeType,
+    self, IncomingDefault, Message as RealMessage, MessageBodyMetadata, MessageMimeType,
 };
 use stash::orm::Model as _;
 use std::sync::Arc;
@@ -1127,7 +1126,7 @@ pub async fn block_address(
 ) -> Result<(), ActionError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {
-        IncomingDefaultLocation::action_block(ctx.action_queue(), email.into())
+        IncomingDefault::action_block(ctx.action_queue(), email.into())
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)
@@ -1149,7 +1148,7 @@ pub async fn block_address(
 pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(), ActionError> {
     let ctx = mailbox.ctx()?;
     uniffi_async(async move {
-        IncomingDefaultLocation::action_unblock(ctx.action_queue(), email.into())
+        IncomingDefault::action_unblock(ctx.action_queue(), email.into())
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)

@@ -31,9 +31,8 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::mail_scroller::{MailScroller as RealMailScroller, ScrollerUpdate};
-use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
-    Attachment, LabelWithCounters, Message as MailMessage, MessageBodyMetadata,
+    Attachment, IncomingDefault, LabelWithCounters, Message as MailMessage, MessageBodyMetadata,
 };
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::rsvp::RsvpEvent;
@@ -1732,18 +1731,14 @@ fn block_sender(
 ) -> Command<Messages> {
     Command::from_future(async move {
         match block_or_unblock {
-            BlockOrUnblock::Block => {
-                IncomingDefaultLocation::action_block(ctx.action_queue(), email)
-                    .await
-                    .context("Failed to block or unblock sender")
-                    .map(|_| ())
-            }
-            BlockOrUnblock::Unblock => {
-                IncomingDefaultLocation::action_unblock(ctx.action_queue(), email)
-                    .await
-                    .context("Failed to block or unblock sender")
-                    .map(|_| ())
-            }
+            BlockOrUnblock::Block => IncomingDefault::action_block(ctx.action_queue(), email)
+                .await
+                .context("Failed to block or unblock sender")
+                .map(|_| ()),
+            BlockOrUnblock::Unblock => IncomingDefault::action_unblock(ctx.action_queue(), email)
+                .await
+                .context("Failed to block or unblock sender")
+                .map(|_| ()),
         }
     })
 }

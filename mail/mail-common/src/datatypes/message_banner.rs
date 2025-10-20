@@ -2,7 +2,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::UnixTimestamp;
 use stash::stash::Tether;
 
-use crate::models::{MailSettings, Message, default_location::IncomingDefaultLocation};
+use crate::models::{IncomingDefault, IncomingDefaultLocation, MailSettings, Message};
 
 use super::{MessageFlags, SystemLabelId};
 
@@ -125,11 +125,10 @@ impl Message {
             });
         }
 
-        if let Ok(Some(IncomingDefaultLocation::Blocked)) = IncomingDefaultLocation::find(
-            self.sender.address.clone().into_clear_text_string(),
-            tether,
-        )
-        .await
+        if let Ok(Some(IncomingDefaultLocation::Blocked)) =
+            IncomingDefault::by_email(self.sender.address.clone().into_clear_text_string(), tether)
+                .await
+                .map(|i| i.map(|i| i.location))
         {
             banners.push(MessageBanner::BlockedSender);
         }
