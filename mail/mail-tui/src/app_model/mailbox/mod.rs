@@ -59,6 +59,8 @@ pub enum Message {
     SearchStatusBar(SearchStatusBar),
     ClearSearchStatusBar,
     OpenContacts,
+    ForcePollEventStart,
+    ForcePollEventFinish,
 }
 
 pub struct LabelAs<T: LocalIdMarker> {
@@ -190,12 +192,10 @@ pub fn refresh(ctx: Arc<MailUserContext>) -> Command<Messages> {
 
 pub fn poll_event_loop(ctx: Arc<MailUserContext>) -> Command<Messages> {
     Command::batch([
-        Command::message(Messages::DisplayInfo(
-            Some("Event Loop poll".to_owned()),
-            "Polling event loop".to_owned(),
-        )),
-        Command::from_future(async move {
-            ctx.force_event_loop_poll().await.context("Event loop poll")
+        Message::ForcePollEventStart.into(),
+        Command::task(async move {
+            let _ = ctx.force_event_loop_poll_and_wait().await;
+            Message::ForcePollEventFinish.into()
         }),
     ])
 }

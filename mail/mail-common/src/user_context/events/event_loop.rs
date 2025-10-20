@@ -158,7 +158,14 @@ impl MailUserContext {
     ///
     pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<EventPoll>> {
         // Delegate to UserContext
-        self.user_context().force_event_loop_poll().await
+        self.user_context().force_event_loop_poll().await?;
+        Ok(())
+    }
+
+    pub async fn force_event_loop_poll_and_wait(&self) -> Result<(), ActionError<EventPoll>> {
+        // Delegate to UserContext
+        self.user_context().force_event_loop_poll_and_wait().await?;
+        Ok(())
     }
 
     async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction>> {
