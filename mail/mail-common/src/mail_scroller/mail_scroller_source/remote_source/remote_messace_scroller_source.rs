@@ -2,6 +2,7 @@ use super::{MailPaginatorJoinHandle, RemoteSource};
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::models::MessageSyncDecision;
 #[cfg(feature = "prefetch")]
 use crate::prefetch::PrefetchJob;
 use crate::{
@@ -12,8 +13,10 @@ use crate::{
 use anyhow::anyhow;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
+    response_data::MessageMetadata as ApiMessageMetadata,
 };
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
@@ -190,7 +193,7 @@ impl RemoteMessageScrollerSource {
         Ok(task)
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread))]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_first_page(
         session: &Session,
@@ -225,16 +228,11 @@ impl RemoteMessageScrollerSource {
             return Ok(vec![]);
         }
 
-        let mut messages: Vec<Message> = vec![];
         let mut tether = stash.connection().await?;
-
-        for message in response.messages {
-            messages.push(Message::from_api_metadata(message, &tether).await?);
-        }
 
         Self::save_messages(
             local_label_id,
-            &mut messages,
+            response.messages,
             unread,
             true,
             order_dir,
@@ -242,12 +240,10 @@ impl RemoteMessageScrollerSource {
             session,
             &mut tether,
         )
-        .await?;
-
-        Ok(messages)
+        .await
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread))]
     #[allow(clippy::too_many_arguments)]
     async fn sync_next_page(
         session: &Session,
@@ -299,16 +295,11 @@ impl RemoteMessageScrollerSource {
             return Ok(vec![]);
         }
 
-        let mut messages: Vec<Message> = vec![];
         let mut tether = stash.connection().await?;
-
-        for message in response.messages {
-            messages.push(Message::from_api_metadata(message, &tether).await?);
-        }
 
         Self::save_messages(
             local_label_id,
-            &mut messages,
+            response.messages,
             unread,
             true,
             order_dir,
@@ -316,12 +307,10 @@ impl RemoteMessageScrollerSource {
             session,
             &mut tether,
         )
-        .await?;
-
-        Ok(messages)
+        .await
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread))]
     #[allow(clippy::too_many_arguments)]
     async fn sync_previous_page(
         session: &Session,
@@ -362,15 +351,11 @@ impl RemoteMessageScrollerSource {
             return Ok(vec![]);
         }
 
-        let mut messages: Vec<Message> = vec![];
         let mut tether = stash.connection().await?;
-        for message in response.messages {
-            messages.push(Message::from_api_metadata(message, &tether).await?);
-        }
 
         Self::save_messages(
             local_label_id,
-            &mut messages,
+            response.messages,
             unread,
             false,
             order_dir,
@@ -378,40 +363,54 @@ impl RemoteMessageScrollerSource {
             session,
             &mut tether,
         )
-        .await?;
-
-        Ok(messages)
+        .await
     }
 
     #[allow(clippy::too_many_arguments)]
     async fn save_messages(
         local_label_id: LocalLabelId,
-        messages: &mut [Message],
+        api_messages: Vec<ApiMessageMetadata>,
         unread: ReadFilter,
         update_scroller: bool,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
         api: &Session,
         tether: &mut Tether,
-    ) -> Result<(), MailContextError> {
-        if messages.is_empty() {
-            return Ok(());
+    ) -> Result<Vec<Message>, MailContextError> {
+        if api_messages.is_empty() {
+            return Ok(vec![]);
         }
 
         // Resolve missing dependencies.
         let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
-        for message in messages.iter() {
-            dependency_fetcher.check_message(message, tether).await?;
+        for message in api_messages.iter() {
+            dependency_fetcher
+                .check_api_message_metadata(message, tether)
+                .await?;
         }
         dependency_fetcher.fetch_and_store(api, tether).await?;
+
+        let mut messages = Vec::with_capacity(api_messages.len());
 
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
         tether
             .quiet_tx(async |tx| {
                 // Save all messages.
-                for message in messages.iter_mut() {
-                    message.create_or_get_local(tx).await?
+
+                for api_message in api_messages {
+                    let Some(message) = (if Message::sync_decision(&api_message, None, tx).await?
+                        == MessageSyncDecision::Skip
+                    {
+                        Message::find_by_remote_id(api_message.id.clone(), tx).await?
+                    } else {
+                        let mut message = Message::from_api_metadata(api_message, tx).await?;
+                        message.create_or_get_local(tx).await?;
+                        Some(message)
+                    }) else {
+                        continue;
+                    };
+                    messages.push(message)
                 }
 
                 let last = messages.last().unwrap();
@@ -438,7 +437,7 @@ impl RemoteMessageScrollerSource {
                     .await?;
                 }
 
-                Ok(())
+                Ok(messages)
             })
             .await
     }

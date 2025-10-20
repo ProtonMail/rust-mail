@@ -620,21 +620,21 @@ async fn test_create_message() {
     test_create_message_dependencies_core(&mut tether).await;
     let _conversation_id = test_create_message_dependencies(&mut tether).await;
     let message = test_message_with_metadata(vec![LabelId::inbox(), MY_LABEL_ID1.clone()], vec![]);
-    let id =
-        tether
-            .tx::<_, _, StashError>(async |tx| {
-                Ok(Message::create_or_update_messages_from_metadata(
-                    vec![message.metadata.clone()],
-                    tx,
-                )
-                .await
-                .expect("failed to create message")
-                .into_iter()
-                .next()
-                .unwrap())
-            })
+    let id = tether
+        .tx::<_, _, StashError>(async |tx| {
+            Ok(Message::create_or_update_messages_from_metadata(
+                vec![message.metadata.clone()],
+                None,
+                tx,
+            )
             .await
-            .unwrap();
+            .expect("failed to create message")
+            .into_iter()
+            .next()
+            .unwrap())
+        })
+        .await
+        .unwrap();
     let db_message = Message::load(id, &tether)
         .await
         .expect("failed to get message")
@@ -674,7 +674,7 @@ async fn test_create_message_without_synced_conversation() {
     let remote_id = api_metadata.id.clone();
     tether
         .tx::<_, _, StashError>(async |tx| {
-            Message::create_or_update_messages_from_metadata(vec![api_metadata], tx)
+            Message::create_or_update_messages_from_metadata(vec![api_metadata], None, tx)
                 .await
                 .expect("failed to create message");
             Ok(())
@@ -749,7 +749,7 @@ async fn test_create_message_with_attachments() {
     let id = conn
         .tx::<_, _, StashError>(async |tx| {
             Ok(
-                Message::create_or_update_messages_from_metadata(vec![message.metadata], tx)
+                Message::create_or_update_messages_from_metadata(vec![message.metadata], None, tx)
                     .await
                     .expect("failed to create message")
                     .into_iter()
@@ -869,7 +869,7 @@ async fn test_update_message() {
     let id = tether
         .tx::<_, _, StashError>(async |tx| {
             Ok(
-                Message::create_or_update_messages_from_metadata(vec![message.metadata], tx)
+                Message::create_or_update_messages_from_metadata(vec![message.metadata], None, tx)
                     .await
                     .expect("failed to create message")
                     .into_iter()

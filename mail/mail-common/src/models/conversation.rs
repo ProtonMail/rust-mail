@@ -2093,7 +2093,7 @@ impl Conversation {
             // This has been deemed more acceptable than the user complaining that their
             // conversations can't  be marked as read after marking all
             // conversations as read.
-            Message::create_or_update_messages_from_metadata_vec(message_metadata, tx)
+            Message::create_or_update_messages_from_metadata_vec(message_metadata, None, tx)
                 .await
                 .map_err(|e| {
                     error!("Failed to write message metadata: {e:?}");
@@ -2156,7 +2156,7 @@ impl Conversation {
             tx.run_tx::<_, _>(async move |tx| {
                 let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
 
-                Message::create_or_update_messages_from_metadata(message_metadata, tx)
+                Message::create_or_update_messages_from_metadata(message_metadata, None, tx)
                     .await
                     .map_err(|e| {
                         error!("Failed to write message metadata: {e:?}");
