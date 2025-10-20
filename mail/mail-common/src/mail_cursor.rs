@@ -243,6 +243,9 @@ mod tests {
         test_utils::test_context::MailTestContext,
     };
     use derive_more::Debug;
+    use itertools::Either;
+    use proton_core_api::services::proton::LabelId;
+    use proton_core_common::datatypes::LocalLabelId;
     use proton_mail_common_derive::ScrollerEq;
 
     #[derive(Clone, Copy, Debug, PartialEq, ScrollerEq)]
@@ -338,7 +341,7 @@ mod tests {
             todo!()
         }
 
-        fn change_include(&mut self, _: IncludeSwitch) {
+        fn change_include(&mut self, _: IncludeSwitch) -> Either<LocalLabelId, LabelId> {
             todo!()
         }
 

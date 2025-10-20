@@ -5,12 +5,14 @@ use crate::datatypes::{MessageRecipientDisplayMode, ViewMode};
 use crate::models::{ConversationCounters, MailLabel, MessageCounters};
 use crate::{AppError, MailContextResult};
 pub use attachments::DecryptedAttachment;
+use parking_lot::RwLock;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension as _, ModelIdExtension as _};
 use stash::orm::Model;
 use stash::stash::{Stash, Tether, WatcherHandle};
-use tracing::debug;
+use std::sync::Arc;
+use tracing::{debug, instrument};
 
 /// Represents an open label through which one can access the messages or conversations.
 ///
@@ -22,9 +24,7 @@ use tracing::debug;
 /// which is the correct mode.
 #[derive(Clone)]
 pub struct Mailbox {
-    label_id: LocalLabelId,
-    view_mode: ViewMode,
-    recipient_display_mode: MessageRecipientDisplayMode,
+    state: Arc<RwLock<MailboxState>>,
 }
 
 impl Mailbox {
@@ -34,12 +34,17 @@ impl Mailbox {
             .ok_or(AppError::LabelNotFound(label_id))?;
 
         let view_mode = label.view_mode(tether).await?;
+
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
 
-        Ok(Self {
+        let state = MailboxState {
             label_id,
             view_mode,
             recipient_display_mode: label.recipient_display_mode(),
+        };
+
+        Ok(Self {
+            state: Arc::new(RwLock::new(state)),
         })
     }
 
@@ -50,26 +55,56 @@ impl Mailbox {
 
         let label_id = label.id();
         let view_mode = label.view_mode(tether).await?;
+
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
 
-        Ok(Self {
+        let state = MailboxState {
             label_id,
             view_mode,
             recipient_display_mode: label.recipient_display_mode(),
+        };
+
+        Ok(Self {
+            state: Arc::new(RwLock::new(state)),
         })
     }
 
-    pub fn label_id(&self) -> LocalLabelId {
-        self.label_id
+    #[instrument(skip(self, tether))]
+    pub async fn change_label(
+        &self,
+        tether: &Tether,
+        label_id: LocalLabelId,
+    ) -> MailContextResult<()> {
+        debug!("Updating Mailbox");
+
+        let label = Label::load(label_id, tether)
+            .await?
+            .ok_or(AppError::LabelNotFound(label_id))?;
+
+        let view_mode = label.view_mode(tether).await?;
+        let recipient_display_mode = label.recipient_display_mode();
+
+        // ---
+
+        let mut state = self.state.write();
+
+        state.label_id = label_id;
+        state.view_mode = view_mode;
+        state.recipient_display_mode = recipient_display_mode;
+
+        Ok(())
     }
 
-    /// The mailbox's current view mode.
+    pub fn label_id(&self) -> LocalLabelId {
+        self.state.read().label_id
+    }
+
     pub fn view_mode(&self) -> ViewMode {
-        self.view_mode
+        self.state.read().view_mode
     }
 
     pub fn recipient_display_mode(&self) -> MessageRecipientDisplayMode {
-        self.recipient_display_mode
+        self.state.read().recipient_display_mode
     }
 
     /// Get the number of unread items in this mailbox.
@@ -78,13 +113,13 @@ impl Mailbox {
     ///
     /// Returns error if the query failed.
     pub async fn unread_count(&self, tether: &Tether) -> MailContextResult<u64> {
-        Ok(match self.view_mode {
+        Ok(match self.view_mode() {
             ViewMode::Conversations => {
-                let counters = ConversationCounters::find_by_id(self.label_id, tether).await?;
+                let counters = ConversationCounters::find_by_id(self.label_id(), tether).await?;
                 counters.map(|c| c.unread).unwrap_or_default()
             }
             ViewMode::Messages => {
-                let counters = MessageCounters::find_by_id(self.label_id, tether).await?;
+                let counters = MessageCounters::find_by_id(self.label_id(), tether).await?;
                 counters.map(|c| c.unread).unwrap_or_default()
             }
         })
@@ -98,13 +133,20 @@ impl Mailbox {
     /// Returns error if the query failed.
     ///
     pub async fn watch_unread_count(&self, stash: &Stash) -> MailContextResult<WatcherHandle> {
-        let watcher = match self.view_mode {
+        let watcher = match self.view_mode() {
             ViewMode::Conversations => ConversationCounters::watch(stash).await?,
             ViewMode::Messages => MessageCounters::watch(stash).await?,
         };
 
         Ok(watcher)
     }
+}
+
+#[derive(Clone)]
+struct MailboxState {
+    label_id: LocalLabelId,
+    view_mode: ViewMode,
+    recipient_display_mode: MessageRecipientDisplayMode,
 }
 
 #[cfg(any(feature = "test-utils", test))]
@@ -131,29 +173,30 @@ mod test_utils {
             api: &Session,
             count: usize,
         ) -> MailContextResult<()> {
-            let Some(label) = Label::load(self.label_id, tether).await? else {
-                return Err(AppError::LabelNotFound(self.label_id).into());
+            let Some(label) = Label::load(self.label_id(), tether).await? else {
+                return Err(AppError::LabelNotFound(self.label_id()).into());
             };
 
             let Some(remote_id) = label.remote_id.clone() else {
-                return Err(AppError::LabelDoesNotHaveRemoteId(self.label_id).into());
+                return Err(AppError::LabelDoesNotHaveRemoteId(self.label_id()).into());
             };
 
-            debug!("Syncing {}({})", self.label_id, &remote_id);
+            debug!("Syncing {}({})", self.label_id(), &remote_id);
 
-            let mut mailbox_label = MailboxLabels::find_by_id(self.label_id, tether)
+            let mut mailbox_label = MailboxLabels::find_by_id(self.label_id(), tether)
                 .await?
-                .unwrap_or_else(|| MailboxLabels::new(self.label_id));
+                .unwrap_or_else(|| MailboxLabels::new(self.label_id()));
             if mailbox_label.initialized {
-                debug!("Label {} already initialized, skipping", self.label_id);
+                debug!("Label {} already initialized, skipping", self.label_id());
                 return Ok(());
             }
             debug!(
                 "Label {} not initialized, fetching (mode={:?})",
-                self.label_id, self.view_mode
+                self.label_id(),
+                self.view_mode()
             );
 
-            match self.view_mode {
+            match self.view_mode() {
                 ViewMode::Conversations => {
                     Conversation::sync_first_conversation_page(remote_id, count, api, tether)
                         .inspect_err(|e| error!("Failed to sync conversations for label: {e:?}"))

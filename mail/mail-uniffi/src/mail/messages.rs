@@ -565,17 +565,18 @@ pub async fn messages_for_label(
 ///
 #[uniffi_export]
 pub async fn scroll_messages_for_label(
-    session: Arc<MailUserSession>,
+    mailbox: Arc<Mailbox>,
     label_id: Id,
     unread: ReadFilter,
     include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<MessageScroller>, ActionError> {
-    let context = session.ctx()?;
+    let context = mailbox.ctx()?;
 
     uniffi_async(async move {
         let (scroller, handle) = MailScroller::messages(
             context.as_weak(),
+            Some(mailbox.get()),
             label_id.into(),
             unread.into(),
             include.into(),
@@ -585,7 +586,9 @@ pub async fn scroll_messages_for_label(
 
         let handle = spawn_message_scroller_watcher(&context, handle, callback);
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller::new(scroller, handle)))
+        Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller::new(
+            mailbox, scroller, handle,
+        )))
     })
     .await
     .map_err(ActionError::from)
@@ -603,19 +606,25 @@ pub async fn scroll_messages_for_label(
 ///
 #[uniffi_export]
 pub async fn scroller_search(
-    session: Arc<MailUserSession>,
+    mailbox: Arc<Mailbox>,
     options: PaginatorSearchOptions,
     include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<SearchScroller>, ActionError> {
-    let context = session.ctx()?;
+    let context = mailbox.ctx()?;
 
     uniffi_async(async move {
-        let (scroller, handle) =
-            MailScroller::search(context.as_weak(), options.into(), include.into(), 50).await?;
+        let (scroller, handle) = MailScroller::search(
+            context.as_weak(),
+            Some(mailbox.get()),
+            options.into(),
+            include.into(),
+            50,
+        )
+        .await?;
 
         let handle = spawn_message_scroller_watcher(&context, handle, callback);
-        let scroller = SearchScroller::new(scroller, handle);
+        let scroller = SearchScroller::new(mailbox, scroller, handle);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(scroller))
     })

@@ -585,18 +585,21 @@ impl ContextualConversation {
     ) -> Option<HiddenMessagesBanner> {
         let trash_id = LabelId::trash();
         let almost_all_mail_id = LabelId::almost_all_mail();
+        let all_mail_id = LabelId::all_mail();
+        let spam_id = LabelId::spam();
 
         match label.remote_label_id.as_ref() {
             Some(id)
                 if id == &trash_id
-                    && conversation
-                        .labels
-                        .iter()
-                        .any(|l| l.remote_label_id.as_ref() == Some(&almost_all_mail_id)) =>
+                    && conversation.labels.iter().any(|l| {
+                        l.remote_label_id.as_ref() == Some(&almost_all_mail_id)
+                            || l.remote_label_id.as_ref() == Some(&spam_id)
+                    }) =>
             {
                 Some(HiddenMessagesBanner::ContainsNonTrashedMessages)
             }
             Some(id) if id == &trash_id => None,
+            Some(id) if id == &all_mail_id => None,
             _ => {
                 if conversation
                     .labels
@@ -685,6 +688,9 @@ mod tests {
     #[test_case(LabelId::trash(), vec![LabelId::almost_all_mail(), LabelId::trash()] => Some(HiddenMessagesBanner::ContainsNonTrashedMessages); "TEST4 - almost all mail and trash")]
     #[test_case(LabelId::inbox(), vec![LabelId::almost_all_mail(), LabelId::trash(), LabelId::from("custom")] => Some(HiddenMessagesBanner::ContainsTrashedMessages); "TEST5 - almost all mail, trash and custom")]
     #[test_case(LabelId::inbox(), vec![LabelId::inbox(), LabelId::almost_all_mail(), LabelId::from("custom")] => None; "TEST6 - inbox, almost all mail and custom")]
+    #[test_case(LabelId::all_mail(), vec![LabelId::trash()] => None; "TEST7 - all mail and trash")]
+    #[test_case(LabelId::almost_all_mail(), vec![LabelId::trash()] => Some(HiddenMessagesBanner::ContainsTrashedMessages); "TEST8 - almost all mail and trash")]
+    #[test_case(LabelId::trash(), vec![LabelId::trash(), LabelId::spam()] => Some(HiddenMessagesBanner::ContainsNonTrashedMessages); "TEST9 - trash, and trash and spam")]
     fn test_hidden_messages_banner(
         context_label: LabelId,
         conversation_labels: Vec<LabelId>,

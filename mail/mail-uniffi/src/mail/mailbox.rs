@@ -43,6 +43,10 @@ impl Mailbox {
     pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
         Ok(self.ctx()?.user_stash().to_owned())
     }
+
+    pub(crate) fn get(&self) -> &RealMailbox {
+        &self.mbox
+    }
 }
 
 /// Callback for operations that get scheduled in the background and return no result.

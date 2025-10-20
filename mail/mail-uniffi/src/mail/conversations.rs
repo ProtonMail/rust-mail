@@ -553,17 +553,18 @@ pub async fn move_conversations(
 ///
 #[uniffi_export]
 pub async fn scroll_conversations_for_label(
-    session: Arc<MailUserSession>,
+    mailbox: Arc<Mailbox>,
     label_id: Id,
     unread: ReadFilter,
     include: IncludeSwitch,
     callback: Box<dyn ConversationScrollerLiveQueryCallback>,
 ) -> Result<Arc<ConversationScroller>, ActionError> {
-    let context = session.ctx()?;
+    let context = mailbox.ctx()?;
 
     uniffi_async(async move {
         let (scroller, handle) = MailScroller::conversations(
             context.as_weak(),
+            Some(mailbox.get()),
             label_id.into(),
             unread.into(),
             include.into(),
@@ -572,7 +573,7 @@ pub async fn scroll_conversations_for_label(
         .await?;
 
         let handle = spawn_conversation_scroller_watcher(&context, handle, callback);
-        let scroller = ConversationScroller::new(scroller, handle);
+        let scroller = ConversationScroller::new(mailbox, scroller, handle);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(scroller))
     })
@@ -677,16 +678,12 @@ impl From<OpenConversationOrigin> for RealOpenConversationOrigin {
 ///
 /// Watches the specified conversation for changes. When the conversation's
 /// messages change, the callback will be invoked.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn watch_conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
     origin: OpenConversationOrigin,
+    show_all: bool,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Option<WatchedConversation>, ActionError> {
     let ctx = mailbox.ctx()?;
@@ -698,7 +695,9 @@ pub async fn watch_conversation(
             .local_id(&stash.connection().await?)
             .await?
             .expect("Trash label ID should be present");
-        let view_options = if label_id == trash_label_id.into() {
+        let view_options = if show_all {
+            ConversationViewOptions::All
+        } else if label_id == trash_label_id.into() {
             ConversationViewOptions::Trashed
         } else {
             ConversationViewOptions::NonTrashed

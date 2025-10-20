@@ -561,6 +561,7 @@ impl TestScroller<ContextualConversation> {
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) = MailScroller::conversations(
             user_ctx.as_weak(),
+            None,
             local_label_id,
             unread,
             include,
@@ -580,6 +581,7 @@ impl TestScroller<ContextualConversation> {
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) = MailScroller::conversations(
             user_ctx.as_weak(),
+            None,
             local_label_id,
             unread,
             include,
@@ -601,6 +603,7 @@ impl TestScroller<Message> {
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) = MailScroller::messages(
             user_ctx.as_weak(),
+            None,
             local_label_id,
             unread,
             include,
@@ -618,7 +621,7 @@ impl TestScroller<Message> {
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) =
-            MailScroller::search(user_ctx.as_weak(), options, include, page_size).await?;
+            MailScroller::search(user_ctx.as_weak(), None, options, include, page_size).await?;
 
         Self::new(scroller, handle).await
     }
