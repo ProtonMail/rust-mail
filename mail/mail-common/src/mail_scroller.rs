@@ -515,14 +515,18 @@ where
 
             ctx2.spawn(async move {
                 let Ok(label_id) = rx.await else {
+                    tracing::error!("Failed to receive label ID");
                     return;
                 };
 
                 let Ok(tether) = ctx.user_stash().connection().await else {
+                    tracing::error!("Failed to get connection");
                     return;
                 };
 
-                _ = mailbox.change_label(&tether, label_id).await;
+                if let Err(err) = mailbox.change_label(&tether, label_id).await {
+                    tracing::error!("Failed to change label: {}", err);
+                }
             });
         }
 
