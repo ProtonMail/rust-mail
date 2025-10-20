@@ -1,6 +1,6 @@
 use crate::datatypes::{
-    DateFormat, Density, Email, HighSecurity, LogAuth, Password, Phone, Referral, SettingsFlags,
-    TimeFormat, TwoFa, WeekStart,
+    DateFormat, Density, Email, HighSecurity, LogAuth, NotificationSettings, Password, Phone,
+    Referral, SettingsFlags, TimeFormat, TwoFa, WeekStart,
 };
 use proton_core_api::services::proton::UserId;
 use proton_core_api::services::proton::UserSettings as ApiUserSettings;
@@ -50,7 +50,7 @@ pub struct UserSettings {
     pub log_auth: LogAuth,
 
     #[DbField]
-    pub news: u32,
+    pub news: NotificationSettings,
 
     #[DbField]
     pub password: Password,
@@ -96,7 +96,7 @@ impl From<ApiUserSettings> for UserSettings {
             invoice_text: value.invoice_text,
             locale: value.locale,
             log_auth: value.log_auth.into(),
-            news: value.news,
+            news: NotificationSettings(value.news),
             password: value.password.into(),
             phone: value.phone.into(),
             referral: value.referral.map(Into::into),

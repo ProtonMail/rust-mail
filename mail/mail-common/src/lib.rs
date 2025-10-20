@@ -24,6 +24,7 @@ pub mod mail_cursor;
 pub mod mail_scroller;
 pub mod rsvp;
 mod send_queries;
+pub mod upsell_eligibility_watcher;
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils;

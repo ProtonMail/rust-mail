@@ -16,6 +16,7 @@ use crate::models::{AttachmentData, Conversation, MailSettings, Message};
 #[cfg(feature = "prefetch")]
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchService};
 use crate::rsvp::RsvpService;
+use crate::upsell_eligibility_watcher::UpsellEligibilityWatcher;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use attachment_cache::AttachmentCacheState;
@@ -31,9 +32,12 @@ use proton_core_api::service::{ApiServiceError, ApiServiceResult};
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
 use proton_core_api::session::Session;
-use proton_core_common::datatypes::{AccountDetails, AddressStatus, LocalAddressId};
+use proton_core_common::datatypes::{
+    AccountDetails, AddressStatus, BlackFridayWave, LocalAddressId, NotificationSettings,
+    UpsellEligibility, UpsellType,
+};
 use proton_core_common::event_loop::EventPollMode;
-use proton_core_common::models::{Address, User, UserSettings};
+use proton_core_common::models::{Address, PaidSubscription, Role, User, UserSettings};
 use proton_core_common::services::{EventPollConfigService, NetworkMonitorService};
 use proton_core_common::{
     ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
@@ -47,7 +51,7 @@ use proton_event_loop::Subscriber;
 use proton_task_service::Spawner;
 use reqwest::Method;
 use stash::orm::Model;
-use stash::stash::{RunTransaction, Stash, Tether};
+use stash::stash::{RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::future::Future;
@@ -71,6 +75,10 @@ const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
 
 #[cfg(feature = "prefetch")]
 const DEFAULT_PREFETCH_BOUND: usize = 10;
+
+// Feature flags
+const FF_BLACK_FRIDAY: &str = "MailBlackFriday2025";
+const FF_BLACK_FRIDAY_WAVE2: &str = "MailBlackFriday2025Wave2";
 
 /// App origin only
 pub struct DefaultQueueExecutor {
@@ -497,6 +505,52 @@ impl MailUserContext {
             .unlocked_address_keys(pgp, conn, self.session(), address_id)
             .await?;
         Ok(keys)
+    }
+
+    pub async fn watch_upsell_eligibility(&self) -> Result<WatcherHandle, StashError> {
+        UpsellEligibilityWatcher::watch(self.user_stash()).await
+    }
+
+    pub async fn upsell_eligibility(&self) -> MailContextResult<UpsellEligibility> {
+        let user = self.user().await?;
+
+        if user.subscribed != PaidSubscription::empty() || user.role == Role::Member {
+            Ok(UpsellEligibility::NotEligible)
+        } else {
+            let upsell_type = self.upsell_type(user).await?;
+            Ok(UpsellEligibility::Eligible(upsell_type))
+        }
+    }
+
+    async fn upsell_type(&self, user: User) -> MailContextResult<UpsellType> {
+        let feature_flags = self.mail_context().feature_flags();
+        let black_friday_promo_live = feature_flags
+            .get(FF_BLACK_FRIDAY)
+            .await?
+            .unwrap_or_default();
+        let black_friday_promo_wave2 = feature_flags
+            .get(FF_BLACK_FRIDAY_WAVE2)
+            .await?
+            .unwrap_or_default();
+
+        if black_friday_promo_live {
+            let in_app_notifications_enabled = self
+                .user_settings()
+                .await?
+                .news
+                .contains(NotificationSettings::IN_APP_NOTIFICATIONS);
+
+            if in_app_notifications_enabled && !user.is_deliquent() {
+                let wave = if black_friday_promo_wave2 {
+                    BlackFridayWave::Wave2
+                } else {
+                    BlackFridayWave::Wave1
+                };
+                return Ok(UpsellType::BlackFriday(wave));
+            }
+        }
+
+        Ok(UpsellType::Standard)
     }
 
     /// Loads the send preferences of the recipient with the given email address.

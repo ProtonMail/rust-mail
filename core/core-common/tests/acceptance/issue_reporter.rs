@@ -1,4 +1,6 @@
-use proton_core_common::datatypes::{DateFormat, Density, LogAuth, WeekStart};
+use proton_core_common::datatypes::{
+    DateFormat, Density, LogAuth, NotificationSettings, WeekStart,
+};
 use proton_core_common::models::UserSettings;
 use proton_core_common::test_utils::test_context::TestContext;
 use proton_issue_reporter_service::{
@@ -27,7 +29,7 @@ async fn issues_not_report_if_telemetry_disabled() {
         invoice_text: String::new(),
         locale: String::new(),
         log_auth: LogAuth::Disabled,
-        news: 0,
+        news: NotificationSettings::default(),
         password: Default::default(),
         phone: Default::default(),
         referral: None,

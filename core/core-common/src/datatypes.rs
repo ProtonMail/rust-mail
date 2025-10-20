@@ -1743,6 +1743,63 @@ impl ToSql for ImageProxy {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct NotificationSettings(pub u32);
+
+bitflags::bitflags! {
+    impl NotificationSettings: u32 {
+        const ANNOUNCEMENTS = 1 << 0;
+        const FEATURES = 1 << 1;
+        const NEWSLETTER = 1 << 2;
+        const BETA = 1 << 3;
+        const BUSINESS = 1 << 4;
+        const OFFERS = 1 << 5;
+        const NEW_MAIL_NOTIFICATION = 1 << 6;
+        const ONBOARDING = 1 << 7;
+        const USER_SURVEYS = 1 << 8;
+        const PRODUCT_INBOX = 1 << 9;
+        const PRODUCT_VPN = 1 << 10;
+        const PRODUCT_DRIVE = 1 << 11;
+        const PRODUCT_PASS = 1 << 12;
+        const PRODUCT_WALLET = 1 << 13;
+        const IN_APP_NOTIFICATIONS = 1 << 14;
+        const PRODUCT_LUMO = 1 << 15;
+    }
+}
+
+impl FromSql for NotificationSettings {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        Ok(NotificationSettings(u32::column_result(value)?))
+    }
+}
+
+impl ToSql for NotificationSettings {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        u32::to_sql(&self.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpsellEligibility {
+    Eligible(UpsellType),
+    NotEligible,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpsellType {
+    BlackFriday(BlackFridayWave),
+    Standard,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackFridayWave {
+    /// 50% off
+    Wave1,
+    /// 80% off
+    Wave2,
+}
+
 #[cfg(any(test, feature = "test-utils"))]
 mod tests {
     use super::{ApiConfig, AppDetails, EnvId};
