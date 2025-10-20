@@ -4,6 +4,7 @@ use crate::mail::MailUserSession;
 use proton_core_common::datatypes::SystemLabel as RealSystemLabel;
 use proton_core_common::models::Label as RealLabel;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use stash::orm::Model;
 use std::sync::Arc;
 use uniffi::Enum as UniffiEnum;
 use uniffi_runtime::uniffi_async;
@@ -114,6 +115,27 @@ pub async fn resolve_system_label_id(
             .map(Into::into);
 
         Ok(local_id)
+    })
+    .await
+    .map_err(Into::into)
+}
+
+#[uniffi_export]
+pub async fn resolve_system_label_by_id(
+    ctx: Arc<MailUserSession>,
+    id: Id,
+) -> Result<Option<SystemLabel>, ProtonError> {
+    let ctx = ctx.ctx()?;
+
+    uniffi_async::<_, RealProtonMailError, _>(async move {
+        let tether = ctx.user_stash().connection().await?;
+        let id = id.into();
+        let label = RealLabel::load(id, &tether).await?;
+        let Some(remote_id) = label.and_then(|l| l.remote_id) else {
+            return Ok(None);
+        };
+
+        Ok(RealSystemLabel::from_rid(&remote_id).map(Into::into))
     })
     .await
     .map_err(Into::into)
