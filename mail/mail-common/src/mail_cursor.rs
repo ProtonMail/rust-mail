@@ -2,10 +2,11 @@ use crate::{
     MailContextError,
     mail_scroller::{MailScroller, MailScrollerItem},
 };
+use anyhow::anyhow;
 use derive_more::Debug;
 use itertools::Itertools;
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::sync::oneshot;
 use tracing::{info, instrument, warn};
 use uuid::Uuid;
@@ -16,7 +17,8 @@ where
     T: MailScrollerItem,
 {
     id: Uuid,
-    parent: Arc<MailScroller<T>>,
+    items: Weak<RwLock<Vec<T>>>,
+    parent: Weak<MailScroller<T>>,
     state: RwLock<Option<State<T>>>,
 }
 
@@ -25,13 +27,16 @@ where
     T: MailScrollerItem,
 {
     #[instrument(skip_all)]
-    pub(crate) fn new(parent: Arc<MailScroller<T>>, looking_at: T::Id) -> Self {
+    pub(crate) fn new(
+        looking_at: T::Id,
+        items: Arc<RwLock<Vec<T>>>,
+        parent: Arc<MailScroller<T>>,
+    ) -> Self {
         let id = Uuid::new_v4();
 
         info!(?id, ?looking_at, "Creating MailCursor");
 
-        let mut prevs: Vec<_> = parent
-            .items()
+        let mut prevs: Vec<_> = items
             .read()
             .iter()
             .map(|item| item.item_id())
@@ -52,7 +57,8 @@ where
 
         Self {
             id,
-            parent,
+            parent: Arc::downgrade(&parent),
+            items: Arc::downgrade(&items),
             state: RwLock::new(state),
         }
     }
@@ -63,8 +69,8 @@ where
     pub fn peek_prev(&self) -> Option<T> {
         let mut state = self.state.write();
         let state = state.as_mut()?;
-
-        let items = self.parent.items().read();
+        let arc_items = self.items.upgrade()?;
+        let items = arc_items.read();
 
         while let Some(prev) = state.prevs.last() {
             if let Some(prev) = Self::find(&items, *prev) {
@@ -82,12 +88,13 @@ where
     /// This function does not advance the cursor, see [`Self::goto_next()`].
     pub fn peek_next(&self) -> NextMailCursorItem<T> {
         let mut state = self.state.write();
-
         let Some(state) = state.as_mut() else {
             return NextMailCursorItem::None;
         };
-
-        let items = self.parent.items().read();
+        let Some(items) = self.items.upgrade() else {
+            return NextMailCursorItem::None;
+        };
+        let items = items.read();
 
         if let Some(next) = state.next {
             if let Some(next) = Self::find(&items, next) {
@@ -123,7 +130,13 @@ where
     pub async fn fetch_next(&self) -> Result<Option<T>, MailContextError> {
         let (tx, rx) = oneshot::channel();
 
-        self.parent.fetch_more(Some(tx))?;
+        if let Some(parent) = self.parent.upgrade() {
+            parent.fetch_more(Some(tx))?;
+        } else {
+            return Err(MailContextError::Other(anyhow!(
+                "Parent scroller has been dropped"
+            )));
+        }
 
         // Wait until the scroller is updated
         _ = rx.await;
@@ -407,7 +420,7 @@ mod tests {
         // ---
         // Create a cursor for the first item on the list
 
-        let cursor = scroller.clone().cursor(1);
+        let cursor = scroller.clone().cursor(1).await.unwrap();
 
         assert_eq!(None, cursor.peek_prev());
 
@@ -419,7 +432,7 @@ mod tests {
         // ---
         // Create a cursor for the middle item on the list
 
-        let cursor = scroller.clone().cursor(3);
+        let cursor = scroller.clone().cursor(3).await.unwrap();
 
         assert_eq!(
             Some(FakeItem::new(2, "elizabeth taylor")),
@@ -431,7 +444,7 @@ mod tests {
         // ---
         // Create a cursor for the last item on the list
 
-        let cursor = scroller.clone().cursor(5);
+        let cursor = scroller.clone().cursor(5).await.unwrap();
 
         assert_eq!(Some(FakeItem::new(4, "father figure")), cursor.peek_prev());
         assert_eq!(NextMailCursorItem::Maybe, cursor.peek_next());
@@ -439,7 +452,7 @@ mod tests {
         // ---
         // Create a cursor for a non-existing item
 
-        let cursor = scroller.clone().cursor(69420);
+        let cursor = scroller.clone().cursor(69420).await.unwrap();
 
         assert_eq!(None, cursor.peek_prev());
         assert_eq!(None, cursor.peek_next());
@@ -448,7 +461,7 @@ mod tests {
     #[tokio::test]
     async fn basic_backward_movement() {
         let (_ctx, _source, scroller, _handle) = target(datasets::small()).await;
-        let cursor = scroller.clone().cursor(5);
+        let cursor = scroller.clone().cursor(5).await.unwrap();
 
         // ---
         // Sanity check of the initial state
@@ -520,7 +533,7 @@ mod tests {
     #[tokio::test]
     async fn basic_forward_movement() {
         let (_ctx, _source, scroller, _handle) = target(datasets::small()).await;
-        let cursor = scroller.clone().cursor(1);
+        let cursor = scroller.clone().cursor(1).await.unwrap();
 
         // ---
         // Sanity check of the initial state
@@ -591,7 +604,7 @@ mod tests {
     #[tokio::test]
     async fn nuke_current_item() {
         let (_ctx, source, scroller, handle) = target(datasets::small()).await;
-        let cursor = scroller.clone().cursor(3);
+        let cursor = scroller.clone().cursor(3).await.unwrap();
 
         // ---
         // Sanity check of the initial state
@@ -658,7 +671,7 @@ mod tests {
     #[tokio::test]
     async fn nuke_previous_item() {
         let (_ctx, source, scroller, handle) = target(datasets::small()).await;
-        let cursor = scroller.clone().cursor(3);
+        let cursor = scroller.clone().cursor(3).await.unwrap();
 
         // ---
         // Sanity check of the initial state
@@ -694,7 +707,7 @@ mod tests {
     #[tokio::test]
     async fn nuke_next_item() {
         let (_ctx, source, scroller, handle) = target(datasets::small()).await;
-        let cursor = scroller.clone().cursor(3);
+        let cursor = scroller.clone().cursor(3).await.unwrap();
 
         // ---
         // Sanity check of the initial state
