@@ -1023,7 +1023,7 @@ fn recipients_value_to_list(recipients: &str) -> Result<RecipientList, recipient
     for addr in recipients.split(',') {
         list.add_single(recipients::RecipientEntry {
             email: addr.into(),
-            display_name: None,
+            name: None,
         })?;
     }
     Ok(list)

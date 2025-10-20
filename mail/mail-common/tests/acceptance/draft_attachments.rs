@@ -1158,7 +1158,7 @@ async fn can_not_send_without_all_uploaded_attachments() {
             RecipientGroupId::To,
             RecipientEntry {
                 email: "foo@bar.com".into(),
-                display_name: None,
+                name: None,
             },
         )
         .await

@@ -10,7 +10,7 @@ use stash::stash::StashError;
 fn duplicate_single_recipient_reports_error() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "foo@example.com".into(),
     };
 
@@ -24,7 +24,7 @@ fn remove_single_recipient() {
     let mut list = RecipientList::default();
     let email = "foo@example.com".to_owned();
     let entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: email.clone().into(),
     };
 
@@ -40,7 +40,7 @@ fn invalid_email_is_added_to_list_with_error_status() {
 
     for invalid_email in invalid_emails {
         let entry = RecipientEntry {
-            display_name: None,
+            name: None,
             email: invalid_email.into(),
         };
 
@@ -64,7 +64,7 @@ fn invalid_email_is_added_to_list_with_error_status() {
 fn invalid_email_is_added_to_list_with_error_status_group() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "borkenEmail!".into(),
     };
 
@@ -86,11 +86,11 @@ fn invalid_email_is_added_to_list_with_error_status_group() {
 fn duplicate_group_recipient_are_returned() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "foo@example.com".into(),
     };
     let entry2 = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "bar@example.com".into(),
     };
 
@@ -113,11 +113,11 @@ fn duplicate_group_recipient_are_returned() {
 fn group_extend() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "foo@example.com".into(),
     };
     let entry2 = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "bar@example.com".into(),
     };
 
@@ -152,11 +152,11 @@ fn group_extend() {
 fn remove_group_recipient() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "foo@example.com".into(),
     };
     let entry2 = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "bar@example.com".into(),
     };
 
@@ -172,11 +172,11 @@ fn remove_single_recipient_from_group() {
     let email1 = "foo@example.com".to_owned();
     let email2 = "bar@example.com".to_owned();
     let entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: email1.clone().into(),
     };
     let entry2 = RecipientEntry {
-        display_name: None,
+        name: None,
         email: email2.clone().into(),
     };
 
@@ -201,32 +201,32 @@ fn to_message_recipient_only_copies_valid_values() {
     let mut list = RecipientList::default();
 
     let valid_entry = RecipientEntry {
-        display_name: Some("Foo Ext".into()),
+        name: Some("Foo Ext".into()),
         email: "foo@example.com".into(),
     };
 
     let valid_proton_entry = RecipientEntry {
-        display_name: Some("Foo Proton".into()),
+        name: Some("Foo Proton".into()),
         email: "foo@proton.ch".into(),
     };
 
     let validating_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "validating@example.com".into(),
     };
 
     let unchecked_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "unchecked@example.com".into(),
     };
 
     let invalid_email_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "@".into(),
     };
 
     let unknown_error_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "unknown@error.org".into(),
     };
 
@@ -248,25 +248,25 @@ fn to_message_recipient_only_copies_valid_values() {
         MessageRecipient {
             address: valid_entry.email,
             is_proton: false,
-            name: valid_entry.display_name.unwrap_or_default(),
+            name: valid_entry.name.unwrap_or_default(),
             group: MaybeEmptyString(None),
         },
         MessageRecipient {
             address: valid_proton_entry.email,
             is_proton: true,
-            name: valid_proton_entry.display_name.unwrap_or_default(),
+            name: valid_proton_entry.name.unwrap_or_default(),
             group: MaybeEmptyString(None),
         },
         MessageRecipient {
             address: validating_entry.email,
             is_proton: false,
-            name: validating_entry.display_name.unwrap_or_default(),
+            name: validating_entry.name.unwrap_or_default(),
             group: MaybeEmptyString(None),
         },
         MessageRecipient {
             address: unchecked_entry.email,
             is_proton: false,
-            name: unchecked_entry.display_name.unwrap_or_default(),
+            name: unchecked_entry.name.unwrap_or_default(),
             group: MaybeEmptyString(None),
         },
     ];
@@ -279,32 +279,32 @@ fn to_message_recipient_only_copies_valid_values_group() {
     let mut list = RecipientList::default();
 
     let valid_entry = RecipientEntry {
-        display_name: Some("Foo Ext".into()),
+        name: Some("Foo Ext".into()),
         email: "foo@example.com".into(),
     };
 
     let valid_proton_entry = RecipientEntry {
-        display_name: Some("Foo Proton".into()),
+        name: Some("Foo Proton".into()),
         email: "foo@proton.ch".into(),
     };
 
     let validating_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "validating@example.com".into(),
     };
 
     let unchecked_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "unchecked@example.com".into(),
     };
 
     let invalid_email_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "@".to_owned().into(),
     };
 
     let unknown_error_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "unknown@error.org".into(),
     };
 
@@ -342,25 +342,25 @@ fn to_message_recipient_only_copies_valid_values_group() {
         MessageRecipient {
             address: valid_entry.email,
             is_proton: false,
-            name: valid_entry.display_name.unwrap_or_default(),
+            name: valid_entry.name.unwrap_or_default(),
             group: group_name_maybe(),
         },
         MessageRecipient {
             address: valid_proton_entry.email,
             is_proton: true,
-            name: valid_proton_entry.display_name.unwrap_or_default(),
+            name: valid_proton_entry.name.unwrap_or_default(),
             group: group_name_maybe(),
         },
         MessageRecipient {
             address: validating_entry.email,
             is_proton: false,
-            name: validating_entry.display_name.unwrap_or_default(),
+            name: validating_entry.name.unwrap_or_default(),
             group: group_name_maybe(),
         },
         MessageRecipient {
             address: unchecked_entry.email,
             is_proton: false,
-            name: unchecked_entry.display_name.unwrap_or_default(),
+            name: unchecked_entry.name.unwrap_or_default(),
             group: group_name_maybe(),
         },
     ];
@@ -468,37 +468,37 @@ fn recipient_expiration_feature() {
     let mut list = RecipientList::default();
 
     let valid_entry = RecipientEntry {
-        display_name: Some("Foo Ext".into()),
+        name: Some("Foo Ext".into()),
         email: "foo@example.com".into(),
     };
 
     let valid_proton_entry = RecipientEntry {
-        display_name: Some("Foo Proton".into()),
+        name: Some("Foo Proton".into()),
         email: "foo@proton.ch".into(),
     };
 
     let validating_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "validating@example.com".into(),
     };
 
     let unchecked_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "unchecked@example.com".into(),
     };
 
     let invalid_email_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "@".into(),
     };
 
     let unknown_error_entry = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "unknown@error.org".into(),
     };
 
     let valid_proton_entry_with_is_proton_false = RecipientEntry {
-        display_name: None,
+        name: None,
         email: "v@pm.me".into(),
     };
 
@@ -522,7 +522,7 @@ fn recipient_expiration_feature() {
 
     for domain in PROTON_EMAIL_DOMAINS {
         list.add_single(RecipientEntry {
-            display_name: None,
+            name: None,
             email: format!("bar{domain}").into(),
         })
         .unwrap();

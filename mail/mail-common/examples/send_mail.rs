@@ -122,7 +122,7 @@ async fn main() {
         .add_single_recipient(
             RecipientGroupId::To,
             RecipientEntry {
-                display_name: None,
+                name: None,
                 email: recipient.into(),
             },
         )

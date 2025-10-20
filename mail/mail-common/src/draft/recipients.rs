@@ -36,7 +36,6 @@ impl MaybeEmptyString {
         self.0.map(NonEmptyString::into_inner)
     }
 
-    /// Actually gets an empty string if the string is empty.
     pub fn into_string(self) -> String {
         self.0.map(NonEmptyString::into_inner).unwrap_or_default()
     }
@@ -48,23 +47,13 @@ impl From<String> for MaybeEmptyString {
     }
 }
 
-/// State of the recipient validation
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ValidationState {
-    /// Has been checked by the proton server. If true, it means it is a
-    /// proton address.
-    Valid(bool),
-    /// This proton address does not exist
+    Valid(bool), // true => is Proton address, false => isn't
     DoesNotExist,
-    /// The email is formatted correctly
     InvalidEmail,
-    /// This recipient has not yet been checked, there may be no network
-    /// or the validation hasn't started.
     Unchecked,
-    /// This recipient being validated.
     Validating,
-    /// This triggers when there is an error during validation that
-    /// was not accounted for.
     Unknown,
 }
 
@@ -94,25 +83,17 @@ impl From<&ApiServiceError> for ValidationState {
     }
 }
 
-/// Represents a single recipient
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SingleRecipient {
-    /// Optional display name for the recipient.
     pub display_name: Option<PrivateString>,
-    /// Recipient's email
     pub email: PrivateEmail,
-    /// Validation state.
     pub state: ValidationState,
 }
 
-/// Represents list of recipients in named group.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GroupRecipient {
-    /// Recipients that compose this group
     pub recipients: Vec<SingleRecipient>,
-    /// Name of the group
     pub group_name: NonEmptyString,
-    /// Total number of addresses in this group.
     pub total_in_group: u64,
 }
 
@@ -122,7 +103,6 @@ pub enum RecipientError {
     DuplicateAddress(PrivateEmail),
 }
 
-/// An email recipient.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub enum Recipient {
     Single(SingleRecipient),
@@ -131,24 +111,22 @@ pub enum Recipient {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct RecipientEntry {
-    pub display_name: Option<PrivateString>,
+    pub name: Option<PrivateString>,
     pub email: PrivateEmail,
 }
 
-/// Abstraction over possible contact group resolvers.
 pub trait ContactGroupResolver {
-    /// Resolve the total number of members in a contact group.
-    ///
-    /// Return `None` on error or if the group can't be found.
+    /// Returns the number of members in given contact group or `None` if no
+    /// such group exists.
     fn resolve_contact_group_total(
         &self,
         name: &NonEmptyString,
     ) -> impl Future<Output = Option<u64>>;
 }
 
-/// Default contact group resolver, always returns `None`.
 #[derive(Default, Copy, Clone)]
 pub struct NullContactGroupResolver;
+
 impl ContactGroupResolver for NullContactGroupResolver {
     async fn resolve_contact_group_total(&self, _: &NonEmptyString) -> Option<u64> {
         None
@@ -239,31 +217,26 @@ pub struct RecipientList {
 }
 
 impl RecipientList {
-    /// Create a new empty list.
     pub fn new() -> Self {
-        Self {
-            recipients: Vec::new(),
-        }
+        Self::default()
     }
 
-    /// Create a list from a [`Message`]'s recipient list.
-    ///
-    /// This function expect the data to be valid. Errors are silently
-    /// ignored.
     pub async fn from_message_recipients(
         contact_group_resolver: &impl ContactGroupResolver,
         recipients: impl IntoIterator<Item = MessageRecipient>,
     ) -> Self {
         let mut list = Self::new();
+
         for recipient in recipients {
             let entry = RecipientEntry {
                 email: recipient.address,
-                display_name: if recipient.name.is_empty() {
+                name: if recipient.name.is_empty() {
                     None
                 } else {
                     Some(recipient.name)
                 },
             };
+
             if let Some(name) = recipient.group.0 {
                 //if group is not found, assume total is the number of entries
                 //in the current group.
@@ -288,28 +261,25 @@ impl RecipientList {
 
     pub fn from_message_reply_to(reply_tos: impl IntoIterator<Item = MessageReplyTo>) -> Self {
         let mut list = Self::new();
+
         for recipient in reply_tos {
             let entry = RecipientEntry {
                 email: recipient.address,
-                display_name: if recipient.name.is_empty() {
+                name: if recipient.name.is_empty() {
                     None
                 } else {
                     Some(recipient.name)
                 },
             };
+
             if let Err(e) = list.add_single(entry) {
                 error!("Failed to add single recipient: {e:?}");
             }
         }
+
         list
     }
 
-    /// Add a new recipient to the list.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the address is not valid or was already added
-    /// to this list.
     pub fn add_single(
         &mut self,
         entry: RecipientEntry,
@@ -333,10 +303,11 @@ impl RecipientList {
         };
 
         self.recipients.push(Recipient::Single(SingleRecipient {
-            display_name: entry.display_name,
+            display_name: entry.name,
             email: entry.email,
             state,
         }));
+
         match self
             .recipients
             .last_mut()
@@ -347,7 +318,6 @@ impl RecipientList {
         }
     }
 
-    /// Remove a recipient from this list by `email`.
     pub fn remove_single(&mut self, email: &str) {
         self.recipients.retain(|r| {
             let Recipient::Single(recipient) = r else {
@@ -408,7 +378,7 @@ impl RecipientList {
             };
 
             recipients.push(SingleRecipient {
-                display_name: recipient.display_name,
+                display_name: recipient.name,
                 email: recipient.email,
                 state,
             });
@@ -420,7 +390,6 @@ impl RecipientList {
         (group, duplicates)
     }
 
-    /// Remove an entire group from the recipient list.
     pub fn remove_group(&mut self, group_name: &NonEmptyString) {
         self.recipients.retain(|r| {
             let Recipient::Group(recipient) = r else {
@@ -431,12 +400,10 @@ impl RecipientList {
         })
     }
 
-    /// Remove a recipient with `email` from the group with `group_name`.
     pub fn remove_group_recipient(&mut self, group_name: &NonEmptyString, email: &str) {
         self.remove_group_recipients(group_name, std::iter::once(email));
     }
 
-    /// Remove recipients with `emails` from the group with `group_name`.
     pub fn remove_group_recipients<T: AsRef<str>>(
         &mut self,
         group_name: &NonEmptyString,
@@ -451,7 +418,6 @@ impl RecipientList {
         }
     }
 
-    /// Get all recipients.
     pub fn recipients(&self) -> &[Recipient] {
         &self.recipients
     }
@@ -472,11 +438,9 @@ impl RecipientList {
         None
     }
 
-    /// Create a new message recipient list fom the current state.
-    ///
-    /// Invalid recipients are ignored.
     pub fn to_message_recipients(&self) -> Vec<MessageRecipient> {
         let mut recipients = Vec::with_capacity(self.recipients.len());
+
         for recipient in &self.recipients {
             match recipient {
                 Recipient::Single(single) => {
@@ -485,6 +449,7 @@ impl RecipientList {
                         ValidationState::Validating | ValidationState::Unchecked => false,
                         _ => continue,
                     };
+
                     recipients.push(MessageRecipient {
                         address: single.email.clone(),
                         is_proton,
@@ -492,6 +457,7 @@ impl RecipientList {
                         group: MaybeEmptyString(None),
                     })
                 }
+
                 Recipient::Group(group) => {
                     for recipient in &group.recipients {
                         let is_proton = match recipient.state {
@@ -499,6 +465,7 @@ impl RecipientList {
                             ValidationState::Validating | ValidationState::Unchecked => false,
                             _ => continue,
                         };
+
                         recipients.push(MessageRecipient {
                             address: recipient.email.clone(),
                             is_proton,
@@ -513,12 +480,10 @@ impl RecipientList {
         recipients
     }
 
-    /// Number of recipients in this list.
     pub fn len(&self) -> usize {
         self.recipients.len()
     }
 
-    /// Whether this recipient list is empty
     pub fn is_empty(&self) -> bool {
         self.recipients.is_empty()
     }
@@ -576,16 +541,14 @@ impl RecipientList {
         }
     }
 
-    /// Check whether this list contains the given `email`.
     pub fn contains_email<'e>(&self, email: impl Into<PrivateEmailRef<'e>>) -> bool {
         self.find_recipient_by_email(email.into()).is_some()
     }
 
-    /// Check whether this list contains all the given `emails`.
-    pub fn contains_emails<'e, T: Into<PrivateEmailRef<'e>>>(
-        &self,
-        emails: impl IntoIterator<Item = T>,
-    ) -> bool {
+    pub fn contains_emails<'e, T>(&self, emails: impl IntoIterator<Item = T>) -> bool
+    where
+        T: Into<PrivateEmailRef<'e>>,
+    {
         for email in emails {
             if self.contains_email(email.into()) {
                 return true;
@@ -616,6 +579,7 @@ impl RecipientList {
             self.recipients.push(Recipient::Group(group));
             self.recipients.last_mut().expect("recipients must exist")
         };
+
         match recipient {
             Recipient::Group(group) => group,
             _ => unreachable!(),
@@ -685,7 +649,6 @@ impl RecipientValidationUpdate {
     }
 }
 
-/// Specifies the behaviour for the mechanism through which updates are notified.
 pub trait OnBackgroundValidationComplete: Send + Sync + Clone + 'static {
     fn recipients_validation_state_updated(
         &self,
@@ -693,7 +656,6 @@ pub trait OnBackgroundValidationComplete: Send + Sync + Clone + 'static {
     ) -> impl Future<Output = ()> + Send;
 }
 
-/// Channel based background validation updates.
 #[derive(Clone)]
 pub struct ChannelBackgroundValidationComplete(flume::Sender<RecipientValidationUpdate>);
 
@@ -724,8 +686,8 @@ pub struct ValidatingRecipientList<'l, T: OnBackgroundValidationComplete> {
     cancellation_token: CancellationToken,
     cb: T,
 }
+
 impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
-    /// Create a new instance.
     pub fn new(
         cancellation_token: CancellationToken,
         list: &'l mut RecipientList,
@@ -740,12 +702,14 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
 
     pub fn check_all(&mut self, ctx: &MailUserContext) {
         let mut emails_to_validate = Vec::new();
+
         let mut check_recipient = |recipient: &mut SingleRecipient| {
             if recipient.state == ValidationState::Unchecked {
                 recipient.state = ValidationState::Validating;
                 emails_to_validate.push(recipient.email.clone());
             }
         };
+
         for recipient in &mut self.list.recipients {
             match recipient {
                 Recipient::Single(recipient) => {
@@ -758,10 +722,10 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
                 }
             }
         }
+
         self.validate_addresses(ctx, emails_to_validate);
     }
 
-    /// See [`RecipientList::add_single`] for more details.
     pub fn add_single(
         &mut self,
         ctx: &MailUserContext,
@@ -779,7 +743,6 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
         Ok(())
     }
 
-    /// See [`RecipientList::add_group`] for more details.
     pub fn add_group(
         &mut self,
         ctx: &MailUserContext,

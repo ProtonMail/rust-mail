@@ -15,19 +15,16 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::error;
 
-/// Single email recipient.
 #[derive(Clone, uniffi::Record)]
 pub struct SingleRecipientEntry {
-    /// Optional display name component.
     pub name: Option<String>,
-    /// Email address component.
     pub email: String,
 }
 
 impl From<SingleRecipientEntry> for RecipientEntry {
     fn from(value: SingleRecipientEntry) -> Self {
         Self {
-            display_name: value.name.map(Into::into),
+            name: value.name.map(Into::into),
             email: value.email.into(),
         }
     }
