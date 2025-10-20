@@ -126,6 +126,7 @@ pub trait ContactGroupResolver {
 
 #[derive(Default, Copy, Clone)]
 pub struct NullContactGroupResolver;
+
 impl ContactGroupResolver for NullContactGroupResolver {
     async fn resolve_contact_group_total(&self, _: &NonEmptyString) -> Option<u64> {
         None
@@ -217,9 +218,7 @@ pub struct RecipientList {
 
 impl RecipientList {
     pub fn new() -> Self {
-        Self {
-            recipients: Vec::new(),
-        }
+        Self::default()
     }
 
     pub async fn from_message_recipients(
@@ -227,6 +226,7 @@ impl RecipientList {
         recipients: impl IntoIterator<Item = MessageRecipient>,
     ) -> Self {
         let mut list = Self::new();
+
         for recipient in recipients {
             let entry = RecipientEntry {
                 email: recipient.address,
@@ -236,6 +236,7 @@ impl RecipientList {
                     Some(recipient.name)
                 },
             };
+
             if let Some(name) = recipient.group.0 {
                 //if group is not found, assume total is the number of entries
                 //in the current group.
@@ -260,6 +261,7 @@ impl RecipientList {
 
     pub fn from_message_reply_to(reply_tos: impl IntoIterator<Item = MessageReplyTo>) -> Self {
         let mut list = Self::new();
+
         for recipient in reply_tos {
             let entry = RecipientEntry {
                 email: recipient.address,
@@ -269,10 +271,12 @@ impl RecipientList {
                     Some(recipient.name)
                 },
             };
+
             if let Err(e) = list.add_single(entry) {
                 error!("Failed to add single recipient: {e:?}");
             }
         }
+
         list
     }
 
@@ -303,6 +307,7 @@ impl RecipientList {
             email: entry.email,
             state,
         }));
+
         match self
             .recipients
             .last_mut()
@@ -435,6 +440,7 @@ impl RecipientList {
 
     pub fn to_message_recipients(&self) -> Vec<MessageRecipient> {
         let mut recipients = Vec::with_capacity(self.recipients.len());
+
         for recipient in &self.recipients {
             match recipient {
                 Recipient::Single(single) => {
@@ -443,6 +449,7 @@ impl RecipientList {
                         ValidationState::Validating | ValidationState::Unchecked => false,
                         _ => continue,
                     };
+
                     recipients.push(MessageRecipient {
                         address: single.email.clone(),
                         is_proton,
@@ -450,6 +457,7 @@ impl RecipientList {
                         group: MaybeEmptyString(None),
                     })
                 }
+
                 Recipient::Group(group) => {
                     for recipient in &group.recipients {
                         let is_proton = match recipient.state {
@@ -457,6 +465,7 @@ impl RecipientList {
                             ValidationState::Validating | ValidationState::Unchecked => false,
                             _ => continue,
                         };
+
                         recipients.push(MessageRecipient {
                             address: recipient.email.clone(),
                             is_proton,
@@ -536,10 +545,10 @@ impl RecipientList {
         self.find_recipient_by_email(email.into()).is_some()
     }
 
-    pub fn contains_emails<'e, T: Into<PrivateEmailRef<'e>>>(
-        &self,
-        emails: impl IntoIterator<Item = T>,
-    ) -> bool {
+    pub fn contains_emails<'e, T>(&self, emails: impl IntoIterator<Item = T>) -> bool
+    where
+        T: Into<PrivateEmailRef<'e>>,
+    {
         for email in emails {
             if self.contains_email(email.into()) {
                 return true;
@@ -570,6 +579,7 @@ impl RecipientList {
             self.recipients.push(Recipient::Group(group));
             self.recipients.last_mut().expect("recipients must exist")
         };
+
         match recipient {
             Recipient::Group(group) => group,
             _ => unreachable!(),
@@ -676,6 +686,7 @@ pub struct ValidatingRecipientList<'l, T: OnBackgroundValidationComplete> {
     cancellation_token: CancellationToken,
     cb: T,
 }
+
 impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
     pub fn new(
         cancellation_token: CancellationToken,
@@ -691,12 +702,14 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
 
     pub fn check_all(&mut self, ctx: &MailUserContext) {
         let mut emails_to_validate = Vec::new();
+
         let mut check_recipient = |recipient: &mut SingleRecipient| {
             if recipient.state == ValidationState::Unchecked {
                 recipient.state = ValidationState::Validating;
                 emails_to_validate.push(recipient.email.clone());
             }
         };
+
         for recipient in &mut self.list.recipients {
             match recipient {
                 Recipient::Single(recipient) => {
@@ -709,6 +722,7 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
                 }
             }
         }
+
         self.validate_addresses(ctx, emails_to_validate);
     }
 
