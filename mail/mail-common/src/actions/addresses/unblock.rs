@@ -19,6 +19,7 @@ use stash::stash::Bond;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Unblock {
     pub email: PrivateEmail,
+    #[serde(default)]
     removed: Option<LocalIncomingDefaultId>,
 }
 
