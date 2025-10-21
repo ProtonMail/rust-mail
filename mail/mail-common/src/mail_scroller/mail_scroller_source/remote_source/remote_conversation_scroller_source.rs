@@ -243,6 +243,7 @@ impl RemoteConversationScrollerSource {
 
         Self::save_conversations(
             local_label_id,
+            &remote_label_id,
             &mut conversations,
             unread,
             context_time,
@@ -312,6 +313,7 @@ impl RemoteConversationScrollerSource {
 
         Self::save_conversations(
             local_label_id,
+            &remote_label_id,
             &mut conversations,
             unread,
             context_time,
@@ -394,6 +396,7 @@ impl RemoteConversationScrollerSource {
 
         Self::save_conversations(
             local_label_id,
+            &remote_label_id,
             &mut conversations,
             unread,
             context_time,
@@ -441,6 +444,7 @@ impl RemoteConversationScrollerSource {
     #[allow(clippy::too_many_arguments)]
     async fn save_conversations(
         local_label_id: LocalLabelId,
+        remote_label_id: &LabelId,
         conversations: &mut [Conversation],
         unread: ReadFilter,
         context_time: Option<UnixTimestamp>,
@@ -465,7 +469,9 @@ impl RemoteConversationScrollerSource {
             .quiet_tx(async |tx| {
                 // Save all conversations.
                 for conversation in conversations.iter_mut() {
-                    conversation.create_or_get_local(tx).await?;
+                    conversation
+                        .create_or_get_local(remote_label_id, tx)
+                        .await?;
                 }
 
                 let Some((last, label)) = conversations

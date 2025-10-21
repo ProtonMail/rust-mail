@@ -1,3 +1,4 @@
+use proton_mail_common::datatypes::SystemLabelId;
 use std::collections::BTreeMap;
 
 use crate as proton_mail_common;
@@ -953,7 +954,10 @@ async fn test_create_or_get_local_fix_preserves_api_conversations_with_labels() 
     // Step 3: Call create_or_get_local (this is where the bug happened)
     tether
         .tx(async |bond| {
-            api_conversation.create_or_get_local(bond).await.unwrap();
+            api_conversation
+                .create_or_get_local(&LabelId::inbox(), bond)
+                .await
+                .unwrap();
             Ok::<(), StashError>(())
         })
         .await

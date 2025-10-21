@@ -14,12 +14,13 @@ use crate::test_utils::db_states::{
     new_test_unread_db_state, new_test_unread_db_state_unread_label_in_folder,
 };
 use crate::test_utils::search::{
-    MY_ATTACHMENT_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels, test_conversation,
+    MY_ATTACHMENT_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels, test_conversation, test_label1,
     test_starred_label,
 };
 use crate::test_utils::utils::{
-    conv_counts_as_map, create_address, message_counts_for_conversation, msg_counts_as_map,
-    prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip, prepare_db_state_core,
+    TestDBState, conv_counts_as_map, create_address, message_counts_for_conversation,
+    msg_counts_as_map, prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip,
+    prepare_db_state_core,
 };
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
@@ -3193,4 +3194,151 @@ async fn test_conversation_label_set_lowest_expiration_time_in_label_context() {
         conv_label.context_expiration_time,
         lowest_expiration_time.into()
     );
+}
+
+#[tokio::test]
+#[test_case::test_case(
+    create_or_get_local_default_conv(),
+    create_or_get_local_default_with_updated_label(),
+    true;
+    "Updated label syncs"
+)]
+#[test_case::test_case(
+    create_or_get_local_default_conv(),
+    create_or_get_local_default_with_custom_label_only(),
+    true;
+    "Remove label syncs"
+)]
+#[test_case::test_case(
+    create_or_get_local_default_with_custom_label_only(),
+    create_or_get_local_default_conv(),
+    true;
+    "Added label syncs"
+)]
+#[test_case::test_case(
+    create_or_get_local_default_conv(),
+    create_or_get_local_default_with_both_labels(),
+    false;
+    "Unrelated label update does not sync"
+)]
+async fn create_or_get_local(
+    mut existing_conversation: Conversation,
+    mut new_conversation: Conversation,
+    expect_replace: bool,
+) {
+    // Label conversation with a label that was never assigned to the conversation.
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut conn = stash.connection().await.unwrap();
+    let mut state = TestDBState {
+        addresses: vec![],
+        labels: vec![
+            test_label1(),
+            label!(
+               remote_id: Some(LabelId::inbox()),
+               name: "Inbox".to_owned(),
+               path: Some("Inbox".to_owned()),
+               color: LabelColor::black(),
+               label_type: LabelType::System,
+               display_order: 0
+            ),
+        ],
+        conversations: vec![],
+        messages: vec![],
+    };
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let _ = prepare_and_patch_db_state(&mut conn, state.clone()).await;
+
+    let mut tether = stash.connection().await.unwrap();
+
+    tether
+        .tx(async |tx| {
+            existing_conversation.save(tx).await?;
+            existing_conversation.reload(tx).await?;
+            new_conversation
+                .create_or_get_local(&LabelId::inbox(), tx)
+                .await?;
+            new_conversation.reload(tx).await
+        })
+        .await
+        .unwrap();
+
+    let db_conv = Conversation::find_by_id(existing_conversation.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    if expect_replace {
+        assert_eq!(db_conv, new_conversation);
+        assert_ne!(new_conversation, existing_conversation);
+    } else {
+        assert_eq!(db_conv, existing_conversation);
+        assert_eq!(new_conversation, existing_conversation);
+    }
+}
+
+fn create_or_get_local_default_conv() -> Conversation {
+    Conversation {
+        remote_id: Some(ConversationId::from("MY_CONV")),
+        labels: vec![ConversationLabel {
+            remote_label_id: Some(LabelId::inbox()),
+            context_num_messages: 1,
+            ..ConversationLabel::test_default()
+        }],
+        num_messages: 1,
+        num_unread: 0,
+        is_known: true,
+        ..Conversation::test_default()
+    }
+}
+
+fn create_or_get_local_default_with_updated_label() -> Conversation {
+    Conversation {
+        remote_id: Some(ConversationId::from("MY_CONV")),
+        labels: vec![ConversationLabel {
+            remote_label_id: Some(LabelId::inbox()),
+            context_num_messages: 2,
+            context_num_unread: 1,
+            ..ConversationLabel::test_default()
+        }],
+        num_messages: 1,
+        num_unread: 0,
+        is_known: true,
+        ..Conversation::test_default()
+    }
+}
+fn create_or_get_local_default_with_custom_label_only() -> Conversation {
+    Conversation {
+        remote_id: Some(ConversationId::from("MY_CONV")),
+        labels: vec![ConversationLabel {
+            remote_label_id: Some(test_label1().remote_id.unwrap()),
+            context_num_messages: 0,
+            context_num_unread: 1,
+            ..ConversationLabel::test_default()
+        }],
+        num_messages: 1,
+        num_unread: 0,
+        is_known: true,
+        ..Conversation::test_default()
+    }
+}
+fn create_or_get_local_default_with_both_labels() -> Conversation {
+    Conversation {
+        remote_id: Some(ConversationId::from("MY_CONV")),
+        labels: vec![
+            ConversationLabel {
+                remote_label_id: Some(LabelId::inbox()),
+                context_num_messages: 1,
+                ..ConversationLabel::test_default()
+            },
+            ConversationLabel {
+                remote_label_id: Some(test_label1().remote_id.unwrap()),
+                context_num_messages: 0,
+                context_num_unread: 1,
+                ..ConversationLabel::test_default()
+            },
+        ],
+        num_messages: 1,
+        num_unread: 0,
+        is_known: true,
+        ..Conversation::test_default()
+    }
 }
