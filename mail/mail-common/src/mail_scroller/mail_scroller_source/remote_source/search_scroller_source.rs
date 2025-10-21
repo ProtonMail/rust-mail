@@ -1,17 +1,16 @@
 use super::MailPaginatorJoinHandle;
+use crate::AppError;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
-use crate::datatypes::{IncludeSwitch, SystemLabelId};
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, SearchOptions},
     mail_scroller::MailScrollerSource,
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
 };
-use itertools::Either;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
 };
@@ -30,7 +29,7 @@ use tracing::debug;
 ///
 #[derive(Debug)]
 pub struct SearchScrollerSource {
-    remote_label_id: LocalLabelId,
+    local_label_id: LocalLabelId,
     options: SearchOptions,
     page_size: usize,
     initialized: bool,
@@ -42,7 +41,7 @@ pub struct SearchScrollerSource {
 impl SearchScrollerSource {
     pub fn new(remote_label_id: LocalLabelId, options: SearchOptions, page_size: usize) -> Self {
         Self {
-            remote_label_id,
+            local_label_id: remote_label_id,
             options,
             page_size,
             initialized: false,
@@ -62,12 +61,18 @@ impl SearchScrollerSource {
             .tx(async |tx| SearchScrollData::delete_all(tx).await)
             .await?;
 
+        let Some(remote_label_id) =
+            Label::local_id_counterpart(self.local_label_id, &tether).await?
+        else {
+            return Err(AppError::LabelDoesNotHaveRemoteId(self.local_label_id).into());
+        };
+
         debug!("Paginating for the first time, getting first page & spawning sync task.");
 
         Self::spawn_first_page_sync(
             ctx,
             self.total.clone(),
-            self.remote_label_id.clone(),
+            remote_label_id,
             self.options.clone(),
             self.page_size,
         )
@@ -391,9 +396,15 @@ impl MailScrollerSource for SearchScrollerSource {
             let task = if items.is_empty() {
                 None
             } else {
+                let Some(remote_label_id) =
+                    Label::local_id_counterpart(self.local_label_id, &tether).await?
+                else {
+                    return Err(AppError::LabelDoesNotHaveRemoteId(self.local_label_id).into());
+                };
+
                 Self::spawn_background_sync(
                     ctx,
-                    self.remote_label_id.clone(),
+                    remote_label_id,
                     self.options.clone(),
                     self.page_size,
                 )
@@ -413,7 +424,7 @@ impl MailScrollerSource for SearchScrollerSource {
         Ok(None)
     }
 
-    async fn reset(
+    async fn clear(
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
@@ -430,20 +441,19 @@ impl MailScrollerSource for SearchScrollerSource {
 
     async fn change_state(
         &mut self,
-        _ctx: &MailUserContext,
+        ctx: &MailUserContext,
         _unread: Option<ReadFilter>,
-        _label: Option<LocalLabelId>,
+        label: Option<LocalLabelId>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        // Noop for search scroller
-        Ok(None)
-    }
+        if let Some(label) = label {
+            tracing::info!(
+                "Changing label from {current:?} to {label:?}",
+                current = self.local_label_id
+            );
+            self.local_label_id = label;
+        }
+        let task = self.initialize_impl(ctx).await?;
 
-    fn change_include(&mut self, include: IncludeSwitch) -> Either<LocalLabelId, LabelId> {
-        self.remote_label_id = match include {
-            IncludeSwitch::Default => self.orig_remote_label_id.clone(),
-            IncludeSwitch::WithSpamAndTrash => LabelId::all_mail(),
-        };
-
-        Either::Right(self.remote_label_id.clone())
+        Ok(task)
     }
 }

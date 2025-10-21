@@ -52,7 +52,7 @@ impl ConversationsState {
         let label_id = mbox.label_id();
 
         Command::task(async move {
-            match Self::new_impl(ctx, &mbox, label_id, unread).await {
+            match Self::new_impl(ctx, label_id, unread).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenConversationView(mbox, label, state)),
                     background_command,
@@ -68,19 +68,11 @@ impl ConversationsState {
 
     async fn new_impl(
         ctx: Arc<MailUserContext>,
-        mbox: &Mailbox,
         label_id: LocalLabelId,
         unread: ReadFilter,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let (scroller, handle) = RealMailScroller::conversations(
-            ctx.as_weak(),
-            Some(mbox),
-            label_id,
-            unread,
-            IncludeSwitch::default(),
-            ITEM_LIMIT,
-        )
-        .await?;
+        let (scroller, handle) =
+            RealMailScroller::conversations(ctx.as_weak(), label_id, unread, ITEM_LIMIT).await?;
 
         let (scroller, command) = MailScroller::new(scroller, handle, |update| match update {
             ScrollerUpdate::List(update) => match update {
@@ -482,7 +474,7 @@ impl ConversationsState {
                     format!("> Messages in {folder} will be automatically deleted after 30 days.")
                 }
             });
-        } else if self.scroller.supports_include_filter() {
+        } else if self.scroller.supports_include_filter {
             banner = Some(if self.include.has_spam_and_trash() {
                 "> Seeing too many messages? [E]xclude Spam/Trash.".into()
             } else {

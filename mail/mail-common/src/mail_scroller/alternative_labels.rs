@@ -6,6 +6,7 @@ use proton_core_common::{
 };
 use stash::stash::Tether;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AlternativeLabels {
     pub label: LocalLabelId,
     pub alt_label: Option<LocalLabelId>,

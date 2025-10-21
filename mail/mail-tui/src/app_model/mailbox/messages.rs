@@ -137,7 +137,7 @@ impl MessagesState {
         let recipient_display_mode = mbox.recipient_display_mode();
 
         Command::task(async move {
-            match Self::new_impl(ctx, &mbox, label_id, unread, recipient_display_mode).await {
+            match Self::new_impl(ctx, label_id, unread, recipient_display_mode).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenMessageView(mbox, label, state)),
                     background_command,
@@ -149,23 +149,15 @@ impl MessagesState {
 
     async fn new_impl(
         ctx: Arc<MailUserContext>,
-        mbox: &Mailbox,
         label_id: LocalLabelId,
         unread: ReadFilter,
         recipient_display_mode: MessageRecipientDisplayMode,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let (scroller, handle) = RealMailScroller::messages(
-            ctx.as_weak(),
-            Some(mbox),
-            label_id,
-            unread,
-            IncludeSwitch::default(),
-            ITEM_LIMIT,
-        )
-        .await?;
+        let (scroller, handle) =
+            RealMailScroller::messages(ctx.as_weak(), label_id, unread, ITEM_LIMIT).await?;
 
         let (scroller, command) =
-            MailScroller::new::<MailMessage>(scroller, handle, handle_scroller_update);
+            MailScroller::new::<MailMessage>(scroller, handle, handle_scroller_update).await;
 
         scroller.fetch_more();
 
@@ -189,7 +181,7 @@ impl MessagesState {
         keywords: String,
     ) -> Command<Messages> {
         Command::task(async move {
-            match Self::from_search_impl(ctx, &mbox, keywords).await {
+            match Self::from_search_impl(ctx, keywords).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenSearchView(mbox, state)),
                     background_command,
@@ -209,20 +201,14 @@ impl MessagesState {
 
     async fn from_search_impl(
         ctx: Arc<MailUserContext>,
-        mbox: &Mailbox,
         keywords: String,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let (scroller, handle) = RealMailScroller::search(
-            ctx.as_weak(),
-            Some(mbox),
-            SearchOptions::from(&keywords),
-            IncludeSwitch::default(),
-            ITEM_LIMIT,
-        )
-        .await?;
+        let (scroller, handle) =
+            RealMailScroller::search(ctx.as_weak(), SearchOptions::from(&keywords), ITEM_LIMIT)
+                .await?;
 
         let (scroller, command) =
-            MailScroller::new::<MailMessage>(scroller, handle, handle_scroller_update);
+            MailScroller::new::<MailMessage>(scroller, handle, handle_scroller_update).await;
 
         scroller.fetch_more();
 
@@ -914,7 +900,7 @@ impl MessagesState {
 
             if let Some(paginator) = self.mode.paginator()
                 && let Some(include) = self.mode.include()
-                && paginator.supports_include_filter()
+                && paginator.supports_include_filter
             {
                 banner = Some(if include.has_spam_and_trash() {
                     "> Seeing too many messages? [E]xclude Spam/Trash."

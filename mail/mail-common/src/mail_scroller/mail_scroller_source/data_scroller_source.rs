@@ -2,11 +2,9 @@ use super::{
     MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
     remote_source::RemoteSource,
 };
-use crate::datatypes::IncludeSwitch;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 use anyhow::anyhow;
-use itertools::Either;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::LocalLabelId,
@@ -34,12 +32,8 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Self {
-        let local_label_ids =
-            alt_local_label_id.map(|alt_local_label_id| (local_label_id, alt_local_label_id));
-
         Self {
             local_label_id,
-            local_label_ids,
             unread,
             page_size,
             invalidate: None,
@@ -533,20 +527,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         Ok(task)
     }
 
-    fn change_include(&mut self, include: IncludeSwitch) -> Either<LocalLabelId, LabelId> {
-        if let Some((default_label, extended_label)) = self.local_label_ids {
-            self.local_label_id = match include {
-                IncludeSwitch::Default => default_label,
-                IncludeSwitch::WithSpamAndTrash => extended_label,
-            };
-        } else {
-            warn!(?include, "Unexpected change-include command");
-        }
-
-        Either::Left(self.local_label_id)
-    }
-
-    async fn reset(
+    async fn clear(
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {

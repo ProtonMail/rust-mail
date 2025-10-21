@@ -9,7 +9,6 @@
 //! won't.
 //!
 
-use super::mail_scroller::IncludeSwitch;
 use super::messages::WatchedLabelAs;
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, MobileActionsResult, SnoozeError, VoidActionResult};
@@ -554,23 +553,16 @@ pub async fn move_conversations(
 #[uniffi_export]
 pub async fn scroll_conversations_for_label(
     mailbox: Arc<Mailbox>,
-    label_id: Id,
     unread: ReadFilter,
-    include: IncludeSwitch,
     callback: Box<dyn ConversationScrollerLiveQueryCallback>,
 ) -> Result<Arc<ConversationScroller>, ActionError> {
     let context = mailbox.ctx()?;
 
     uniffi_async(async move {
-        let (scroller, handle) = MailScroller::conversations(
-            context.as_weak(),
-            Some(mailbox.get()),
-            label_id.into(),
-            unread.into(),
-            include.into(),
-            50,
-        )
-        .await?;
+        let label_id = mailbox.label_id();
+        let (scroller, handle) =
+            MailScroller::conversations(context.as_weak(), label_id.into(), unread.into(), 50)
+                .await?;
 
         let handle = spawn_conversation_scroller_watcher(&context, handle, callback);
         let scroller = ConversationScroller::new(mailbox, scroller, handle);

@@ -482,8 +482,17 @@ impl ConversationScroller {
     }
 
     #[must_use]
-    pub fn supports_include_filter(&self) -> bool {
-        self.scroller.supports_include_filter()
+    pub async fn supports_include_filter(&self) -> Result<bool, MailScrollerError> {
+        let scroller = Arc::clone(&self.scroller);
+
+        uniffi_async(async move {
+            scroller
+                .supports_include_filter()
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(Into::into)
     }
 
     pub fn terminate(&self) {
@@ -616,8 +625,17 @@ impl MessageScroller {
     }
 
     #[must_use]
-    pub fn supports_include_filter(&self) -> bool {
-        self.scroller.supports_include_filter()
+    pub async fn supports_include_filter(&self) -> Result<bool, MailScrollerError> {
+        let scroller = Arc::clone(&self.scroller);
+
+        uniffi_async(async move {
+            scroller
+                .supports_include_filter()
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(Into::into)
     }
 
     pub fn terminate(&self) {
@@ -734,8 +752,17 @@ impl SearchScroller {
     }
 
     #[must_use]
-    pub fn supports_include_filter(&self) -> bool {
-        self.scroller.supports_include_filter()
+    pub async fn supports_include_filter(&self) -> Result<bool, MailScrollerError> {
+        let scroller = Arc::clone(&self.scroller);
+
+        uniffi_async(async move {
+            scroller
+                .supports_include_filter()
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(Into::into)
     }
 
     pub fn terminate(&self) {

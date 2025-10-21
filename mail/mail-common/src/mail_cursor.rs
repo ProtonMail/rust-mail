@@ -251,14 +251,15 @@ mod tests {
     use super::*;
     use crate::{
         MailContextError, MailUserContext,
-        datatypes::{IncludeSwitch, ReadFilter},
-        mail_scroller::{MailPaginatorJoinHandle, MailScrollerHandle, MailScrollerSource},
+        datatypes::ReadFilter,
+        mail_scroller::{
+            AlternativeLabels, MailPaginatorJoinHandle, MailScrollerHandle, MailScrollerSource,
+            ScrollerUpdate,
+        },
         test_utils::test_context::MailTestContext,
     };
     use derive_more::Debug;
-    use itertools::Either;
-    use proton_core_api::services::proton::LabelId;
-    use proton_core_common::datatypes::LocalLabelId;
+    use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
     use proton_mail_common_derive::ScrollerEq;
 
     #[derive(Clone, Copy, Debug, PartialEq, ScrollerEq)]
@@ -346,19 +347,16 @@ mod tests {
             todo!()
         }
 
-        async fn change_filter(
+        async fn change_state(
             &mut self,
             _: &MailUserContext,
-            _: ReadFilter,
+            _: Option<ReadFilter>,
+            _: Option<LocalLabelId>,
         ) -> Result<MailPaginatorJoinHandle, MailContextError> {
             todo!()
         }
 
-        fn change_include(&mut self, _: IncludeSwitch) -> Either<LocalLabelId, LabelId> {
-            todo!()
-        }
-
-        async fn reset(
+        async fn clear(
             &mut self,
             _: &MailUserContext,
         ) -> Result<MailPaginatorJoinHandle, MailContextError> {
@@ -377,22 +375,30 @@ mod tests {
         FakeSource,
         Arc<MailScroller<FakeItem>>,
         MailScrollerHandle<FakeItem>,
+        Arc<MailUserContext>,
     ) {
         let ctx = MailTestContext::new().await;
         let uctx = ctx.uninitialized_mail_user_context().await;
         let source = FakeSource::new(items);
         let page_size = 5;
-        let supports_include_filter = false;
+        let tether = uctx.user_stash().connection().await.unwrap();
+        let inbox = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+        let alternative_labels = AlternativeLabels::new(inbox, &tether).await.unwrap();
 
         let (scroller, handle) =
-            MailScroller::new(uctx, source.clone(), page_size, supports_include_filter)
+            MailScroller::new(uctx.clone(), source.clone(), page_size, alternative_labels)
                 .await
                 .unwrap();
 
         scroller.force_refresh().unwrap();
-        handle.updates.recv_async().await.unwrap();
 
-        (ctx, source, Arc::new(scroller), handle)
+        while let Ok(update) = handle.updates.recv_async().await {
+            if matches!(update, ScrollerUpdate::ReplaceFrom { idx: 0, .. }) {
+                break;
+            }
+        }
+
+        (ctx, source, Arc::new(scroller), handle, uctx)
     }
 
     mod datasets {
@@ -415,7 +421,7 @@ mod tests {
 
     #[tokio::test]
     async fn constructor() {
-        let (_ctx, _source, scroller, _handle) = target(datasets::small()).await;
+        let (_ctx, _source, scroller, _handle, _uctx) = target(datasets::small()).await;
 
         // ---
         // Create a cursor for the first item on the list
@@ -460,7 +466,7 @@ mod tests {
 
     #[tokio::test]
     async fn basic_backward_movement() {
-        let (_ctx, _source, scroller, _handle) = target(datasets::small()).await;
+        let (_ctx, _source, scroller, _handle, _uctx) = target(datasets::small()).await;
         let cursor = scroller.clone().cursor(5).await.unwrap();
 
         // ---
@@ -532,7 +538,7 @@ mod tests {
 
     #[tokio::test]
     async fn basic_forward_movement() {
-        let (_ctx, _source, scroller, _handle) = target(datasets::small()).await;
+        let (_ctx, _source, scroller, _handle, _uctx) = target(datasets::small()).await;
         let cursor = scroller.clone().cursor(1).await.unwrap();
 
         // ---
@@ -603,7 +609,7 @@ mod tests {
     /// items, they become marked as read and disappear from the list.
     #[tokio::test]
     async fn nuke_current_item() {
-        let (_ctx, source, scroller, handle) = target(datasets::small()).await;
+        let (_ctx, source, scroller, handle, _uctx) = target(datasets::small()).await;
         let cursor = scroller.clone().cursor(3).await.unwrap();
 
         // ---
@@ -670,7 +676,7 @@ mod tests {
     /// from the list.
     #[tokio::test]
     async fn nuke_previous_item() {
-        let (_ctx, source, scroller, handle) = target(datasets::small()).await;
+        let (_ctx, source, scroller, handle, _uctx) = target(datasets::small()).await;
         let cursor = scroller.clone().cursor(3).await.unwrap();
 
         // ---
@@ -706,7 +712,7 @@ mod tests {
     /// from the list.
     #[tokio::test]
     async fn nuke_next_item() {
-        let (_ctx, source, scroller, handle) = target(datasets::small()).await;
+        let (_ctx, source, scroller, handle, _uctx) = target(datasets::small()).await;
         let cursor = scroller.clone().cursor(3).await.unwrap();
 
         // ---
