@@ -30,8 +30,7 @@ use tracing::debug;
 ///
 #[derive(Debug)]
 pub struct SearchScrollerSource {
-    remote_label_id: LabelId,
-    orig_remote_label_id: LabelId,
+    remote_label_id: LocalLabelId,
     options: SearchOptions,
     page_size: usize,
     initialized: bool,
@@ -41,15 +40,9 @@ pub struct SearchScrollerSource {
 }
 
 impl SearchScrollerSource {
-    pub fn new(
-        remote_label_id: LabelId,
-        orig_remote_label_id: LabelId,
-        options: SearchOptions,
-        page_size: usize,
-    ) -> Self {
+    pub fn new(remote_label_id: LocalLabelId, options: SearchOptions, page_size: usize) -> Self {
         Self {
             remote_label_id,
-            orig_remote_label_id,
             options,
             page_size,
             initialized: false,
@@ -435,10 +428,11 @@ impl MailScrollerSource for SearchScrollerSource {
         ]
     }
 
-    async fn change_filter(
+    async fn change_state(
         &mut self,
         _ctx: &MailUserContext,
-        _unread: ReadFilter,
+        _unread: Option<ReadFilter>,
+        _label: Option<LocalLabelId>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         // Noop for search scroller
         Ok(None)

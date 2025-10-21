@@ -88,10 +88,11 @@ where
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
-    fn change_filter(
+    fn change_state(
         &mut self,
         ctx: &MailUserContext,
-        unread: ReadFilter,
+        unread: Option<ReadFilter>,
+        label: Option<LocalLabelId>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     fn change_include(&mut self, include: IncludeSwitch) -> Either<LocalLabelId, LabelId>;

@@ -1,15 +1,14 @@
+mod alternative_label;
 mod mail_scroller_source;
 mod mail_scroller_watcher;
 
+use self::alternative_label::AlternativeLabels;
 pub use self::mail_scroller_source::*;
 pub use self::mail_scroller_watcher::*;
 use crate::Mailbox;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
-use crate::datatypes::{
-    AlmostAllMail, ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions, SystemLabelId,
-};
+use crate::datatypes::{ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions};
 use crate::mail_cursor::MailCursor;
-use crate::models::MailSettings;
 use crate::models::{ConversationScrollData, Message, MessageScrollData};
 use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
@@ -27,7 +26,7 @@ use proton_core_common::models::LabelError;
 use proton_core_common::models::{Label, ModelIdExtension};
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::orm::Model;
-use stash::stash::{Tether, WatcherHandle};
+use stash::stash::WatcherHandle;
 use std::sync::{Arc, Weak};
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::AbortHandle;
@@ -183,85 +182,58 @@ where
     ctx: Weak<MailUserContext>,
     command: flume::Sender<ScrollerCommand<T>>,
     ordered_command: flume::Sender<ScrollerOrderedCommand>,
-    supports_include_filter: bool,
     aborts: Vec<AbortHandle>,
 }
 
 impl MailScroller<ContextualConversation> {
     pub async fn conversations(
         ctx: Weak<MailUserContext>,
-        mailbox: Option<&Mailbox>,
-        mut label: LocalLabelId,
+        label: LocalLabelId,
         unread: ReadFilter,
-        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<ContextualConversation>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let tether = ctx.user_stash().connection().await?;
-
-        let alt_label = alternative_label(label, &tether).await?;
         let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
         let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
-
-        if include.has_spam_and_trash()
-            && let Some(alt_label) = alt_label
-        {
-            label = alt_label;
-        }
-
+        let alternative_labels = AlternativeLabels::new(label, &tether).await?;
         let source = DataScrollerSource::<ConversationScrollData>::new(
             label,
-            alt_label,
             unread,
             page_size,
             order_dir,
             order_field,
         );
 
-        if let Some(mailbox) = mailbox {
-            mailbox.change_label(&tether, label).await?;
-        }
+        // if let Some(mailbox) = mailbox {
+        //     mailbox.change_label(&tether, label).await?;
+        // }
 
-        Self::new(ctx, source, page_size, alt_label.is_some()).await
+        Self::new(ctx, source, page_size, alternative_labels).await
     }
 }
 
 impl MailScroller<Message> {
     pub async fn messages(
         ctx: Weak<MailUserContext>,
-        mailbox: Option<&Mailbox>,
-        mut label: LocalLabelId,
+        label: LocalLabelId,
         unread: ReadFilter,
-        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let tether = ctx.user_stash().connection().await?;
-
-        let alt_label = alternative_label(label, &tether).await?;
         let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
         let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
-
-        if include.has_spam_and_trash()
-            && let Some(alt_label) = alt_label
-        {
-            label = alt_label;
-        }
-
+        let alternative_labels = AlternativeLabels::new(label, &tether).await?;
         let source = DataScrollerSource::<MessageScrollData>::new(
             label,
-            alt_label,
             unread,
             page_size,
             order_dir,
             order_field,
         );
 
-        if let Some(mailbox) = mailbox {
-            mailbox.change_label(&tether, label).await?;
-        }
-
-        Self::new(ctx, source, page_size, alt_label.is_some()).await
+        Self::new(ctx, source, page_size, alternative_labels).await
     }
 
     pub async fn search(
@@ -273,52 +245,11 @@ impl MailScroller<Message> {
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let tether = ctx.user_stash().connection().await?;
-        let settings = MailSettings::get_or_default(&tether).await;
+        let alternative_labels = AlternativeLabels::new_search(&tether).await?;
+        let label = alternative_labels.label;
+        let source = SearchScrollerSource::new(label, options, page_size);
 
-        let label = if include.has_spam_and_trash() {
-            LabelId::all_mail()
-        } else {
-            settings.all_mail()
-        };
-
-        let alt_label = match settings.almost_all_mail {
-            AlmostAllMail::AllMail => None,
-            AlmostAllMail::AlmostAllMail => Some(LabelId::all_mail()),
-        };
-
-        let source =
-            SearchScrollerSource::new(label.clone(), settings.all_mail(), options, page_size);
-
-        if let Some(mailbox) = mailbox {
-            let label = Label::remote_id_counterpart(label.clone(), &tether)
-                .await?
-                .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(label))?;
-
-            mailbox.change_label(&tether, label).await?;
-        }
-
-        Self::new(ctx, source, page_size, alt_label.is_some()).await
-    }
-}
-
-/// If `id` points at the `All Mail` label, this function returns id of the
-/// `Almost All Mail` label; otherwise it returns `None`.
-async fn alternative_label(
-    id: LocalLabelId,
-    tether: &Tether,
-) -> Result<Option<LocalLabelId>, MailContextError> {
-    let Some(id) = Label::local_id_counterpart(id, tether).await? else {
-        return Ok(None);
-    };
-
-    if id == LabelId::almost_all_mail() {
-        let id = Label::find_by_remote_id(LabelId::all_mail(), tether)
-            .await?
-            .map(|label| label.id());
-
-        Ok(id)
-    } else {
-        Ok(None)
+        Self::new(ctx, source, page_size, alternative_labels).await
     }
 }
 
@@ -330,7 +261,7 @@ where
         ctx: Arc<MailUserContext>,
         source: S,
         page_size: usize,
-        supports_include_filter: bool,
+        alternative_labels: AlternativeLabels,
     ) -> Result<(Self, MailScrollerHandle<T>), MailContextError>
     where
         S: MailScrollerSource<Item = T>,
@@ -346,7 +277,7 @@ where
             updates,
             handle,
             aborts,
-        } = ScrollerWorker::run(ctx_weak.clone(), source, page_size).await?;
+        } = ScrollerWorker::run(ctx_weak.clone(), source, page_size, alternative_labels).await?;
 
         let event_service = ctx.core_context().event_service();
         let ordered_command_cloned = ordered_command.clone();
@@ -391,7 +322,6 @@ where
                 ctx: ctx_weak,
                 command,
                 ordered_command,
-                supports_include_filter,
                 aborts,
             },
             MailScrollerHandle { updates, handle },
@@ -528,6 +458,21 @@ where
             .map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send change filter command"))
             })?;
+
+        Ok(())
+    }
+
+    pub fn change_label(&self, label: LocalLabelId) -> Result<(), MailContextError> {
+        let uuid = Uuid::new_v4();
+
+        tracing::trace!("Sending `ChangeLabel` command with uuid: {uuid}");
+
+        self.ordered_command
+            .send(ScrollerOrderedCommand::ChangeLabel {
+                src: ScrollerSource::ScrollEvent(uuid),
+                label,
+            })
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to send change label command")))?;
 
         Ok(())
     }
@@ -702,6 +647,7 @@ where
         ctx: Weak<MailUserContext>,
         mut source: S,
         page_size: usize,
+        alternative_labels: AlternativeLabels,
     ) -> Result<ScrollerWorkerHandle<S>, MailContextError> {
         let (update_sender, update_receiver) = flume::unbounded();
         let (command_sender, command_receiver) = flume::unbounded();
@@ -920,6 +866,20 @@ where
                         .send_async(result)
                         .await
                         .map_err(|e| anyhow!("Failed to send change filter update: {e:?}"))?;
+                }
+            }
+
+            ScrollerOrderedCommand::ChangeLabel { src, label } => {
+                let result = self
+                    .change_label(src, label)
+                    .await
+                    .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
+
+                if result.is_some() || result.is_scroll_event() {
+                    self.update
+                        .send_async(result)
+                        .await
+                        .map_err(|e| anyhow!("Failed to send change label update: {e:?}"))?;
                 }
             }
 
@@ -1174,9 +1134,28 @@ where
             .source
             .write()
             .await
-            .change_filter(&ctx, unread)
+            .change_state(&ctx, Some(unread), None)
             .await?;
 
+        self.items.write().clear();
+        self.fetch_more(src).await?;
+        self.refresh(true, src).await
+    }
+
+    #[tracing::instrument(skip_all, fields(src=%src))]
+    async fn change_label(
+        &mut self,
+        src: ScrollerSource,
+        label: LocalLabelId,
+    ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        tracing::debug!("Changing label to `{label}`");
+        let _ = self.task.take();
+        self.source
+            .write()
+            .await
+            .change_state(&ctx, Some(ReadFilter::All), Some(label))
+            .await?;
         self.items.write().clear();
         self.fetch_more(src).await?;
         self.refresh(true, src).await
@@ -1352,6 +1331,10 @@ enum ScrollerOrderedCommand {
     ChangeFilter {
         src: ScrollerSource,
         unread: ReadFilter,
+    },
+    ChangeLabel {
+        src: ScrollerSource,
+        label: LocalLabelId,
     },
     ChangeInclude {
         #[derivative(PartialEq = "ignore")]
