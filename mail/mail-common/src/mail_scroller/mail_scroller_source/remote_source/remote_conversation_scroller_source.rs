@@ -75,7 +75,7 @@ impl RemoteSource for ConversationScrollData {
                 let prefetch_jobs = items
                     .into_iter()
                     .filter(|item| !item.has_messages)
-                    .filter(|item| item.deleted)
+                    .filter(|item| !item.deleted)
                     .map(|item| PrefetchJob::Conversation(item.local_id, local_label_id))
                     .collect();
 

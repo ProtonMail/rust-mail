@@ -1053,13 +1053,13 @@ impl Conversation {
         Ok(tether
             .query_value_opt(
                 format!(
-                    "SELECT deleted FROM {} WHERE local_id=? AND deleted=1",
+                    "SELECT deleted FROM {} WHERE local_id=?",
                     Self::table_name()
                 ),
                 params![id],
             )
             .await?
-            .unwrap_or(false))
+            .unwrap_or(true))
     }
 
     /// Updates active label counters after undelete of conversation.

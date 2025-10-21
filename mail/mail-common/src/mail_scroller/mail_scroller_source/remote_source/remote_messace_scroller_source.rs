@@ -73,7 +73,7 @@ impl RemoteSource for MessageScrollData {
             {
                 let prefetch_jobs = items
                     .into_iter()
-                    .filter(|item| item.deleted)
+                    .filter(|item| !item.deleted)
                     .filter_map(|item| Some(PrefetchJob::Message(item.local_id?)))
                     .collect();
 
