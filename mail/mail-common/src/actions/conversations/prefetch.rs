@@ -88,6 +88,7 @@ impl Handler for PrefetchHandler {
             action.local_id,
             &mut guard,
             ctx.session(),
+            false,
         )
         .await;
 
