@@ -5,7 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.149.6] - 2025-10-01
+## [mail-uniffi-v0.151.0] - 2025-10-21
+
+### Changed
+
+- [ET-5086] Apply message sync rules everywhere
+- [ET-5086] Only sync out of date state on open
+- Do not leak internal scroller state to the interface.
+
+### Features
+
+- Add payments status api request
+- Introduce WatchedFeatureFlags
+- Resolve system label by id
+
+### Fixes
+
+- Sync Mailbox's label ids with MailScroller
+- search: Keep track of original label id
+- Call payment status from UserContext
+- Allow watching conversations with all messages
+- Make sure we dont show banner in all mail folder
+- [ET-4920] Expiration time calculation
+- Make sure blocking sender creates only one row in DB
+- Trash should stay empty when items were deleted
+- [ET-5086] Resync missing conversation messages
+- [ET-5086] Handle draft creation failure due to sync issues
+- Do not prefetch or overwrite deleted items in scroller remote sources
+- [ET-5086] Allow the scroller to bring in new conversation updates
+
+
+## [mail-uniffi-v0.149.22] - 2025-10-17
 
 ### Fixes
 
@@ -164,6 +194,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-4384] Only allow one event loop action to be queued
+- [ET-4384] Also update messages when opening converastion
+- [ET-4384] Revert default action queue to 1 worker
 - Move from Spam to Trash should not add `almost_all_mail` label to the message
 - Do not remove category labels when moving to trash
 
@@ -187,15 +220,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-4833] Migrate mobile signature from prev-gen
 - [ET-4875] Styles - Use rem instead of em
-
-
-## [mail-uniffi-v0.149.5] - 2025-09-30
-
-### Fixes
-
-- [ET-4384] Only allow one event loop action to be queued
-- [ET-4384] Also update messages when opening converastion
-- [ET-4384] Revert default action queue to 1 worker
 
 
 ## [mail-uniffi-v0.149.3] - 2025-09-29
