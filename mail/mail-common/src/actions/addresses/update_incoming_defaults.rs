@@ -1,5 +1,8 @@
+use std::sync::Weak;
+
+use crate::MailUserContext;
 use crate::actions::MailActionError;
-use crate::models::default_location::IncomingDefaultLocation;
+use crate::models::IncomingDefault;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
@@ -29,6 +32,7 @@ impl Action for SyncIncomingDefaults {
 
 pub struct SyncIncomingDefaultsHandler {
     pub api: Session,
+    pub ctx: Weak<MailUserContext>,
 }
 
 impl Handler for SyncIncomingDefaultsHandler {
@@ -58,14 +62,16 @@ impl Handler for SyncIncomingDefaultsHandler {
         _: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let data = IncomingDefaultLocation::sync(&self.api).await?;
+        let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
+
+        let data = IncomingDefault::sync(&self.api, ctx.core_context().task_service()).await?;
 
         tracing::info!("Updating incoming defaults");
 
         guard
             .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
-                tx.execute("DELETE FROM incoming_default", vec![]).await?;
-                IncomingDefaultLocation::store_by_email(data, tx).await?;
+                IncomingDefault::replace_all(data.into_iter().map(Into::into).collect(), tx)
+                    .await?;
                 Ok(())
             })
             .await?;

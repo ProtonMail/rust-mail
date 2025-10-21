@@ -527,6 +527,23 @@ impl MailTestContext {
 
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
+    pub async fn mock_post_incoming_default_n(
+        &self,
+        incoming_default: IncomingDefault,
+        times: u64,
+    ) {
+        let resp = PostIncomingDefaultResponse { incoming_default };
+        Mock::given(method("POST"))
+            .and(path("/api/mail/v4/incomingdefaults"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(times)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    #[allow(clippy::doc_markdown)]
+    #[function_name::named]
     pub async fn mock_report_phishing(&self) {
         Mock::given(method("POST"))
             .and(path("/api/core/v4/reports/phishing"))

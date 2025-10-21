@@ -2,10 +2,9 @@ use crate::actions::refresh::ActionRefresh;
 use crate::actions::{conversations, messages};
 use crate::datatypes::{LocalConversationId, LocalMessageId};
 use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
-use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{
-    CachedScrollData, ConversationScrollData, MailLabel, MailSettings, MessageScrollData,
-    RollbackItem, StoreLabelCounters,
+    CachedScrollData, ConversationScrollData, IncomingDefault, MailLabel, MailSettings,
+    MessageScrollData, RollbackItem, StoreLabelCounters,
 };
 #[cfg(feature = "prefetch")]
 use crate::prefetch::PrefetchJob;
@@ -169,7 +168,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
         }
 
         if data.queue_incoming_default {
-            IncomingDefaultLocation::action_resync(ctx.action_queue()).await;
+            IncomingDefault::action_resync(ctx.action_queue()).await;
         }
 
         Ok(())
@@ -290,7 +289,7 @@ async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
             error!("Failed to clear database entries, while refreshing mail: {e}");
         })?;
 
-    IncomingDefaultLocation::action_resync(ctx.action_queue()).await;
+    IncomingDefault::action_resync(ctx.action_queue()).await;
 
     let all_mail = SystemLabel::AllMail
         .load(&tether)

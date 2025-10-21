@@ -57,9 +57,7 @@
         "IsRepliedAll": 0,
         "IsForwarded": 0,
         "AddressID": "cO6RgDJwoHFScLqIkVnRD9luDVkh20EDto1aIHVHU43-dJlREzFcUjS-c7bB-_qlnxBgwAShddHZ4UDdu6RswQ==",
-        "LabelIDs": [
-          "1"
-        ],
+        "LabelIDs": ["1"],
         "ExternalID": "somesemirandomstringofchars",
         "NumAttachments": 2,
         "Flags": 8198,
@@ -85,12 +83,8 @@
         "DisplaySnoozedReminder": true,
         "IsProton": 1,
         "BimiSelector": "default",
-        "LabelIDsAdded": [
-          "2"
-        ],
-        "LabelIDsRemoved": [
-          "2"
-        ]
+        "LabelIDsAdded": ["2"],
+        "LabelIDsRemoved": ["2"]
       }
     }
   ],
@@ -110,9 +104,7 @@
         "NumAttachments": 0,
         "ExpirationTime": 0,
         "Size": 3555,
-        "LabelIDs": [
-          "0"
-        ],
+        "LabelIDs": ["0"],
         "Labels": [
           {
             "ID": "0",
@@ -129,12 +121,8 @@
         "DisplaySenderImage": 1,
         "IsProton": 1,
         "BimiSelector": "default",
-        "LabelIDsAdded": [
-          "2"
-        ],
-        "LabelIDsRemoved": [
-          "2"
-        ],
+        "LabelIDsAdded": ["2"],
+        "LabelIDsRemoved": ["2"],
         "AttachmentInfo": {
           "image/jpeg": {
             "inline": 2,
@@ -163,9 +151,7 @@
       "Importer": {
         "ID": "ziWi-ZOb28XR4sCGFCEpqQbd1...lEp-fhjBbUPDMHGU699fw==",
         "Account": "test@protonmail.dev",
-        "Product": [
-          "Mail"
-        ],
+        "Product": ["Mail"],
         "Provider": 1,
         "TokenID": "ziWi-ZOb28XR4sCGFCEpqQbd1...lEp-fhjBbUPDMHGU699fw==",
         "ModifyTime": "12345678",
@@ -234,23 +220,17 @@
             "ID": "aefew4323jFv0BhSMw==",
             "Name": "test1",
             "Email": "features@protonmail.black",
-            "Type": [
-              "work"
-            ],
+            "Type": ["work"],
             "Defaults": 1,
             "Order": 1,
             "ContactID": "a29olIjFv0rnXxBhSMw==",
-            "LabelIDs": [
-              "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w=="
-            ],
+            "LabelIDs": ["I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w=="],
             "CanonicalEmail": "features@protonmail.black",
             "LastUsedTime": 0,
             "IsProton": 1
           }
         ],
-        "LabelIDs": [
-          "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w=="
-        ],
+        "LabelIDs": ["I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w=="],
         "Cards": [
           {
             "Type": 2,
@@ -269,15 +249,11 @@
         "ID": "aefew4323jFv0BhSMw==",
         "Name": "test1",
         "Email": "features@protonmail.black",
-        "Type": [
-          "work"
-        ],
+        "Type": ["work"],
         "Defaults": 1,
         "Order": 1,
         "ContactID": "a29olIjFv0rnXxBhSMw==",
-        "LabelIDs": [
-          "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w=="
-        ],
+        "LabelIDs": ["I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w=="],
         "CanonicalEmail": "features@protonmail.black",
         "LastUsedTime": 0,
         "IsProton": 1
@@ -297,12 +273,8 @@
         "Tree": [
           {
             "If": {
-              "Headers": [
-                "From"
-              ],
-              "Keys": [
-                "protonmail.ch"
-              ],
+              "Headers": ["From"],
+              "Keys": ["protonmail.ch"],
               "Match": {
                 "Type": "Is"
               },
@@ -331,6 +303,7 @@
     {
       "ID": "Ik65N-aChBuWFd...UvkFTwJFJPQg==",
       "Action": 1,
+      "Location": 14,
       "Filter": {}
     },
     {
@@ -386,10 +359,7 @@
     "Plans": [
       {
         "ID": "<encrypted_plan_id2>",
-        "Type": [
-          0,
-          1
-        ],
+        "Type": [0, 1],
         "State": 1,
         "Cycle": 1,
         "Name": "business",
@@ -541,9 +511,7 @@
       "StartTime": 0,
       "Endtime": 0,
       "Repeat": 0,
-      "DaysSelected": [
-        "string"
-      ],
+      "DaysSelected": ["string"],
       "Subject": "Auto",
       "Message": "",
       "IsEnabled": null,
@@ -593,21 +561,15 @@
     "MobileSettings": {
       "MessageToolbar": {
         "IsCustom": true,
-        "Actions": [
-          "string"
-        ]
+        "Actions": ["string"]
       },
       "ConversationToolbar": {
         "IsCustom": true,
-        "Actions": [
-          "string"
-        ]
+        "Actions": ["string"]
       },
       "ListToolbar": {
         "IsCustom": true,
-        "Actions": [
-          "string"
-        ]
+        "Actions": ["string"]
       }
     },
     "HideEmbeddedImages": 1,
@@ -625,9 +587,7 @@
     "PlanTitle": "VPN Plus",
     "MaxConnect": 10,
     "MaxTier": 2,
-    "Groups": [
-      "vpn-paid"
-    ],
+    "Groups": ["vpn-paid"],
     "NeedConnectionAllocation": false,
     "BusinessEvents": false,
     "BrowserExtension": false,
@@ -663,9 +623,7 @@
         "MaxSpace": 0,
         "Name": "Jason",
         "UsedSpace": 0,
-        "Addresses": [
-          "string"
-        ]
+        "Addresses": ["string"]
       }
     }
   ],
@@ -747,9 +705,7 @@
             "Token": "null or -----BEGIN PGP MESSAGE-----.*",
             "Signature": "null or -----BEGIN PGP SIGNATURE-----",
             "Fingerprint": "c93f767df53b0ca8395cfde90483475164ec6353",
-            "Fingerprints": [
-              "c93f767df53b0ca8395cfde90483475164ec6353"
-            ],
+            "Fingerprints": ["c93f767df53b0ca8395cfde90483475164ec6353"],
             "Activation": "-----BEGIN PGP MESSAGE-----.*",
             "Primary": 1,
             "Active": 1,
@@ -786,9 +742,7 @@
         "Filter": {
           "Tree": [
             {
-              "List": [
-                "string"
-              ],
+              "List": ["string"],
               "Type": "Require"
             }
           ],
@@ -812,9 +766,7 @@
         "Filter": {
           "Tree": [
             {
-              "List": [
-                "string"
-              ],
+              "List": ["string"],
               "Type": "Require"
             }
           ],
@@ -904,39 +856,27 @@
         "EntryPerProtocol": {
           "OpenVPNUDP": {
             "IPv4": "1.0.0.0",
-            "Ports": [
-              "443"
-            ]
+            "Ports": ["443"]
           },
           "OpenVPNTCP": {
             "IPv4": "1.0.0.0",
-            "Ports": [
-              "443"
-            ]
+            "Ports": ["443"]
           },
           "IKEv2": {
             "IPv4": "1.0.0.0",
-            "Ports": [
-              "443"
-            ]
+            "Ports": ["443"]
           },
           "WireGuardUDP": {
             "IPv4": "1.0.0.0",
-            "Ports": [
-              "443"
-            ]
+            "Ports": ["443"]
           },
           "WireGuardTCP": {
             "IPv4": "1.0.0.0",
-            "Ports": [
-              "443"
-            ]
+            "Ports": ["443"]
           },
           "WireGuardTLS": {
             "IPv4": "1.0.0.0",
-            "Ports": [
-              "443"
-            ]
+            "Ports": ["443"]
           }
         }
       }
@@ -1062,9 +1002,7 @@
         "PoolSize": 10,
         "Priority": 1,
         "ScriptType": 1,
-        "Addresses": [
-          null
-        ]
+        "Addresses": [null]
       }
     }
   ],
@@ -1145,7 +1083,5 @@
     "ReceiveTransactionNotification": 1,
     "WalletCreated": 1
   },
-  "Notices": [
-    "This is an announcement"
-  ]
+  "Notices": ["This is an announcement"]
 }

@@ -167,7 +167,10 @@ pub(crate) fn register_actions(
             reg(queue, unblock::UnblockHandler { api: api.clone() });
             reg(
                 queue,
-                update_incoming_defaults::SyncIncomingDefaultsHandler { api: api.clone() },
+                update_incoming_defaults::SyncIncomingDefaultsHandler {
+                    api: api.clone(),
+                    ctx: ctx.clone(),
+                },
             );
             reg(queue, conversations::MoveHandler { api: api.clone() });
             replace(

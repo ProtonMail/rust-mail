@@ -2,7 +2,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::Address;
 use proton_core_common::models::ModelExtension as _;
 use proton_mail_api::services::proton::common::MessageId;
-use proton_mail_api::services::proton::response_data::IncomingDefault;
+use proton_mail_api::services::proton::response_data::IncomingDefault as ApiIncomingDefault;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use proton_mail_common::datatypes::MessageFlags;
 use proton_mail_common::datatypes::ParsedHeaders;
@@ -10,11 +10,13 @@ use proton_mail_common::datatypes::SystemLabelId as _;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::models::Conversation;
+use proton_mail_common::models::IncomingDefault;
+use proton_mail_common::models::IncomingDefaultLocation;
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::models::MessageBody;
 use proton_mail_common::models::MessageBodyMetadata;
 use proton_mail_common::models::MessageMimeType;
-use proton_mail_common::models::default_location::IncomingDefaultLocation;
+
 use proton_mail_common::test_utils::init::Params;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -30,6 +32,16 @@ use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::{method, path};
+
+fn default_api_incoming_default() -> ApiIncomingDefault {
+    ApiIncomingDefault {
+        email: None,
+        location: ApiIncomingDefaultLocation::Blocked,
+        action: None,
+        id: "".into(),
+        domain: None,
+    }
+}
 
 #[tokio::test]
 async fn banners() {
@@ -58,9 +70,9 @@ async fn banners() {
     test_ctx.mock_delete_incoming_default().await;
 
     test_ctx
-        .mock_post_incoming_default(IncomingDefault {
+        .mock_post_incoming_default(ApiIncomingDefault {
             email: Some("normal@email".into()),
-            ..Default::default()
+            ..default_api_incoming_default()
         })
         .await;
 
@@ -84,16 +96,15 @@ async fn banners() {
         .tx::<_, _, StashError>(async |tx| {
             conv.save(tx).await.unwrap();
             addr.save(tx).await.unwrap();
-            let incoming_default = vec![IncomingDefault {
-                email: Some("blocked@email".into()),
-                location: Some(ApiIncomingDefaultLocation::Blocked),
-                id: "123".into(),
-                action: None,
+            let mut incoming_default = IncomingDefault {
+                email: "blocked@email".into(),
+                location: IncomingDefaultLocation::Blocked,
+                remote_id: Some("123".into()),
+                local_id: None,
                 domain: None,
-            }];
-            IncomingDefaultLocation::store_by_email(incoming_default, tx)
-                .await
-                .unwrap();
+                deleted: false,
+            };
+            incoming_default.save(tx).await.unwrap();
             Ok(())
         })
         .await
@@ -241,7 +252,7 @@ async fn banners() {
 
     // Let's block, unblock and report phishing to see how labels change
 
-    IncomingDefaultLocation::action_unblock(ctx.action_queue(), "blocked@email".into())
+    IncomingDefault::action_unblock(ctx.action_queue(), "blocked@email".into())
         .await
         .unwrap();
 
@@ -281,7 +292,7 @@ async fn banners() {
     );
 
     // Let's make sure that action_report_phishing gets reverted and that blocking works
-    IncomingDefaultLocation::action_block(ctx.action_queue(), "normal@email".into())
+    IncomingDefault::action_block(ctx.action_queue(), "normal@email".into())
         .await
         .unwrap();
 

@@ -116,16 +116,14 @@ MailEvent {
     incoming_defaults: Some(
         [
             IncomingDefault {
-                location: None,
+                location: Blocked,
                 action: None,
                 email: None,
                 id: "Ik65N-aChBuWFd...UvkFTwJFJPQg==",
                 domain: None,
             },
             IncomingDefault {
-                location: Some(
-                    Blocked,
-                ),
+                location: Blocked,
                 action: None,
                 email: Some(
                     eXXXX@XXXXX,
