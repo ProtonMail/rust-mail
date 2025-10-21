@@ -40,7 +40,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::LazyLock;
 use velcro::hash_map;
 use wiremock::matchers::{body_json, method, path, query_param};
-use wiremock::{Mock, ResponseTemplate, Times};
+use wiremock::{Mock, MockBuilder, ResponseTemplate, Times};
 
 /// Initialization parameters.
 #[derive(Clone, Default)]
@@ -321,6 +321,18 @@ impl MailTestContext {
         .named(function_name!())
         .mount(self.mock_server())
         .await;
+    }
+
+    /// Generate new mock expectations for retrieving conversations.
+    ///
+    /// This function will mock the response for the given conversations.
+    ///
+    #[function_name::named]
+    pub async fn mock_get_conversations_with(&self, with: impl Fn(MockBuilder) -> Mock) {
+        with(Mock::given(method("GET")).and(path("/api/mail/v4/conversations")))
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
     }
 
     /// Generate new mock for `ping` request

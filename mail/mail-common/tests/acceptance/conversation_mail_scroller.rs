@@ -1564,6 +1564,156 @@ async fn test_conversation_mail_scroller_reads_non_empty_folder_for_the_first_ti
     assert_eq!(test_scroller.items().len(), 9);
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+async fn test_conversation_mail_scroller_handles_stale_data_in_inbox_on_next_and_previous_page() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let page_size = 10;
+    let include = IncludeSwitch::Default;
+    let unread = ReadFilter::All;
+    let mut api_page = create_api_conversation_page(0..9, 100);
+    for conv in api_page.iter_mut() {
+        conv.labels = vec![ApiConversationLabel {
+            id: LabelId::inbox(),
+            ..ApiConversationLabel::test_default()
+        }];
+    }
+    // Set up cached data
+    let remote_label_id = SystemLabel::Trash.remote_id();
+    let mut data = hash_map! {
+        vec![remote_label_id.as_str()]: vec![],
+        vec!["rid2"]: test_conversations(50, 0),
+    };
+    data.save_to_database(&mut tether).await;
+
+    let api_page_clone = api_page.clone();
+    ctx.mock_get_conversations_with(move |builder| {
+        builder
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
+                    conversations: api_page_clone.clone(),
+                    stale: true,
+                    total: 1,
+                }),
+            )
+            .expect(2..=4)
+    })
+    .await;
+    ctx.mock_ping_success().await;
+    ctx.catch_all().await;
+
+    // we should get an update on the first fetch_more in Inbox despite the data being stale
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 10;
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
+
+    let mut test_scroller =
+        TestScroller::conversations_instant(&user_ctx, local_label_id, unread, include, page_size)
+            .await
+            .unwrap();
+
+    test_scroller.fetch_more().unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::Append { items: 9 })
+        .await;
+    assert!(test_scroller.has_more().await.unwrap());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+async fn test_conversation_mail_scroller_handles_stale_data_in_trash_on_next_and_previous_page() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let page_size = 10;
+    let include = IncludeSwitch::Default;
+    let unread = ReadFilter::All;
+    let remote_label_id = SystemLabel::Trash.remote_id();
+    let mut api_page = create_api_conversation_page(0..9, 100);
+    for conv in api_page.iter_mut() {
+        conv.labels = vec![ApiConversationLabel {
+            id: remote_label_id.clone(),
+            ..ApiConversationLabel::test_default()
+        }];
+    }
+    // Set up cached data
+    let mut data = hash_map! {
+        vec![remote_label_id.as_str()]: vec![],
+        vec!["rid2"]: test_conversations(50, 0),
+    };
+    data.save_to_database(&mut tether).await;
+
+    let api_page_clone = api_page.clone();
+    ctx.mock_get_conversations_with(move |builder| {
+        builder
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
+                    conversations: api_page_clone.clone(),
+                    stale: true,
+                    total: 1,
+                }),
+            )
+            .expect(2..=4)
+    })
+    .await;
+    ctx.mock_ping_success().await;
+    ctx.catch_all().await;
+
+    let local_label_id = SystemLabel::Trash.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 10;
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
+
+    let mut test_scroller =
+        TestScroller::conversations_instant(&user_ctx, local_label_id, unread, include, page_size)
+            .await
+            .unwrap();
+
+    // The location is trash so we should get no update as the data is stale
+    test_scroller.fetch_more().unwrap(); // 1st fetch_more
+    test_scroller.match_next_update(TestUpdate::None).await;
+    assert!(test_scroller.has_more().await.unwrap());
+
+    // Update the database should trigger a new fetch_more
+    let mut new_data = hash_map! {
+        vec!["rid2"]: test_conversations(1, 299),
+    };
+    new_data.save_to_database(&mut tether).await;
+
+    // We shouldn't get any update as the data is still stale
+    test_scroller.match_next_update(TestUpdate::None).await;
+
+    // Lets test recovery
+    ctx.mock_server().reset().await;
+    ctx.mock_get_conversations_with(move |builder| {
+        builder
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
+                    conversations: api_page.clone(),
+                    stale: false,
+                    total: 1,
+                }),
+            )
+            .expect(2..=3)
+    })
+    .await;
+    ctx.mock_ping_success().await;
+    ctx.catch_all().await;
+
+    test_scroller.fetch_more_and_wait().await.unwrap(); // 1st fetch_more
+    test_scroller
+        .match_next_update(TestUpdate::Append { items: 9 })
+        .await;
+    assert!(test_scroller.has_more().await.unwrap());
+}
+
 #[function_name::named]
 pub async fn mock_get_conversations_page(
     ctx: &MailTestContext,
