@@ -65,17 +65,22 @@ impl Handler for BlockHandler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Blocking {}", action.email);
 
-        let mut incoming_default =
-            IncomingDefault::by_email(action.email.as_clear_text_str(), bond)
-                .await?
-                .unwrap_or_else(|| IncomingDefault {
-                    local_id: None,
-                    remote_id: None,
-                    email: action.email.clone(),
-                    domain: None,
-                    location: IncomingDefaultLocation::Blocked,
-                    deleted: false,
-                });
+        if IncomingDefault::by_email(action.email.as_clear_text_str(), bond)
+            .await?
+            .is_some()
+        {
+            tracing::warn!("Email is already blocked");
+            return Ok(());
+        }
+
+        let mut incoming_default = IncomingDefault {
+            local_id: None,
+            remote_id: None,
+            email: action.email.clone(),
+            domain: None,
+            location: IncomingDefaultLocation::Blocked,
+            deleted: false,
+        };
         incoming_default.save(bond).await?;
         action.local_id = incoming_default.local_id;
 
@@ -112,7 +117,8 @@ impl Handler for BlockHandler {
         tracing::info!("Blocking {}", action.email);
 
         let Some(local_id) = action.local_id else {
-            return Err(anyhow!("Missing local_id").into());
+            tracing::warn!("Email is already blocked");
+            return Ok(());
         };
 
         let new_incoming = self

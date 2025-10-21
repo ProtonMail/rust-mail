@@ -132,7 +132,7 @@ async fn test_double_block_idempotent() {
     let email = "double_block@example.com";
 
     test_ctx
-        .mock_post_incoming_default_n(default_api_incoming_default(email), 2)
+        .mock_post_incoming_default_n(default_api_incoming_default(email), 1)
         .await;
     test_ctx.catch_all().await;
     IncomingDefault::action_block(user_ctx.action_queue(), email.into())
