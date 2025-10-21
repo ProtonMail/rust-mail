@@ -61,7 +61,7 @@ use stash::rusqlite::{OptionalExtension, params_from_iter};
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{ConnectionExt, IterMapToSql, MapToSql as _, placeholders, placeholders_n};
 use std::collections::hash_map::Entry as HmEntry;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::ops::{AddAssign, Deref, DerefMut};
 use std::sync::Arc;
@@ -528,48 +528,59 @@ impl Conversation {
     /// is required due to multiprocess nature of mail application and the possibility to
     /// view mailboxes without interfering with processes triggered by the user.
     ///
-    /// If the conversation is known and has new labels, it will update the conversation
-    /// by adding the new labels to the existing labels.
-    ///
     /// If the conversation is not known, it will replace existing conversation with API data.
+    ///
+    /// Conversation is updated only if the current open label context state is different. This way
+    /// new messages in conversations are visible earlier and we prevent unnecessary updates if not
+    /// relevant to the current location.
     ///
     /// # Errors
     ///
     /// Returns an error if the local conversation id is not set or the query failed.
     ///
-    pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn create_or_get_local(
+        &mut self,
+        current_label_id: &LabelId,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone()
-            && let Some(mut existing) = Self::find_by_remote_id(remote_id, bond).await?
+            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
         {
             if existing.is_known {
-                let existing_labels = existing
-                    .labels
-                    .iter()
-                    .map(|l| l.remote_label_id.clone())
-                    .collect::<HashSet<_>>();
-                let new_labels = self
-                    .labels
-                    .iter()
-                    .filter(|l| !existing_labels.contains(&l.remote_label_id))
-                    .cloned()
-                    .collect_vec();
-                let no_new_labels = new_labels.is_empty();
-                existing.labels.extend(new_labels);
+                let should_skip = match (
+                    self.labels
+                        .iter()
+                        .find(|l| l.remote_label_id.as_ref() == Some(current_label_id)),
+                    existing
+                        .labels
+                        .iter()
+                        .find(|l| l.remote_label_id.as_ref() == Some(current_label_id)),
+                ) {
+                    (Some(this_label), Some(other_label)) => {
+                        this_label.are_stats_equal(other_label)
+                    }
+                    (Some(_), None) | (None, Some(_)) => false,
+                    (None, None) => true,
+                };
 
-                if no_new_labels {
+                if should_skip {
                     *self = existing;
-
                     tracing::trace!(
                         remote_id = ?self.remote_id,
                         "Skipping saving conversation, we already have it in the local DB"
                     );
                     return Ok(());
                 }
+                self.local_id = existing.local_id;
+                tracing::debug!(
+                remote_id = ?self.remote_id,
+                    "Updating unknown conversation with API data"
+                );
             } else {
                 // Otherwise, update the unknown conversation with API data
                 self.local_id = existing.local_id;
                 tracing::debug!(
-                    remote_id = ?self.remote_id,
+                remote_id = ?self.remote_id,
                     "Updating unknown conversation with API data"
                 );
             }
@@ -3309,6 +3320,16 @@ impl ConversationLabel {
             context_snooze_time: self.context_snooze_time.as_u64(),
             context_time: self.context_time.as_u64(),
         })
+    }
+
+    pub(crate) fn are_stats_equal(&self, other: &Self) -> bool {
+        self.context_time == other.context_time
+            && self.context_expiration_time == other.context_expiration_time
+            && self.context_num_attachments == other.context_num_attachments
+            && self.context_num_messages == other.context_num_messages
+            && self.context_num_unread == other.context_num_unread
+            && self.context_size == other.context_size
+            && self.context_snooze_time == other.context_snooze_time
     }
 }
 
