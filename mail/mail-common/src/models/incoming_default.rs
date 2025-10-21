@@ -29,6 +29,7 @@ use stash::exports::Value;
 use stash::macros::Model;
 
 use proton_mail_api::services::proton::response_data::IncomingDefault as ApiIncomingDefault;
+use proton_mail_api::services::proton::response_data::IncomingDefaultEvent as ApiIncomingDefaultEvent;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use stash::orm::Model;
 use stash::params;
@@ -43,6 +44,21 @@ use crate::actions::addresses::block::Block;
 use crate::actions::addresses::unblock::Unblock;
 use crate::actions::addresses::update_incoming_defaults::SyncIncomingDefaults;
 use crate::datatypes::LocalIncomingDefaultId;
+
+#[derive(Clone, PartialEq, Debug, Eq)]
+pub struct IncomingDefaultEvent {
+    pub remote_id: IncomingDefaultId,
+}
+
+impl From<ApiIncomingDefaultEvent> for IncomingDefaultEvent {
+    fn from(api: ApiIncomingDefaultEvent) -> Self {
+        let ApiIncomingDefaultEvent { id, action: _ } = api;
+
+        IncomingDefaultEvent {
+            remote_id: id.into(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Model, PartialEq)]
 #[TableName("incoming_defaults")]

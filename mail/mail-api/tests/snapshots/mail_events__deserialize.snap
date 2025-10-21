@@ -115,21 +115,13 @@ MailEvent {
     ),
     incoming_defaults: Some(
         [
-            IncomingDefault {
-                location: Blocked,
-                action: None,
-                email: None,
+            IncomingDefaultEvent {
                 id: "Ik65N-aChBuWFd...UvkFTwJFJPQg==",
-                domain: None,
+                action: Create,
             },
-            IncomingDefault {
-                location: Blocked,
-                action: None,
-                email: Some(
-                    eXXXX@XXXXX,
-                ),
+            IncomingDefaultEvent {
                 id: "Ik65N-aChBuWFd...UvkFTwJFJPQg==",
-                domain: None,
+                action: Create,
             },
         ],
     ),

@@ -580,7 +580,7 @@ pub struct MailEvent {
 
     pub conversations: Option<Vec<ConversationEvent>>,
 
-    pub incoming_defaults: Option<Vec<IncomingDefault>>,
+    pub incoming_defaults: Option<Vec<IncomingDefaultEvent>>,
 
     pub mail_settings: Option<MailSettings>,
 
@@ -1365,23 +1365,33 @@ pub struct NewAttachmentResponse {
     pub headers: MessageAttachmentHeaders,
 }
 
-/// The response from an incoming default, can come either in the event loop or by calling
-/// `incomingdefaults`
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct IncomingDefaultEvent {
+    #[serde(rename = "ID")]
+    pub id: String,
+
+    pub action: Action,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct IncomingDefault {
+    #[serde(rename = "ID")]
+    pub id: String,
+
     /// Which label messages from this address go to
     pub location: IncomingDefaultLocation,
+
     /// What to do with this response
     #[serde(rename = "Type")]
     pub action: Option<Action>,
 
     pub email: Option<PrivateEmail>,
-    // These are unused
-    //
-    #[serde(rename = "ID")]
-    pub id: String,
+
+    // This is unused
     pub domain: Option<String>,
     // time: Option<u64>,
 }
