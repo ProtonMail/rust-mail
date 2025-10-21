@@ -31,14 +31,13 @@
 //!
 
 use crate::datatypes::{ConversationLabelsCount, MessageLabelsCount};
-use crate::models::{Conversation, MailSettings};
+use crate::models::{Conversation, IncomingDefaultEvent, MailSettings};
 use proton_core_api::services::proton::EventId;
 use proton_core_common::datatypes::Refresh;
 use proton_core_common::events::{Action, LabelEvent};
 use proton_core_common::utils::MapVec as _;
 use proton_event_loop::Event;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
-use proton_mail_api::services::proton::prelude::IncomingDefault;
 use proton_mail_api::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, MailEvent as ApiMailEvent,
     MessageEvent as ApiMessageEvent, MessageMetadata,
@@ -82,7 +81,7 @@ pub struct MailEvent {
     /// TODO: Document this field.
     pub has_more: bool,
 
-    pub incoming_defaults: Option<Vec<IncomingDefault>>,
+    pub incoming_defaults: Option<Vec<IncomingDefaultEvent>>,
 
     /// TODO: Document this field.
     pub labels: Option<Vec<LabelEvent>>,
@@ -143,7 +142,9 @@ impl From<ApiMailEvent> for MailEvent {
             messages: value.messages.map(|messages| messages.map_vec()),
             refresh: value.refresh.into(),
             has_more: value.has_more,
-            incoming_defaults: value.incoming_defaults,
+            incoming_defaults: value
+                .incoming_defaults
+                .map(|i| i.into_iter().map(Into::into).collect()),
         }
     }
 }
