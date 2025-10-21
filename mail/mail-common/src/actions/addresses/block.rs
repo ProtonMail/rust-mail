@@ -20,6 +20,7 @@ use stash::stash::Bond;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Block {
     pub email: PrivateEmail,
+    #[serde(default)]
     local_id: Option<LocalIncomingDefaultId>,
 }
 
