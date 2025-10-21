@@ -409,12 +409,21 @@ impl ConversationScroller {
     }
 
     #[must_use]
-    pub fn cursor(&self, looking_at: Id) -> Arc<MailConversationCursor> {
-        let cursor = self.scroller.clone().cursor(looking_at.into());
+    pub async fn cursor(
+        &self,
+        looking_at: Id,
+    ) -> Result<Arc<MailConversationCursor>, MailScrollerError> {
+        let scroller = Arc::clone(&self.scroller);
 
-        Arc::new(MailConversationCursor {
-            cursor: Arc::new(cursor),
+        uniffi_async(async move {
+            let cursor = scroller.cursor(looking_at.into()).await?;
+
+            Result::<_, RealProtonMailError>::Ok(Arc::new(MailConversationCursor {
+                cursor: Arc::new(cursor),
+            }))
         })
+        .await
+        .map_err(Into::into)
     }
 
     #[must_use]
@@ -534,12 +543,21 @@ impl MessageScroller {
     }
 
     #[must_use]
-    pub fn cursor(&self, looking_at: Id) -> Arc<MailMessageCursor> {
-        let cursor = self.scroller.clone().cursor(looking_at.into());
+    pub async fn cursor(
+        &self,
+        looking_at: Id,
+    ) -> Result<Arc<MailMessageCursor>, MailScrollerError> {
+        let scroller = Arc::clone(&self.scroller);
 
-        Arc::new(MailMessageCursor {
-            cursor: Arc::new(cursor),
+        uniffi_async(async move {
+            let cursor = scroller.cursor(looking_at.into()).await?;
+
+            Result::<_, RealProtonMailError>::Ok(Arc::new(MailMessageCursor {
+                cursor: Arc::new(cursor),
+            }))
         })
+        .await
+        .map_err(Into::into)
     }
 
     #[must_use]
@@ -643,12 +661,21 @@ impl SearchScroller {
     }
 
     #[must_use]
-    pub fn cursor(&self, looking_at: Id) -> Arc<MailMessageCursor> {
-        let cursor = self.scroller.clone().cursor(looking_at.into());
+    pub async fn cursor(
+        &self,
+        looking_at: Id,
+    ) -> Result<Arc<MailMessageCursor>, MailScrollerError> {
+        let scroller = Arc::clone(&self.scroller);
 
-        Arc::new(MailMessageCursor {
-            cursor: Arc::new(cursor),
+        uniffi_async(async move {
+            let cursor = scroller.cursor(looking_at.into()).await?;
+
+            Result::<_, RealProtonMailError>::Ok(Arc::new(MailMessageCursor {
+                cursor: Arc::new(cursor),
+            }))
         })
+        .await
+        .map_err(Into::into)
     }
 
     #[must_use]

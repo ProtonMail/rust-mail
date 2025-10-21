@@ -147,10 +147,9 @@ where
 {
     id: Uuid,
     ctx: Weak<MailUserContext>,
-    command: flume::Sender<ScrollerCommand>,
+    command: flume::Sender<ScrollerCommand<T>>,
     ordered_command: flume::Sender<ScrollerOrderedCommand>,
     supports_include_filter: bool,
-    items: Arc<SyncRwLock<Vec<T>>>,
     aborts: Vec<AbortHandle>,
 }
 
@@ -312,7 +311,6 @@ where
             ordered_command,
             updates,
             handle,
-            items,
             aborts,
         } = ScrollerWorker::run(ctx_weak.clone(), source, page_size).await?;
 
@@ -360,7 +358,6 @@ where
                 command,
                 ordered_command,
                 supports_include_filter,
-                items,
                 aborts,
             },
             MailScrollerHandle { updates, handle },
@@ -380,6 +377,23 @@ where
         receiver
             .await
             .map_err(|_| MailContextError::Other(anyhow!("Failed to receive has more response")))?
+    }
+
+    pub async fn cursor(
+        self: &Arc<Self>,
+        looking_at: T::Id,
+    ) -> Result<MailCursor<T>, MailContextError> {
+        let (sender, receiver) = oneshot::channel();
+
+        debug!("Sending `Items` command");
+
+        self.command
+            .send(ScrollerCommand::Cursor(self.clone(), looking_at, sender))
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to send `items` command")))?;
+
+        receiver
+            .await
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to receive `items` response")))
     }
 
     #[instrument(skip_all, fields(id = ?self.id))]
@@ -449,10 +463,6 @@ where
             })?;
 
         Ok(())
-    }
-
-    pub(crate) fn items(&self) -> &SyncRwLock<Vec<T>> {
-        &self.items
     }
 
     #[instrument(skip_all, fields(id = ?self.id))]
@@ -593,11 +603,6 @@ where
             .map_err(|_| MailContextError::Other(anyhow!("Failed to receive synced response")))?
     }
 
-    #[instrument(skip_all, fields(id = ?self.id))]
-    pub fn cursor(self: Arc<Self>, looking_at: T::Id) -> MailCursor<T> {
-        MailCursor::new(self, looking_at)
-    }
-
     pub fn supports_include_filter(&self) -> bool {
         self.supports_include_filter
     }
@@ -688,7 +693,7 @@ where
             page_size,
             task,
             execute_on_online: None,
-            items: items.clone(),
+            items,
             update: update_sender,
             ordered_command_recv: ordered_command_receiver,
             ordered_command_send: ordered_command_sender.clone(),
@@ -706,14 +711,13 @@ where
             ordered_command: ordered_command_sender,
             updates: update_receiver,
             handle,
-            items,
             aborts,
         })
     }
 
     fn spawn(
         mut self,
-        command_receiver: flume::Receiver<ScrollerCommand>,
+        command_receiver: flume::Receiver<ScrollerCommand<S::Item>>,
         ordered_command_sender: flume::Sender<ScrollerOrderedCommand>,
         db_receiver: flume::Receiver<()>,
         invalidation_receiver: flume::Receiver<()>,
@@ -721,6 +725,7 @@ where
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let mut aborts = vec![];
         let source_clone = self.source.clone();
+        let items_clone = Arc::clone(&self.items);
         let weak_ctx = self.ctx.clone();
 
         // Ordered operations, these needs to be streamlined and not blocking other operations
@@ -771,7 +776,7 @@ where
                             tracing::error!("Failed to receive command: {e:?}");
                             return;
                         }
-                        if let Err(e) = Self::handle_command(r.unwrap(), &source_clone, &weak_ctx).await {
+                        if let Err(e) = Self::handle_command(r.unwrap(), &source_clone, items_clone.clone(), &weak_ctx).await {
                             tracing::error!("Failed to handle command: {e:?}");
                         }
                     }
@@ -921,8 +926,9 @@ where
     }
 
     async fn handle_command(
-        command: ScrollerCommand,
+        command: ScrollerCommand<S::Item>,
         source: &RwLock<S>,
+        items: Arc<SyncRwLock<Vec<S::Item>>>,
         ctx: &Weak<MailUserContext>,
     ) -> Result<(), MailContextError> {
         match command {
@@ -964,6 +970,12 @@ where
                 sender
                     .send(has_more)
                     .map_err(|e| anyhow!("Failed to send has more: {e:?}"))?;
+            }
+            ScrollerCommand::Cursor(scroller, looking_at, sender) => {
+                let cursor = MailCursor::new(looking_at, items.clone(), scroller);
+                sender
+                    .send(cursor)
+                    .map_err(|_| anyhow!("Fail to send `cursor`"))?;
             }
         }
 
@@ -1264,19 +1276,19 @@ struct ScrollerWorkerHandle<S>
 where
     S: MailScrollerSource,
 {
-    command: flume::Sender<ScrollerCommand>,
+    command: flume::Sender<ScrollerCommand<S::Item>>,
     ordered_command: flume::Sender<ScrollerOrderedCommand>,
     updates: flume::Receiver<ScrollerUpdate<S::Item>>,
     handle: DropRemoveTableObserverHandle,
-    items: Arc<SyncRwLock<Vec<S::Item>>>,
     aborts: Vec<AbortHandle>,
 }
 
-enum ScrollerCommand {
+enum ScrollerCommand<T: MailScrollerItem> {
     GetTotal(oneshot::Sender<Result<u64, MailContextError>>),
     GetSeen(oneshot::Sender<Result<u64, MailContextError>>),
     GetSynced(oneshot::Sender<Result<u64, MailContextError>>),
     HasMore(oneshot::Sender<Result<bool, MailContextError>>),
+    Cursor(Arc<MailScroller<T>>, T::Id, oneshot::Sender<MailCursor<T>>),
 }
 
 #[derive(Debug, Derivative)]
