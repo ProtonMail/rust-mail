@@ -589,6 +589,20 @@ impl Save {
         // we implement draft updates.
         guard
             .tx::<_, _, <Self as Action>::Error>(async |bond| {
+                // There is a small chance that, some rogue event or state update could have
+                // brought in the new draft before we have received the message from
+                // the server and applied the changes in the db. This can happen if we have
+                // a bug in the event loop code or the scrollers fetched new elements without
+                // proper filtering.
+                // If the local message if does not match what we expect, then we should delete
+                // the existing message with that remote id and re-create it to avoid duplicate
+                // remote ids.
+                if let Some(existing_local_message_id) = Message::remote_id_counterpart(new_message.metadata.id.clone(), bond).await? && existing_local_message_id != local_message_id{
+                    tracing::warn!("Found duplicate message with {:?}, deleting...", new_message.metadata.id);
+                    Message::delete_by_id(existing_local_message_id, bond).await?;
+                }
+
+
                 // check if someone else already created this conversation through some other
                 // flow.
                 if let Some(remote_conv_local_id) = Conversation::remote_id_counterpart(new_message.metadata.conversation_id.clone(), bond).await?
@@ -632,7 +646,7 @@ impl Save {
                 Message::update_ids_and_display_order(
                     local_message_id,
                     new_local_message.display_order,
-                    new_local_message.remote_id.expect("Should be set after api fetc"),
+                    new_local_message.remote_id.expect("Should be set after api fetch"),
                     new_local_message.remote_conversation_id.expect("Should be set after api fetch"),
                     bond
                 )

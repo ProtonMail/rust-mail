@@ -1856,3 +1856,113 @@ async fn replying_to_expiring_message_inherits_expiration() {
     // Due to this method relying on Unixtimestamp::now(), it should be higher or equal
     assert!(expiration_time >= expected_expiration_time);
 }
+
+#[tokio::test]
+async fn draft_save_handles_save_with_new_message_if_remote_message_already_exists_after_server_response()
+ {
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let mut params = draft_test_params_with_mime_type(MimeType::TextHtml);
+    params.addresses[0].status = AddressStatus::Disabled;
+
+    // Create one message we can reply to.
+    let mut remote_existing_message = draft_message_with_attachments();
+
+    let time = UnixTimestamp::now().saturating_add(100);
+    let expiration_time = UnixTimestamp::now().saturating_add(2000);
+
+    remote_existing_message.metadata.sender.address = "me@proton.me".into();
+    remote_existing_message.body.reply_to.address = "me@proton.me".into();
+    remote_existing_message.metadata.id = "FancyRemoteId".into();
+    remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+    remote_existing_message.metadata.expiration_time = expiration_time.as_u64();
+    remote_existing_message.metadata.time = time.as_u64();
+    remote_existing_message
+        .metadata
+        .attachments_metadata
+        .clear();
+    remote_existing_message.body.attachments.clear();
+
+    let params = draft_test_params();
+    let message = draft_message();
+
+    ctx.setup_user(params.clone()).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let (mut existing_message, _, _) =
+        Message::from_api_data(remote_existing_message.clone(), &tether)
+            .await
+            .unwrap();
+
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
+
+    ctx.mock_get_message(
+        &remote_existing_message.metadata.id,
+        remote_existing_message.clone(),
+    )
+    .await;
+
+    let expected_draft_params = expected_create_reply_draft_params(
+        &existing_message,
+        MimeType::TextHtml,
+        ReplyMode::Sender,
+    );
+
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        Some(remote_existing_message.metadata.id.clone()),
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    ctx.catch_all().await;
+
+    // Get the message body - required to reply to draft.
+    Message::force_sync_message_and_body(
+        &user_ctx,
+        existing_message.remote_id.unwrap(),
+        false,
+        &mut tether,
+    )
+    .await
+    .unwrap();
+    // Create draft.
+    let draft = Draft::reply(
+        &user_ctx,
+        existing_message.local_id.unwrap(),
+        ReplyMode::Sender,
+        true,
+    )
+    .await
+    .unwrap();
+
+    draft.save().await.unwrap();
+
+    // Crate the message to simulate some other rogue event/state update creating the
+    // new draft before the server has a chance to respond. We also setup the conversation remote
+    // id to simulate a reply scenario.
+
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let mut new_message = Message::from_api_metadata(message.metadata.clone(), &tether)
+        .await
+        .unwrap();
+    tether
+        .tx(async |tx| new_message.save(tx).await)
+        .await
+        .unwrap();
+
+    let draft_message_id = draft.message_id().await.unwrap().unwrap();
+    assert_ne!(draft_message_id, new_message.id());
+    user_ctx.execute_all_send_actions().await.unwrap();
+}
