@@ -217,7 +217,7 @@ impl ContextualConversation {
         let api = ctx.session();
         let conv_and_messages = match origin {
             OpenConversationOrigin::Default => {
-                Self::conversation_and_messages(
+                Self::open_conversation_and_messages(
                     ctx.network_monitor_service(),
                     local_conversation_id,
                     local_label_id,
@@ -339,6 +339,47 @@ impl ContextualConversation {
         stash: &Stash,
         api: &Session,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
+        Self::conversation_and_messages_impl(
+            network_monitor_service,
+            local_conversation_id,
+            local_label_id,
+            view_options,
+            stash,
+            api,
+            false,
+        )
+        .await
+    }
+
+    #[tracing::instrument(skip(stash, api, network_monitor_service))]
+    pub async fn open_conversation_and_messages(
+        network_monitor_service: &NetworkMonitorService,
+        local_conversation_id: LocalConversationId,
+        local_label_id: LocalLabelId,
+        view_options: ConversationViewOptions,
+        stash: &Stash,
+        api: &Session,
+    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
+        Self::conversation_and_messages_impl(
+            network_monitor_service,
+            local_conversation_id,
+            local_label_id,
+            view_options,
+            stash,
+            api,
+            true,
+        )
+        .await
+    }
+    async fn conversation_and_messages_impl(
+        network_monitor_service: &NetworkMonitorService,
+        local_conversation_id: LocalConversationId,
+        local_label_id: LocalLabelId,
+        view_options: ConversationViewOptions,
+        stash: &Stash,
+        api: &Session,
+        extra_sync_allowed: bool,
+    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection().await?;
         let label = Label::find_by_id(local_label_id, &conn)
@@ -349,6 +390,7 @@ impl ContextualConversation {
             local_conversation_id,
             &mut conn,
             api,
+            extra_sync_allowed,
         )
         .await
         {

@@ -1813,7 +1813,19 @@ impl Conversation {
         tether: &Tether,
     ) -> Result<u64, StashError> {
         Message::count(
-            "WHERE local_conversation_id == ? ORDER BY time ASC, display_order ASC",
+            "WHERE local_conversation_id == ?",
+            params![local_id],
+            tether,
+        )
+        .await
+    }
+
+    pub async fn local_message_count_with_remote_id(
+        local_id: LocalConversationId,
+        tether: &Tether,
+    ) -> Result<u64, StashError> {
+        Message::count(
+            "WHERE local_conversation_id == ? AND remote_id IS NOT NULL",
             params![local_id],
             tether,
         )
@@ -2106,14 +2118,13 @@ impl Conversation {
         .map_err(AppError::Other)
     }
 
-    // Until we have a sync manager, the prefetcher will only sync conversation messages
-    // if we have never synced the messages before.
     #[tracing::instrument(skip(tx, session, network_monitor_service))]
     pub async fn sync_conversation_messages(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
         session: &Session,
+        extra_sync_allowed: bool,
     ) -> Result<(), AppError> {
         let Some(mut conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await?
         else {
@@ -2121,13 +2132,15 @@ impl Conversation {
         };
 
         let total_message_count =
-            Conversation::message_count(local_conversation_id, tx.tether()).await?;
-        let has_new_messages = total_message_count != conversation.num_messages;
+            Conversation::local_message_count_with_remote_id(local_conversation_id, tx.tether())
+                .await?;
+        let should_sync_all_messages =
+            extra_sync_allowed && total_message_count != conversation.num_messages;
         if !conversation.has_messages {
             let Some(ref rid) = conversation.remote_id else {
                 return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
             };
-            info!("Syncing {rid:?}'s messages (has_new_messages={has_new_messages})");
+            info!("Syncing {rid:?}'s messages");
 
             if network_monitor_service.check_now().await.is_offline() {
                 debug!("No connection, skipping sync");
@@ -2191,8 +2204,8 @@ impl Conversation {
             })
             .await
             .map_err(AppError::Other)?;
-        } else if has_new_messages {
-            info!("Message total mismatch, syncing conversation from server");
+        } else if should_sync_all_messages {
+            info!("Message state mismatch, syncing conversation from server");
             Self::sync_conversation_messages_from_push_notification(
                 network_monitor_service,
                 local_conversation_id,

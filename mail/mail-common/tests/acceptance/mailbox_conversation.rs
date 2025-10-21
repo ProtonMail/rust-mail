@@ -570,7 +570,7 @@ async fn test_new_mailbox_syncs_new_conversation_if_total_does_not_add_up() {
 
     // Get the message for a conversation.
 
-    let result = ContextualConversation::conversation_and_messages(
+    let result = ContextualConversation::open_conversation_and_messages(
         user_ctx.network_monitor_service(),
         conversation.id(),
         mailbox.label_id(),
@@ -604,7 +604,7 @@ async fn test_new_mailbox_syncs_new_conversation_if_total_does_not_add_up() {
     tether.tx(async |tx| conv.save(tx).await).await.unwrap();
 
     // Get messages again, should have new message
-    let result = ContextualConversation::conversation_and_messages(
+    let result = ContextualConversation::open_conversation_and_messages(
         user_ctx.network_monitor_service(),
         conversation.id(),
         mailbox.label_id(),
