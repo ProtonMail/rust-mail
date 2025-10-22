@@ -1,5 +1,8 @@
 use anyhow::anyhow;
+use regex::Regex;
+use stash::orm::ModelHooks;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::time::Instant;
 
 use indoc::indoc;
@@ -62,6 +65,7 @@ impl From<ApiIncomingDefaultEvent> for IncomingDefaultEvent {
 
 #[derive(Clone, Debug, Model, PartialEq)]
 #[TableName("incoming_defaults")]
+#[ModelHooks]
 pub struct IncomingDefault {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalIncomingDefaultId>,
@@ -80,6 +84,21 @@ pub struct IncomingDefault {
 
     #[DbField]
     pub deleted: bool,
+}
+
+impl ModelHooks for IncomingDefault {
+    fn after_load(&mut self, _: &stash::exports::Connection) -> stash::stash::StashResult<()> {
+        Ok(())
+    }
+
+    fn before_save(&mut self, _: &Transaction<'_>) -> stash::stash::StashResult<()> {
+        self.email = PrivateEmail::new(Self::sanitize(self.email.as_clear_text_str()));
+        Ok(())
+    }
+
+    fn after_save(&mut self, _: &Transaction<'_>) -> stash::stash::StashResult<()> {
+        Ok(())
+    }
 }
 
 impl From<ApiIncomingDefault> for IncomingDefault {
@@ -103,17 +122,24 @@ impl From<ApiIncomingDefault> for IncomingDefault {
     }
 }
 
+static SANITIZE_EMAIL_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^a-zA-Z0-9!#$%&'*+\-=?^_`{|}~@.\[\]]+").unwrap());
+
 impl IncomingDefault {
+    /// This sanitization replicates of what we do on the server side (except for trimming emails to 191 characters cause that's just silly).
+    /// See: https://www.php.net/manual/en/filter.constants.php#constant.filter-sanitize-email
+    fn sanitize(email: impl Into<String>) -> String {
+        let email = email.into();
+        let email = SANITIZE_EMAIL_REGEX.replace_all(&email, "").to_string();
+        email.to_lowercase()
+    }
+
     pub async fn by_email(
         email: impl Into<String>,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        Self::find_first(
-            "WHERE email = ? AND deleted = 0",
-            params![email.into()],
-            tether,
-        )
-        .await
+        let email = Self::sanitize(email);
+        Self::find_first("WHERE email = ? AND deleted = 0", params![email], tether).await
     }
 
     pub async fn update_from_api(
@@ -151,7 +177,7 @@ impl IncomingDefault {
         "})?;
         for incoming in new {
             q.execute((
-                incoming.email,
+                Self::sanitize(incoming.email.as_clear_text_str()),
                 incoming.location,
                 incoming.domain,
                 incoming.remote_id,
@@ -286,5 +312,53 @@ impl IncomingDefault {
         }
 
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case("" => "".to_string(); "empty")]
+    #[test_case("valid@email.com" => "valid@email.com".to_string(); "normal")]
+    #[test_case("VaLiD@email.com" => "valid@email.com".to_string(); "mixed case")]
+    #[test_case("999@email.com" => "999@email.com".to_string(); "valid number")]
+    #[test_case("test!@email.com" => "test!@email.com".to_string(); "valid exclamation mark")]
+    #[test_case("test#@email.com" => "test#@email.com".to_string(); "valid hash")]
+    #[test_case("test$@email.com" => "test$@email.com".to_string(); "valid dollar")]
+    #[test_case("test%@email.com" => "test%@email.com".to_string(); "valid percent")]
+    #[test_case("test&@email.com" => "test&@email.com".to_string(); "valid ampersand")]
+    #[test_case("test'@email.com" => "test'@email.com".to_string(); "valid apostrophe")]
+    #[test_case("test*@email.com" => "test*@email.com".to_string(); "valid asterisk")]
+    #[test_case("test+@email.com" => "test+@email.com".to_string(); "valid plus")]
+    #[test_case("test-@email.com" => "test-@email.com".to_string(); "valid minus")]
+    #[test_case("test=@email.com" => "test=@email.com".to_string(); "valid equals")]
+    #[test_case("test?@email.com" => "test?@email.com".to_string(); "valid question")]
+    #[test_case("test^@email.com" => "test^@email.com".to_string(); "valid caret")]
+    #[test_case("test_@email.com" => "test_@email.com".to_string(); "valid underscore")]
+    #[test_case("test`@email.com" => "test`@email.com".to_string(); "valid backtick")]
+    #[test_case("test{@email.com" => "test{@email.com".to_string(); "valid left brace")]
+    #[test_case("test|@email.com" => "test|@email.com".to_string(); "valid pipe")]
+    #[test_case("test}@email.com" => "test}@email.com".to_string(); "valid right brace")]
+    #[test_case("test~@email.com" => "test~@email.com".to_string(); "valid tilde")]
+    #[test_case("test[@email.com" => "test[@email.com".to_string(); "valid left bracket")]
+    #[test_case("test]@email.com" => "test]@email.com".to_string(); "valid right bracket")]
+    #[test_case("test<>@email.com" => "test@email.com".to_string(); "sanitize angle brackets")]
+    #[test_case("test()@email.com" => "test@email.com".to_string(); "sanitize parentheses")]
+    #[test_case("test,@email.com" => "test@email.com".to_string(); "sanitize comma")]
+    #[test_case("test;@email.com" => "test@email.com".to_string(); "sanitize semicolon")]
+    #[test_case("test:@email.com" => "test@email.com".to_string(); "sanitize colon")]
+    #[test_case("test\"@email.com" => "test@email.com".to_string(); "sanitize quote")]
+    #[test_case("test/@email.com" => "test@email.com".to_string(); "sanitize slash")]
+    #[test_case("test\\@email.com" => "test@email.com".to_string(); "sanitize backslash")]
+    #[test_case("test @email.com" => "test@email.com".to_string(); "sanitize space")]
+    #[test_case("test\t@email.com" => "test@email.com".to_string(); "sanitize tab")]
+    #[test_case("test\n@email.com" => "test@email.com".to_string(); "sanitize newline")]
+    #[test_case("tëst@émàil.com" => "tst@mil.com".to_string(); "sanitize unicode")]
+    #[test_case("test😀@email.com" => "test@email.com".to_string(); "sanitize emoji")]
+    #[test_case("123!@#$%&*+-=?^_`{|}~[]aBc@domain.com" => "123!@#$%&*+-=?^_`{|}~[]abc@domain.com".to_string(); "all valid characters")]
+    fn sanitize_emails(email: &str) -> String {
+        IncomingDefault::sanitize(email)
     }
 }
