@@ -5,7 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.154.0] - 2025-10-22
+
+### Changed
+
+- [ET-5030] Remove include from constructors, and use `change_label` commmon functionality for include
+- [ET-5030] Remove unread filter from the constructor of the scroller
+- [ET-5030] Further simplify construction of the scroller
+
+### Features
+
+- [ET-5030] Add `change_label` method for a scroller
+- [ET-5030] `change_label` recalculates alternative labels
+- [ET-5030] Add `change_keywords` method for SearchScroller
+
+
+## [mail-uniffi-v0.153.0] - 2025-10-22
 
 ### Features
 
