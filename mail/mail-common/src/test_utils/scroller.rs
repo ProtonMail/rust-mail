@@ -15,7 +15,7 @@ use crate::{
     Mailbox,
     actions::ConversationOrMessage,
     conv_id, conversation,
-    datatypes::{ContextualConversation, ReadFilter, SearchOptions},
+    datatypes::{ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions},
     label, lbl_id,
     mail_scroller::MailScrollerItem,
     message,
@@ -359,6 +359,18 @@ where
         label: LocalLabelId,
     ) -> Result<(), MailContextError> {
         self.scroller.change_label(mailbox, label)
+    }
+
+    pub fn change_include(
+        &self,
+        mailbox: &Mailbox,
+        include: IncludeSwitch,
+    ) -> Result<(), MailContextError> {
+        self.scroller.change_include(mailbox, include)
+    }
+
+    pub fn change_keywords(&self, keywords: SearchOptions) -> Result<(), MailContextError> {
+        self.scroller.change_keywords(keywords)
     }
 
     pub fn force_refresh(&self) -> Result<(), MailContextError> {

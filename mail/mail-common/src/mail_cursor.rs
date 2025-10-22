@@ -251,7 +251,7 @@ mod tests {
     use super::*;
     use crate::{
         MailContextError, MailUserContext,
-        datatypes::ReadFilter,
+        datatypes::{ReadFilter, SearchOptions},
         mail_scroller::{
             MailPaginatorJoinHandle, MailScrollerHandle, MailScrollerSource, ScrollerUpdate,
         },
@@ -351,6 +351,7 @@ mod tests {
             _: &MailUserContext,
             _: Option<ReadFilter>,
             _: Option<LocalLabelId>,
+            _: Option<SearchOptions>,
         ) -> Result<MailPaginatorJoinHandle, MailContextError> {
             todo!()
         }

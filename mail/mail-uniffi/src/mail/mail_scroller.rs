@@ -2,7 +2,7 @@ use super::Mailbox;
 use crate::core::datatypes::Id;
 use crate::errors::MailScrollerError;
 use crate::mail::datatypes::{Conversation, Message};
-use crate::{WatchHandle, async_runtime, uniffi_async};
+use crate::{PaginatorSearchOptions, WatchHandle, async_runtime, uniffi_async};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::{
     ContextualConversation as RealContextualConversation, IncludeSwitch as RealIncludeSwitch,
@@ -704,6 +704,16 @@ impl SearchScroller {
     ) -> Result<(), MailScrollerError> {
         self.scroller
             .change_include(self.mailbox.get(), include.into())
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
+    pub fn change_keywords(
+        self: Arc<Self>,
+        keywords: PaginatorSearchOptions,
+    ) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_keywords(keywords.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }

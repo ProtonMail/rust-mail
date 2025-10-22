@@ -534,6 +534,23 @@ where
         Ok(())
     }
 
+    pub fn change_keywords(&self, keywords: SearchOptions) -> Result<(), MailContextError> {
+        let uuid = Uuid::new_v4();
+
+        debug!(?uuid, "Sending `ChangeKeywords` command");
+
+        self.ordered_command
+            .send(ScrollerOrderedCommand::ChangeKeywords {
+                src: ScrollerSource::ScrollEvent(uuid),
+                keywords,
+            })
+            .map_err(|_| {
+                MailContextError::Other(anyhow!("Failed to send change keywords command"))
+            })?;
+
+        Ok(())
+    }
+
     pub fn clear(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
 
@@ -942,6 +959,20 @@ where
                 }
             }
 
+            ScrollerOrderedCommand::ChangeKeywords { src, keywords } => {
+                let result = self
+                    .change_keywords(src, keywords)
+                    .await
+                    .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
+
+                if result.is_some() || result.is_scroll_event() {
+                    self.update
+                        .send_async(result)
+                        .await
+                        .map_err(|e| anyhow!("Failed to send change keywords update: {e:?}"))?;
+                }
+            }
+
             ScrollerOrderedCommand::Clear(src) => {
                 let result = self
                     .clear(src)
@@ -1164,7 +1195,7 @@ where
             .source
             .write()
             .await
-            .change_state(&ctx, Some(unread), None)
+            .change_state(&ctx, Some(unread), None, None)
             .await?;
         self.reset(src).await
     }
@@ -1182,7 +1213,25 @@ where
             .source
             .write()
             .await
-            .change_state(&ctx, Some(ReadFilter::All), Some(label))
+            .change_state(&ctx, Some(ReadFilter::All), Some(label), None)
+            .await?;
+        self.reset(src).await
+    }
+
+    #[tracing::instrument(skip_all, fields(src=%src))]
+    async fn change_keywords(
+        &mut self,
+        src: ScrollerSource,
+        keywords: SearchOptions,
+    ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        tracing::debug!("Changing search keywords");
+        let _ = self.task.take();
+        self.task = self
+            .source
+            .write()
+            .await
+            .change_state(&ctx, None, None, Some(keywords))
             .await?;
         self.reset(src).await
     }
@@ -1396,6 +1445,11 @@ enum ScrollerOrderedCommand {
         tx: oneshot::Sender<LocalLabelId>,
         src: ScrollerSource,
         include: IncludeSwitch,
+    },
+    ChangeKeywords {
+        src: ScrollerSource,
+        #[derivative(PartialEq = "ignore")]
+        keywords: SearchOptions,
     },
     Clear(ScrollerSource),
     AlternativeLabels(#[derivative(PartialEq = "ignore")] oneshot::Sender<AlternativeLabels>),

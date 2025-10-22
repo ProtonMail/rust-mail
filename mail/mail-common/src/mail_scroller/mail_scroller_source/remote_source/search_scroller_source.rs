@@ -444,6 +444,7 @@ impl MailScrollerSource for SearchScrollerSource {
         ctx: &MailUserContext,
         _unread: Option<ReadFilter>,
         label: Option<LocalLabelId>,
+        keywords: Option<SearchOptions>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         if let Some(label) = label {
             tracing::info!(
@@ -451,6 +452,10 @@ impl MailScrollerSource for SearchScrollerSource {
                 current = self.local_label_id
             );
             self.local_label_id = label;
+        }
+        if let Some(keywords) = keywords {
+            tracing::info!("Changing search parameters");
+            self.options = keywords;
         }
         let task = self.initialize_impl(ctx).await?;
 

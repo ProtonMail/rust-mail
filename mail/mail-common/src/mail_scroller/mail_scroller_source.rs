@@ -4,6 +4,7 @@ mod remote_source;
 
 pub use self::data_scroller_source::*;
 pub use self::remote_source::*;
+use crate::datatypes::SearchOptions;
 use crate::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter};
 use crate::models::Message;
 use crate::traits::ScrollerEq;
@@ -89,6 +90,7 @@ where
         ctx: &MailUserContext,
         unread: Option<ReadFilter>,
         label: Option<LocalLabelId>,
+        keywords: Option<SearchOptions>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     fn clear(

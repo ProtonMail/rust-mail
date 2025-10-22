@@ -2,6 +2,7 @@ use super::{
     MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
     remote_source::RemoteSource,
 };
+use crate::datatypes::SearchOptions;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 use anyhow::anyhow;
@@ -496,6 +497,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         ctx: &MailUserContext,
         unread: Option<ReadFilter>,
         label: Option<LocalLabelId>,
+        _keywords: Option<SearchOptions>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let tether = ctx.user_stash().connection().await?;
         if let Some(unread) = unread {
