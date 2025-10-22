@@ -12,6 +12,7 @@ use stash::{
 };
 
 use crate::{
+    Mailbox,
     actions::ConversationOrMessage,
     conv_id, conversation,
     datatypes::{ContextualConversation, ReadFilter, SearchOptions},
@@ -350,6 +351,14 @@ where
 
     pub fn change_filter(&self, filter: ReadFilter) -> Result<(), MailContextError> {
         self.scroller.change_filter(filter)
+    }
+
+    pub fn change_label(
+        &self,
+        mailbox: &Mailbox,
+        label: LocalLabelId,
+    ) -> Result<(), MailContextError> {
+        self.scroller.change_label(mailbox, label)
     }
 
     pub fn force_refresh(&self) -> Result<(), MailContextError> {

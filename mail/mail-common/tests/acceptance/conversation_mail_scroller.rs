@@ -13,6 +13,7 @@ use proton_mail_api::services::proton::{
     response_data::Conversation as ApiConversation,
     response_data::ConversationLabel as ApiConversationLabel,
 };
+use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::{
     SystemLabelId,
     labels::{ScrollOrderDir, ScrollOrderField},
@@ -1652,6 +1653,103 @@ async fn test_conversation_mail_scroller_handles_stale_data_in_trash_on_next_and
         .match_next_update(TestUpdate::Append { items: 9 })
         .await;
     assert!(test_scroller.has_more().await.unwrap());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+async fn test_conversation_mail_scroller_change_label() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let page_size = 10;
+    let mut api_page = create_api_conversation_page(0..9, 100);
+    for conv in api_page.iter_mut() {
+        conv.labels = vec![ApiConversationLabel {
+            id: LabelId::inbox(),
+            ..ApiConversationLabel::test_default()
+        }];
+    }
+    // Set up cached data
+    let remote_label_id = SystemLabel::Inbox.remote_id();
+    let mut data = hash_map! {
+        vec![remote_label_id.as_str()]: vec![],
+        vec!["rid2"]: test_conversations(50, 0),
+    };
+    data.save_to_database(&mut tether).await;
+
+    let api_page_clone = api_page.clone();
+    ctx.mock_get_conversations_with(move |builder| {
+        builder
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
+                    conversations: api_page_clone.clone(),
+                    stale: true,
+                    total: 1,
+                }),
+            )
+            .expect(2..=8)
+    })
+    .await;
+    ctx.mock_ping_success().await;
+    ctx.catch_all().await;
+
+    // we should get an update on the first fetch_more in Inbox despite the data being stale
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 10;
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
+
+    let mut test_scroller =
+        TestScroller::conversations_instant(&user_ctx, local_label_id, page_size)
+            .await
+            .unwrap();
+
+    test_scroller.fetch_more().unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::Append { items: 9 })
+        .await;
+    assert!(test_scroller.has_more().await.unwrap());
+
+    let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
+        .await
+        .unwrap();
+    let remote_label_id = LabelId::from("rid2");
+    let local_label_id = Label::remote_id_counterpart(remote_label_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 50;
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
+
+    // Switch to custom label "rid2"
+    test_scroller
+        .change_label(&mailbox, local_label_id)
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 10 })
+        .await;
+    test_scroller.fetch_more().unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::Append { items: 10 })
+        .await;
+    assert_eq!(mailbox.label_id(), local_label_id);
+
+    // Switch back to inbox
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    test_scroller
+        .change_label(&mailbox, local_label_id)
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 9 })
+        .await;
+
+    assert_eq!(mailbox.label_id(), local_label_id);
 }
 
 #[function_name::named]
