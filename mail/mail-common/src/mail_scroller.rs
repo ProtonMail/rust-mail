@@ -1258,7 +1258,7 @@ where
             let label = self.include_to_label(include).await;
             self.change_label(src, label).await
         } else {
-            Ok(ScrollerUpdate::None(src))
+            Ok(ScrollerListUpdate::None(src).into())
         }
     }
 

@@ -253,7 +253,8 @@ mod tests {
         MailContextError, MailUserContext,
         datatypes::{ReadFilter, SearchOptions},
         mail_scroller::{
-            MailPaginatorJoinHandle, MailScrollerHandle, MailScrollerSource, ScrollerUpdate,
+            MailPaginatorJoinHandle, MailScrollerHandle, MailScrollerSource, ScrollerListUpdate,
+            ScrollerUpdate,
         },
         test_utils::test_context::MailTestContext,
     };
@@ -390,7 +391,10 @@ mod tests {
         scroller.force_refresh().unwrap();
 
         while let Ok(update) = handle.updates.recv_async().await {
-            if matches!(update, ScrollerUpdate::ReplaceFrom { idx: 0, .. }) {
+            if matches!(
+                update,
+                ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, .. })
+            ) {
                 break;
             }
         }

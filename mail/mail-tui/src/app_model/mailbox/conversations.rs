@@ -11,9 +11,7 @@ use anyhow::{Context, anyhow};
 use crossterm::event::KeyModifiers;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
-use proton_mail_common::datatypes::{
-    ContextualConversation, IncludeSwitch, LocalConversationId, ReadFilter,
-};
+use proton_mail_common::datatypes::{ContextualConversation, IncludeSwitch, LocalConversationId};
 use proton_mail_common::mail_scroller::{
     MailScroller as RealMailScroller, ScrollerListUpdate, ScrollerStatusUpdate, ScrollerUpdate,
 };
@@ -104,7 +102,8 @@ impl ConversationsState {
                     ConversationMessage::ScrollerFetchNewEnd.into()
                 }
             },
-        });
+        })
+        .await;
 
         let autodelete_banner = ContextualConversation::auto_delete_banner(label_id, &ctx).await?;
 
