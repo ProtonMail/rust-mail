@@ -67,15 +67,13 @@ impl<T: Action> ActionFailureObserver<T> {
 /// Completion does not necessary mean the action finished executing correctly.
 pub struct ActionAwaiter {
     receiver: Receiver<BroadcastMessage>,
-    action_id: ActionId,
 }
 
 impl ActionAwaiter {
     /// Create a new instance to wait on the action with `action_id` queue in the given `queue`.
     #[must_use]
-    pub fn new(queue: &Queue, action_id: ActionId) -> Self {
+    pub fn new(queue: &Queue) -> Self {
         Self {
-            action_id,
             receiver: queue.new_broadcast_receiver(),
         }
     }
@@ -94,17 +92,17 @@ impl ActionAwaiter {
     /// # Errors
     ///
     /// Returns error if the broadcast channel closes.
-    pub async fn wait(mut self) -> Result<BroadcastMessage, RecvError> {
+    pub async fn wait(&mut self, action_id: ActionId) -> Result<BroadcastMessage, RecvError> {
         loop {
             match self.receiver.recv().await {
                 Ok(msg) => match &msg {
                     BroadcastMessage::Success(id, _) | BroadcastMessage::Deleted(id, _)
-                        if *id == self.action_id =>
+                        if *id == action_id =>
                     {
                         return Ok(msg);
                     }
                     BroadcastMessage::Error(_, meta) | BroadcastMessage::Cancelled(meta)
-                        if meta.id == self.action_id =>
+                        if meta.id == action_id =>
                     {
                         return Ok(msg);
                     }

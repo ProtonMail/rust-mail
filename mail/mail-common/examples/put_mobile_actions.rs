@@ -209,9 +209,9 @@ async fn main() {
     );
 
     // Wait for the action to complete
-    let awaiter = ActionAwaiter::new(user_ctx.action_queue(), action_id);
+    let mut awaiter = ActionAwaiter::new(user_ctx.action_queue());
 
-    match awaiter.wait().await.unwrap() {
+    match awaiter.wait(action_id).await.unwrap() {
         BroadcastMessage::Queued(_, _) => {}
         BroadcastMessage::Success(_, _) => {
             info!("Mobile settings successfully updated!");

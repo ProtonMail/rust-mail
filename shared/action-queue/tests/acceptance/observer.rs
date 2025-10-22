@@ -82,14 +82,14 @@ async fn action_awaiter() {
     let id_error = queue.queue_action(ErrorAction {}).await.unwrap().id;
     let id_success = queue.queue_action(SuccessAction {}).await.unwrap().id;
 
-    let cancel_awaiter = ActionAwaiter::new(&queue, id_cancel);
-    let delete_awaiter = ActionAwaiter::new(&queue, id_delete);
-    let error_awaiter = ActionAwaiter::new(&queue, id_error);
-    let success_awaiter = ActionAwaiter::new(&queue, id_success);
+    let mut cancel_awaiter = ActionAwaiter::new(&queue);
+    let mut delete_awaiter = ActionAwaiter::new(&queue);
+    let mut error_awaiter = ActionAwaiter::new(&queue);
+    let mut success_awaiter = ActionAwaiter::new(&queue);
 
     // check cancelled response.
     queue.cancel(id_cancel).await.unwrap();
-    let result = tokio::time::timeout(Duration::from_secs(5), cancel_awaiter.wait())
+    let result = tokio::time::timeout(Duration::from_secs(5), cancel_awaiter.wait(id_cancel))
         .await
         .expect("timed out")
         .unwrap();
@@ -97,7 +97,7 @@ async fn action_awaiter() {
 
     // check delete response.
     queue.delete_action(id_delete).await.unwrap();
-    let result = tokio::time::timeout(Duration::from_secs(5), delete_awaiter.wait())
+    let result = tokio::time::timeout(Duration::from_secs(5), delete_awaiter.wait(id_delete))
         .await
         .expect("timed out")
         .unwrap();
@@ -109,7 +109,7 @@ async fn action_awaiter() {
 
     // check failure execution.
     queue.delete_action(id_delete).await.unwrap();
-    let result = tokio::time::timeout(Duration::from_secs(5), error_awaiter.wait())
+    let result = tokio::time::timeout(Duration::from_secs(5), error_awaiter.wait(id_error))
         .await
         .expect("timed out")
         .unwrap();
@@ -117,7 +117,7 @@ async fn action_awaiter() {
 
     // execute success action.
     executor.execute_one().await.unwrap();
-    let result = tokio::time::timeout(Duration::from_secs(5), success_awaiter.wait())
+    let result = tokio::time::timeout(Duration::from_secs(5), success_awaiter.wait(id_success))
         .await
         .expect("timed out")
         .unwrap();
