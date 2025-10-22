@@ -253,13 +253,12 @@ mod tests {
         MailContextError, MailUserContext,
         datatypes::ReadFilter,
         mail_scroller::{
-            AlternativeLabels, MailPaginatorJoinHandle, MailScrollerHandle, MailScrollerSource,
-            ScrollerUpdate,
+            MailPaginatorJoinHandle, MailScrollerHandle, MailScrollerSource, ScrollerUpdate,
         },
         test_utils::test_context::MailTestContext,
     };
     use derive_more::Debug;
-    use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
+    use proton_core_common::datatypes::LocalLabelId;
     use proton_mail_common_derive::ScrollerEq;
 
     #[derive(Clone, Copy, Debug, PartialEq, ScrollerEq)]
@@ -381,14 +380,11 @@ mod tests {
         let uctx = ctx.uninitialized_mail_user_context().await;
         let source = FakeSource::new(items);
         let page_size = 5;
-        let tether = uctx.user_stash().connection().await.unwrap();
-        let inbox = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-        let alternative_labels = AlternativeLabels::new(inbox, &tether).await.unwrap();
+        let inbox = LocalLabelId::from(1);
 
-        let (scroller, handle) =
-            MailScroller::new(uctx.clone(), source.clone(), page_size, alternative_labels)
-                .await
-                .unwrap();
+        let (scroller, handle) = MailScroller::new(uctx.clone(), source.clone(), page_size, inbox)
+            .await
+            .unwrap();
 
         scroller.force_refresh().unwrap();
 
