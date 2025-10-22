@@ -26,7 +26,7 @@ use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{
     ContextualConversation, ConversationViewOptions, IncludeSwitch, LocalConversationId,
-    LocalMessageId, MessageRecipientDisplayMode, ReadFilter, SearchOptions,
+    LocalMessageId, MessageRecipientDisplayMode, SearchOptions,
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::{Draft, ReplyMode};
@@ -131,13 +131,12 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         mbox: Mailbox,
         label: LabelWithCounters,
-        unread: ReadFilter,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();
         let recipient_display_mode = mbox.recipient_display_mode();
 
         Command::task(async move {
-            match Self::new_impl(ctx, label_id, unread, recipient_display_mode).await {
+            match Self::new_impl(ctx, label_id, recipient_display_mode).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenMessageView(mbox, label, state)),
                     background_command,
@@ -150,11 +149,10 @@ impl MessagesState {
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
-        unread: ReadFilter,
         recipient_display_mode: MessageRecipientDisplayMode,
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) =
-            RealMailScroller::messages(ctx.as_weak(), label_id, unread, ITEM_LIMIT).await?;
+            RealMailScroller::messages(ctx.as_weak(), label_id, ITEM_LIMIT).await?;
 
         let (scroller, command) =
             MailScroller::new::<MailMessage>(scroller, handle, handle_scroller_update).await;

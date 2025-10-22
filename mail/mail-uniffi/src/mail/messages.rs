@@ -23,7 +23,7 @@ use crate::errors::{
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::mail::datatypes::{LabelAsOutput, Undo};
 use crate::mail::mail_scroller::{
-    MessageScroller, MessageScrollerLiveQueryCallback, ReadFilter, SearchScroller,
+    MessageScroller, MessageScrollerLiveQueryCallback, SearchScroller,
     spawn_message_scroller_watcher,
 };
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
@@ -564,7 +564,6 @@ pub async fn messages_for_label(
 #[uniffi_export]
 pub async fn scroll_messages_for_label(
     mailbox: Arc<Mailbox>,
-    unread: ReadFilter,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = mailbox.ctx()?;
@@ -572,7 +571,7 @@ pub async fn scroll_messages_for_label(
     uniffi_async(async move {
         let label_id = mailbox.label_id();
         let (scroller, handle) =
-            MailScroller::messages(context.as_weak(), label_id.into(), unread.into(), 50).await?;
+            MailScroller::messages(context.as_weak(), label_id.into(), 50).await?;
 
         let handle = spawn_message_scroller_watcher(&context, handle, callback);
 

@@ -348,6 +348,10 @@ where
         self.scroller.refresh()
     }
 
+    pub fn change_filter(&self, filter: ReadFilter) -> Result<(), MailContextError> {
+        self.scroller.change_filter(filter)
+    }
+
     pub fn force_refresh(&self) -> Result<(), MailContextError> {
         self.scroller.force_refresh()
     }
@@ -564,12 +568,10 @@ impl TestScroller<ContextualConversation> {
     pub async fn conversations(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
-        unread: ReadFilter,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) =
-            MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
-                .await?;
+            MailScroller::conversations(user_ctx.as_weak(), local_label_id, page_size).await?;
 
         Self::new(scroller, handle).await
     }
@@ -577,12 +579,10 @@ impl TestScroller<ContextualConversation> {
     pub async fn conversations_instant(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
-        unread: ReadFilter,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) =
-            MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
-                .await?;
+            MailScroller::conversations(user_ctx.as_weak(), local_label_id, page_size).await?;
 
         Ok(Self::new_instant(scroller, handle))
     }
@@ -592,11 +592,10 @@ impl TestScroller<Message> {
     pub async fn messages(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
-        unread: ReadFilter,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) =
-            MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size).await?;
+            MailScroller::messages(user_ctx.as_weak(), local_label_id, page_size).await?;
 
         Self::new(scroller, handle).await
     }

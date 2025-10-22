@@ -184,7 +184,6 @@ impl MailScroller<ContextualConversation> {
     pub async fn conversations(
         ctx: Weak<MailUserContext>,
         label: LocalLabelId,
-        unread: ReadFilter,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<ContextualConversation>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
@@ -192,6 +191,7 @@ impl MailScroller<ContextualConversation> {
         let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
         let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
         let alternative_labels = AlternativeLabels::new(label, &tether).await?;
+        let unread = ReadFilter::All;
         let source = DataScrollerSource::<ConversationScrollData>::new(
             label,
             unread,
@@ -208,7 +208,6 @@ impl MailScroller<Message> {
     pub async fn messages(
         ctx: Weak<MailUserContext>,
         label: LocalLabelId,
-        unread: ReadFilter,
         page_size: usize,
     ) -> Result<(Self, MailScrollerHandle<Message>), MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
@@ -216,6 +215,7 @@ impl MailScroller<Message> {
         let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
         let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
         let alternative_labels = AlternativeLabels::new(label, &tether).await?;
+        let unread = ReadFilter::All;
         let source = DataScrollerSource::<MessageScrollData>::new(
             label,
             unread,

@@ -47,12 +47,11 @@ impl ConversationsState {
         ctx: Arc<MailUserContext>,
         mbox: Mailbox,
         label: LabelWithCounters,
-        unread: ReadFilter,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();
 
         Command::task(async move {
-            match Self::new_impl(ctx, label_id, unread).await {
+            match Self::new_impl(ctx, label_id).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenConversationView(mbox, label, state)),
                     background_command,
@@ -69,10 +68,9 @@ impl ConversationsState {
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
-        unread: ReadFilter,
     ) -> MailContextResult<(Self, Command<Messages>)> {
         let (scroller, handle) =
-            RealMailScroller::conversations(ctx.as_weak(), label_id, unread, ITEM_LIMIT).await?;
+            RealMailScroller::conversations(ctx.as_weak(), label_id, ITEM_LIMIT).await?;
 
         let (scroller, command) = MailScroller::new(scroller, handle, |update| match update {
             ScrollerUpdate::List(update) => match update {

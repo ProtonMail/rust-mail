@@ -100,10 +100,12 @@ async fn main() {
     let page_count = 50_u32;
     let unread = ReadFilter::Unread;
 
-    let mut paginator =
-        TestScroller::conversations(&user_ctx, label.id(), unread, page_count as usize)
-            .await
-            .unwrap();
+    let mut paginator = TestScroller::conversations(&user_ctx, label.id(), page_count as usize)
+        .await
+        .unwrap();
+
+    paginator.change_filter(unread).unwrap();
+    paginator.wait_for_update().await.unwrap();
 
     paginate_mail(&mut paginator, |v1, v2| {
         // We can only guarantee this for when no filter is applied.

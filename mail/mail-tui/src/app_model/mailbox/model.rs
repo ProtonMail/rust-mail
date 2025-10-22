@@ -113,7 +113,6 @@ impl MailboxModel {
     fn sync_mailbox(&mut self, mbox: Mailbox) -> Command<Messages> {
         self.state = State::new_syncing();
 
-        let filter = self.unread;
         let ctx = Arc::clone(&self.ctx);
 
         // Create the background worker.
@@ -145,9 +144,9 @@ impl MailboxModel {
                 };
 
                 if mbox.view_mode() == ViewMode::Conversations {
-                    ConversationsState::build(Arc::clone(&ctx), mbox, label, filter)
+                    ConversationsState::build(Arc::clone(&ctx), mbox, label)
                 } else {
-                    MessagesState::build(Arc::clone(&ctx), mbox, label, filter)
+                    MessagesState::build(Arc::clone(&ctx), mbox, label)
                 }
             }),
         ])

@@ -18,7 +18,7 @@ use crate::mail::datatypes::{
     SnoozeActions, Undo,
 };
 use crate::mail::mail_scroller::{
-    ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
+    ConversationScroller, ConversationScrollerLiveQueryCallback,
     spawn_conversation_scroller_watcher,
 };
 use crate::mail::{MailUserSession, Mailbox};
@@ -553,7 +553,6 @@ pub async fn move_conversations(
 #[uniffi_export]
 pub async fn scroll_conversations_for_label(
     mailbox: Arc<Mailbox>,
-    unread: ReadFilter,
     callback: Box<dyn ConversationScrollerLiveQueryCallback>,
 ) -> Result<Arc<ConversationScroller>, ActionError> {
     let context = mailbox.ctx()?;
@@ -561,8 +560,7 @@ pub async fn scroll_conversations_for_label(
     uniffi_async(async move {
         let label_id = mailbox.label_id();
         let (scroller, handle) =
-            MailScroller::conversations(context.as_weak(), label_id.into(), unread.into(), 50)
-                .await?;
+            MailScroller::conversations(context.as_weak(), label_id.into(), 50).await?;
 
         let handle = spawn_conversation_scroller_watcher(&context, handle, callback);
         let scroller = ConversationScroller::new(mailbox, scroller, handle);
