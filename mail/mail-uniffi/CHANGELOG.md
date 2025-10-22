@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- Sanitize email addresses in incoming defaults
+- [ET-5097] Scroller fetch new feadback
+
+
+## [mail-uniffi-v0.152.0] - 2025-10-22
+
+### Features
+
 - [ET-5033] Support recipients with display names
 - [ET-5097] force_event_poll_and_wait
 
