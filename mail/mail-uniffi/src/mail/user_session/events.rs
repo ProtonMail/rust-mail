@@ -61,6 +61,20 @@ impl MailUserSession {
         .into()
     }
 
+    #[returns(VoidEventResult)]
+    pub async fn force_event_loop_poll_and_wait(&self) -> Result<(), EventError> {
+        let ctx = self.ctx()?;
+        uniffi_async(async move {
+            ctx.force_event_loop_poll_and_wait()
+                .await
+                .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Internal))?;
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(EventError::from)
+        .into()
+    }
+
     /// Observe event loop errors.
     ///
     /// When an error occurs the `callback` is invoked.

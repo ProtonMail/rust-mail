@@ -35,6 +35,7 @@ use proton_mail_common::{
 use ratatui::crossterm::event::Event;
 use ratatui::layout::{Flex, Rect};
 use ratatui::prelude::*;
+use ratatui::style::Styled;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 use tokio::select;
@@ -65,6 +66,7 @@ pub struct MailboxModel {
     search_status: Option<SearchStatusBar>,
     unread: ReadFilter,
     background_worker_initialized: bool,
+    force_event_loop_poll_running: bool,
 }
 
 impl MailboxModel {
@@ -89,6 +91,7 @@ impl MailboxModel {
             search_status: None,
             unread: ReadFilter::All,
             background_worker_initialized: false,
+            force_event_loop_poll_running: false,
         })
     }
 
@@ -538,10 +541,30 @@ impl AppStateHandler for MailboxModel {
                 MessagesState::from_search(self.ctx.clone(), self.mailbox.clone(), keywords),
             ]),
             Message::Composer(_) => Command::None,
+            Message::ForcePollEventStart => {
+                self.force_event_loop_poll_running = true;
+                Command::None
+            }
+            Message::ForcePollEventFinish => {
+                self.force_event_loop_poll_running = false;
+                Command::None
+            }
         }
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
+        let area = if self.force_event_loop_poll_running {
+            let [message_area, area] =
+                Layout::vertical([Constraint::Length(1), Constraint::Percentage(100)]).areas(area);
+            let text = Text::from("Force Polling Event Loop")
+                .set_style(Style::new().reversed())
+                .alignment(Alignment::Center);
+            frame.render_widget(text, message_area);
+            area
+        } else {
+            area
+        };
+
         self.state.view(frame, area);
         if let Some(composer) = &mut self.composer {
             composer.view(frame, area);
