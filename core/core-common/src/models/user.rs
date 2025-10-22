@@ -9,7 +9,9 @@ use derive_more::TryFrom;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::User as ApiUser;
 use proton_core_api::services::proton::UserId;
-use proton_core_api::services::proton::{DelinquentState as ApiDelinquentState, ProtonCore};
+use proton_core_api::services::proton::{
+    DelinquentState as ApiDelinquentState, ProtonCore, Role as ApiRole,
+};
 use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
 use stash::exports::{FromSql, FromSqlError, SqliteError, ToSql, ToSqlOutput, Transaction, Value};
@@ -69,7 +71,7 @@ pub struct User {
     pub product_used_space: ProductUsedSpace,
 
     #[DbField]
-    pub role: u32,
+    pub role: Role,
 
     /// Activated services (bitmap): 1: User has the mail product activated, 4: User has the VPN activated
     /// TODO: Double check that this is up to date
@@ -107,7 +109,7 @@ impl From<ApiUser> for User {
             private: value.private,
             name: value.name,
             product_used_space: value.product_used_space.into(),
-            role: value.role,
+            role: value.role.into(),
             services: value.services,
             subscribed: PaidSubscription(value.subscribed),
             to_migrate: value.to_migrate,
@@ -223,6 +225,52 @@ bitflags::bitflags! {
         const NEUTRON = 1 << 5;
         const LUMO = 1 << 6;
         const AUTHENTICATOR = 1 << 7;
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize, TryFrom)]
+#[try_from(repr)]
+#[repr(u32)]
+pub enum Role {
+    #[default]
+    None = 0,
+    Member = 1,
+    Admin = 2,
+    Unknown(u32),
+}
+
+impl From<Role> for i64 {
+    fn from(value: Role) -> Self {
+        match value {
+            Role::None => 0,
+            Role::Member => 1,
+            Role::Admin => 2,
+            Role::Unknown(v) => i64::from(v),
+        }
+    }
+}
+
+impl From<ApiRole> for Role {
+    fn from(value: ApiRole) -> Self {
+        match value {
+            ApiRole::None => Self::None,
+            ApiRole::Member => Self::Member,
+            ApiRole::Admin => Self::Admin,
+            ApiRole::Unknown(v) => Self::Unknown(v),
+        }
+    }
+}
+
+impl FromSql for Role {
+    fn column_result(value: stash::exports::ValueRef<'_>) -> stash::exports::FromSqlResult<Self> {
+        let val = u32::column_result(value)?;
+        Ok(Self::try_from(val).unwrap_or(Role::Unknown(val)))
+    }
+}
+
+impl ToSql for Role {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer((*self).into())))
     }
 }
 

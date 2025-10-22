@@ -273,6 +273,38 @@ impl From<UserType> for u8 {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[repr(u32)]
+pub enum Role {
+    None = 0,
+    Member = 1,
+    Admin = 2,
+    Unknown(u32),
+}
+
+impl From<u32> for Role {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => Self::None,
+            1 => Self::Member,
+            2 => Self::Admin,
+            v => Self::Unknown(v),
+        }
+    }
+}
+
+impl From<Role> for u32 {
+    fn from(value: Role) -> Self {
+        match value {
+            Role::None => 0,
+            Role::Member => 1,
+            Role::Admin => 2,
+            Role::Unknown(v) => v,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize_repr))]
@@ -856,7 +888,8 @@ pub struct User {
     pub product_used_space: ProductUsedSpace,
 
     /// TODO: Document this field.
-    pub role: u32,
+    #[serde_as(as = "FromInto<u32>")]
+    pub role: Role,
 
     /// TODO: Document this field.
     pub services: u32,

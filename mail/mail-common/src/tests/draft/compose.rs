@@ -959,7 +959,7 @@ fn validate_address(params: ValidateAddressParams) {
         private: false,
         name: None,
         product_used_space: Default::default(),
-        role: 0,
+        role: Default::default(),
         services: 0,
         subscribed: params.plans,
         to_migrate: false,

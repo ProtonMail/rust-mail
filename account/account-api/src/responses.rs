@@ -491,7 +491,7 @@ impl From<User> for proton_core_api::services::proton::User {
             name: val.name,
             private: val.private != 0,
             product_used_space: val.product_used_space.into(),
-            role: val.role,
+            role: val.role.into(),
             services: val.services,
             subscribed: val.subscribed,
             to_migrate: val.to_migrate,
