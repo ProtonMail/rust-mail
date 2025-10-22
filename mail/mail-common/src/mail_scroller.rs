@@ -899,6 +899,16 @@ where
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
+                if !result.is_error() {
+                    // Its not the end of the world if we fail to recalculate alternative labels.
+                    // So lets just log the error and continue.
+                    self.recalculate_alternative_labels(label)
+                        .await
+                        .unwrap_or_else(|e| {
+                            tracing::error!("Failed to recalculate alternative labels: {e:?}");
+                        });
+                }
+
                 if result.is_some() || result.is_scroll_event() {
                     self.update
                         .send_async(result)
@@ -1299,6 +1309,18 @@ where
             .send_async(ScrollerOrderedCommand::FetchMore { src, tx: None })
             .await
             .inspect_err(|e| tracing::error!("Failed to schedule fetch more command: {e:?}"));
+    }
+
+    async fn recalculate_alternative_labels(
+        &mut self,
+        label: LocalLabelId,
+    ) -> Result<(), MailContextError> {
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let tether = ctx.user_stash().connection().await?;
+        let alternative_labels = AlternativeLabels::new(label, &tether).await?;
+        self.alternative_labels = alternative_labels;
+
+        Ok(())
     }
 
     async fn include_to_label(&self, include: IncludeSwitch) -> LocalLabelId {
