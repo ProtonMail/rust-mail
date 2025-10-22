@@ -137,8 +137,8 @@ async fn main() {
 
     let id = draft.save().await.unwrap().id;
 
-    ActionAwaiter::new(user_ctx.action_queue(), id)
-        .wait()
+    ActionAwaiter::new(user_ctx.action_queue())
+        .wait(id)
         .await
         .unwrap();
 
@@ -158,9 +158,9 @@ async fn main() {
 
     let id = draft.send().await.unwrap().id;
 
-    let send_awaiter = ActionAwaiter::new(user_ctx.action_queue(), id);
+    let mut send_awaiter = ActionAwaiter::new(user_ctx.action_queue());
 
-    match send_awaiter.wait().await.unwrap() {
+    match send_awaiter.wait(id).await.unwrap() {
         BroadcastMessage::Queued(_, _) => {}
         BroadcastMessage::Success(_, _) => {
             info!("Message successfully sent.");

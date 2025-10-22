@@ -785,10 +785,10 @@ pub async fn cancel_schedule_send(
                         "Action is being executed ({id}), waiting at most {wait_on_completion_duration:?} until finished"
                     );
                     // Action is currently being executed, wait for it to finish.
-                    let waiter = ActionAwaiter::new(queue, id);
+                    let mut waiter = ActionAwaiter::new(queue);
 
                     let Ok(message) =
-                        tokio::time::timeout(wait_on_completion_duration, waiter.wait())
+                        tokio::time::timeout(wait_on_completion_duration, waiter.wait(id))
                             .await
                             .map_err(|_| CancelScheduleSendError::TimedOut)?
                     else {
