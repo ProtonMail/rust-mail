@@ -5525,6 +5525,7 @@ dependencies = [
  "proton-observability",
  "proton-sqlite3",
  "proton-task-service",
+ "regex",
  "reqwest",
  "secrecy",
  "serde",
