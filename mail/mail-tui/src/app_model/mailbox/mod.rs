@@ -92,6 +92,8 @@ pub enum ConversationMessage {
     ReplaceRange(usize, usize, Vec<ContextualConversation>),
     HasMore,
     DeleteAll(LocalLabelId),
+    ScrollerFetchNewStart,
+    ScrollerFetchNewEnd,
 }
 
 impl From<ConversationMessage> for Messages {
@@ -122,6 +124,8 @@ pub enum MessageMessage {
     HasMore,
     CancelScheduleSend(LocalMessageId),
     UpdateRsvp(Box<RsvpEvent>),
+    ScrollerFetchNewStart,
+    ScrollerFetchNewEnd,
 }
 
 impl<I: Into<Messages>> From<I> for Command<Messages> {

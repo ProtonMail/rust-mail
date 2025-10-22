@@ -30,7 +30,9 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::{Draft, ReplyMode};
-use proton_mail_common::mail_scroller::{MailScroller as RealMailScroller, ScrollerUpdate};
+use proton_mail_common::mail_scroller::{
+    MailScroller as RealMailScroller, ScrollerListUpdate, ScrollerStatusUpdate, ScrollerUpdate,
+};
 use proton_mail_common::models::{
     Attachment, IncomingDefault, LabelWithCounters, Message as MailMessage, MessageBodyMetadata,
 };
@@ -42,6 +44,7 @@ use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
+use ratatui::style::Styled;
 use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table};
 use stash::orm::Model;
 use stash::params;
@@ -63,6 +66,7 @@ pub struct MessagesState {
     mode: Mode,
     recipient_display_mode: MessageRecipientDisplayMode,
     fetching: bool,
+    fetching_new: bool,
 }
 
 enum Mode {
@@ -91,25 +95,31 @@ impl Mode {
 
 fn handle_scroller_update(update: ScrollerUpdate<MailMessage>) -> Messages {
     match update {
-        ScrollerUpdate::Append { src: _, items } => MessageMessage::NextPage(items).into(),
-        ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
-            MessageMessage::ReplaceFrom(idx, items).into()
-        }
-        ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
-            MessageMessage::ReplaceBefore(idx, items).into()
-        }
-        ScrollerUpdate::ReplaceRange {
-            src: _,
-            from,
-            to,
-            items,
-        } => MessageMessage::ReplaceRange(from, to, items).into(),
+        ScrollerUpdate::List(update) => match update {
+            ScrollerListUpdate::Append { src: _, items } => MessageMessage::NextPage(items).into(),
+            ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => {
+                MessageMessage::ReplaceFrom(idx, items).into()
+            }
+            ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => {
+                MessageMessage::ReplaceBefore(idx, items).into()
+            }
+            ScrollerListUpdate::ReplaceRange {
+                src: _,
+                from,
+                to,
+                items,
+            } => MessageMessage::ReplaceRange(from, to, items).into(),
+            ScrollerListUpdate::None(_) => MessageMessage::NextPage(vec![]).into(),
+        },
         ScrollerUpdate::Error { src, error } => {
             let e = anyhow!("Message Reload Query src: {src:?}, error: {error}");
             tracing::error!("{e:?}");
             e.into()
         }
-        ScrollerUpdate::None(_) => MessageMessage::NextPage(vec![]).into(),
+        ScrollerUpdate::Status(update) => match update {
+            ScrollerStatusUpdate::FetchNewStart(_) => MessageMessage::ScrollerFetchNewStart.into(),
+            ScrollerStatusUpdate::FetchNewEnd(_) => MessageMessage::ScrollerFetchNewEnd.into(),
+        },
     }
 }
 
@@ -167,6 +177,7 @@ impl MessagesState {
                 mode: Mode::Label(scroller, IncludeSwitch::default()),
                 recipient_display_mode,
                 fetching: false,
+                fetching_new: false,
             },
             command,
         ))
@@ -226,6 +237,7 @@ impl MessagesState {
                 mode: Mode::Search(scroller, IncludeSwitch::default()),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
                 fetching: false,
+                fetching_new: false,
             },
             Command::batch(vec![
                 Command::message(Message::SearchStatusBar(SearchStatusBar {
@@ -322,6 +334,7 @@ impl MessagesState {
                 mode: Mode::Conversation(watcher),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
                 fetching: false,
+                fetching_new: false,
             },
             background_command,
         ))
@@ -868,12 +881,32 @@ impl MessagesState {
                     msg.rsvp = Rsvp::Success(rsvp);
                 }
             }
+            MessageMessage::ScrollerFetchNewStart => {
+                self.fetching_new = true;
+            }
+            MessageMessage::ScrollerFetchNewEnd => {
+                self.fetching_new = false;
+            }
         }
 
         Command::None
     }
 
     pub fn view(&mut self, frame: &mut Frame, area: Rect) {
+        let area = if self.fetching_new {
+            let [status, area] =
+                Layout::vertical([Constraint::Length(1), Constraint::Percentage(100)]).areas(area);
+            frame.render_widget(
+                Text::from("Fetching new data...")
+                    .set_style(Style::new().reversed())
+                    .alignment(Alignment::Center),
+                status,
+            );
+            area
+        } else {
+            area
+        };
+
         let area = self.open_message.draw(frame, area);
 
         if let Some(mut area) = area {

@@ -14,13 +14,16 @@ use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteS
 use proton_mail_common::datatypes::{
     ContextualConversation, IncludeSwitch, LocalConversationId, ReadFilter,
 };
-use proton_mail_common::mail_scroller::{MailScroller as RealMailScroller, ScrollerUpdate};
+use proton_mail_common::mail_scroller::{
+    MailScroller as RealMailScroller, ScrollerListUpdate, ScrollerStatusUpdate, ScrollerUpdate,
+};
 use proton_mail_common::models::{Conversation, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::{MailContextResult, MailUserContext, Mailbox};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
+use ratatui::style::Styled;
 use ratatui::widgets::Paragraph;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
@@ -36,6 +39,7 @@ pub struct ConversationsState {
     opened_label: LocalLabelId,
     autodelete_banner: Option<AutoDeleteBanner>,
     fetching: bool,
+    fetching_new: bool,
 }
 
 impl ConversationsState {
@@ -79,25 +83,37 @@ impl ConversationsState {
         .await?;
 
         let (scroller, command) = MailScroller::new(scroller, handle, |update| match update {
-            ScrollerUpdate::Append { src: _, items } => ConversationMessage::NextPage(items).into(),
-            ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
-                ConversationMessage::ReplaceFrom(idx, items).into()
-            }
-            ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
-                ConversationMessage::ReplaceBefore(idx, items).into()
-            }
-            ScrollerUpdate::ReplaceRange {
-                src: _,
-                from,
-                to,
-                items,
-            } => ConversationMessage::ReplaceRange(from, to, items).into(),
+            ScrollerUpdate::List(update) => match update {
+                ScrollerListUpdate::None(_) => ConversationMessage::NextPage(vec![]).into(),
+                ScrollerListUpdate::Append { src: _, items } => {
+                    ConversationMessage::NextPage(items).into()
+                }
+                ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => {
+                    ConversationMessage::ReplaceFrom(idx, items).into()
+                }
+                ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => {
+                    ConversationMessage::ReplaceBefore(idx, items).into()
+                }
+                ScrollerListUpdate::ReplaceRange {
+                    src: _,
+                    from,
+                    to,
+                    items,
+                } => ConversationMessage::ReplaceRange(from, to, items).into(),
+            },
             ScrollerUpdate::Error { src, error } => {
                 let e = anyhow!("Conversation Reload Query src: {src:?}, error: {error}");
                 tracing::error!("{e:?}");
                 e.into()
             }
-            ScrollerUpdate::None(_) => ConversationMessage::NextPage(vec![]).into(),
+            ScrollerUpdate::Status(update) => match update {
+                ScrollerStatusUpdate::FetchNewStart(_) => {
+                    ConversationMessage::ScrollerFetchNewStart.into()
+                }
+                ScrollerStatusUpdate::FetchNewEnd(_) => {
+                    ConversationMessage::ScrollerFetchNewEnd.into()
+                }
+            },
         });
 
         let autodelete_banner = ContextualConversation::auto_delete_banner(label_id, &ctx).await?;
@@ -114,6 +130,7 @@ impl ConversationsState {
                 opened_label: label_id,
                 autodelete_banner,
                 fetching: false,
+                fetching_new: false,
             },
             command,
         ))
@@ -414,6 +431,14 @@ impl ConversationsState {
                     }
 
                     ConversationMessage::DeleteAll(id) => delete_all(user_ctx.to_owned(), id),
+                    ConversationMessage::ScrollerFetchNewStart => {
+                        self.fetching_new = true;
+                        Command::none()
+                    }
+                    ConversationMessage::ScrollerFetchNewEnd => {
+                        self.fetching_new = false;
+                        Command::none()
+                    }
 
                     _ => Command::None,
                 }
@@ -464,6 +489,20 @@ impl ConversationsState {
                 "> Can't find what you're looking for? [I]nclude Spam/Trash.".into()
             });
         }
+
+        area = if self.fetching_new {
+            let [status, area] =
+                Layout::vertical([Constraint::Length(1), Constraint::Percentage(100)]).areas(area);
+            frame.render_widget(
+                Text::from("Fetching new data...")
+                    .set_style(Style::new().reversed())
+                    .alignment(Alignment::Center),
+                status,
+            );
+            area
+        } else {
+            area
+        };
 
         if let Some(banner) = banner {
             let banner = Paragraph::new(banner).cyan();
