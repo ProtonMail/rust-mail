@@ -25,6 +25,7 @@ use crate::{
 
 use super::utils::{create_address, test_address};
 
+use crate::mail_scroller::ScrollerListUpdate;
 use crate::{
     MailContextError, MailUserContext,
     mail_scroller::{MailScroller, MailScrollerHandle, ScrollerUpdate},
@@ -364,9 +365,14 @@ where
     }
 
     pub async fn wait_for_update(&mut self) -> Result<Option<Vec<T>>, MailContextError> {
-        let update = self.handle.updates.recv_async().await.map_err(|_| {
-            MailContextError::Other(anyhow::anyhow!("Failed to receive scroller update"))
-        })?;
+        let update = loop {
+            let update = self.handle.updates.recv_async().await.map_err(|_| {
+                MailContextError::Other(anyhow::anyhow!("Failed to receive scroller update"))
+            })?;
+            if !update.is_status_update() {
+                break update;
+            }
+        };
 
         self.handle_scroller_update(update)
     }
@@ -445,45 +451,45 @@ where
 
     fn assert_single_update(actual: &ScrollerUpdate<T>, expected: &TestUpdate) -> bool {
         match (actual, expected) {
-            (ScrollerUpdate::None(_), TestUpdate::None) => true,
+            (ScrollerUpdate::List(ScrollerListUpdate::None(_)), TestUpdate::None) => true,
             (
-                ScrollerUpdate::Append {
+                ScrollerUpdate::List(ScrollerListUpdate::Append {
                     items: actual_items,
                     ..
-                },
+                }),
                 TestUpdate::Append {
                     items: expected_items,
                 },
             ) => actual_items.len() == *expected_items,
             (
-                ScrollerUpdate::ReplaceFrom {
+                ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom {
                     idx: actual_idx,
                     items: actual_items,
                     ..
-                },
+                }),
                 TestUpdate::ReplaceFrom {
                     idx: expected_idx,
                     items: expected_items,
                 },
             ) => actual_idx == expected_idx && actual_items.len() == *expected_items,
             (
-                ScrollerUpdate::ReplaceBefore {
+                ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore {
                     idx: actual_idx,
                     items: actual_items,
                     ..
-                },
+                }),
                 TestUpdate::ReplaceBefore {
                     idx: expected_idx,
                     items: expected_items,
                 },
             ) => actual_idx == expected_idx && actual_items.len() == *expected_items,
             (
-                ScrollerUpdate::ReplaceRange {
+                ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange {
                     from: actual_from,
                     to: actual_to,
                     items: actual_items,
                     ..
-                },
+                }),
                 TestUpdate::ReplaceRange {
                     from: expected_from,
                     to: expected_to,
@@ -511,38 +517,41 @@ where
         update: ScrollerUpdate<T>,
     ) -> Result<Option<Vec<T>>, MailContextError> {
         tracing::info!("Scroller update: {update:?}");
-        if !update.is_error() {
+        if !update.is_error() && !update.is_status_update() {
             self.updates.push(update.clone());
         }
 
         match update {
-            ScrollerUpdate::None(_) => Ok(None),
-            ScrollerUpdate::Append { src: _, items } => {
-                self.collected_items.extend(items.clone());
-                Ok(Some(items))
-            }
-            ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
-                self.collected_items.splice(idx.., items.clone());
-                Ok(Some(items))
-            }
-            ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
-                self.collected_items.splice(..idx, items.clone());
-                Ok(Some(items))
-            }
-            ScrollerUpdate::ReplaceRange {
-                src: _,
-                from,
-                to,
-                items,
-            } => {
-                self.collected_items.splice(from..to, items.clone());
-                Ok(Some(items))
-            }
+            ScrollerUpdate::List(update) => match update {
+                ScrollerListUpdate::None(_) => Ok(None),
+                ScrollerListUpdate::Append { src: _, items } => {
+                    self.collected_items.extend(items.clone());
+                    Ok(Some(items))
+                }
+                ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => {
+                    self.collected_items.splice(idx.., items.clone());
+                    Ok(Some(items))
+                }
+                ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => {
+                    self.collected_items.splice(..idx, items.clone());
+                    Ok(Some(items))
+                }
+                ScrollerListUpdate::ReplaceRange {
+                    src: _,
+                    from,
+                    to,
+                    items,
+                } => {
+                    self.collected_items.splice(from..to, items.clone());
+                    Ok(Some(items))
+                }
+            },
             ScrollerUpdate::Error { src, error } => {
                 let err_str = error.to_string();
                 self.updates.push(ScrollerUpdate::Error { src, error });
                 Err(MailContextError::Other(anyhow::anyhow!("Error: {err_str}")))
             }
+            ScrollerUpdate::Status(_) => Ok(None),
         }
     }
 

@@ -11,7 +11,8 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::mail_cursor::{MailCursor as RealMailCursor, NextMailCursorItem};
 use proton_mail_common::mail_scroller::{
-    MailScroller as RealMailScroller, MailScrollerHandle, ScrollerUpdate,
+    MailScroller as RealMailScroller, MailScrollerHandle, ScrollerListUpdate, ScrollerStatusUpdate,
+    ScrollerUpdate,
 };
 use proton_mail_common::models::Message as RealMessage;
 use std::sync::Arc;
@@ -59,6 +60,31 @@ pub trait ConversationScrollerLiveQueryCallback: Send + Sync {
 
 #[derive(Debug, uniffi::Enum)]
 pub enum ConversationScrollerUpdate {
+    List(ConversationScrollerListUpdate),
+    Status(ConversationScrollerStatusUpdate),
+    /// An error has occurred.
+    Error {
+        error: MailScrollerError,
+    },
+}
+
+#[derive(Debug, uniffi::Enum)]
+pub enum ConversationScrollerStatusUpdate {
+    FetchNewStart,
+    FetchNewEnd,
+}
+
+impl From<ScrollerStatusUpdate> for ConversationScrollerStatusUpdate {
+    fn from(status: ScrollerStatusUpdate) -> Self {
+        match status {
+            ScrollerStatusUpdate::FetchNewStart(_) => Self::FetchNewStart,
+            ScrollerStatusUpdate::FetchNewEnd(_) => Self::FetchNewEnd,
+        }
+    }
+}
+
+#[derive(Debug, uniffi::Enum)]
+pub enum ConversationScrollerListUpdate {
     /// No update has occurred. It will be returned only for client-side requests.
     None,
 
@@ -102,43 +128,44 @@ pub enum ConversationScrollerUpdate {
         to: u64,   // exclusive
         items: Vec<Conversation>,
     },
-
-    /// An error has occurred.
-    Error { error: MailScrollerError },
 }
 
-impl From<ScrollerUpdate<RealContextualConversation>> for ConversationScrollerUpdate {
-    fn from(update: ScrollerUpdate<RealContextualConversation>) -> Self {
+impl From<ScrollerListUpdate<RealContextualConversation>> for ConversationScrollerListUpdate {
+    fn from(update: ScrollerListUpdate<RealContextualConversation>) -> Self {
         match update {
-            ScrollerUpdate::None(_) => ConversationScrollerUpdate::None,
-            ScrollerUpdate::Append { src: _, items } => ConversationScrollerUpdate::Append(
-                items.into_iter().map(Conversation::from).collect(),
-            ),
-            ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
-                ConversationScrollerUpdate::ReplaceFrom {
-                    idx: u64::try_from(idx).unwrap(),
-                    items: items.into_iter().map(Conversation::from).collect(),
-                }
+            ScrollerListUpdate::None(_) => Self::None,
+            ScrollerListUpdate::Append { src: _, items } => {
+                Self::Append(items.into_iter().map(Conversation::from).collect())
             }
-            ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
-                ConversationScrollerUpdate::ReplaceBefore {
-                    idx: u64::try_from(idx).unwrap(),
-                    items: items.into_iter().map(Conversation::from).collect(),
-                }
-            }
-            ScrollerUpdate::ReplaceRange {
+            ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => Self::ReplaceFrom {
+                idx: u64::try_from(idx).unwrap(),
+                items: items.into_iter().map(Conversation::from).collect(),
+            },
+            ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => Self::ReplaceBefore {
+                idx: u64::try_from(idx).unwrap(),
+                items: items.into_iter().map(Conversation::from).collect(),
+            },
+            ScrollerListUpdate::ReplaceRange {
                 src: _,
                 from,
                 to,
                 items,
-            } => ConversationScrollerUpdate::ReplaceRange {
+            } => Self::ReplaceRange {
                 from: u64::try_from(from).unwrap(),
                 to: u64::try_from(to).unwrap(),
                 items: items.into_iter().map(Conversation::from).collect(),
             },
+        }
+    }
+}
+impl From<ScrollerUpdate<RealContextualConversation>> for ConversationScrollerUpdate {
+    fn from(update: ScrollerUpdate<RealContextualConversation>) -> Self {
+        match update {
+            ScrollerUpdate::List(update) => Self::List(update.into()),
             ScrollerUpdate::Error { src: _, error } => ConversationScrollerUpdate::Error {
                 error: RealProtonMailError::from(error).into(),
             },
+            ScrollerUpdate::Status(update) => Self::Status(update.into()),
         }
     }
 }
@@ -182,7 +209,22 @@ pub trait MessageScrollerLiveQueryCallback: Send + Sync {
 }
 
 #[derive(Debug, uniffi::Enum)]
-pub enum MessageScrollerUpdate {
+pub enum MessageScrollerStatusUpdate {
+    FetchNewStart,
+    FetchNewEnd,
+}
+
+impl From<ScrollerStatusUpdate> for MessageScrollerStatusUpdate {
+    fn from(update: ScrollerStatusUpdate) -> Self {
+        match update {
+            ScrollerStatusUpdate::FetchNewStart(_) => Self::FetchNewStart,
+            ScrollerStatusUpdate::FetchNewEnd(_) => Self::FetchNewEnd,
+        }
+    }
+}
+
+#[derive(Debug, uniffi::Enum)]
+pub enum MessageScrollerListUpdate {
     /// No update has occurred. It will be returned only for client-side requests.
     None,
 
@@ -204,40 +246,53 @@ pub enum MessageScrollerUpdate {
         to: u64,
         items: Vec<Message>,
     },
-
-    /// An error has occurred.
-    Error { error: MailScrollerError },
 }
 
-impl From<ScrollerUpdate<RealMessage>> for MessageScrollerUpdate {
-    fn from(update: ScrollerUpdate<RealMessage>) -> Self {
+impl From<ScrollerListUpdate<RealMessage>> for MessageScrollerListUpdate {
+    fn from(update: ScrollerListUpdate<RealMessage>) -> Self {
         match update {
-            ScrollerUpdate::None(_) => MessageScrollerUpdate::None,
-            ScrollerUpdate::Append { src: _, items } => {
-                MessageScrollerUpdate::Append(items.into_iter().map(Message::from).collect())
+            ScrollerListUpdate::None(_) => Self::None,
+            ScrollerListUpdate::Append { src: _, items } => {
+                Self::Append(items.into_iter().map(Message::from).collect())
             }
-            ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
-                MessageScrollerUpdate::ReplaceFrom {
+            ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => {
+                Self::ReplaceFrom {
                     idx: u64::try_from(idx).unwrap(), // good luck not fitting in a u64
                     items: items.into_iter().map(Message::from).collect(),
                 }
             }
-            ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
-                MessageScrollerUpdate::ReplaceBefore {
-                    idx: u64::try_from(idx).unwrap(),
-                    items: items.into_iter().map(Message::from).collect(),
-                }
-            }
-            ScrollerUpdate::ReplaceRange {
+            ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => Self::ReplaceBefore {
+                idx: u64::try_from(idx).unwrap(),
+                items: items.into_iter().map(Message::from).collect(),
+            },
+            ScrollerListUpdate::ReplaceRange {
                 src: _,
                 from,
                 to,
                 items,
-            } => MessageScrollerUpdate::ReplaceRange {
+            } => Self::ReplaceRange {
                 from: u64::try_from(from).unwrap(),
                 to: u64::try_from(to).unwrap(),
                 items: items.into_iter().map(Message::from).collect(),
             },
+        }
+    }
+}
+
+#[derive(Debug, uniffi::Enum)]
+pub enum MessageScrollerUpdate {
+    List(MessageScrollerListUpdate),
+    Status(MessageScrollerStatusUpdate),
+    /// An error has occurred.
+    Error {
+        error: MailScrollerError,
+    },
+}
+impl From<ScrollerUpdate<RealMessage>> for MessageScrollerUpdate {
+    fn from(value: ScrollerUpdate<RealMessage>) -> Self {
+        match value {
+            ScrollerUpdate::Status(update) => Self::Status(update.into()),
+            ScrollerUpdate::List(update) => Self::List(update.into()),
             ScrollerUpdate::Error { src: _, error } => MessageScrollerUpdate::Error {
                 error: RealProtonMailError::from(error).into(),
             },

@@ -52,7 +52,19 @@ pub enum MailScrollerError {
 }
 
 #[derive(Debug)]
-pub enum ScrollerUpdate<T> {
+pub enum ScrollerStatusUpdate {
+    FetchNewStart(ScrollerSource),
+    FetchNewEnd(ScrollerSource),
+}
+
+impl<T> From<ScrollerStatusUpdate> for ScrollerUpdate<T> {
+    fn from(value: ScrollerStatusUpdate) -> Self {
+        Self::Status(value)
+    }
+}
+
+#[derive(Debug)]
+pub enum ScrollerListUpdate<T> {
     None(ScrollerSource),
     Append {
         src: ScrollerSource,
@@ -74,6 +86,18 @@ pub enum ScrollerUpdate<T> {
         to: usize,
         items: Vec<T>,
     },
+}
+
+impl<T> From<ScrollerListUpdate<T>> for ScrollerUpdate<T> {
+    fn from(value: ScrollerListUpdate<T>) -> Self {
+        Self::List(value)
+    }
+}
+
+#[derive(Debug)]
+pub enum ScrollerUpdate<T> {
+    Status(ScrollerStatusUpdate),
+    List(ScrollerListUpdate<T>),
     Error {
         src: ScrollerSource,
         error: MailContextError,
@@ -82,11 +106,15 @@ pub enum ScrollerUpdate<T> {
 
 impl<T> ScrollerUpdate<T> {
     pub fn is_none(&self) -> bool {
-        matches!(self, ScrollerUpdate::None(_))
+        matches!(self, ScrollerUpdate::List(ScrollerListUpdate::None(_)))
     }
 
     pub fn is_error(&self) -> bool {
         matches!(self, ScrollerUpdate::Error { .. })
+    }
+
+    pub fn is_status_update(&self) -> bool {
+        matches!(self, ScrollerUpdate::Status(_))
     }
 
     pub fn is_some(&self) -> bool {
@@ -95,11 +123,17 @@ impl<T> ScrollerUpdate<T> {
 
     pub fn src(&self) -> &ScrollerSource {
         match self {
-            ScrollerUpdate::None(src) => src,
-            ScrollerUpdate::Append { src, .. } => src,
-            ScrollerUpdate::ReplaceFrom { src, .. } => src,
-            ScrollerUpdate::ReplaceBefore { src, .. } => src,
-            ScrollerUpdate::ReplaceRange { src, .. } => src,
+            ScrollerUpdate::List(update) => match update {
+                ScrollerListUpdate::None(src) => src,
+                ScrollerListUpdate::Append { src, .. } => src,
+                ScrollerListUpdate::ReplaceFrom { src, .. } => src,
+                ScrollerListUpdate::ReplaceBefore { src, .. } => src,
+                ScrollerListUpdate::ReplaceRange { src, .. } => src,
+            },
+            ScrollerUpdate::Status(update) => match update {
+                ScrollerStatusUpdate::FetchNewStart(src) => src,
+                ScrollerStatusUpdate::FetchNewEnd(src) => src,
+            },
             ScrollerUpdate::Error { src, .. } => src,
         }
     }
@@ -854,10 +888,20 @@ where
             }
 
             ScrollerOrderedCommand::FetchNew(src) => {
+                self.update
+                    .send_async(ScrollerStatusUpdate::FetchNewStart(src).into())
+                    .await
+                    .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
+
                 let result = self
                     .fetch_new(src)
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
+
+                self.update
+                    .send_async(ScrollerStatusUpdate::FetchNewEnd(src).into())
+                    .await
+                    .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
 
                 self.update
                     .send_async(result)
@@ -1037,7 +1081,7 @@ where
         if items.is_empty() {
             debug!("No new items fetched");
 
-            Ok(ScrollerUpdate::None(call_src))
+            Ok(ScrollerListUpdate::None(call_src).into())
         } else {
             if let Some(handle) = self.execute_on_online.take() {
                 handle.abort();
@@ -1047,10 +1091,11 @@ where
 
             self.items.write().extend(items.clone());
 
-            Ok(ScrollerUpdate::Append {
+            Ok(ScrollerListUpdate::Append {
                 src: call_src,
                 items,
-            })
+            }
+            .into())
         }
     }
 
@@ -1084,11 +1129,12 @@ where
         let update = if force {
             *self.items.write() = visible_items.clone();
 
-            ScrollerUpdate::ReplaceFrom {
+            ScrollerListUpdate::ReplaceFrom {
                 src,
                 idx: 0,
                 items: visible_items,
             }
+            .into()
         } else {
             debug!("Calculating diff...");
 
@@ -1108,7 +1154,7 @@ where
     fn get_items(&self, src: ScrollerSource) -> ScrollerUpdate<S::Item> {
         let items = self.items.read().clone();
 
-        ScrollerUpdate::ReplaceFrom { src, idx: 0, items }
+        ScrollerListUpdate::ReplaceFrom { src, idx: 0, items }.into()
     }
 
     #[tracing::instrument(skip_all, fields(src=%src))]
@@ -1330,11 +1376,11 @@ where
 
     if old.len() == new.len() && prefix_count == old.len() {
         debug!("No update required");
-        return ScrollerUpdate::None(src);
+        return ScrollerListUpdate::None(src).into();
     } else if prefix_count == old.len() {
         let items = new[prefix_count..].to_vec();
         debug!("Append: items number: {}", items.len());
-        return ScrollerUpdate::Append { src, items };
+        return ScrollerListUpdate::Append { src, items }.into();
     }
 
     let suffix_count = old
@@ -1351,7 +1397,7 @@ where
             let idx = prefix_count;
             let items = new[prefix_count..].to_vec();
             debug!("Replace from: {idx}, items number: {}", items.len());
-            ScrollerUpdate::ReplaceFrom { src, idx, items }
+            ScrollerListUpdate::ReplaceFrom { src, idx, items }.into()
         }
         (0, suffix_count) => {
             let idx = old.len().saturating_sub(suffix_count);
@@ -1360,7 +1406,7 @@ where
                 new[..idx].to_vec()
             };
             debug!("Replace before: {idx}, items number: {}", items.len());
-            ScrollerUpdate::ReplaceBefore { src, idx, items }
+            ScrollerListUpdate::ReplaceBefore { src, idx, items }.into()
         }
         (prefix_count, suffix_count) => {
             let from = prefix_count;
@@ -1370,12 +1416,13 @@ where
                 new[from..to].to_vec()
             };
             debug!("Replace range: {from}..{to}, items number: {}", items.len());
-            ScrollerUpdate::ReplaceRange {
+            ScrollerListUpdate::ReplaceRange {
                 src,
                 from,
                 to,
                 items,
             }
+            .into()
         }
     }
 }
@@ -1384,33 +1431,51 @@ where
 impl<T: Clone> Clone for ScrollerUpdate<T> {
     fn clone(&self) -> Self {
         match self {
-            ScrollerUpdate::None(src) => ScrollerUpdate::None(*src),
-            ScrollerUpdate::Append { src, items } => ScrollerUpdate::Append {
-                src: *src,
-                items: items.clone(),
-            },
-            ScrollerUpdate::ReplaceFrom { src, idx, items } => ScrollerUpdate::ReplaceFrom {
-                src: *src,
-                idx: *idx,
-                items: items.clone(),
-            },
-            ScrollerUpdate::ReplaceBefore { src, idx, items } => ScrollerUpdate::ReplaceBefore {
-                src: *src,
-                idx: *idx,
-                items: items.clone(),
-            },
-            ScrollerUpdate::ReplaceRange {
-                src,
-                from,
-                to,
-                items,
-            } => ScrollerUpdate::ReplaceRange {
-                src: *src,
-                from: *from,
-                to: *to,
-                items: items.clone(),
+            ScrollerUpdate::List(update) => match update {
+                ScrollerListUpdate::None(src) => ScrollerListUpdate::None(*src).into(),
+                ScrollerListUpdate::Append { src, items } => ScrollerListUpdate::Append {
+                    src: *src,
+                    items: items.clone(),
+                }
+                .into(),
+                ScrollerListUpdate::ReplaceFrom { src, idx, items } => {
+                    ScrollerListUpdate::ReplaceFrom {
+                        src: *src,
+                        idx: *idx,
+                        items: items.clone(),
+                    }
+                    .into()
+                }
+                ScrollerListUpdate::ReplaceBefore { src, idx, items } => {
+                    ScrollerListUpdate::ReplaceBefore {
+                        src: *src,
+                        idx: *idx,
+                        items: items.clone(),
+                    }
+                    .into()
+                }
+                ScrollerListUpdate::ReplaceRange {
+                    src,
+                    from,
+                    to,
+                    items,
+                } => ScrollerListUpdate::ReplaceRange {
+                    src: *src,
+                    from: *from,
+                    to: *to,
+                    items: items.clone(),
+                }
+                .into(),
             },
             ScrollerUpdate::Error { .. } => panic!("Cannot clone error update"),
+            ScrollerUpdate::Status(update) => match update {
+                ScrollerStatusUpdate::FetchNewStart(src) => {
+                    ScrollerStatusUpdate::FetchNewStart(*src).into()
+                }
+                ScrollerStatusUpdate::FetchNewEnd(src) => {
+                    ScrollerStatusUpdate::FetchNewEnd(*src).into()
+                }
+            },
         }
     }
 }
@@ -1432,57 +1497,57 @@ mod tests {
     }
 
     // Test cases for calculate_scroller_update function
-    #[test_case(vec![], vec![] => matches ScrollerUpdate::None(_); "Test 1: empty to empty")]
-    #[test_case(vec![], vec![1] => matches ScrollerUpdate::Append { items, .. } if items == vec![1]; "Test 2: empty to single item")]
-    #[test_case(vec![], vec![1, 2, 3] => matches ScrollerUpdate::Append { items, .. } if items == vec![1, 2, 3]; "Test 3: empty to multiple items")]
-    #[test_case(vec![1], vec![] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items.is_empty(); "Test 4: single item to empty")]
-    #[test_case(vec![1, 2, 3], vec![] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items.is_empty(); "Test 5: multiple items to empty")]
-    #[test_case(vec![1], vec![1] => matches ScrollerUpdate::None(_); "Test 6: same single item")]
-    #[test_case(vec![1, 2, 3], vec![1, 2, 3] => matches ScrollerUpdate::None(_); "Test 7: same multiple items")]
+    #[test_case(vec![], vec![] => matches ScrollerUpdate::List(ScrollerListUpdate::None(_)); "Test 1: empty to empty")]
+    #[test_case(vec![], vec![1] => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![1]; "Test 2: empty to single item")]
+    #[test_case(vec![], vec![1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![1, 2, 3]; "Test 3: empty to multiple items")]
+    #[test_case(vec![1], vec![] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items.is_empty(); "Test 4: single item to empty")]
+    #[test_case(vec![1, 2, 3], vec![] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items.is_empty(); "Test 5: multiple items to empty")]
+    #[test_case(vec![1], vec![1] => matches ScrollerUpdate::List(ScrollerListUpdate::None(_)); "Test 6: same single item")]
+    #[test_case(vec![1, 2, 3], vec![1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::None(_)); "Test 7: same multiple items")]
     // Items added at the beginning
-    #[test_case(vec![1, 2, 3], vec![0, 1, 2, 3] => matches ScrollerUpdate::ReplaceBefore { idx: 0, items, .. } if items == vec![0]; "Test 8: add one item at beginning")]
-    #[test_case(vec![1, 2, 3], vec![0, -1, 1, 2, 3] => matches ScrollerUpdate::ReplaceBefore { idx: 0, items, .. } if items == vec![0, -1]; "Test 9: add two items at beginning")]
-    #[test_case(vec![3, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::ReplaceBefore { idx: 0, items, .. } if items == vec![1, 2]; "Test 10: add items at beginning with all suffix common")]
+    #[test_case(vec![1, 2, 3], vec![0, 1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![0]; "Test 8: add one item at beginning")]
+    #[test_case(vec![1, 2, 3], vec![0, -1, 1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![0, -1]; "Test 9: add two items at beginning")]
+    #[test_case(vec![3, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![1, 2]; "Test 10: add items at beginning with all suffix common")]
     // Items added at the end
-    #[test_case(vec![1, 2, 3], vec![1, 2, 3, 4] => matches ScrollerUpdate::Append { items, .. } if items == vec![4]; "Test 11: add one item at end")]
-    #[test_case(vec![1, 2, 3], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::Append { items, .. } if items == vec![4, 5]; "Test 12: add two items at end")]
+    #[test_case(vec![1, 2, 3], vec![1, 2, 3, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![4]; "Test 11: add one item at end")]
+    #[test_case(vec![1, 2, 3], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![4, 5]; "Test 12: add two items at end")]
     // Items added in the middle
-    #[test_case(vec![1, 3], vec![1, 2, 3] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 1, items, .. } if items == vec![2]; "Test 13: add item in middle")]
-    #[test_case(vec![1, 4], vec![1, 2, 3, 4] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 1, items, .. } if items == vec![2, 3]; "Test 14: add two items in middle")]
-    #[test_case(vec![1, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 1, items, .. } if items == vec![2, 3]; "Test 14a: add two items in middle")]
+    #[test_case(vec![1, 3], vec![1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 1, items, .. }) if items == vec![2]; "Test 13: add item in middle")]
+    #[test_case(vec![1, 4], vec![1, 2, 3, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 1, items, .. }) if items == vec![2, 3]; "Test 14: add two items in middle")]
+    #[test_case(vec![1, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 1, items, .. }) if items == vec![2, 3]; "Test 14a: add two items in middle")]
     // Items removed from beginning
-    #[test_case(vec![1, 2, 3], vec![2, 3] => matches ScrollerUpdate::ReplaceBefore { idx: 1, items, .. } if items.is_empty(); "Test 15: remove one item from beginning")]
-    #[test_case(vec![1, 2, 3, 4], vec![3, 4] => matches ScrollerUpdate::ReplaceBefore { idx: 2, items, .. } if items.is_empty(); "Test 16: remove two items from beginning")]
+    #[test_case(vec![1, 2, 3], vec![2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 1, items, .. }) if items.is_empty(); "Test 15: remove one item from beginning")]
+    #[test_case(vec![1, 2, 3, 4], vec![3, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 2, items, .. }) if items.is_empty(); "Test 16: remove two items from beginning")]
     // Items removed from end
-    #[test_case(vec![1, 2, 3], vec![1, 2] => matches ScrollerUpdate::ReplaceFrom { idx: 2, items, .. } if items.is_empty(); "Test 17: remove one item from end")]
-    #[test_case(vec![1, 2, 3, 4], vec![1, 2] => matches ScrollerUpdate::ReplaceFrom { idx: 2, items, .. } if items.is_empty(); "Test 18: remove two items from end")]
+    #[test_case(vec![1, 2, 3], vec![1, 2] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 2, items, .. }) if items.is_empty(); "Test 17: remove one item from end")]
+    #[test_case(vec![1, 2, 3, 4], vec![1, 2] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 2, items, .. }) if items.is_empty(); "Test 18: remove two items from end")]
     // Items removed from middle
-    #[test_case(vec![1, 2, 3], vec![1, 3] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 2, items, .. } if items.is_empty(); "Test 19: remove item from middle")]
-    #[test_case(vec![1, 2, 3, 4], vec![1, 4] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 3, items, .. } if items.is_empty(); "Test 20: remove two items from middle")]
-    #[test_case(vec![1, 2, 3, 4, 5], vec![1, 4, 5] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 3, items, .. } if items.is_empty(); "Test 20a: remove two items from middle")]
+    #[test_case(vec![1, 2, 3], vec![1, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 2, items, .. }) if items.is_empty(); "Test 19: remove item from middle")]
+    #[test_case(vec![1, 2, 3, 4], vec![1, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 3, items, .. }) if items.is_empty(); "Test 20: remove two items from middle")]
+    #[test_case(vec![1, 2, 3, 4, 5], vec![1, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 3, items, .. }) if items.is_empty(); "Test 20a: remove two items from middle")]
     // Items replaced
-    #[test_case(vec![1, 2, 3], vec![1, 4, 3] => matches ScrollerUpdate::ReplaceRange { from: 1, to: 2, items, .. } if items == vec![4]; "Test 21: replace item in middle")]
-    #[test_case(vec![1, 2, 3], vec![4, 2, 3] => matches ScrollerUpdate::ReplaceBefore { idx: 1, items, .. } if items == vec![4]; "Test 22: replace first item")]
-    #[test_case(vec![1, 2, 3], vec![1, 2, 4] => matches ScrollerUpdate::ReplaceFrom { idx: 2, items, .. } if items == vec![4]; "Test 23: replace last item")]
+    #[test_case(vec![1, 2, 3], vec![1, 4, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 2, items, .. }) if items == vec![4]; "Test 21: replace item in middle")]
+    #[test_case(vec![1, 2, 3], vec![4, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 1, items, .. }) if items == vec![4]; "Test 22: replace first item")]
+    #[test_case(vec![1, 2, 3], vec![1, 2, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 2, items, .. }) if items == vec![4]; "Test 23: replace last item")]
     // Completely different vectors
-    #[test_case(vec![1, 2, 3], vec![4, 5, 6] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items == vec![4, 5, 6]; "Test 24: completely different same length")]
-    #[test_case(vec![1, 2], vec![3, 4, 5] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items == vec![3, 4, 5]; "Test 25: completely different new longer")]
-    #[test_case(vec![1, 2, 3], vec![4, 5] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items == vec![4, 5]; "Test 26: completely different new shorter")]
+    #[test_case(vec![1, 2, 3], vec![4, 5, 6] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items == vec![4, 5, 6]; "Test 24: completely different same length")]
+    #[test_case(vec![1, 2], vec![3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items == vec![3, 4, 5]; "Test 25: completely different new longer")]
+    #[test_case(vec![1, 2, 3], vec![4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items == vec![4, 5]; "Test 26: completely different new shorter")]
     // Complex cases that test the algorithm's logic
-    #[test_case(vec![1, 2, 3, 4, 5, 6], vec![0, 1, 2, 3, 4, 5, 6] => matches ScrollerUpdate::ReplaceBefore { idx: 0, items, .. } if items == vec![0]; "Test 27: add at beginning with many common suffix")]
-    #[test_case(vec![1, 2, 3, 4, 5, 6], vec![1, 2, 3, 7, 8, 9] => matches ScrollerUpdate::ReplaceFrom { idx: 3, items, .. } if items == vec![7, 8, 9]; "Test 28: replace latter half")]
-    #[test_case(vec![1, 2, 3, 4, 5, 6], vec![7, 8, 9, 4, 5, 6] => matches ScrollerUpdate::ReplaceBefore { idx: 3, items, .. } if items == vec![7, 8, 9]; "Test 29: replace first half")]
+    #[test_case(vec![1, 2, 3, 4, 5, 6], vec![0, 1, 2, 3, 4, 5, 6] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![0]; "Test 27: add at beginning with many common suffix")]
+    #[test_case(vec![1, 2, 3, 4, 5, 6], vec![1, 2, 3, 7, 8, 9] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 3, items, .. }) if items == vec![7, 8, 9]; "Test 28: replace latter half")]
+    #[test_case(vec![1, 2, 3, 4, 5, 6], vec![7, 8, 9, 4, 5, 6] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 3, items, .. }) if items == vec![7, 8, 9]; "Test 29: replace first half")]
     // Edge cases with single elements
-    #[test_case(vec![1], vec![1, 2] => matches ScrollerUpdate::Append { items, .. } if items == vec![2]; "Test 30: single to two elements")]
-    #[test_case(vec![1, 2], vec![1] => matches ScrollerUpdate::ReplaceFrom { idx: 1, items, .. } if items.is_empty(); "Test 31: two to single element")]
-    #[test_case(vec![1], vec![2] => matches ScrollerUpdate::ReplaceFrom { idx: 0, items, .. } if items == vec![2]; "Test 32: single element replacement")]
+    #[test_case(vec![1], vec![1, 2] => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![2]; "Test 30: single to two elements")]
+    #[test_case(vec![1, 2], vec![1] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 1, items, .. }) if items.is_empty(); "Test 31: two to single element")]
+    #[test_case(vec![1], vec![2] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items == vec![2]; "Test 32: single element replacement")]
     // Cases that test the 50% threshold logic
-    #[test_case(vec![1, 2, 3, 4], vec![0, 2, 3, 4] => matches ScrollerUpdate::ReplaceBefore { idx: 1, items, .. } if items == vec![0]; "Test 33: suffix common >= 50% triggers ReplaceBefore")]
-    #[test_case(vec![1, 2, 3, 4], vec![1, 0, 0, 0] => matches ScrollerUpdate::ReplaceFrom { idx: 1, items, .. } if items == vec![0, 0, 0]; "Test 34: prefix common > suffix common")]
-    #[test_case(vec![1, 2, 3, 4, 5, 6], vec![0, 0, 0, 4, 5, 6] => matches ScrollerUpdate::ReplaceBefore { idx: 3, items, .. } if items == vec![0, 0, 0]; "Test 35: suffix wins over prefix")]
+    #[test_case(vec![1, 2, 3, 4], vec![0, 2, 3, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 1, items, .. }) if items == vec![0]; "Test 33: suffix common >= 50% triggers ReplaceBefore")]
+    #[test_case(vec![1, 2, 3, 4], vec![1, 0, 0, 0] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 1, items, .. }) if items == vec![0, 0, 0]; "Test 34: prefix common > suffix common")]
+    #[test_case(vec![1, 2, 3, 4, 5, 6], vec![0, 0, 0, 4, 5, 6] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 3, items, .. }) if items == vec![0, 0, 0]; "Test 35: suffix wins over prefix")]
     // Large vectors to test performance characteristics
-    #[test_case((1..=100).collect::<Vec<_>>(), (0..=100).collect::<Vec<_>>() => matches ScrollerUpdate::ReplaceBefore { idx: 0, items, .. } if items == vec![0]; "Test 36: large vector add at beginning")]
-    #[test_case((1..=100).collect::<Vec<_>>(), (1..=101).collect::<Vec<_>>() => matches ScrollerUpdate::Append { items, .. } if items == vec![101]; "Test 37: large vector add at end")]
+    #[test_case((1..=100).collect::<Vec<_>>(), (0..=100).collect::<Vec<_>>() => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![0]; "Test 36: large vector add at beginning")]
+    #[test_case((1..=100).collect::<Vec<_>>(), (1..=101).collect::<Vec<_>>() => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![101]; "Test 37: large vector add at end")]
 
     // Test the actual function
     fn test_calculate_scroller_update(old: Vec<i32>, new: Vec<i32>) -> ScrollerUpdate<i32> {
@@ -1494,26 +1559,29 @@ mod tests {
 
     fn apply_scroller_update(mut current: Vec<i32>, update: &ScrollerUpdate<i32>) -> Vec<i32> {
         match update {
-            ScrollerUpdate::None(_) => current,
-            ScrollerUpdate::Append { items, .. } => {
-                current.extend(items.clone());
-                current
-            }
-            ScrollerUpdate::ReplaceFrom { idx, items, .. } => {
-                current.splice(idx.., items.clone());
-                current
-            }
-            ScrollerUpdate::ReplaceBefore { idx, items, .. } => {
-                current.splice(..idx, items.clone());
-                current
-            }
-            ScrollerUpdate::ReplaceRange {
-                from, to, items, ..
-            } => {
-                current.splice(from..to, items.clone());
-                current
-            }
+            ScrollerUpdate::List(update) => match update {
+                ScrollerListUpdate::None(_) => current,
+                ScrollerListUpdate::Append { items, .. } => {
+                    current.extend(items.clone());
+                    current
+                }
+                ScrollerListUpdate::ReplaceFrom { idx, items, .. } => {
+                    current.splice(idx.., items.clone());
+                    current
+                }
+                ScrollerListUpdate::ReplaceBefore { idx, items, .. } => {
+                    current.splice(..idx, items.clone());
+                    current
+                }
+                ScrollerListUpdate::ReplaceRange {
+                    from, to, items, ..
+                } => {
+                    current.splice(from..to, items.clone());
+                    current
+                }
+            },
             ScrollerUpdate::Error { .. } => current,
+            ScrollerUpdate::Status(_) => current,
         }
     }
 
@@ -1523,9 +1591,9 @@ mod tests {
         let result = calculate_scroller_update(&[1, 2], &[1, 2, 3], src);
 
         match result {
-            ScrollerUpdate::Append {
+            ScrollerUpdate::List(ScrollerListUpdate::Append {
                 src: result_src, ..
-            } => {
+            }) => {
                 assert_eq!(result_src, src);
             }
             _ => panic!("Expected Append variant"),
@@ -1539,7 +1607,7 @@ mod tests {
         let result = calculate_scroller_update(&old, &new, test_source());
 
         match result {
-            ScrollerUpdate::ReplaceBefore { idx, items, .. } => {
+            ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx, items, .. }) => {
                 assert_eq!(idx, 0); // All old items are common suffix, so replace before idx 0
                 assert_eq!(items, vec![0]); // Only the new item at the beginning
             }
@@ -1554,7 +1622,7 @@ mod tests {
         let result = calculate_scroller_update(&old, &new, test_source());
 
         match result {
-            ScrollerUpdate::ReplaceFrom { idx, items, .. } => {
+            ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx, items, .. }) => {
                 assert_eq!(idx, 0); // No common prefix
                 assert_eq!(items, vec![4, 5, 6, 7]); // All new items
             }
@@ -1570,7 +1638,7 @@ mod tests {
         let result = calculate_scroller_update(&old, &new, test_source());
 
         match result {
-            ScrollerUpdate::ReplaceBefore { idx, items, .. } => {
+            ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx, items, .. }) => {
                 assert_eq!(idx, 3); // Common suffix: [40, 50] starting at idx 3 in old
                 assert_eq!(items, vec![5, 15, 20, 35]); // New items before the common suffix
             }
