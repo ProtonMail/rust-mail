@@ -1,6 +1,7 @@
 use crate::MailUserContext;
 use crate::datatypes::MessageRecipient;
 use crate::models::MessageReplyTo;
+use email_address::EmailAddress;
 use non_empty_string::NonEmptyString;
 use proton_core_api::consts::CoreBundle;
 use proton_core_api::service::ApiServiceError;
@@ -13,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Tether;
 use std::collections::HashSet;
 use std::future::Future;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::error;
@@ -113,6 +115,34 @@ pub enum Recipient {
 pub struct RecipientEntry {
     pub name: Option<PrivateString>,
     pub email: PrivateEmail,
+}
+
+impl RecipientEntry {
+    /// Parses given string as an email recipient.
+    ///
+    /// Basically:
+    ///
+    /// - `eoj@pm.me` ends up as `name: None` and `email: "eoj@pm.me"`,
+    /// - `joe <eoj@pm.me>` ends up as `name: Some("joe")` and `email: "eoj@pm.me"`.
+    pub fn new(email: &str) -> Self {
+        let email = email.trim();
+
+        if let Ok(email) = EmailAddress::from_str(email) {
+            let name = email.display_part().trim();
+
+            if !name.is_empty() {
+                return Self {
+                    name: Some(name.into()),
+                    email: email.email().into(),
+                };
+            }
+        }
+
+        Self {
+            name: None,
+            email: email.into(),
+        }
+    }
 }
 
 pub trait ContactGroupResolver {

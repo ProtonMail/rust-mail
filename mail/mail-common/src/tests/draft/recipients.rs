@@ -5,6 +5,7 @@ use proton_core_common::models::{Contact, ContactEmail, Label};
 use proton_mail_common::test_utils::db::new_test_connection_file;
 use stash::orm::Model;
 use stash::stash::StashError;
+use test_case::test_case;
 
 #[test]
 fn duplicate_single_recipient_reports_error() {
@@ -560,4 +561,28 @@ fn group_name_always() -> NonEmptyString {
 
 fn group_name_maybe() -> MaybeEmptyString {
     "my_group".to_owned().into()
+}
+
+#[test_case("joe@pm.me", None, "joe@pm.me")]
+#[test_case("  whitespace.joe@pm.me  ", None, "whitespace.joe@pm.me")]
+#[test_case("🍆 <eggplant.joe@pm.me>", Some("🍆"), "eggplant.joe@pm.me")]
+#[test_case(
+    "cotton eyed joe <cotton.eyed.joe@pm.me>",
+    Some("cotton eyed joe"),
+    "cotton.eyed.joe@pm.me"
+)]
+#[test_case(
+    "\"quoted <> joe\" <quoted.joe@pm.me>",
+    Some("\"quoted <> joe\""),
+    "quoted.joe@pm.me"
+)]
+fn recipient_entry(given: &str, expected_name: Option<&str>, expected_email: &str) {
+    let actual = RecipientEntry::new(given);
+
+    let expected = RecipientEntry {
+        name: expected_name.map(Into::into),
+        email: expected_email.into(),
+    };
+
+    assert_eq!(expected, actual);
 }

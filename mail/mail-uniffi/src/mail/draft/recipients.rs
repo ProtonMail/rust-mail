@@ -30,6 +30,19 @@ impl From<SingleRecipientEntry> for RecipientEntry {
     }
 }
 
+#[allow(
+    clippy::redundant_closure_for_method_calls,
+    reason = "hella awkward otherwise"
+)]
+impl From<RecipientEntry> for SingleRecipientEntry {
+    fn from(value: RecipientEntry) -> Self {
+        Self {
+            name: value.name.map(|name| name.into_clear_text_string()),
+            email: value.email.into_clear_text_string(),
+        }
+    }
+}
+
 /// Errors which occur when adding a single recipient
 #[derive(uniffi::Enum)]
 pub enum AddSingleRecipientError {
@@ -383,4 +396,9 @@ impl ComposerRecipientList {
             }
         })
     }
+}
+
+#[uniffi::export]
+pub fn new_recipient(email: &str) -> SingleRecipientEntry {
+    RecipientEntry::new(email).into()
 }
