@@ -113,7 +113,6 @@ impl MailboxModel {
     fn sync_mailbox(&mut self, mbox: Mailbox) -> Command<Messages> {
         self.state = State::new_syncing();
 
-        let filter = self.unread;
         let ctx = Arc::clone(&self.ctx);
 
         // Create the background worker.
@@ -145,9 +144,9 @@ impl MailboxModel {
                 };
 
                 if mbox.view_mode() == ViewMode::Conversations {
-                    ConversationsState::build(Arc::clone(&ctx), mbox, label, filter)
+                    ConversationsState::build(Arc::clone(&ctx), mbox, label)
                 } else {
-                    MessagesState::build(Arc::clone(&ctx), mbox, label, filter)
+                    MessagesState::build(Arc::clone(&ctx), mbox, label)
                 }
             }),
         ])
@@ -349,11 +348,11 @@ impl MailboxModel {
 
     fn clear_cursor(&mut self) {
         if let State::Conversations(state) = &mut self.state {
-            let _ = state.scroller().clone_inner().reset();
+            let _ = state.scroller().clone_inner().clear();
         } else if let State::Messages(state) = &mut self.state {
             state
                 .label_scroller()
-                .map(|scroller| scroller.clone_inner().reset());
+                .map(|scroller| scroller.clone_inner().clear());
         }
     }
 }

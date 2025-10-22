@@ -4,14 +4,11 @@ mod remote_source;
 
 pub use self::data_scroller_source::*;
 pub use self::remote_source::*;
-use crate::datatypes::{
-    ContextualConversation, IncludeSwitch, LocalConversationId, LocalMessageId, ReadFilter,
-};
+use crate::datatypes::SearchOptions;
+use crate::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter};
 use crate::models::Message;
 use crate::traits::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
-use itertools::Either;
-use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use stash::orm::Model;
 use std::hash::Hash;
@@ -88,15 +85,15 @@ where
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
-    fn change_filter(
+    fn change_state(
         &mut self,
         ctx: &MailUserContext,
-        unread: ReadFilter,
+        unread: Option<ReadFilter>,
+        label: Option<LocalLabelId>,
+        keywords: Option<SearchOptions>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
-    fn change_include(&mut self, include: IncludeSwitch) -> Either<LocalLabelId, LabelId>;
-
-    fn reset(
+    fn clear(
         &mut self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;

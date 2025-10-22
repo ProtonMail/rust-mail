@@ -12,6 +12,7 @@ where
     T: MailScrollerItem,
 {
     scoller: Arc<RealMailScroller<T>>,
+    pub supports_include_filter: bool,
     _watch_handle: TuiWatchHandle,
 }
 
@@ -19,7 +20,7 @@ impl<T> MailScroller<T>
 where
     T: MailScrollerItem,
 {
-    pub fn new<U>(
+    pub async fn new<U>(
         scoller: RealMailScroller<T>,
         handle: MailScrollerHandle<U>,
         to_message: impl Fn(ScrollerUpdate<U>) -> Messages + Send + Sync + 'static,
@@ -28,6 +29,7 @@ where
         U: Send + 'static,
     {
         let scoller = Arc::new(scoller);
+        let supports_include_filter = scoller.supports_include_filter().await.unwrap_or(false);
         let to_message = Arc::new(to_message);
 
         let (watcher, background_command) =
@@ -40,6 +42,7 @@ where
         (
             Self {
                 scoller,
+                supports_include_filter,
                 _watch_handle: watcher,
             },
             background_command,

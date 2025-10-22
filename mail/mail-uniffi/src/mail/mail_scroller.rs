@@ -2,7 +2,7 @@ use super::Mailbox;
 use crate::core::datatypes::Id;
 use crate::errors::MailScrollerError;
 use crate::mail::datatypes::{Conversation, Message};
-use crate::{WatchHandle, async_runtime, uniffi_async};
+use crate::{PaginatorSearchOptions, WatchHandle, async_runtime, uniffi_async};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::{
     ContextualConversation as RealContextualConversation, IncludeSwitch as RealIncludeSwitch,
@@ -482,8 +482,17 @@ impl ConversationScroller {
     }
 
     #[must_use]
-    pub fn supports_include_filter(&self) -> bool {
-        self.scroller.supports_include_filter()
+    pub async fn supports_include_filter(&self) -> Result<bool, MailScrollerError> {
+        let scroller = Arc::clone(&self.scroller);
+
+        uniffi_async(async move {
+            scroller
+                .supports_include_filter()
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(Into::into)
     }
 
     pub fn terminate(&self) {
@@ -616,8 +625,17 @@ impl MessageScroller {
     }
 
     #[must_use]
-    pub fn supports_include_filter(&self) -> bool {
-        self.scroller.supports_include_filter()
+    pub async fn supports_include_filter(&self) -> Result<bool, MailScrollerError> {
+        let scroller = Arc::clone(&self.scroller);
+
+        uniffi_async(async move {
+            scroller
+                .supports_include_filter()
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(Into::into)
     }
 
     pub fn terminate(&self) {
@@ -690,6 +708,16 @@ impl SearchScroller {
             .map_err(Into::into)
     }
 
+    pub fn change_keywords(
+        self: Arc<Self>,
+        keywords: PaginatorSearchOptions,
+    ) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_keywords(keywords.into())
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     /// Retrieves the current items in the scroller, the items will be returned
     /// in the callback with the `ReplaceFrom { idx: 0, items }` update.
     pub fn get_items(self: Arc<Self>) -> Result<(), MailScrollerError> {
@@ -734,8 +762,17 @@ impl SearchScroller {
     }
 
     #[must_use]
-    pub fn supports_include_filter(&self) -> bool {
-        self.scroller.supports_include_filter()
+    pub async fn supports_include_filter(&self) -> Result<bool, MailScrollerError> {
+        let scroller = Arc::clone(&self.scroller);
+
+        uniffi_async(async move {
+            scroller
+                .supports_include_filter()
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(Into::into)
     }
 
     pub fn terminate(&self) {

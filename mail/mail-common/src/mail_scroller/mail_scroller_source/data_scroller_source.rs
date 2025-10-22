@@ -2,11 +2,10 @@ use super::{
     MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
     remote_source::RemoteSource,
 };
-use crate::datatypes::IncludeSwitch;
+use crate::datatypes::SearchOptions;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 use anyhow::anyhow;
-use itertools::Either;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::LocalLabelId,
@@ -18,7 +17,6 @@ use tracing::{debug, warn};
 #[derive(Debug)]
 pub struct DataScrollerSource<T: RemoteSource> {
     local_label_id: LocalLabelId,
-    local_label_ids: Option<(LocalLabelId, LocalLabelId)>,
     unread: ReadFilter,
     page_size: usize,
     invalidate: Option<flume::Sender<()>>,
@@ -30,18 +28,13 @@ pub struct DataScrollerSource<T: RemoteSource> {
 impl<T: RemoteSource> DataScrollerSource<T> {
     pub fn new(
         local_label_id: LocalLabelId,
-        alt_local_label_id: Option<LocalLabelId>,
         unread: ReadFilter,
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Self {
-        let local_label_ids =
-            alt_local_label_id.map(|alt_local_label_id| (local_label_id, alt_local_label_id));
-
         Self {
             local_label_id,
-            local_label_ids,
             unread,
             page_size,
             invalidate: None,
@@ -499,37 +492,44 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         Ok(task)
     }
 
-    async fn change_filter(
+    async fn change_state(
         &mut self,
         ctx: &MailUserContext,
-        unread: ReadFilter,
+        unread: Option<ReadFilter>,
+        label: Option<LocalLabelId>,
+        _keywords: Option<SearchOptions>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let tether = ctx.user_stash().connection().await?;
-        self.unread = unread;
-        self.state =
-            MailScrollerState::new_online(self.local_label_id, unread, self.page_size, &tether)
-                .await?;
-        debug!("Changed filter, new state: {}, initializing...", self.state);
+        if let Some(unread) = unread {
+            tracing::info!(
+                "Changing unread filter from {current:?} to {unread:?}",
+                current = self.unread,
+            );
+            self.unread = unread;
+        }
+        if let Some(label) = label {
+            tracing::info!(
+                "Changing label from {current} to {label}",
+                current = self.local_label_id
+            );
+            self.local_label_id = label;
+        }
+
+        self.state = MailScrollerState::new_online(
+            self.local_label_id,
+            self.unread,
+            self.page_size,
+            &tether,
+        )
+        .await?;
+        debug!("Changed state, new state: {}, initializing...", self.state);
 
         let task = self.initialize_impl(ctx, false).await?;
 
         Ok(task)
     }
 
-    fn change_include(&mut self, include: IncludeSwitch) -> Either<LocalLabelId, LabelId> {
-        if let Some((default_label, extended_label)) = self.local_label_ids {
-            self.local_label_id = match include {
-                IncludeSwitch::Default => default_label,
-                IncludeSwitch::WithSpamAndTrash => extended_label,
-            };
-        } else {
-            warn!(?include, "Unexpected change-include command");
-        }
-
-        Either::Left(self.local_label_id)
-    }
-
-    async fn reset(
+    async fn clear(
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {

@@ -12,6 +12,7 @@ use stash::{
 };
 
 use crate::{
+    Mailbox,
     actions::ConversationOrMessage,
     conv_id, conversation,
     datatypes::{ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions},
@@ -348,6 +349,30 @@ where
         self.scroller.refresh()
     }
 
+    pub fn change_filter(&self, filter: ReadFilter) -> Result<(), MailContextError> {
+        self.scroller.change_filter(filter)
+    }
+
+    pub fn change_label(
+        &self,
+        mailbox: &Mailbox,
+        label: LocalLabelId,
+    ) -> Result<(), MailContextError> {
+        self.scroller.change_label(mailbox, label)
+    }
+
+    pub fn change_include(
+        &self,
+        mailbox: &Mailbox,
+        include: IncludeSwitch,
+    ) -> Result<(), MailContextError> {
+        self.scroller.change_include(mailbox, include)
+    }
+
+    pub fn change_keywords(&self, keywords: SearchOptions) -> Result<(), MailContextError> {
+        self.scroller.change_keywords(keywords)
+    }
+
     pub fn force_refresh(&self) -> Result<(), MailContextError> {
         self.scroller.force_refresh()
     }
@@ -555,8 +580,8 @@ where
         }
     }
 
-    pub fn supports_include_filter(&self) -> bool {
-        self.scroller.supports_include_filter()
+    pub async fn supports_include_filter(&self) -> bool {
+        self.scroller.supports_include_filter().await.unwrap()
     }
 }
 
@@ -564,19 +589,10 @@ impl TestScroller<ContextualConversation> {
     pub async fn conversations(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
-        unread: ReadFilter,
-        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) = MailScroller::conversations(
-            user_ctx.as_weak(),
-            None,
-            local_label_id,
-            unread,
-            include,
-            page_size,
-        )
-        .await?;
+        let (scroller, handle) =
+            MailScroller::conversations(user_ctx.as_weak(), local_label_id, page_size).await?;
 
         Self::new(scroller, handle).await
     }
@@ -584,19 +600,10 @@ impl TestScroller<ContextualConversation> {
     pub async fn conversations_instant(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
-        unread: ReadFilter,
-        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) = MailScroller::conversations(
-            user_ctx.as_weak(),
-            None,
-            local_label_id,
-            unread,
-            include,
-            page_size,
-        )
-        .await?;
+        let (scroller, handle) =
+            MailScroller::conversations(user_ctx.as_weak(), local_label_id, page_size).await?;
 
         Ok(Self::new_instant(scroller, handle))
     }
@@ -606,19 +613,10 @@ impl TestScroller<Message> {
     pub async fn messages(
         user_ctx: &Arc<MailUserContext>,
         local_label_id: LocalLabelId,
-        unread: ReadFilter,
-        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let (scroller, handle) = MailScroller::messages(
-            user_ctx.as_weak(),
-            None,
-            local_label_id,
-            unread,
-            include,
-            page_size,
-        )
-        .await?;
+        let (scroller, handle) =
+            MailScroller::messages(user_ctx.as_weak(), local_label_id, page_size).await?;
 
         Self::new(scroller, handle).await
     }
@@ -626,11 +624,10 @@ impl TestScroller<Message> {
     pub async fn search(
         user_ctx: &Arc<MailUserContext>,
         options: SearchOptions,
-        include: IncludeSwitch,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
         let (scroller, handle) =
-            MailScroller::search(user_ctx.as_weak(), None, options, include, page_size).await?;
+            MailScroller::search(user_ctx.as_weak(), options, page_size).await?;
 
         Self::new(scroller, handle).await
     }

@@ -2,12 +2,12 @@ use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_mail_api::services::proton::common::MessageId;
-use proton_mail_common::api_message_meta;
 use proton_mail_common::datatypes::{AlmostAllMail, IncludeSwitch, SearchOptions, SystemLabelId};
 use proton_mail_common::models::{MailSettings, Message};
 use proton_mail_common::msg_id;
-use proton_mail_common::test_utils::scroller::{TestScroller, save_single_message};
+use proton_mail_common::test_utils::scroller::{TestScroller, TestUpdate, save_single_message};
 use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
+use proton_mail_common::{Mailbox, api_message_meta};
 use stash::orm::Model;
 use stash::stash::StashError;
 use std::time::Duration;
@@ -37,16 +37,14 @@ async fn reads_one_item_from_online_scroll_data() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let include = IncludeSwitch::Default;
     let page_size = 5;
 
-    let mut test_scroller =
-        TestScroller::search(&user_ctx, SearchOptions::default(), include, page_size)
-            .await
-            .unwrap();
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
 
     assert!(
-        test_scroller.supports_include_filter(),
+        test_scroller.supports_include_filter().await,
         "Scroller supports include-filter, because we're looking at the \
          AlmostAllMail label"
     );
@@ -67,7 +65,6 @@ async fn reads_one_item_from_online_scroll_data() {
 #[tokio::test]
 async fn reads_two_pages_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
-    let include = IncludeSwitch::Default;
     let page_size = 5;
     let label = SystemLabelId::almost_all_mail();
     let keyword = "Invoice 2024";
@@ -79,7 +76,7 @@ async fn reads_two_pages_from_online_scroll_data() {
 
     // Online
     let mut test_scroller =
-        TestScroller::search(&user_ctx, SearchOptions::from(keyword), include, page_size)
+        TestScroller::search(&user_ctx, SearchOptions::from(keyword), page_size)
             .await
             .unwrap();
 
@@ -132,7 +129,7 @@ async fn reads_two_pages_from_online_scroll_data() {
 
     // Search always relay on online data even for the same options used just before.
     let mut test_scroller =
-        TestScroller::search(&user_ctx, SearchOptions::from(keyword), include, page_size)
+        TestScroller::search(&user_ctx, SearchOptions::from(keyword), page_size)
             .await
             .unwrap();
 
@@ -214,13 +211,11 @@ async fn does_not_refresh_on_new_message_in_database() {
         .await
         .unwrap();
 
-    let include = IncludeSwitch::Default;
     let page_size = 5;
 
-    let mut test_scroller =
-        TestScroller::search(&user_ctx, SearchOptions::default(), include, page_size)
-            .await
-            .unwrap();
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
 
     test_scroller.fetch_more_and_wait().await.unwrap();
     let actual = test_scroller.items();
@@ -287,13 +282,11 @@ async fn does_refresh_on_modified_message_in_database() {
         .await
         .unwrap();
 
-    let include = IncludeSwitch::Default;
     let page_size = 5;
 
-    let mut test_scroller =
-        TestScroller::search(&user_ctx, SearchOptions::default(), include, page_size)
-            .await
-            .unwrap();
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
 
     test_scroller.fetch_more_and_wait().await.unwrap();
     let actual = test_scroller.items();
@@ -363,16 +356,14 @@ async fn all_mail() {
 
     // ---
 
-    let include = IncludeSwitch::Default;
     let page_size = 5;
 
-    let mut test_scroller =
-        TestScroller::search(&user_ctx, SearchOptions::default(), include, page_size)
-            .await
-            .unwrap();
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
 
     assert!(
-        !test_scroller.supports_include_filter(),
+        !test_scroller.supports_include_filter().await,
         "Scroller doesn't support include-filter, because we're already \
          looking at the AllMail label"
     );
@@ -395,17 +386,37 @@ async fn almost_all_mail_with_spam_and_trash() {
 
     // ---
 
-    let message = api_message_meta!(
-        id: MessageId::from("mymsg"),
-        conversation_id: conversation.id,
-        address_id: address.id,
+    let message1 = api_message_meta!(
+        id: MessageId::from("mymsg1"),
+        conversation_id: conversation.id.clone(),
+        address_id: address.id.clone(),
         label_ids: vec![SystemLabel::AllMail.remote_id()]
     );
+
+    let message2 = api_message_meta!(
+        id: MessageId::from("mymsg2"),
+        conversation_id: conversation.id.clone(),
+        address_id: address.id.clone(),
+        label_ids: vec![SystemLabel::Spam.remote_id()]
+    );
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::almost_all_mail())
+        .expect(1..=2)
+        .respond_with(vec![message1.clone()])
+        .await;
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::all_mail())
+        .given_keyword("keyword")
+        .expect(1..=2)
+        .respond_with(vec![message2.clone()])
+        .await;
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::all_mail())
         .expect(1..=2)
-        .respond_with(vec![message])
+        .respond_with(vec![message1, message2])
         .await;
 
     ctx.mock_ping_success().await;
@@ -427,27 +438,61 @@ async fn almost_all_mail_with_spam_and_trash() {
 
     // ---
 
-    let include = IncludeSwitch::WithSpamAndTrash;
     let page_size = 5;
 
-    let mut test_scroller =
-        TestScroller::search(&user_ctx, SearchOptions::default(), include, page_size)
-            .await
-            .unwrap();
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
 
     assert!(
-        test_scroller.supports_include_filter(),
+        test_scroller.supports_include_filter().await,
         "Scroller supports include-filter, because originally we're looking at \
          the AlmostAllMail label"
     );
 
     test_scroller.fetch_more_and_wait().await.unwrap();
+    {
+        let actual = test_scroller.items();
+
+        assert_eq!(actual.len(), 1);
+        assert_eq!(test_scroller.items().len(), 1);
+        assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg1"));
+    }
+    let all_mail_local_id = SystemLabel::AllMail
+        .local_id(&tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let mailbox = Mailbox::with_remote_id(&tether, LabelId::almost_all_mail())
+        .await
+        .unwrap();
+    test_scroller
+        .change_include(&mailbox, IncludeSwitch::WithSpamAndTrash)
+        .unwrap();
+
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
+        .await;
+    {
+        let actual = test_scroller.items();
+        assert_eq!(actual.len(), 2);
+        assert_eq!(test_scroller.items().len(), 2);
+        assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg1"));
+        assert_eq!(actual[1].remote_id.clone(), msg_id!("mymsg2"));
+    }
+
+    test_scroller
+        .change_keywords(SearchOptions::from("keyword"))
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })
+        .await;
 
     let actual = test_scroller.items();
-
     assert_eq!(actual.len(), 1);
     assert_eq!(test_scroller.items().len(), 1);
-    assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg"));
+    assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg2"));
+    assert_eq!(mailbox.label_id(), all_mail_local_id);
 }
 
 async fn setup_api_message_pages(

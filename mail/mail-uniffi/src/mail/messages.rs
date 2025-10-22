@@ -12,7 +12,6 @@ use super::datatypes::{
     AllListActions, AllMessageActions, Message, MessageActionSheet, MobileAction,
 };
 use super::datatypes::{LabelAsAction, MimeType, MoveAction};
-use super::mail_scroller::IncludeSwitch;
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::PaginatorSearchOptions;
@@ -24,7 +23,7 @@ use crate::errors::{
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::mail::datatypes::{LabelAsOutput, Undo};
 use crate::mail::mail_scroller::{
-    MessageScroller, MessageScrollerLiveQueryCallback, ReadFilter, SearchScroller,
+    MessageScroller, MessageScrollerLiveQueryCallback, SearchScroller,
     spawn_message_scroller_watcher,
 };
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
@@ -565,23 +564,14 @@ pub async fn messages_for_label(
 #[uniffi_export]
 pub async fn scroll_messages_for_label(
     mailbox: Arc<Mailbox>,
-    label_id: Id,
-    unread: ReadFilter,
-    include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = mailbox.ctx()?;
 
     uniffi_async(async move {
-        let (scroller, handle) = MailScroller::messages(
-            context.as_weak(),
-            Some(mailbox.get()),
-            label_id.into(),
-            unread.into(),
-            include.into(),
-            50,
-        )
-        .await?;
+        let label_id = mailbox.label_id();
+        let (scroller, handle) =
+            MailScroller::messages(context.as_weak(), label_id.into(), 50).await?;
 
         let handle = spawn_message_scroller_watcher(&context, handle, callback);
 
@@ -607,20 +597,13 @@ pub async fn scroll_messages_for_label(
 pub async fn scroller_search(
     mailbox: Arc<Mailbox>,
     options: PaginatorSearchOptions,
-    include: IncludeSwitch,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<SearchScroller>, ActionError> {
     let context = mailbox.ctx()?;
 
     uniffi_async(async move {
-        let (scroller, handle) = MailScroller::search(
-            context.as_weak(),
-            Some(mailbox.get()),
-            options.into(),
-            include.into(),
-            50,
-        )
-        .await?;
+        let (scroller, handle) =
+            MailScroller::search(context.as_weak(), options.into(), 50).await?;
 
         let handle = spawn_message_scroller_watcher(&context, handle, callback);
         let scroller = SearchScroller::new(mailbox, scroller, handle);

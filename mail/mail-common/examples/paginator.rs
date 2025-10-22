@@ -11,7 +11,6 @@ use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::datatypes::IncludeSwitch;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
 use proton_mail_common::test_utils::scroller::TestScroller;
 use stash::orm::Model;
@@ -100,12 +99,13 @@ async fn main() {
 
     let page_count = 50_u32;
     let unread = ReadFilter::Unread;
-    let include = IncludeSwitch::Default;
 
-    let mut paginator =
-        TestScroller::conversations(&user_ctx, label.id(), unread, include, page_count as usize)
-            .await
-            .unwrap();
+    let mut paginator = TestScroller::conversations(&user_ctx, label.id(), page_count as usize)
+        .await
+        .unwrap();
+
+    paginator.change_filter(unread).unwrap();
+    paginator.wait_for_update().await.unwrap();
 
     paginate_mail(&mut paginator, |v1, v2| {
         // We can only guarantee this for when no filter is applied.
