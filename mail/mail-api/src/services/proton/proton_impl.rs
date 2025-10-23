@@ -53,6 +53,25 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
             .into_body_json()?)
     }
 
+    async fn put_incoming_default(
+        &self,
+        id: IncomingDefaultId,
+        location: IncomingDefaultLocation,
+        email: &str,
+    ) -> ApiServiceResult<PutIncomingDefaultResponse> {
+        let body = json!({
+            "Email": email,
+            "Location": location,
+            "Id": id
+        });
+        Ok(PUT!("{MAIL_V4}/incomingdefaults")
+            .body_json(body)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn post_incoming_default(
         &self,
         location: IncomingDefaultLocation,

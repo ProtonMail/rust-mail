@@ -8,7 +8,7 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{
     AddressSubPackage, AuthInput, IncomingDefault, Package, PostCancelSendResponse,
     PostIncomingDefaultResponse, PostSendDirectMessageResponse, PostSendRequest,
-    PutMessageHamResponse,
+    PutIncomingDefaultResponse, PutMessageHamResponse,
 };
 use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
@@ -517,6 +517,19 @@ impl MailTestContext {
     pub async fn mock_post_incoming_default(&self, incoming_default: IncomingDefault) {
         let resp = PostIncomingDefaultResponse { incoming_default };
         Mock::given(method("POST"))
+            .and(path("/api/mail/v4/incomingdefaults"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    #[allow(clippy::doc_markdown)]
+    #[function_name::named]
+    pub async fn mock_put_incoming_default(&self, incoming_default: IncomingDefault) {
+        let resp = PutIncomingDefaultResponse { incoming_default };
+        Mock::given(method("PUT"))
             .and(path("/api/mail/v4/incomingdefaults"))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)

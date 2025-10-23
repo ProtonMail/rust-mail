@@ -389,7 +389,7 @@ async fn test_block_sender_when_inbox_location_exists() {
         .unwrap();
 
     test_ctx
-        .mock_post_incoming_default_n(default_api_incoming_default(email), 1)
+        .mock_put_incoming_default(default_api_incoming_default(email))
         .await;
     test_ctx.catch_all().await;
 
@@ -452,7 +452,7 @@ async fn test_block_sender_when_spam_location_exists() {
         .unwrap();
 
     test_ctx
-        .mock_post_incoming_default_n(default_api_incoming_default(email), 1)
+        .mock_put_incoming_default(default_api_incoming_default(email))
         .await;
     test_ctx.catch_all().await;
 
