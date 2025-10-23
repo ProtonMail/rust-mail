@@ -3,7 +3,9 @@ use std::sync::Weak;
 use std::time::Duration;
 
 use anyhow::{Context as _, Result};
+use proton_core_api::services::proton::muon::common::WithTimeout;
 use proton_core_api::session::Session;
+use proton_core_common::app_events::OnEnterForegroundEvent;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{FeatureFlag, ModelExtension};
 use proton_core_common::{Context, services::Service};
@@ -124,7 +126,7 @@ impl FeatureFlagsService {
     }
 }
 
-const REFRESH_INTERVAL_SECS: u64 = 600; // 10 minutes
+const REFRESH_TIMEOUT_SECS: u64 = 600; // 10 minutes
 
 #[async_trait::async_trait]
 impl Service for FeatureFlagsService {
@@ -137,13 +139,30 @@ impl Service for FeatureFlagsService {
             .expect("Context to be there during initialization");
 
         let task_service = ctx.task_service();
+        let event_service = ctx.event_service();
         let self_clone = self.clone();
+        let Some(mut event_stream) = event_service.subscribe::<OnEnterForegroundEvent>() else {
+            error!("Failed to subscribe to OnEnterForegroundEvent");
+            return Ok(());
+        };
         task_service.spawn(async move {
+            let ctx = self_clone.ctx.upgrade().expect("Could not upgrade context");
+            let Ok(session) = ctx.new_api_session(None).await else {
+                error!("Failed to create API session");
+                return;
+            };
+            drop(ctx);
             loop {
-                if let Err(error) = self_clone.refresh().await {
+                if let Err(error) = self_clone.fetch_and_update(&session).await {
                     error!(%error, "Failed to refresh feature flags");
                 };
-                tokio::time::sleep(Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
+                if let Ok(Err(_)) = event_stream
+                    .next()
+                    .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
+                    .await
+                {
+                    break;
+                }
             }
         });
         Ok(())
