@@ -363,3 +363,251 @@ async fn test_remote_unblock_failure_with_proper_error_handling() {
 
     let _result = user_ctx.execute_all_actions().await;
 }
+
+#[tokio::test]
+async fn test_block_sender_when_inbox_location_exists() {
+    let test_ctx = MailTestContext::new().await;
+    let user_ctx = test_ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let email = "inbox_to_block@example.com";
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut incoming_default = IncomingDefault {
+                email: email.into(),
+                location: IncomingDefaultLocation::Inbox,
+                remote_id: Some("existing-inbox-id".into()),
+                local_id: None,
+                domain: None,
+                deleted: false,
+            };
+            incoming_default.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    test_ctx
+        .mock_post_incoming_default_n(default_api_incoming_default(email), 1)
+        .await;
+    test_ctx.catch_all().await;
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let initial_default = IncomingDefault::by_email(email, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(initial_default.location, IncomingDefaultLocation::Inbox);
+
+    IncomingDefault::action_block(user_ctx.action_queue(), email.into())
+        .await
+        .unwrap();
+
+    let executed_count = user_ctx.execute_all_actions().await.unwrap();
+    assert_eq!(executed_count, 1);
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let updated_default = IncomingDefault::by_email(email, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(updated_default.location, IncomingDefaultLocation::Blocked);
+}
+
+#[tokio::test]
+async fn test_block_sender_when_spam_location_exists() {
+    let test_ctx = MailTestContext::new().await;
+    let user_ctx = test_ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let email = "spam_to_block@example.com";
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut incoming_default = IncomingDefault {
+                email: email.into(),
+                location: IncomingDefaultLocation::Spam,
+                remote_id: Some("existing-spam-id".into()),
+                local_id: None,
+                domain: None,
+                deleted: false,
+            };
+            incoming_default.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    test_ctx
+        .mock_post_incoming_default_n(default_api_incoming_default(email), 1)
+        .await;
+    test_ctx.catch_all().await;
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let initial_default = IncomingDefault::by_email(email, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(initial_default.location, IncomingDefaultLocation::Spam);
+
+    IncomingDefault::action_block(user_ctx.action_queue(), email.into())
+        .await
+        .unwrap();
+
+    let executed_count = user_ctx.execute_all_actions().await.unwrap();
+    assert_eq!(executed_count, 1);
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let updated_default = IncomingDefault::by_email(email, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(updated_default.location, IncomingDefaultLocation::Blocked);
+}
+
+#[tokio::test]
+async fn test_unblock_sender_when_inbox_location_exists_should_not_work() {
+    let test_ctx = MailTestContext::new().await;
+    let user_ctx = test_ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let email = "inbox_unblock_attempt@example.com";
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut incoming_default = IncomingDefault {
+                email: email.into(),
+                location: IncomingDefaultLocation::Inbox,
+                remote_id: Some("existing-inbox-id".into()),
+                local_id: None,
+                domain: None,
+                deleted: false,
+            };
+            incoming_default.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    test_ctx.catch_all().await;
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let initial_default = IncomingDefault::by_email(email, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(initial_default.location, IncomingDefaultLocation::Inbox);
+
+    IncomingDefault::action_unblock(user_ctx.action_queue(), email.into())
+        .await
+        .unwrap();
+
+    let executed_count = user_ctx.execute_all_actions().await.unwrap();
+    assert_eq!(executed_count, 1);
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let unchanged_default = IncomingDefault::by_email(email, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(unchanged_default.location, IncomingDefaultLocation::Inbox);
+    assert!(!unchanged_default.deleted);
+}
+
+#[tokio::test]
+async fn test_unblock_sender_when_spam_location_exists_should_not_work() {
+    let test_ctx = MailTestContext::new().await;
+    let user_ctx = test_ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let email = "spam_unblock_attempt@example.com";
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut incoming_default = IncomingDefault {
+                email: email.into(),
+                location: IncomingDefaultLocation::Spam,
+                remote_id: Some("existing-spam-id".into()),
+                local_id: None,
+                domain: None,
+                deleted: false,
+            };
+            incoming_default.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    test_ctx.catch_all().await;
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let initial_default = IncomingDefault::by_email(email, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(initial_default.location, IncomingDefaultLocation::Spam);
+
+    IncomingDefault::action_unblock(user_ctx.action_queue(), email.into())
+        .await
+        .unwrap();
+
+    let executed_count = user_ctx.execute_all_actions().await.unwrap();
+    assert_eq!(executed_count, 1);
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let unchanged_default = IncomingDefault::by_email(email, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(unchanged_default.location, IncomingDefaultLocation::Spam);
+    assert!(!unchanged_default.deleted);
+}
