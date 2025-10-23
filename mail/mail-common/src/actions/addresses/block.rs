@@ -22,6 +22,8 @@ pub struct Block {
     pub email: PrivateEmail,
     #[serde(default)]
     local_id: Option<LocalIncomingDefaultId>,
+    #[serde(default)]
+    previous_location: Option<IncomingDefaultLocation>,
 }
 
 impl Block {
@@ -29,6 +31,7 @@ impl Block {
         Self {
             email,
             local_id: None,
+            previous_location: None,
         }
     }
 }
@@ -65,22 +68,24 @@ impl Handler for BlockHandler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Blocking {}", action.email);
 
-        if IncomingDefault::by_email(action.email.as_clear_text_str(), bond)
-            .await?
-            .is_some()
-        {
+        let existing = IncomingDefault::by_email(action.email.as_clear_text_str(), bond).await?;
+
+        let previous_location = existing.as_ref().map(|i| i.location);
+        if previous_location == Some(IncomingDefaultLocation::Blocked) {
             tracing::warn!("Email is already blocked");
             return Ok(());
         }
+        action.previous_location = previous_location;
 
-        let mut incoming_default = IncomingDefault {
+        let mut incoming_default = existing.unwrap_or_else(|| IncomingDefault {
             local_id: None,
             remote_id: None,
             email: action.email.clone(),
             domain: None,
             location: IncomingDefaultLocation::Blocked,
             deleted: false,
-        };
+        });
+        incoming_default.location = IncomingDefaultLocation::Blocked;
         incoming_default.save(bond).await?;
         action.local_id = incoming_default.local_id;
 
@@ -103,7 +108,11 @@ impl Handler for BlockHandler {
             return Err(anyhow!("Missing local_id").into());
         };
 
-        IncomingDefault::delete_by_id(local_id, bond).await?;
+        if let Some(previous_location) = action.previous_location {
+            IncomingDefault::update_location(local_id, previous_location, bond).await?;
+        } else {
+            IncomingDefault::delete_by_id(local_id, bond).await?;
+        }
 
         Ok(())
     }
