@@ -2,7 +2,7 @@ use crate::datatypes::{
     DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
     SettingsFlags, TfaStatus, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
 };
-use crate::models::{DelinquentState, PaidSubscription, User, UserSettings};
+use crate::models::{DelinquentState, PaidSubscription, Role, User, UserSettings};
 use crate::tests::common::new_core_test_connection;
 use proton_core_api::services::proton::UserId;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as RealUserKeys};
@@ -180,7 +180,7 @@ fn new_test_user() -> User {
         },
         to_migrate: Default::default(),
         mnemonic_status: UserMnemonicStatus::Disabled,
-        role: 12345,
+        role: Role::Admin,
         private: false,
         subscribed: PaidSubscription(3_234_234),
         services: 23_123_123,

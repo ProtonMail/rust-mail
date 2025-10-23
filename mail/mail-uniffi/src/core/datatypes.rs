@@ -89,7 +89,7 @@ use proton_core_common::datatypes::{
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::models::{
     Address as RealAddress, Contact as RealContact, ContactCard as RealContactCard,
-    ContactEmail as RealContactEmail, ModelIdExtension, User as RealUser,
+    ContactEmail as RealContactEmail, ModelIdExtension, Role as RealRole, User as RealUser,
     UserSettings as RealUserSettings,
 };
 use proton_core_common::utils::MapVec as _;
@@ -538,6 +538,36 @@ impl From<RealUserType> for UserType {
             RealUserType::External => Self::External,
             RealUserType::CredentialLess => Self::CredentialLess,
             RealUserType::Unknown(v) => Self::Unknown(v),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
+pub enum Role {
+    None,
+    Member,
+    Admin,
+    Unknown(u32),
+}
+
+impl From<Role> for RealRole {
+    fn from(role: Role) -> Self {
+        match role {
+            Role::None => Self::None,
+            Role::Member => Self::Member,
+            Role::Admin => Self::Admin,
+            Role::Unknown(v) => Self::Unknown(v),
+        }
+    }
+}
+
+impl From<RealRole> for Role {
+    fn from(role: RealRole) -> Self {
+        match role {
+            RealRole::None => Self::None,
+            RealRole::Member => Self::Member,
+            RealRole::Admin => Self::Admin,
+            RealRole::Unknown(v) => Self::Unknown(v),
         }
     }
 }
@@ -1550,7 +1580,7 @@ pub struct User {
     pub product_used_space: ProductUsedSpace,
 
     /// TODO: Document this field.
-    pub role: u32,
+    pub role: Role,
 
     /// TODO: Document this field.
     pub services: u32,
@@ -1584,7 +1614,7 @@ impl From<RealUser> for User {
             private: user.private,
             name: user.name,
             product_used_space: user.product_used_space.into(),
-            role: user.role,
+            role: user.role.into(),
             services: user.services,
             subscribed: user.subscribed.bits(),
             to_migrate: user.to_migrate,

@@ -5,7 +5,7 @@ use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, DelinquentState,
-    Flags as ApiFlags, ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
+    Flags as ApiFlags, ProductUsedSpace as ApiProductUsedSpace, Role as ApiRole, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId, UserId};
@@ -79,7 +79,7 @@ pub fn message_body_test_user_info() -> ApiUser {
         },
         to_migrate: false,
         mnemonic_status: ApiUserMnemonicStatus::Unknown,
-        role: 0,
+        role: ApiRole::None,
         private: false,
         subscribed: 0,
         services: 0,
