@@ -401,11 +401,11 @@ impl From<DraftSaveError> for ProtonMailError {
             DraftSaveError::AlreadySent => Self::Reason(MailErrorReason::DraftSaveReason(
                 DraftSaveErrorReason::MessageAlreadySent,
             )),
-            DraftSaveError::MetadataNotFound(_) | DraftSaveError::DraftDoesNotExistOnServer => {
-                Self::Reason(MailErrorReason::DraftSaveReason(
-                    DraftSaveErrorReason::MessageDoesNotExist,
-                ))
-            }
+            DraftSaveError::MetadataNotFound(_)
+            | DraftSaveError::MetadataMissingLocalConversationId(_)
+            | DraftSaveError::DraftDoesNotExistOnServer => Self::Reason(
+                MailErrorReason::DraftSaveReason(DraftSaveErrorReason::MessageDoesNotExist),
+            ),
         }
     }
 }

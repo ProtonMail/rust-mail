@@ -744,6 +744,7 @@ impl DraftSendFailure {
                 | SaveError::MessageNotADraft(_)
                 | SaveError::AttachmentDoesNotHaveKeyPackets(_)
                 | SaveError::MetadataNotFound(_)
+                | SaveError::MetadataMissingLocalConversationId(_)
                 | SaveError::DraftDoesNotExistOnServer => Self::Internal,
             },
             Error::Send(err) => match err {

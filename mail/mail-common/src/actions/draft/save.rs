@@ -3,11 +3,11 @@ use crate::actions::draft::{
     SEND_ACTION_GROUP, local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id,
     local_sent_label_id,
 };
+use crate::datatypes::LocalAttachmentId;
 use crate::datatypes::{
     AttachmentMetadata, Disposition, LocalMessageId, MessageSender, MessageSenders, MimeType,
     RollbackItemType, SystemLabelId,
 };
-use crate::datatypes::{LocalAttachmentId, LocalConversationId};
 use crate::draft::compose::maybe_sanitize;
 use crate::draft::recipients::RecipientList;
 use crate::draft::{Draft, ReplyMode, SaveError, compose, draft_v1};
@@ -50,7 +50,6 @@ pub struct Save {
     cc_list: RecipientList,
     bcc_list: RecipientList,
     message_id: Option<LocalMessageId>,
-    conversation_id: Option<LocalConversationId>,
     address_id: AddressId,
 
     /// Unencrypted subject
@@ -83,7 +82,6 @@ impl Save {
             cc_list: draft.cc_list.clone(),
             bcc_list: draft.bcc_list.clone(),
             message_id: None,
-            conversation_id: None,
             address_id: draft.address_id.clone(),
             subject: if draft.subject.is_empty() {
                 compose::DEFAULT_SUBJECT.to_owned()
@@ -130,7 +128,7 @@ impl Save {
 
 impl Action for Save {
     const TYPE: Type = Type("save_draft");
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     const PRIORITY: Priority = Priority::High;
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
 
@@ -147,7 +145,7 @@ impl VersionConverter for SaveVersionConverter {
     type Output = Save;
 
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
-        if !(old_version <= 2 && current_version == 2) {
+        if !(old_version <= 3 && current_version == 3) {
             return Err(VersionConverterError::InvalidVersion(current_version).into());
         }
 
@@ -369,7 +367,6 @@ impl Handler for SaveHandler {
         })?;
 
         action.message_id = metadata.local_message_id;
-        action.conversation_id = metadata.local_conversation_id;
         action.reply_mode = metadata.reply_mode;
         action.parent_id = metadata.local_parent_id;
         action.attachment_ids = attachment_ids;
@@ -417,8 +414,16 @@ impl Save {
     ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
         let session = ctx.session();
 
+        let mut metadata = DraftMetadata::find_by_id(action.metadata_id, guard.tether())
+            .await?
+            .ok_or(SaveError::MetadataNotFound(action.metadata_id))?;
         let local_message_id = action.message_id.expect("Should be set");
-        let conversation_id = action.conversation_id.expect("Should be set");
+        let mut local_conversation_id =
+            metadata
+                .local_conversation_id
+                .ok_or(SaveError::MetadataMissingLocalConversationId(
+                    action.metadata_id,
+                ))?;
 
         if Message::find_by_id(local_message_id, guard.tether())
             .await?
@@ -428,11 +433,11 @@ impl Save {
             return Err(AppError::MessageMissing(local_message_id).into());
         };
 
-        if Conversation::find_by_id(conversation_id, guard.tether())
+        if Conversation::find_by_id(local_conversation_id, guard.tether())
             .await?
             .is_none()
         {
-            return Err(AppError::ConversationNotFound(conversation_id).into());
+            return Err(AppError::ConversationNotFound(local_conversation_id).into());
         };
 
         let remote_parent_id = if let Some(parent_id) = action.parent_id {
@@ -597,7 +602,7 @@ impl Save {
                 // If the local message if does not match what we expect, then we should delete
                 // the existing message with that remote id and re-create it to avoid duplicate
                 // remote ids.
-                if let Some(existing_local_message_id) = Message::remote_id_counterpart(new_message.metadata.id.clone(), bond).await? && existing_local_message_id != local_message_id{
+                if let Some(existing_local_message_id) = Message::remote_id_counterpart(new_message.metadata.id.clone(), bond).await? && existing_local_message_id != local_message_id {
                     tracing::warn!("Found duplicate message with {:?}, deleting...", new_message.metadata.id);
                     Message::delete_by_id(existing_local_message_id, bond).await?;
                 }
@@ -606,31 +611,72 @@ impl Save {
                 // check if someone else already created this conversation through some other
                 // flow.
                 if let Some(remote_conv_local_id) = Conversation::remote_id_counterpart(new_message.metadata.conversation_id.clone(), bond).await?
-                    && remote_conv_local_id != conversation_id {
-                        warn!("Draft conversation was synced by other means, patching data to preserve local changes");
-                        // Someone else managed to create this before us, but we don't want this
-                        // conversation to overwrite our local data so we remove it. This is safe
-                        // to do since this only happens when we create a new empty draft. Replies
-                        // and forwarding already have a conversation.
+                    && remote_conv_local_id != local_conversation_id {
+                    warn!("Draft conversation was synced by other means, patching data to preserve local changes");
+                    // Someone else managed to create this before us, but we don't want this
+                    // conversation to overwrite our local data so we remove it. This is safe
+                    // to do since this only happens when we create a new empty draft. Replies
+                    // and forwarding already have a conversation.
 
-                        // Update message conversation id, it is possible that this was patched
-                        // to the newly created conversation.
-                        bond.execute(
-                            "UPDATE messages SET local_conversation_id=? WHERE local_id=?",
-                            params![conversation_id, local_message_id],
-                        ).await?;
+                    // Update message conversation id, it is possible that this was patched
+                    // to the newly created conversation.
+                    bond.execute(
+                        "UPDATE messages SET local_conversation_id=? WHERE local_id=?",
+                        params![local_conversation_id, local_message_id],
+                    ).await?;
 
-                        // Delete the other conversation.
-                        Conversation::delete_by_id(remote_conv_local_id, bond).await?;
-                    }
+                    // Delete the other conversation.
+                    Conversation::delete_by_id(remote_conv_local_id, bond).await?;
+                }
+
+                let existing_conv_remote_id = Conversation::local_id_counterpart(local_conversation_id, bond).await?;
+
+                if existing_conv_remote_id.is_none() {
                     // Update the remote conversation id.
                     Conversation::update_remote_id(
-                        conversation_id,
+                        local_conversation_id,
                         new_message.metadata.conversation_id.clone(),
                         bond,
                     )
                         .await
                         .inspect_err(|e| error!("Failed to update the conversation remote id: {e:?}"))?;
+                } else if existing_conv_remote_id.is_some_and(|id| id != new_message.metadata.conversation_id.clone()) {
+                    // Certain modifications to a reply, such as changing the subject, will trigger an update where the
+                    // message's conversation id is changed. We need to detect this and create a placeholder until we are
+                    // done sending to receive the full data from the server.
+                    tracing::debug!("Received new {:?}, contents will only be known after send", new_message.metadata.conversation_id);
+                    if Conversation::find_by_remote_id(new_message.metadata.conversation_id.clone(), bond).await?.is_none() {
+                        tracing::debug!("Creating new placeholder conversation");
+                        let mut new_conversation = Conversation{
+                            local_id: None,
+                            remote_id: Some(new_message.metadata.conversation_id.clone()),
+                            attachment_info: Default::default(),
+                            attachments_metadata: vec![],
+                            deleted: false,
+                            display_snooze_reminder: false,
+                            snoozed_until: None,
+                            exclusive_location: None,
+                            expiration_time: Default::default(),
+                            labels: vec![],
+                            num_attachments: 0,
+                            num_messages: 1,
+                            num_unread: 0,
+                            display_order: 0,
+                            recipients: Default::default(),
+                            senders: Default::default(),
+                            size: 0,
+                            subject: new_message.metadata.subject.clone(),
+                            is_known: false,
+                            custom_labels: vec![],
+                            has_messages: false,
+                        };
+
+                        new_conversation.save(bond).await.inspect_err(|e| tracing::error!("Failed to create place holder conversation:{e}"))?;
+                        metadata.local_conversation_id = Some(new_conversation.id());
+                        metadata.save(bond).await?;
+                        local_conversation_id = new_conversation.id();
+                    }
+                }
 
                 // Update message data
                 let (new_local_message, mut new_message_body_metadata, _) =
@@ -645,10 +691,11 @@ impl Save {
                 // care about is the display order. Everything else we control.
                 Message::update_ids_and_display_order(
                     local_message_id,
+                    local_conversation_id,
                     new_local_message.display_order,
                     new_local_message.remote_id.expect("Should be set after api fetch"),
                     new_local_message.remote_conversation_id.expect("Should be set after api fetch"),
-                    bond
+                    bond,
                 )
                     .await
                     .inspect_err(|e| error!("Failed to update the message: {e:?}"))?;
@@ -767,8 +814,8 @@ impl Save {
                 // from reply/forwarding. This only happens on time, the rest of the case
                 // the order will not be guaranteed anymore.
                 for original_attachment in attachments {
-                    if let Some(new_attachment)= new_message_body_metadata.attachments.iter_mut().find(|new_attachment| {
-                        original_attachment.remote_id() == new_attachment.remote_id() && (original_attachment.remote_address_id != new_attachment.remote_address_id || original_attachment.key_packets!= new_attachment.key_packets)
+                    if let Some(new_attachment) = new_message_body_metadata.attachments.iter_mut().find(|new_attachment| {
+                        original_attachment.remote_id() == new_attachment.remote_id() && (original_attachment.remote_address_id != new_attachment.remote_address_id || original_attachment.key_packets != new_attachment.key_packets)
                     }) {
                         tracing::info!("Detected address change on attachment ({}/{})", original_attachment.local_id.unwrap(), original_attachment.remote_id().as_ref().unwrap());
                         new_attachment.local_id = original_attachment.local_id;
