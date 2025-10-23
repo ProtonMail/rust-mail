@@ -2251,6 +2251,7 @@ impl Message {
 
     pub async fn update_ids_and_display_order(
         id: LocalMessageId,
+        local_conversation_id: LocalConversationId,
         display_order: u64,
         message_id: MessageId,
         conversation_id: ConversationId,
@@ -2261,10 +2262,17 @@ impl Message {
             UPDATE {} SET
                 display_order = ?,
                 remote_id =?,
-                remote_conversation_id =?
+                remote_conversation_id =?,
+                local_conversation_id =?
             WHERE local_id = ?
         ", Message::table_name()},
-            params![display_order, message_id, conversation_id, id],
+            params![
+                display_order,
+                message_id,
+                conversation_id,
+                local_conversation_id,
+                id
+            ],
         )
         .await?;
         Ok(())

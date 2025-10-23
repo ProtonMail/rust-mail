@@ -174,6 +174,8 @@ pub enum SaveError {
     AlreadySent,
     #[error("Draft does not exist on server")]
     DraftDoesNotExistOnServer,
+    #[error("Metadata missing local conversation id")]
+    MetadataMissingLocalConversationId(MetadataId),
 }
 
 impl From<SaveError> for MailContextError {
