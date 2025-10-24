@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::Weak;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result};
 use proton_core_api::services::proton::muon::common::WithTimeout;
@@ -126,6 +126,7 @@ impl FeatureFlagsService {
     }
 }
 
+const REFRESH_THROTTLE_SECS: u64 = 60; // 1 minute
 const REFRESH_TIMEOUT_SECS: u64 = 600; // 10 minutes
 
 #[async_trait::async_trait]
@@ -156,12 +157,18 @@ impl Service for FeatureFlagsService {
                 if let Err(error) = self_clone.fetch_and_update(&session).await {
                     error!(%error, "Failed to refresh feature flags");
                 };
-                if let Ok(Err(_)) = event_stream
-                    .next()
-                    .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
-                    .await
-                {
-                    break;
+                let last_updated = Instant::now();
+                loop {
+                    if let Ok(Err(_)) = event_stream
+                        .next()
+                        .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
+                        .await
+                    {
+                        return;
+                    }
+                    if last_updated.elapsed() >= Duration::from_secs(REFRESH_THROTTLE_SECS) {
+                        break;
+                    }
                 }
             }
         });
