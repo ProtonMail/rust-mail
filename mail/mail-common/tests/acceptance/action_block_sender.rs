@@ -377,7 +377,7 @@ async fn test_block_sender_when_inbox_location_exists() {
             let mut incoming_default = IncomingDefault {
                 email: email.into(),
                 location: IncomingDefaultLocation::Inbox,
-                remote_id: Some("existing-inbox-id".into()),
+                remote_id: Some(format!("remote-id-{email}").into()),
                 local_id: None,
                 domain: None,
                 deleted: false,
@@ -440,7 +440,7 @@ async fn test_block_sender_when_spam_location_exists() {
             let mut incoming_default = IncomingDefault {
                 email: email.into(),
                 location: IncomingDefaultLocation::Spam,
-                remote_id: Some("existing-spam-id".into()),
+                remote_id: Some(format!("remote-id-{email}").into()),
                 local_id: None,
                 domain: None,
                 deleted: false,
@@ -503,7 +503,7 @@ async fn test_unblock_sender_when_inbox_location_exists_should_not_work() {
             let mut incoming_default = IncomingDefault {
                 email: email.into(),
                 location: IncomingDefaultLocation::Inbox,
-                remote_id: Some("existing-inbox-id".into()),
+                remote_id: Some(format!("remote-id-{email}").into()),
                 local_id: None,
                 domain: None,
                 deleted: false,
