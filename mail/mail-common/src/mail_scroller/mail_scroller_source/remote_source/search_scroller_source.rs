@@ -457,6 +457,9 @@ impl MailScrollerSource for SearchScrollerSource {
             tracing::info!("Changing search parameters");
             self.options = keywords;
         }
+        // Reset the scroller to its initial state.
+        self.initialized = false;
+        self.last = None;
         let task = self.initialize_impl(ctx).await?;
 
         Ok(task)
