@@ -917,7 +917,7 @@ where
 
             ScrollerOrderedCommand::ChangeLabel { src, label } => {
                 let result = self
-                    .change_label(src, label)
+                    .change_label(src, label, Some(ReadFilter::All))
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
@@ -1205,6 +1205,7 @@ where
         &mut self,
         src: ScrollerSource,
         label: LocalLabelId,
+        with_filter: Option<ReadFilter>,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing label to `{label}`");
@@ -1213,7 +1214,7 @@ where
             .source
             .write()
             .await
-            .change_state(&ctx, Some(ReadFilter::All), Some(label), None)
+            .change_state(&ctx, with_filter, Some(label), None)
             .await?;
         self.reset(src).await
     }
@@ -1256,7 +1257,7 @@ where
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         if self.alternative_labels.supports_include_filter() {
             let label = self.include_to_label(include).await;
-            self.change_label(src, label).await
+            self.change_label(src, label, None).await
         } else {
             Ok(ScrollerListUpdate::None(src).into())
         }
