@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.154.2] - 2025-10-24
+
+### Changed
+
+- add Role enum
+
+### Features
+
+- Feature flags - onForeground & reuse session
+
+### Fixes
+
+- Blocking works when previous incoming default was Inbox/Spam
+- [ET-5030] Reset search scroller state so change keyword is able to load more than two pages
+- [ET-5030] `change_include` preserves `unread_filter`
+
+
+## [mail-uniffi-v0.154.1] - 2025-10-23
 
 ### Fixes
 
