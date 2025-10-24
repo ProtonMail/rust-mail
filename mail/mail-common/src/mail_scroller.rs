@@ -1227,7 +1227,7 @@ where
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing search keywords");
-        let _ = self.task.take();
+        Self::abort_task(&mut self.task);
         self.task = self
             .source
             .write()
@@ -1356,6 +1356,16 @@ where
             }
         } else {
             Ok(())
+        }
+    }
+
+    fn abort_task(task: &mut MailPaginatorJoinHandle) {
+        match task.take() {
+            Some(task) => {
+                debug!("Aborting previous task");
+                task.abort();
+            }
+            None => debug!("No task to abort"),
         }
     }
 
