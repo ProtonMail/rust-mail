@@ -1,4 +1,4 @@
-use proton_core_common::models::{FeatureFlag, User, UserSettings};
+use proton_core_common::models::{User, UserSettings};
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use stash::stash::{Stash, StashError, WatcherHandle};
@@ -21,7 +21,6 @@ struct UpsellEligibilityTableWatcher {
 impl TableObserver for UpsellEligibilityTableWatcher {
     fn tables(&self) -> Vec<String> {
         vec![
-            FeatureFlag::table_name().to_string(),
             User::table_name().to_string(),
             UserSettings::table_name().to_string(),
         ]
