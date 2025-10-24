@@ -31,8 +31,8 @@ use proton_core_common::services::{
     DeviceInfoService, NetworkMonitorService, SessionObserverService,
 };
 use proton_core_common::{
-    ContactError, Context, ContextBuilder, CoreAccountState, CoreContextError, CoreContextResult,
-    CoreSessionState, KeyHandlingError, Origin, UserContext,
+    ContactError, Context, CoreAccountState, CoreContextError, CoreContextResult, CoreSessionState,
+    KeyHandlingError, Origin, UserContext,
 };
 use proton_core_common::{OnSessionDeletedResponse, UserDatabaseInitializer};
 use proton_crypto_inbox::attachment::AttachmentEncryptionError;
@@ -282,10 +282,7 @@ impl MailContext {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
 
-        let core_context_builder =
-            ContextBuilder::new().with_cyclic_service(FeatureFlagsService::new);
         let core_context = Context::new(
-            core_context_builder,
             origin,
             runtime,
             session_db_path,
@@ -300,6 +297,7 @@ impl MailContext {
             event_poll_mode,
             network_monitor_config,
             issue_reporter,
+            |e| e.with_cyclic_service(FeatureFlagsService::new),
         )
         .await?;
 

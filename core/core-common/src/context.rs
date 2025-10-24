@@ -301,7 +301,6 @@ const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
 impl Context {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
-        mut builder: ContextBuilder,
         origin: Origin,
         runtime: runtime::Handle,
         account_db_path: impl Into<PathBuf>,
@@ -316,7 +315,9 @@ impl Context {
         event_poll_mode: EventPollMode,
         network_monitor_config: proton_network_monitor_service::Config,
         issue_reporter: Arc<dyn IssueReporter>,
+        extra: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> CoreContextResult<Arc<Self>> {
+        let mut builder = ContextBuilder::new();
         let issue_reporter_cloned = issue_reporter.clone();
         async {
             let account_db_path = account_db_path.into();
@@ -383,6 +384,7 @@ impl Context {
                     .with_service(DeviceInfoService::new(device_info_provider))
                     .with_service(EventPollConfigService::new(event_poll_mode));
             }
+            builder = extra(builder);
 
             builder
                 .build(
