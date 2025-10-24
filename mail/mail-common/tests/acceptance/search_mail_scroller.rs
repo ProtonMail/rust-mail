@@ -495,6 +495,233 @@ async fn almost_all_mail_with_spam_and_trash() {
     assert_eq!(mailbox.label_id(), all_mail_local_id);
 }
 
+#[tokio::test]
+async fn change_include_multiple_times_in_a_row() {
+    let ctx = MailTestContext::new().await;
+    let params = TestParams::default_basic();
+    let conversation = params.conversations.first().cloned().unwrap();
+    let address = params.addresses.first().cloned().unwrap();
+
+    // ---
+
+    let message1 = api_message_meta!(
+        id: MessageId::from("mymsg1"),
+        conversation_id: conversation.id.clone(),
+        address_id: address.id.clone(),
+        label_ids: vec![SystemLabel::AllMail.remote_id()]
+    );
+
+    let message2 = api_message_meta!(
+        id: MessageId::from("mymsg2"),
+        conversation_id: conversation.id.clone(),
+        address_id: address.id.clone(),
+        label_ids: vec![SystemLabel::Spam.remote_id()]
+    );
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::almost_all_mail())
+        .expect(6..=8)
+        .respond_with(vec![message1.clone()])
+        .await;
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::all_mail())
+        .expect(6..=8)
+        .respond_with(vec![message1, message2])
+        .await;
+
+    ctx.mock_ping_success().await;
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+
+    // ---
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let mut settings = MailSettings::get_or_default(&tether).await;
+
+    settings.almost_all_mail = AlmostAllMail::AlmostAllMail;
+
+    tether
+        .tx(async |bond| settings.save(bond).await)
+        .await
+        .unwrap();
+
+    // ---
+
+    let page_size = 5;
+
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
+
+    assert!(
+        test_scroller.supports_include_filter().await,
+        "Scroller supports include-filter, because originally we're looking at \
+         the AlmostAllMail label"
+    );
+
+    test_scroller.fetch_more_and_wait().await.unwrap();
+    {
+        let actual = test_scroller.items();
+
+        assert_eq!(actual.len(), 1);
+        assert_eq!(test_scroller.items().len(), 1);
+        assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg1"));
+    }
+
+    let mailbox = Mailbox::with_remote_id(&tether, LabelId::almost_all_mail())
+        .await
+        .unwrap();
+    test_scroller
+        .change_include(&mailbox, IncludeSwitch::WithSpamAndTrash)
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
+        .await;
+    test_scroller
+        .change_include(&mailbox, IncludeSwitch::Default)
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })
+        .await;
+    test_scroller
+        .change_include(&mailbox, IncludeSwitch::WithSpamAndTrash)
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
+        .await;
+    test_scroller
+        .change_include(&mailbox, IncludeSwitch::Default)
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })
+        .await;
+    test_scroller
+        .change_include(&mailbox, IncludeSwitch::WithSpamAndTrash)
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
+        .await;
+    test_scroller
+        .change_include(&mailbox, IncludeSwitch::Default)
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })
+        .await;
+}
+
+#[tokio::test]
+async fn change_keywords_multiple_times_in_a_row() {
+    let ctx = MailTestContext::new().await;
+    let params = TestParams::default_basic();
+    let conversation = params.conversations.first().cloned().unwrap();
+    let address = params.addresses.first().cloned().unwrap();
+
+    // ---
+
+    let message1 = api_message_meta!(
+        id: MessageId::from("mymsg1"),
+        conversation_id: conversation.id.clone(),
+        address_id: address.id.clone(),
+        label_ids: vec![SystemLabel::AllMail.remote_id()]
+    );
+
+    let message2 = api_message_meta!(
+        id: MessageId::from("mymsg2"),
+        conversation_id: conversation.id.clone(),
+        address_id: address.id.clone(),
+        label_ids: vec![SystemLabel::Spam.remote_id()]
+    );
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::almost_all_mail())
+        .given_keyword("keyword")
+        .expect(6..=8)
+        .respond_with(vec![message1.clone()])
+        .await;
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::almost_all_mail())
+        .given_keyword("other keyword")
+        .expect(6..=8)
+        .respond_with(vec![message1, message2])
+        .await;
+
+    ctx.mock_ping_success().await;
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+
+    // ---
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let mut settings = MailSettings::get_or_default(&tether).await;
+
+    settings.almost_all_mail = AlmostAllMail::AlmostAllMail;
+
+    tether
+        .tx(async |bond| settings.save(bond).await)
+        .await
+        .unwrap();
+
+    // ---
+
+    let page_size = 5;
+    let keywords = SearchOptions::from("keyword");
+    let other_keywords = SearchOptions::from("other keyword");
+
+    let mut test_scroller = TestScroller::search(&user_ctx, keywords.clone(), page_size)
+        .await
+        .unwrap();
+
+    assert!(
+        test_scroller.supports_include_filter().await,
+        "Scroller supports include-filter, because originally we're looking at \
+         the AlmostAllMail label"
+    );
+
+    test_scroller.fetch_more_and_wait().await.unwrap();
+    {
+        let actual = test_scroller.items();
+
+        assert_eq!(actual.len(), 1);
+        assert_eq!(test_scroller.items().len(), 1);
+        assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg1"));
+    }
+
+    test_scroller
+        .change_keywords(other_keywords.clone())
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
+        .await;
+    test_scroller.change_keywords(keywords.clone()).unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })
+        .await;
+    test_scroller
+        .change_keywords(other_keywords.clone())
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
+        .await;
+    test_scroller.change_keywords(keywords.clone()).unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })
+        .await;
+    test_scroller
+        .change_keywords(other_keywords.clone())
+        .unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
+        .await;
+    test_scroller.change_keywords(keywords.clone()).unwrap();
+    test_scroller
+        .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })
+        .await;
+}
+
 async fn setup_api_message_pages(
     ctx: &MailTestContext,
     page_size: usize,

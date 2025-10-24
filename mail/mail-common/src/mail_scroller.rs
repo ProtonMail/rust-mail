@@ -1256,6 +1256,7 @@ where
         include: IncludeSwitch,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         if self.alternative_labels.supports_include_filter() {
+            Self::abort_task(&mut self.task);
             let label = self.include_to_label(include).await;
             self.change_label(src, label, None).await
         } else {
