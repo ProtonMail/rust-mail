@@ -11,7 +11,7 @@ use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::migration_snooper::NoopMigrationSnooper;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
-use proton_core_common::{Context, ContextBuilder, Origin};
+use proton_core_common::{Context, Origin};
 use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::LogService;
 use proton_mail_api::services::proton::ProtonMail;
@@ -141,7 +141,6 @@ async fn create_context() -> Arc<Context> {
         .expect("failed to store in keychain");
 
     Context::new(
-        ContextBuilder::new(),
         Origin::App,
         runtime::Handle::current(),
         tmp_dir.path(),
@@ -157,6 +156,7 @@ async fn create_context() -> Arc<Context> {
         #[allow(clippy::default_trait_access)]
         Default::default(),
         Arc::new(NoopIssueReporter),
+        |e| e,
     )
     .await
     .expect("failed to create core context")
