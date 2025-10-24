@@ -1,5 +1,7 @@
 use anyhow::anyhow;
 use regex::Regex;
+use serde::Deserialize;
+use serde::Serialize;
 use stash::orm::ModelHooks;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -157,6 +159,22 @@ impl IncomingDefault {
         Ok(())
     }
 
+    pub async fn update_location(
+        local_id: LocalIncomingDefaultId,
+        location: IncomingDefaultLocation,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            format!(
+                "UPDATE {} SET location = ? WHERE local_id = ?",
+                Self::table_name()
+            ),
+            params![location, local_id],
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn replace_all(new: Vec<Self>, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.sync_bridge(move |tx| Self::replace_all_sync(new, tx))
             .await?;
@@ -215,7 +233,7 @@ impl IncomingDefault {
 
 /// Where do messages from a sender go by default. This is handled by the backend, but we sometimes
 /// want this informaton for things like banners.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, TryFrom)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, TryFrom, Serialize, Deserialize)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum IncomingDefaultLocation {

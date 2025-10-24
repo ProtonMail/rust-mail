@@ -7,7 +7,7 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
-use proton_core_api::services::proton::PrivateEmail;
+use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail};
 use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::models::ModelExtension;
@@ -22,6 +22,14 @@ pub struct Block {
     pub email: PrivateEmail,
     #[serde(default)]
     local_id: Option<LocalIncomingDefaultId>,
+    #[serde(default)]
+    previous: Option<PreviousIncomingDefault>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PreviousIncomingDefault {
+    location: IncomingDefaultLocation,
+    remote_id: Option<IncomingDefaultId>,
 }
 
 impl Block {
@@ -29,6 +37,7 @@ impl Block {
         Self {
             email,
             local_id: None,
+            previous: None,
         }
     }
 }
@@ -65,22 +74,27 @@ impl Handler for BlockHandler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Blocking {}", action.email);
 
-        if IncomingDefault::by_email(action.email.as_clear_text_str(), bond)
-            .await?
-            .is_some()
-        {
+        let previous = IncomingDefault::by_email(action.email.as_clear_text_str(), bond).await?;
+
+        let previous_location = previous.as_ref().map(|i| i.location);
+        if previous_location == Some(IncomingDefaultLocation::Blocked) {
             tracing::warn!("Email is already blocked");
             return Ok(());
         }
+        action.previous = previous.as_ref().map(|i| PreviousIncomingDefault {
+            location: i.location,
+            remote_id: i.remote_id.clone(),
+        });
 
-        let mut incoming_default = IncomingDefault {
+        let mut incoming_default = previous.unwrap_or_else(|| IncomingDefault {
             local_id: None,
             remote_id: None,
             email: action.email.clone(),
             domain: None,
             location: IncomingDefaultLocation::Blocked,
             deleted: false,
-        };
+        });
+        incoming_default.location = IncomingDefaultLocation::Blocked;
         incoming_default.save(bond).await?;
         action.local_id = incoming_default.local_id;
 
@@ -103,7 +117,11 @@ impl Handler for BlockHandler {
             return Err(anyhow!("Missing local_id").into());
         };
 
-        IncomingDefault::delete_by_id(local_id, bond).await?;
+        if let Some(previous) = action.previous.as_ref() {
+            IncomingDefault::update_location(local_id, previous.location, bond).await?;
+        } else {
+            IncomingDefault::delete_by_id(local_id, bond).await?;
+        }
 
         Ok(())
     }
@@ -121,11 +139,25 @@ impl Handler for BlockHandler {
             return Ok(());
         };
 
-        let new_incoming = self
-            .api
-            .post_incoming_default(ApiIncomingDefaultLocation::Blocked, &action.email)
-            .await?
-            .incoming_default;
+        let new_incoming = if let Some(remote_id) = action
+            .previous
+            .as_ref()
+            .and_then(|previous| previous.remote_id.as_ref())
+        {
+            self.api
+                .put_incoming_default(
+                    remote_id.clone(),
+                    ApiIncomingDefaultLocation::Blocked,
+                    &action.email,
+                )
+                .await?
+                .incoming_default
+        } else {
+            self.api
+                .post_incoming_default(ApiIncomingDefaultLocation::Blocked, &action.email)
+                .await?
+                .incoming_default
+        };
 
         guard
             .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {

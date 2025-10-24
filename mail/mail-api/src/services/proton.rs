@@ -76,9 +76,17 @@ pub trait ProtonMail {
         page: u64,
     ) -> ApiServiceResult<GetIncomingDefaultResponse>;
 
-    /// POSTs incoming default, creates a new one.
+    /// PUTs incoming default, updates an existing one.
     ///
-    /// Calls the API to get a page of the incoming defaults.
+    /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/IncomingDefaults/operation/post_mail-%7B_version%7D-incomingdefaults).
+    async fn put_incoming_default(
+        &self,
+        id: IncomingDefaultId,
+        location: IncomingDefaultLocation,
+        email: &str,
+    ) -> ApiServiceResult<PutIncomingDefaultResponse>;
+
+    /// POSTs incoming default, creates a new one.
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/IncomingDefaults/operation/post_mail-%7B_version%7D-incomingdefaults).
     async fn post_incoming_default(

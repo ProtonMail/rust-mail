@@ -1,7 +1,7 @@
 use crate::actions::MailActionError;
 use crate::actions::addresses::incoming_defaults_dependency_key;
 use crate::datatypes::LocalIncomingDefaultId;
-use crate::models::IncomingDefault;
+use crate::models::{IncomingDefault, IncomingDefaultLocation};
 use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
@@ -74,6 +74,13 @@ impl Handler for UnblockHandler {
             // Let's make this action idempotent.
             return Ok(());
         };
+        if incoming.location != IncomingDefaultLocation::Blocked {
+            tracing::error!(
+                "Unable to unblock address that is not registered as blocked: {}",
+                action.email
+            );
+            return Ok(());
+        }
         action.removed = incoming.local_id;
         incoming.deleted = true;
         incoming.save(bond).await?;

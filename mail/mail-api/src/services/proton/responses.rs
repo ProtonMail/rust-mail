@@ -339,6 +339,13 @@ pub struct PostIncomingDefaultResponse {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutIncomingDefaultResponse {
+    pub incoming_default: IncomingDefault,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "camelCase")]
 pub struct GetUnleashFeaturesResponse {
     pub toggles: Vec<UnleashToggle>,
