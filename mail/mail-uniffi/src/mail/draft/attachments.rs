@@ -3,7 +3,7 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
     DraftAttachmentDispositionSwapError, DraftAttachmentDispositionSwapErrorReason,
     DraftAttachmentRetryError, DraftAttachmentUploadError, DraftAttachmentUploadErrorReason,
-    ProtonError, VoidDraftAttachmentDispositionSwapResult,
+    ProtonError, VoidDraftAttachmentDispositionSwapResult, VoidProtonResult,
 };
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::state::MailUserContextPtr;
@@ -28,6 +28,7 @@ use std::sync::Arc;
 use tokio::task::AbortHandle;
 use tracing::error;
 use uniffi_common::errors::UserApiServiceError;
+use uniffi_runtime::async_runtime;
 
 #[derive(uniffi::Enum)]
 pub enum DraftAttachmentError {
@@ -355,6 +356,28 @@ impl AttachmentList {
         .map_err(DraftAttachmentUploadError::from)
     }
 
+    pub async fn watcher_stream(
+        self: Arc<Self>,
+    ) -> Result<Arc<DraftAttachmentListUpdateStream>, DraftAttachmentUploadError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+        uniffi_async::<_, RealProtonMailError, _>(async move {
+            let metadata_id = self.draft.metadata_id;
+            let stash = ctx.user_stash().clone();
+            let observer = DraftAttachmentObserver::new(metadata_id, stash)
+                .await
+                .map_err(RealProtonMailError::from)?;
+            Ok(Arc::new(DraftAttachmentListUpdateStream {
+                observer: tokio::sync::Mutex::new(observer),
+            }))
+        })
+        .await
+        .map_err(DraftAttachmentUploadError::from)
+    }
+
     #[returns(VoidDraftAttachmentDispositionSwapResult)]
     pub async fn swap_attachment_disposition(
         &self,
@@ -365,6 +388,35 @@ impl AttachmentList {
             .await
             .map_err(RealProtonMailError::from)?;
         Ok(())
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct DraftAttachmentListUpdateStream {
+    observer: tokio::sync::Mutex<DraftAttachmentObserver>,
+}
+
+#[uniffi_export]
+impl DraftAttachmentListUpdateStream {
+    #[returns(VoidProtonResult)]
+    pub async fn next_async(self: Arc<Self>) -> Result<(), ProtonError> {
+        async_runtime()
+            .spawn(async move {
+                let mut observer = self.observer.lock().await;
+                observer.next().await
+            })
+            .await
+            .map_err(|e| RealProtonMailError::from(MailContextError::from(e)))?
+            .map_err(RealProtonMailError::from)?;
+        Ok(())
+    }
+
+    #[returns(VoidProtonResult)]
+    pub fn next_sync(&self) -> Result<(), ProtonError> {
+        async_runtime().block_on(async {
+            let mut observer = self.observer.lock().await;
+            Ok(observer.next().await.map_err(RealProtonMailError::from)?)
+        })
     }
 }
 
