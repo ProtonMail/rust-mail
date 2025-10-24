@@ -1693,16 +1693,26 @@ async fn test_conversation_mail_scroller_change_label() {
     ctx.catch_all().await;
 
     // we should get an update on the first fetch_more in Inbox despite the data being stale
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
-    counters.total = 10;
+    let inbox_local_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut inbox_counters = ConversationCounters::new(inbox_local_id);
+    let remote_label_id = LabelId::from("rid2");
+    let rid2_local_id = Label::remote_id_counterpart(remote_label_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut rid2_counters = ConversationCounters::new(rid2_local_id);
+    inbox_counters.total = 10;
+    rid2_counters.total = 50;
     tether
-        .tx(async |bond| counters.save(bond).await)
+        .tx(async |bond| {
+            inbox_counters.save(bond).await?;
+            rid2_counters.save(bond).await
+        })
         .await
         .unwrap();
 
     let mut test_scroller =
-        TestScroller::conversations_instant(&user_ctx, local_label_id, page_size)
+        TestScroller::conversations_instant(&user_ctx, inbox_local_id, page_size)
             .await
             .unwrap();
 
@@ -1715,22 +1725,9 @@ async fn test_conversation_mail_scroller_change_label() {
     let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
         .await
         .unwrap();
-    let remote_label_id = LabelId::from("rid2");
-    let local_label_id = Label::remote_id_counterpart(remote_label_id, &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
-    counters.total = 50;
-    tether
-        .tx(async |bond| counters.save(bond).await)
-        .await
-        .unwrap();
 
     // Switch to custom label "rid2"
-    test_scroller
-        .change_label(&mailbox, local_label_id)
-        .unwrap();
+    test_scroller.change_label(&mailbox, rid2_local_id).unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 10 })
         .await;
@@ -1738,18 +1735,17 @@ async fn test_conversation_mail_scroller_change_label() {
     test_scroller
         .match_next_update(TestUpdate::Append { items: 10 })
         .await;
-    assert_eq!(mailbox.label_id(), local_label_id);
+    assert_eq!(mailbox.label_id(), rid2_local_id);
 
     // Switch back to inbox
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     test_scroller
-        .change_label(&mailbox, local_label_id)
+        .change_label(&mailbox, inbox_local_id)
         .unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 9 })
         .await;
 
-    assert_eq!(mailbox.label_id(), local_label_id);
+    assert_eq!(mailbox.label_id(), inbox_local_id);
 }
 
 #[function_name::named]
