@@ -1,4 +1,3 @@
-use crate::Origin;
 use crate::datatypes::ApiConfig;
 use crate::db::account::{CoreAccount, CoreSession};
 use crate::event_loop::EventPollMode;
@@ -11,6 +10,7 @@ use crate::{
     db::account::SessionEncryptionKey,
     os::{InMemoryKeyChain, KeyChain, KeyChainExt},
 };
+use crate::{ContextBuilder, Origin};
 use proton_core_api::auth::{Tokens, UserKeySecret};
 use proton_core_api::exports::RetryPolicy;
 use proton_core_api::services::proton::{SessionId, UserId};
@@ -142,25 +142,34 @@ impl TestContext {
     }
 
     pub async fn new() -> Arc<Self> {
-        Self::_new(None, None, None, None).await
+        Self::_new(None, None, None, None, |e| e).await
     }
 
     pub async fn with_user_secret_and_user_id(
         user_key_secret: UserKeySecret,
         user_id: UserId,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
+        extra: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> Arc<Self> {
-        Self::_new(Some(user_key_secret), Some(user_id), initializers, None).await
+        Self::_new(
+            Some(user_key_secret),
+            Some(user_id),
+            initializers,
+            None,
+            extra,
+        )
+        .await
     }
 
     pub async fn with_initializers(
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
+        extra: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> Arc<Self> {
-        Self::_new(None, None, initializers, None).await
+        Self::_new(None, None, initializers, None, extra).await
     }
 
     pub async fn with_issue_reporter(reporter: Arc<dyn IssueReporter>) -> Arc<Self> {
-        Self::_new(None, None, None, Some(reporter)).await
+        Self::_new(None, None, None, Some(reporter), |e| e).await
     }
 
     async fn _new(
@@ -168,6 +177,7 @@ impl TestContext {
         user_id: Option<UserId>,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
         issue_reporter: Option<Arc<dyn IssueReporter>>,
+        extra: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> Arc<Self> {
         _ = set_global_default(
             registry()
@@ -220,7 +230,7 @@ impl TestContext {
             EventPollMode::Manual,
             test_network_monitor_service_config(),
             issue_reporter.unwrap_or(Arc::new(NoopIssueReporter)),
-            |e| e,
+            extra,
         )
         .await
         .expect("failed to create core context");
