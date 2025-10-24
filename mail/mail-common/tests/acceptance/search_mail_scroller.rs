@@ -481,8 +481,6 @@ async fn almost_all_mail_with_spam_and_trash() {
         assert_eq!(actual[1].remote_id.clone(), msg_id!("mymsg2"));
     }
 
-    // Prevent race condition between followup request for change_keywords and change_include
-    tokio::time::sleep(Duration::from_millis(50)).await;
     test_scroller
         .change_keywords(SearchOptions::from("keyword"))
         .unwrap();
