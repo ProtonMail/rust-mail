@@ -22,7 +22,7 @@ use crate::mail::mail_scroller::{
     spawn_conversation_scroller_watcher,
 };
 use crate::mail::{MailUserSession, Mailbox};
-use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
+use crate::{LiveQueryCallback, WatchHandle, declare_live_query_tagger, uniffi_async};
 use itertools::Itertools;
 use proton_core_common::datatypes::{SystemLabel, WeekStart as RealWeekStart};
 use proton_core_common::models::Label as RealLabel;
@@ -96,12 +96,15 @@ pub async fn available_label_as_actions_for_conversations(
     .map_err(ActionError::from)
 }
 
+declare_live_query_tagger!(WatchAvailableLabelsAsActionMarker);
+
 /// Watches label_as actions for conversations.
 /// Any action returned here should reflect the display needs.
 ///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
+///
 ///
 #[uniffi_export]
 pub async fn watch_available_label_as_actions_for_conversations(
@@ -119,7 +122,7 @@ pub async fn watch_available_label_as_actions_for_conversations(
         )
         .await?;
         let actions = actions.into_iter().map_into().collect_vec();
-        let handle = watch_channel(&*ctx, handle, callback);
+        let handle = WatchAvailableLabelsAsActionMarker::watch_channel(&*ctx, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(WatchedLabelAs { actions, handle })
     })
@@ -664,6 +667,7 @@ impl From<OpenConversationOrigin> for RealOpenConversationOrigin {
     }
 }
 
+declare_live_query_tagger!(WatchConversationMarker);
 /// Watch the given conversation.
 ///
 /// Watches the specified conversation for changes. When the conversation's
@@ -705,7 +709,7 @@ pub async fn watch_conversation(
         };
 
         let receiver = ContextualConversation::watch(&stash).await?;
-        let watcher = watch_channel(&*ctx, receiver, callback);
+        let watcher = WatchConversationMarker::watch_channel(&*ctx, receiver, callback);
 
         Result::<_, RealProtonMailError>::Ok(Some(WatchedConversation {
             conversation: conv_and_msgs.conversation.into(),
@@ -728,6 +732,8 @@ pub struct WatchedConversations {
     pub handle: Arc<WatchHandle>,
 }
 
+declare_live_query_tagger!(WatchConversationsForLabelMarker);
+
 /// Watch conversations for the given label.
 ///
 /// Watches conversations with the specified label for changes. When the
@@ -749,7 +755,8 @@ pub async fn watch_conversations_for_label(
         let tether = stash.connection().await?;
         let conversations = RealConversation::in_label(label_id.into(), &tether).await?;
         let receiver = ContextualConversation::watch(&stash).await?;
-        let watcher = watch_channel(&*user_context, receiver, callback);
+        let watcher =
+            WatchConversationsForLabelMarker::watch_channel(&*user_context, receiver, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedConversations {
             conversations: conversations
                 .into_iter()
@@ -802,6 +809,7 @@ pub async fn label_conversations_as(
     .map_err(ActionError::from)
 }
 
+declare_live_query_tagger!(WatchAvailableMoveToActionsMarker);
 /// watches available move_to actions for conversations or messages.
 /// Any action returned here should reflect the display needs.
 ///
@@ -818,7 +826,7 @@ pub async fn watch_available_move_to_actions(
     let stash = mailbox.stash()?;
     uniffi_async(async move {
         let handle = RealLabel::watch(&stash).await?;
-        let handle = watch_channel(&*ctx, handle, callback);
+        let handle = WatchAvailableMoveToActionsMarker::watch_channel(&*ctx, handle, callback);
         Result::<_, RealProtonMailError>::Ok(handle)
     })
     .await

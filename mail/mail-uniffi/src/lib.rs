@@ -145,7 +145,6 @@ use proton_core_common::watch_handle::WatchHandle as RealWatchHandle;
 use proton_mail_common::datatypes::SearchOptions as RealSearchOptions;
 use proton_task_service::Spawner;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
-use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use uniffi_runtime::{async_runtime, async_runtime_slim, uniffi_async};
@@ -223,20 +222,7 @@ impl WatchHandle {
     }
 }
 
-#[must_use]
-pub fn watch_channel(
-    ctx: &impl Spawner,
-    handle: WatcherHandle,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Arc<WatchHandle> {
-    let task_handle = watch_channel_inner(ctx, handle.receiver, move || {
-        callback.on_update();
-    });
-
-    Arc::new(WatchHandle::new(handle.handle, &task_handle))
-}
-
-fn watch_channel_inner<T: Send + 'static>(
+pub fn watch_channel_inner<T: Send + 'static>(
     ctx: &impl Spawner,
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + Sync + 'static,
@@ -256,23 +242,65 @@ fn watch_channel_inner<T: Send + 'static>(
     })
 }
 
-#[must_use]
-pub fn watch_channel_async(
-    ctx: &impl Spawner,
-    handle: WatcherHandle,
-    callback: Arc<dyn AsyncLiveQueryCallback>,
-) -> Arc<WatchHandle> {
-    let WatcherHandle {
-        receiver, handle, ..
-    } = handle;
+#[macro_export]
+macro_rules! declare_live_query_tagger {
+    ($name:ident) => {
+        struct $name;
 
-    let task_handle = ctx.spawn_task(async move {
-        while receiver.recv_async().await.is_ok() {
-            callback.on_update().await;
+        impl $name {
+            #[allow(clippy::unit_arg)]
+            #[inline(never)]
+            #[allow(dead_code)]
+            fn tag_sync(cb: &dyn $crate::LiveQueryCallback) {
+                std::hint::black_box(cb.on_update());
+            }
+
+            #[allow(clippy::unit_arg)]
+            #[inline(never)]
+            #[allow(dead_code)]
+            fn tag_async(
+                cb: &dyn $crate::AsyncLiveQueryCallback,
+            ) -> impl Future<Output = ()> + Send + '_ {
+                async {
+                    std::hint::black_box(cb.on_update().await);
+                }
+            }
+
+            #[must_use]
+            #[allow(dead_code)]
+            pub fn watch_channel_async(
+                ctx: &impl ::proton_task_service::Spawner,
+                handle: ::stash::stash::WatcherHandle,
+                callback: Arc<dyn $crate::AsyncLiveQueryCallback>,
+            ) -> Arc<$crate::WatchHandle> {
+                let ::stash::stash::WatcherHandle {
+                    receiver, handle, ..
+                } = handle;
+
+                let task_handle = ctx.spawn_task(async move {
+                    while receiver.recv_async().await.is_ok() {
+                        Self::tag_async(callback.as_ref()).await;
+                    }
+                });
+
+                Arc::new($crate::WatchHandle::new(handle, &task_handle))
+            }
+
+            #[must_use]
+            #[allow(dead_code)]
+            pub fn watch_channel(
+                ctx: &impl ::proton_task_service::Spawner,
+                handle: ::stash::stash::WatcherHandle,
+                callback: Box<dyn $crate::LiveQueryCallback>,
+            ) -> Arc<$crate::WatchHandle> {
+                let task_handle = $crate::watch_channel_inner(ctx, handle.receiver, move || {
+                    Self::tag_sync(callback.as_ref());
+                });
+
+                Arc::new($crate::WatchHandle::new(handle.handle, &task_handle))
+            }
         }
-    });
-
-    Arc::new(WatchHandle::new(handle, &task_handle))
+    };
 }
 
 /// Search options for pagination

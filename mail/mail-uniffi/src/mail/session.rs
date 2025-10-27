@@ -12,10 +12,8 @@ use crate::mail::MailUserSession;
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::version::rust_sdk_version;
-use crate::{AsyncLiveQueryCallback, watch_channel_async};
-use crate::{
-    LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async, watch_channel,
-};
+use crate::{AsyncLiveQueryCallback, declare_live_query_tagger};
+use crate::{LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async};
 use proton_core_common::services::SessionObserverService;
 
 use chrono::Local;
@@ -1319,6 +1317,8 @@ pub struct WatchedAccounts {
     pub handle: Arc<WatchHandle>,
 }
 
+declare_live_query_tagger!(WatchAccountsMaker);
+
 impl WatchedAccounts {
     fn new(accounts: Vec<Arc<StoredAccount>>, handle: Arc<WatchHandle>) -> Self {
         Self { accounts, handle }
@@ -1330,7 +1330,10 @@ impl WatchedAccounts {
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedAccounts {
-        WatchedAccounts::new(accounts, watch_channel(ctx, handle, callback))
+        WatchedAccounts::new(
+            accounts,
+            WatchAccountsMaker::watch_channel(ctx, handle, callback),
+        )
     }
 
     fn new_async(
@@ -1339,7 +1342,10 @@ impl WatchedAccounts {
         handle: WatcherHandle,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> WatchedAccounts {
-        WatchedAccounts::new(accounts, watch_channel_async(ctx, handle, callback))
+        WatchedAccounts::new(
+            accounts,
+            WatchAccountsMaker::watch_channel_async(ctx, handle, callback),
+        )
     }
 }
 
@@ -1368,6 +1374,8 @@ pub struct WatchedSessions {
     pub handle: Arc<WatchHandle>,
 }
 
+declare_live_query_tagger!(WatchSessionsMaker);
+
 impl WatchedSessions {
     fn new(sessions: Vec<Arc<StoredSession>>, handle: Arc<WatchHandle>) -> Self {
         Self { sessions, handle }
@@ -1379,7 +1387,10 @@ impl WatchedSessions {
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedSessions {
-        WatchedSessions::new(sessions, watch_channel(ctx, handle, callback))
+        WatchedSessions::new(
+            sessions,
+            WatchSessionsMaker::watch_channel(ctx, handle, callback),
+        )
     }
 
     fn new_async(
@@ -1388,7 +1399,10 @@ impl WatchedSessions {
         handle: WatcherHandle,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> WatchedSessions {
-        WatchedSessions::new(sessions, watch_channel_async(ctx, handle, callback))
+        WatchedSessions::new(
+            sessions,
+            WatchSessionsMaker::watch_channel_async(ctx, handle, callback),
+        )
     }
 }
 
@@ -1396,6 +1410,8 @@ impl WatchedSessions {
 pub struct WatchedFeatureFlags {
     pub handle: Arc<WatchHandle>,
 }
+
+declare_live_query_tagger!(WatchFeatureFlagsMarker);
 
 impl WatchedFeatureFlags {
     fn new(handle: Arc<WatchHandle>) -> Self {
@@ -1407,7 +1423,9 @@ impl WatchedFeatureFlags {
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedFeatureFlags {
-        WatchedFeatureFlags::new(watch_channel(ctx, handle, callback))
+        WatchedFeatureFlags::new(WatchFeatureFlagsMarker::watch_channel(
+            ctx, handle, callback,
+        ))
     }
 
     fn new_async(
@@ -1415,6 +1433,8 @@ impl WatchedFeatureFlags {
         handle: WatcherHandle,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> WatchedFeatureFlags {
-        WatchedFeatureFlags::new(watch_channel_async(ctx, handle, callback))
+        WatchedFeatureFlags::new(WatchFeatureFlagsMarker::watch_channel_async(
+            ctx, handle, callback,
+        ))
     }
 }

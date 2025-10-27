@@ -6,7 +6,7 @@ use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::state::MailUserContextPtr;
-use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
+use crate::{LiveQueryCallback, WatchHandle, declare_live_query_tagger, uniffi_async};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::LabelWithCounters as RealLabelWithCounters;
@@ -130,7 +130,7 @@ impl Sidebar {
 
         uniffi_async(async move {
             let handle = RealLabelWithCounters::watch(&stash).await?;
-            let handle = watch_channel(&*ctx, handle, callback);
+            let handle = WatchSideBarLabelsMarker::watch_channel(&*ctx, handle, callback);
 
             Result::<_, RealProtonMailError>::Ok(handle)
         })
@@ -138,3 +138,5 @@ impl Sidebar {
         .map_err(ActionError::from)
     }
 }
+
+declare_live_query_tagger!(WatchSideBarLabelsMarker);
