@@ -142,34 +142,34 @@ impl TestContext {
     }
 
     pub async fn new() -> Arc<Self> {
-        Self::_new(None, None, None, None, |e| e).await
+        Self::_new(None, None, None, None, |builder| builder).await
     }
 
     pub async fn with_user_secret_and_user_id(
         user_key_secret: UserKeySecret,
         user_id: UserId,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
-        extra: impl FnOnce(ContextBuilder) -> ContextBuilder,
+        extra_builder: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> Arc<Self> {
         Self::_new(
             Some(user_key_secret),
             Some(user_id),
             initializers,
             None,
-            extra,
+            extra_builder,
         )
         .await
     }
 
     pub async fn with_initializers(
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
-        extra: impl FnOnce(ContextBuilder) -> ContextBuilder,
+        extra_builder: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> Arc<Self> {
-        Self::_new(None, None, initializers, None, extra).await
+        Self::_new(None, None, initializers, None, extra_builder).await
     }
 
     pub async fn with_issue_reporter(reporter: Arc<dyn IssueReporter>) -> Arc<Self> {
-        Self::_new(None, None, None, Some(reporter), |e| e).await
+        Self::_new(None, None, None, Some(reporter), |builder| builder).await
     }
 
     async fn _new(
@@ -177,7 +177,7 @@ impl TestContext {
         user_id: Option<UserId>,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
         issue_reporter: Option<Arc<dyn IssueReporter>>,
-        extra: impl FnOnce(ContextBuilder) -> ContextBuilder,
+        extra_builder: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> Arc<Self> {
         _ = set_global_default(
             registry()
@@ -230,7 +230,7 @@ impl TestContext {
             EventPollMode::Manual,
             test_network_monitor_service_config(),
             issue_reporter.unwrap_or(Arc::new(NoopIssueReporter)),
-            extra,
+            extra_builder,
         )
         .await
         .expect("failed to create core context");

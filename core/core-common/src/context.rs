@@ -315,7 +315,7 @@ impl Context {
         event_poll_mode: EventPollMode,
         network_monitor_config: proton_network_monitor_service::Config,
         issue_reporter: Arc<dyn IssueReporter>,
-        extra: impl FnOnce(ContextBuilder) -> ContextBuilder,
+        extra_builder: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> CoreContextResult<Arc<Self>> {
         let mut builder = ContextBuilder::new();
         let issue_reporter_cloned = issue_reporter.clone();
@@ -384,7 +384,7 @@ impl Context {
                     .with_service(DeviceInfoService::new(device_info_provider))
                     .with_service(EventPollConfigService::new(event_poll_mode));
             }
-            builder = extra(builder);
+            builder = extra_builder(builder);
 
             builder
                 .build(
