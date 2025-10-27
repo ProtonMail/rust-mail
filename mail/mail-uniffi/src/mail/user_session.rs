@@ -144,6 +144,18 @@ impl MailUserSession {
             .block_on(async { self.watch_table(callback, UserContext::watch_user).await })
     }
 
+    pub fn watch_user_stream(&self) -> Result<Arc<WatchUserStream>, ProtonError> {
+        let ctx = self.ctx()?;
+        async_runtime().block_on(async {
+            let handle = ctx
+                .user_context()
+                .watch_user()
+                .await
+                .map_err(RealProtonMailError::from)?;
+            Ok(Arc::new(WatchUserStream { handle }))
+        })
+    }
+
     pub fn watch_user_settings(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
@@ -160,6 +172,29 @@ impl MailUserSession {
     ) -> Result<Arc<WatchHandle>, ProtonError> {
         async_runtime()
             .block_on(async { self.watch_table(callback, UserContext::watch_labels).await })
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct WatchUserStream {
+    handle: WatcherHandle,
+}
+
+#[uniffi_export]
+impl WatchUserStream {
+    pub fn next_sync(&self) -> Result<(), ProtonError> {
+        self.handle
+            .receiver
+            .recv()
+            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    }
+
+    pub async fn next_async(&self) -> Result<(), ProtonError> {
+        self.handle
+            .receiver
+            .recv_async()
+            .await
+            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
     }
 }
 
