@@ -11,7 +11,7 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
 use crate::{
-    AsyncLiveQueryCallback, WatchHandle, async_runtime, uniffi_async, watch_channel_async,
+    AsyncLiveQueryCallback, WatchHandle, async_runtime, declare_live_query_tagger, uniffi_async,
 };
 use futures::TryFutureExt;
 use muon::common::IntoDyn;
@@ -20,12 +20,11 @@ use proton_account_uniffi::login::ProcessTargetDeviceQrError;
 use proton_account_uniffi::password::PasswordFlow;
 use proton_account_uniffi::password_validator::PasswordValidatorService;
 use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
-use proton_core_common::UserContext;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
 use proton_observability::PreLoginMetricRecorder;
-use stash::stash::{Stash, StashError, WatcherHandle};
+use stash::stash::{Stash, WatcherHandle};
 use std::sync::Arc;
 use tracing::error;
 
@@ -78,22 +77,7 @@ impl MailUserSession {
     pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
         Ok(self.ctx()?.user_stash().to_owned())
     }
-
-    pub async fn watch_table(
-        &self,
-        callback: Arc<dyn AsyncLiveQueryCallback>,
-        watch_fn: impl AsyncFnOnce(&UserContext) -> Result<WatcherHandle, StashError>,
-    ) -> Result<Arc<WatchHandle>, ProtonError> {
-        let ctx = self.ctx()?;
-        let watcher_handle = watch_fn(ctx.user_context())
-            .await
-            .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
-            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
-        let watch_handle = watch_channel_async(&*ctx, watcher_handle, callback);
-        Ok(watch_handle)
-    }
 }
-
 #[uniffi_export]
 impl MailUserSession {
     /// Get the User ID of the current user.
@@ -124,6 +108,11 @@ impl MailUserSession {
     }
 }
 
+declare_live_query_tagger!(WatchAddressesMarker);
+declare_live_query_tagger!(WatchUserMarker);
+declare_live_query_tagger!(WatchUserSettingsMarker);
+declare_live_query_tagger!(WatchLabelsMarker);
+
 #[uniffi_export]
 impl MailUserSession {
     pub fn watch_addresses(
@@ -131,8 +120,16 @@ impl MailUserSession {
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
         async_runtime().block_on(async {
-            self.watch_table(callback, UserContext::watch_addresses)
+            let ctx = self.ctx()?;
+            let watcher_handle = ctx
+                .user_context()
+                .watch_addresses()
                 .await
+                .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
+                .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
+            let watch_handle =
+                WatchAddressesMarker::watch_channel_async(&*ctx, watcher_handle, callback);
+            Ok(watch_handle)
         })
     }
 
@@ -140,8 +137,18 @@ impl MailUserSession {
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
-        async_runtime()
-            .block_on(async { self.watch_table(callback, UserContext::watch_user).await })
+        async_runtime().block_on(async {
+            let ctx = self.ctx()?;
+            let watcher_handle = ctx
+                .user_context()
+                .watch_user()
+                .await
+                .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
+                .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
+            let watch_handle =
+                WatchUserMarker::watch_channel_async(&*ctx, watcher_handle, callback);
+            Ok(watch_handle)
+        })
     }
 
     pub fn watch_user_stream(&self) -> Result<Arc<WatchUserStream>, ProtonError> {
@@ -161,8 +168,16 @@ impl MailUserSession {
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
         async_runtime().block_on(async {
-            self.watch_table(callback, UserContext::watch_user_settings)
+            let ctx = self.ctx()?;
+            let watcher_handle = ctx
+                .user_context()
+                .watch_user_settings()
                 .await
+                .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
+                .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
+            let watch_handle =
+                WatchUserSettingsMarker::watch_channel_async(&*ctx, watcher_handle, callback);
+            Ok(watch_handle)
         })
     }
 
@@ -170,8 +185,18 @@ impl MailUserSession {
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
-        async_runtime()
-            .block_on(async { self.watch_table(callback, UserContext::watch_labels).await })
+        async_runtime().block_on(async {
+            let ctx = self.ctx()?;
+            let watcher_handle = ctx
+                .user_context()
+                .watch_labels()
+                .await
+                .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
+                .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
+            let watch_handle =
+                WatchLabelsMarker::watch_channel_async(&*ctx, watcher_handle, callback);
+            Ok(watch_handle)
+        })
     }
 }
 
