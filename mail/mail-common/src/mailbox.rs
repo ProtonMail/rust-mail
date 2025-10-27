@@ -22,7 +22,7 @@ use tracing::{debug, instrument};
 ///
 /// Before creating a live query, check the value of [`Mailbox::view_mode()`] to verify
 /// which is the correct mode.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Mailbox {
     state: Arc<RwLock<MailboxState>>,
 }
@@ -142,7 +142,7 @@ impl Mailbox {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct MailboxState {
     label_id: LocalLabelId,
     view_mode: ViewMode,
