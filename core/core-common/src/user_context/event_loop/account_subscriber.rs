@@ -61,17 +61,17 @@ impl Subscriber<CoreEvent> for AccountEventSubscriber {
             // Note: this relies on the core event subscriber refresh to have completed first
             // since it syncs the data and then we only need to update it
             let user_id = ctx.user_id().clone();
+            let user = User::load(user_id.clone(), &ctx.user_stash.connection().await?)
+                .await?
+                .ok_or(SubscriberError::Other(anyhow!(
+                    "Could not find user with {user_id:?}"
+                )))?;
+
             ctx.context
                 .account_stash()
                 .connection()
                 .await?
                 .tx::<_, _, SubscriberError>(async |tx| {
-                    let user =
-                        User::load(user_id.clone(), tx)
-                            .await?
-                            .ok_or(SubscriberError::Other(anyhow!(
-                                "Could not find user with {user_id:?}"
-                            )))?;
                     update_account_data(&user, tx).await.map_err(|e| {
                         SubscriberError::Other(anyhow!("Failed apply refresh changes: {e}"))
                     })
