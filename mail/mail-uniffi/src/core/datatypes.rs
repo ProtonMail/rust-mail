@@ -76,6 +76,7 @@ use core::fmt;
 use proton_core_common::datatypes::{
     AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
     AddressType as RealAddressType, ApiConfig as RealApiConfig, AppDetails as RealAppDetails,
+    BlackFridayWave as RealBlackFridayWave,
     ContactSendingPreferences as RealContactSendingPreferences, DateFormat as RealDateFormat,
     Density as RealDensity, DeviceEnvironment as RealDeviceEnvironment,
     EarlyAccess as RealEarlyAccess, Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
@@ -83,7 +84,8 @@ use proton_core_common::datatypes::{
     LocalLabelId, LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
     ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral,
     SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
-    TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
+    TwoFa as RealTwoFa, UpsellEligibility as RealUpsellEligibility, UpsellType as RealUpsellType,
+    UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
 };
 use proton_core_common::models::Label as RealLabel;
@@ -1710,7 +1712,7 @@ impl From<RealUserSettings> for UserSettings {
             invoice_text: settings.invoice_text,
             locale: settings.locale,
             log_auth: settings.log_auth.into(),
-            news: settings.news,
+            news: settings.news.0,
             password: settings.password.into(),
             phone: settings.phone.into(),
             referral: settings.referral.map(Referral::from),
@@ -2307,6 +2309,55 @@ impl From<RealPaymentVendorState> for PaymentVendorState {
         match state {
             RealPaymentVendorState::Disabled => PaymentVendorState::Disabled,
             RealPaymentVendorState::Enabled => PaymentVendorState::Enabled,
+        }
+    }
+}
+
+#[derive(UniffiEnum)]
+pub enum UpsellEligibility {
+    NotEligible,
+    Eligible(UpsellType),
+}
+
+impl From<RealUpsellEligibility> for UpsellEligibility {
+    fn from(value: RealUpsellEligibility) -> Self {
+        match value {
+            RealUpsellEligibility::Eligible(upsell_type) => {
+                UpsellEligibility::Eligible(upsell_type.into())
+            }
+            RealUpsellEligibility::NotEligible => UpsellEligibility::NotEligible,
+        }
+    }
+}
+
+#[derive(UniffiEnum)]
+pub enum UpsellType {
+    Standard,
+    BlackFriday(BlackFridayWave),
+}
+
+impl From<RealUpsellType> for UpsellType {
+    fn from(value: RealUpsellType) -> Self {
+        match value {
+            RealUpsellType::BlackFriday(wave) => UpsellType::BlackFriday(wave.into()),
+            RealUpsellType::Standard => UpsellType::Standard,
+        }
+    }
+}
+
+#[derive(UniffiEnum)]
+pub enum BlackFridayWave {
+    /// 50% off
+    Wave1,
+    /// 80% off
+    Wave2,
+}
+
+impl From<RealBlackFridayWave> for BlackFridayWave {
+    fn from(wave: RealBlackFridayWave) -> Self {
+        match wave {
+            RealBlackFridayWave::Wave1 => BlackFridayWave::Wave1,
+            RealBlackFridayWave::Wave2 => BlackFridayWave::Wave2,
         }
     }
 }

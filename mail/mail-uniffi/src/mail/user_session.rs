@@ -5,7 +5,7 @@ mod labels;
 use crate::core::datatypes::{
     AccountDetails, ConnectionStatus, GetPaymentsPlansOptions, Id, NewSubscription,
     NewSubscriptionValues, PaymentReceipt, PaymentToken, PaymentsPlans, PaymentsStatus,
-    Subscriptions, User, UserSettings,
+    Subscriptions, UpsellEligibility, User, UserSettings,
 };
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
@@ -79,13 +79,27 @@ impl MailUserSession {
         Ok(self.ctx()?.user_stash().to_owned())
     }
 
-    pub async fn watch_table(
+    pub async fn watch_core_table(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
         watch_fn: impl AsyncFnOnce(&UserContext) -> Result<WatcherHandle, StashError>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
         let ctx = self.ctx()?;
         let watcher_handle = watch_fn(ctx.user_context())
+            .await
+            .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
+            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
+        let watch_handle = watch_channel_async(&*ctx, watcher_handle, callback);
+        Ok(watch_handle)
+    }
+
+    pub async fn watch_table(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+        watch_fn: impl AsyncFnOnce(&MailUserContext) -> Result<WatcherHandle, StashError>,
+    ) -> Result<Arc<WatchHandle>, ProtonError> {
+        let ctx = self.ctx()?;
+        let watcher_handle = watch_fn(&ctx)
             .await
             .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
             .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
@@ -131,7 +145,7 @@ impl MailUserSession {
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
         async_runtime().block_on(async {
-            self.watch_table(callback, UserContext::watch_addresses)
+            self.watch_core_table(callback, UserContext::watch_addresses)
                 .await
         })
     }
@@ -140,8 +154,10 @@ impl MailUserSession {
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
-        async_runtime()
-            .block_on(async { self.watch_table(callback, UserContext::watch_user).await })
+        async_runtime().block_on(async {
+            self.watch_core_table(callback, UserContext::watch_user)
+                .await
+        })
     }
 
     pub fn watch_user_settings(
@@ -149,7 +165,7 @@ impl MailUserSession {
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
         async_runtime().block_on(async {
-            self.watch_table(callback, UserContext::watch_user_settings)
+            self.watch_core_table(callback, UserContext::watch_user_settings)
                 .await
         })
     }
@@ -158,8 +174,20 @@ impl MailUserSession {
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ProtonError> {
-        async_runtime()
-            .block_on(async { self.watch_table(callback, UserContext::watch_labels).await })
+        async_runtime().block_on(async {
+            self.watch_core_table(callback, UserContext::watch_labels)
+                .await
+        })
+    }
+
+    pub fn watch_upsell_eligibility(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> Result<Arc<WatchHandle>, ProtonError> {
+        async_runtime().block_on(async {
+            self.watch_table(callback, MailUserContext::watch_upsell_eligibility)
+                .await
+        })
     }
 }
 
@@ -529,6 +557,16 @@ impl MailUserSession {
                 .await?;
 
             Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    pub async fn upsell_eligibility(&self) -> Result<UpsellEligibility, UserSessionError> {
+        let ctx = self.ctx()?;
+        uniffi_async(async move {
+            let upsell_eligibility = ctx.upsell_eligibility().await?;
+            Result::<_, RealProtonMailError>::Ok(upsell_eligibility.into())
         })
         .await
         .map_err(UserSessionError::from)

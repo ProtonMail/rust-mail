@@ -48,4 +48,5 @@ mod acceptance {
     mod sign_out_all;
     mod snooze;
     mod unsubscribe;
+    mod upsell_eligibility;
 }

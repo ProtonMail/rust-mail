@@ -156,7 +156,7 @@ async fn create_context() -> Arc<Context> {
         #[allow(clippy::default_trait_access)]
         Default::default(),
         Arc::new(NoopIssueReporter),
-        |e| e,
+        |builder| builder,
     )
     .await
     .expect("failed to create core context")

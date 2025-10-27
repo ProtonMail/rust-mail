@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::FeatureFlag;
-use proton_core_common::services::Service;
 use proton_mail_api::services::proton::response_data::{UnleashToggle, UnleashToggleVariant};
 use proton_mail_api::services::proton::responses::GetUnleashFeaturesResponse;
 use proton_mail_common::feature_flags::FeatureFlagsService;
@@ -36,17 +35,21 @@ async fn test_feature_flags_cold_start_background_fetch() {
     Mock::given(method("GET"))
         .and(path("/api/feature/v2/frontend"))
         .respond_with(ResponseTemplate::new(200).set_body_json(mock_response))
-        .expect(1)
+        // There might be an additional request due to init happening in parallel to
+        // setting this mock.
+        .expect(1..=2)
         .named("Cold start Unleash fetch")
         .mount(ctx.mock_server())
         .await;
 
-    let feature_flags = setup_feature_flags_service(&ctx).await;
+    let feature_flags = ctx.context().feature_flags();
 
     assert_eq!(feature_flags.get("TestFeatureA").await.unwrap(), None);
     assert_eq!(feature_flags.get("TestFeatureB").await.unwrap(), None);
 
-    wait_for_flag(&feature_flags, "TestFeatureA", 4, 250).await;
+    feature_flags.refresh().await.unwrap();
+
+    wait_for_flag(feature_flags, "TestFeatureA", 4, 250).await;
 
     assert_eq!(feature_flags.get("TestFeatureA").await.unwrap(), Some(true));
     assert_eq!(feature_flags.get("TestFeatureB").await.unwrap(), Some(true));
@@ -109,7 +112,7 @@ async fn test_feature_flags_warm_start_immediate_return() {
         .mount(ctx.mock_server())
         .await;
 
-    let feature_flags = setup_feature_flags_service(&ctx).await;
+    let feature_flags = ctx.context().feature_flags();
 
     assert_eq!(
         feature_flags.get("CachedFeatureX").await.unwrap(),
@@ -170,7 +173,7 @@ async fn test_feature_flags_warm_start_background_refresh() {
         .mount(ctx.mock_server())
         .await;
 
-    let feature_flags = setup_feature_flags_service(&ctx).await;
+    let feature_flags = ctx.context().feature_flags();
 
     assert_eq!(
         feature_flags.get("ExistingFeature").await.unwrap(),
@@ -181,7 +184,8 @@ async fn test_feature_flags_warm_start_background_refresh() {
         None
     );
 
-    wait_for_flag(&feature_flags, "NewFeatureFromRefresh", 4, 250).await;
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "NewFeatureFromRefresh", 10, 250).await;
 
     assert_eq!(
         feature_flags.get("ExistingFeature").await.unwrap(),
@@ -245,7 +249,8 @@ async fn test_feature_flags_network_failure_preserves_cache() {
         .mount(ctx.mock_server())
         .await;
 
-    let feature_flags = setup_feature_flags_service(&ctx).await;
+    let feature_flags = ctx.context().feature_flags();
+    _ = feature_flags.refresh().await;
 
     assert_eq!(feature_flags.get("CachedFlag").await.unwrap(), Some(true));
     assert_eq!(feature_flags.get("NonExistentFlag").await.unwrap(), None);
@@ -283,14 +288,17 @@ async fn test_feature_flags_handle_network_failure() {
                 }],
             }),
         ))
-        .expect(3)
+        // There might be an additional request due to init happening in parallel to
+        // setting this mock.
+        .expect(3..=4)
         .named("Cold start network failure then success")
         .mount(ctx.mock_server())
         .await;
 
-    let feature_flags = setup_feature_flags_service(&ctx).await;
+    let feature_flags = ctx.context().feature_flags();
+    _ = feature_flags.refresh().await;
 
-    wait_for_flag(&feature_flags, "TestFeatureRetry", 10, 1000).await;
+    wait_for_flag(feature_flags, "TestFeatureRetry", 10, 1000).await;
 
     assert_eq!(
         feature_flags.get("TestFeatureRetry").await.unwrap(),
@@ -315,18 +323,6 @@ async fn wait_for_flag(
     }
 
     panic!("Flag {key} not found after {initial} attempts");
-}
-
-async fn setup_feature_flags_service(ctx: &MailTestContext) -> FeatureFlagsService {
-    let core_context = ctx.core_context();
-    let weak_ctx = std::sync::Arc::downgrade(core_context);
-    let service = FeatureFlagsService::new(weak_ctx);
-
-    service
-        .init()
-        .await
-        .expect("Failed to initialize FeatureFlagsService");
-    service
 }
 
 fn test_unleash_variant() -> UnleashToggleVariant {

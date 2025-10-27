@@ -297,7 +297,7 @@ impl MailContext {
             event_poll_mode,
             network_monitor_config,
             issue_reporter,
-            |e| e.with_cyclic_service(FeatureFlagsService::new),
+            |builder| builder.with_cyclic_service(FeatureFlagsService::new),
         )
         .await?;
 

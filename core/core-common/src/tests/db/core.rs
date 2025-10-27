@@ -1,6 +1,7 @@
 use crate::datatypes::{
-    DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
-    SettingsFlags, TfaStatus, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
+    DateFormat, Density, Email, Flags, HighSecurity, LogAuth, NotificationSettings, Password,
+    Phone, ProductUsedSpace, SettingsFlags, TfaStatus, TimeFormat, TwoFa, UserKeys,
+    UserMnemonicStatus, UserType, WeekStart,
 };
 use crate::models::{DelinquentState, PaidSubscription, Role, User, UserSettings};
 use crate::tests::common::new_core_test_connection;
@@ -88,7 +89,7 @@ async fn test_core_store_and_load_user_settings() {
             expiration_time: Some(9999),
             registered_keys: vec![],
         },
-        news: 111,
+        news: NotificationSettings::default(),
         locale: "LOCALE".to_owned(),
         log_auth: LogAuth::Advanced,
         invoice_text: "my_invoice".to_owned(),
