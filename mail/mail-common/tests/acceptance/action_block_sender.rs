@@ -42,6 +42,19 @@ async fn count_incoming_defaults_for_email(
     Ok(results.len())
 }
 
+async fn count_incoming_defaults_for_domain(
+    tether: &stash::stash::Tether,
+    domain: &str,
+) -> Result<usize, StashError> {
+    let results = IncomingDefault::find(
+        "WHERE domain = ? AND deleted = 0",
+        stash::params![domain.to_string()],
+        tether,
+    )
+    .await?;
+    Ok(results.len())
+}
+
 #[tokio::test]
 async fn test_basic_block_sender() {
     let test_ctx = MailTestContext::new().await;
@@ -80,7 +93,10 @@ async fn test_basic_block_sender() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(incoming_default.email.as_ref(), email.into());
+    assert_eq!(
+        incoming_default.email.as_ref().unwrap().as_clear_text_str(),
+        email
+    );
     assert_eq!(incoming_default.location, IncomingDefaultLocation::Blocked);
     assert!(!incoming_default.deleted);
     assert!(incoming_default.remote_id.is_some());
@@ -99,7 +115,7 @@ async fn test_basic_unblock_sender() {
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut incoming_default = IncomingDefault {
-                email: email.into(),
+                email: Some(email.into()),
                 location: IncomingDefaultLocation::Blocked,
                 remote_id: Some("existing-remote-id".into()),
                 local_id: None,
@@ -184,7 +200,7 @@ async fn test_double_unblock_idempotent() {
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut incoming_default = IncomingDefault {
-                email: email.into(),
+                email: Some(email.into()),
                 location: IncomingDefaultLocation::Blocked,
                 remote_id: Some("existing-remote-id".into()),
                 local_id: None,
@@ -337,7 +353,7 @@ async fn test_remote_unblock_failure_with_proper_error_handling() {
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut incoming_default = IncomingDefault {
-                email: email.into(),
+                email: Some(email.into()),
                 location: IncomingDefaultLocation::Blocked,
                 remote_id: Some("existing-remote-id".into()),
                 local_id: None,
@@ -385,7 +401,7 @@ async fn test_block_sender_when_inbox_location_exists() {
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut incoming_default = IncomingDefault {
-                email: email.into(),
+                email: Some(email.into()),
                 location: IncomingDefaultLocation::Inbox,
                 remote_id: Some(format!("remote-id-{email}").into()),
                 local_id: None,
@@ -448,7 +464,7 @@ async fn test_block_sender_when_spam_location_exists() {
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut incoming_default = IncomingDefault {
-                email: email.into(),
+                email: Some(email.into()),
                 location: IncomingDefaultLocation::Spam,
                 remote_id: Some(format!("remote-id-{email}").into()),
                 local_id: None,
@@ -511,7 +527,7 @@ async fn test_unblock_sender_when_inbox_location_exists_should_not_work() {
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut incoming_default = IncomingDefault {
-                email: email.into(),
+                email: Some(email.into()),
                 location: IncomingDefaultLocation::Inbox,
                 remote_id: Some(format!("remote-id-{email}").into()),
                 local_id: None,
@@ -572,7 +588,7 @@ async fn test_unblock_sender_when_spam_location_exists_should_not_work() {
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut incoming_default = IncomingDefault {
-                email: email.into(),
+                email: Some(email.into()),
                 location: IncomingDefaultLocation::Spam,
                 remote_id: Some("existing-spam-id".into()),
                 local_id: None,
@@ -659,6 +675,12 @@ async fn test_api_returning_domain() {
         count_incoming_defaults_for_email(&tether, email)
             .await
             .unwrap(),
+        0
+    );
+    assert_eq!(
+        count_incoming_defaults_for_domain(&tether, domain)
+            .await
+            .unwrap(),
         1
     );
 
@@ -666,10 +688,11 @@ async fn test_api_returning_domain() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(incoming_default.email.as_ref(), email.into());
+    assert!(incoming_default.email.is_none());
+    assert_eq!(incoming_default.domain.as_ref().unwrap(), domain);
     assert_eq!(incoming_default.location, IncomingDefaultLocation::Blocked);
     assert!(!incoming_default.deleted);
     // We did not save the response from the Backend (Because we do not support lack of email)
     // but at least we did not panic
-    assert!(incoming_default.remote_id.is_none());
+    assert!(incoming_default.remote_id.is_some());
 }
