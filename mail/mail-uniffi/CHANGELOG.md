@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Incoming defaults migration & receiving API should not crash
+
+
+## [mail-uniffi-v0.154.7] - 2025-10-28
+
+### Fixes
+
 - Enable fallback resolver with custom resolver
 
 
