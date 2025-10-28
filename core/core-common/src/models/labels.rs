@@ -5,8 +5,6 @@
 #[path = "../tests/models/labels.rs"]
 mod labels;
 
-use std::collections::BTreeSet;
-
 use crate::datatypes::{
     ALL_LABEL_TYPES, CONTACT_LABEL_TYPES, InitializationKey, LabelColor, LabelType, LocalLabelId,
     MAIL_LABEL_TYPES,
@@ -25,7 +23,9 @@ use stash::orm::{Model, ModelHooks};
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, StashResult, Tether, WatcherHandle};
 use stash::utils::{MapToSql as _, placeholders};
+use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
+use topological_sort::TopologicalSort;
 use tracing::error;
 
 #[derive(Debug, Error)]
@@ -144,14 +144,14 @@ impl Label {
     where
         API: ProtonCore,
     {
-        let label_requests = futures::future::join_all(
+        let labels = futures::future::join_all(
             label_types
                 .iter()
                 .map(|category| api.get_labels((*category).into())),
         )
         .await;
 
-        Ok(label_requests
+        let labels = labels
             .into_iter()
             .map(|res| {
                 res.inspect_err(|err| error!("Failed to fetch labels: {err:?}"))
@@ -159,9 +159,36 @@ impl Label {
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
-            .flat_map(|res| res.labels)
-            .map_into::<Self>()
-            .collect())
+            .flat_map(|res| res.labels);
+
+        Ok(Self::collect(labels))
+    }
+
+    fn collect(labels: impl IntoIterator<Item = ApiLabel>) -> Vec<Label> {
+        let mut ids = TopologicalSort::<LabelId>::new();
+        let mut objs = BTreeMap::new();
+
+        for label in labels {
+            if let Some(parent_id) = &label.parent_id {
+                ids.add_dependency(parent_id.clone(), label.id.clone());
+            } else {
+                ids.insert(label.id.clone());
+            }
+
+            objs.insert(label.id.clone(), label);
+        }
+
+        // ---
+
+        let mut labels = Vec::new();
+
+        while let Some(id) = ids.pop() {
+            if let Some(obj) = objs.remove(&id) {
+                labels.push(obj.into());
+            }
+        }
+
+        labels
     }
 
     pub async fn get_labels_by_ids<API>(
@@ -298,20 +325,24 @@ impl ModelHooks for Label {
             Some(parent_id) => {
                 let res = Self::remote_id_counterpart_sync(parent_id, tx)?;
                 if res.is_none() {
-                    // TODO: handle this error
                     error!(
-                        "A Label({:?}) remote_parent don't have corresponding local_id",
-                        self.remote_id
+                        ?self.local_id,
+                        ?self.remote_id,
+                        ?self.remote_parent_id,
+                        "Got a label with a missing parent",
                     );
                 }
                 res
             }
+
             None => None,
         };
+
         tx.execute(
             "UPDATE labels SET local_parent_id=? WHERE local_id=?",
             (self.local_parent_id, self.local_id),
         )?;
+
         Ok(())
     }
 
@@ -382,5 +413,58 @@ impl Label {
             path: Option::default(),
             sticky: Default::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cmp::Ordering;
+
+    fn api_label(id: &str, parent_id: Option<&str>) -> ApiLabel {
+        ApiLabel {
+            id: id.into(),
+            parent_id: parent_id.map(Into::into),
+            ..ApiLabel::test_default()
+        }
+    }
+
+    #[test]
+    fn collect() {
+        let labels = Label::collect([
+            api_label("a", None),
+            api_label("b", Some("a")),
+            api_label("c", Some("d")),
+            api_label("d", None),
+            api_label("e", Some("f")),
+            api_label("f", Some("a")),
+        ]);
+
+        let labels: Vec<_> = labels
+            .into_iter()
+            .map(|label| label.remote_id.unwrap().to_string())
+            .collect();
+
+        // The topological-sort crate internally uses a hashmap, which means we
+        // can't directly compare `labels` - we can only make sure the invariant
+        // we're interested in is preserved
+        let assert = |lhs: &str, ord: Ordering, rhs: &str| {
+            let lhs_idx = labels.iter().find_position(|id| *id == lhs).unwrap();
+            let rhs_idx = labels.iter().find_position(|id| *id == rhs).unwrap();
+
+            assert_eq!(ord, lhs_idx.cmp(&rhs_idx));
+        };
+
+        // `b` depends on `a`, so `a` must be processed first
+        assert("a", Ordering::Less, "b");
+
+        // `c` depends on `d`, so `d` must be processed first
+        assert("d", Ordering::Less, "c");
+
+        // `e` depends on `f`, so `f` must be processed first
+        assert("f", Ordering::Less, "e");
+
+        // `f` depends on `a`, so `a` must be processed first
+        assert("a", Ordering::Less, "f");
     }
 }

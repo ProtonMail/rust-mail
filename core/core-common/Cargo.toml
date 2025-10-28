@@ -64,6 +64,7 @@ jiff = { workspace = true }
 url = { workspace = true }
 proton-network-monitor-service = { workspace = true, features = ["muon"] }
 proton-observability = { workspace = true }
+topological-sort = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
