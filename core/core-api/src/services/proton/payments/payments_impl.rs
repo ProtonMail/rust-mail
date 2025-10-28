@@ -81,4 +81,15 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonPayments for Th
 
         Ok(())
     }
+
+    async fn get_payment_method(
+        &self,
+        payment_method_id: String,
+    ) -> ApiServiceResult<GetPaymentMethodResponse> {
+        Ok(GET!("{PAYMENTS_V5}/methods/{payment_method_id}")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
 }
