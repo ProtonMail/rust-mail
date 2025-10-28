@@ -644,6 +644,16 @@ impl Conversation {
         let mut ids = Vec::with_capacity(conversations.len());
 
         for mut conv in conversations {
+            let deleted = bond
+                .query_value_opt::<bool>(
+                    "SELECT deleted FROM conversations WHERE remote_id = ?",
+                    params![conv.remote_id.clone()],
+                )
+                .await?;
+            if let Some(deleted) = deleted {
+                conv.deleted = deleted;
+            }
+
             Self::save(&mut conv, bond).await?;
             ids.push(conv.id());
         }
