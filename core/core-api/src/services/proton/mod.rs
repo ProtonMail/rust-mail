@@ -86,6 +86,7 @@ pub use self::core::*;
 pub use self::data::*;
 pub use self::payments::*;
 pub use muon;
+use muon::rt::{AsyncResolver, ResolverExt, with_fallback};
 
 /// An error that can occur when building a Proton client.
 #[derive(Debug, Error)]
@@ -130,7 +131,7 @@ pub async fn build<S: Store>(
         .spawner(Tokio::spawner());
 
     if let Some(resolver) = config.resolver.clone() {
-        builder = builder.resolver(resolver);
+        builder = builder.resolver(resolver.layer([with_fallback(AsyncResolver)]));
     }
 
     if let Some(proxy) = &config.proxy {
