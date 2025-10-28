@@ -19,6 +19,16 @@ fn default_api_incoming_default(email: &str) -> ApiIncomingDefault {
     }
 }
 
+fn domain_api_incoming_default(domain: &str) -> ApiIncomingDefault {
+    ApiIncomingDefault {
+        email: None,
+        location: ApiIncomingDefaultLocation::Blocked,
+        action: None,
+        id: format!("remote-id-{domain}"),
+        domain: Some(domain.into()),
+    }
+}
+
 async fn count_incoming_defaults_for_email(
     tether: &stash::stash::Tether,
     email: &str,
@@ -610,4 +620,56 @@ async fn test_unblock_sender_when_spam_location_exists_should_not_work() {
         .unwrap();
     assert_eq!(unchanged_default.location, IncomingDefaultLocation::Spam);
     assert!(!unchanged_default.deleted);
+}
+
+#[tokio::test]
+async fn test_api_returning_domain() {
+    /*
+     * Since our local codebase does not handle domains (yet) lets assume
+     * broken scenario where for some reason backend returns an incoming default with a
+     * domain instead of an email. In the end we do not control BE...
+     */
+    let test_ctx = MailTestContext::new().await;
+    let user_ctx = test_ctx.uninitialized_mail_user_context().await;
+    let tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let email = "block_me@example.com";
+    let domain = "example.com";
+
+    test_ctx
+        .mock_post_incoming_default_n(domain_api_incoming_default(domain), 1)
+        .await;
+    test_ctx.catch_all().await;
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        0
+    );
+
+    IncomingDefault::action_block(user_ctx.action_queue(), email.into())
+        .await
+        .unwrap();
+
+    let executed_count = user_ctx.execute_all_actions().await.unwrap();
+    assert_eq!(executed_count, 1);
+
+    assert_eq!(
+        count_incoming_defaults_for_email(&tether, email)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let incoming_default = IncomingDefault::by_email(email, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(incoming_default.email.as_ref(), email.into());
+    assert_eq!(incoming_default.location, IncomingDefaultLocation::Blocked);
+    assert!(!incoming_default.deleted);
+    // We did not save the response from the Backend (Because we do not support lack of email)
+    // but at least we did not panic
+    assert!(incoming_default.remote_id.is_none());
 }

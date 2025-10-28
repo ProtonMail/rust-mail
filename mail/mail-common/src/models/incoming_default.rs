@@ -103,8 +103,8 @@ impl ModelHooks for IncomingDefault {
     }
 }
 
-impl From<ApiIncomingDefault> for IncomingDefault {
-    fn from(api: ApiIncomingDefault) -> Self {
+impl IncomingDefault {
+    pub fn from_api(api: ApiIncomingDefault) -> Option<Self> {
         let ApiIncomingDefault {
             location,
             action: _,
@@ -113,14 +113,19 @@ impl From<ApiIncomingDefault> for IncomingDefault {
             domain,
         } = api;
 
-        Self {
+        let Some(email) = email else {
+            tracing::warn!("Incoming default from API is missing an email");
+            return None;
+        };
+
+        Some(IncomingDefault {
             local_id: None,
             remote_id: Some(id.into()),
-            email: email.expect("email is required"),
+            email,
             location: location.into(),
             domain,
             deleted: false,
-        }
+        })
     }
 }
 
@@ -149,7 +154,10 @@ impl IncomingDefault {
         api: ApiIncomingDefault,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        let incoming: Self = api.into();
+        let Some(incoming) = Self::from_api(api) else {
+            tracing::warn!("Incoming default has missing email. Ignoring it");
+            return Ok(());
+        };
         Self {
             local_id: Some(local_id),
             ..incoming
@@ -286,7 +294,12 @@ impl IncomingDefault {
             stash.connection().await?,
             async || Ok(Self::sync(api, tasks).await?),
             |tx, res| {
-                Self::replace_all_sync(res.into_iter().map(Into::into).collect(), tx)?;
+                Self::replace_all_sync(
+                    res.into_iter()
+                        .filter_map(IncomingDefault::from_api)
+                        .collect(),
+                    tx,
+                )?;
                 Ok(())
             },
         )
