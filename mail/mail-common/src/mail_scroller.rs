@@ -26,8 +26,10 @@ use proton_core_common::models::ModelIdExtension;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::AbortHandle;
+use tokio::time;
 use tracing::debug;
 use tracing::info;
 use tracing::instrument;
@@ -41,6 +43,8 @@ mod message_scroller;
 #[cfg(test)]
 #[path = "tests/mail_scroller/conversation_scroller.rs"]
 mod conversation_scroller;
+
+const MIN_STATUS_UPDATE_DURATION: Duration = Duration::from_millis(1500);
 
 #[derive(Debug, thiserror::Error)]
 pub enum MailScrollerError {
@@ -282,7 +286,7 @@ where
 
                     debug!("Scroller {id} fetch new after enter foreground");
 
-                    if Self::do_fetch_new(&ordered_command_cloned, false).is_err() {
+                    if Self::do_fetch_new(&ordered_command_cloned, true).is_err() {
                         return;
                     }
                 }
@@ -300,7 +304,7 @@ where
 
                     debug!("Scroller {id} fetch new after force refresh event");
 
-                    if Self::do_fetch_new(&ordered_command_cloned, true).is_err() {
+                    if Self::do_fetch_new(&ordered_command_cloned, false).is_err() {
                         return;
                     }
                 }
@@ -368,14 +372,14 @@ where
 
     #[instrument(skip_all, fields(id = ?self.id))]
     pub fn fetch_new(&self) -> Result<(), MailContextError> {
-        Self::do_fetch_new(&self.ordered_command, false)?;
+        Self::do_fetch_new(&self.ordered_command, true)?;
 
         Ok(())
     }
 
     fn do_fetch_new(
         sender: &flume::Sender<ScrollerOrderedCommand>,
-        from_force_poll: bool,
+        propagate_scroller_updates: bool,
     ) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
 
@@ -384,7 +388,7 @@ where
         sender
             .send(ScrollerOrderedCommand::FetchNew {
                 src: ScrollerSource::ScrollEvent(uuid),
-                from_force_poll,
+                propagate_scroller_updates,
             })
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send fetch new command")))
     }
@@ -843,39 +847,45 @@ where
 
             ScrollerOrderedCommand::FetchNew {
                 src,
-                from_force_poll,
+                propagate_scroller_updates,
             } => {
-                if !from_force_poll {
+                if propagate_scroller_updates {
                     self.update
                         .send_async(ScrollerStatusUpdate::FetchNewStart(src).into())
                         .await
                         .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
                 }
 
-                const MIN_DURATION: std::time::Duration = std::time::Duration::from_millis(1500);
-                let start_time = tokio::time::Instant::now();
+                let minimum_sleep = time::Instant::now().checked_add(MIN_STATUS_UPDATE_DURATION);
+                let minimum_sleep =
+                    time::sleep_until(minimum_sleep.unwrap_or(time::Instant::now()));
 
                 let result = self
                     .fetch_new(src)
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
-                if !from_force_poll {
-                    let minimum_end_time = start_time.checked_add(MIN_DURATION);
-                    if let Some(end_time) = minimum_end_time {
-                        tokio::time::sleep_until(end_time).await;
-                    }
-
-                    self.update
-                        .send_async(ScrollerStatusUpdate::FetchNewEnd(src).into())
-                        .await
-                        .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
-                }
-
                 self.update
                     .send_async(result)
                     .await
                     .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
+
+                if propagate_scroller_updates {
+                    if let Some(ctx) = self.ctx.upgrade() {
+                        let update_cloned = self.update.clone();
+                        ctx.spawn(async move {
+                            minimum_sleep.await;
+                            let _ = update_cloned
+                                .send_async(ScrollerStatusUpdate::FetchNewEnd(src).into())
+                                .await;
+                        });
+                    } else {
+                        let _ = self
+                            .update
+                            .send_async(ScrollerStatusUpdate::FetchNewEnd(src).into())
+                            .await;
+                    }
+                }
             }
 
             ScrollerOrderedCommand::ChangeFilter { src, unread } => {
@@ -1417,9 +1427,9 @@ enum ScrollerOrderedCommand {
     },
     FetchNew {
         src: ScrollerSource,
-        /// When true, loading bar events (FetchNewStart/FetchNewEnd) will not be sent.
-        /// This is used when the fetch is triggered by pull to refresh.
-        from_force_poll: bool,
+        /// When true, loading bar events (FetchNewStart/FetchNewEnd) will be sent.
+        /// Set to false when the fetch is triggered e.g. by pull to refresh to skip showing loading bar.
+        propagate_scroller_updates: bool,
     },
     Refresh(ScrollerSource),
     ForceRefresh(ScrollerSource),
