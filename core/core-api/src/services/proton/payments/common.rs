@@ -298,9 +298,11 @@ pub struct PaymentMethodCardDetails {
     pub brand: String,
     pub exp_month: String,
     pub exp_year: String,
+    #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
     pub country: Option<String>,
-    #[serde(rename = "ZIP")]
+    #[serde(rename = "ZIP", default)]
     pub zip: Option<String>,
     #[serde(
         rename = "ThreeDSSupport",
@@ -315,7 +317,7 @@ pub struct PaymentMethodCardDetails {
 pub struct PaymentMethodPaypalDetails {
     #[serde(rename = "BillingAgreementID")]
     pub billing_agreement_id: String,
-    #[serde(rename = "PayerID")]
+    #[serde(rename = "PayerID", default)]
     pub payer_id: Option<String>,
     pub payer: String,
 }

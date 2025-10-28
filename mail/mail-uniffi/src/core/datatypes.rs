@@ -73,6 +73,22 @@ use stash::stash::Tether;
 use tracing::error;
 
 use core::fmt;
+use proton_core_api::services::proton::{
+    AppleRecurringReceiptDetails as RealAppleRecurringReceiptDetails,
+    GetPaymentsPlansOptions as RealGetPaymentsPlansOptions,
+    GoogleRecurringReceiptDetails as RealGoogleRecurringReceiptDetails, Location as RealLocation,
+    NewSubscription as RealNewSubscription, NewSubscriptionValues as RealNewSubscriptionValues,
+    PaymentMethod as RealPaymentMethod, PaymentMethodCardDetails as RealPaymentMethodCardDetails,
+    PaymentMethodDetails as RealPaymentMethodDetails,
+    PaymentMethodDirectDebitDetails as RealPaymentMethodDirectDebitDetails,
+    PaymentMethodPaypalDetails as RealPaymentMethodPaypalDetails,
+    PaymentMethods as RealPaymentMethods, PaymentReceipt as RealPaymentReceipt,
+    PaymentVendor as RealPaymentVendor, PaymentVendorState as RealPaymentVendorState,
+    Plan as RealPlan, PlanDecoration as RealPlanDecoration, PlanEntitlement as RealPlanEntitlement,
+    PlanInstance as RealPlanInstance, PlanPrice as RealPlanPrice, PlanType as RealPlanType,
+    PlanVendor as RealPlanVendor, PlanVendorName as RealPlanVendorName,
+    Subscription as RealSubscription, SubscriptionId,
+};
 use proton_core_common::datatypes::{
     AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
     AddressType as RealAddressType, ApiConfig as RealApiConfig, AppDetails as RealAppDetails,
@@ -700,6 +716,23 @@ pub enum MigrationTokens {
         /// The refresh token.
         refresh_token: String,
     },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, uniffi::Enum)]
+pub enum PaymentMethodDetails {
+    Card(PaymentMethodCardDetails),
+    Paypal(PaymentMethodPaypalDetails),
+    DirectDebit(PaymentMethodDirectDebitDetails),
+}
+
+impl From<RealPaymentMethodDetails> for PaymentMethodDetails {
+    fn from(details: RealPaymentMethodDetails) -> Self {
+        match details {
+            RealPaymentMethodDetails::Card(details) => Self::Card(details.into()),
+            RealPaymentMethodDetails::Paypal(details) => Self::Paypal(details.into()),
+            RealPaymentMethodDetails::DirectDebit(details) => Self::DirectDebit(details.into()),
+        }
+    }
 }
 
 //  STRUCTS
@@ -1726,27 +1759,6 @@ impl From<RealUserSettings> for UserSettings {
     }
 }
 
-use proton_core_api::services::proton::AppleRecurringReceiptDetails as RealAppleRecurringReceiptDetails;
-use proton_core_api::services::proton::GetPaymentsPlansOptions as RealGetPaymentsPlansOptions;
-use proton_core_api::services::proton::GoogleRecurringReceiptDetails as RealGoogleRecurringReceiptDetails;
-use proton_core_api::services::proton::Location as RealLocation;
-use proton_core_api::services::proton::NewSubscription as RealNewSubscription;
-use proton_core_api::services::proton::NewSubscriptionValues as RealNewSubscriptionValues;
-use proton_core_api::services::proton::PaymentMethods as RealPaymentMethods;
-use proton_core_api::services::proton::PaymentReceipt as RealPaymentReceipt;
-use proton_core_api::services::proton::PaymentVendor as RealPaymentVendor;
-use proton_core_api::services::proton::PaymentVendorState as RealPaymentVendorState;
-use proton_core_api::services::proton::Plan as RealPlan;
-use proton_core_api::services::proton::PlanDecoration as RealPlanDecoration;
-use proton_core_api::services::proton::PlanEntitlement as RealPlanEntitlement;
-use proton_core_api::services::proton::PlanInstance as RealPlanInstance;
-use proton_core_api::services::proton::PlanPrice as RealPlanPrice;
-use proton_core_api::services::proton::PlanType as RealPlanType;
-use proton_core_api::services::proton::PlanVendor as RealPlanVendor;
-use proton_core_api::services::proton::PlanVendorName as RealPlanVendorName;
-use proton_core_api::services::proton::Subscription as RealSubscription;
-use proton_core_api::services::proton::SubscriptionId;
-
 /// Represents a single payment plan from the Proton API.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct Plan {
@@ -2275,6 +2287,90 @@ impl From<RealPaymentMethods> for PaymentMethods {
             card: methods.card.into(),
             in_app: methods.in_app.into(),
             paypal: methods.paypal.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct PaymentMethod {
+    pub id: String,
+    pub payment_type: String,
+    pub autopay: bool,
+    pub external: bool,
+    pub order: i32,
+    pub details: PaymentMethodDetails,
+}
+
+impl From<RealPaymentMethod> for PaymentMethod {
+    fn from(method: RealPaymentMethod) -> Self {
+        Self {
+            id: method.id,
+            payment_type: method.payment_type,
+            autopay: method.autopay,
+            external: method.external,
+            order: method.order,
+            details: method.details.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct PaymentMethodCardDetails {
+    pub last4: String,
+    pub brand: String,
+    pub exp_month: String,
+    pub exp_year: String,
+    pub name: Option<String>,
+    pub country: Option<String>,
+    pub zip: Option<String>,
+    pub three_ds_support: bool,
+}
+
+impl From<RealPaymentMethodCardDetails> for PaymentMethodCardDetails {
+    fn from(details: RealPaymentMethodCardDetails) -> Self {
+        Self {
+            last4: details.last4,
+            brand: details.brand,
+            exp_month: details.exp_month,
+            exp_year: details.exp_year,
+            name: details.name,
+            country: details.country,
+            zip: details.zip,
+            three_ds_support: details.three_ds_support,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct PaymentMethodPaypalDetails {
+    pub billing_agreement_id: String,
+    pub payer_id: Option<String>,
+    pub payer: String,
+}
+
+impl From<RealPaymentMethodPaypalDetails> for PaymentMethodPaypalDetails {
+    fn from(details: RealPaymentMethodPaypalDetails) -> Self {
+        Self {
+            billing_agreement_id: details.billing_agreement_id,
+            payer_id: details.payer_id,
+            payer: details.payer,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct PaymentMethodDirectDebitDetails {
+    pub account_name: String,
+    pub country: String,
+    pub last4: String,
+}
+
+impl From<RealPaymentMethodDirectDebitDetails> for PaymentMethodDirectDebitDetails {
+    fn from(details: RealPaymentMethodDirectDebitDetails) -> Self {
+        Self {
+            account_name: details.account_name,
+            country: details.country,
+            last4: details.last4,
         }
     }
 }

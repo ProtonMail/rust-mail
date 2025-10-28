@@ -4,8 +4,8 @@ mod labels;
 
 use crate::core::datatypes::{
     AccountDetails, ConnectionStatus, GetPaymentsPlansOptions, Id, NewSubscription,
-    NewSubscriptionValues, PaymentReceipt, PaymentToken, PaymentsPlans, PaymentsStatus,
-    Subscriptions, UpsellEligibility, User, UserSettings,
+    NewSubscriptionValues, PaymentMethod, PaymentReceipt, PaymentToken, PaymentsPlans,
+    PaymentsStatus, Subscriptions, UpsellEligibility, User, UserSettings,
 };
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
@@ -582,6 +582,22 @@ impl MailUserSession {
                 .map_err(MailContextError::from)?;
 
             Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    pub async fn get_payment_method(&self, id: String) -> Result<PaymentMethod, UserSessionError> {
+        let ctx = self.ctx()?;
+        uniffi_async(async move {
+            let res = ctx
+                .user_context()
+                .get_service::<PaymentsService>()
+                .get_payment_method(id)
+                .await
+                .map_err(MailContextError::from)?;
+
+            Ok::<_, RealProtonMailError>(res.payment_method.into())
         })
         .await
         .map_err(UserSessionError::from)

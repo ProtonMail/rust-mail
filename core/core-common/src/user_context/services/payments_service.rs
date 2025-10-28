@@ -3,9 +3,9 @@ use std::sync::{Arc, Weak};
 use anyhow::anyhow;
 use bytes::Bytes;
 use proton_core_api::services::proton::{
-    GetPaymentsPlansOptions, GetPaymentsPlansResponse, GetPaymentsStatusResponse,
-    GetPaymentsSubscriptionResponse, NewSubscription, NewSubscriptionValues, PaymentReceipt,
-    PostPaymentsTokensResponse, ProtonPayments,
+    GetPaymentMethodResponse, GetPaymentsPlansOptions, GetPaymentsPlansResponse,
+    GetPaymentsStatusResponse, GetPaymentsSubscriptionResponse, NewSubscription,
+    NewSubscriptionValues, PaymentReceipt, PostPaymentsTokensResponse, ProtonPayments,
 };
 
 use crate::{CoreContextError, CoreContextResult, UserContext};
@@ -83,5 +83,13 @@ impl PaymentsService {
             .post_payments_subscription(subscribtion, new_values)
             .await?;
         Ok(())
+    }
+
+    pub async fn get_payment_method(
+        &self,
+        id: String,
+    ) -> CoreContextResult<GetPaymentMethodResponse> {
+        let res = self.ctx()?.session().get_payment_method(id).await?;
+        Ok(res)
     }
 }
