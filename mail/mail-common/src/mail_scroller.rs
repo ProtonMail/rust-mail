@@ -282,7 +282,7 @@ where
 
                     debug!("Scroller {id} fetch new after enter foreground");
 
-                    if Self::do_fetch_new(&ordered_command_cloned).is_err() {
+                    if Self::do_fetch_new(&ordered_command_cloned, false).is_err() {
                         return;
                     }
                 }
@@ -300,7 +300,7 @@ where
 
                     debug!("Scroller {id} fetch new after force refresh event");
 
-                    if Self::do_fetch_new(&ordered_command_cloned).is_err() {
+                    if Self::do_fetch_new(&ordered_command_cloned, true).is_err() {
                         return;
                     }
                 }
@@ -368,22 +368,24 @@ where
 
     #[instrument(skip_all, fields(id = ?self.id))]
     pub fn fetch_new(&self) -> Result<(), MailContextError> {
-        Self::do_fetch_new(&self.ordered_command)?;
+        Self::do_fetch_new(&self.ordered_command, false)?;
 
         Ok(())
     }
 
     fn do_fetch_new(
         sender: &flume::Sender<ScrollerOrderedCommand>,
+        from_force_poll: bool,
     ) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
 
         debug!(?uuid, "Sending `FetchNew` command");
 
         sender
-            .send(ScrollerOrderedCommand::FetchNew(
-                ScrollerSource::ScrollEvent(uuid),
-            ))
+            .send(ScrollerOrderedCommand::FetchNew {
+                src: ScrollerSource::ScrollEvent(uuid),
+                from_force_poll,
+            })
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send fetch new command")))
     }
 
@@ -839,21 +841,36 @@ where
                     .map_err(|e| anyhow!("Failed to send get items update: {e:?}"))?;
             }
 
-            ScrollerOrderedCommand::FetchNew(src) => {
-                self.update
-                    .send_async(ScrollerStatusUpdate::FetchNewStart(src).into())
-                    .await
-                    .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
+            ScrollerOrderedCommand::FetchNew {
+                src,
+                from_force_poll,
+            } => {
+                if !from_force_poll {
+                    self.update
+                        .send_async(ScrollerStatusUpdate::FetchNewStart(src).into())
+                        .await
+                        .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
+                }
+
+                const MIN_DURATION: std::time::Duration = std::time::Duration::from_millis(1500);
+                let start_time = tokio::time::Instant::now();
 
                 let result = self
                     .fetch_new(src)
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
-                self.update
-                    .send_async(ScrollerStatusUpdate::FetchNewEnd(src).into())
-                    .await
-                    .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
+                if !from_force_poll {
+                    let minimum_end_time = start_time.checked_add(MIN_DURATION);
+                    if let Some(end_time) = minimum_end_time {
+                        tokio::time::sleep_until(end_time).await;
+                    }
+
+                    self.update
+                        .send_async(ScrollerStatusUpdate::FetchNewEnd(src).into())
+                        .await
+                        .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
+                }
 
                 self.update
                     .send_async(result)
@@ -1398,7 +1415,12 @@ enum ScrollerOrderedCommand {
         #[derivative(PartialEq = "ignore")]
         tx: Option<oneshot::Sender<()>>,
     },
-    FetchNew(ScrollerSource),
+    FetchNew {
+        src: ScrollerSource,
+        /// When true, loading bar events (FetchNewStart/FetchNewEnd) will not be sent.
+        /// This is used when the fetch is triggered by pull to refresh.
+        from_force_poll: bool,
+    },
     Refresh(ScrollerSource),
     ForceRefresh(ScrollerSource),
     GetItems(ScrollerSource),
