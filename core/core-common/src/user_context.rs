@@ -15,6 +15,7 @@ use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
+use services::PaymentsService;
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use stash::watcher::TableWatcher;
@@ -128,6 +129,7 @@ impl UserContext {
 
                 if matches!(origin, Origin::App) {
                     builder = builder
+                        .with_cyclic_service(PaymentsService::new)
                         .with_cyclic_service(move |weak_ref: Weak<UserContext>| {
                             let event_ctx = CoreEventLoopContext::from(weak_ref);
                             let event_loop = EventPoll::new(

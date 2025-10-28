@@ -35,9 +35,7 @@ async fn test_feature_flags_cold_start_background_fetch() {
     Mock::given(method("GET"))
         .and(path("/api/feature/v2/frontend"))
         .respond_with(ResponseTemplate::new(200).set_body_json(mock_response))
-        // There might be an additional request due to init happening in parallel to
-        // setting this mock.
-        .expect(1..=2)
+        .expect(1)
         .named("Cold start Unleash fetch")
         .mount(ctx.mock_server())
         .await;
@@ -288,9 +286,7 @@ async fn test_feature_flags_handle_network_failure() {
                 }],
             }),
         ))
-        // There might be an additional request due to init happening in parallel to
-        // setting this mock.
-        .expect(3..=4)
+        .expect(3)
         .named("Cold start network failure then success")
         .mount(ctx.mock_server())
         .await;

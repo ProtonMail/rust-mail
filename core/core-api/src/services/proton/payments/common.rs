@@ -14,12 +14,13 @@ use serde_repr::Serialize_repr;
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use serde_repr::Deserialize_repr;
-use serde_with::serde_as;
+use serde_with::{BoolFromInt, serde_as};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 
 use crate::declare_proton_id;
+use crate::services::proton::common::deserialize_bool_from_string;
 
 //  STRUCTS
 //==============================================================================
@@ -261,4 +262,71 @@ declare_proton_id! {
 }
 declare_proton_id! {
     pub SubscriptionId
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PaymentMethod {
+    #[serde(rename = "ID")]
+    pub id: String,
+    #[serde(rename = "Type")]
+    pub payment_type: String,
+    #[serde_as(as = "BoolFromInt")]
+    pub autopay: bool,
+    #[serde_as(as = "BoolFromInt")]
+    pub external: bool,
+    pub order: i32,
+    pub details: PaymentMethodDetails,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(untagged)]
+pub enum PaymentMethodDetails {
+    Card(PaymentMethodCardDetails),
+    Paypal(PaymentMethodPaypalDetails),
+    DirectDebit(PaymentMethodDirectDebitDetails),
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PaymentMethodCardDetails {
+    pub last4: String,
+    pub brand: String,
+    pub exp_month: String,
+    pub exp_year: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub country: Option<String>,
+    #[serde(rename = "ZIP", default)]
+    pub zip: Option<String>,
+    #[serde(
+        rename = "ThreeDSSupport",
+        deserialize_with = "deserialize_bool_from_string"
+    )]
+    pub three_ds_support: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PaymentMethodPaypalDetails {
+    #[serde(rename = "BillingAgreementID")]
+    pub billing_agreement_id: String,
+    #[serde(rename = "PayerID", default)]
+    pub payer_id: Option<String>,
+    pub payer: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PaymentMethodDirectDebitDetails {
+    pub account_name: String,
+    pub country: String,
+    pub last4: String,
 }

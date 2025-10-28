@@ -1,5 +1,5 @@
 use crate::actions::MailActionError;
-use crate::feature_flags::FeatureFlagsService;
+use crate::feature_flags::{FeatureFlagsBackgroundTask, FeatureFlagsService};
 use crate::mail_scroller::MailScrollerError;
 use crate::migration_snooper::MailMigrationSnooper;
 use crate::{AppError, MailUserContext, draft};
@@ -297,7 +297,11 @@ impl MailContext {
             event_poll_mode,
             network_monitor_config,
             issue_reporter,
-            |builder| builder.with_cyclic_service(FeatureFlagsService::new),
+            |builder| {
+                builder.with_cyclic_service(|ctx| {
+                    FeatureFlagsService::new(ctx, FeatureFlagsBackgroundTask::Enabled)
+                })
+            },
         )
         .await?;
 

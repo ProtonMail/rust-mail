@@ -72,3 +72,10 @@ pub struct PostPaymentsTokensResponse {
     pub token: String,
     pub status: u64,
 }
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct GetPaymentMethodResponse {
+    pub payment_method: PaymentMethod,
+}

@@ -11,7 +11,6 @@ pub mod migration_snooper;
 pub mod models;
 pub mod observability;
 pub mod os;
-pub mod payments;
 pub mod pin_code;
 pub mod post_login_check;
 mod user_context;

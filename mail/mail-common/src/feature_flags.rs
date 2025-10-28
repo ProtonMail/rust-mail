@@ -16,14 +16,24 @@ use stash::stash::WatcherHandle;
 use stash::watcher::TableWatcher;
 use tracing::error;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FeatureFlagsBackgroundTask {
+    Enabled,
+    Disabled,
+}
+
 #[derive(Clone)]
 pub struct FeatureFlagsService {
     ctx: Weak<Context>,
+    background_task_setting: FeatureFlagsBackgroundTask,
 }
 
 impl FeatureFlagsService {
-    pub fn new(ctx: Weak<Context>) -> Self {
-        Self { ctx }
+    pub fn new(ctx: Weak<Context>, background_task_setting: FeatureFlagsBackgroundTask) -> Self {
+        Self {
+            ctx,
+            background_task_setting,
+        }
     }
 
     #[tracing::instrument(skip_all, name = "FeatureFlagsFetchAndUpdate")]
@@ -134,6 +144,10 @@ impl Service for FeatureFlagsService {
     type Error = CoreContextError;
 
     async fn init(&self) -> Result<(), Self::Error> {
+        if self.background_task_setting == FeatureFlagsBackgroundTask::Disabled {
+            tracing::warn!("Feature flags background task is disabled");
+            return Ok(());
+        }
         let ctx = self
             .ctx
             .upgrade()

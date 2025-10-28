@@ -1,7 +1,7 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::context::{MailUserDatabaseInitializer, ShouldInitializeMailUserContext};
 use crate::events::MailEvent;
-use crate::feature_flags::FeatureFlagsService;
+use crate::feature_flags::{FeatureFlagsBackgroundTask, FeatureFlagsService};
 use crate::{MailContext, MailContextResult, MailUserContext};
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
@@ -83,7 +83,11 @@ impl MailTestContext {
         let initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>> =
             Some(vec![Box::new(MailUserDatabaseInitializer {})]);
 
-        let extra = |e: ContextBuilder| e.with_cyclic_service(FeatureFlagsService::new);
+        let extra = |e: ContextBuilder| {
+            e.with_cyclic_service(|ctx| {
+                FeatureFlagsService::new(ctx, FeatureFlagsBackgroundTask::Disabled)
+            })
+        };
 
         let core_test_context = if let (Some(secret), Some(id)) = (user_key_secret, user_id) {
             TestContext::with_user_secret_and_user_id(secret, id, initializers, extra).await
