@@ -70,8 +70,13 @@ impl Handler for SyncIncomingDefaultsHandler {
 
         guard
             .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
-                IncomingDefault::replace_all(data.into_iter().map(Into::into).collect(), tx)
-                    .await?;
+                IncomingDefault::replace_all(
+                    data.into_iter()
+                        .filter_map(IncomingDefault::from_api)
+                        .collect(),
+                    tx,
+                )
+                .await?;
                 Ok(())
             })
             .await?;

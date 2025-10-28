@@ -23,6 +23,7 @@ SELECT
     email,
     location,
     domain
-FROM incoming_default;
+FROM incoming_default
+WHERE email IS NOT NULL;
 
 DROP TABLE incoming_default;
