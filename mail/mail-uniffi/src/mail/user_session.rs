@@ -19,11 +19,12 @@ use proton_account_api::login::state::want_qr_confirmation::process_target_devic
 use proton_account_uniffi::login::ProcessTargetDeviceQrError;
 use proton_account_uniffi::password::PasswordFlow;
 use proton_account_uniffi::password_validator::PasswordValidatorService;
-use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
+use proton_core_api::services::proton::ProtonAuth;
 use proton_core_common::UserContext;
-use proton_mail_common::MailUserContext;
+use proton_core_common::services::PaymentsService;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
+use proton_mail_common::{MailContextError, MailUserContext};
 use proton_observability::PreLoginMetricRecorder;
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::sync::Arc;
@@ -455,7 +456,12 @@ impl MailUserSession {
     ) -> Result<PaymentsStatus, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
-            let res = ctx.user_context().get_payments_status(vendor).await?;
+            let res = ctx
+                .user_context()
+                .get_service::<PaymentsService>()
+                .get_payments_status(vendor)
+                .await
+                .map_err(MailContextError::from)?;
 
             Result::<_, RealProtonMailError>::Ok(PaymentsStatus {
                 location: res.location.into(),
@@ -474,7 +480,12 @@ impl MailUserSession {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            let res = ctx.session().get_payments_plans(options.into()).await?;
+            let res = ctx
+                .user_context()
+                .get_service::<PaymentsService>()
+                .get_payments_plans(options.into())
+                .await
+                .map_err(MailContextError::from)?;
 
             Result::<_, RealProtonMailError>::Ok(PaymentsPlans {
                 plans: res.plans.into_iter().map(Into::into).collect(),
@@ -493,7 +504,12 @@ impl MailUserSession {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            let res = ctx.session().get_payments_resources_icons(name).await?;
+            let res = ctx
+                .user_context()
+                .get_service::<PaymentsService>()
+                .get_payments_resources_icons(name)
+                .await
+                .map_err(MailContextError::from)?;
 
             Result::<_, RealProtonMailError>::Ok(res.into())
         })
@@ -512,9 +528,11 @@ impl MailUserSession {
 
         uniffi_async(async move {
             let res = ctx
-                .session()
+                .user_context()
+                .get_service::<PaymentsService>()
                 .post_payments_tokens(amount, currency, payment.into())
-                .await?;
+                .await
+                .map_err(MailContextError::from)?;
 
             Result::<_, RealProtonMailError>::Ok(PaymentToken {
                 token: res.token,
@@ -530,7 +548,12 @@ impl MailUserSession {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            let res = ctx.session().get_payments_subscription().await?;
+            let res = ctx
+                .user_context()
+                .get_service::<PaymentsService>()
+                .get_payments_subscription()
+                .await
+                .map_err(MailContextError::from)?;
             let current = res.subscriptions.into_iter().map(Into::into);
             let upcoming = res.upcoming_subscriptions.into_iter().map(Into::into);
 
@@ -552,9 +575,11 @@ impl MailUserSession {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            ctx.session()
+            ctx.user_context()
+                .get_service::<PaymentsService>()
                 .post_payments_subscription(subscription.into(), new_values.into())
-                .await?;
+                .await
+                .map_err(MailContextError::from)?;
 
             Result::<_, RealProtonMailError>::Ok(())
         })
