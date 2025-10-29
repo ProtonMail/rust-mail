@@ -379,7 +379,7 @@ where
 
     fn do_fetch_new(
         sender: &flume::Sender<ScrollerOrderedCommand>,
-        propagate_scroller_updates: bool,
+        propagate_status_updates: bool,
     ) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
 
@@ -388,7 +388,7 @@ where
         sender
             .send(ScrollerOrderedCommand::FetchNew {
                 src: ScrollerSource::ScrollEvent(uuid),
-                propagate_scroller_updates,
+                propagate_status_updates,
             })
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send fetch new command")))
     }
@@ -847,18 +847,14 @@ where
 
             ScrollerOrderedCommand::FetchNew {
                 src,
-                propagate_scroller_updates,
+                propagate_status_updates,
             } => {
-                if propagate_scroller_updates {
+                if propagate_status_updates {
                     self.update
                         .send_async(ScrollerStatusUpdate::FetchNewStart(src).into())
                         .await
                         .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
                 }
-
-                let minimum_sleep = time::Instant::now().checked_add(MIN_STATUS_UPDATE_DURATION);
-                let minimum_sleep =
-                    time::sleep_until(minimum_sleep.unwrap_or(time::Instant::now()));
 
                 let result = self
                     .fetch_new(src)
@@ -870,11 +866,11 @@ where
                     .await
                     .map_err(|e| anyhow!("Failed to send fetch new update: {e:?}"))?;
 
-                if propagate_scroller_updates {
+                if propagate_status_updates {
                     if let Some(ctx) = self.ctx.upgrade() {
                         let update_cloned = self.update.clone();
                         ctx.spawn(async move {
-                            minimum_sleep.await;
+                            time::sleep(MIN_STATUS_UPDATE_DURATION).await;
                             let _ = update_cloned
                                 .send_async(ScrollerStatusUpdate::FetchNewEnd(src).into())
                                 .await;
@@ -1429,7 +1425,7 @@ enum ScrollerOrderedCommand {
         src: ScrollerSource,
         /// When true, loading bar events (FetchNewStart/FetchNewEnd) will be sent.
         /// Set to false when the fetch is triggered e.g. by pull to refresh to skip showing loading bar.
-        propagate_scroller_updates: bool,
+        propagate_status_updates: bool,
     },
     Refresh(ScrollerSource),
     ForceRefresh(ScrollerSource),
