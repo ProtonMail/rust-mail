@@ -303,6 +303,18 @@ macro_rules! declare_live_query_tagger {
     };
 }
 
+#[macro_export]
+macro_rules! watch_table {
+    ($tag: tt, $ctx:expr, $spawner:expr, $callback:expr, $watch_fn:expr) => {{
+        let watcher_handle = $watch_fn($ctx)
+            .await
+            .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
+            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
+        let watch_handle = $tag::watch_channel_async($spawner.as_ref(), watcher_handle, $callback);
+        Ok(watch_handle)
+    }};
+}
+
 /// Search options for pagination
 #[derive(uniffi::Record)]
 pub struct PaginatorSearchOptions {
