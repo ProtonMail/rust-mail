@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- UpsellEligibility
+- Introduce payment method API
+- get_payment_method in uniffi
+
+
+## [mail-uniffi-v0.154.8] - 2025-10-28
+
 ### Fixes
 
 - Incoming defaults migration & receiving API should not crash
