@@ -62,9 +62,8 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
         let body = json!({
             "Email": email,
             "Location": location,
-            "Id": id
         });
-        Ok(PUT!("{MAIL_V4}/incomingdefaults")
+        Ok(PUT!("{MAIL_V4}/incomingdefaults/{id}")
             .body_json(body)?
             .send_with(self)
             .await?

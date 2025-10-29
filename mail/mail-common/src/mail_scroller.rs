@@ -177,7 +177,6 @@ where
     T: MailScrollerItem,
 {
     id: Uuid,
-    ctx: Weak<MailUserContext>,
     command: flume::Sender<ScrollerCommand<T>>,
     ordered_command: flume::Sender<ScrollerOrderedCommand>,
     aborts: Vec<AbortHandle>,
@@ -311,7 +310,6 @@ where
         Ok((
             Self {
                 id,
-                ctx: ctx_weak,
                 command,
                 ordered_command,
                 aborts,
@@ -467,24 +465,9 @@ where
             .send(ScrollerOrderedCommand::ChangeLabel {
                 src: ScrollerSource::ScrollEvent(uuid),
                 label,
+                mbox: mailbox.clone(),
             })
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send change label command")))?;
-
-        if let Some(ctx) = self.ctx.upgrade() {
-            let mailbox = mailbox.clone();
-            let ctx2 = ctx.clone();
-
-            ctx2.spawn(async move {
-                let Ok(tether) = ctx.user_stash().connection().await else {
-                    tracing::error!("Failed to get connection");
-                    return;
-                };
-
-                if let Err(err) = mailbox.change_label(&tether, label).await {
-                    tracing::error!("Failed to change label: {}", err);
-                }
-            });
-        }
 
         Ok(())
     }
@@ -496,40 +479,17 @@ where
         include: IncludeSwitch,
     ) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
-        let (tx, rx) = oneshot::channel();
-
         debug!(?uuid, "Sending `ChangeInclude` command");
 
         self.ordered_command
             .send(ScrollerOrderedCommand::ChangeInclude {
-                tx,
                 src: ScrollerSource::ScrollEvent(uuid),
                 include,
+                mbox: mailbox.clone(),
             })
             .map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send change include command"))
             })?;
-
-        if let Some(ctx) = self.ctx.upgrade() {
-            let mailbox = mailbox.clone();
-            let ctx2 = ctx.clone();
-
-            ctx2.spawn(async move {
-                let Ok(label_id) = rx.await else {
-                    tracing::error!("Failed to receive label ID");
-                    return;
-                };
-
-                let Ok(tether) = ctx.user_stash().connection().await else {
-                    tracing::error!("Failed to get connection");
-                    return;
-                };
-
-                if let Err(err) = mailbox.change_label(&tether, label_id).await {
-                    tracing::error!("Failed to change label: {}", err);
-                }
-            });
-        }
 
         Ok(())
     }
@@ -915,9 +875,9 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::ChangeLabel { src, label } => {
+            ScrollerOrderedCommand::ChangeLabel { src, label, mbox } => {
                 let result = self
-                    .change_label(src, label, Some(ReadFilter::All))
+                    .change_label(src, label, Some(ReadFilter::All), mbox)
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
@@ -939,17 +899,11 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::ChangeInclude { tx, src, include } => {
+            ScrollerOrderedCommand::ChangeInclude { src, include, mbox } => {
                 let result = self
-                    .change_include(src, include)
+                    .change_include(src, include, mbox)
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
-
-                if !result.is_error() {
-                    let label = self.include_to_label(include).await;
-                    tx.send(label)
-                        .map_err(|e| anyhow!("Failed to send change include update: {e:?}"))?;
-                }
 
                 if result.is_some() || result.is_scroll_event() {
                     self.update
@@ -1206,6 +1160,7 @@ where
         src: ScrollerSource,
         label: LocalLabelId,
         with_filter: Option<ReadFilter>,
+        mbox: Mailbox,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing label to `{label}`");
@@ -1216,6 +1171,8 @@ where
             .await
             .change_state(&ctx, with_filter, Some(label), None)
             .await?;
+        let tether = ctx.user_stash().connection().await?;
+        mbox.change_label(&tether, label).await?;
         self.reset(src).await
     }
 
@@ -1254,11 +1211,12 @@ where
         &mut self,
         src: ScrollerSource,
         include: IncludeSwitch,
+        mbox: Mailbox,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         if self.alternative_labels.supports_include_filter() {
             Self::abort_task(&mut self.task);
             let label = self.include_to_label(include).await;
-            self.change_label(src, label, None).await
+            self.change_label(src, label, None, mbox).await
         } else {
             Ok(ScrollerListUpdate::None(src).into())
         }
@@ -1451,12 +1409,14 @@ enum ScrollerOrderedCommand {
     ChangeLabel {
         src: ScrollerSource,
         label: LocalLabelId,
+        #[derivative(PartialEq = "ignore")]
+        mbox: Mailbox,
     },
     ChangeInclude {
-        #[derivative(PartialEq = "ignore")]
-        tx: oneshot::Sender<LocalLabelId>,
         src: ScrollerSource,
         include: IncludeSwitch,
+        #[derivative(PartialEq = "ignore")]
+        mbox: Mailbox,
     },
     ChangeKeywords {
         src: ScrollerSource,

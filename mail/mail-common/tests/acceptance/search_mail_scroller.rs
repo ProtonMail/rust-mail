@@ -520,13 +520,27 @@ async fn change_include_multiple_times_in_a_row() {
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::almost_all_mail())
-        .expect(6..=8)
+        .given_end_id(message1.id.as_str())
+        .expect(2..=4)
+        .respond_with(vec![])
+        .await;
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::almost_all_mail())
+        .expect(2..=4)
         .respond_with(vec![message1.clone()])
         .await;
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::all_mail())
-        .expect(6..=8)
+        .given_end_id(message2.id.as_str())
+        .expect(2..=4)
+        .respond_with(vec![])
+        .await;
+
+    ctx.mock_get_messages()
+        .given_label_id(&LabelId::all_mail())
+        .expect(2..=4)
         .respond_with(vec![message1, message2])
         .await;
 

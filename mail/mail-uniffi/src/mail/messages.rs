@@ -14,7 +14,6 @@ use super::datatypes::{
 use super::datatypes::{LabelAsAction, MimeType, MoveAction};
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
-use crate::PaginatorSearchOptions;
 use crate::core::datatypes::{Id, RemoteId, UnixTimestamp};
 use crate::errors::{
     ActionError, AttachmentDataResult, BodyOutputResult, MobileActionsResult, ProtonError,
@@ -26,7 +25,8 @@ use crate::mail::mail_scroller::{
     MessageScroller, MessageScrollerLiveQueryCallback, SearchScroller,
     spawn_message_scroller_watcher,
 };
-use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
+use crate::{LiveQueryCallback, WatchHandle, uniffi_async};
+use crate::{PaginatorSearchOptions, declare_live_query_tagger};
 use itertools::Itertools as _;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
@@ -464,6 +464,8 @@ pub struct WatchedMessage {
     pub handle: Arc<WatchHandle>,
 }
 
+declare_live_query_tagger!(WatchMessageMarker);
+
 /// Watch message for changes.
 ///
 /// When the messages change, the callback will be invoked.
@@ -489,7 +491,7 @@ pub async fn watch_message(
         };
 
         let handle = RealMessage::watch(&stash).await?;
-        let handle = watch_channel(&*user_context, handle, callback);
+        let handle = WatchMessageMarker::watch_channel(&*user_context, handle, callback);
         Result::<_, RealProtonMailError>::Ok(Some(WatchedMessage {
             message: message.into(),
             handle,
@@ -672,6 +674,7 @@ pub async fn available_label_as_actions_for_messages(
     .map_err(ActionError::from)
 }
 
+declare_live_query_tagger!(WatchAvailableLabelAsActionsMessageMaker);
 /// Watches label_as actions for messages.
 /// Any action returned here should reflect the display needs.
 ///
@@ -692,7 +695,8 @@ pub async fn watch_available_label_as_actions_for_messages(
         let (actions, handle) =
             RealMessage::watch_available_label_as_actions(ids.map_vec(), &tether).await?;
         let actions = actions.map_vec();
-        let handle = watch_channel(&*ctx, handle, callback);
+        let handle =
+            WatchAvailableLabelAsActionsMessageMaker::watch_channel(&*ctx, handle, callback);
 
         Ok::<_, RealProtonMailError>(WatchedLabelAs { actions, handle })
     })
@@ -920,6 +924,8 @@ pub struct WatchedMessages {
     pub handle: Arc<WatchHandle>,
 }
 
+declare_live_query_tagger!(WatchMessagesForLabelMaker);
+
 /// Watch messages for the given label.
 ///
 /// Watches messages with the specified label for changes. When the messages
@@ -941,7 +947,7 @@ pub async fn watch_messages_for_label(
         let tether = stash.connection().await?;
         let messages = RealMessage::in_label(label_id.into(), &tether).await?;
         let handle = RealMessage::watch(&stash).await?;
-        let watcher = watch_channel(&*user_context, handle, callback);
+        let watcher = WatchMessagesForLabelMaker::watch_channel(&*user_context, handle, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedMessages {
             messages: messages.map_vec(),
             handle: watcher,

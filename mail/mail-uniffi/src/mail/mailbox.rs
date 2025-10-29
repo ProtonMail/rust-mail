@@ -6,7 +6,7 @@ use crate::errors::{ProtonError, UserSessionError};
 use crate::mail::MailUserSession;
 use crate::mail::datatypes::{MessageRecipientDisplayMode, ViewMode};
 use crate::mail::state::MailUserContextPtr;
-use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
+use crate::{LiveQueryCallback, WatchHandle, declare_live_query_tagger, uniffi_async};
 use proton_core_api::services::proton::LabelId as RealLabelId;
 use proton_core_api::session::Session;
 use proton_mail_common::MailUserContext;
@@ -181,7 +181,7 @@ impl Mailbox {
 
         uniffi_async(async move {
             let receiver = mbox.watch_unread_count(ctx.user_stash()).await?;
-            let watcher = watch_channel(&*ctx, receiver, callback);
+            let watcher = WatchUnreadCounterMarker::watch_channel(&*ctx, receiver, callback);
 
             Result::<_, RealProtonMailError>::Ok(watcher)
         })
@@ -189,6 +189,8 @@ impl Mailbox {
         .map_err(UserSessionError::from)
     }
 }
+
+declare_live_query_tagger!(WatchUnreadCounterMarker);
 
 impl Mailbox {
     /// Get the inner mailbox.

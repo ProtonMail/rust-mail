@@ -2,7 +2,7 @@ use super::state::MailUserContextPtr;
 use super::{MailUserSession, datatypes::MailSettings};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ProtonError, UserSessionError};
-use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
+use crate::{LiveQueryCallback, WatchHandle, declare_live_query_tagger, uniffi_async};
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::{
@@ -48,6 +48,8 @@ pub struct SettingsWatcher {
     pub watch_handle: Arc<WatchHandle>,
 }
 
+declare_live_query_tagger!(WatchMailSettingsMarker);
+
 #[uniffi_export]
 pub async fn watch_mail_settings(
     ctx: &MailUserSession,
@@ -66,7 +68,7 @@ pub async fn watch_mail_settings(
             .into();
 
         let handle = RealMailSettings::watch(stash).await?;
-        let watcher = watch_channel(&*ctx, handle, callback);
+        let watcher = WatchMailSettingsMarker::watch_channel(&*ctx, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(SettingsWatcher {
             watch_handle: watcher,

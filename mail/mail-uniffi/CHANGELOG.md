@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- Incoming defaults migration & receiving API should not crash
+
+
+## [mail-uniffi-v0.154.7] - 2025-10-28
+
+### Fixes
+
+- Enable fallback resolver with custom resolver
+
+
+## [mail-uniffi-v0.154.6] - 2025-10-28
+
+### Changed
+
+- Tag live query callstacks
+
+### Features
+
+- DraftAttchmentListUpdateStream + WathchUserStream
+
+### Fixes
+
+- Scroller test with change include has a race condition on `next_page` request
+- Deleted trash should not reappear
+
+
+## [mail-uniffi-v0.154.5] - 2025-10-27
+
+### Fixes
+
+- Proper PUT incoming defaults
+- Incorrect user look up in account event handler
+- Make Mailbox label updates more deterministic
+
+
 ## [mail-uniffi-v0.154.4] - 2025-10-24
 
 ### Fixes

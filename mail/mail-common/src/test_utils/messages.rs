@@ -528,9 +528,10 @@ impl MailTestContext {
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_put_incoming_default(&self, incoming_default: IncomingDefault) {
+        let id = incoming_default.id.clone();
         let resp = PutIncomingDefaultResponse { incoming_default };
         Mock::given(method("PUT"))
-            .and(path("/api/mail/v4/incomingdefaults"))
+            .and(path(format!("/api/mail/v4/incomingdefaults/{id}")))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
             .named(function_name!())
