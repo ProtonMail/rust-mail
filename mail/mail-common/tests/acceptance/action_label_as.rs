@@ -419,7 +419,9 @@ fn label_eq<'a>(conv: &Conversation, comp: impl IntoIterator<Item = &'a LabelWit
         .map(|x| x.local_label_id.unwrap())
         .sorted();
 
-    for (conv, label) in labels.zip(comp) {
+    let mut other_labels = comp.into_iter().collect::<Vec<_>>();
+    other_labels.sort_by(|l1, l2| l1.local_id.unwrap().cmp(&l2.local_id.unwrap()));
+    for (conv, label) in labels.zip(other_labels.into_iter()) {
         assert_eq!(conv, label.label().id());
     }
 }
@@ -435,19 +437,30 @@ async fn assert_state0(tether: &Tether) {
 
 /// State 1: Action has been made in test2
 async fn assert_state1(tether: &Tether) {
-    let [label1, label2, label3, archive] = LabelWithCounters::from_remote_ids(
-        tether,
-        [
-            "selected".into(),
-            "partial".into(),
-            "unselected".into(),
-            LabelId::archive(),
-        ],
-    )
-    .await
-    .unwrap()
-    .try_into()
-    .unwrap();
+    let label1 = LabelWithCounters::from_remote_ids(tether, [LabelId::from("selected")])
+        .await
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    let label2 = LabelWithCounters::from_remote_ids(tether, [LabelId::from("partial")])
+        .await
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    let label3 = LabelWithCounters::from_remote_ids(tether, [LabelId::from("unselected")])
+        .await
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    let archive = LabelWithCounters::from_remote_ids(tether, [LabelId::archive()])
+        .await
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
 
     let [conversation1, conversation2, conversation3, conversation4] = get_convs(tether).await;
 

@@ -21,7 +21,7 @@ serde = { workspace = true }
 stash = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-topological-sort = "0.2.2"
+topological-sort = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
