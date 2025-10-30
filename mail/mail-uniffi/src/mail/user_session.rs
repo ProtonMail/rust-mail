@@ -27,7 +27,7 @@ use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
 use proton_mail_common::{MailContextError, MailUserContext};
 use proton_observability::PreLoginMetricRecorder;
-use stash::stash::Stash;
+use stash::stash::{Stash, WatcherHandle};
 use std::sync::Arc;
 use tracing::error;
 
@@ -202,6 +202,41 @@ impl MailUserSession {
                 MailUserContext::watch_upsell_eligibility
             )
         })
+    }
+
+    pub fn watch_user_stream(&self) -> Result<Arc<WatchUserStream>, ProtonError> {
+        let ctx = self.ctx()?;
+        async_runtime().block_on(async {
+            let handle = ctx
+                .user_context()
+                .watch_user()
+                .await
+                .map_err(RealProtonMailError::from)?;
+            Ok(Arc::new(WatchUserStream { handle }))
+        })
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct WatchUserStream {
+    handle: WatcherHandle,
+}
+
+#[uniffi_export]
+impl WatchUserStream {
+    pub fn next_sync(&self) -> Result<(), ProtonError> {
+        self.handle
+            .receiver
+            .recv()
+            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    }
+
+    pub async fn next_async(&self) -> Result<(), ProtonError> {
+        self.handle
+            .receiver
+            .recv_async()
+            .await
+            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
     }
 }
 
