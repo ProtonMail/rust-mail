@@ -47,6 +47,7 @@ impl RegisterDeviceTaskHandle {
     ///
     #[returns(VoidActionResult)]
     pub fn update_device(&self, device: RegisteredDevice) -> Result<(), ActionError> {
+        tracing::debug!("Uniffi: Updating device registration");
         self.sender
             .send(Some(RealRegisteredDevice::from(device)))
             .map_err(|_| {
@@ -74,6 +75,7 @@ impl MailSession {
     ///
     pub fn register_device_task(&self) -> Result<Arc<RegisterDeviceTaskHandle>, ActionError> {
         async_runtime().block_on(async {
+            tracing::debug!("Uniffi: Spawning device registration task");
             let ctx = self.ctx().core_context().clone();
             let (tx, rx) = watch::channel(None);
             let handle = spawn_registered_device_task(ctx, rx)
