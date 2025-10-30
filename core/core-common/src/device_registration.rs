@@ -126,6 +126,8 @@ async fn registered_device_task(
     let mut sessions_stream = sessions_watcher.receiver.into_stream();
     let mut state = RegisteredDeviceTaskState::default();
 
+    tracing::debug!("Spawned device registration task");
+
     loop {
         registered_device_task_step(&ctx, &mut state, &mut sessions_stream, &mut device_rx).await?;
     }
@@ -142,6 +144,8 @@ pub async fn registered_device_task_step(
     sessions_stream: &mut flume::r#async::RecvStream<'_, ()>,
     device_rx: &mut watch::Receiver<Option<RegisteredDevice>>,
 ) -> Result<(), RegisteredDeviceTaskError> {
+    tracing::debug!("Device registration task step");
+
     let sessions = tokio::select! {
         res = device_rx.changed() => {
             tracing::debug!("Device details changed: {res:?}");
@@ -165,6 +169,7 @@ pub async fn registered_device_task_step(
     };
 
     if sessions.is_empty() {
+        tracing::debug!("No sessions to register");
         return Ok(());
     }
 
@@ -202,6 +207,7 @@ pub async fn registered_device_task_step(
                     continue;
                 }
                 if e.is_not_fully_authenticated() {
+                    tracing::debug!("Session is not fully authenticated");
                     // Session is not fully authenticated. We are waiting for 2FA to finish.
                     // When it finishes, it will trigger session update with new scopes,
                     // therefore instead of repeating that registration, let's skip it for now.
