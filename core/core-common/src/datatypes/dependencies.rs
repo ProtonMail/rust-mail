@@ -8,15 +8,15 @@ use proton_core_api::{services::proton::ContactId, session::Session};
 use stash::stash::{RunTransaction, Tether};
 use stash::{orm::Model, params};
 
+#[derive(Default)]
 pub struct ContactsDependencyFetcher {
     contact_ids: HashSet<ContactId>,
 }
 
 impl ContactsDependencyFetcher {
+    #[must_use]
     pub fn new() -> Self {
-        Self {
-            contact_ids: HashSet::new(),
-        }
+        Self::default()
     }
 }
 

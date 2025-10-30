@@ -731,7 +731,7 @@ async fn calculate_missing_dependencies(
     let mut fetcher = ContactsDependencyFetcher::new();
     for event in events {
         if let Some(contact_emails) = event.contact_emails.as_ref() {
-            for contact_email in contact_emails.iter() {
+            for contact_email in contact_emails {
                 if let Some(contact_email) = contact_email.contact_email.as_ref() {
                     fetcher.check_contact_email(contact_email, tether).await?;
                 }

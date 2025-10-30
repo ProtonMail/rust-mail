@@ -420,7 +420,7 @@ impl Contact {
         }
 
         tx.run_tx(async |tx| {
-            for contact in contacts.iter_mut() {
+            for contact in &mut contacts {
                 contact.save(tx).await?;
             }
             Ok(())
