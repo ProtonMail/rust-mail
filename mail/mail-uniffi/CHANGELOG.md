@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Features
+
+- [ET-3431] Add 1.5s delay and skip loading bar during pull-to-refresh
+
+### Fixes
+
+- [ET-5216] Topo-sort labels during initialization
+- [ET-5222] Fix invalid isProton setting in message contacts
+- [ET-5253] Do not crash if key packets are missing from attachment
+
+
 ## [mail-uniffi-v0.155.2] - 2025-10-30
 
 ### Fixes
