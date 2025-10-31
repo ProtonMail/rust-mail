@@ -14,11 +14,11 @@ use tokio_util::sync::CancellationToken;
 
 #[test_case(TEST_EMAIL_1,
     success_response(false),
-    ValidationState::Valid(false)
+    ValidationState::Valid{official:false, proton:false}
 ; "Valid non proton address")]
 #[test_case(TEST_EMAIL_3,
     success_response(true),
-    ValidationState::Valid(true)
+    ValidationState::Valid{official:true, proton:true}
 ; "Valid proton address")]
 #[test_case(TEST_EMAIL_2,
     failure_invalid_email(),
@@ -91,11 +91,11 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
 
 #[test_case(TEST_EMAIL_1,
     success_response(false),
-    ValidationState::Valid(false)
+    ValidationState::Valid{official:false, proton:false}
 ; "Valid non proton address")]
 #[test_case(TEST_EMAIL_3,
     success_response(true),
-    ValidationState::Valid(true)
+    ValidationState::Valid{official:true, proton:true}
 ; "Valid proton address")]
 #[test_case(TEST_EMAIL_2,
     failure_invalid_email(),
