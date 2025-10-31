@@ -515,6 +515,20 @@ impl StoredAction {
             })
             .await
     }
+
+    // Note: This method does not technically require a transaction, but we exploit some useful
+    // properties if we have one such as guaranteeing that nothing else is modifying the list
+    // while we are processing this query.
+    pub async fn rebase_action_order(
+        action_group: &str,
+        tx: &Bond<'_>,
+    ) -> Result<Vec<ActionId>, StashError> {
+        tx.query_values::<_, ActionId>(
+            "SELECT id FROM action_queue WHERE action_group = ? ORDER BY created ASC, rowid ASC",
+            params![action_group.to_owned()],
+        )
+        .await
+    }
 }
 
 impl ModelHooks for StoredAction {

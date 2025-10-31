@@ -166,4 +166,13 @@ impl Handler for DeleteHandler {
         }
         Ok(())
     }
+    async fn rebase_local(
+        &self,
+        this_id: ActionId,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        self.apply_local(this_id, action, tx).await?;
+        Ok(())
+    }
 }

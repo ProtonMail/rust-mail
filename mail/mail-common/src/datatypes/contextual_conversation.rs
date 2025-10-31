@@ -14,6 +14,7 @@ use crate::models::{
 use crate::{AppError, MailContextResult, MailUserContext};
 use futures::try_join;
 use itertools::Itertools;
+use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
@@ -229,6 +230,7 @@ impl ContextualConversation {
                     view_options,
                     stash,
                     api,
+                    ctx.action_queue(),
                 )
                 .await?
             }
@@ -240,6 +242,7 @@ impl ContextualConversation {
                     view_options,
                     stash,
                     api,
+                    ctx.action_queue(),
                 )
                 .await?
             }
@@ -266,7 +269,7 @@ impl ContextualConversation {
 
     /// Unlike [`conversation_and_messages()`] this version always sync the conversation
     /// data to ensure that we have the most up to date information.
-    #[tracing::instrument(skip(stash, api, network_monitor_service))]
+    #[tracing::instrument(skip(stash, api, network_monitor_service, queue))]
     pub async fn conversation_and_messages_from_push_notification(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
@@ -274,6 +277,7 @@ impl ContextualConversation {
         view_options: ConversationViewOptions,
         stash: &Stash,
         api: &Session,
+        queue: &Queue,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection().await?;
@@ -285,6 +289,7 @@ impl ContextualConversation {
             local_conversation_id,
             &mut conn,
             api,
+            queue,
         )
         .await
         {
@@ -335,7 +340,7 @@ impl ContextualConversation {
     ///
     /// Returns error if the query failed, syncing the data failed or
     /// the conversation has no messages.
-    #[tracing::instrument(skip(stash, api, network_monitor_service))]
+    #[tracing::instrument(skip(stash, api, network_monitor_service, queue))]
     pub async fn conversation_and_messages(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
@@ -343,6 +348,7 @@ impl ContextualConversation {
         view_options: ConversationViewOptions,
         stash: &Stash,
         api: &Session,
+        queue: &Queue,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         Self::conversation_and_messages_impl(
             network_monitor_service,
@@ -352,11 +358,12 @@ impl ContextualConversation {
             stash,
             api,
             false,
+            queue,
         )
         .await
     }
 
-    #[tracing::instrument(skip(stash, api, network_monitor_service))]
+    #[tracing::instrument(skip(stash, api, network_monitor_service, queue))]
     pub async fn open_conversation_and_messages(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
@@ -364,6 +371,7 @@ impl ContextualConversation {
         view_options: ConversationViewOptions,
         stash: &Stash,
         api: &Session,
+        queue: &Queue,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         Self::conversation_and_messages_impl(
             network_monitor_service,
@@ -373,9 +381,12 @@ impl ContextualConversation {
             stash,
             api,
             true,
+            queue,
         )
         .await
     }
+
+    #[allow(clippy::too_many_arguments)]
     async fn conversation_and_messages_impl(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
@@ -384,6 +395,7 @@ impl ContextualConversation {
         stash: &Stash,
         api: &Session,
         extra_sync_allowed: bool,
+        queue: &Queue,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection().await?;
@@ -396,6 +408,7 @@ impl ContextualConversation {
             &mut conn,
             api,
             extra_sync_allowed,
+            queue,
         )
         .await
         {

@@ -100,6 +100,7 @@ use crate::event_loop::account_subscriber::AccountEventSubscriber;
 use crate::events::LabelEvent;
 use crate::models::{ContactEmail, ModelIdExtension};
 pub use macros::*;
+use proton_action_queue::action::ActionGroup;
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 
 const CORE_EVENT_TYPE_ID: &str = "proton-core-event";
@@ -249,6 +250,11 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
             for event in events.iter_mut() {
                 handle_event(event, tx, &user_id).await?;
             }
+
+            ctx.queue
+                .rebase_in(ActionGroup::default(), tx)
+                .await
+                .context("Failed to rebase")?;
             Ok(())
         })
         .await

@@ -373,6 +373,7 @@ pub async fn conversation(
                 view_options,
                 &stash,
                 &session,
+                ctx.action_queue(),
             )
             .await?
             .map(Into::into),

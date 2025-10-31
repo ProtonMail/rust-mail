@@ -369,6 +369,14 @@ impl Handler for ActionHandler2 {
     ) -> Result<(), NoopError> {
         unreachable!()
     }
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> std::result::Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
 
 #[tokio::test]

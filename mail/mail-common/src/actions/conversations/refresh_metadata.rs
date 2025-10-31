@@ -158,6 +158,14 @@ impl Handler for RefreshMetadataHandler {
 
         Ok(())
     }
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
 
 async fn refresh_conversation_messages(

@@ -448,6 +448,22 @@ pub trait Handler: Send + Sync {
     ) -> impl Future<
         Output = Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>,
     > + Send;
+
+    /// Rebase local changes over the current state of the cached data.
+    ///
+    /// This method will be invoked when new data is brought in from the server at the discretion
+    /// of the integrator.
+    ///
+    /// # Remarks
+    ///
+    /// * Action state can be updated and will be saved back to the queue.
+    /// * Rebasing can happen on running actions while they are executing `apply_remote`.
+    fn rebase_local(
+        &self,
+        this_id: ActionId,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send;
 }
 
 /// Identifier for an action that has been queued.

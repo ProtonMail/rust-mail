@@ -266,6 +266,7 @@ impl MessagesState {
             ConversationViewOptions::All,
             ctx.user_stash(),
             ctx.session(),
+            ctx.action_queue(),
         )
         .await?
         else {

@@ -98,6 +98,7 @@ impl Handler for PrefetchHandler {
             &mut guard,
             ctx.session(),
             false,
+            ctx.action_queue(),
         )
         .await;
 
@@ -150,6 +151,14 @@ impl Handler for PrefetchHandler {
             }
         }
 
+        Ok(())
+    }
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())
     }
 }

@@ -97,6 +97,7 @@ async fn test_new_mailbox_sync_conversations() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -114,6 +115,7 @@ async fn test_new_mailbox_sync_conversations() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -253,6 +255,7 @@ async fn test_new_mailbox_syncs_new_conversation_messages_on_push_notification()
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -274,6 +277,7 @@ async fn test_new_mailbox_syncs_new_conversation_messages_on_push_notification()
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -395,6 +399,7 @@ async fn test_opening_conversation_with_trashed_message() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -413,6 +418,7 @@ async fn test_opening_conversation_with_trashed_message() {
         ConversationViewOptions::NonTrashed,
         user_ctx.user_stash(),
         user_ctx.session(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -435,6 +441,7 @@ async fn test_opening_conversation_with_trashed_message() {
         ConversationViewOptions::Trashed,
         user_ctx.user_stash(),
         user_ctx.session(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -577,6 +584,7 @@ async fn test_new_mailbox_syncs_new_conversation_if_total_does_not_add_up() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -611,6 +619,7 @@ async fn test_new_mailbox_syncs_new_conversation_if_total_does_not_add_up() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()

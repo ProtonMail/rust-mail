@@ -17,6 +17,7 @@ use anyhow::Context;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use indoc::formatdoc;
+use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::Label;
@@ -25,7 +26,6 @@ use stash::orm::Model;
 use std::collections::HashMap;
 use std::sync::Weak;
 use tracing::{debug, error, info, warn};
-
 // Import common macros from core
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
@@ -126,6 +126,11 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                     // It so happens that the API only returns the IDs of what changed, not the
                     // actual data, so we better reload all.
                     data.queue_incoming_default |= event.incoming_defaults.is_some();
+
+                    ctx.action_queue()
+                        .rebase_in(ActionGroup::default(), tx)
+                        .await
+                        .context("Failed to rebase")?;
                 }
                 Ok(())
             })

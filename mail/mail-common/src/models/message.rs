@@ -24,7 +24,7 @@ use crate::models::*;
 use crate::{MailContextError, find_in_query};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
-use proton_action_queue::action::MetadataBuilder;
+use proton_action_queue::action::{ActionGroup, MetadataBuilder};
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::MultiActionError;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
@@ -1323,7 +1323,8 @@ impl Message {
         }
 
         let (_, encrypted_body) =
-            Self::sync_message_and_body(remote_id, ctx.session(), &mut tx).await?;
+            Self::sync_message_and_body(remote_id, ctx.session(), &mut tx, ctx.action_queue())
+                .await?;
 
         trace!("Message successfully downloaded. Decrypting...");
 
@@ -1913,7 +1914,8 @@ impl Message {
         tracing::info!("Force syncing");
 
         let (message, encrypted) =
-            Self::sync_message_and_body(message_id, ctx.session(), tether).await?;
+            Self::sync_message_and_body(message_id, ctx.session(), tether, ctx.action_queue())
+                .await?;
 
         let decrypted = Self::decrypt_message_body(
             ctx,
@@ -1945,11 +1947,12 @@ impl Message {
     ///
     /// Returns error if the message failed to fetch from the server or update the
     /// metadata on the server.
-    #[tracing::instrument(skip(api, tx))]
+    #[tracing::instrument(skip(api, tx, queue))]
     async fn sync_message_and_body(
         message_id: MessageId,
         api: &Session,
         tx: &mut impl RunTransaction,
+        queue: &Queue,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         info!("Fetching message");
         let message = api.get_message(message_id).await.map(|v| v.message)?;
@@ -1968,6 +1971,10 @@ impl Message {
             body_metadata.save(tx).await.inspect_err(|e| {
                 error!("Failed to save message body metadata: {e:?}");
             })?;
+
+            if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
+                tracing::error!("Failed to rebase: {e}")
+            }
 
             Ok(())
         })

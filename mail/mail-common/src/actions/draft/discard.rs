@@ -178,4 +178,13 @@ impl Handler for DiscardHandler {
         // Nothing else to do, event loop will take care of the cleanup.
         Ok(())
     }
+
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
