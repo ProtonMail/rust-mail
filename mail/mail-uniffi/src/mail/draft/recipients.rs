@@ -153,7 +153,7 @@ pub enum RecipientInvalidReason {
 impl From<ValidationState> for ComposerRecipientValidState {
     fn from(value: ValidationState) -> Self {
         match value {
-            ValidationState::Valid(_) | ValidationState::Unchecked => Self::Valid,
+            ValidationState::Valid { .. } | ValidationState::Unchecked => Self::Valid,
             ValidationState::DoesNotExist => Self::Invalid(RecipientInvalidReason::DoesNotExist),
             ValidationState::InvalidEmail => Self::Invalid(RecipientInvalidReason::Format),
             ValidationState::Validating => Self::Validating,

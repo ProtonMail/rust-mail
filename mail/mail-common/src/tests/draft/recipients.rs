@@ -231,10 +231,22 @@ fn to_message_recipient_only_copies_valid_values() {
         email: "unknown@error.org".into(),
     };
 
-    list.add_single_with_state(valid_entry.clone(), ValidationState::Valid(false))
-        .unwrap();
-    list.add_single_with_state(valid_proton_entry.clone(), ValidationState::Valid(true))
-        .unwrap();
+    list.add_single_with_state(
+        valid_entry.clone(),
+        ValidationState::Valid {
+            proton: false,
+            official: false,
+        },
+    )
+    .unwrap();
+    list.add_single_with_state(
+        valid_proton_entry.clone(),
+        ValidationState::Valid {
+            official: false,
+            proton: true,
+        },
+    )
+    .unwrap();
     list.add_single_with_state(validating_entry.clone(), ValidationState::Validating)
         .unwrap();
     // Unchecked is the default state.
@@ -254,7 +266,7 @@ fn to_message_recipient_only_copies_valid_values() {
         },
         MessageRecipient {
             address: valid_proton_entry.email,
-            is_proton: true,
+            is_proton: false,
             name: valid_proton_entry.name.unwrap_or_default(),
             group: MaybeEmptyString(None),
         },
@@ -313,13 +325,19 @@ fn to_message_recipient_only_copies_valid_values_group() {
         group_name_always(),
         [valid_entry.clone()],
         0,
-        ValidationState::Valid(false),
+        ValidationState::Valid {
+            proton: false,
+            official: false,
+        },
     );
     list.add_group_with_state(
         group_name_always(),
         [valid_proton_entry.clone()],
         0,
-        ValidationState::Valid(true),
+        ValidationState::Valid {
+            proton: true,
+            official: true,
+        },
     );
     list.add_group_with_state(
         group_name_always(),
@@ -503,10 +521,22 @@ fn recipient_expiration_feature() {
         email: "v@pm.me".into(),
     };
 
-    list.add_single_with_state(valid_entry.clone(), ValidationState::Valid(false))
-        .unwrap();
-    list.add_single_with_state(valid_proton_entry.clone(), ValidationState::Valid(true))
-        .unwrap();
+    list.add_single_with_state(
+        valid_entry.clone(),
+        ValidationState::Valid {
+            proton: false,
+            official: false,
+        },
+    )
+    .unwrap();
+    list.add_single_with_state(
+        valid_proton_entry.clone(),
+        ValidationState::Valid {
+            proton: true,
+            official: false,
+        },
+    )
+    .unwrap();
     list.add_single_with_state(validating_entry.clone(), ValidationState::Validating)
         .unwrap();
     // Unchecked is the default state.
@@ -517,7 +547,10 @@ fn recipient_expiration_feature() {
         .unwrap();
     list.add_single_with_state(
         valid_proton_entry_with_is_proton_false.clone(),
-        ValidationState::Valid(false),
+        ValidationState::Valid {
+            proton: false,
+            official: false,
+        },
     )
     .unwrap();
 

@@ -51,7 +51,7 @@ impl From<String> for MaybeEmptyString {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ValidationState {
-    Valid(bool), // true => is Proton address, false => isn't
+    Valid { official: bool, proton: bool },
     DoesNotExist,
     InvalidEmail,
     Unchecked,
@@ -193,17 +193,12 @@ pub struct ExpirationFeatureSupportReport {
 impl ExpirationFeatureSupportReport {
     fn check(&mut self, email: PrivateEmailRef, validation_state: ValidationState) {
         match validation_state {
-            ValidationState::Valid(true) => {
-                self.supported.insert(email.to_owned());
-            }
-            ValidationState::Valid(false) => {
-                // API is currently returning `IsProton:0` for known official proton email addresses,
-                // so we have to manually match here to correctly detect this.
-                if is_known_proton_domain(email.clone()) {
+            ValidationState::Valid { proton, .. } => {
+                if proton || is_known_proton_domain(email.clone()) {
                     self.supported.insert(email.to_owned());
-                    return;
+                } else {
+                    self.unsupported.insert(email.to_owned());
                 }
-                self.unsupported.insert(email.to_owned());
             }
             _ => {
                 // If we are unable to validate at the moment, we can still
@@ -220,9 +215,12 @@ impl ExpirationFeatureSupportReport {
 
     fn add_as_supported(&mut self, email: PrivateEmailRef, validation_state: ValidationState) {
         match validation_state {
-            ValidationState::Valid(_)
-            | ValidationState::Unchecked
-            | ValidationState::Validating => {
+            ValidationState::Valid { proton, .. } => {
+                if proton {
+                    self.supported.insert(email.to_owned());
+                }
+            }
+            ValidationState::Unchecked | ValidationState::Validating => {
                 self.supported.insert(email.to_owned());
             }
             _ => {}
@@ -475,11 +473,10 @@ impl RecipientList {
             match recipient {
                 Recipient::Single(single) => {
                     let is_proton = match single.state {
-                        ValidationState::Valid(is_proton) => is_proton,
+                        ValidationState::Valid { official, .. } => official,
                         ValidationState::Validating | ValidationState::Unchecked => false,
                         _ => continue,
                     };
-
                     recipients.push(MessageRecipient {
                         address: single.email.clone(),
                         is_proton,
@@ -491,7 +488,7 @@ impl RecipientList {
                 Recipient::Group(group) => {
                     for recipient in &group.recipients {
                         let is_proton = match recipient.state {
-                            ValidationState::Valid(is_proton) => is_proton,
+                            ValidationState::Valid { official, .. } => official,
                             ValidationState::Validating | ValidationState::Unchecked => false,
                             _ => continue,
                         };
@@ -837,7 +834,9 @@ async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> Validat
         .public_address_keys(&pgp_provider, email.as_ref(), false)
         .await
     {
-        Ok(keys) => ValidationState::Valid(
+        Ok(keys) => ValidationState::Valid {
+            official: keys.is_proton,
+            proton:
             // if it's a known proton domain we can skip the key check
             if is_known_proton_domain(email.as_ref()) {
                 true
@@ -845,7 +844,7 @@ async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> Validat
                 // check whether this domain is actually a proton powered email account
                 keys.into_inbox_keys(true).recipient_type == RecipientType::Internal
             },
-        ),
+        },
         Err(CoreContextError::Api(e)) => ValidationState::from(e),
         Err(e) => {
             error!("Unknown validation error: {e:?}");

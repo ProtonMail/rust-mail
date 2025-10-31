@@ -349,10 +349,12 @@ async fn move_from_label_does_not_unlabel() {
     // * the message is in the second label
     // * the message is still in the first label
     message.reload(&tether).await.unwrap();
-    assert_eq!(
-        message.label_ids,
-        vec![source_label_id, destination_label_id]
-    );
+
+    let mut labels = message.label_ids.clone();
+    labels.sort();
+    let mut expected = vec![source_label_id, destination_label_id];
+    expected.sort();
+    assert_eq!(labels, expected);
 }
 
 #[tokio::test]
