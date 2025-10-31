@@ -302,6 +302,8 @@ pub enum PackageError {
     MimeBodyAttachmentLoad(#[from] ApiServiceError),
     #[error("Attachment Data Missing")]
     AttachmentDataMissing,
+    #[error("Attachment missing key packets")]
+    AttachmentMissingKeyPackets(LocalAttachmentId),
     #[error("Attachment failed to load: {0}")]
     AttachmentLoad(Box<MailContextError>),
     #[error("Attachment has no local id")]

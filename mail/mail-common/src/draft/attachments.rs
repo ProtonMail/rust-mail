@@ -315,6 +315,11 @@ pub async fn build_attachment_key_packets(
             continue;
         };
 
+        if attachment.key_packets.is_none() {
+            tracing::error!("Attachment key packets missing for {:?}", attachment.id());
+            return Err(MailContextError::Crypto);
+        }
+
         let attachment_address_id = attachment.remote_address_id.as_ref().unwrap();
 
         // If the address of the sender changed we need to regenerate the key packets for this
