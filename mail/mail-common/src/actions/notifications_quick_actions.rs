@@ -5,20 +5,21 @@ use crate::{
     datatypes::mail_notifications::PushNotificationQuickAction,
 };
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, Metadata, Priority, Type, WriterGuard,
 };
+use proton_action_queue::queue::QueuedActionOutput;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::SystemLabel;
-use proton_core_common::models::LabelError;
+use proton_core_common::models::{LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{info, instrument, warn};
 
-use super::ActionMoveData;
 use super::messages::{Move, Read};
+use super::{ActionMoveData, MailActionError};
 
 #[instrument(skip(ctx))]
 pub async fn exec(
@@ -42,22 +43,53 @@ pub async fn exec(
     Ok(())
 }
 
+async fn read_msg_local(ctx: &MailUserContext, msg_id: MessageId) -> MailContextResult<()> {
+    let tether = ctx.user_stash().connection().await?;
+    let local_id = Message::remote_id_counterpart(msg_id.clone(), &tether)
+        .await?
+        .ok_or_else(|| MailContextError::Other(anyhow::anyhow!("Message is not found")))?;
+    queue_action_with_highest_priority(ctx, Read::new(std::iter::once(local_id))).await?;
+    Ok(())
+}
+
 #[instrument(skip_all)]
 async fn read_msg(ctx: &MailUserContext, msg_id: MessageId) -> MailContextResult<()> {
-    match Message::find_or_fetch_by_remote_id(ctx, msg_id.clone()).await {
-        Ok(local_id) => {
-            ctx.queue_action(Read::new(std::iter::once(local_id)))
-                .await?;
-        }
-        Err(e) => {
-            warn!("Failed to resolve remote id, queuing fallback operation: {e}");
-            ctx.action_queue()
-                .queue_action(PushNotificationAction {
-                    action: PushNotificationQuickAction::MarkAsRead { remote_id: msg_id },
-                })
-                .await?;
-        }
+    if let Err(e) = read_msg_local(ctx, msg_id.clone()).await {
+        warn!("Failed to mark as read locally. Queuing fallback operation: {e}");
+
+        queue_action_with_highest_priority(
+            ctx,
+            PushNotificationAction {
+                action: PushNotificationQuickAction::MarkAsRead { remote_id: msg_id },
+            },
+        )
+        .await?;
     }
+    Ok(())
+}
+
+async fn move_msg_local(
+    ctx: &MailUserContext,
+    msg_id: MessageId,
+    label: SystemLabel,
+) -> MailContextResult<()> {
+    let tether = ctx.user_stash().connection().await?;
+
+    let local_id = Message::remote_id_counterpart(msg_id.clone(), &tether)
+        .await?
+        .ok_or_else(|| MailContextError::Other(anyhow::anyhow!("Message is not found")))?;
+
+    // The likelihood of this failing is extremely low since system labels are
+    // pre-created ahead of time.
+    let label_id = label
+        .local_id(&tether)
+        .await?
+        .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(label.remote_id()))?;
+
+    if let Some(action) = ActionMoveData::new(&tether, label_id, [local_id]).await? {
+        queue_action_with_highest_priority(ctx, Move(action)).await?;
+    }
+
     Ok(())
 }
 
@@ -67,42 +99,49 @@ async fn move_msg(
     label: SystemLabel,
     msg_id: MessageId,
 ) -> MailContextResult<()> {
-    match Message::find_or_fetch_by_remote_id(ctx, msg_id.clone()).await {
-        Ok(local_id) => {
-            let tether = ctx.user_stash().connection().await?;
-
-            // The likelihood of this failing is extremely low since system labels are
-            // pre-created ahead of time.
-            let label_id = label
-                .local_id(&tether)
-                .await?
-                .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(label.remote_id()))?;
-
-            if let Some(action) = ActionMoveData::new(&tether, label_id, [local_id]).await? {
-                ctx.queue_action(Move(action)).await?;
-            }
-        }
-        Err(e) => {
-            warn!("Failed to resolve remote id, queuing fallback operation: {e}");
-            if label == SystemLabel::Archive {
-                ctx.action_queue()
-                    .queue_action(PushNotificationAction {
-                        action: PushNotificationQuickAction::MoveToArchive { remote_id: msg_id },
-                    })
-                    .await?;
-            } else if label == SystemLabel::Trash {
-                ctx.action_queue()
-                    .queue_action(PushNotificationAction {
-                        action: PushNotificationQuickAction::MoveToTrash { remote_id: msg_id },
-                    })
-                    .await?;
-            } else {
-                warn!("Received invalid system label: {label}");
-                return Ok(());
-            }
+    if let Err(e) = move_msg_local(ctx, msg_id.clone(), label).await {
+        warn!("Failed to move message locally. Queuing fallback operation: {e}");
+        if label == SystemLabel::Archive {
+            queue_action_with_highest_priority(
+                ctx,
+                PushNotificationAction {
+                    action: PushNotificationQuickAction::MoveToArchive { remote_id: msg_id },
+                },
+            )
+            .await?;
+        } else if label == SystemLabel::Trash {
+            queue_action_with_highest_priority(
+                ctx,
+                PushNotificationAction {
+                    action: PushNotificationQuickAction::MoveToTrash { remote_id: msg_id },
+                },
+            )
+            .await?;
+        } else {
+            warn!("Received invalid system label: {label}");
+            return Ok(());
         }
     }
     Ok(())
+}
+
+async fn queue_action_with_highest_priority<T>(
+    ctx: &MailUserContext,
+    action: T,
+) -> MailContextResult<QueuedActionOutput<T>>
+where
+    T: Action<Error = MailActionError>,
+{
+    Ok(ctx
+        .user_context()
+        .queue()
+        .queue_action_with_metadata(
+            action,
+            Metadata::builder()
+                .with_priority_override(Priority::Highest)
+                .build(),
+        )
+        .await?)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -119,7 +158,7 @@ impl Action for PushNotificationAction {
     type Handler = PushNotificationActionHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
-    type Error = MailContextError;
+    type Error = MailActionError;
 }
 
 pub struct PushNotificationActionHandler {
@@ -134,7 +173,7 @@ impl Handler for PushNotificationActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), MailContextError> {
+    ) -> Result<(), MailActionError> {
         Ok(())
     }
 
@@ -143,7 +182,7 @@ impl Handler for PushNotificationActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), MailContextError> {
+    ) -> Result<(), MailActionError> {
         Ok(())
     }
 
@@ -152,7 +191,7 @@ impl Handler for PushNotificationActionHandler {
         _: ActionId,
         action: &mut Self::Action,
         _: WriterGuard<'_>,
-    ) -> Result<(), MailContextError> {
+    ) -> Result<(), MailActionError> {
         match &action.action {
             PushNotificationQuickAction::MarkAsRead { remote_id } => {
                 tracing::info!("Marking {remote_id:?} as read from push notification quick action");
