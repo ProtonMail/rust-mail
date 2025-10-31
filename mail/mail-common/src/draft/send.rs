@@ -564,6 +564,10 @@ where
             continue;
         }
 
+        if attachment.key_packets.is_none() {
+            return Err(PackageError::AttachmentMissingKeyPackets(attachment.id()));
+        }
+
         let attachment_key = attachment
             .decrypt_attachment_info(pgp, sender_keys)?
             .session_key
@@ -612,6 +616,11 @@ where
         }
 
         // Decrypt attachment information using sender's keys
+        if attachment.key_packets.is_none() {
+            // check if this really set since we assert in the next call.
+            return Err(PackageError::AttachmentMissingKeyPackets(attachment.id()));
+        }
+
         let attachment_info = attachment.decrypt_attachment_info(pgp, sender_keys)?;
 
         let recipient_attachment_kp = match encryption_tool {
