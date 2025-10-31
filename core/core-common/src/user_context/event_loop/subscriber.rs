@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::{
-    UserContext,
-    datatypes::Refresh,
+    CoreContextError, UserContext,
+    datatypes::{ContactsDependencyFetcher, Refresh},
     events::{Action, AddressEvent, ContactEmailEvent, ContactEvent, CoreEvent},
     models::{Address, Contact, Label, ModelExtension, User},
 };
@@ -22,7 +22,7 @@ use stash::{
     exports::SqliteError,
     orm::Model,
     params,
-    stash::{Bond, StashError},
+    stash::{Bond, StashError, Tether},
 };
 use tracing::{debug, error, info, warn};
 
@@ -236,8 +236,15 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
 
         let user_id = ctx.user_id().clone();
         let stash = ctx.stash().clone();
-
         let mut conn = stash.connection().await?;
+
+        calculate_missing_dependencies(events, &conn)
+            .await
+            .context("Failed to calculate missing dependencies")?
+            .fetch_and_store(ctx.session(), &mut conn)
+            .await
+            .context("Failed to fetch or store dependencies")?;
+
         conn.tx::<_, _, StashError>(async |tx| {
             for event in events.iter_mut() {
                 handle_event(event, tx, &user_id).await?;
@@ -715,4 +722,22 @@ pub async fn handle_label_events(
         }
     }
     Ok(())
+}
+
+async fn calculate_missing_dependencies(
+    events: &[CoreEvent],
+    tether: &Tether,
+) -> Result<ContactsDependencyFetcher, CoreContextError> {
+    let mut fetcher = ContactsDependencyFetcher::new();
+    for event in events {
+        if let Some(contact_emails) = event.contact_emails.as_ref() {
+            for contact_email in contact_emails {
+                if let Some(contact_email) = contact_email.contact_email.as_ref() {
+                    fetcher.check_contact_email(contact_email, tether).await?;
+                }
+            }
+        }
+    }
+
+    Ok(fetcher)
 }

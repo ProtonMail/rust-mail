@@ -13,7 +13,7 @@ use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension}
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use anyhow::Context;
 use bytes::Buf as _;
-use futures::future::try_join;
+use futures::future::{try_join, try_join_all};
 use futures::try_join;
 use ical::VcardParser;
 use itertools::Itertools;
@@ -400,6 +400,36 @@ impl Contact {
         Ok(())
     }
 
+    pub async fn sync_contacts_by_ids(
+        api: &Session,
+        contact_ids: Vec<ContactId>,
+        tx: &mut impl RunTransaction,
+    ) -> Result<Vec<Self>, ApiServiceError> {
+        let batch_size = 10;
+        let mut contacts: Vec<Self> = Vec::new();
+
+        for batch in contact_ids.chunks(batch_size) {
+            let requests = batch.iter().map(|id| api.get_contact(id.clone()));
+            let responses = try_join_all(requests).await?;
+
+            contacts.extend(
+                responses
+                    .into_iter()
+                    .map(|response| response.contact.into()),
+            );
+        }
+
+        tx.run_tx(async |tx| {
+            for contact in &mut contacts {
+                contact.save(tx).await?;
+            }
+            Ok(())
+        })
+        .await?;
+
+        Ok(contacts)
+    }
+
     /// Returns a list of contacts grouped by the first letter of their name.
     ///
     /// # Errors
@@ -448,9 +478,9 @@ impl Contact {
         let mut res = ContactEmail::load_inner(
             "SELECT contact_emails.* FROM contact_emails
              JOIN contacts ON contact_emails.remote_contact_id = contacts.remote_id
-             WHERE contacts.deleted = 0 
+             WHERE contacts.deleted = 0
              AND EXISTS (
-                 SELECT 1 FROM json_each(contacts.label_ids) 
+                 SELECT 1 FROM json_each(contacts.label_ids)
                  WHERE json_each.value = ?
              )
              ORDER BY contact_emails.display_order, contact_emails.local_id",
