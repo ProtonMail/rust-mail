@@ -26,7 +26,10 @@ use chrono::Local;
 use futures::future;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
+#[cfg(feature = "action_rebase")]
+use proton_action_queue::action::ActionGroup;
 use proton_action_queue::action::MetadataBuilder;
+
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
@@ -2034,12 +2037,14 @@ impl Conversation {
         Ok(())
     }
 
-    #[tracing::instrument(skip(tx, session, network_monitor_service))]
+    #[tracing::instrument(skip(tx, session, network_monitor_service, queue))]
+    #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))]
     pub async fn sync_conversation_messages_from_push_notification(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
         session: &Session,
+        queue: &Queue,
     ) -> Result<Conversation, AppError> {
         let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
@@ -2138,19 +2143,25 @@ impl Conversation {
                     e
                 })?;
 
+            #[cfg(feature = "action_rebase")]
+            if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
+                tracing::error!("Failed to rebase changes: {e}");
+            }
+
             Ok(new_conversation)
         })
         .await
         .map_err(AppError::Other)
     }
 
-    #[tracing::instrument(skip(tx, session, network_monitor_service))]
+    #[tracing::instrument(skip(tx, session, network_monitor_service, queue))]
     pub async fn sync_conversation_messages(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
         session: &Session,
         extra_sync_allowed: bool,
+        queue: &Queue,
     ) -> Result<(), AppError> {
         let Some(mut conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await?
         else {
@@ -2226,6 +2237,11 @@ impl Conversation {
                     })?;
                 }
 
+                #[cfg(feature = "action_rebase")]
+                if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
+                    tracing::error!("Failed to rebase changes: {e}");
+                }
+
                 Ok(())
             })
             .await
@@ -2237,6 +2253,7 @@ impl Conversation {
                 local_conversation_id,
                 tx,
                 session,
+                queue,
             )
             .await?;
             return Ok(());

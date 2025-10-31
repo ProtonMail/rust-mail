@@ -278,6 +278,15 @@ impl Handler for SuccessActionHandler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         Ok(())
     }
+
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -326,6 +335,14 @@ impl Handler for ErrorActionHandler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         Err(DefaultError::NetworkFailure)
     }
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -372,5 +389,13 @@ impl Handler for WriterGuardExpiredActionHandler {
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         Err(WriterGuardError::Expired.into())
+    }
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
     }
 }

@@ -588,6 +588,79 @@ async fn clear_all_actions_in_chosen_action_group() {
     assert!(action_in_default.is_some());
 }
 
+#[tokio::test]
+async fn rebase_action_id_order() {
+    // we want to make sure that the order of the actions is returned in the order they were
+    // inserted into the queue regardless of priority. This is important to preserve the chain
+    // of rebase operations.
+
+    let state = TestAction {
+        foo: "foo".to_string(),
+        bar: 2048,
+        dependency_keys: ActionDependencyKeys::default(),
+    };
+
+    let stash = new_test_connection().await;
+    let mut conn = stash.connection().await.unwrap();
+
+    // Create two actions in the default group.
+    let mut stored_default_1 = StoredAction::new::<TestAction>(
+        &state,
+        Metadata::builder()
+            .with_priority_override(Priority::Lowest)
+            .build(),
+    )
+    .unwrap();
+    let mut stored_default_2 =
+        StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
+    let mut stored_default_3 = StoredAction::new::<TestAction>(
+        &state,
+        Metadata::builder()
+            .with_priority_override(Priority::Highest)
+            .build(),
+    )
+    .unwrap();
+
+    // Create two actions in a custom group (simulating share extension group).
+    let share_group = ActionGroup::new("OTHER");
+    let metadata = MetadataBuilder::new()
+        .with_group_override(share_group.clone())
+        .build();
+    let mut stored_other = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
+
+    // Save all actions in a single transaction.
+    conn.tx::<_, _, StashError>(async |tx| {
+        stored_default_1.save(tx).await?;
+        stored_default_2.save(tx).await?;
+        stored_default_3.save(tx).await?;
+        stored_other.save(tx).await?;
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    // Ensure all actions are present.
+    let total = StoredAction::pending_count(&conn).await.unwrap();
+    assert_eq!(total, 4);
+
+    // Delete only the share extension group.
+    let rebase_order = conn
+        .tx::<_, _, StashError>(async |tx| {
+            StoredAction::rebase_action_order(TestAction::GROUP.as_ref(), tx).await
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        rebase_order,
+        vec![
+            stored_default_1.id.unwrap(),
+            stored_default_2.id.unwrap(),
+            stored_default_3.id.unwrap()
+        ]
+    );
+}
+
 async fn new_test_connection() -> Stash {
     _ = set_global_default(
         registry()

@@ -43,6 +43,15 @@ where
     ) -> Result<<T as Action>::RemoteOutput, T::Error> {
         Ok(T::RemoteOutput::default())
     }
+
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), T::Error> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

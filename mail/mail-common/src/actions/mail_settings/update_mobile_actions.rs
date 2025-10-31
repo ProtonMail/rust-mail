@@ -180,6 +180,15 @@ impl Handler for UpdateMobileActionsHandler {
 
         Ok(())
     }
+
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

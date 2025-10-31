@@ -273,6 +273,14 @@ impl Handler for TestHandler {
         );
         Ok(())
     }
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
 
 static EXECUTOR_ID: OnceLock<String> = OnceLock::new();

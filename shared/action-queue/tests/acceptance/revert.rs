@@ -247,6 +247,15 @@ impl Handler for RevertActionHandler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         Err(DefaultError::APIFailure)
     }
+
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -302,5 +311,14 @@ impl Handler for ChainCancelActionHandler {
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         Err(DefaultError::APIFailure)
+    }
+
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
     }
 }

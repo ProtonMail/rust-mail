@@ -8,6 +8,7 @@ use crate::{
     mail_scroller::MailScrollerSource,
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
 };
+use proton_action_queue::queue::Queue;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
@@ -102,6 +103,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
+        let ctx_cloned = ctx.as_arc();
         let task = Some(ctx.spawn(async move {
             let mut tether = stash.connection().await?;
 
@@ -112,6 +114,7 @@ impl SearchScrollerSource {
                 remote_label_id,
                 search,
                 page_size,
+                ctx_cloned.action_queue(),
             )
             .await?;
 
@@ -130,6 +133,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
+        let ctx_cloned = ctx.as_arc();
         let task = Some(ctx.spawn(async move {
             let tether = stash.connection().await?;
 
@@ -144,6 +148,7 @@ impl SearchScrollerSource {
                     time,
                     search,
                     page_size,
+                    ctx_cloned.action_queue(),
                 )
                 .await?;
             }
@@ -162,6 +167,7 @@ impl SearchScrollerSource {
         remote_label_id: LabelId,
         search: SearchOptions,
         page_size: usize,
+        queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
 
@@ -198,7 +204,7 @@ impl SearchScrollerSource {
             messages.push(Message::from_api_metadata(message, tether).await?);
         }
 
-        Self::save_messages(&mut messages, session, tether).await?;
+        Self::save_messages(&mut messages, session, tether, queue).await?;
 
         Ok(messages)
     }
@@ -213,6 +219,7 @@ impl SearchScrollerSource {
         last_time: UnixTimestamp,
         search: SearchOptions,
         page_size: usize,
+        queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_time}"
@@ -256,15 +263,17 @@ impl SearchScrollerSource {
             messages.push(Message::from_api_metadata(message, &tether).await?);
         }
 
-        Self::save_messages(&mut messages, session, &mut tether).await?;
+        Self::save_messages(&mut messages, session, &mut tether, queue).await?;
 
         Ok(messages)
     }
 
+    #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))]
     async fn save_messages(
         messages: &mut [Message],
         api: &Session,
         tether: &mut Tether,
+        queue: &Queue,
     ) -> Result<(), MailContextError> {
         if messages.is_empty() {
             return Ok(());
@@ -295,6 +304,14 @@ impl SearchScrollerSource {
                         .with_save(tx)
                         .await?;
                     display_order = display_order.saturating_add(1);
+                }
+
+                #[cfg(feature = "action_rebase")]
+                if let Err(e) = queue
+                    .rebase_in(proton_action_queue::action::ActionGroup::default(), tx)
+                    .await
+                {
+                    tracing::error!("Failed to rebase: {e}");
                 }
 
                 let last = messages.last().unwrap();

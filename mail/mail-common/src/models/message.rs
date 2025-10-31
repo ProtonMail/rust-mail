@@ -24,6 +24,8 @@ use crate::models::*;
 use crate::{MailContextError, find_in_query};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
+#[cfg(feature = "action_rebase")]
+use proton_action_queue::action::ActionGroup;
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::MultiActionError;
@@ -1323,7 +1325,8 @@ impl Message {
         }
 
         let (_, encrypted_body) =
-            Self::sync_message_and_body(remote_id, ctx.session(), &mut tx).await?;
+            Self::sync_message_and_body(remote_id, ctx.session(), &mut tx, ctx.action_queue())
+                .await?;
 
         trace!("Message successfully downloaded. Decrypting...");
 
@@ -1913,7 +1916,8 @@ impl Message {
         tracing::info!("Force syncing");
 
         let (message, encrypted) =
-            Self::sync_message_and_body(message_id, ctx.session(), tether).await?;
+            Self::sync_message_and_body(message_id, ctx.session(), tether, ctx.action_queue())
+                .await?;
 
         let decrypted = Self::decrypt_message_body(
             ctx,
@@ -1945,11 +1949,13 @@ impl Message {
     ///
     /// Returns error if the message failed to fetch from the server or update the
     /// metadata on the server.
-    #[tracing::instrument(skip(api, tx))]
+    #[tracing::instrument(skip(api, tx, queue))]
+    #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))]
     async fn sync_message_and_body(
         message_id: MessageId,
         api: &Session,
         tx: &mut impl RunTransaction,
+        queue: &Queue,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         info!("Fetching message");
         let message = api.get_message(message_id).await.map(|v| v.message)?;
@@ -1968,6 +1974,11 @@ impl Message {
             body_metadata.save(tx).await.inspect_err(|e| {
                 error!("Failed to save message body metadata: {e:?}");
             })?;
+
+            #[cfg(feature = "action_rebase")]
+            if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
+                tracing::error!("Failed to rebase: {e}")
+            }
 
             Ok(())
         })

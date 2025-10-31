@@ -12,6 +12,9 @@ use crate::{
     models::{Message, MessageScrollData},
 };
 use anyhow::anyhow;
+#[cfg(feature = "action_rebase")]
+use proton_action_queue::action::ActionGroup;
+use proton_action_queue::queue::Queue;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelIdExtension;
@@ -45,6 +48,7 @@ impl RemoteSource for MessageScrollData {
         let stash = ctx.user_stash().clone();
         #[cfg(feature = "prefetch")]
         let arc_ctx = ctx.as_arc();
+        let ctx_cloned = ctx.as_arc();
         let handle = ctx.spawn(async move {
             #[allow(unused_variables)]
             let items = RemoteMessageScrollerSource::sync_first_page(
@@ -56,6 +60,7 @@ impl RemoteSource for MessageScrollData {
                 page_size,
                 order_dir,
                 order_field,
+                ctx_cloned.action_queue(),
             )
             .await?;
 
@@ -125,6 +130,7 @@ impl RemoteSource for MessageScrollData {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
+        let ctx_cloned = ctx.as_arc();
         let task = Some(ctx.spawn(async move {
             let items = RemoteMessageScrollerSource::sync_previous_page(
                 &session,
@@ -137,6 +143,7 @@ impl RemoteSource for MessageScrollData {
                 page_size,
                 order_dir,
                 order_field,
+                ctx_cloned.action_queue(),
             )
             .await?;
 
@@ -174,6 +181,7 @@ impl RemoteMessageScrollerSource {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
+        let ctx_cloned = ctx.as_arc();
         let task = Some(ctx.spawn(async move {
             Self::sync_next_page(
                 &session,
@@ -186,6 +194,7 @@ impl RemoteMessageScrollerSource {
                 page_size,
                 order_dir,
                 order_field,
+                ctx_cloned.action_queue(),
             )
             .await?;
 
@@ -206,6 +215,7 @@ impl RemoteMessageScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
 
@@ -240,6 +250,7 @@ impl RemoteMessageScrollerSource {
             order_field,
             session,
             &mut tether,
+            queue,
         )
         .await
     }
@@ -257,6 +268,7 @@ impl RemoteMessageScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
@@ -307,6 +319,7 @@ impl RemoteMessageScrollerSource {
             order_field,
             session,
             &mut tether,
+            queue,
         )
         .await
     }
@@ -324,6 +337,7 @@ impl RemoteMessageScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!(
             "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
@@ -363,6 +377,7 @@ impl RemoteMessageScrollerSource {
             order_field,
             session,
             &mut tether,
+            queue,
         )
         .await
     }
@@ -377,6 +392,7 @@ impl RemoteMessageScrollerSource {
         order_field: ScrollOrderField,
         api: &Session,
         tether: &mut Tether,
+        #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))] queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         if api_messages.is_empty() {
             return Ok(vec![]);
@@ -412,6 +428,12 @@ impl RemoteMessageScrollerSource {
                         continue;
                     };
                     messages.push(message)
+                }
+
+                // We don't want this to cause failures in the scroller.
+                #[cfg(feature = "action_rebase")]
+                if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
+                    tracing::error!("Failed to rebase changes: {e}")
                 }
 
                 let last = messages.last().unwrap();

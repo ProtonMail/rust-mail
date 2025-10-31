@@ -45,6 +45,46 @@ async fn state_preserved_after_local_change() {
     executor.execute_all().await.unwrap();
 }
 
+#[cfg(feature = "rebase")]
+#[tokio::test]
+async fn rebase_state() {
+    // Check if the action state is persisted after local changes and correctly transmitted
+    // to subsequent follow ups.
+
+    let queue = new_queue(new_factory::<TestAction>(TestActionHandler)).await;
+
+    // Check direct execution.
+    queue
+        .queue_action(TestAction { v: ACTION_VALUE })
+        .await
+        .unwrap();
+
+    queue
+        .stash()
+        .connection()
+        .await
+        .unwrap()
+        .tx(async |tx| tx.ext_insert_value(ACTION_KEY, 100).await)
+        .await
+        .unwrap();
+
+    queue.rebase(TestAction::GROUP).await.unwrap();
+
+    // Check local state is as expected.
+    assert_eq!(
+        queue
+            .stash()
+            .connection()
+            .await
+            .unwrap()
+            .ext_get_value(ACTION_KEY)
+            .await
+            .unwrap()
+            .unwrap(),
+        ACTION_VALUE_AFTER_LOCAL_APPLY
+    );
+}
+
 #[derive(Serialize, Deserialize)]
 struct TestAction {
     v: u32,
@@ -109,5 +149,15 @@ impl Handler for TestActionHandler {
             .await?;
 
         Ok(ACTION_VALUE_FINAL)
+    }
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(tx
+            .ext_insert_value(ACTION_KEY, ACTION_VALUE_AFTER_LOCAL_APPLY)
+            .await?)
     }
 }

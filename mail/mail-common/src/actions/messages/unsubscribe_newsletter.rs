@@ -148,4 +148,13 @@ impl Handler for UnsubscribeNewsletterHandler {
 
         Err(anyhow!("Unsubscribe newsletter via email is not yet implemented.").into())
     }
+
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
