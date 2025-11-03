@@ -1,24 +1,24 @@
-use crate::datatypes::SystemLabelId;
+use crate::datatypes::LocalMessageId;
+use crate::datatypes::mail_notifications::InternalPushNotificationQuickAction;
 use crate::models::Message;
 use crate::{
     MailContextError, MailContextResult, MailUserContext,
     datatypes::mail_notifications::PushNotificationQuickAction,
 };
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Metadata, Priority, Type, WriterGuard,
+    Action, ActionId, Handler, Priority, Type, VersionConverter, VersionConverterError,
+    WriterGuard, deserialize,
 };
-use proton_action_queue::queue::QueuedActionOutput;
-use proton_core_api::services::proton::LabelId;
+use proton_action_queue::queue::Queue;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
-use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
-use stash::stash::Bond;
+use stash::stash::{Bond, Tether};
 use tracing::{info, instrument, warn};
 
-use super::messages::{Move, Read};
+use super::messages::{Move, MoveHandler, Read, ReadHandler};
 use super::{ActionMoveData, MailActionError};
 
 #[instrument(skip(ctx))]
@@ -28,133 +28,117 @@ pub async fn exec(
 ) -> MailContextResult<()> {
     info!("Executing notification action");
 
-    match action {
-        PushNotificationQuickAction::MarkAsRead { remote_id } => {
-            read_msg(ctx, remote_id).await?;
-        }
-        PushNotificationQuickAction::MoveToArchive { remote_id } => {
-            move_msg(ctx, SystemLabel::Archive, remote_id).await?;
-        }
-        PushNotificationQuickAction::MoveToTrash { remote_id } => {
-            move_msg(ctx, SystemLabel::Trash, remote_id).await?;
-        }
+    let action: InternalPushNotificationQuickAction = action.into();
+
+    if let Err(err) = exec_locally(ctx, &action).await {
+        warn!("Failed to execute {action:?} locally. Queuing fallback operation: {err}");
+
+        ctx.user_context()
+            .queue()
+            .queue_action(PushNotificationAction {
+                action,
+                local_id: None,
+            })
+            .await?;
     }
 
     Ok(())
 }
 
-async fn read_msg_local(ctx: &MailUserContext, msg_id: MessageId) -> MailContextResult<()> {
-    let tether = ctx.user_stash().connection().await?;
-    let local_id = Message::remote_id_counterpart(msg_id.clone(), &tether)
-        .await?
-        .ok_or_else(|| MailContextError::Other(anyhow::anyhow!("Message is not found")))?;
-    queue_action_with_highest_priority(ctx, Read::new(std::iter::once(local_id))).await?;
-    Ok(())
-}
-
-#[instrument(skip_all)]
-async fn read_msg(ctx: &MailUserContext, msg_id: MessageId) -> MailContextResult<()> {
-    if let Err(e) = read_msg_local(ctx, msg_id.clone()).await {
-        warn!("Failed to mark as read locally. Queuing fallback operation: {e}");
-
-        queue_action_with_highest_priority(
-            ctx,
-            PushNotificationAction {
-                action: PushNotificationQuickAction::MarkAsRead { remote_id: msg_id },
-            },
-        )
-        .await?;
-    }
-    Ok(())
-}
-
-async fn move_msg_local(
+async fn exec_locally(
     ctx: &MailUserContext,
-    msg_id: MessageId,
-    label: SystemLabel,
+    action: &InternalPushNotificationQuickAction,
 ) -> MailContextResult<()> {
     let tether = ctx.user_stash().connection().await?;
-
-    let local_id = Message::remote_id_counterpart(msg_id.clone(), &tether)
+    let remote_id = action.remote_id();
+    let local_id = Message::remote_id_counterpart(remote_id.clone(), &tether)
         .await?
         .ok_or_else(|| MailContextError::Other(anyhow::anyhow!("Message is not found")))?;
 
+    match action {
+        InternalPushNotificationQuickAction::MarkAsRead { remote_id: _ } => {
+            execute_action_immediately(ctx, Read::single(local_id)).await?;
+        }
+        InternalPushNotificationQuickAction::MoveToLabel {
+            remote_id: _,
+            label,
+        } => {
+            if let Some(action) = get_action_move_data(*label, local_id, &tether).await? {
+                execute_action_immediately(ctx, Move(action)).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn get_action_move_data(
+    label: SystemLabel,
+    local_id: LocalMessageId,
+    tether: &Tether,
+) -> Result<Option<ActionMoveData<Message>>, MailActionError> {
     // The likelihood of this failing is extremely low since system labels are
     // pre-created ahead of time.
     let label_id = label
-        .local_id(&tether)
+        .local_id(tether)
         .await?
         .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(label.remote_id()))?;
 
-    if let Some(action) = ActionMoveData::new(&tether, label_id, [local_id]).await? {
-        queue_action_with_highest_priority(ctx, Move(action)).await?;
-    }
-
-    Ok(())
+    Ok(ActionMoveData::new(tether, label_id, [local_id]).await?)
 }
 
-#[instrument(skip_all)]
-async fn move_msg(
-    ctx: &MailUserContext,
-    label: SystemLabel,
-    msg_id: MessageId,
-) -> MailContextResult<()> {
-    if let Err(e) = move_msg_local(ctx, msg_id.clone(), label).await {
-        warn!("Failed to move message locally. Queuing fallback operation: {e}");
-        if label == SystemLabel::Archive {
-            queue_action_with_highest_priority(
-                ctx,
-                PushNotificationAction {
-                    action: PushNotificationQuickAction::MoveToArchive { remote_id: msg_id },
-                },
-            )
-            .await?;
-        } else if label == SystemLabel::Trash {
-            queue_action_with_highest_priority(
-                ctx,
-                PushNotificationAction {
-                    action: PushNotificationQuickAction::MoveToTrash { remote_id: msg_id },
-                },
-            )
-            .await?;
-        } else {
-            warn!("Received invalid system label: {label}");
-            return Ok(());
-        }
-    }
-    Ok(())
-}
-
-async fn queue_action_with_highest_priority<T>(
-    ctx: &MailUserContext,
-    action: T,
-) -> MailContextResult<QueuedActionOutput<T>>
+async fn execute_action_immediately<T>(ctx: &MailUserContext, action: T) -> MailContextResult<()>
 where
     T: Action<Error = MailActionError>,
 {
-    Ok(ctx
-        .user_context()
-        .queue()
-        .queue_action_with_metadata(
-            action,
-            Metadata::builder()
-                .with_priority_override(Priority::Highest)
-                .build(),
-        )
-        .await?)
+    let stash = ctx.user_stash().clone();
+
+    let queue = Queue::new(stash).await?;
+    queue.queue_action(action).await?;
+
+    queue.new_executor().execute_all().await?;
+
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PushNotificationAction {
+    action: InternalPushNotificationQuickAction,
+    local_id: Option<LocalMessageId>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct V0PushNotificationAction {
     action: PushNotificationQuickAction,
+}
+
+pub struct PushNotificationActionConverter;
+impl VersionConverter for PushNotificationActionConverter {
+    type Output = PushNotificationAction;
+
+    fn convert(
+        old_version: u32,
+        current_version: u32,
+        data: &[u8],
+    ) -> proton_action_queue::action::FactoryResult<Self::Output> {
+        if !(old_version <= 1 && current_version == 1) {
+            return Err(VersionConverterError::InvalidVersion(current_version).into());
+        }
+        let v0 = deserialize::<V0PushNotificationAction>(data)?;
+        let internal: InternalPushNotificationQuickAction = v0.action.into();
+
+        Ok(PushNotificationAction {
+            action: internal,
+            local_id: None,
+        })
+    }
 }
 
 impl Action for PushNotificationAction {
     const TYPE: Type = Type("push_notification_quick_action");
-    const VERSION: u32 = 0;
+    const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Highest;
 
-    type VersionConverter = DefaultVersionConverter<Self>;
+    type VersionConverter = PushNotificationActionConverter;
     type Handler = PushNotificationActionHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
@@ -170,19 +154,72 @@ impl Handler for PushNotificationActionHandler {
 
     async fn apply_local(
         &self,
-        _: ActionId,
-        _: &mut Self::Action,
-        _: &Bond<'_>,
+        action_id: ActionId,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
     ) -> Result<(), MailActionError> {
+        // We still try to apply locally, because there might be a scenario,
+        // where the message was synced in between of the push notification quick action execution
+        // and queue processing.
+        let remote_id = action.action.remote_id().clone();
+        let Some(local_id) = Message::remote_id_counterpart(remote_id, tx).await? else {
+            return Ok(());
+        };
+        action.local_id = Some(local_id);
+        match &action.action {
+            InternalPushNotificationQuickAction::MarkAsRead { remote_id: _ } => {
+                ReadHandler {
+                    api: self.api.clone(),
+                }
+                .apply_local(action_id, &mut Read::single(local_id), tx)
+                .await?;
+            }
+            InternalPushNotificationQuickAction::MoveToLabel {
+                remote_id: _,
+                label,
+            } => {
+                if let Some(action) = get_action_move_data(*label, local_id, tx).await? {
+                    MoveHandler {
+                        api: self.api.clone(),
+                    }
+                    .apply_local(action_id, &mut Move(action), tx)
+                    .await?;
+                }
+            }
+        }
         Ok(())
     }
 
     async fn revert_local(
         &self,
-        _: ActionId,
-        _: &mut Self::Action,
-        _: &Bond<'_>,
+        action_id: ActionId,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
     ) -> Result<(), MailActionError> {
+        let Some(local_id) = action.local_id else {
+            return Ok(());
+        };
+        match &action.action {
+            InternalPushNotificationQuickAction::MarkAsRead { remote_id: _ } => {
+                ReadHandler {
+                    api: self.api.clone(),
+                }
+                .revert_local(action_id, &mut Read::single(local_id), tx)
+                .await?;
+            }
+            InternalPushNotificationQuickAction::MoveToLabel {
+                remote_id: _,
+                label,
+            } => {
+                if let Some(action) = get_action_move_data(*label, local_id, tx).await? {
+                    MoveHandler {
+                        api: self.api.clone(),
+                    }
+                    .revert_local(action_id, &mut Move(action), tx)
+                    .await?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -193,22 +230,17 @@ impl Handler for PushNotificationActionHandler {
         _: WriterGuard<'_>,
     ) -> Result<(), MailActionError> {
         match &action.action {
-            PushNotificationQuickAction::MarkAsRead { remote_id } => {
+            InternalPushNotificationQuickAction::MarkAsRead { remote_id } => {
                 tracing::info!("Marking {remote_id:?} as read from push notification quick action");
                 self.api.put_messages_read(vec![remote_id.clone()]).await?;
             }
-            PushNotificationQuickAction::MoveToArchive { remote_id } => {
+            InternalPushNotificationQuickAction::MoveToLabel { remote_id, label } => {
+                let label_id = label.label_id();
                 tracing::info!(
-                    "Moving {remote_id:?} to Archive from push notification quick action"
+                    "Moving {remote_id:?} to {label:?} from push notification quick action"
                 );
                 self.api
-                    .put_messages_label(vec![remote_id.clone()], LabelId::archive(), None)
-                    .await?;
-            }
-            PushNotificationQuickAction::MoveToTrash { remote_id } => {
-                tracing::info!("Moving {remote_id:?} to Trash from push notification quick action");
-                self.api
-                    .put_messages_label(vec![remote_id.clone()], LabelId::trash(), None)
+                    .put_messages_label(vec![remote_id.clone()], label_id, None)
                     .await?;
             }
         }

@@ -22,6 +22,10 @@ impl Read {
     pub fn new(message_ids: impl IntoIterator<Item = LocalMessageId>) -> Self {
         Self(GenericActionData::new(message_ids))
     }
+
+    pub fn single(message_id: LocalMessageId) -> Self {
+        Self::new(std::iter::once(message_id))
+    }
 }
 
 impl Action for Read {
