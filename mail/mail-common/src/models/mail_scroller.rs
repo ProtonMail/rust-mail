@@ -1016,13 +1016,12 @@ impl<T: ScrollData> CachedScrollData<T> {
     }
 
     pub async fn scroll_data_end(&self, tether: &Tether) -> Result<Option<T>, StashError> {
-        let cursor_count = self.end.seen_count(tether).await?.saturating_sub(1);
+        let cursor_count = self.synced_count(tether).await?.saturating_sub(1);
         let last = self
             .end
             .visible_elements_limit(Some(1), Some(cursor_count), true, tether)
             .await?
             .pop();
-
         match last {
             Some(last) => Ok(T::into_scroll_data(
                 self.local_label_id,
