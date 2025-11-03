@@ -19,7 +19,7 @@ use proton_mail_common::datatypes::{
     SystemLabelId,
     labels::{ScrollOrderDir, ScrollOrderField},
 };
-use proton_mail_common::models::ConversationLabel;
+use proton_mail_common::models::{CachedScrollData, ConversationLabel};
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
     scroller::{
@@ -1234,89 +1234,6 @@ async fn test_conversation_mail_scroller_fetch_new() {
     assert_eq!(test_scroller.items().len(), 2);
 }
 
-#[function_name::named]
-async fn setup_api_sync_previous_page(
-    ctx: &MailTestContext,
-    first_id: &str,
-    conversations: Option<Vec<ApiConversation>>,
-    label: &LabelId,
-    expect: impl Into<Times>,
-) {
-    let desc = ScrollOrderDir::for_label(label)
-        .reverse()
-        .as_api_desc()
-        .unwrap();
-    Mock::given(method("GET"))
-        .and(path("/api/mail/v4/conversations"))
-        .and(query_param_contains("AnchorID", first_id))
-        .and(query_param_contains("Desc", (desc as u8).to_string()))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
-                conversations: conversations.unwrap_or_default(),
-                stale: false,
-                total: 0,
-            }),
-        )
-        .expect(expect)
-        .named(function_name!())
-        .mount(ctx.mock_server())
-        .await;
-}
-
-fn create_api_conversation_page(
-    range: impl Into<Range<usize>>,
-    starting_display_order: u64,
-) -> Vec<ApiConversation> {
-    let params = TestParams::default_basic();
-    let test_conversation = params.conversations.clone().pop().unwrap();
-    // Conversations are returned and displayed in reversed order
-    range
-        .into()
-        .rev()
-        .map(|i| {
-            let order = starting_display_order + i as u64;
-            let mut new = test_conversation.clone();
-            new.id = format!("{}_{}", new.id, order).into();
-            new.order = order;
-            new.context_time = Some(order);
-            new
-        })
-        .collect_vec()
-}
-
-async fn setup_api_conversation_pages(
-    ctx: &MailTestContext,
-    page_size: usize,
-    starting_display_order: u64,
-    label: &LabelId,
-    empty_pages_requests: impl Into<Times>,
-) -> TestParams {
-    ctx.mock_ping_success().await;
-    let mut params = TestParams::default_basic();
-    // Conversations are returned and displayed in reversed order
-    let second_page = create_api_conversation_page(0..page_size, starting_display_order);
-    let first_page =
-        create_api_conversation_page(page_size..(page_size * 2), starting_display_order);
-    let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
-    let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
-
-    mock_get_conversations_page(ctx, second_page, &first_page_last_id, label, 1_u64).await;
-    // last page is empty
-    mock_get_conversations_page(
-        ctx,
-        vec![],
-        &second_page_last_id,
-        label,
-        empty_pages_requests,
-    )
-    .await;
-    ctx.mock_get_conversations(first_page, 1_u64).await;
-
-    // Do not download any conv on init
-    params.conversations = vec![];
-    params
-}
-
 #[tokio::test]
 async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
     let ctx = MailTestContext::new().await;
@@ -1847,6 +1764,185 @@ async fn test_conversation_mail_scroller_change_include() {
         .await;
 
     assert_eq!(mailbox.label_id(), almost_all_mail_local_id);
+}
+
+#[tokio::test]
+async fn test_conversation_mail_scroller_end_cursor_is_not_pointing_to_any_element() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    // Set up cached data
+    let remote_label_id = SystemLabel::Inbox.remote_id();
+    let page_size = 5;
+    let mut data = hash_map! {
+        vec![remote_label_id.as_str()]: test_conversations(1, 100),
+        vec!["rid2"]: test_conversations(50, 0),
+    };
+    data.save_to_database(&mut tether).await;
+
+    // We should not get a previous page request!
+    setup_api_sync_previous_page(&ctx, "myconv_100", None, &remote_label_id, 0).await;
+    // We will only run first page requests
+    ctx.mock_get_conversations(vec![], 3).await;
+    ctx.catch_all().await;
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 10;
+    let mut cursor = ConversationScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::All)
+        .order_dir(ScrollOrderDir::for_label(&remote_label_id))
+        .order_field(ScrollOrderField::for_label(&remote_label_id))
+        .conversation_time(0.into())
+        .snooze_time(0.into())
+        .display_order(10) // we need to base our cursor reach on the display order
+        .remote_conversation_id("this_does_not_exist".into())
+        .build();
+    tether
+        .tx(async |bond| {
+            counters.save(bond).await?;
+            cursor.save(bond).await
+        })
+        .await
+        .unwrap();
+
+    let cached_cursor = CachedScrollData::<ConversationScrollData>::new(
+        local_label_id,
+        ReadFilter::All,
+        page_size,
+        &tether,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let end_cursor = cached_cursor.load_end_cursor(&tether).await.unwrap();
+    assert_eq!(
+        end_cursor.remote_conversation_id,
+        "this_does_not_exist".into()
+    );
+    let end_element = cached_cursor
+        .scroll_data_end(&tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(end_element.remote_conversation_id, "myconv_100".into());
+
+    let mut test_scroller =
+        TestScroller::conversations_instant(&user_ctx, local_label_id, page_size)
+            .await
+            .unwrap();
+
+    // Here cursor should no longer exist
+    let cursor = CachedScrollData::<ConversationScrollData>::new(
+        local_label_id,
+        ReadFilter::All,
+        page_size,
+        &tether,
+    )
+    .await
+    .unwrap();
+
+    assert!(cursor.is_none());
+
+    // Besides the fact the cursor existed and first element still exists
+    // we will not request next and previous pages and instead it will request first page
+    // since the end cursor is not pointing to any element
+    test_scroller.fetch_more().unwrap();
+
+    // Return cashed element instantly
+    test_scroller
+        .match_next_update(TestUpdate::Append { items: 1 })
+        .await;
+
+    // The first page request is running in background
+    // but since it has no items it will not trigger refresh
+    // Lets fetch more again to see that we will not get any items in the update
+    test_scroller.fetch_more().unwrap();
+    test_scroller.match_next_update(TestUpdate::None).await;
+}
+
+#[function_name::named]
+async fn setup_api_sync_previous_page(
+    ctx: &MailTestContext,
+    first_id: &str,
+    conversations: Option<Vec<ApiConversation>>,
+    label: &LabelId,
+    expect: impl Into<Times>,
+) {
+    let desc = ScrollOrderDir::for_label(label)
+        .reverse()
+        .as_api_desc()
+        .unwrap();
+    Mock::given(method("GET"))
+        .and(path("/api/mail/v4/conversations"))
+        .and(query_param_contains("AnchorID", first_id))
+        .and(query_param_contains("Desc", (desc as u8).to_string()))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
+                conversations: conversations.unwrap_or_default(),
+                stale: false,
+                total: 0,
+            }),
+        )
+        .expect(expect)
+        .named(function_name!())
+        .mount(ctx.mock_server())
+        .await;
+}
+
+fn create_api_conversation_page(
+    range: impl Into<Range<usize>>,
+    starting_display_order: u64,
+) -> Vec<ApiConversation> {
+    let params = TestParams::default_basic();
+    let test_conversation = params.conversations.clone().pop().unwrap();
+    // Conversations are returned and displayed in reversed order
+    range
+        .into()
+        .rev()
+        .map(|i| {
+            let order = starting_display_order + i as u64;
+            let mut new = test_conversation.clone();
+            new.id = format!("{}_{}", new.id, order).into();
+            new.order = order;
+            new.context_time = Some(order);
+            new
+        })
+        .collect_vec()
+}
+
+async fn setup_api_conversation_pages(
+    ctx: &MailTestContext,
+    page_size: usize,
+    starting_display_order: u64,
+    label: &LabelId,
+    empty_pages_requests: impl Into<Times>,
+) -> TestParams {
+    ctx.mock_ping_success().await;
+    let mut params = TestParams::default_basic();
+    // Conversations are returned and displayed in reversed order
+    let second_page = create_api_conversation_page(0..page_size, starting_display_order);
+    let first_page =
+        create_api_conversation_page(page_size..(page_size * 2), starting_display_order);
+    let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
+    let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
+
+    mock_get_conversations_page(ctx, second_page, &first_page_last_id, label, 1_u64).await;
+    // last page is empty
+    mock_get_conversations_page(
+        ctx,
+        vec![],
+        &second_page_last_id,
+        label,
+        empty_pages_requests,
+    )
+    .await;
+    ctx.mock_get_conversations(first_page, 1_u64).await;
+
+    // Do not download any conv on init
+    params.conversations = vec![];
+    params
 }
 
 #[function_name::named]
