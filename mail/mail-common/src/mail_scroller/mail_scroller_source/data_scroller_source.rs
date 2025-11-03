@@ -73,14 +73,17 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 if is_online { "online" } else { "offline" }
             );
 
-            if let Some(_end) = scroller.scroll_data_end(&tether).await?
-                && let Some(scroll_data) = scroller.scroll_data_begin(&tether).await?
+            let end_cursor = scroller.load_end_cursor(&tether).await?;
+
+            if let Some(ending_element) = scroller.scroll_data_end(&tether).await?
+                && let Some(beggining_element) = scroller.scroll_data_begin(&tether).await?
+                && T::item_id(&ending_element) == T::item_id(&end_cursor)
             {
                 debug!("Syncing previous page in background");
 
                 self.sync_previous_page(
                     ctx,
-                    &scroll_data,
+                    &beggining_element,
                     remote_label_id.clone(),
                     self.invalidate.clone(),
                 )
@@ -92,7 +95,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 {
                     debug!("Syncing next page in a task");
 
-                    self.sync_next_page(ctx, &scroll_data, remote_label_id)
+                    self.sync_next_page(ctx, &ending_element, remote_label_id)
                         .await?
                 } else {
                     None
@@ -102,10 +105,8 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             } else {
                 debug!("Cursor points to empty scroll data, will sync first page instead");
 
-                let scroll_data = scroller.end_cursor(&tether).await?;
-
                 tether
-                    .tx(async |bond| scroll_data.delete(bond).await)
+                    .tx(async |bond| end_cursor.delete(bond).await)
                     .await?;
             };
         }
@@ -427,7 +428,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 );
 
                 let task = if should_load_more_from_remote {
-                    let cp = scroller.end_cursor(&tether).await?;
+                    let cp = scroller.load_end_cursor(&tether).await?;
                     self.sync_next_page(ctx, &cp, label.remote_id.clone().unwrap())
                         .await?
                 } else {
@@ -538,7 +539,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         if let Some(scroller) = self.state.online() {
             tracing::info!("Clearing cache for label {}", self.local_label_id);
             let mut tether = ctx.user_stash().connection().await?;
-            let cursor = scroller.end_cursor(&tether).await?;
+            let cursor = scroller.load_end_cursor(&tether).await?;
             tether.tx(async |tx| cursor.delete(tx).await).await?;
         }
         self.clear_state();

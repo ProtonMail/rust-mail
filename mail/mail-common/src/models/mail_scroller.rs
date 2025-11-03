@@ -7,6 +7,7 @@ use crate::mail_scroller::MailScrollerItem;
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
 use anyhow::anyhow;
 use indoc::formatdoc;
+use proton_core_api::services::proton::ProtonIdMarker;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::prelude::{ConversationId, MessageId};
@@ -26,6 +27,7 @@ where
 {
     type Model: ModelExtension;
     type Item: MailScrollerItem;
+    type RemoteId: ProtonIdMarker;
 
     fn find_with_key(
         local_label_id: LocalLabelId,
@@ -42,6 +44,8 @@ where
             .await
         }
     }
+
+    fn item_id(&self) -> Self::RemoteId;
 
     fn total(
         local_label_id: LocalLabelId,
@@ -161,6 +165,11 @@ impl From<MessageScrollData> for ScrollCursor<MessageScrollData> {
 impl ScrollData for MessageScrollData {
     type Model = Message;
     type Item = Message;
+    type RemoteId = MessageId;
+
+    fn item_id(&self) -> MessageId {
+        self.remote_message_id.clone()
+    }
 
     async fn total(
         local_label_id: LocalLabelId,
@@ -428,6 +437,11 @@ impl From<ConversationScrollData> for ScrollCursor<ConversationScrollData> {
 impl ScrollData for ConversationScrollData {
     type Model = Conversation;
     type Item = ContextualConversation;
+    type RemoteId = ConversationId;
+
+    fn item_id(&self) -> ConversationId {
+        self.remote_conversation_id.clone()
+    }
 
     async fn total(
         local_label_id: LocalLabelId,
@@ -977,7 +991,7 @@ impl<T: ScrollData> CachedScrollData<T> {
     /// further to the end of the downloaded list of elements.
     ///
     pub async fn update(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.end = self.end_cursor(tether).await?.into();
+        self.end = self.load_end_cursor(tether).await?.into();
 
         Ok(())
     }
@@ -1023,7 +1037,7 @@ impl<T: ScrollData> CachedScrollData<T> {
 
     /// Get the underlying "data" to which the end cursor points to.
     ///
-    pub async fn end_cursor(&self, tether: &Tether) -> Result<T, StashError> {
+    pub async fn load_end_cursor(&self, tether: &Tether) -> Result<T, StashError> {
         // Due to nature of primary key of the underlying table
         // It does not really matter if we take end or cursor as
         // they should be the same however `end` var is just shorter.
