@@ -977,7 +977,7 @@ impl<T: ScrollData> CachedScrollData<T> {
     /// further to the end of the downloaded list of elements.
     ///
     pub async fn update(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.end = self.scroll_data_end(tether).await?.into();
+        self.end = self.end_cursor(tether).await?.into();
 
         Ok(())
     }
@@ -1001,9 +1001,29 @@ impl<T: ScrollData> CachedScrollData<T> {
         }
     }
 
+    pub async fn scroll_data_end(&self, tether: &Tether) -> Result<Option<T>, StashError> {
+        let cursor_count = self.end.seen_count(tether).await?.saturating_sub(1);
+        let last = self
+            .end
+            .visible_elements_limit(Some(1), Some(cursor_count), true, tether)
+            .await?
+            .pop();
+
+        match last {
+            Some(last) => Ok(T::into_scroll_data(
+                self.local_label_id,
+                self.unread,
+                last,
+                self.order_dir,
+                self.order_field,
+            )),
+            None => Ok(None),
+        }
+    }
+
     /// Get the underlying "data" to which the end cursor points to.
     ///
-    pub async fn scroll_data_end(&self, tether: &Tether) -> Result<T, StashError> {
+    pub async fn end_cursor(&self, tether: &Tether) -> Result<T, StashError> {
         // Due to nature of primary key of the underlying table
         // It does not really matter if we take end or cursor as
         // they should be the same however `end` var is just shorter.
