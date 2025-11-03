@@ -101,13 +101,13 @@ impl MailUserContext {
                             match msg {
                                 BroadcastMessage::Queued(_, metadata) | BroadcastMessage::Success(_, metadata) => {
                                     if metadata.action_group == ActionGroup::default().as_ref() {
-                                        interval.reset();
+                                        //interval.reset();
                                         if metadata.action_type == EventPoll::TYPE.as_ref() {
                                             continue;
                                         }
-                                        if let Err(e) = ctx.user_context().cancel_event_poll().await {
-                                            tracing::error!("Failed to cancel queued event poll: {e}");
-                                        }
+                                        //if let Err(e) = ctx.user_context().cancel_event_poll().await {
+                                        //    tracing::error!("Failed to cancel queued event poll: {e}");
+                                        //}
                                         continue;
                                     } else {
                                         continue;
