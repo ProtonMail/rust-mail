@@ -689,6 +689,32 @@ impl Queue {
         }
         Ok(())
     }
+
+    #[cfg(feature = "rebase")]
+    pub async fn rebase(&self, action_group: ActionGroup) -> QueuedResult<()> {
+        let mut tether = self.shared.stash.connection().await?;
+        tether
+            .tx(async |tx| self.rebase_in(action_group, tx).await)
+            .await
+    }
+
+    #[cfg(feature = "rebase")]
+    pub async fn rebase_in(&self, action_group: ActionGroup, tx: &Bond<'_>) -> QueuedResult<()> {
+        let ids = StoredAction::rebase_action_order(action_group.as_ref(), tx).await?;
+        if ids.is_empty() {
+            return Ok(());
+        }
+
+        for id in ids {
+            let action = StoredAction::load(id, tx)
+                .await?
+                .ok_or(QueuedError::ActionNotFound(id))?;
+            let (mut decoded, meta) = decode_action(&self.shared.factory, action.clone())?;
+            decoded.rebase(action, meta, tx).await?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -726,6 +752,14 @@ pub(crate) trait ErasedQueuedAction: Send {
         &'a mut self,
         tx: &'a Bond,
         metadata: Arc<QueuedMetadata>,
+    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
+
+    #[cfg_attr(not(feature = "rebase"), allow(dead_code))]
+    fn rebase<'a>(
+        &'a mut self,
+        action: StoredAction,
+        metadata: Arc<QueuedMetadata>,
+        tx: &'a Bond,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 }
 
@@ -789,6 +823,34 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
                     })
                     .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
 
+                Ok(())
+            }
+            .instrument(span),
+        )
+    }
+
+    fn rebase<'a>(
+        &'a mut self,
+        mut action: StoredAction,
+        metadata: Arc<QueuedMetadata>,
+        tx: &'a Bond,
+    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
+        let span = tracing::debug_span!("queue::rebase", id=self.id.0, type=T::TYPE.0);
+        Box::pin(
+            async move {
+                tracing::info!("Rebasing local state");
+                self.handler
+                    .rebase_local(self.id, &mut self.action, tx)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to rebase local changes: {e:?}");
+                        QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata)
+                    })?;
+
+                action
+                    .set_action_state(&self.action)
+                    .map_err(|e| StashError::Custom(anyhow::Error::new(e)))?;
+                action.save(tx).await?;
                 Ok(())
             }
             .instrument(span),

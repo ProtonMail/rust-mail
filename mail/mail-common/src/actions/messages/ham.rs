@@ -109,4 +109,15 @@ impl Handler for HamHandler {
 
         Ok(())
     }
+
+    async fn rebase_local(
+        &self,
+        this_id: ActionId,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        //TODO(ET-5183): Test me!
+        self.apply_local(this_id, action, tx).await?;
+        Ok(())
+    }
 }

@@ -300,6 +300,15 @@ impl Handler for SendHandler {
 
         r
     }
+
+    async fn rebase_local(
+        &self,
+        _: ActionId,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
+    }
 }
 
 const SEND_DELIVERY_DELTA_INTERVAL: Duration = Duration::from_secs(60);

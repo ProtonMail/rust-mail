@@ -11,6 +11,9 @@ use crate::{
     models::{Conversation, ConversationScrollData},
 };
 use anyhow::anyhow;
+#[cfg(feature = "action_rebase")]
+use proton_action_queue::action::ActionGroup;
+use proton_action_queue::queue::Queue;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_mail_api::services::proton::{
@@ -46,6 +49,7 @@ impl RemoteSource for ConversationScrollData {
         #[cfg(feature = "prefetch")]
         let arc_ctx = ctx.as_arc();
 
+        let ctx_cloned = ctx.as_arc();
         let handle = ctx.spawn(async move {
             #[allow(unused_variables)]
             let items = RemoteConversationScrollerSource::sync_first_page(
@@ -57,6 +61,7 @@ impl RemoteSource for ConversationScrollData {
                 page_size,
                 order_dir,
                 order_field,
+                ctx_cloned.action_queue(),
             )
             .await?;
 
@@ -127,6 +132,7 @@ impl RemoteSource for ConversationScrollData {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
+        let ctx_cloned = ctx.as_arc();
         let task = Some(ctx.spawn(async move {
             let items = RemoteConversationScrollerSource::sync_previous_page(
                 &session,
@@ -139,6 +145,7 @@ impl RemoteSource for ConversationScrollData {
                 page_size,
                 order_dir,
                 order_field,
+                ctx_cloned.action_queue(),
             )
             .await?;
 
@@ -176,6 +183,7 @@ impl RemoteConversationScrollerSource {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
+        let ctx_cloned = ctx.as_arc();
         let task = Some(ctx.spawn(async move {
             Self::sync_next_page(
                 &session,
@@ -188,6 +196,7 @@ impl RemoteConversationScrollerSource {
                 page_size,
                 order_dir,
                 order_field,
+                ctx_cloned.action_queue(),
             )
             .await?;
 
@@ -208,6 +217,7 @@ impl RemoteConversationScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        queue: &Queue,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
 
@@ -252,6 +262,7 @@ impl RemoteConversationScrollerSource {
             order_field,
             session,
             &mut tether,
+            queue,
         )
         .await?;
 
@@ -274,6 +285,7 @@ impl RemoteConversationScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        queue: &Queue,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!(
             "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
@@ -322,6 +334,7 @@ impl RemoteConversationScrollerSource {
             order_field,
             session,
             &mut tether,
+            queue,
         )
         .await?;
 
@@ -344,6 +357,7 @@ impl RemoteConversationScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        queue: &Queue,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
@@ -405,6 +419,7 @@ impl RemoteConversationScrollerSource {
             order_field,
             session,
             &mut tether,
+            queue,
         )
         .await?;
 
@@ -453,6 +468,7 @@ impl RemoteConversationScrollerSource {
         order_field: ScrollOrderField,
         api: &Session,
         tether: &mut Tether,
+        #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))] queue: &Queue,
     ) -> Result<(), MailContextError> {
         // Resolve missing dependencies.
         let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
@@ -472,6 +488,12 @@ impl RemoteConversationScrollerSource {
                     conversation
                         .create_or_get_local(remote_label_id, tx)
                         .await?;
+                }
+
+                // We don't want this to cause failures in the scroller.
+                #[cfg(feature = "action_rebase")]
+                if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
+                    tracing::error!("Failed to rebase changes: {e}")
                 }
 
                 let Some((last, label)) = conversations
