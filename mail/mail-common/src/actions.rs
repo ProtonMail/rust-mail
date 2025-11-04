@@ -459,6 +459,13 @@ pub fn filter_responses_by_codes<T: ProtonIdMarker>(
         .collect::<Vec<_>>()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum MoveRemoteStrategy {
+    #[default]
+    Enabled,
+    Disabled,
+}
+
 /// Action which moves target items between two labels.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActionMoveData<T>
@@ -471,6 +478,9 @@ where
     // These 2 exist solely for the revert and undo
     marked_read: Vec<LocalMessageId>,
     removed_labels: Vec<LabelPair<T::IdType>>,
+
+    #[serde(default)]
+    remote_strategy: MoveRemoteStrategy,
 }
 
 impl<T> ActionMoveData<T>
@@ -485,6 +495,7 @@ where
                 destination: Default::default(),
                 marked_read: Default::default(),
                 removed_labels: Default::default(),
+                remote_strategy: Default::default(),
             },
         )
     }
@@ -518,7 +529,12 @@ where
             destination: Some(destination),
             marked_read: vec![],
             removed_labels: vec![],
+            remote_strategy: MoveRemoteStrategy::Enabled,
         }))
+    }
+
+    pub fn disable_remote(&mut self) {
+        self.remote_strategy = MoveRemoteStrategy::Disabled;
     }
 
     async fn move_to_async(&mut self, bond: &Bond<'_>) -> anyhow::Result<()> {
@@ -610,11 +626,14 @@ where
         api: &Session,
         mut guard: WriterGuard<'_>,
     ) -> Result<(), MailActionError> {
-        let tether = guard.tether();
-
         let Some(dest_label) = self.destination else {
             return Ok(());
         };
+        if self.remote_strategy == MoveRemoteStrategy::Disabled {
+            return Ok(());
+        }
+
+        let tether = guard.tether();
 
         let dest_label = Label::resolve_remote_label_id(dest_label, tether).await?;
         let mut all_remote_ids = Vec::new();
@@ -644,6 +663,7 @@ where
                 sources,
                 marked_read: vec![],
                 removed_labels: vec![],
+                remote_strategy: self.remote_strategy,
             }
         })
     }
@@ -726,6 +746,7 @@ where
                     sources,
                     marked_read: vec![],
                     removed_labels: vec![],
+                    remote_strategy: MoveRemoteStrategy::Enabled,
                 })
             }
 
