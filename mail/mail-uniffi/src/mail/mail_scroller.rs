@@ -1,4 +1,3 @@
-use super::Mailbox;
 use crate::core::datatypes::Id;
 use crate::errors::MailScrollerError;
 use crate::mail::datatypes::{Conversation, Message};
@@ -360,7 +359,6 @@ impl From<IncludeSwitch> for RealIncludeSwitch {
 
 #[derive(uniffi::Object)]
 pub struct ConversationScroller {
-    mailbox: Arc<Mailbox>,
     scroller: Arc<RealMailScroller<RealContextualConversation>>,
     handle: Arc<WatchHandle>,
 }
@@ -368,12 +366,10 @@ pub struct ConversationScroller {
 impl ConversationScroller {
     #[must_use]
     pub(crate) fn new(
-        mailbox: Arc<Mailbox>,
         scroller: RealMailScroller<RealContextualConversation>,
         handle: Arc<WatchHandle>,
     ) -> Self {
         Self {
-            mailbox,
             scroller: Arc::new(scroller),
             handle,
         }
@@ -442,7 +438,7 @@ impl ConversationScroller {
         include: IncludeSwitch,
     ) -> Result<(), MailScrollerError> {
         self.scroller
-            .change_include(self.mailbox.get(), include.into())
+            .change_include(include.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -502,20 +498,14 @@ impl ConversationScroller {
 
 #[derive(uniffi::Object)]
 pub struct MessageScroller {
-    mailbox: Arc<Mailbox>,
     scroller: Arc<RealMailScroller<RealMessage>>,
     handle: Arc<WatchHandle>,
 }
 
 impl MessageScroller {
     #[must_use]
-    pub(crate) fn new(
-        mailbox: Arc<Mailbox>,
-        scroller: RealMailScroller<RealMessage>,
-        handle: Arc<WatchHandle>,
-    ) -> Self {
+    pub(crate) fn new(scroller: RealMailScroller<RealMessage>, handle: Arc<WatchHandle>) -> Self {
         Self {
-            mailbox,
             scroller: Arc::new(scroller),
             handle,
         }
@@ -576,7 +566,7 @@ impl MessageScroller {
         include: IncludeSwitch,
     ) -> Result<(), MailScrollerError> {
         self.scroller
-            .change_include(self.mailbox.get(), include.into())
+            .change_include(include.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -645,20 +635,14 @@ impl MessageScroller {
 
 #[derive(uniffi::Object)]
 pub struct SearchScroller {
-    mailbox: Arc<Mailbox>,
     scroller: Arc<RealMailScroller<RealMessage>>,
     handle: Arc<WatchHandle>,
 }
 
 impl SearchScroller {
     #[must_use]
-    pub(crate) fn new(
-        mailbox: Arc<Mailbox>,
-        scroller: RealMailScroller<RealMessage>,
-        handle: Arc<WatchHandle>,
-    ) -> Self {
+    pub(crate) fn new(scroller: RealMailScroller<RealMessage>, handle: Arc<WatchHandle>) -> Self {
         Self {
-            mailbox,
             scroller: Arc::new(scroller),
             handle,
         }
@@ -703,7 +687,7 @@ impl SearchScroller {
         include: IncludeSwitch,
     ) -> Result<(), MailScrollerError> {
         self.scroller
-            .change_include(self.mailbox.get(), include.into())
+            .change_include(include.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }

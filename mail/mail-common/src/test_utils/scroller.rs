@@ -12,7 +12,6 @@ use stash::{
 };
 
 use crate::{
-    Mailbox,
     actions::ConversationOrMessage,
     conv_id, conversation,
     datatypes::{ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions},
@@ -353,20 +352,12 @@ where
         self.scroller.change_filter(filter)
     }
 
-    pub fn change_label(
-        &self,
-        mailbox: &Mailbox,
-        label: LocalLabelId,
-    ) -> Result<(), MailContextError> {
-        self.scroller.change_label(mailbox, label)
+    pub fn change_label(&self, label: LocalLabelId) -> Result<(), MailContextError> {
+        self.scroller.change_label(label)
     }
 
-    pub fn change_include(
-        &self,
-        mailbox: &Mailbox,
-        include: IncludeSwitch,
-    ) -> Result<(), MailContextError> {
-        self.scroller.change_include(mailbox, include)
+    pub fn change_include(&self, include: IncludeSwitch) -> Result<(), MailContextError> {
+        self.scroller.change_include(include)
     }
 
     pub fn change_keywords(&self, keywords: SearchOptions) -> Result<(), MailContextError> {

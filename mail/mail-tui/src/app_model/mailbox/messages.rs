@@ -592,7 +592,7 @@ impl MessagesState {
                     }
                 };
 
-                _ = scroller.change_include(mbox, include);
+                _ = scroller.change_include(include);
                 *curr_include = include;
 
                 Command::None
