@@ -299,7 +299,7 @@ impl ConversationsState {
                     _ => unreachable!(),
                 };
 
-                _ = self.scroller.change_include(mbox, self.include);
+                _ = self.scroller.change_include(self.include);
 
                 Command::None
             }

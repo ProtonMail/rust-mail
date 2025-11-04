@@ -13,7 +13,6 @@ use proton_mail_api::services::proton::{
     response_data::Conversation as ApiConversation,
     response_data::ConversationLabel as ApiConversationLabel,
 };
-use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::IncludeSwitch;
 use proton_mail_common::datatypes::{
     SystemLabelId,
@@ -1640,12 +1639,8 @@ async fn test_conversation_mail_scroller_change_label() {
         .await;
     assert!(test_scroller.has_more().await.unwrap());
 
-    let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
-        .await
-        .unwrap();
-
     // Switch to custom label "rid2"
-    test_scroller.change_label(&mailbox, rid2_local_id).unwrap();
+    test_scroller.change_label(rid2_local_id).unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 10 })
         .await;
@@ -1653,17 +1648,12 @@ async fn test_conversation_mail_scroller_change_label() {
     test_scroller
         .match_next_update(TestUpdate::Append { items: 10 })
         .await;
-    assert_eq!(mailbox.label_id(), rid2_local_id);
 
     // Switch back to inbox
-    test_scroller
-        .change_label(&mailbox, inbox_local_id)
-        .unwrap();
+    test_scroller.change_label(inbox_local_id).unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 9 })
         .await;
-
-    assert_eq!(mailbox.label_id(), inbox_local_id);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
@@ -1738,13 +1728,9 @@ async fn test_conversation_mail_scroller_change_include() {
         .await;
     assert!(test_scroller.has_more().await.unwrap());
 
-    let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
-        .await
-        .unwrap();
-
     // Switch to all mail
     test_scroller
-        .change_include(&mailbox, IncludeSwitch::WithSpamAndTrash)
+        .change_include(IncludeSwitch::WithSpamAndTrash)
         .unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 10 })
@@ -1753,17 +1739,14 @@ async fn test_conversation_mail_scroller_change_include() {
     test_scroller
         .match_next_update(TestUpdate::Append { items: 10 })
         .await;
-    assert_eq!(mailbox.label_id(), all_mail_local_id);
 
     // Switch back to almost all mail
     test_scroller
-        .change_include(&mailbox, IncludeSwitch::Default)
+        .change_include(IncludeSwitch::Default)
         .unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 9 })
         .await;
-
-    assert_eq!(mailbox.label_id(), almost_all_mail_local_id);
 }
 
 #[tokio::test]

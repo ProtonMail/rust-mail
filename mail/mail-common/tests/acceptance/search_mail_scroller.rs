@@ -2,12 +2,12 @@ use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_common::api_message_meta;
 use proton_mail_common::datatypes::{AlmostAllMail, IncludeSwitch, SearchOptions, SystemLabelId};
 use proton_mail_common::models::{MailSettings, Message};
 use proton_mail_common::msg_id;
 use proton_mail_common::test_utils::scroller::{TestScroller, TestUpdate, save_single_message};
 use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
-use proton_mail_common::{Mailbox, api_message_meta};
 use stash::orm::Model;
 use stash::stash::StashError;
 use std::time::Duration;
@@ -458,16 +458,8 @@ async fn almost_all_mail_with_spam_and_trash() {
         assert_eq!(test_scroller.items().len(), 1);
         assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg1"));
     }
-    let all_mail_local_id = SystemLabel::AllMail
-        .local_id(&tether)
-        .await
-        .unwrap()
-        .unwrap();
-    let mailbox = Mailbox::with_remote_id(&tether, LabelId::almost_all_mail())
-        .await
-        .unwrap();
     test_scroller
-        .change_include(&mailbox, IncludeSwitch::WithSpamAndTrash)
+        .change_include(IncludeSwitch::WithSpamAndTrash)
         .unwrap();
 
     test_scroller
@@ -492,7 +484,6 @@ async fn almost_all_mail_with_spam_and_trash() {
     assert_eq!(actual.len(), 1);
     assert_eq!(test_scroller.items().len(), 1);
     assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg2"));
-    assert_eq!(mailbox.label_id(), all_mail_local_id);
 }
 
 #[tokio::test]
@@ -584,41 +575,38 @@ async fn change_include_multiple_times_in_a_row() {
         assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg1"));
     }
 
-    let mailbox = Mailbox::with_remote_id(&tether, LabelId::almost_all_mail())
-        .await
-        .unwrap();
     test_scroller
-        .change_include(&mailbox, IncludeSwitch::WithSpamAndTrash)
+        .change_include(IncludeSwitch::WithSpamAndTrash)
         .unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
         .await;
     test_scroller
-        .change_include(&mailbox, IncludeSwitch::Default)
+        .change_include(IncludeSwitch::Default)
         .unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })
         .await;
     test_scroller
-        .change_include(&mailbox, IncludeSwitch::WithSpamAndTrash)
+        .change_include(IncludeSwitch::WithSpamAndTrash)
         .unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
         .await;
     test_scroller
-        .change_include(&mailbox, IncludeSwitch::Default)
+        .change_include(IncludeSwitch::Default)
         .unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })
         .await;
     test_scroller
-        .change_include(&mailbox, IncludeSwitch::WithSpamAndTrash)
+        .change_include(IncludeSwitch::WithSpamAndTrash)
         .unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 2 })
         .await;
     test_scroller
-        .change_include(&mailbox, IncludeSwitch::Default)
+        .change_include(IncludeSwitch::Default)
         .unwrap();
     test_scroller
         .match_next_update(TestUpdate::ReplaceFrom { idx: 0, items: 1 })

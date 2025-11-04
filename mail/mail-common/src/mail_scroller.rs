@@ -5,7 +5,6 @@ mod mail_scroller_watcher;
 pub use self::alternative_labels::AlternativeLabels;
 pub use self::mail_scroller_source::*;
 pub use self::mail_scroller_watcher::*;
-use crate::Mailbox;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::datatypes::{ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions};
 use crate::mail_cursor::MailCursor;
@@ -458,11 +457,7 @@ where
         Ok(())
     }
 
-    pub fn change_label(
-        &self,
-        mailbox: &Mailbox,
-        label: LocalLabelId,
-    ) -> Result<(), MailContextError> {
+    pub fn change_label(&self, label: LocalLabelId) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
 
         debug!(?uuid, "Sending `ChangeLabel` command");
@@ -471,7 +466,6 @@ where
             .send(ScrollerOrderedCommand::ChangeLabel {
                 src: ScrollerSource::ScrollEvent(uuid),
                 label,
-                mbox: mailbox.clone(),
             })
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send change label command")))?;
 
@@ -479,11 +473,7 @@ where
     }
 
     #[instrument(skip_all, fields(id = ?self.id))]
-    pub fn change_include(
-        &self,
-        mailbox: &Mailbox,
-        include: IncludeSwitch,
-    ) -> Result<(), MailContextError> {
+    pub fn change_include(&self, include: IncludeSwitch) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
         debug!(?uuid, "Sending `ChangeInclude` command");
 
@@ -491,7 +481,6 @@ where
             .send(ScrollerOrderedCommand::ChangeInclude {
                 src: ScrollerSource::ScrollEvent(uuid),
                 include,
-                mbox: mailbox.clone(),
             })
             .map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send change include command"))
@@ -898,9 +887,9 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::ChangeLabel { src, label, mbox } => {
+            ScrollerOrderedCommand::ChangeLabel { src, label } => {
                 let result = self
-                    .change_label(src, label, Some(ReadFilter::All), mbox)
+                    .change_label(src, label, Some(ReadFilter::All))
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
@@ -922,9 +911,9 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::ChangeInclude { src, include, mbox } => {
+            ScrollerOrderedCommand::ChangeInclude { src, include } => {
                 let result = self
-                    .change_include(src, include, mbox)
+                    .change_include(src, include)
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
@@ -1183,7 +1172,6 @@ where
         src: ScrollerSource,
         label: LocalLabelId,
         with_filter: Option<ReadFilter>,
-        mbox: Mailbox,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing label to `{label}`");
@@ -1194,8 +1182,6 @@ where
             .await
             .change_state(&ctx, with_filter, Some(label), None)
             .await?;
-        let tether = ctx.user_stash().connection().await?;
-        mbox.change_label(&tether, label).await?;
         self.reset(src).await
     }
 
@@ -1234,12 +1220,11 @@ where
         &mut self,
         src: ScrollerSource,
         include: IncludeSwitch,
-        mbox: Mailbox,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         if self.alternative_labels.supports_include_filter() {
             Self::abort_task(&mut self.task);
             let label = self.include_to_label(include).await;
-            self.change_label(src, label, None, mbox).await
+            self.change_label(src, label, None).await
         } else {
             Ok(ScrollerListUpdate::None(src).into())
         }
@@ -1437,14 +1422,10 @@ enum ScrollerOrderedCommand {
     ChangeLabel {
         src: ScrollerSource,
         label: LocalLabelId,
-        #[derivative(PartialEq = "ignore")]
-        mbox: Mailbox,
     },
     ChangeInclude {
         src: ScrollerSource,
         include: IncludeSwitch,
-        #[derivative(PartialEq = "ignore")]
-        mbox: Mailbox,
     },
     ChangeKeywords {
         src: ScrollerSource,
