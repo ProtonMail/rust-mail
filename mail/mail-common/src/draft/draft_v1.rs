@@ -692,8 +692,15 @@ impl Draft {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = save_action.crate_draft_params(encrypted);
 
-        let attachment_key_packets =
-            build_attachment_key_packets(context, &address_id, attachments, tether).await?;
+        let force_re_encrypt = draft_reply_or_forward_params.is_some();
+        let attachment_key_packets = build_attachment_key_packets(
+            context,
+            &address_id,
+            attachments,
+            force_re_encrypt,
+            tether,
+        )
+        .await?;
 
         let response = session
             .create_draft(
@@ -722,7 +729,7 @@ impl Draft {
         let params = save_action.crate_draft_params(encrypted);
 
         let attachment_key_packets =
-            build_attachment_key_packets(context, &address_id, attachments, tether).await?;
+            build_attachment_key_packets(context, &address_id, attachments, false, tether).await?;
 
         match session
             .update_draft(message_id, params, attachment_key_packets)
