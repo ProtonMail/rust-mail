@@ -9,27 +9,38 @@ use proton_action_queue::action::{
     Action, ActionId, Handler, Metadata, Priority, Type, VersionConverter, VersionConverterError,
     WriterGuard, deserialize,
 };
+use proton_core_api::exports::RetryPolicy;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Tether};
+use std::time::Duration;
 use tracing::{debug, info, instrument, warn};
 
 use super::messages::{Move, MoveHandler, Read, ReadHandler};
 use super::{ActionMoveData, MailActionError};
 
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
+
 #[instrument(skip(ctx))]
 pub async fn exec(
     ctx: &MailUserContext,
     action: PushNotificationQuickAction,
+    time_left_ms: Option<u64>,
 ) -> MailContextResult<()> {
     info!("Executing notification action");
 
+    let time_left = time_left_ms.map(Duration::from_millis).map(|duration| {
+        duration
+            .saturating_sub(Duration::from_secs(1))
+            .min(DEFAULT_TIMEOUT)
+    });
+
     let action: InternalPushNotificationQuickAction = action.into();
 
-    if let Err(err) = exec_flow(ctx, &action).await {
+    if let Err(err) = exec_flow(ctx, &action, time_left).await {
         warn!("Failed to execute {action:?}. Queuing fallback operation: {err}");
 
         ctx.user_context()
@@ -50,8 +61,11 @@ pub async fn exec(
 async fn exec_flow(
     ctx: &MailUserContext,
     action: &InternalPushNotificationQuickAction,
+    time_left: Option<Duration>,
 ) -> MailContextResult<()> {
-    exec_remote(action, ctx.session()).await?;
+    let api = ctx.session();
+    let retry_policy = Some(RetryPolicy::default().never());
+    exec_remote(action, api, time_left, retry_policy).await?;
     exec_locally(ctx, action).await?;
     Ok(())
 }
@@ -118,16 +132,26 @@ async fn get_action_move_data(
 async fn exec_remote(
     action: &InternalPushNotificationQuickAction,
     session: &Session,
+    time_left: Option<Duration>,
+    retry_policy: Option<RetryPolicy>,
 ) -> Result<(), MailActionError> {
     match &action {
         InternalPushNotificationQuickAction::MarkAsRead { remote_id } => {
             tracing::info!("Marking {remote_id:?} as read from push notification quick action");
-            session.put_messages_read(vec![remote_id.clone()]).await?;
+            session
+                .put_messages_read(vec![remote_id.clone()], time_left, retry_policy)
+                .await?;
         }
         InternalPushNotificationQuickAction::MoveToLabel { remote_id, label } => {
             tracing::info!("Moving {remote_id:?} to {label:?} from push notification quick action");
             session
-                .put_messages_label(vec![remote_id.clone()], label.label_id(), None)
+                .put_messages_label(
+                    vec![remote_id.clone()],
+                    label.label_id(),
+                    None,
+                    time_left,
+                    retry_policy,
+                )
                 .await?;
         }
     }
@@ -263,7 +287,7 @@ impl Handler for PushNotificationActionHandler {
         action: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<(), MailActionError> {
-        exec_remote(&action.action, &self.api).await?;
+        exec_remote(&action.action, &self.api, None, None).await?;
         Ok(())
     }
 }

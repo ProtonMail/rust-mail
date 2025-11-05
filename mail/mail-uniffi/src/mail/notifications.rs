@@ -260,11 +260,12 @@ impl MailUserSession {
     pub async fn execute_notification_quick_action(
         &self,
         action: PushNotificationQuickAction,
+        time_left_ms: Option<u64>,
     ) -> Result<(), ActionError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            notifications_quick_actions::exec(ctx.as_ref(), action.into())
+            notifications_quick_actions::exec(ctx.as_ref(), action.into(), time_left_ms)
                 .await
                 .map_err(RealProtonMailError::from)
         })

@@ -2610,7 +2610,7 @@ impl ConversationOrMessage for Message {
         info!("Applying {label_id:?} to {ids:?}");
         let label_id = &label_id;
         let request = |ids: Vec<MessageId>| async move {
-            api.put_messages_label(ids.clone(), label_id.clone(), None)
+            api.put_messages_label(ids.clone(), label_id.clone(), None, None, None)
                 .await
                 .map(|v| v.responses)
         };
