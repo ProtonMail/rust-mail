@@ -30,6 +30,7 @@ use itertools::Itertools;
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::action::MetadataBuilder;
 
+use derivative::Derivative;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::consts::Mail;
@@ -606,7 +607,7 @@ impl Conversation {
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         let ids = Vec::from_iter(ids);
         bond.sync_bridge(move |tx| Self::apply_label(label_id, ids, tx))
             .await
@@ -1492,7 +1493,7 @@ impl Conversation {
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         let ids = Vec::from_iter(ids);
         bond.sync_bridge(move |tx| Self::remove_label(label_id, ids, tx))
             .await
@@ -2462,6 +2463,12 @@ impl Conversation {
             context_time: None,
         })
     }
+
+    #[cfg(feature = "test-utils")]
+    pub fn sort_labels(&mut self) {
+        self.labels
+            .sort_by(|l1, l2| l1.local_label_id.cmp(&l2.local_label_id));
+    }
 }
 
 impl ConversationOrMessage for Conversation {
@@ -2471,7 +2478,8 @@ impl ConversationOrMessage for Conversation {
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType>,
         tx: &Transaction<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        let mut modified = Vec::new();
         for conv_id in ids {
             info!("Applying {label_id:?} to {conv_id:?}");
             let message_ids = tx.query_rows_col::<LocalMessageId>(
@@ -2489,10 +2497,13 @@ impl ConversationOrMessage for Conversation {
                 (label_id, conv_id),
             )?;
 
+            modified.extend(message_ids.iter().copied());
+
             if !message_ids.is_empty() {
                 Conversation::label_impl(label_id, conv_id, &message_ids, tx)?;
                 continue;
             }
+
             // Fallback without message metadata. We should grab the highest time values from
             // all the remaining labels assigned to this conversation. All conversations
             // messages will always have the All Mail label assigned.
@@ -2557,24 +2568,26 @@ impl ConversationOrMessage for Conversation {
             counters.save_sync(tx)?;
         }
 
-        Ok(())
+        Ok(modified)
     }
 
     fn remove_label(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType>,
         tx: &Transaction<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         let mut ids = ids.into_iter().peekable();
         if ids.peek().is_none() {
             if cfg!(debug_assertions) {
                 panic!("remove_label for no conversations")
             } else {
-                return Ok(());
+                return Ok(vec![]);
             }
         }
 
         let mut conv_counter = ConversationCounters::load_by_id_exact_sync(label_id, tx)?;
+
+        let mut modified_messages = Vec::new();
 
         for id in ids {
             info!("Removing {label_id:?} from {id:?}",);
@@ -2632,10 +2645,12 @@ impl ConversationOrMessage for Conversation {
                 }
                 conv_counter.total = conv_counter.total.saturating_sub(1);
             }
+
+            modified_messages.extend(message_ids);
         }
 
         conv_counter.save_sync(tx)?;
-        Ok(())
+        Ok(modified_messages)
     }
 
     async fn api_apply_label(
@@ -2672,9 +2687,8 @@ impl ConversationOrMessage for Conversation {
             .map(filter_responses)
     }
 
-    fn get_exclusive_location(&self) -> Option<LocalLabelId> {
-        //TODO:(ET-5183): this will be address in the move action fix.
-        self.locations.first().map(|x| x.local_id())
+    fn get_exclusive_locations(&self) -> Vec<LocalLabelId> {
+        self.locations.iter().map(|x| x.local_id()).collect()
     }
 
     fn mark_read(
@@ -3012,7 +3026,8 @@ impl TableObserver for ConversationActionWatcher {
 /// [`ConversationLabel`] information is superimposed over the [`Conversation`]
 /// for that context.
 ///
-#[derive(Clone, Debug, Eq, Model, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Model, Derivative)]
+#[derivative(Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[TableName("conversation_labels")]
 #[ModelHooks]
 pub struct ConversationLabel {
@@ -3020,6 +3035,12 @@ pub struct ConversationLabel {
     // so we do not assign it a special value. The real primary key is
     // (local_conversation_id + local_label_id).
     #[IdField(autoincrement)]
+    #[derivative(
+        Debug = "ignore",
+        PartialEq = "ignore",
+        Hash = "ignore",
+        PartialOrd = "ignore"
+    )]
     pub local_id: Option<u64>,
 
     #[DbField]

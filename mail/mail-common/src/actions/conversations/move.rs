@@ -1,10 +1,6 @@
 use crate::AppError;
-use crate::actions::conversations::LabelAs;
-use crate::actions::messages::Unread;
-use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
+use crate::actions::{ActionMoveData, MailActionError};
 use crate::models::Conversation;
-use anyhow::Context;
-use itertools::Itertools;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, FactoryResult, Handler, Type, VersionConverter,
     WriterGuard,
@@ -29,7 +25,7 @@ impl VersionConverter for Move {
 
 impl Action for Move {
     const TYPE: Type = Type("move_conversations");
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     type VersionConverter = Self;
     type Handler = MoveHandler;
     type RemoteOutput = ();
@@ -86,13 +82,12 @@ impl Handler for MoveHandler {
 
     async fn rebase_local(
         &self,
-        this_id: ActionId,
+        _: ActionId,
         action: &mut Self::Action,
-        _: &RebaseChangeSet,
+        rebase_change_set: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        //TODO(ET-5183): Test me!
-        self.apply_local(this_id, action, tx).await?;
+        action.0.rebase_local(rebase_change_set, tx).await?;
         Ok(())
     }
 }
@@ -110,28 +105,9 @@ impl UndoMoveToConversations {
         };
         // The queue couldn't revert. This means that we're on our own to undo this.
 
-        let move_actions = self.action.0.reverse().map(Move).collect_vec();
+        let (label_as, mark_unread) = self.action.0.build_undo_states();
 
-        let label_as_data = LabelAsData {
-            source_label_id: 0.into(), // This is fine because it's unused (no archiving, no undoing)
-            add: self.action.0.removed_labels,
-            remove: vec![],
-        };
-
-        let id = enqueue!(
-            queue,
-            [
-                LabelAs(label_as_data),
-                Unread::new(self.action.0.marked_read),
-            ]
-        )?;
-
-        queue
-            .queue_actions(move_actions, Some(id))
-            .await
-            .context("Error undoing")?
-            .last()
-            .map(|a| a.id);
+        enqueue!(queue, [label_as, mark_unread,])?;
 
         Ok(())
     }
