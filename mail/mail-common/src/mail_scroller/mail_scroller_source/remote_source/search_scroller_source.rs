@@ -14,6 +14,7 @@ use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
+    response_data::MessageMetadata as ApiMessageMetadata,
 };
 use stash::{
     orm::Model,
@@ -198,15 +199,7 @@ impl SearchScrollerSource {
             return Ok(vec![]);
         }
 
-        let mut messages: Vec<Message> = vec![];
-
-        for message in response.messages {
-            messages.push(Message::from_api_metadata(message, tether).await?);
-        }
-
-        Self::save_messages(&mut messages, session, tether, queue).await?;
-
-        Ok(messages)
+        Self::save_messages(response.messages, session, tether, queue).await
     }
 
     #[tracing::instrument(skip_all, fields(label_id=?remote_label_id) )]
@@ -257,36 +250,31 @@ impl SearchScrollerSource {
             return Ok(vec![]);
         }
 
-        let mut messages: Vec<Message> = vec![];
-
-        for message in response.messages {
-            messages.push(Message::from_api_metadata(message, &tether).await?);
-        }
-
-        Self::save_messages(&mut messages, session, &mut tether, queue).await?;
-
-        Ok(messages)
+        Self::save_messages(response.messages, session, &mut tether, queue).await
     }
 
     #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))]
     async fn save_messages(
-        messages: &mut [Message],
+        api_messages: Vec<ApiMessageMetadata>,
         api: &Session,
         tether: &mut Tether,
         queue: &Queue,
-    ) -> Result<(), MailContextError> {
-        if messages.is_empty() {
-            return Ok(());
+    ) -> Result<Vec<Message>, MailContextError> {
+        if api_messages.is_empty() {
+            return Ok(vec![]);
         }
 
         // Resolve missing dependencies.
         let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
-        for message in messages.iter() {
-            dependency_fetcher.check_message(message, tether).await?;
+        for message in api_messages.iter() {
+            dependency_fetcher
+                .check_api_message_metadata(message, tether)
+                .await?;
         }
         dependency_fetcher.fetch_and_store(api, tether).await?;
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
+
         tether
             .quiet_tx(async |tx| {
                 let mut display_order = SearchScrollData::last(tx)
@@ -294,9 +282,9 @@ impl SearchScrollerSource {
                     .map(|s| s.display_order.saturating_add(1))
                     .unwrap_or_default();
 
+                let mut messages = Message::save_scroller_messages(api_messages, tx).await?;
                 // Save all messages.
                 for message in messages.iter_mut() {
-                    message.create_or_get_local(tx).await?;
                     SearchScrollData::builder()
                         .local_message_id(message.id())
                         .display_order(display_order)
@@ -325,7 +313,7 @@ impl SearchScrollerSource {
                     remote_id, time, display_order
                 );
 
-                Ok(())
+                Ok(messages)
             })
             .await
     }

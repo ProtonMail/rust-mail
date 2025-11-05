@@ -2323,6 +2323,29 @@ impl Message {
             .map(|_| self.snooze_time)
     }
 
+    pub(crate) async fn save_scroller_messages(
+        api_messages: Vec<ApiMessageMetadata>,
+        tx: &Bond<'_>,
+    ) -> Result<Vec<Message>, MailContextError> {
+        let mut messages = Vec::with_capacity(api_messages.len());
+        for api_message in api_messages {
+            let Some(message) = (if Message::sync_decision(&api_message, None, tx).await?
+                == MessageSyncDecision::Skip
+            {
+                Message::find_by_remote_id(api_message.id.clone(), tx).await?
+            } else {
+                let mut message = Message::from_api_metadata(api_message, tx).await?;
+                message.create_or_get_local(tx).await?;
+                Some(message)
+            }) else {
+                continue;
+            };
+            messages.push(message)
+        }
+
+        Ok(messages)
+    }
+
     pub(crate) async fn sync_decision(
         metadata: &ApiMessageMetadata,
         event_action: Option<Action>,

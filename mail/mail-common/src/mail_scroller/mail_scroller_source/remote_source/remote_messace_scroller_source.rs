@@ -3,7 +3,6 @@ use crate::datatypes::SystemLabelId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
-use crate::models::MessageSyncDecision;
 #[cfg(feature = "prefetch")]
 use crate::prefetch::PrefetchJob;
 use crate::{
@@ -17,7 +16,6 @@ use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::Queue;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
-use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,
@@ -407,28 +405,13 @@ impl RemoteMessageScrollerSource {
         }
         dependency_fetcher.fetch_and_store(api, tether).await?;
 
-        let mut messages = Vec::with_capacity(api_messages.len());
-
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
         tether
             .quiet_tx(async |tx| {
                 // Save all messages.
 
-                for api_message in api_messages {
-                    let Some(message) = (if Message::sync_decision(&api_message, None, tx).await?
-                        == MessageSyncDecision::Skip
-                    {
-                        Message::find_by_remote_id(api_message.id.clone(), tx).await?
-                    } else {
-                        let mut message = Message::from_api_metadata(api_message, tx).await?;
-                        message.create_or_get_local(tx).await?;
-                        Some(message)
-                    }) else {
-                        continue;
-                    };
-                    messages.push(message)
-                }
+                let messages = Message::save_scroller_messages(api_messages, tx).await?;
 
                 // We don't want this to cause failures in the scroller.
                 #[cfg(feature = "action_rebase")]
