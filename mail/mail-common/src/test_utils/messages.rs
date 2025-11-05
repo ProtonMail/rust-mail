@@ -274,18 +274,16 @@ impl MailTestContext {
         action: Option<DraftAction>,
         reply: ApiMessage,
         parent_id: Option<MessageId>,
-        attachment_key_packets: DraftAttachmentKeyPackets,
+        attachment_key_packets: Option<DraftAttachmentKeyPackets>,
     ) {
         let response = PostCreateDraftResponse { message: reply };
         Mock::given(method("POST"))
-            .and(body_partial_json(TestCreateDraftRequest::from(
-                PostCreateDraftRequest {
-                    message: params,
-                    action,
-                    attachment_key_packets,
-                    parent_id,
-                },
-            )))
+            .and(body_partial_json(TestCreateDraftRequest {
+                message: params.into(),
+                action,
+                attachment_key_packets,
+                parent_id,
+            }))
             .and(path("/api/mail/v4/messages".to_string()))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
@@ -651,10 +649,11 @@ pub struct TestCreateDraftRequest {
     pub message: TestDraftParams,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<DraftAction>,
-    pub attachment_key_packets: DraftAttachmentKeyPackets,
     #[serde(rename = "ParentID")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<MessageId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_key_packets: Option<DraftAttachmentKeyPackets>,
 }
 
 impl From<PostCreateDraftRequest> for TestCreateDraftRequest {
@@ -662,8 +661,8 @@ impl From<PostCreateDraftRequest> for TestCreateDraftRequest {
         Self {
             message: value.message.into(),
             action: value.action,
-            attachment_key_packets: value.attachment_key_packets,
             parent_id: value.parent_id,
+            attachment_key_packets: Some(value.attachment_key_packets),
         }
     }
 }

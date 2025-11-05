@@ -113,7 +113,7 @@ async fn discard_draft_after_save_marks_message_deleted() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -192,7 +192,7 @@ async fn discard_draft_by_message_id() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -644,7 +644,7 @@ async fn discard_draft_failure_undeletes_message() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
