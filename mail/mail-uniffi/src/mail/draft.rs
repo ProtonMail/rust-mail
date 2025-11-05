@@ -388,28 +388,23 @@ pub async fn open_draft(
 
 #[uniffi_export]
 impl Draft {
-    /// Get the sender of the draft.
     pub fn sender(&self) -> String {
         //TODO: Improve in follow up with event updates.
         async_runtime().block_on(async { self.instance.sender().await.unwrap_or_default() })
     }
 
-    /// Get the To recipients of the draft.
     pub fn to_recipients(&self) -> Arc<ComposerRecipientList> {
         ComposerRecipientList::new_to_list(self.instance.clone(), self.cached.clone())
     }
 
-    /// Get the Cc recipients of the draft.
     pub fn cc_recipients(&self) -> Arc<ComposerRecipientList> {
         ComposerRecipientList::new_cc_list(self.instance.clone(), self.cached.clone())
     }
 
-    /// Get the Bcc recipients of the draft.
     pub fn bcc_recipients(&self) -> Arc<ComposerRecipientList> {
         ComposerRecipientList::new_bcc_list(self.instance.clone(), self.cached.clone())
     }
 
-    /// Get the draft's subject.
     pub fn subject(&self) -> String {
         async_runtime().block_on(async { self.cached.read().await.subject.clone() })
     }
@@ -469,12 +464,10 @@ impl Draft {
         })?)
     }
 
-    /// Get the draft's body.
     pub fn body(&self) -> String {
         async_runtime().block_on(async { self.cached.read().await.body.clone() })
     }
 
-    /// Set the draft's `subject`.
     #[returns(VoidDraftSaveResult)]
     pub fn set_subject(&self, subject: String) -> Result<(), DraftSaveError> {
         async_runtime()
@@ -488,7 +481,6 @@ impl Draft {
             .into()
     }
 
-    /// Set the draft's `body`.
     #[returns(VoidDraftSaveResult)]
     pub fn set_body(&self, body: String) -> Result<(), DraftSaveError> {
         async_runtime()
@@ -502,14 +494,10 @@ impl Draft {
             .into()
     }
 
-    /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
         async_runtime().block_on(async { self.cached.read().await.mime_type.into() })
     }
 
-    /// Get the Draft's message id .
-    ///
-    /// Returns `None` if no message was created.
     pub async fn message_id(self: Arc<Self>) -> Result<Option<Id>, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
@@ -537,15 +525,8 @@ impl Draft {
             .block_on(async { self.cached.read().await.send_result.clone().map(Into::into) })
     }
 
-    /// Load an embedded attachment in this draft message.
-    ///
-    /// See [`DecryptedMessageBody::load_image`] for more details.
-    ///
-    /// # Errors
-    ///
-    /// See [`DecryptedMessageBody::load_image`] for more details.
-    //NOTE: iOS request we share the same result types between
-    // this function and the DecryptedMessageBody equivalent.
+    // NOTE: iOS request we share the same result types between
+    //       this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
     pub async fn load_image(self: Arc<Self>, url: String) -> Result<AttachmentData, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
@@ -557,9 +538,8 @@ impl Draft {
             .into()
     }
 
-    /// Same as [`get_embedded_attachment()`], but synchronous.
-    //NOTE: iOS request we share the same result types between
-    // this function and the DecryptedMessageBody equivalent.
+    // NOTE: iOS request we share the same result types between
+    //       this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
     pub fn load_image_sync(self: Arc<Self>, cid: String) -> Result<AttachmentData, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
@@ -571,12 +551,10 @@ impl Draft {
             .into()
     }
 
-    /// Get the attachment list.
     pub fn attachment_list(&self) -> Arc<AttachmentList> {
         Arc::clone(&self.attachment_list)
     }
 
-    /// Change the sender address for this draft to the given `email` address.
     pub async fn change_sender_address(
         self: Arc<Self>,
         email: String,
