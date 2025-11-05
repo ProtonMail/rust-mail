@@ -60,7 +60,7 @@ async fn create_empty_draft() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -249,7 +249,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -658,21 +658,6 @@ async fn create_draft_reply_with_override_impl(
         attachment.id = AttachmentId::from(Uuid::new_v4().to_string());
     }
 
-    let key_packets = DraftAttachmentKeyPackets::from_iter(
-        remote_existing_message
-            .body
-            .attachments
-            .iter()
-            .filter(|a| {
-                if reply_mode == ReplyMode::Forward {
-                    true
-                } else {
-                    a.disposition == Disposition::Inline
-                }
-            })
-            .map(|a| (a.id.clone(), a.key_packets.clone())),
-    );
-
     ctx.mock_get_message(
         &remote_existing_message.metadata.id,
         remote_existing_message.clone(),
@@ -684,7 +669,7 @@ async fn create_draft_reply_with_override_impl(
         Some(DraftAction::from(reply_mode)),
         message.clone(),
         Some(existing_message.remote_id.clone().unwrap()),
-        key_packets,
+        None,
     )
     .await;
 
@@ -844,7 +829,7 @@ async fn open_draft_sync_status_success() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -899,7 +884,7 @@ async fn open_draft_sync_status_cached() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -993,7 +978,7 @@ async fn new_draft_conversation_remote_id_updated_externally() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1082,7 +1067,7 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1273,7 +1258,7 @@ async fn open_draft_resets_password() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1421,7 +1406,7 @@ async fn open_draft_catches_invalid_address() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1922,7 +1907,7 @@ async fn draft_save_handles_save_with_new_message_if_remote_message_already_exis
         None,
         message.clone(),
         Some(remote_existing_message.metadata.id.clone()),
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -2041,7 +2026,7 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject() {
         None,
         message_with_new_conv_id,
         Some(remote_existing_message.metadata.id.clone()),
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 

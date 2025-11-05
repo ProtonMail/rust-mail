@@ -26,6 +26,9 @@ use proton_mail_common::test_utils::message_body::{
     message_body_test_addresses, message_body_test_mail_settings, message_body_test_message_simple,
     message_body_test_user_info,
 };
+
+const MOCK_ATTACHMENT_KEY_PACKET: &str = "wV4DGS71hsmM2EQSAQdAwLggNHWQfw7ZdO/BJrT4WpD3yK2ZhqRt6/abVcoKii4wVlG50hY+UgSoVOf3RBJ33bastQrBMK25JsRJqFByq2t2BXKojQVQtP9B1CmjNjZ0";
+
 pub fn draft_test_params() -> TestParams {
     draft_test_params_impl(None)
 }
@@ -181,7 +184,7 @@ pub fn gen_inline_attachment() -> MessageAttachment {
             image_height: None,
             image_width: None,
         },
-        key_packets: KeyPackets::from("inline_key_packets"),
+        key_packets: KeyPackets::from(MOCK_ATTACHMENT_KEY_PACKET),
         mime_type: "image/jpeg".to_owned(),
         name: "image.jpeg".to_owned(),
         signature: None,
@@ -200,7 +203,7 @@ pub fn gen_normal_attachment() -> MessageAttachment {
             image_height: None,
             image_width: None,
         },
-        key_packets: KeyPackets::from("key_packets"),
+        key_packets: KeyPackets::from(MOCK_ATTACHMENT_KEY_PACKET),
         mime_type: "application/pdf".to_owned(),
         name: "doc.pdf".to_owned(),
         signature: None,
