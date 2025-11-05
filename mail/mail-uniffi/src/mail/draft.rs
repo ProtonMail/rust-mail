@@ -2,6 +2,7 @@ mod attachments;
 mod observer;
 mod recipients;
 
+use super::ImagePolicy;
 use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
@@ -328,6 +329,7 @@ pub struct DraftSenderAddressList {
 pub async fn new_draft(
     session: &MailUserSession,
     create_mode: DraftCreateMode,
+    image_policy: ImagePolicy,
 ) -> Result<Arc<Draft>, DraftOpenError> {
     let ctx = session.ctx()?;
     let ptr = session.ptr();
@@ -337,15 +339,43 @@ pub async fn new_draft(
 
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty_ex(&ctx, options).await,
+
             DraftCreateMode::Reply(id) => {
-                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Sender, false, options).await
+                RealDraft::reply_ex(
+                    &ctx,
+                    id.into(),
+                    ReplyMode::Sender,
+                    image_policy.into(),
+                    false,
+                    options,
+                )
+                .await
             }
+
             DraftCreateMode::ReplyAll(id) => {
-                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::All, false, options).await
+                RealDraft::reply_ex(
+                    &ctx,
+                    id.into(),
+                    ReplyMode::All,
+                    image_policy.into(),
+                    false,
+                    options,
+                )
+                .await
             }
+
             DraftCreateMode::Forward(id) => {
-                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Forward, false, options).await
+                RealDraft::reply_ex(
+                    &ctx,
+                    id.into(),
+                    ReplyMode::Forward,
+                    image_policy.into(),
+                    false,
+                    options,
+                )
+                .await
             }
+
             DraftCreateMode::FromIosShareExtension => {
                 RealDraft::from_ios_share_extension(&ctx, options).await
             }
@@ -529,10 +559,7 @@ impl Draft {
     //       this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
     pub async fn load_image(self: Arc<Self>, url: String) -> Result<AttachmentData, ProtonError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
-        };
-        uniffi_async(async move { self.load_image_impl(&ctx, url).await })
+        uniffi_async(async move { self.load_image_impl(url).await })
             .await
             .map_err(ProtonError::from)
             .into()
@@ -542,11 +569,8 @@ impl Draft {
     //       this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
     pub fn load_image_sync(self: Arc<Self>, cid: String) -> Result<AttachmentData, ProtonError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
-        };
         async_runtime()
-            .block_on(self.load_image_impl(&ctx, cid))
+            .block_on(self.load_image_impl(cid))
             .map_err(ProtonError::from)
             .into()
     }
@@ -811,11 +835,7 @@ impl Draft {
 }
 
 impl Draft {
-    async fn load_image_impl(
-        &self,
-        _: &MailUserContext,
-        url: String,
-    ) -> Result<AttachmentData, RealProtonMailError> {
+    async fn load_image_impl(&self, url: String) -> Result<AttachmentData, RealProtonMailError> {
         let att = self
             .instance
             .load_image(url)

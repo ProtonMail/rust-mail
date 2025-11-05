@@ -5670,6 +5670,7 @@ dependencies = [
  "uniffi-common",
  "uniffi-macros",
  "uniffi-runtime",
+ "url",
 ]
 
 [[package]]

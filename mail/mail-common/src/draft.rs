@@ -5,7 +5,7 @@ use crate::models::{
     Attachment, AttachmentData, DraftMetadata, DraftSendResult, MailSettings, MessageMimeType,
     MetadataId,
 };
-use crate::{MailContextError, MailContextResult, MailUserContext};
+use crate::{ImagePolicy, MailContextError, MailContextResult, MailUserContext};
 use chrono::{DateTime, Local};
 use compose::find_default_sender_address;
 use derive_more::Display;
@@ -738,6 +738,7 @@ impl DraftActor {
             context,
             message_id,
             reply_mode,
+            ImagePolicy::Safe,
             use_utc,
             DraftActorOptions::default(),
         )
@@ -748,10 +749,12 @@ impl DraftActor {
         context: &MailUserContext,
         message_id: LocalMessageId,
         reply_mode: ReplyMode,
+        image_policy: ImagePolicy,
         use_utc: bool,
         options: DraftActorOptions,
     ) -> Result<Self, MailContextError> {
-        let draft = draft_v1::Draft::reply(context, message_id, reply_mode, use_utc).await?;
+        let draft =
+            draft_v1::Draft::reply(context, message_id, reply_mode, image_policy, use_utc).await?;
 
         Ok(Self::create(context, draft, options))
     }
@@ -1755,9 +1758,10 @@ impl DraftActor {
                     // We don't wait to wait for this to finish so we can run in parallel
                     let ctx_cloned = ctx.clone();
                     let id = draft.metadata_id;
+                    let policy = draft.image_policy;
 
                     ctx_cloned.spawn(async move {
-                        let r = draft_v1::Draft::load_image(id, &ctx, url).await;
+                        let r = draft_v1::Draft::load_image(id, &ctx, url, policy).await;
                         let _ = sender.send(r);
                     });
                 }

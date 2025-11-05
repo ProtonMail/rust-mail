@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 //! Everything related to processing a decrypted message.
+use crate::ImagePolicy;
 use crate::actions::messages::UnsubscribeNewsletter;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
@@ -252,26 +253,18 @@ impl DecryptedMessageBody {
         Self::new_without_prefetching(body, metadata, mime_type, None, address_id, Some(error))
     }
 
-    /// Load a remote image (potentially proxied) or embedded attachment in the email body.
-    pub async fn load_image_from_str(
-        &self,
-        ctx: &MailUserContext,
-        url: &str,
-    ) -> MailContextResult<AttachmentData> {
-        let url = Url::try_from(url)?;
-
-        self.load_image(ctx, url).await
-    }
-
     pub async fn load_image(
         &self,
         ctx: &MailUserContext,
         url: Url,
+        policy: ImagePolicy,
     ) -> MailContextResult<AttachmentData> {
-        let f = async |cid: &ContentId, ctx: &MailUserContext| {
-            self.get_embedded_attachment(ctx, cid).await
-        };
-        ctx.load_image_inner(f, url).await
+        ctx.image_loader()
+            .load(url, policy, async |cid| {
+                self.get_embedded_attachment(ctx, cid).await
+            })
+            .await
+            .map_err(Into::into)
     }
 
     /// Load or fetch an embedded attachment with `cid` for this message.

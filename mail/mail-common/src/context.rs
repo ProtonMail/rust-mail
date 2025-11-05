@@ -2,7 +2,7 @@ use crate::actions::MailActionError;
 use crate::feature_flags::{FeatureFlagsBackgroundTask, FeatureFlagsService};
 use crate::mail_scroller::MailScrollerError;
 use crate::migration_snooper::MailMigrationSnooper;
-use crate::{AppError, MailUserContext, draft};
+use crate::{AppError, ImageLoaderError, MailUserContext, draft};
 use anyhow::anyhow;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
@@ -229,6 +229,21 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::ActionQueue(error) => Self::ActionQueue(error),
             CoreContextError::EventLoop(err) => Self::EventLoop(err),
             CoreContextError::NetworkMonitorService(e) => Self::NetworkMonitorService(e),
+        }
+    }
+}
+
+impl From<ImageLoaderError<MailContextError>> for MailContextError {
+    fn from(value: ImageLoaderError<MailContextError>) -> Self {
+        match value {
+            ImageLoaderError::Api(err) => err.into(),
+            ImageLoaderError::LoadCid(err) => err,
+            ImageLoaderError::LostContext => Self::LostContext,
+            ImageLoaderError::Stash(err) => err.into(),
+
+            value @ (ImageLoaderError::UnexpectedScheme(..) | ImageLoaderError::Url(..)) => {
+                Self::Other(value.into())
+            }
         }
     }
 }
