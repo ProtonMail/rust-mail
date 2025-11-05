@@ -28,7 +28,7 @@ impl VersionConverter for Move {
 
 impl Action for Move {
     const TYPE: Type = Type("move_conversations");
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     type VersionConverter = Self;
     type Handler = MoveHandler;
     type RemoteOutput = ();

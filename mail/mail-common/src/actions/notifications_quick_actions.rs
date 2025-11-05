@@ -139,13 +139,13 @@ async fn exec_remote(
         InternalPushNotificationQuickAction::MarkAsRead { remote_id } => {
             tracing::info!("Marking {remote_id:?} as read from push notification quick action");
             session
-                .put_messages_read(vec![remote_id.clone()], time_left, retry_policy)
+                .put_messages_read_ex(vec![remote_id.clone()], time_left, retry_policy)
                 .await?;
         }
         InternalPushNotificationQuickAction::MoveToLabel { remote_id, label } => {
             tracing::info!("Moving {remote_id:?} to {label:?} from push notification quick action");
             session
-                .put_messages_label(
+                .put_messages_label_ex(
                     vec![remote_id.clone()],
                     label.label_id(),
                     None,
@@ -180,6 +180,9 @@ impl VersionConverter for PushNotificationActionConverter {
     ) -> proton_action_queue::action::FactoryResult<Self::Output> {
         if !(old_version <= 1 && current_version == 1) {
             return Err(VersionConverterError::InvalidVersion(current_version).into());
+        }
+        if old_version == current_version {
+            return Ok(deserialize::<PushNotificationAction>(data)?);
         }
         let v0 = deserialize::<V0PushNotificationAction>(data)?;
         let internal: InternalPushNotificationQuickAction = v0.action.into();

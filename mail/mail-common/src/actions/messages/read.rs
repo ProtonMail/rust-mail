@@ -46,7 +46,7 @@ impl Read {
 
 impl Action for Read {
     const TYPE: Type = Type("mark_messages_read");
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
 
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = ReadHandler;
@@ -116,11 +116,7 @@ impl Handler for ReadHandler {
             Message::local_ids_counterpart(action.0.target_ids.clone(), guard.tether()).await?;
         info!("Marking {message_ids:?} as read");
 
-        let response = self
-            .api
-            .put_messages_read(message_ids, None, None)
-            .await?
-            .responses;
+        let response = self.api.put_messages_read(message_ids).await?.responses;
 
         // In this case General::NotExists is returned also for messages already marked as read
         let failed_ids = filter_responses_by_codes(

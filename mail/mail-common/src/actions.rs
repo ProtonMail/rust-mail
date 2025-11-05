@@ -750,7 +750,7 @@ where
                 })
             }
 
-            2 => Ok(action::deserialize::<Self>(data)?),
+            2 | 3 => Ok(action::deserialize::<Self>(data)?),
 
             other_version => Err(FactoryError::InvalidVersion(other_version)),
         }

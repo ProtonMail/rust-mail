@@ -384,6 +384,16 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
         ids: Vec<MessageId>,
         label_id: LabelId,
         spam_action: Option<bool>,
+    ) -> ApiServiceResult<PutMessagesLabelResponse> {
+        self.put_messages_label_ex(ids, label_id, spam_action, None, None)
+            .await
+    }
+
+    async fn put_messages_label_ex(
+        &self,
+        ids: Vec<MessageId>,
+        label_id: LabelId,
+        spam_action: Option<bool>,
         timeout: Option<Duration>,
         retry_policy: Option<RetryPolicy>,
     ) -> ApiServiceResult<PutMessagesLabelResponse> {
@@ -403,6 +413,13 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
     }
 
     async fn put_messages_read(
+        &self,
+        ids: Vec<MessageId>,
+    ) -> ApiServiceResult<PutMessagesReadResponse> {
+        self.put_messages_read_ex(ids, None, None).await
+    }
+
+    async fn put_messages_read_ex(
         &self,
         ids: Vec<MessageId>,
         timeout: Option<Duration>,

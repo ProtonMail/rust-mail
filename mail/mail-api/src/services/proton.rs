@@ -303,12 +303,14 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<PutMessagesDeleteResponse>;
 
     /// Put a label on some messages.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_messages_label(
+        &self,
+        message_ids: Vec<MessageId>,
+        label_id: LabelId,
+        spam_action: Option<bool>,
+    ) -> ApiServiceResult<PutMessagesLabelResponse>;
+
+    async fn put_messages_label_ex(
         &self,
         message_ids: Vec<MessageId>,
         label_id: LabelId,
@@ -317,13 +319,12 @@ pub trait ProtonMail {
         retry_policy: Option<RetryPolicy>,
     ) -> ApiServiceResult<PutMessagesLabelResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_messages_read(
+        &self,
+        message_ids: Vec<MessageId>,
+    ) -> ApiServiceResult<PutMessagesReadResponse>;
+
+    async fn put_messages_read_ex(
         &self,
         message_ids: Vec<MessageId>,
         timeout: Option<Duration>,
