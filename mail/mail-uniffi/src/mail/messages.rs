@@ -148,12 +148,14 @@ impl DecryptedMessage {
     #[returns(AttachmentDataResult)]
     pub async fn load_image(self: Arc<Self>, url: String) -> Result<AttachmentData, ProtonError> {
         let ctx = self.ctx()?;
+
         uniffi_async(async move {
             let att = self
                 .body
                 .load_image_from_str(&ctx, &url)
                 .await
                 .map_err(RealProtonMailError::from)?;
+
             Ok::<_, RealProtonMailError>(AttachmentData {
                 data: att.data,
                 mime: att.mime,

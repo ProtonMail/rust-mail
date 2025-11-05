@@ -191,13 +191,16 @@ impl MailUserContext {
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
         let user_context_cloned = user_context.clone();
+
         async {
+            let span =
+                tracing::debug_span!(parent: None, "qac", user_id = %user_context.user_id().short_id());
+
             let origin = mail_context.core_context().origin();
+
             let mut builder =
                 MailUserContextBuilder::new().with_service(AttachmentCacheState::new());
 
-            let span =
-                tracing::debug_span!(parent: None, "qac", user_id = %user_context.user_id().short_id());
             builder = match origin {
                 Origin::App => {
                     let builder = builder
@@ -289,6 +292,7 @@ impl MailUserContext {
                         .mail_context()
                         .core_context()
                         .get_service::<EventPollConfigService>();
+
                     if let EventPollMode::Automatic(interval) = config.mode() {
                         this.init_event_loop_poll(interval)?;
                     }

@@ -1032,6 +1032,7 @@ impl MailContext {
     pub fn network_monitor_service(&self) -> &NetworkMonitorService {
         self.core_context.network_monitor_service()
     }
+
     pub fn issue_reporter_service(&self) -> &IssueReporterService {
         self.core_context.issue_reporter_service()
     }

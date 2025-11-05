@@ -77,6 +77,7 @@ pub struct Draft {
     pub address_id: AddressId,
     pub subject: String,
     pub send_result: Option<DraftSendResult>,
+
     #[debug(skip)]
     body: String,
     mime_type: MessageMimeType,
@@ -277,6 +278,7 @@ impl Draft {
             sender_alias,
             last_draft_save_action_id: metadata.save_action_id,
         };
+
         draft.sanitize_body();
 
         // When syncing the draft from the server  we need to re-check address validity in

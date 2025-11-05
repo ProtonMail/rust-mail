@@ -162,6 +162,7 @@ impl DraftMetadata {
         } else {
             DraftExpirationOption::Custom
         };
+
         let mut metadata = Self {
             id: None,
             local_message_id: None,
@@ -180,6 +181,7 @@ impl DraftMetadata {
 
         Ok(metadata)
     }
+
     pub fn with_ids(message_id: LocalMessageId, conversation_id: LocalConversationId) -> Self {
         Self {
             id: None,
@@ -284,6 +286,7 @@ impl DraftMetadata {
         let Some(local_id) = Message::remote_id_counterpart(remote_id, tether).await? else {
             return Ok(None);
         };
+
         Self::find_by_message_id(local_id, tether).await
     }
 

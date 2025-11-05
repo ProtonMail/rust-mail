@@ -331,8 +331,10 @@ pub async fn new_draft(
 ) -> Result<Arc<Draft>, DraftOpenError> {
     let ctx = session.ctx()?;
     let ptr = session.ptr();
+
     uniffi_async(async move {
         let options = draft_options();
+
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty_ex(&ctx, options).await,
             DraftCreateMode::Reply(id) => {
@@ -453,6 +455,7 @@ impl Draft {
         editor_id: String,
     ) -> Result<HtmlForComposer, ProtonError> {
         let theme_opts = theme_opts.into();
+
         Ok(async_runtime().block_on(async {
             let (head_content, initial_body) = self
                 .instance
@@ -511,9 +514,11 @@ impl Draft {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
+
         uniffi_async::<Option<Id>, RealProtonMailError, _>(async move {
             let metadata_id = self.instance.metadata_id;
             let tether = ctx.user_stash().connection().await?;
+
             DraftMetadata::message_id(metadata_id, &tether)
                 .await
                 .map(|v| v.map(Into::into))
@@ -590,18 +595,17 @@ impl Draft {
         self: Arc<Self>,
     ) -> Result<DraftSenderAddressList, ProtonError> {
         Ok(uniffi_async::<_, RealProtonMailError, _>(async move {
-            let addresses = self
+            let available = self
                 .instance
                 .sender_addresses()
                 .await?
                 .into_iter()
                 .map(|v| v.email)
                 .collect::<Vec<_>>();
-            let current = self.instance.sender().await?;
-            Ok(DraftSenderAddressList {
-                available: addresses,
-                active: current,
-            })
+
+            let active = self.instance.sender().await?;
+
+            Ok(DraftSenderAddressList { available, active })
         })
         .await?)
     }
@@ -839,7 +843,8 @@ impl Draft {
             .load_image(url)
             .await
             .map_err(RealProtonMailError::from)?;
-        Ok::<_, RealProtonMailError>(AttachmentData {
+
+        Ok(AttachmentData {
             data: att.data,
             mime: att.mime,
         })
