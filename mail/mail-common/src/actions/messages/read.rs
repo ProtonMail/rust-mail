@@ -15,38 +15,22 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{error, info};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-pub enum ReadRemoteStrategy {
-    #[default]
-    Enabled,
-    Disabled,
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Read(
-    GenericActionData<Message>,
-    #[serde(default)] ReadRemoteStrategy,
-);
+pub struct Read(GenericActionData<Message>);
 
 impl Read {
     pub fn new(message_ids: impl IntoIterator<Item = LocalMessageId>) -> Self {
-        Self(
-            GenericActionData::new(message_ids),
-            ReadRemoteStrategy::Enabled,
-        )
+        Self(GenericActionData::new(message_ids))
     }
 
-    pub fn for_push_notification(message_id: LocalMessageId) -> Self {
-        Self(
-            GenericActionData::new(std::iter::once(message_id)),
-            ReadRemoteStrategy::Disabled,
-        )
+    pub fn single(message_id: LocalMessageId) -> Self {
+        Self(GenericActionData::new(std::iter::once(message_id)))
     }
 }
 
 impl Action for Read {
     const TYPE: Type = Type("mark_messages_read");
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = ReadHandler;
@@ -106,9 +90,6 @@ impl Handler for ReadHandler {
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         if action.0.target_ids.is_empty() {
-            return Ok(());
-        }
-        if action.1 == ReadRemoteStrategy::Disabled {
             return Ok(());
         }
 

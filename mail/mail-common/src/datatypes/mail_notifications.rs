@@ -4,7 +4,6 @@
 //! It's using shared base from [`proton_core_common`] but with the context of mail application
 //!
 
-use proton_core_common::datatypes::SystemLabel;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::push_notifications::DecryptedEmailPushNotificationAction as ApiDecryptedEmailPushNotificationAction;
 use proton_mail_api::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
@@ -31,45 +30,6 @@ pub enum PushNotificationQuickAction {
     MarkAsRead { remote_id: MessageId },
     MoveToArchive { remote_id: MessageId },
     MoveToTrash { remote_id: MessageId },
-}
-
-/// Internal version of push notification quick actions.
-/// It is more generic than [`PushNotificationQuickAction`], as it is not limited to
-/// trash or archive.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum InternalPushNotificationQuickAction {
-    MarkAsRead {
-        remote_id: MessageId,
-    },
-    MoveToLabel {
-        remote_id: MessageId,
-        label: SystemLabel,
-    },
-}
-
-impl From<PushNotificationQuickAction> for InternalPushNotificationQuickAction {
-    fn from(action: PushNotificationQuickAction) -> Self {
-        match action {
-            PushNotificationQuickAction::MarkAsRead { remote_id } => Self::MarkAsRead { remote_id },
-            PushNotificationQuickAction::MoveToArchive { remote_id } => Self::MoveToLabel {
-                remote_id,
-                label: SystemLabel::Archive,
-            },
-            PushNotificationQuickAction::MoveToTrash { remote_id } => Self::MoveToLabel {
-                remote_id,
-                label: SystemLabel::Trash,
-            },
-        }
-    }
-}
-
-impl InternalPushNotificationQuickAction {
-    pub fn remote_id(&self) -> &MessageId {
-        match self {
-            Self::MarkAsRead { remote_id } => remote_id,
-            Self::MoveToLabel { remote_id, .. } => remote_id,
-        }
-    }
 }
 
 /// Decrypted notification usable only in the context of the Inbox application
