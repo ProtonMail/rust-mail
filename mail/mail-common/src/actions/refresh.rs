@@ -2,6 +2,7 @@ use crate::MailUserContext;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::actions::event_poll::ActionEventLoopError;
 use proton_core_common::datatypes::Refresh;
 use serde::{Deserialize, Serialize};
@@ -79,6 +80,7 @@ impl Handler for ActionRefreshHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

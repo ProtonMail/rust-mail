@@ -1,5 +1,6 @@
 use crate::action::{Action, ActionId, Error, Handler, WriterGuard, WriterGuardError};
 use crate::queue::ActionRequeueReason;
+use crate::rebase::RebaseChangeSet;
 use stash::stash::{Bond, StashError};
 use std::marker::PhantomData;
 
@@ -48,6 +49,7 @@ where
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), T::Error> {
         Ok(())

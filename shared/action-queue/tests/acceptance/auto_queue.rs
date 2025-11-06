@@ -7,6 +7,7 @@ use proton_action_queue::queue::{
     ActionRequeueReason, BroadcastMessage, NoopOnlineStatusWaiter, OnlineStatusWaiter,
     QueuedActionState, TokioTaskSpawner,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use std::time::Duration;
@@ -283,6 +284,7 @@ impl Handler for SuccessActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())
@@ -339,6 +341,7 @@ impl Handler for ErrorActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())
@@ -394,6 +397,7 @@ impl Handler for WriterGuardExpiredActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

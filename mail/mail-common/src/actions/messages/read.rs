@@ -7,6 +7,7 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::consts::General;
 use proton_core_api::session::Session;
 use proton_core_common::models::ModelIdExtension;
@@ -126,6 +127,7 @@ impl Handler for ReadHandler {
         &self,
         this_id: ActionId,
         action: &mut Self::Action,
+        _: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         //TODO(ET-5183): Test me!

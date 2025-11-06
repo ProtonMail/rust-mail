@@ -12,6 +12,7 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, FactoryResult, Handler, Priority, Type, VersionConverter,
     VersionConverterError, WriterGuard, deserialize,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::AddressId;
@@ -275,6 +276,7 @@ impl Handler for AttachmentUploadHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

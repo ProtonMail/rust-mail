@@ -3252,10 +3252,11 @@ async fn create_or_get_local(
 
     tether
         .tx(async |tx| {
+            let mut change_set = RebaseChangeSet::default();
             existing_conversation.save(tx).await?;
             existing_conversation.reload(tx).await?;
             new_conversation
-                .create_or_get_local(&LabelId::inbox(), tx)
+                .create_or_get_local(&LabelId::inbox(), &mut change_set, tx)
                 .await?;
             new_conversation.reload(tx).await
         })

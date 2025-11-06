@@ -56,6 +56,7 @@ use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext};
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_api::services::proton::{PrivateEmail, PrivateString};
@@ -686,7 +687,11 @@ impl Message {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn create_or_get_local(
+        &mut self,
+        rebase_change_set: &mut RebaseChangeSet,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone()
             && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
         {
@@ -701,6 +706,7 @@ impl Message {
         }
 
         self.save(bond).await?;
+        rebase_change_set.add(self.id());
         Ok(())
     }
 
@@ -1976,8 +1982,14 @@ impl Message {
             })?;
 
             #[cfg(feature = "action_rebase")]
-            if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
-                tracing::error!("Failed to rebase: {e}")
+            {
+                let rebase_change_set = RebaseChangeSet::from(message.id());
+                if let Err(e) = queue
+                    .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
+                    .await
+                {
+                    tracing::error!("Failed to rebase: {e}")
+                }
             }
 
             Ok(())
@@ -2325,6 +2337,7 @@ impl Message {
 
     pub(crate) async fn save_scroller_messages(
         api_messages: Vec<ApiMessageMetadata>,
+        rebase_change_set: &mut RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         let mut messages = Vec::with_capacity(api_messages.len());
@@ -2335,7 +2348,7 @@ impl Message {
                 Message::find_by_remote_id(api_message.id.clone(), tx).await?
             } else {
                 let mut message = Message::from_api_metadata(api_message, tx).await?;
-                message.create_or_get_local(tx).await?;
+                message.create_or_get_local(rebase_change_set, tx).await?;
                 Some(message)
             }) else {
                 continue;

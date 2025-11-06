@@ -4,6 +4,7 @@ use proton_action_queue::action::{
     ActionDependencyKey, ActionDependencyKeys, FactoryResult, VersionConverter,
     VersionConverterError, deserialize,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_action_queue::{
     action::{self, Action, ActionId, Handler, Priority, Type, WriterGuard, WriterGuardError},
     queue::ActionRequeueReason,
@@ -151,6 +152,7 @@ impl Handler for EventPollHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // do nothing
