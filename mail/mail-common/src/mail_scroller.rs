@@ -1589,6 +1589,13 @@ mod tests {
     #[test_case(vec![1, 3], vec![1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 1, items, .. }) if items == vec![2]; "Test 13: add item in middle")]
     #[test_case(vec![1, 4], vec![1, 2, 3, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 1, items, .. }) if items == vec![2, 3]; "Test 14: add two items in middle")]
     #[test_case(vec![1, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 1, items, .. }) if items == vec![2, 3]; "Test 14a: add two items in middle")]
+    #[test_case(vec![1, 6, 4], vec![1, 2, 3, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 2, items, .. }) if items == vec![2, 3]; "Test 14b: replace one with two items in middle")]
+    #[test_case(vec![1, 6, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 2, items, .. }) if items == vec![2, 3]; "Test 14c: replace one with two items in middle")]
+    #[test_case(vec![1, 2, 6, 4], vec![1, 2, 3, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 2, to: 3, items, .. }) if items == vec![3]; "Test 14d: replace one with two items in middle")]
+    #[test_case(vec![1, 2, 6, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 2, to: 3, items, .. }) if items == vec![3, 4]; "Test 14e: replace one with two items in middle")]
+    #[test_case(vec![1, 2, 3, 4], vec![1, 6, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 3, items, .. }) if items == vec![6]; "Test 14f: replace two with one item in middle")]
+    #[test_case(vec![1, 2, 3, 4, 5], vec![1, 6, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 1, to: 3, items, .. }) if items == vec![6]; "Test 14g: replace two with one item in middle")]
+    #[test_case(vec![1, 2, 3, 4, 5], vec![1, 2, 6, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceRange { from: 2, to: 4, items, .. }) if items == vec![6]; "Test 14h: replace three with two items in middle")]
     // Items removed from beginning
     #[test_case(vec![1, 2, 3], vec![2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 1, items, .. }) if items.is_empty(); "Test 15: remove one item from beginning")]
     #[test_case(vec![1, 2, 3, 4], vec![3, 4] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 2, items, .. }) if items.is_empty(); "Test 16: remove two items from beginning")]
