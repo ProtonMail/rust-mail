@@ -1,3 +1,4 @@
+use crate::MailContext;
 use crate::datatypes::LocalMessageId;
 use crate::models::Message;
 use crate::{
@@ -11,21 +12,42 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::exports::RetryPolicy;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::SystemLabel;
+use proton_core_common::db::account::CoreSession;
 use proton_core_common::models::{LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Tether};
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, info, instrument, warn};
 
 use super::messages::{Move, MoveHandler, Read, ReadHandler};
 use super::{ActionMoveData, MailActionError};
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
+// This timeout is explicitly set to 30 not 60 seconds because there is no chance
+// we will get more than 30 seconds for the notification execution from the OS.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
-#[instrument(skip(ctx))]
+#[instrument(skip(ctx, session))]
 pub async fn exec(
+    ctx: Arc<MailContext>,
+    session: &CoreSession,
+    action: PushNotificationQuickAction,
+    time_left_ms: Option<u64>,
+) -> MailContextResult<()> {
+    ctx.core_context()
+        .task_service()
+        .scope_background_async(async || {
+            if let Some(user_ctx) = ctx.initialized_user_context_from_session(session).await? {
+                exec_inner(&user_ctx, action, time_left_ms).await?;
+            }
+            Ok(())
+        })
+        .await
+}
+
+async fn exec_inner(
     ctx: &MailUserContext,
     action: PushNotificationQuickAction,
     time_left_ms: Option<u64>,
