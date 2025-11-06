@@ -551,8 +551,6 @@ impl Conversation {
         if let Some(remote_id) = self.remote_id.clone()
             && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
         {
-            self.deleted = existing.deleted;
-
             if existing.is_known {
                 let should_skip = match (
                     self.labels
