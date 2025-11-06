@@ -2374,9 +2374,8 @@ impl Message {
         //    draft is open)
 
         let mut is_stale_draft = false;
-        if DraftMetadata::find_by_message_with_remote_id(metadata.id.clone(), tx)
-            .await?
-            .is_some()
+        if let Some(draft_metadata) =
+            DraftMetadata::find_by_message_with_remote_id(metadata.id.clone(), tx).await?
         {
             // We have a message that has been opened as a draft, but it is possible that
             // another session has sent this draft. Deleting the metadata at this point in
@@ -2390,7 +2389,11 @@ impl Message {
             // states on the rust side.
 
             let flags = MessageFlags::from(metadata.flags);
-            if !(flags.is_schedule_send() || flags.is_sent()) {
+            // if the send action id is still present it means the sending is still ongoing
+            // and we should not remove/modify the data as the server response will take care of it.
+            if !((flags.is_schedule_send() || flags.is_sent())
+                && draft_metadata.send_action_id.is_none())
+            {
                 // Case 2.
                 tracing::info!(
                     "Skipping message update for {} because it's opened locally",
