@@ -266,26 +266,14 @@ impl MailSession {
         let mail_ctx = self.ctx_arc();
 
         uniffi_async(async move {
-            mail_ctx
-                .core_context()
-                .task_service()
-                .scope_background_async(async || {
-                    if let Some(user_ctx) = mail_ctx
-                        .initialized_user_context_from_session(session.session())
-                        .await
-                        .map_err(RealProtonMailError::from)?
-                    {
-                        notifications_quick_actions::exec(
-                            user_ctx.as_ref(),
-                            action.into(),
-                            time_left_ms,
-                        )
-                        .await
-                        .map_err(RealProtonMailError::from)?;
-                    }
-                    Ok::<_, RealProtonMailError>(())
-                })
-                .await
+            notifications_quick_actions::exec(
+                mail_ctx,
+                session.session(),
+                action.into(),
+                time_left_ms,
+            )
+            .await
+            .map_err(RealProtonMailError::from)
         })
         .await
         .map_err(ActionError::from)
