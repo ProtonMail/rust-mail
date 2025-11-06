@@ -610,11 +610,11 @@ where
         api: &Session,
         mut guard: WriterGuard<'_>,
     ) -> Result<(), MailActionError> {
-        let tether = guard.tether();
-
         let Some(dest_label) = self.destination else {
             return Ok(());
         };
+
+        let tether = guard.tether();
 
         let dest_label = Label::resolve_remote_label_id(dest_label, tether).await?;
         let mut all_remote_ids = Vec::new();

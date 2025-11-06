@@ -15,6 +15,7 @@
 
 use crate::services::proton::prelude::*;
 use bytes::Bytes;
+use muon::common::RetryPolicy;
 use proton_core_api::service::ApiServiceResult;
 use proton_core_api::services::proton::{IncomingDefaultId, LabelId};
 use std::time::Duration;
@@ -302,11 +303,6 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<PutMessagesDeleteResponse>;
 
     /// Put a label on some messages.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_messages_label(
         &self,
         message_ids: Vec<MessageId>,
@@ -314,15 +310,25 @@ pub trait ProtonMail {
         spam_action: Option<bool>,
     ) -> ApiServiceResult<PutMessagesLabelResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
+    async fn put_messages_label_ex(
+        &self,
+        message_ids: Vec<MessageId>,
+        label_id: LabelId,
+        spam_action: Option<bool>,
+        timeout: Option<Duration>,
+        retry_policy: Option<RetryPolicy>,
+    ) -> ApiServiceResult<PutMessagesLabelResponse>;
+
     async fn put_messages_read(
         &self,
         message_ids: Vec<MessageId>,
+    ) -> ApiServiceResult<PutMessagesReadResponse>;
+
+    async fn put_messages_read_ex(
+        &self,
+        message_ids: Vec<MessageId>,
+        timeout: Option<Duration>,
+        retry_policy: Option<RetryPolicy>,
     ) -> ApiServiceResult<PutMessagesReadResponse>;
 
     /// Remove a label from some messages.

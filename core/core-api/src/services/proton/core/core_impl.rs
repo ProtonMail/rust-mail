@@ -12,6 +12,7 @@ use serde_json::json;
 use crate::service::ApiServiceResult;
 use crate::services::proton::core::{CORE_V4, CORE_V5, ProtonCore};
 use crate::services::proton::prelude::*;
+use crate::utils::HttpReqExt;
 
 impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
     async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse> {
@@ -150,16 +151,12 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
         timeout: Option<Duration>,
         retry: Option<RetryPolicy>,
     ) -> ApiServiceResult<()> {
-        let mut request = GET!("{CORE_V4}/tests/ping");
-
-        if let Some(timeout) = timeout {
-            request = request.allowed_time(timeout);
-        }
-        if let Some(retry) = retry {
-            request = request.retry_policy(retry);
-        }
-
-        request.send_with(self).await?.ok()?;
+        GET!("{CORE_V4}/tests/ping")
+            .with_allowed_time(timeout)
+            .with_retry_policy(retry)
+            .send_with(self)
+            .await?
+            .ok()?;
 
         Ok(())
     }

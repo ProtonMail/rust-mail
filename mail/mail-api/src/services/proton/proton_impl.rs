@@ -1,11 +1,12 @@
 use bytes::Bytes;
-use muon::common::Sender;
+use muon::common::{RetryPolicy, Sender};
 use muon::util::DurationExt;
 use muon::{DELETE, ProtonRequest, ProtonResponse};
 use proton_core_api::service::ApiServiceResult;
 use proton_core_api::services::proton::muon::util::ProtonRequestExt;
 use proton_core_api::services::proton::muon::{GET, POST, PUT, serde_to_query};
 use proton_core_api::services::proton::{CORE_V4, IncomingDefaultId, LabelId};
+use proton_core_api::utils::HttpReqExt as _;
 use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;
@@ -384,6 +385,18 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
         label_id: LabelId,
         spam_action: Option<bool>,
     ) -> ApiServiceResult<PutMessagesLabelResponse> {
+        self.put_messages_label_ex(ids, label_id, spam_action, None, None)
+            .await
+    }
+
+    async fn put_messages_label_ex(
+        &self,
+        ids: Vec<MessageId>,
+        label_id: LabelId,
+        spam_action: Option<bool>,
+        timeout: Option<Duration>,
+        retry_policy: Option<RetryPolicy>,
+    ) -> ApiServiceResult<PutMessagesLabelResponse> {
         Ok(PUT!("{MAIL_V4}/messages/label")
             .body_json(PutMessagesLabelRequest {
                 action: 1,
@@ -391,6 +404,8 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
                 label_id,
                 spam_action,
             })?
+            .with_allowed_time(timeout)
+            .with_retry_policy(retry_policy)
             .send_with(self)
             .await?
             .ok()?
@@ -401,8 +416,19 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
         &self,
         ids: Vec<MessageId>,
     ) -> ApiServiceResult<PutMessagesReadResponse> {
+        self.put_messages_read_ex(ids, None, None).await
+    }
+
+    async fn put_messages_read_ex(
+        &self,
+        ids: Vec<MessageId>,
+        timeout: Option<Duration>,
+        retry_policy: Option<RetryPolicy>,
+    ) -> ApiServiceResult<PutMessagesReadResponse> {
         Ok(PUT!("{MAIL_V4}/messages/read")
             .body_json(PutMessagesReadRequest { ids })?
+            .with_allowed_time(timeout)
+            .with_retry_policy(retry_policy)
             .send_with(self)
             .await?
             .ok()?
