@@ -4,6 +4,7 @@ pub mod datatypes;
 pub mod db;
 pub mod errors;
 mod events;
+mod image_loader;
 pub mod ios_share_ext;
 mod mailbox;
 pub mod migration_snooper;
@@ -30,6 +31,7 @@ pub mod upsell_eligibility_watcher;
 pub mod test_utils;
 
 pub use self::context::{MailContext, MailContextError, MailContextResult};
+pub use self::image_loader::*;
 pub use self::mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
 pub use self::rsvp::{RsvpEvent, RsvpEventId};
 pub use self::sidebar::{Sidebar, SidebarError, SidebarResult};

@@ -1,4 +1,5 @@
 pub use super::*;
+use crate::ImagePolicy;
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::MessageFlags;
@@ -770,6 +771,7 @@ async fn create_reply_with_mime_and_body_and_message(
         &resolver,
         MetadataId(0),
         reply_mode,
+        ImagePolicy::Safe,
         &address,
         &mail_settings,
         &custom_settings,

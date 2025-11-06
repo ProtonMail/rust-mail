@@ -13,7 +13,7 @@ use super::datatypes::{
 };
 use super::datatypes::{LabelAsAction, MimeType, MoveAction};
 use super::state::MailUserContextPtr;
-use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
+use super::{ImagePolicy, MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::core::datatypes::{Id, RemoteId, UnixTimestamp};
 use crate::errors::{
     ActionError, AttachmentDataResult, BodyOutputResult, MobileActionsResult, ProtonError,
@@ -31,8 +31,9 @@ use itertools::Itertools as _;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
-use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::unexpected::Unexpected;
+use proton_mail_common::{MailContextError, MailUserContext};
+use url::Url;
 
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::PrivateEmail;
@@ -126,7 +127,6 @@ impl DecryptedMessage {
 
 #[uniffi_export]
 impl DecryptedMessage {
-    /// Unsubscribes from the newsletter
     #[returns(VoidActionResult)]
     pub async fn unsubscribe_from_newsletter(self: Arc<Self>) -> Result<(), ProtonError> {
         uniffi_async(async move {
@@ -142,18 +142,25 @@ impl DecryptedMessage {
         .into()
     }
 
-    /// Load a remote image (potentially proxied) or embedded attachment in the email body.
-    ///
-    /// This will not resolve images in the fs.
     #[returns(AttachmentDataResult)]
-    pub async fn load_image(self: Arc<Self>, url: String) -> Result<AttachmentData, ProtonError> {
+    pub async fn load_image(
+        self: Arc<Self>,
+        url: String,
+        policy: ImagePolicy,
+    ) -> Result<AttachmentData, ProtonError> {
         let ctx = self.ctx()?;
+
         uniffi_async(async move {
+            let url = Url::try_from(url.as_str())
+                .map_err(MailContextError::from)
+                .map_err(RealProtonMailError::from)?;
+
             let att = self
                 .body
-                .load_image_from_str(&ctx, &url)
+                .load_image(&ctx, url, policy.into())
                 .await
                 .map_err(RealProtonMailError::from)?;
+
             Ok::<_, RealProtonMailError>(AttachmentData {
                 data: att.data,
                 mime: att.mime,

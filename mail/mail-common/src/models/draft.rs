@@ -120,11 +120,6 @@ pub struct DraftMetadata {
 }
 
 impl DraftMetadata {
-    /// Create metadata for new empty draft.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn empty(bond: &Bond<'_>) -> Result<Self, StashError> {
         let mut metadata = Self {
             id: None,
@@ -145,11 +140,6 @@ impl DraftMetadata {
         Ok(metadata)
     }
 
-    /// Create metadata for new reply draft.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn reply(
         reply_mode: ReplyMode,
         source_message_id: LocalMessageId,
@@ -162,6 +152,7 @@ impl DraftMetadata {
         } else {
             DraftExpirationOption::Custom
         };
+
         let mut metadata = Self {
             id: None,
             local_message_id: None,
@@ -180,6 +171,7 @@ impl DraftMetadata {
 
         Ok(metadata)
     }
+
     pub fn with_ids(message_id: LocalMessageId, conversation_id: LocalConversationId) -> Self {
         Self {
             id: None,
@@ -196,20 +188,10 @@ impl DraftMetadata {
         }
     }
 
-    /// Find metadata with `id`.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     pub async fn find_by_id(id: MetadataId, tether: &Tether) -> Result<Option<Self>, StashError> {
         DraftMetadata::find_first("WHERE id=?", params![id], tether).await
     }
 
-    /// Find metadata for a message with `local_message_id`.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     pub async fn find_by_message_id(
         local_message_id: LocalMessageId,
         tether: &Tether,
@@ -226,11 +208,6 @@ impl DraftMetadata {
         DraftMetadata::find_first_sync("WHERE local_message_id=?", (local_message_id,), conn)
     }
 
-    /// Delete metadata for a message with `local_message_id`.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     pub async fn delete_for_message(
         local_message_id: LocalMessageId,
         bond: &Bond<'_>,
@@ -245,11 +222,6 @@ impl DraftMetadata {
         .await
     }
 
-    /// Delete metadata for the given `id`.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     pub async fn delete(id: MetadataId, bond: &Bond<'_>) -> Result<usize, StashError> {
         bond.execute(
             format!("DELETE FROM `{}` WHERE id = ?", Self::table_name()),
@@ -258,14 +230,6 @@ impl DraftMetadata {
         .await
     }
 
-    /// Get the message id associated with a draft.
-    ///
-    /// This method can return `None` if the message has not been
-    /// created yet.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn message_id(
         id: MetadataId,
         tether: &Tether,
@@ -284,16 +248,13 @@ impl DraftMetadata {
         let Some(local_id) = Message::remote_id_counterpart(remote_id, tether).await? else {
             return Ok(None);
         };
+
         Self::find_by_message_id(local_id, tether).await
     }
 
     /// Check whether this draft has pending changes that have not been communicated to the server.
     ///
     /// Pending change are action that have been queued but not yet executed.
-    ///
-    /// # Errors
-    ///
-    /// Returns errors if the query failed.
     pub async fn has_pending_changes(&self, tether: &Tether) -> Result<bool, StashError> {
         //TODO: check attachment metadata.
         Ok(self.save_action_id.is_some()
@@ -306,11 +267,6 @@ impl DraftMetadata {
             .is_empty())
     }
 
-    /// Retrieve the last recorded save action.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn last_save_action_id(
         metadata_id: MetadataId,
         tether: &Tether,
@@ -331,12 +287,6 @@ impl DraftMetadata {
         }
     }
 
-    /// Retrive all message ids for with send action is pending.
-    ///
-    /// # Errors
-    ///
-    /// When database query fails
-    ///
     pub async fn messages_with_pending_send(
         tether: &Tether,
     ) -> Result<Vec<LocalMessageId>, StashError> {

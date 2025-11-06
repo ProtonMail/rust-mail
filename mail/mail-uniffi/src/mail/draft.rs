@@ -2,6 +2,7 @@ mod attachments;
 mod observer;
 mod recipients;
 
+use super::ImagePolicy;
 use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
@@ -328,22 +329,53 @@ pub struct DraftSenderAddressList {
 pub async fn new_draft(
     session: &MailUserSession,
     create_mode: DraftCreateMode,
+    image_policy: ImagePolicy,
 ) -> Result<Arc<Draft>, DraftOpenError> {
     let ctx = session.ctx()?;
     let ptr = session.ptr();
+
     uniffi_async(async move {
         let options = draft_options();
+
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty_ex(&ctx, options).await,
+
             DraftCreateMode::Reply(id) => {
-                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Sender, false, options).await
+                RealDraft::reply_ex(
+                    &ctx,
+                    id.into(),
+                    ReplyMode::Sender,
+                    image_policy.into(),
+                    false,
+                    options,
+                )
+                .await
             }
+
             DraftCreateMode::ReplyAll(id) => {
-                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::All, false, options).await
+                RealDraft::reply_ex(
+                    &ctx,
+                    id.into(),
+                    ReplyMode::All,
+                    image_policy.into(),
+                    false,
+                    options,
+                )
+                .await
             }
+
             DraftCreateMode::Forward(id) => {
-                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Forward, false, options).await
+                RealDraft::reply_ex(
+                    &ctx,
+                    id.into(),
+                    ReplyMode::Forward,
+                    image_policy.into(),
+                    false,
+                    options,
+                )
+                .await
             }
+
             DraftCreateMode::FromIosShareExtension => {
                 RealDraft::from_ios_share_extension(&ctx, options).await
             }
@@ -386,28 +418,23 @@ pub async fn open_draft(
 
 #[uniffi_export]
 impl Draft {
-    /// Get the sender of the draft.
     pub fn sender(&self) -> String {
         //TODO: Improve in follow up with event updates.
         async_runtime().block_on(async { self.instance.sender().await.unwrap_or_default() })
     }
 
-    /// Get the To recipients of the draft.
     pub fn to_recipients(&self) -> Arc<ComposerRecipientList> {
         ComposerRecipientList::new_to_list(self.instance.clone(), self.cached.clone())
     }
 
-    /// Get the Cc recipients of the draft.
     pub fn cc_recipients(&self) -> Arc<ComposerRecipientList> {
         ComposerRecipientList::new_cc_list(self.instance.clone(), self.cached.clone())
     }
 
-    /// Get the Bcc recipients of the draft.
     pub fn bcc_recipients(&self) -> Arc<ComposerRecipientList> {
         ComposerRecipientList::new_bcc_list(self.instance.clone(), self.cached.clone())
     }
 
-    /// Get the draft's subject.
     pub fn subject(&self) -> String {
         async_runtime().block_on(async { self.cached.read().await.subject.clone() })
     }
@@ -453,6 +480,7 @@ impl Draft {
         editor_id: String,
     ) -> Result<HtmlForComposer, ProtonError> {
         let theme_opts = theme_opts.into();
+
         Ok(async_runtime().block_on(async {
             let (head_content, initial_body) = self
                 .instance
@@ -466,12 +494,10 @@ impl Draft {
         })?)
     }
 
-    /// Get the draft's body.
     pub fn body(&self) -> String {
         async_runtime().block_on(async { self.cached.read().await.body.clone() })
     }
 
-    /// Set the draft's `subject`.
     #[returns(VoidDraftSaveResult)]
     pub fn set_subject(&self, subject: String) -> Result<(), DraftSaveError> {
         async_runtime()
@@ -485,7 +511,6 @@ impl Draft {
             .into()
     }
 
-    /// Set the draft's `body`.
     #[returns(VoidDraftSaveResult)]
     pub fn set_body(&self, body: String) -> Result<(), DraftSaveError> {
         async_runtime()
@@ -499,21 +524,19 @@ impl Draft {
             .into()
     }
 
-    /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
         async_runtime().block_on(async { self.cached.read().await.mime_type.into() })
     }
 
-    /// Get the Draft's message id .
-    ///
-    /// Returns `None` if no message was created.
     pub async fn message_id(self: Arc<Self>) -> Result<Option<Id>, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
+
         uniffi_async::<Option<Id>, RealProtonMailError, _>(async move {
             let metadata_id = self.instance.metadata_id;
             let tether = ctx.user_stash().connection().await?;
+
             DraftMetadata::message_id(metadata_id, &tether)
                 .await
                 .map(|v| v.map(Into::into))
@@ -532,46 +555,30 @@ impl Draft {
             .block_on(async { self.cached.read().await.send_result.clone().map(Into::into) })
     }
 
-    /// Load an embedded attachment in this draft message.
-    ///
-    /// See [`DecryptedMessageBody::load_image`] for more details.
-    ///
-    /// # Errors
-    ///
-    /// See [`DecryptedMessageBody::load_image`] for more details.
-    //NOTE: iOS request we share the same result types between
-    // this function and the DecryptedMessageBody equivalent.
+    // NOTE: iOS request we share the same result types between
+    //       this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
     pub async fn load_image(self: Arc<Self>, url: String) -> Result<AttachmentData, ProtonError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
-        };
-        uniffi_async(async move { self.load_image_impl(&ctx, url).await })
+        uniffi_async(async move { self.load_image_impl(url).await })
             .await
             .map_err(ProtonError::from)
             .into()
     }
 
-    /// Same as [`get_embedded_attachment()`], but synchronous.
-    //NOTE: iOS request we share the same result types between
-    // this function and the DecryptedMessageBody equivalent.
+    // NOTE: iOS request we share the same result types between
+    //       this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
     pub fn load_image_sync(self: Arc<Self>, cid: String) -> Result<AttachmentData, ProtonError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
-        };
         async_runtime()
-            .block_on(self.load_image_impl(&ctx, cid))
+            .block_on(self.load_image_impl(cid))
             .map_err(ProtonError::from)
             .into()
     }
 
-    /// Get the attachment list.
     pub fn attachment_list(&self) -> Arc<AttachmentList> {
         Arc::clone(&self.attachment_list)
     }
 
-    /// Change the sender address for this draft to the given `email` address.
     pub async fn change_sender_address(
         self: Arc<Self>,
         email: String,
@@ -590,18 +597,17 @@ impl Draft {
         self: Arc<Self>,
     ) -> Result<DraftSenderAddressList, ProtonError> {
         Ok(uniffi_async::<_, RealProtonMailError, _>(async move {
-            let addresses = self
+            let available = self
                 .instance
                 .sender_addresses()
                 .await?
                 .into_iter()
                 .map(|v| v.email)
                 .collect::<Vec<_>>();
-            let current = self.instance.sender().await?;
-            Ok(DraftSenderAddressList {
-                available: addresses,
-                active: current,
-            })
+
+            let active = self.instance.sender().await?;
+
+            Ok(DraftSenderAddressList { available, active })
         })
         .await?)
     }
@@ -829,17 +835,14 @@ impl Draft {
 }
 
 impl Draft {
-    async fn load_image_impl(
-        &self,
-        _: &MailUserContext,
-        url: String,
-    ) -> Result<AttachmentData, RealProtonMailError> {
+    async fn load_image_impl(&self, url: String) -> Result<AttachmentData, RealProtonMailError> {
         let att = self
             .instance
             .load_image(url)
             .await
             .map_err(RealProtonMailError::from)?;
-        Ok::<_, RealProtonMailError>(AttachmentData {
+
+        Ok(AttachmentData {
             data: att.data,
             mime: att.mime,
         })

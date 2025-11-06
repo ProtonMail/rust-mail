@@ -5,7 +5,7 @@ use crate::models::{
     Attachment, AttachmentData, DraftMetadata, DraftSendResult, MailSettings, MessageMimeType,
     MetadataId,
 };
-use crate::{MailContextError, MailContextResult, MailUserContext};
+use crate::{ImagePolicy, MailContextError, MailContextResult, MailUserContext};
 use chrono::{DateTime, Local};
 use compose::find_default_sender_address;
 use derive_more::Display;
@@ -738,6 +738,7 @@ impl DraftActor {
             context,
             message_id,
             reply_mode,
+            ImagePolicy::Safe,
             use_utc,
             DraftActorOptions::default(),
         )
@@ -748,10 +749,12 @@ impl DraftActor {
         context: &MailUserContext,
         message_id: LocalMessageId,
         reply_mode: ReplyMode,
+        image_policy: ImagePolicy,
         use_utc: bool,
         options: DraftActorOptions,
     ) -> Result<Self, MailContextError> {
-        let draft = draft_v1::Draft::reply(context, message_id, reply_mode, use_utc).await?;
+        let draft =
+            draft_v1::Draft::reply(context, message_id, reply_mode, image_policy, use_utc).await?;
 
         Ok(Self::create(context, draft, options))
     }
@@ -781,14 +784,18 @@ impl DraftActor {
         self.act(|sender| DraftActorMessage::Discard { sender })
             .await?
     }
+
     pub async fn message_id(&self) -> Result<Option<LocalMessageId>, MailContextError> {
         self.act(DraftActorMessage::GetMessageId).await?
     }
+
     pub async fn conversation_id(&self) -> Result<Option<LocalConversationId>, MailContextError> {
         self.act(DraftActorMessage::GetConversationId).await?
     }
+
     pub async fn load_image(&self, url: String) -> MailContextResult<AttachmentData> {
         let url = url::Url::parse(&url)?;
+
         self.act(|sender| DraftActorMessage::LoadImage { url, sender })
             .await?
     }
@@ -1263,116 +1270,148 @@ impl DraftActor {
 enum DraftActorMessage {
     #[display("GetExpirationTime")]
     GetExpirationTime(oneshot::Sender<Result<DraftExpirationTime, MailContextError>>),
+
     #[display("SetExpirationTime")]
     SetExpirationTime {
         time: DraftExpirationTime,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("RemovePassword")]
     RemovePassword(oneshot::Sender<Result<(), MailContextError>>),
+
     #[display("SetPassword")]
     SetPassword {
         password: SecretString,
         hint: Option<String>,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("GetPassword")]
     GetPassword(oneshot::Sender<Result<Option<EoData>, MailContextError>>),
+
     #[display("IsPasswordProtected")]
     IsPasswordProtected(oneshot::Sender<Result<bool, MailContextError>>),
+
     #[display("ChangeSenderAddress")]
     ChangeSenderAddress {
         email: String,
         sender: oneshot::Sender<Result<String, MailContextError>>,
     },
+
     #[display("SanitizeBody")]
     SanitizeBody(oneshot::Sender<Result<(), MailContextError>>),
+
     #[display("SetMimeType")]
     SetMimeType {
         mime_type: MessageMimeType,
         sender: oneshot::Sender<()>,
     },
+
     #[display("GetMimeType")]
     GetMimeType(oneshot::Sender<MessageMimeType>),
+
     #[display("SetBody")]
     SetBody {
         body: String,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("GetBody")]
     GetBody(oneshot::Sender<String>),
+
     #[display("HtmlHeadForComposer")]
     HtmlHeadForComposer {
         theme_opts: ThemeOpts,
         editor_id: String,
         sender: oneshot::Sender<(String, String)>,
     },
+
     #[display("GetAttachments")]
     GetAttachments(oneshot::Sender<Result<Vec<DraftAttachment>, MailContextError>>),
+
     #[display("RetryAttachmentUpload")]
     RetryAttachmentOperation {
         attachment_id: LocalAttachmentId,
         sender: oneshot::Sender<Result<ActionId, MailContextError>>,
     },
+
     #[display("RemoveAttachmentWithCid")]
     RemoveAttachmentWithCid {
         content_id: ContentId,
         sender: oneshot::Sender<Result<ActionId, MailContextError>>,
     },
+
     #[display("RemoveAttachment")]
     RemoveAttachment {
         attachment_id: LocalAttachmentId,
         sender: oneshot::Sender<Result<ActionId, MailContextError>>,
     },
+
     #[display("AddAttachment")]
     AddAttachment {
         attachment_id: LocalAttachmentId,
         sender: oneshot::Sender<Result<ActionId, MailContextError>>,
     },
+
     #[display("LoadImage")]
     LoadImage {
         url: url::Url,
         sender: oneshot::Sender<Result<AttachmentData, MailContextError>>,
     },
+
     #[display("GetMessageId")]
     GetMessageId(oneshot::Sender<Result<Option<LocalMessageId>, MailContextError>>),
+
     #[display("GetConversationId")]
     GetConversationId(oneshot::Sender<Result<Option<LocalConversationId>, MailContextError>>),
+
     #[display("Discard")]
     Discard {
         sender: oneshot::Sender<Result<QueuedActionOutput<Discard>, MailContextError>>,
     },
+
     #[display("ScheduleSend")]
     ScheduleSend {
         delivery_time: DateTime<Local>,
         sender: oneshot::Sender<Result<QueuedActionOutput<draft::Send>, MailContextError>>,
     },
+
     #[display("Send")]
     Send {
         sender: oneshot::Sender<Result<QueuedActionOutput<draft::Send>, MailContextError>>,
     },
+
     #[display("Save")]
     Save {
         sender: oneshot::Sender<Result<QueuedActionOutput<draft::Save>, MailContextError>>,
     },
+
     #[display("SenderAddresses")]
     SenderAddresses(oneshot::Sender<Result<Vec<Address>, MailContextError>>),
+
     #[display("GetAddressId")]
     GetAddressId(oneshot::Sender<AddressId>),
+
     #[display("GetSender")]
     GetSender(oneshot::Sender<String>),
+
     #[display("GetAddressValidationResult")]
     GetAddressValidationResult(oneshot::Sender<Option<DraftAddressValidationResult>>),
+
     #[display("ClearAddressValidationResult")]
     ClearAddressValidationResult(oneshot::Sender<()>),
+
     #[display("TakeAddressValidationResult")]
     TakeAddressValidationResult(oneshot::Sender<Option<DraftAddressValidationResult>>),
+
     #[display("AddSingleRecipient")]
     AddSingleRecipient {
         group: RecipientGroupId,
         recipient: RecipientEntry,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("AddRecipientGroup")]
     AddRecipientGroup {
         group: RecipientGroupId,
@@ -1381,6 +1420,7 @@ enum DraftActorMessage {
         total_in_group: u64,
         sender: oneshot::Sender<Result<Vec<RecipientEntry>, MailContextError>>,
     },
+
     #[display("SetRecipientLists")]
     SetRecipientLists {
         to: RecipientList,
@@ -1388,12 +1428,14 @@ enum DraftActorMessage {
         bcc: RecipientList,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("RemoveSingleRecipient")]
     RemoveSingleRecipient {
         group: RecipientGroupId,
         email: PrivateEmail,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("RemoveRecipientFromGroup")]
     RemoveGroupRecipient {
         group: RecipientGroupId,
@@ -1401,6 +1443,7 @@ enum DraftActorMessage {
         group_name: NonEmptyString,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("RemoveRecipientsFromGroup")]
     RemoveGroupRecipients {
         group: RecipientGroupId,
@@ -1408,60 +1451,73 @@ enum DraftActorMessage {
         group_name: NonEmptyString,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("RemoveRecipientGroup")]
     RemoveRecipientGroup {
         group: RecipientGroupId,
         group_name: NonEmptyString,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("GetRecipients")]
     GetRecipients {
         group: RecipientGroupId,
         sender: oneshot::Sender<Vec<Recipient>>,
     },
+
     #[cfg(feature = "test-utils")]
     #[display("TestMutate")]
     TestMutate {
         mutate: Box<dyn FnOnce(&mut draft_v1::Draft) + Send + 'static>,
         sender: oneshot::Sender<()>,
     },
+
     #[display("GetState")]
     GetState(oneshot::Sender<DraftState>),
+
     #[display("SetSubject")]
     SetSubject {
         subject: String,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("GetSubject")]
     GetSubject(oneshot::Sender<String>),
+
     #[display("GetRecipientList")]
     GetRecipientList {
         group: RecipientGroupId,
         sender: oneshot::Sender<RecipientList>,
     },
+
     #[display("SetRecipientList")]
     SetRecipientList {
         group: RecipientGroupId,
         recipients: RecipientList,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("OnRecipientValidation")]
     OnRecipientValidation {
         group: RecipientGroupId,
         updates: RecipientValidationUpdate,
     },
+
     #[display("ReValidateAllRecipients")]
     RevalidateAllRecipients,
+
     #[display("ValidateExpirationFeature")]
     ValidateExpirationFeature(
         oneshot::Sender<Result<ExpirationFeatureSupportReport, MailContextError>>,
     ),
+
     #[display("SwapAttachmentDisposition")]
     SwapAttachmentDisposition {
         attachment_id: LocalAttachmentId,
         new_disposition: CombinedAttachmentDisposition,
         sender: oneshot::Sender<Result<(), MailContextError>>,
     },
+
     #[display("SwapAttachmentDispositionCid")]
     SwapAttachmentDispositionCid {
         content_id: ContentId,
@@ -1498,6 +1554,7 @@ impl DraftActor {
         let cancellation_token = ctx.core_context().cancellation_token().child_token();
         let cloned_event_sender = event_sender.clone();
         let cloned_sender = sender.clone();
+
         ctx.spawn(async move {
             Self::background_loop(
                 weak,
@@ -1510,6 +1567,7 @@ impl DraftActor {
             )
             .await
         });
+
         Self {
             sender,
             metadata_id,
@@ -1565,6 +1623,7 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::SetExpirationTime { time, sender } => {
                     let r = async {
                         let mut tether = ctx.user_stash().connection().await?;
@@ -1573,6 +1632,7 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::RemovePassword(sender) => {
                     let r = async {
                         let mut tether = ctx.user_stash().connection().await?;
@@ -1581,6 +1641,7 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::SetPassword {
                     password,
                     hint,
@@ -1591,10 +1652,12 @@ impl DraftActor {
                         .await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::GetPassword(sender) => {
                     let r = draft.get_password(&ctx).await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::IsPasswordProtected(sender) => {
                     let r = async {
                         let tether = ctx.user_stash().connection().await?;
@@ -1603,6 +1666,7 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::ChangeSenderAddress { email, sender } => {
                     let r = draft
                         .change_sender_address(&ctx, email)
@@ -1611,18 +1675,22 @@ impl DraftActor {
                     let r = auto_saver.map_save(r, &ctx, &mut draft, &options).await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::SanitizeBody(sender) => {
                     draft.sanitize_body();
                     let r = auto_saver.periodic_save(&ctx, &mut draft, &options).await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::SetMimeType { mime_type, sender } => {
                     draft.set_mime_type(mime_type);
                     let _ = sender.send(());
                 }
+
                 DraftActorMessage::GetMimeType(sender) => {
                     let _ = sender.send(draft.mime_type());
                 }
+
                 DraftActorMessage::SetBody { body, sender } => {
                     let r = if body != draft.body() {
                         draft.set_body(body);
@@ -1632,9 +1700,11 @@ impl DraftActor {
                     };
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::GetBody(sender) => {
                     let _ = sender.send(draft.body().to_owned());
                 }
+
                 DraftActorMessage::HtmlHeadForComposer {
                     theme_opts,
                     editor_id,
@@ -1645,6 +1715,7 @@ impl DraftActor {
                         draft.body().to_owned(),
                     ));
                 }
+
                 DraftActorMessage::GetAttachments(sender) => {
                     let r = async {
                         let tether = ctx.user_stash().connection().await?;
@@ -1653,6 +1724,7 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r.map_err(Into::into));
                 }
+
                 DraftActorMessage::RetryAttachmentOperation {
                     attachment_id,
                     sender,
@@ -1660,10 +1732,12 @@ impl DraftActor {
                     let r = draft.retry_attachment_operation(&ctx, attachment_id).await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::RemoveAttachmentWithCid { content_id, sender } => {
                     let r = draft.remove_attachment_with_cid(&ctx, content_id).await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::RemoveAttachment {
                     attachment_id,
                     sender,
@@ -1671,6 +1745,7 @@ impl DraftActor {
                     let r = draft.remove_attachment(&ctx, attachment_id).await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::AddAttachment {
                     attachment_id,
                     sender,
@@ -1678,15 +1753,19 @@ impl DraftActor {
                     let r = draft.add_attachment(&ctx, attachment_id).await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::LoadImage { url, sender } => {
                     // We don't wait to wait for this to finish so we can run in parallel
                     let ctx_cloned = ctx.clone();
                     let id = draft.metadata_id;
+                    let policy = draft.image_policy;
+
                     ctx_cloned.spawn(async move {
-                        let r = draft_v1::Draft::load_image(id, &ctx, url).await;
+                        let r = draft_v1::Draft::load_image(id, &ctx, url, policy).await;
                         let _ = sender.send(r);
                     });
                 }
+
                 DraftActorMessage::GetMessageId(sender) => {
                     let r = async {
                         let tether = ctx.user_stash().connection().await?;
@@ -1695,6 +1774,7 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::GetConversationId(sender) => {
                     let r = async {
                         let tether = ctx.user_stash().connection().await?;
@@ -1703,6 +1783,7 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::Discard { sender } => {
                     let r = draft.discard(ctx.action_queue(), ctx.origin()).await;
                     if r.is_ok() {
@@ -1712,6 +1793,7 @@ impl DraftActor {
                     }
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::ScheduleSend {
                     delivery_time,
                     sender,
@@ -1730,6 +1812,7 @@ impl DraftActor {
                     }
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::Send { sender } => {
                     let r = async {
                         let tether = ctx.user_stash().connection().await?;
@@ -1746,6 +1829,7 @@ impl DraftActor {
                     }
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::SenderAddresses(sender) => {
                     let r = async {
                         let tether = ctx.user_stash().connection().await?;
@@ -1754,6 +1838,7 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r.map_err(Into::into));
                 }
+
                 DraftActorMessage::Save { sender } => {
                     let r = async {
                         let tether = ctx.user_stash().connection().await?;
@@ -1766,22 +1851,28 @@ impl DraftActor {
                     }
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::GetAddressId(sender) => {
                     let _ = sender.send(draft.address_id.clone());
                 }
+
                 DraftActorMessage::GetSender(sender) => {
                     let _ = sender.send(draft.sender.clone());
                 }
+
                 DraftActorMessage::GetAddressValidationResult(sender) => {
                     let _ = sender.send(draft.address_validation_result.clone());
                 }
+
                 DraftActorMessage::ClearAddressValidationResult(sender) => {
                     draft.address_validation_result = None;
                     let _ = sender.send(());
                 }
+
                 DraftActorMessage::TakeAddressValidationResult(sender) => {
                     let _ = sender.send(draft.address_validation_result.take());
                 }
+
                 DraftActorMessage::AddSingleRecipient {
                     group,
                     recipient,
@@ -1822,6 +1913,7 @@ impl DraftActor {
                     }
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::AddRecipientGroup {
                     group,
                     group_name,
@@ -1870,6 +1962,7 @@ impl DraftActor {
                         list: list.clone(),
                     });
                 }
+
                 DraftActorMessage::SetRecipientLists {
                     to,
                     cc,
@@ -1905,6 +1998,7 @@ impl DraftActor {
                         bcc: draft.bcc_list.clone(),
                     });
                 }
+
                 DraftActorMessage::RemoveSingleRecipient {
                     group,
                     email,
@@ -1920,6 +2014,7 @@ impl DraftActor {
                         list: list.clone(),
                     });
                 }
+
                 DraftActorMessage::RemoveGroupRecipient {
                     group,
                     email,
@@ -1936,6 +2031,7 @@ impl DraftActor {
                         list: list.clone(),
                     });
                 }
+
                 DraftActorMessage::RemoveGroupRecipients {
                     group,
                     emails,
@@ -1954,6 +2050,7 @@ impl DraftActor {
                         list: list.clone(),
                     });
                 }
+
                 DraftActorMessage::RemoveRecipientGroup {
                     group,
                     group_name,
@@ -1968,21 +2065,25 @@ impl DraftActor {
                         list: list.clone(),
                     });
                 }
+
                 DraftActorMessage::GetRecipients { group, sender } => {
                     let recipients = recipient_group_from_draft(&mut draft, group)
                         .recipients()
                         .to_vec();
                     let _ = sender.send(recipients);
                 }
+
                 #[cfg(feature = "test-utils")]
                 DraftActorMessage::TestMutate { mutate, sender } => {
                     mutate(&mut draft);
                     let _ = sender.send(());
                 }
+
                 DraftActorMessage::GetState(sender) => {
                     let state = DraftState::from_draft(&draft);
                     let _ = sender.send(state);
                 }
+
                 DraftActorMessage::SetSubject { subject, sender } => {
                     let r = if draft.subject != subject {
                         draft.subject = subject;
@@ -1992,9 +2093,11 @@ impl DraftActor {
                     };
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::GetSubject(sender) => {
                     let _ = sender.send(draft.subject.clone());
                 }
+
                 DraftActorMessage::GetRecipientList { group, sender } => {
                     let recipients = recipient_group_from_draft(&mut draft, group).clone();
                     let _ = sender.send(recipients);
@@ -2030,6 +2133,7 @@ impl DraftActor {
                     }
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::OnRecipientValidation { group, updates } => {
                     let list = recipient_group_from_draft(&mut draft, group);
                     updates.apply(list);
@@ -2039,6 +2143,7 @@ impl DraftActor {
                         list: list.clone(),
                     });
                 }
+
                 DraftActorMessage::RevalidateAllRecipients => {
                     if options.address_validation_enabled {
                         for id in [
@@ -2057,6 +2162,7 @@ impl DraftActor {
                         }
                     }
                 }
+
                 DraftActorMessage::ValidateExpirationFeature(sender) => {
                     let r = async {
                         let tether = ctx.user_stash().connection().await?;
@@ -2096,6 +2202,7 @@ impl DraftActor {
                     .await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::SwapAttachmentDisposition {
                     attachment_id,
                     new_disposition,
@@ -2106,6 +2213,7 @@ impl DraftActor {
                         .await;
                     let _ = sender.send(r);
                 }
+
                 DraftActorMessage::SwapAttachmentDispositionCid { content_id, sender } => {
                     let r = draft
                         .swap_attachment_disposition_from_inline(&ctx, content_id)
@@ -2114,6 +2222,7 @@ impl DraftActor {
                 }
             }
         }
+
         tracing::info!("Terminating");
     }
 }
