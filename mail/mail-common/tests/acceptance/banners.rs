@@ -97,11 +97,21 @@ async fn banners() {
             conv.save(tx).await.unwrap();
             addr.save(tx).await.unwrap();
             let mut incoming_default = IncomingDefault {
-                email: "blocked@email".into(),
+                email: Some("blocked@email".into()),
                 location: IncomingDefaultLocation::Blocked,
                 remote_id: Some("123".into()),
                 local_id: None,
                 domain: None,
+                deleted: false,
+            };
+            incoming_default.save(tx).await.unwrap();
+
+            let mut incoming_default = IncomingDefault {
+                domain: Some("blocked.com".into()),
+                location: IncomingDefaultLocation::Blocked,
+                remote_id: Some("456".into()),
+                local_id: None,
+                email: None,
                 deleted: false,
             };
             incoming_default.save(tx).await.unwrap();
@@ -160,6 +170,15 @@ async fn banners() {
         ..msg_normal.clone()
     };
 
+    let msg_blocked_domain = Message {
+        remote_id: Some("blocked_domain".into()),
+        sender: proton_mail_common::datatypes::MessageSender {
+            address: "dave@blocked.com".into(),
+            ..Default::default()
+        },
+        ..msg_normal.clone()
+    };
+
     let scheduled_time = 123456_u64.into();
 
     let msg_schedule_send = Message {
@@ -191,6 +210,11 @@ async fn banners() {
     assert_eq!(
         vec![MessageBanner::BlockedSender],
         msg_blocked.get_banners(tether).await
+    );
+
+    assert_eq!(
+        vec![MessageBanner::BlockedSender],
+        msg_blocked_domain.get_banners(tether).await
     );
 
     assert_eq!(

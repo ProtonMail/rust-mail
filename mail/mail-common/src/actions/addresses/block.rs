@@ -90,7 +90,7 @@ impl Handler for BlockHandler {
         let mut incoming_default = previous.unwrap_or_else(|| IncomingDefault {
             local_id: None,
             remote_id: None,
-            email: action.email.clone(),
+            email: Some(action.email.clone()),
             domain: None,
             location: IncomingDefaultLocation::Blocked,
             deleted: false,

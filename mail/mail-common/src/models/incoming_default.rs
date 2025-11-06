@@ -76,11 +76,13 @@ pub struct IncomingDefault {
     pub remote_id: Option<IncomingDefaultId>,
 
     #[DbField]
-    pub email: PrivateEmail,
-
-    #[DbField]
     pub location: IncomingDefaultLocation,
 
+    /// XOR with `IncomingDefault::domain`.
+    #[DbField]
+    pub email: Option<PrivateEmail>,
+
+    /// XOR with `IncomingDefault::email`.
     #[DbField]
     pub domain: Option<String>,
 
@@ -94,7 +96,13 @@ impl ModelHooks for IncomingDefault {
     }
 
     fn before_save(&mut self, _: &Transaction<'_>) -> stash::stash::StashResult<()> {
-        self.email = PrivateEmail::new(Self::sanitize(self.email.as_clear_text_str()));
+        let email = self
+            .email
+            .as_ref()
+            .map(|e| Self::sanitize_email(e.as_clear_text_str()))
+            .map(PrivateEmail::new);
+
+        self.email = email;
         Ok(())
     }
 
@@ -103,8 +111,8 @@ impl ModelHooks for IncomingDefault {
     }
 }
 
-impl IncomingDefault {
-    pub fn from_api(api: ApiIncomingDefault) -> Option<Self> {
+impl From<ApiIncomingDefault> for IncomingDefault {
+    fn from(api: ApiIncomingDefault) -> Self {
         let ApiIncomingDefault {
             location,
             action: _,
@@ -113,40 +121,53 @@ impl IncomingDefault {
             domain,
         } = api;
 
-        let Some(email) = email else {
-            tracing::warn!("Incoming default from API is missing an email");
-            return None;
-        };
-
-        Some(IncomingDefault {
+        IncomingDefault {
             local_id: None,
             remote_id: Some(id.into()),
             email,
             location: location.into(),
             domain,
             deleted: false,
-        })
+        }
     }
 }
 
 static SANITIZE_EMAIL_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[^a-zA-Z0-9!#$%&'*+\-=?^_`{|}~@.\[\]]+").unwrap());
 
+static SANITIZE_DOMAIN_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^a-zA-Z0-9!#$%&'*+\-=?^_`{|}~.\[\]]+").unwrap());
+
 impl IncomingDefault {
     /// This sanitization replicates of what we do on the server side (except for trimming emails to 191 characters cause that's just silly).
     /// See: https://www.php.net/manual/en/filter.constants.php#constant.filter-sanitize-email
-    fn sanitize(email: impl Into<String>) -> String {
+    fn sanitize_email(email: impl Into<String>) -> String {
         let email = email.into();
         let email = SANITIZE_EMAIL_REGEX.replace_all(&email, "").to_string();
         email.to_lowercase()
+    }
+
+    fn sanitize_domain(domain: impl Into<String>) -> String {
+        let domain = domain.into();
+        let domain = SANITIZE_DOMAIN_REGEX.replace_all(&domain, "").to_string();
+        domain.to_lowercase()
     }
 
     pub async fn by_email(
         email: impl Into<String>,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        let email = Self::sanitize(email);
-        Self::find_first("WHERE email = ? AND deleted = 0", params![email], tether).await
+        let email = Self::sanitize_email(email);
+        if let Some(domain) = email.split_once('@').map(|(_, domain)| domain.to_string()) {
+            Self::find_first(
+                "WHERE (email = ? OR domain = ?) AND deleted = 0",
+                params![email, domain],
+                tether,
+            )
+            .await
+        } else {
+            Self::find_first("WHERE email = ? AND deleted = 0", params![email], tether).await
+        }
     }
 
     pub async fn update_from_api(
@@ -154,10 +175,7 @@ impl IncomingDefault {
         api: ApiIncomingDefault,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        let Some(incoming) = Self::from_api(api) else {
-            tracing::warn!("Incoming default has missing email. Ignoring it");
-            return Ok(());
-        };
+        let incoming = Self::from(api);
         Self {
             local_id: Some(local_id),
             ..incoming
@@ -203,9 +221,11 @@ impl IncomingDefault {
         "})?;
         for incoming in new {
             q.execute((
-                Self::sanitize(incoming.email.as_clear_text_str()),
+                incoming
+                    .email
+                    .map(|email| Self::sanitize_email(email.as_clear_text_str())),
                 incoming.location,
-                incoming.domain,
+                incoming.domain.map(Self::sanitize_domain),
                 incoming.remote_id,
             ))?;
         }
@@ -294,12 +314,7 @@ impl IncomingDefault {
             stash.connection().await?,
             async || Ok(Self::sync(api, tasks).await?),
             |tx, res| {
-                Self::replace_all_sync(
-                    res.into_iter()
-                        .filter_map(IncomingDefault::from_api)
-                        .collect(),
-                    tx,
-                )?;
+                Self::replace_all_sync(res.into_iter().map(IncomingDefault::from).collect(), tx)?;
                 Ok(())
             },
         )
@@ -390,6 +405,48 @@ mod tests {
     #[test_case("test😀@email.com" => "test@email.com".to_string(); "sanitize emoji")]
     #[test_case("123!@#$%&*+-=?^_`{|}~[]aBc@domain.com" => "123!@#$%&*+-=?^_`{|}~[]abc@domain.com".to_string(); "all valid characters")]
     fn sanitize_emails(email: &str) -> String {
-        IncomingDefault::sanitize(email)
+        IncomingDefault::sanitize_email(email)
+    }
+
+    #[test_case("" => "".to_string(); "empty")]
+    #[test_case("email.com" => "email.com".to_string(); "normal")]
+    #[test_case("EmAiL.com" => "email.com".to_string(); "mixed case")]
+    #[test_case("999.com" => "999.com".to_string(); "valid number")]
+    #[test_case("!email.com" => "!email.com".to_string(); "valid exclamation mark")]
+    #[test_case("#email.com" => "#email.com".to_string(); "valid hash")]
+    #[test_case("$email.com" => "$email.com".to_string(); "valid dollar")]
+    #[test_case("%email.com" => "%email.com".to_string(); "valid percent")]
+    #[test_case("&email.com" => "&email.com".to_string(); "valid ampersand")]
+    #[test_case("'email.com" => "'email.com".to_string(); "valid apostrophe")]
+    #[test_case("*email.com" => "*email.com".to_string(); "valid asterisk")]
+    #[test_case("+email.com" => "+email.com".to_string(); "valid plus")]
+    #[test_case("-email.com" => "-email.com".to_string(); "valid minus")]
+    #[test_case("=email.com" => "=email.com".to_string(); "valid equals")]
+    #[test_case("?email.com" => "?email.com".to_string(); "valid question")]
+    #[test_case("^email.com" => "^email.com".to_string(); "valid caret")]
+    #[test_case("_email.com" => "_email.com".to_string(); "valid underscore")]
+    #[test_case("`email.com" => "`email.com".to_string(); "valid backtick")]
+    #[test_case("{email.com" => "{email.com".to_string(); "valid left brace")]
+    #[test_case("|email.com" => "|email.com".to_string(); "valid pipe")]
+    #[test_case("}email.com" => "}email.com".to_string(); "valid right brace")]
+    #[test_case("~email.com" => "~email.com".to_string(); "valid tilde")]
+    #[test_case("[email.com" => "[email.com".to_string(); "valid left bracket")]
+    #[test_case("]email.com" => "]email.com".to_string(); "valid right bracket")]
+    #[test_case("@email.com" => "email.com".to_string(); "sanitize at sign")]
+    #[test_case("<>email.com" => "email.com".to_string(); "sanitize angle brackets")]
+    #[test_case("()email.com" => "email.com".to_string(); "sanitize parentheses")]
+    #[test_case(",email.com" => "email.com".to_string(); "sanitize comma")]
+    #[test_case(";email.com" => "email.com".to_string(); "sanitize semicolon")]
+    #[test_case(":email.com" => "email.com".to_string(); "sanitize colon")]
+    #[test_case("\"email.com" => "email.com".to_string(); "sanitize quote")]
+    #[test_case("/email.com" => "email.com".to_string(); "sanitize slash")]
+    #[test_case("\\email.com" => "email.com".to_string(); "sanitize backslash")]
+    #[test_case(" email.com" => "email.com".to_string(); "sanitize space")]
+    #[test_case("\temail.com" => "email.com".to_string(); "sanitize tab")]
+    #[test_case("\nemail.com" => "email.com".to_string(); "sanitize newline")]
+    #[test_case("émàil.com" => "mil.com".to_string(); "sanitize unicode")]
+    #[test_case("😀email.com" => "email.com".to_string(); "sanitize emoji")]
+    fn sanitize_domain(domain: &str) -> String {
+        IncomingDefault::sanitize_domain(domain)
     }
 }
