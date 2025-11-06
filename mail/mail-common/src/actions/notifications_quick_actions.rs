@@ -22,7 +22,9 @@ use tracing::{debug, info, instrument, warn};
 use super::messages::{Move, MoveHandler, Read, ReadHandler};
 use super::{ActionMoveData, MailActionError};
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
+// This timeout is explicitly set to 30 not 60 seconds because there is no chance
+// we will get more than 30 seconds for the notification execution from the OS.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[instrument(skip(ctx))]
 pub async fn exec(
