@@ -5,6 +5,7 @@ use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, FactoryResult, Handler, Type, VersionConverter,
     WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -87,6 +88,7 @@ impl Handler for V1ActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())
@@ -164,6 +166,7 @@ impl Handler for V2ActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

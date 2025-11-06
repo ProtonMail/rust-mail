@@ -7,6 +7,7 @@ use proton_action_queue::action::{
     Action, ActionId, Handler, Priority, Type, VersionConverter, VersionConverterError,
     WriterGuard, deserialize,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::exports::RetryPolicy;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::SystemLabel;
@@ -314,6 +315,7 @@ impl Handler for PushNotificationActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

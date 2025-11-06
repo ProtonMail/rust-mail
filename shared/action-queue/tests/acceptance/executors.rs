@@ -6,6 +6,7 @@ use proton_action_queue::queue::{
     NoopOnlineStatusWaiter, NoopOnlineStatusWaiterBuilder, QueueAutoExecutorPool,
     QueueAutoTerminationPolicy, TokioTaskSpawner,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_action_queue::tests::common::DefaultError;
 use stash::stash::Bond;
 use std::num::NonZeroUsize;
@@ -257,6 +258,7 @@ impl Handler for TestHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

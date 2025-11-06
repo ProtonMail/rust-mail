@@ -9,6 +9,7 @@ use crate::{
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
 };
 use proton_action_queue::queue::Queue;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
@@ -277,12 +278,15 @@ impl SearchScrollerSource {
 
         tether
             .quiet_tx(async |tx| {
+                let mut rebase_change_set = RebaseChangeSet::default();
                 let mut display_order = SearchScrollData::last(tx)
                     .await?
                     .map(|s| s.display_order.saturating_add(1))
                     .unwrap_or_default();
 
-                let mut messages = Message::save_scroller_messages(api_messages, tx).await?;
+                let mut messages =
+                    Message::save_scroller_messages(api_messages, &mut rebase_change_set, tx)
+                        .await?;
                 // Save all messages.
                 for message in messages.iter_mut() {
                     SearchScrollData::builder()
@@ -296,7 +300,11 @@ impl SearchScrollerSource {
 
                 #[cfg(feature = "action_rebase")]
                 if let Err(e) = queue
-                    .rebase_in(proton_action_queue::action::ActionGroup::default(), tx)
+                    .rebase_in(
+                        proton_action_queue::action::ActionGroup::default(),
+                        &rebase_change_set,
+                        tx,
+                    )
                     .await
                 {
                     tracing::error!("Failed to rebase: {e}");

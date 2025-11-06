@@ -26,6 +26,7 @@ pub mod action;
 pub mod db;
 pub mod observers;
 pub mod queue;
+pub mod rebase;
 
 #[cfg(any(test, debug_assertions, feature = "test-utils"))]
 pub mod tests {

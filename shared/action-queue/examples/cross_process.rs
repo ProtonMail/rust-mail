@@ -28,6 +28,7 @@ use proton_action_queue::action::{
 use proton_action_queue::queue::{
     NoopOnlineStatusWaiterBuilder, Queue, QueueAutoExecutorPool, TokioTaskSpawner,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, StashConfiguration};
 use std::num::NonZeroUsize;
@@ -277,6 +278,7 @@ impl Handler for TestHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

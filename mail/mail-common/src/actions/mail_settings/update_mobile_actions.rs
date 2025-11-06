@@ -6,6 +6,7 @@ use anyhow::Context;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
@@ -185,6 +186,7 @@ impl Handler for UpdateMobileActionsHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

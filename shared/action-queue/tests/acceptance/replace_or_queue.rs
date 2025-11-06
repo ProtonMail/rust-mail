@@ -4,6 +4,7 @@ use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
 use proton_action_queue::db::{DependencyType, ExecutionGuard, StoredAction};
+use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -279,6 +280,7 @@ impl Handler for TestActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

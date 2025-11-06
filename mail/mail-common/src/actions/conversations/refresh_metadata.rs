@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::prelude::GetMessagesOptions;
 use serde::{self, Deserialize, Serialize};
@@ -162,6 +163,7 @@ impl Handler for RefreshMetadataHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

@@ -11,6 +11,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Tether};
@@ -87,6 +88,7 @@ impl Handler for MoveHandler {
         &self,
         this_id: ActionId,
         action: &mut Self::Action,
+        _: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         //TODO(ET-5183): Test me!

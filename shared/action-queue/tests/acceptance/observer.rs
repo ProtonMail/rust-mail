@@ -4,6 +4,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::observers::{ActionAwaiter, ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::BroadcastMessage;
+use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use std::time::Duration;
@@ -175,6 +176,7 @@ impl Handler for ErrorActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())
@@ -232,6 +234,7 @@ impl Handler for SuccessActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

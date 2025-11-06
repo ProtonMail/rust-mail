@@ -20,6 +20,7 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, FactoryError, FactoryResult, Handler, Priority, Type,
     VersionConverter, VersionConverterError, WriterGuard, WriterGuardError, deserialize,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::PrivateEmail;
 use proton_core_api::services::proton::prelude::AddressId;
@@ -305,6 +306,7 @@ impl Handler for SendHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

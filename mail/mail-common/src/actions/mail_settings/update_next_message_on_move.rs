@@ -5,6 +5,7 @@ use anyhow::Context;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use proton_mail_api::services::proton::{ProtonMail, request_data::PutNextMessageOnMoveRequest};
 use serde::{Deserialize, Serialize};
@@ -110,6 +111,7 @@ impl Handler for UpdateNextMessageOnMoveHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

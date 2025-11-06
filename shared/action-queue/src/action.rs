@@ -3,6 +3,7 @@ use crate::queue::{
     ActionError, ActionRequeueReason, ErasedQueuedAction, QueuedAction, QueuedActionOutput,
     QueuedMetadata,
 };
+use crate::rebase::RebaseChangeSet;
 use anyhow::Context;
 use derive_more::derive::TryFrom;
 use serde::de::DeserializeOwned;
@@ -462,6 +463,7 @@ pub trait Handler: Send + Sync {
         &self,
         this_id: ActionId,
         action: &mut Self::Action,
+        change_set: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send;
 }
