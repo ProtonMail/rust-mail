@@ -14,11 +14,11 @@ use proton_mail_common::datatypes::mail_notifications::{
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 use crate::core::datatypes::RemoteId;
-use crate::core::{FFIKeyChain, OSKeyChain};
+use crate::core::{FFIKeyChain, OSKeyChain, StoredSession};
 use crate::errors::VoidActionResult;
 use crate::{errors::ActionError, uniffi_async};
 
-use super::MailUserSession;
+use super::MailSession;
 
 /// Encrypted push notification
 ///
@@ -253,21 +253,39 @@ impl From<PushNotificationQuickAction> for RealPushNotificationQuickAction {
 }
 
 #[uniffi_export]
-impl MailUserSession {
+impl MailSession {
     /// Insert the quick action into the queue and execute local part immediately.
     ///
     #[returns(VoidActionResult)]
     pub async fn execute_notification_quick_action(
         &self,
+        session: Arc<StoredSession>,
         action: PushNotificationQuickAction,
         time_left_ms: Option<u64>,
     ) -> Result<(), ActionError> {
-        let ctx = self.ctx()?;
+        let mail_ctx = self.ctx_arc();
 
         uniffi_async(async move {
-            notifications_quick_actions::exec(ctx.as_ref(), action.into(), time_left_ms)
+            mail_ctx
+                .core_context()
+                .task_service()
+                .scope_background_async(async || {
+                    if let Some(user_ctx) = mail_ctx
+                        .initialized_user_context_from_session(session.session())
+                        .await
+                        .map_err(RealProtonMailError::from)?
+                    {
+                        notifications_quick_actions::exec(
+                            user_ctx.as_ref(),
+                            action.into(),
+                            time_left_ms,
+                        )
+                        .await
+                        .map_err(RealProtonMailError::from)?;
+                    }
+                    Ok::<_, RealProtonMailError>(())
+                })
                 .await
-                .map_err(RealProtonMailError::from)
         })
         .await
         .map_err(ActionError::from)
