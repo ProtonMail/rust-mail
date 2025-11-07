@@ -263,19 +263,18 @@ path = "crypto/crypto-inbox-mime"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-account]
-version = "0.12.1"
+version = "0.12.3"
 registry = "proton"
 features = ["sql"]
+
+[workspace.dependencies.proton-crypto]
+version = "0.7.1"
+registry = "proton"
 
 [workspace.dependencies.proton-crypto-subtle]
 version = "0.1.0"
 registry = "proton"
 features = ["legacy"]
-
-
-[workspace.dependencies.proton-crypto]
-version = "0.6.0"
-registry = "proton"
 
 [workspace.dependencies.proton-crypto-notifications]
 version = "0.1"
