@@ -291,6 +291,7 @@ pub struct Context {
 impl Drop for Context {
     fn drop(&mut self) {
         tracing::info!("Dropping Context");
+        self.cancellation_token.cancel();
     }
 }
 

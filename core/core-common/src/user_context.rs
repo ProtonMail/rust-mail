@@ -89,6 +89,7 @@ impl Drop for UserContext {
         let user_id = self.user_id();
         let session_id = self.session_id();
         tracing::info!(?user_id, ?session_id, "Dropping UserContext");
+        self.cancellation_token.cancel();
     }
 }
 
