@@ -84,6 +84,14 @@ impl Debug for UserContext {
     }
 }
 
+impl Drop for UserContext {
+    fn drop(&mut self) {
+        let user_id = self.user_id();
+        let session_id = self.session_id();
+        tracing::info!(?user_id, ?session_id, "Dropping UserContext");
+    }
+}
+
 impl UserContext {
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(name = "NewUserContext", skip_all, fields(user_id=%user_id))]
@@ -96,7 +104,7 @@ impl UserContext {
         session_id: SessionId,
         cache_path: PathBuf,
     ) -> CoreContextResult<Arc<Self>> {
-        info!("Creating new user context");
+        info!("Creating new UserContext");
         let issue_reporter = context.issue_reporter_service();
         let user_issue_reporter = issue_reporter
             .reporter()
@@ -197,6 +205,7 @@ impl UserContext {
                 this.register_subscribers().await?;
             }
 
+            info!("Creating new UserContext...Done");
             Ok(this)
         }
         .await
