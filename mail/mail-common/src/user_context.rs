@@ -185,6 +185,7 @@ impl MailUserContext {
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
+        tracing::info!("Creating MailUserContext");
         let user_context_cloned = user_context.clone();
 
         async {
@@ -305,6 +306,7 @@ impl MailUserContext {
             // has been initialized, i.e. here:
             this.queues().resume();
 
+            tracing::info!("Creating MailUserContext...Done");
             Ok(this)
         }
         .await
@@ -845,6 +847,14 @@ impl MailUserContext {
 
     pub fn image_loader(&self) -> &ImageLoader {
         self.get_service()
+    }
+}
+
+impl Drop for MailUserContext {
+    fn drop(&mut self) {
+        let user_id = self.user_id();
+        let session_id = self.session_id();
+        tracing::info!(?user_id, ?session_id, "Dropping MailUserContext");
     }
 }
 

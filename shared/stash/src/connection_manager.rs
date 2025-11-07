@@ -33,6 +33,14 @@ pub struct StashConnectionPool {
     interrupts: Vec<InterruptData>,
     interrupted: Mutex<bool>,
     wait_resume: Condvar,
+    span: tracing::Span,
+}
+
+impl Drop for StashConnectionPool {
+    fn drop(&mut self) {
+        let _entered = self.span.enter();
+        tracing::info!("Stash connection pool dropped");
+    }
 }
 
 impl StashConnectionPool {
@@ -98,6 +106,7 @@ impl StashConnectionPool {
                 interrupts,
                 interrupted: Default::default(),
                 wait_resume: Condvar::new(),
+                span: tracing::Span::current(),
             }
         }))
     }

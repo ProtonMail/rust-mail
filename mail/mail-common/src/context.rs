@@ -273,6 +273,12 @@ pub struct MailContext {
     http_client: OnceLock<reqwest::Client>,
 }
 
+impl Drop for MailContext {
+    fn drop(&mut self) {
+        tracing::info!("Dropping MailContext");
+    }
+}
+
 impl MailContext {
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument("MailContextNew", skip_all)]
@@ -293,6 +299,8 @@ impl MailContext {
         network_monitor_config: proton_network_monitor_service::Config,
         issue_reporter: Arc<dyn IssueReporter>,
     ) -> Result<Arc<Self>, MailContextError> {
+        tracing::info!("Creating MailContext");
+
         let issue_reporter = Arc::new(TracedIssueReporter::new(issue_reporter));
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];

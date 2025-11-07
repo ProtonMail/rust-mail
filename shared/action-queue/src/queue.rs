@@ -880,6 +880,12 @@ pub struct QueueExecutor {
     id: String,
 }
 
+impl Drop for QueueExecutor {
+    fn drop(&mut self) {
+        tracing::info!(?self.id, "Dropping QueueExecutor");
+    }
+}
+
 impl QueueExecutor {
     fn new(action_group: ActionGroup, shared: Arc<Shared>) -> Self {
         Self {
