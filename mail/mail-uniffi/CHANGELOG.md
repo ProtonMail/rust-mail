@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- user-context: Fix cancellation of action queue tasks
+
+
+## [mail-uniffi-v0.157.2] - 2025-11-07
+
 ### Features
 
 - Read-only support for blocked domains
