@@ -9,7 +9,7 @@ use crate::db::migrations::{migrate_core_db, verify_core_db};
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::subscriber::CoreEventLoopContext;
-use proton_action_queue::queue::Queue;
+use proton_action_queue::queue::{self, Queue};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
@@ -460,17 +460,13 @@ pub enum DeleteFilesSafeError {
     Moved(io::Error),
 }
 
-impl proton_action_queue::queue::TaskSpawner for UserContext {
+impl queue::TaskSpawner for UserContext {
     fn spawn_task<F>(&self, future: F) -> JoinHandle<()>
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        let cancellation_token = self.cancellation_token.clone();
-        self.context.task_service().spawn(async move {
-            tokio::select! {
-                () = cancellation_token.cancelled() => (),
-                () = future=> () ,
-            }
-        })
+        self.context
+            .task_service()
+            .spawn_cancellable(self.cancellation_token.clone(), future)
     }
 }
