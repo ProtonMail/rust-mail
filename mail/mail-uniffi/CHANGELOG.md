@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- stash: Drop cyclic dependency between worker threads and their pools (the "database busy" error)
+
+
+## [mail-uniffi-v0.157.3] - 2025-11-10
+
+### Fixes
+
 - user-context: Fix cancellation of action queue tasks
 
 
