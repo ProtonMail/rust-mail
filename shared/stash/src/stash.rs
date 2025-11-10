@@ -47,7 +47,7 @@ use sqlite_watcher::watcher::Watcher;
 use std::any::Any;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::thread::{self};
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -495,12 +495,12 @@ impl Stash {
     /// Creates a new [`Stash`] instance.
     ///
     /// This function creates a new [`Stash`] instance with an associated
-    // background worker on a separate task, with a new SQLite connection
-    // pool.
-    //
-    // Note that the pool is created internally by the worker, and fully
-    // managed by it, as there can only be one worker per [`Stash`] instance
-    // and database operations need to be executed sequentially.
+    /// background worker on a separate task, with a new SQLite connection
+    /// pool.
+    ///
+    /// Note that the pool is created internally by the worker, and fully
+    /// managed by it, as there can only be one worker per [`Stash`] instance
+    /// and database operations need to be executed sequentially.
     ///
     /// # Errors
     ///
@@ -510,6 +510,7 @@ impl Stash {
     pub fn new<'a>(config: impl Into<StashConfiguration<'a>>) -> Result<Self, StashError> {
         let watcher = Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?;
         let pool = Self::make_pool(config.into(), &watcher)?;
+
         Ok(Self {
             pool,
             watcher,
@@ -536,17 +537,19 @@ impl Stash {
         let max_connections = pool_size.unwrap_or(MAX_CONNECTIONS) as usize;
 
         let init_fn = Box::new(|c: &mut Connection| {
-            c.execute_batch(&formatdoc!("
+            c.execute_batch(&formatdoc!(
+                "
                         PRAGMA journal_mode = WAL;         -- Better write-concurrency
                         PRAGMA synchronous = NORMAL;       -- Perform fsync only at critical points
-                        PRAGMA wal_checkpoint(TRUNCATE);   -- Free space by truncating WAL files from the last run
                         PRAGMA busy_timeout = {};          -- Wait if the database is busy/locked
                         PRAGMA foreign_keys = ON;          -- Enforce foreign key constraints
                         PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
                         PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
                         PRAGMA page_size = 8192;
                         PRAGMA cache_size = 10000;
-                    ", BUSY_TIMEOUT.as_millis()))?;
+                    ",
+                BUSY_TIMEOUT.as_millis()
+            ))?;
             // Ensure on iOS wall checkpointing is disabled on close. We could have set this
             // up as a configuration option, but we may forget to set this correctly in the
             // future and re-introduce this bug.
@@ -1187,21 +1190,15 @@ pub(crate) struct PooledTether {
     sender: flume::Sender<TracedOperation>,
 }
 impl PooledTether {
-    pub(crate) fn new(
-        connection: Connection,
-        watcher: &Arc<Watcher>,
-        pool: Weak<StashConnectionPool>,
-        number: usize,
-    ) -> Self {
+    pub(crate) fn new(connection: Connection, watcher: &Arc<Watcher>, number: usize) -> Self {
         // One for tether commands, another for interruption
         let (sender, receiver) = flume::bounded(2);
-
         let watcher_cloned = watcher.clone();
-        let pool_cloned = pool.clone();
+
         thread::Builder::new()
             .name(format!("Tether Worker {number:02}"))
             .spawn(move || {
-                Self::thread_loop(connection, receiver, watcher_cloned.as_ref(), pool_cloned);
+                Self::thread_loop(connection, receiver, watcher_cloned.as_ref());
             })
             .expect("Failed to create named thread, please fix me");
 
@@ -1216,8 +1213,6 @@ impl PooledTether {
         connection: Connection,
         receiver: flume::Receiver<TracedOperation>,
         watcher: &Watcher,
-
-        pool: Weak<StashConnectionPool>,
     ) {
         let mut sm = TetheredWorkerStateMachine {
             transaction: None,
@@ -1228,11 +1223,8 @@ impl PooledTether {
         };
 
         while let Ok(operation) = receiver.recv() {
-            let Some(pool) = pool.upgrade() else {
-                break;
-            };
             let _span = operation.span.entered();
-            if sm.handle_operation(operation.operation, &pool) {
+            if sm.handle_operation(operation.operation) {
                 break;
             }
         }
@@ -1525,7 +1517,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     /// is responsible for managing the connection and transaction state, and
     /// executing the queries.
     ///
-    fn handle_operation(&mut self, operation: Operation, pool: &StashConnectionPool) -> bool {
+    fn handle_operation(&mut self, operation: Operation) -> bool {
         // If we were interrupted during a transaction, this value will be true.
         let mut should_quit = false;
         if self.was_interrupted {
@@ -1540,7 +1532,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                     OperationTransaction::Start(_, _) => {
                         // Starting a new transaction after an interrupt is fine since we
                         // wait until resume was called.
-                        self.handle_transaction(op, pool);
+                        self.handle_transaction(op);
                     }
                     OperationTransaction::StartSync(o, _) | OperationTransaction::Bridge(o) => {
                         let _ = o.sender.send(Err(StashError::interrupted()));
@@ -1578,7 +1570,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
 
         match operation {
             Operation::Transaction(operation) => {
-                self.handle_transaction(operation, pool);
+                self.handle_transaction(operation);
             }
             Operation::Execution(operation) => {
                 self.handle_exec(operation);
@@ -1603,13 +1595,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         self.transaction = None;
     }
 
-    fn handle_transaction(&mut self, operation: OperationTransaction, pool: &StashConnectionPool) {
+    fn handle_transaction(&mut self, operation: OperationTransaction) {
         match operation {
             OperationTransaction::Start(policy, send_back) => {
-                // Check whether we can start a new transaction or wait until we are allowed to.
-                pool.check_interrupted_or_wait_resume();
-                // In theory this should be impossible since we require a `&mut Tether` to start a
-                // transaction
                 assert!(self.transaction.is_none(), "Started transaction twice");
                 match self.start_transaction(policy) {
                     Ok(transaction) => {
@@ -1623,8 +1611,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             }
             OperationTransaction::StartSync(BridgeClosure { closure, sender }, policy) => {
                 assert!(self.transaction.is_none(), "Started transaction twice");
-                // Check whether we can start a new transaction or wait until we are allowed to.
-                pool.check_interrupted_or_wait_resume();
                 let res = self.handle_start_sync(closure, policy);
                 _ = sender.send(res);
             }

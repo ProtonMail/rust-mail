@@ -29,9 +29,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
 use crate::services::user_issue_reporter_service::UserIssueReporterService;
+use anyhow::anyhow;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_issue_reporter_service::{IssueLevel, IssueReportKeys};
-use tokio::task::JoinHandle;
+use tokio::task::{self, JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
@@ -317,10 +318,16 @@ impl UserContext {
         inits: &[Box<dyn UserDatabaseInitializer>],
         origin: Origin,
     ) -> Result<Stash, MigratorError> {
-        let stash = Stash::new(StashConfiguration {
-            path: Some(path),
-            ..Default::default()
-        })?;
+        let path = path.to_owned();
+
+        let stash = task::spawn_blocking(move || {
+            Stash::new(StashConfiguration {
+                path: Some(&path),
+                ..Default::default()
+            })
+        })
+        .await
+        .map_err(|err| MigratorError::Stash(StashError::Custom(anyhow!("{err}"))))??;
 
         match origin {
             Origin::App => {
