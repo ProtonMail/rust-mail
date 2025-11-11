@@ -153,6 +153,8 @@ pub enum MailContextError {
     NonProcessableActions(QueuedError),
     #[error(transparent)]
     NetworkMonitorService(#[from] NetworkMonitorServiceError),
+    #[error("Couldn't load image via the image proxy (got empty response)")]
+    ImageProxyFailed,
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -239,6 +241,7 @@ impl From<ImageLoaderError<MailContextError>> for MailContextError {
             ImageLoaderError::Api(err) => err.into(),
             ImageLoaderError::LoadCid(err) => err,
             ImageLoaderError::LostContext => Self::LostContext,
+            ImageLoaderError::ProxyFailed => Self::ImageProxyFailed,
             ImageLoaderError::Stash(err) => err.into(),
 
             value @ (ImageLoaderError::UnexpectedScheme(..) | ImageLoaderError::Url(..)) => {

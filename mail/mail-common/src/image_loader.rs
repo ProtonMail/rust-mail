@@ -89,7 +89,9 @@ impl ImageLoader {
         };
 
         let data = if use_proxy {
-            Self::fetch_proxied(&ctx, url).await?
+            Self::fetch_proxied(&ctx, url)
+                .await?
+                .ok_or(ImageLoaderError::ProxyFailed)?
         } else {
             Self::fetch_direct(&ctx, url).await?
         };
@@ -101,8 +103,15 @@ impl ImageLoader {
     }
 
     #[instrument(skip_all)]
-    async fn fetch_proxied(ctx: &MailUserContext, url: Url) -> ApiServiceResult<Vec<u8>> {
-        ctx.session().proxy_img(&url).await
+    async fn fetch_proxied(ctx: &MailUserContext, url: Url) -> ApiServiceResult<Option<Vec<u8>>> {
+        let data = ctx.session().proxy_img(&url).await?;
+
+        // Yes, proxy returns an empty response if the image failed to be loaded
+        if data.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(data))
+        }
     }
 
     #[instrument(skip_all)]
@@ -146,7 +155,7 @@ impl ImageLoader {
 
 #[derive(Debug, TError)]
 pub enum ImageLoaderError<C> {
-    #[error("{0}")]
+    #[error(transparent)]
     Api(#[from] ApiServiceError),
 
     #[error("Couldn't load inline image: {0}")]
@@ -155,13 +164,16 @@ pub enum ImageLoaderError<C> {
     #[error("Lost context")]
     LostContext,
 
-    #[error("{0}")]
+    #[error("Couldn't load image via the image proxy (got empty response)")]
+    ProxyFailed,
+
+    #[error(transparent)]
     Stash(#[from] StashError),
 
     #[error("Unexpected image scheme: {0}")]
     UnexpectedScheme(String),
 
-    #[error("{0}")]
+    #[error(transparent)]
     Url(#[from] url::ParseError),
 }
 
@@ -435,5 +447,27 @@ mod tests {
 
         assert_eq!(vec![1, 2, 3], att.data);
         assert_eq!("image/bmp", att.mime);
+    }
+
+    #[tokio::test]
+    async fn load_proxied_err() {
+        let ctx = MailTestContext::new().await;
+        let uctx = ctx.uninitialized_mail_user_context().await;
+
+        // ---
+
+        ctx.mock_proxy_img("https://le.ona/covers/bleeding-love.tiff", vec![])
+            .await;
+
+        let url = Url::from_str("https://le.ona/covers/bleeding-love.tiff").unwrap();
+        let policy = ImagePolicy::Safe;
+
+        let err = uctx
+            .image_loader()
+            .load(url, policy, async |_| Err(()))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, ImageLoaderError::ProxyFailed));
     }
 }
