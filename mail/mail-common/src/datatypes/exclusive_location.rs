@@ -56,6 +56,10 @@ impl ExclusiveLocation {
         }
     }
 
+    pub fn from_labels_many(labels: &[Label]) -> Vec<Self> {
+        labels.iter().filter_map(ExclusiveLocation::new).collect()
+    }
+
     pub fn from_labels(labels: &[Label]) -> Option<Self> {
         let label = SystemLabel::exclusive_locations()
             .into_iter()
@@ -84,6 +88,22 @@ impl ExclusiveLocation {
     ) -> Result<Option<Self>, StashError> {
         let labels = Label::find_by_remote_ids(label_ids.iter().cloned(), tether).await?;
         Ok(ExclusiveLocation::from_labels(&labels))
+    }
+
+    pub async fn from_label_ids_many(
+        label_ids: &[LabelId],
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
+        let labels = Label::find_by_remote_ids(label_ids.iter().cloned(), tether).await?;
+        Ok(ExclusiveLocation::from_labels_many(&labels))
+    }
+
+    pub fn from_label_ids_many_sync(
+        label_ids: &[LabelId],
+        conn: &Connection,
+    ) -> Result<Vec<Self>, StashError> {
+        let labels = Label::find_by_remote_ids_sync(label_ids, conn)?;
+        Ok(ExclusiveLocation::from_labels_many(&labels))
     }
 
     pub fn from_label_ids_sync(

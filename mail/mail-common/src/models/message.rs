@@ -976,7 +976,7 @@ impl Message {
             r#"
             WHERE local_id IN (
                 SELECT local_label_id FROM message_labels WHERE local_message_id = ?
-            ) ORDER BY display_order ASC
+            ) ORDER BY label_type DESC, display_order ASC
             "#,
             (self.local_id,),
             conn,

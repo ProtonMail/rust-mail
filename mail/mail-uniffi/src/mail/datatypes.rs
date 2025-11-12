@@ -714,7 +714,9 @@ pub struct Conversation {
     pub custom_labels: Vec<InlineCustomLabel>,
     pub display_snooze_reminder: bool,
     pub snoozed_until: Option<UnixTimestamp>,
-    pub exclusive_location: Option<ExclusiveLocation>,
+
+    pub locations: Vec<ExclusiveLocation>,
+
     pub expiration_time: UnixTimestamp,
     pub is_starred: bool,
     pub num_attachments: u64,
@@ -746,7 +748,7 @@ impl From<ContextualConversation> for Conversation {
             custom_labels: value.custom_labels.map_vec(),
             display_order: value.display_order,
             display_snooze_reminder: value.display_snooze_reminder,
-            exclusive_location: value.exclusive_location.map(Into::into),
+            locations: value.locations.into_iter().map(Into::into).collect(),
             expiration_time: value.expiration_time.into(),
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,

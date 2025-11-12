@@ -2747,7 +2747,7 @@ async fn conversation_exclusive_location_on_save(
 
     // Validation
     if let Some((is_system, expected)) = expected {
-        match conversation.exclusive_location.unwrap() {
+        match conversation.locations.first().unwrap() {
             ExclusiveLocation::System { name, .. } => {
                 assert!(is_system);
                 match name {
@@ -2761,7 +2761,7 @@ async fn conversation_exclusive_location_on_save(
             }
         }
     } else {
-        assert_eq!(conversation.exclusive_location, None);
+        assert!(conversation.locations.is_empty());
     }
 }
 

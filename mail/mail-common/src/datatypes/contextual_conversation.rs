@@ -63,7 +63,7 @@ pub struct ContextualConversation {
     pub display_order: u64,
 
     #[scroller_eq(skip)]
-    pub exclusive_location: Option<ExclusiveLocation>,
+    pub locations: Vec<ExclusiveLocation>,
 
     /// Time at which this conversation expires.
     pub expiration_time: UnixTimestamp,
@@ -140,7 +140,7 @@ impl ContextualConversation {
             custom_labels: conversation.custom_labels,
             display_order: conversation.display_order,
             display_snooze_reminder: conversation.display_snooze_reminder,
-            exclusive_location: conversation.exclusive_location,
+            locations: conversation.locations,
             expiration_time: label.context_expiration_time.into(),
             is_starred,
             num_attachments: label.context_num_attachments,
