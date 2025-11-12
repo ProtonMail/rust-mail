@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-uniffi"
-version = "0.156.4"
+version = "0.157.6"
 edition.workspace = true
 rust-version.workspace = true
 publish = false
@@ -51,6 +51,7 @@ uniffi-runtime = { workspace = true }
 sqlite-watcher = { workspace = true }
 non-empty-string = { workspace = true }
 proton-network-monitor-service = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 proton-mail-api = { workspace = true }

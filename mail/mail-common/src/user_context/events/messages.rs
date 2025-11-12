@@ -1,6 +1,7 @@
 use crate::events::MessageEvent;
 use crate::models::Message;
 use crate::{AppError, user_context::events::subscriber::PostEventSyncData};
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::events::Action;
 use proton_core_common::models::ModelIdExtension;
 use stash::params;
@@ -10,6 +11,7 @@ use tracing::warn;
 pub async fn handle_message_events(
     tx: &Bond<'_>,
     events: &[MessageEvent],
+    rebase_change_set: &mut RebaseChangeSet,
     data: &mut PostEventSyncData,
 ) -> Result<(), AppError> {
     for event in events {
@@ -58,12 +60,13 @@ pub async fn handle_message_events(
                     continue;
                 };
 
-                Message::create_or_update_messages_from_metadata(
+                let ids = Message::create_or_update_messages_from_metadata(
                     vec![message.clone()],
                     Some(event.action),
                     tx,
                 )
                 .await?;
+                rebase_change_set.add_many(ids);
             }
         }
     }

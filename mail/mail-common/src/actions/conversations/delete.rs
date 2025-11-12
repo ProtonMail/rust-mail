@@ -6,6 +6,7 @@ use crate::models::Conversation;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
@@ -148,6 +149,7 @@ impl Handler for DeleteHandler {
         &self,
         this_id: ActionId,
         action: &mut Self::Action,
+        _: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         //TODO(ET-5183): Test me!

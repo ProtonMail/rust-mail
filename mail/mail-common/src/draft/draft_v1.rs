@@ -26,7 +26,7 @@ use crate::models::{
     DraftAttachmentUploadState, DraftMetadata, DraftSendResult, DraftSendResultOrigin,
     MailSettings, Message, MessageMimeType, MetadataId,
 };
-use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
+use crate::{AppError, ImagePolicy, MailContextError, MailContextResult, MailUserContext};
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, Local};
 use futures::future::join3;
@@ -77,6 +77,8 @@ pub struct Draft {
     pub address_id: AddressId,
     pub subject: String,
     pub send_result: Option<DraftSendResult>,
+    pub image_policy: ImagePolicy,
+
     #[debug(skip)]
     body: String,
     mime_type: MessageMimeType,
@@ -271,12 +273,14 @@ impl Draft {
             address_id: message.remote_address_id,
             subject: message.subject,
             send_result,
+            image_policy: ImagePolicy::Safe,
             body: decrypted.body,
             mime_type: decrypted.mime_type,
             address_validation_result: None,
             sender_alias,
             last_draft_save_action_id: metadata.save_action_id,
         };
+
         draft.sanitize_body();
 
         // When syncing the draft from the server  we need to re-check address validity in
@@ -402,6 +406,7 @@ impl Draft {
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
             send_result: None,
+            image_policy: ImagePolicy::Safe,
             mime_type,
             body,
             address_validation_result: None,
@@ -420,6 +425,7 @@ impl Draft {
         context: &MailUserContext,
         message_id: LocalMessageId,
         reply_mode: ReplyMode,
+        image_policy: ImagePolicy,
         use_utc: bool,
     ) -> Result<Self, MailContextError> {
         info!("Creating new draft reply");
@@ -507,6 +513,7 @@ impl Draft {
                     &contact_group_resolver,
                     metadata.id.unwrap(),
                     reply_mode,
+                    image_policy,
                     &address,
                     &mail_settings,
                     &custom_settings,
@@ -591,6 +598,7 @@ impl Draft {
         contact_group_resolver: &impl ContactGroupResolver,
         metadata_id: MetadataId,
         reply_mode: ReplyMode,
+        image_policy: ImagePolicy,
         address: &Address,
         mail_settings: &MailSettings,
         custom_settings: &CustomSettings,
@@ -657,6 +665,7 @@ impl Draft {
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
             send_result: None,
+            image_policy,
             body,
             mime_type,
             address_validation_result,
@@ -692,8 +701,15 @@ impl Draft {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = save_action.crate_draft_params(encrypted);
 
-        let attachment_key_packets =
-            build_attachment_key_packets(context, &address_id, attachments, tether).await?;
+        let force_re_encrypt = draft_reply_or_forward_params.is_some();
+        let attachment_key_packets = build_attachment_key_packets(
+            context,
+            &address_id,
+            attachments,
+            force_re_encrypt,
+            tether,
+        )
+        .await?;
 
         let response = session
             .create_draft(
@@ -722,7 +738,7 @@ impl Draft {
         let params = save_action.crate_draft_params(encrypted);
 
         let attachment_key_packets =
-            build_attachment_key_packets(context, &address_id, attachments, tether).await?;
+            build_attachment_key_packets(context, &address_id, attachments, false, tether).await?;
 
         match session
             .update_draft(message_id, params, attachment_key_packets)
@@ -900,12 +916,14 @@ impl Draft {
         metadata_id: MetadataId,
         ctx: &MailUserContext,
         url: Url,
+        policy: ImagePolicy,
     ) -> MailContextResult<AttachmentData> {
-        let f = async move |cid: &ContentId, ctx: &MailUserContext| {
-            Self::get_embedded_attachment(metadata_id, ctx, cid).await
-        };
-
-        ctx.load_image_inner(f, url).await
+        ctx.image_loader()
+            .load(url, policy, async move |cid| {
+                Self::get_embedded_attachment(metadata_id, ctx, cid).await
+            })
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn get_embedded_attachment(

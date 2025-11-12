@@ -14,6 +14,7 @@ use anyhow::anyhow;
 #[cfg(feature = "action_rebase")]
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::Queue;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_mail_api::services::proton::{
@@ -483,16 +484,20 @@ impl RemoteConversationScrollerSource {
         // downloaded in the background
         tether
             .quiet_tx(async |tx| {
+                let mut rebase_change_set = RebaseChangeSet::default();
                 // Save all conversations.
                 for conversation in conversations.iter_mut() {
                     conversation
-                        .create_or_get_local(remote_label_id, tx)
+                        .create_or_get_local(remote_label_id, &mut rebase_change_set, tx)
                         .await?;
                 }
 
                 // We don't want this to cause failures in the scroller.
                 #[cfg(feature = "action_rebase")]
-                if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
+                if let Err(e) = queue
+                    .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
+                    .await
+                {
                     tracing::error!("Failed to rebase changes: {e}")
                 }
 

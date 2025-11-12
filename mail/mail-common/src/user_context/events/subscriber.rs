@@ -20,6 +20,7 @@ use indoc::formatdoc;
 #[cfg(feature = "action_rebase")]
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::Label;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
@@ -79,6 +80,8 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
         tether
             .tx::<_, _, SubscriberError>(async |tx| {
+                let mut rebase_change_set = RebaseChangeSet::default();
+
                 for event in events {
                     if let Some(labels) = &event.labels {
                         debug!("Handling label events");
@@ -89,14 +92,19 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
                     if let Some(conversations) = &event.conversations {
                         debug!("Handling conversation events");
-                        handle_conversation_events(tx, conversations, &mut data)
-                            .await
-                            .context("Error handling conversation events")?;
+                        handle_conversation_events(
+                            tx,
+                            conversations,
+                            &mut rebase_change_set,
+                            &mut data,
+                        )
+                        .await
+                        .context("Error handling conversation events")?;
                     }
 
                     if let Some(messages) = &event.messages {
                         debug!("Handling message events");
-                        handle_message_events(tx, messages, &mut data)
+                        handle_message_events(tx, messages, &mut rebase_change_set, &mut data)
                             .await
                             .context("Error handling message events")?;
                     }
@@ -130,7 +138,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
                     #[cfg(feature = "action_rebase")]
                     ctx.action_queue()
-                        .rebase_in(ActionGroup::default(), tx)
+                        .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                         .await
                         .context("Failed to rebase")?;
                 }

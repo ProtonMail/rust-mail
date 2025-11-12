@@ -56,6 +56,7 @@ use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext};
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_api::services::proton::{PrivateEmail, PrivateString};
@@ -686,7 +687,11 @@ impl Message {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn create_or_get_local(
+        &mut self,
+        rebase_change_set: &mut RebaseChangeSet,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone()
             && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
         {
@@ -701,6 +706,7 @@ impl Message {
         }
 
         self.save(bond).await?;
+        rebase_change_set.add(self.id());
         Ok(())
     }
 
@@ -1976,8 +1982,14 @@ impl Message {
             })?;
 
             #[cfg(feature = "action_rebase")]
-            if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
-                tracing::error!("Failed to rebase: {e}")
+            {
+                let rebase_change_set = RebaseChangeSet::from(message.id());
+                if let Err(e) = queue
+                    .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
+                    .await
+                {
+                    tracing::error!("Failed to rebase: {e}")
+                }
             }
 
             Ok(())
@@ -2323,6 +2335,30 @@ impl Message {
             .map(|_| self.snooze_time)
     }
 
+    pub(crate) async fn save_scroller_messages(
+        api_messages: Vec<ApiMessageMetadata>,
+        rebase_change_set: &mut RebaseChangeSet,
+        tx: &Bond<'_>,
+    ) -> Result<Vec<Message>, MailContextError> {
+        let mut messages = Vec::with_capacity(api_messages.len());
+        for api_message in api_messages {
+            let Some(message) = (if Message::sync_decision(&api_message, None, tx).await?
+                == MessageSyncDecision::Skip
+            {
+                Message::find_by_remote_id(api_message.id.clone(), tx).await?
+            } else {
+                let mut message = Message::from_api_metadata(api_message, tx).await?;
+                message.create_or_get_local(rebase_change_set, tx).await?;
+                Some(message)
+            }) else {
+                continue;
+            };
+            messages.push(message)
+        }
+
+        Ok(messages)
+    }
+
     pub(crate) async fn sync_decision(
         metadata: &ApiMessageMetadata,
         event_action: Option<Action>,
@@ -2338,9 +2374,8 @@ impl Message {
         //    draft is open)
 
         let mut is_stale_draft = false;
-        if DraftMetadata::find_by_message_with_remote_id(metadata.id.clone(), tx)
-            .await?
-            .is_some()
+        if let Some(draft_metadata) =
+            DraftMetadata::find_by_message_with_remote_id(metadata.id.clone(), tx).await?
         {
             // We have a message that has been opened as a draft, but it is possible that
             // another session has sent this draft. Deleting the metadata at this point in
@@ -2354,7 +2389,11 @@ impl Message {
             // states on the rust side.
 
             let flags = MessageFlags::from(metadata.flags);
-            if !(flags.is_schedule_send() || flags.is_sent()) {
+            // if the send action id is still present it means the sending is still ongoing
+            // and we should not remove/modify the data as the server response will take care of it.
+            if !((flags.is_schedule_send() || flags.is_sent())
+                && draft_metadata.send_action_id.is_none())
+            {
                 // Case 2.
                 tracing::info!(
                     "Skipping message update for {} because it's opened locally",

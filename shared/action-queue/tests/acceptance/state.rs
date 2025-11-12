@@ -3,6 +3,7 @@ use super::common::{new_factory, new_queue};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -68,7 +69,10 @@ async fn rebase_state() {
         .await
         .unwrap();
 
-    queue.rebase(TestAction::GROUP).await.unwrap();
+    queue
+        .rebase(TestAction::GROUP, &RebaseChangeSet::default())
+        .await
+        .unwrap();
 
     // Check local state is as expected.
     assert_eq!(
@@ -154,6 +158,7 @@ impl Handler for TestActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(tx

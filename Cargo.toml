@@ -82,7 +82,7 @@ indoc = "2.0.5"
 insta = { version = "1.42.0", features = ["toml"] }
 indexmap = { version = "2.7.1", features = ["serde"] }
 itertools = "0.13.0"
-html2text = "0.15.5"
+html2text = "0.16.2"
 fxhash = "=0.2.1" # used by kuchikiki and tui-logger , force to this version to avoid surprises
 jiff = { version = "0.2.4", features = ["serde"] }
 file-format = { version = "0.26.0", features = ["reader"] }

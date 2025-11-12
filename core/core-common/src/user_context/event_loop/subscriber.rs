@@ -105,6 +105,7 @@ use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 
 #[cfg(feature = "action_rebase")]
 use proton_action_queue::action::ActionGroup;
+use proton_action_queue::rebase::RebaseChangeSet;
 
 const CORE_EVENT_TYPE_ID: &str = "proton-core-event";
 
@@ -242,6 +243,8 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
         let stash = ctx.stash().clone();
         let mut conn = stash.connection().await?;
 
+        let mut rebase_change_set = RebaseChangeSet::default();
+
         calculate_missing_dependencies(events, &conn)
             .await
             .context("Failed to calculate missing dependencies")?
@@ -251,12 +254,12 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
 
         conn.tx::<_, _, StashError>(async |tx| {
             for event in events.iter_mut() {
-                handle_event(event, tx, &user_id).await?;
+                handle_event(event, tx, &user_id, &mut rebase_change_set).await?;
             }
 
             #[cfg(feature = "action_rebase")]
             ctx.queue
-                .rebase_in(ActionGroup::default(), tx)
+                .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                 .await
                 .context("Failed to rebase")?;
 
@@ -291,6 +294,7 @@ async fn handle_event(
     event: &mut CoreEvent,
     tx: &Bond<'_>,
     user_id: &UserId,
+    rebase_change_set: &mut RebaseChangeSet,
 ) -> Result<(), StashError> {
     if let Some(user) = event.user.as_mut() {
         debug!("Handling user event");
@@ -328,21 +332,21 @@ async fn handle_event(
     }
     if let Some(addresses) = event.addresses.as_mut() {
         debug!("Handling address event");
-        handle_address_event(tx, addresses).await?;
+        handle_address_event(tx, addresses, rebase_change_set).await?;
     }
 
     if let Some(labels) = event.labels.as_mut() {
         debug!("Handling label event");
-        handle_label_events(tx, labels).await?;
+        handle_label_events(tx, labels, rebase_change_set).await?;
     }
 
     if let Some(contacts) = event.contacts.as_mut() {
         debug!("Handling contact events");
-        handle_contact_event(tx, contacts).await?;
+        handle_contact_event(tx, contacts, rebase_change_set).await?;
     }
     if let Some(contact_emails) = event.contact_emails.as_mut() {
         debug!("Handling contact email events");
-        handle_contact_email_event(tx, contact_emails).await?;
+        handle_contact_email_event(tx, contact_emails, rebase_change_set).await?;
     }
     Ok(())
 }
@@ -583,6 +587,7 @@ async fn refresh_contacts(ctx: &UserContext) -> Result<(), SubscriberError> {
 async fn handle_address_event(
     tx: &Bond<'_>,
     address_events: &mut [AddressEvent],
+    rebase_change_set: &mut RebaseChangeSet,
 ) -> Result<(), StashError> {
     for event in address_events {
         event
@@ -602,6 +607,7 @@ async fn handle_address_event(
             Action::Create | Action::Update => {
                 if let Some(ref mut address) = event.address {
                     address.save(tx).await?;
+                    rebase_change_set.add(address.id());
                 }
             }
 
@@ -617,6 +623,7 @@ async fn handle_address_event(
 async fn handle_contact_event(
     tx: &Bond<'_>,
     contact_events: &mut [ContactEvent],
+    rebase_change_set: &mut RebaseChangeSet,
 ) -> Result<(), StashError> {
     for event in contact_events {
         event
@@ -646,6 +653,7 @@ async fn handle_contact_event(
                         error!("Failed to create or update contact: {e:?}");
                         e
                     })?;
+                    rebase_change_set.add(contact.id());
                 }
             }
             Action::UpdateFlags => (),
@@ -657,6 +665,7 @@ async fn handle_contact_event(
 async fn handle_contact_email_event(
     tx: &Bond<'_>,
     contact_email_events: &mut [ContactEmailEvent],
+    rebase_change_set: &mut RebaseChangeSet,
 ) -> Result<(), StashError> {
     for event in contact_email_events {
         event
@@ -686,6 +695,7 @@ async fn handle_contact_email_event(
                         error!("Failed to create or update contact mail: {e:?}");
                         e
                     })?;
+                    rebase_change_set.add(contact_email.id());
                 }
             }
             Action::UpdateFlags => (),
@@ -697,6 +707,7 @@ async fn handle_contact_email_event(
 pub async fn handle_label_events(
     tx: &Bond<'_>,
     label_events: &[LabelEvent],
+    rebase_change_set: &mut RebaseChangeSet,
 ) -> Result<(), StashError> {
     for label_event in label_events {
         label_event
@@ -726,6 +737,7 @@ pub async fn handle_label_events(
             Action::Update | Action::UpdateFlags => {
                 if let Some(mut label) = label_event.label.clone() {
                     label.save(tx).await?;
+                    rebase_change_set.add(label.id());
                 } else {
                     warn!("Received label update without label");
                 }

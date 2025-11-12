@@ -59,7 +59,7 @@ async fn attachment_not_removed_on_error() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -281,7 +281,7 @@ async fn removing_non_uploaded_attachment() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -369,7 +369,7 @@ async fn removing_uploaded_attachment() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -506,7 +506,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         Some(DraftAction::from(reply_mode)),
         message.clone(),
         Some(existing_message.remote_id.clone().unwrap()),
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -785,7 +785,7 @@ async fn total_attachment_size_more_than_limit_local() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
     ctx.catch_all().await;
@@ -877,7 +877,7 @@ async fn total_attachment_size_more_than_limit() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -991,7 +991,7 @@ async fn total_attachment_count_exceeds_limit() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1121,7 +1121,7 @@ async fn can_not_send_without_all_uploaded_attachments() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1222,7 +1222,7 @@ async fn total_attachment_count_exceeds_limit_local() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
     ctx.catch_all().await;
@@ -1317,7 +1317,7 @@ async fn catch_storage_quota_exceeded_error() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1402,7 +1402,7 @@ async fn swap_attachment_disposition() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1505,7 +1505,7 @@ async fn swap_attachment_disposition_retry() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 

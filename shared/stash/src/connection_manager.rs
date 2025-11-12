@@ -33,6 +33,14 @@ pub struct StashConnectionPool {
     interrupts: Vec<InterruptData>,
     interrupted: Mutex<bool>,
     wait_resume: Condvar,
+    span: tracing::Span,
+}
+
+impl Drop for StashConnectionPool {
+    fn drop(&mut self) {
+        let _entered = self.span.enter();
+        tracing::info!("Stash connection pool dropped");
+    }
 }
 
 impl StashConnectionPool {
@@ -70,21 +78,19 @@ impl StashConnectionPool {
         init_fn: Box<InitFn>,
         watcher: &Arc<Watcher>,
     ) -> Result<Arc<Self>, Error> {
-        let connections: Result<Vec<Connection>, Error> = (0..max_connections)
+        let connections: Vec<_> = (0..max_connections)
             .map(|_| Self::create_connection(&source, &init_fn, OpenFlags::default()))
-            .collect::<Vec<_>>()
-            .into_iter()
-            .collect();
-        let connections = connections?;
+            .collect::<Result<_, Error>>()?;
 
-        Ok(Arc::new_cyclic(|weak| {
+        Ok(Arc::new({
             let mut interrupts = Vec::with_capacity(connections.len());
+
             let connections = connections
                 .into_iter()
                 .enumerate()
                 .map(|(idx, conn)| {
                     let handle = conn.get_interrupt_handle();
-                    let pooled_tether = PooledTether::new(conn, watcher, weak.clone(), idx);
+                    let pooled_tether = PooledTether::new(conn, watcher, idx);
                     interrupts.push(InterruptData {
                         handle,
                         interrupt_notifier: pooled_tether.interrupt_notifier(),
@@ -92,12 +98,14 @@ impl StashConnectionPool {
                     pooled_tether
                 })
                 .collect();
+
             Self {
                 connections: Mutex::new(connections),
                 connections_cond_var: Condvar::new(),
                 interrupts,
                 interrupted: Default::default(),
                 wait_resume: Condvar::new(),
+                span: tracing::Span::current(),
             }
         }))
     }
@@ -151,6 +159,7 @@ impl StashConnectionPool {
     }
 
     /// Check whether we can proceed with new sql queries or wait on the user to call `resume()`.
+    #[allow(dead_code)]
     pub fn check_interrupted_or_wait_resume(&self) {
         let mut interrupted = self.interrupted.lock();
         if !*interrupted {

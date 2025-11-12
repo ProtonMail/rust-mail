@@ -31,6 +31,7 @@ use proton_action_queue::action::ActionGroup;
 use proton_action_queue::action::MetadataBuilder;
 
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
@@ -544,13 +545,12 @@ impl Conversation {
     pub async fn create_or_get_local(
         &mut self,
         current_label_id: &LabelId,
+        rebase_change_set: &mut RebaseChangeSet,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone()
             && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
         {
-            self.deleted = existing.deleted;
-
             if existing.is_known {
                 let should_skip = match (
                     self.labels
@@ -591,7 +591,9 @@ impl Conversation {
             }
         }
 
-        <Self as Model>::save(self, bond).await
+        <Self as Model>::save(self, bond).await?;
+        rebase_change_set.add(self.id());
+        Ok(())
     }
 
     /// Label multiple conversations.
@@ -2083,6 +2085,7 @@ impl Conversation {
         };
 
         tx.run_tx::<_, _>(async move |tx| {
+            let mut rebase_change_set = RebaseChangeSet::default();
             let had_messages = conversation.has_messages;
             let should_sync_conv = conversation
                 .to_api_conversation()
@@ -2114,6 +2117,7 @@ impl Conversation {
                 new_conversation.is_known = true;
                 debug!("Updating conversation");
                 new_conversation.save(tx).await?;
+                rebase_change_set.add(new_conversation.id());
 
                 new_conversation
             } else {
@@ -2136,15 +2140,19 @@ impl Conversation {
             // This has been deemed more acceptable than the user complaining that their
             // conversations can't  be marked as read after marking all
             // conversations as read.
-            Message::create_or_update_messages_from_metadata_vec(message_metadata, None, tx)
+            let ids = Message::create_or_update_messages_from_metadata(message_metadata, None, tx)
                 .await
                 .map_err(|e| {
                     error!("Failed to write message metadata: {e:?}");
                     e
                 })?;
+            rebase_change_set.add_many(ids);
 
             #[cfg(feature = "action_rebase")]
-            if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
+            if let Err(e) = queue
+                .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
+                .await
+            {
                 tracing::error!("Failed to rebase changes: {e}");
             }
 
@@ -2207,14 +2215,19 @@ impl Conversation {
             };
 
             tx.run_tx::<_, _>(async move |tx| {
+                let mut rebase_change_set = RebaseChangeSet::default();
+
                 let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
 
-                Message::create_or_update_messages_from_metadata(message_metadata, None, tx)
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to write message metadata: {e:?}");
-                        e
-                    })?;
+                let ids =
+                    Message::create_or_update_messages_from_metadata(message_metadata, None, tx)
+                        .await
+                        .map_err(|e| {
+                            error!("Failed to write message metadata: {e:?}");
+                            e
+                        })?;
+
+                rebase_change_set.add_many(ids);
 
                 if conversation.is_known {
                     debug!("Conversation was known");
@@ -2235,11 +2248,17 @@ impl Conversation {
                         error!("Failed to write conversation: {e:?}");
                         e
                     })?;
+                    rebase_change_set.add(new_conversation.id());
                 }
 
                 #[cfg(feature = "action_rebase")]
-                if let Err(e) = queue.rebase_in(ActionGroup::default(), tx).await {
-                    tracing::error!("Failed to rebase changes: {e}");
+                {
+                    if let Err(e) = queue
+                        .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
+                        .await
+                    {
+                        tracing::error!("Failed to rebase changes: {e}");
+                    }
                 }
 
                 Ok(())

@@ -117,7 +117,7 @@ async fn basic_send_check() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -307,7 +307,7 @@ async fn basic_schedule_send_check() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -471,7 +471,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -770,7 +770,7 @@ async fn already_sent_error_does_not_produce_error() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1186,7 +1186,7 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1398,7 +1398,7 @@ async fn already_sent_from_even_update() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1533,7 +1533,7 @@ async fn send_external_with_password() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1663,7 +1663,7 @@ async fn send_with_expiration() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1824,7 +1824,7 @@ async fn send_external_with_password_even_if_contact_has_pgp_mime_encryption() {
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 
@@ -1988,7 +1988,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         None,
         message.clone(),
         None,
-        DraftAttachmentKeyPackets::new(),
+        Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
 

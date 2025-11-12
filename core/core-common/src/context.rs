@@ -288,6 +288,13 @@ pub struct Context {
     service_registry: ServiceRegistry<CoreContextError>,
 }
 
+impl Drop for Context {
+    fn drop(&mut self) {
+        tracing::info!("Dropping Context");
+        self.cancellation_token.cancel();
+    }
+}
+
 impl std::ops::Deref for Context {
     type Target = ServiceRegistry<CoreContextError>;
 
@@ -317,6 +324,7 @@ impl Context {
         issue_reporter: Arc<dyn IssueReporter>,
         extra_builder: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> CoreContextResult<Arc<Self>> {
+        tracing::info!("Creating Context");
         let mut builder = ContextBuilder::new();
         let issue_reporter_cloned = issue_reporter.clone();
         async {

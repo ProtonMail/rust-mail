@@ -2769,9 +2769,9 @@ dependencies = [
 
 [[package]]
 name = "html2text"
-version = "0.15.5"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "389acaa5a86952dcdc88a43bc18021009cb9885b0ff8c2fff1cc44e4f34c2fae"
+checksum = "8ec3405a4163878f29357e1156eacd5c9d72803b62925f190c865d1cae8105d5"
 dependencies = [
  "html5ever 0.35.0",
  "tendril",
@@ -5678,7 +5678,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.156.4"
+version = "0.157.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5722,6 +5722,7 @@ dependencies = [
  "uniffi-common",
  "uniffi-macros",
  "uniffi-runtime",
+ "url",
 ]
 
 [[package]]

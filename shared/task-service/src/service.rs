@@ -408,6 +408,22 @@ impl BackgroundAwareTaskService {
         }
     }
 
+    /// Resumes and pauses the background task creating a "scoped" function.
+    pub fn scope_background<O>(&self, f: impl FnOnce() -> O) -> O {
+        self.resume_background();
+        let out = f();
+        self.pause_background();
+        out
+    }
+
+    /// Resumes and pauses the background task creating a "scoped" function.
+    pub async fn scope_background_async<O>(&self, f: impl AsyncFnOnce() -> O) -> O {
+        self.resume_background();
+        let out = f().await;
+        self.pause_background();
+        out
+    }
+
     /// Spawns a new task.
     ///
     /// Spawned task can have its execution paused with [`Self::pause()`].

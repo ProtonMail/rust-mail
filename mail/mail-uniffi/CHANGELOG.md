@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.157.6] - 2025-11-12
+
+### Features
+
+- [ET-3505] Remove font and line-height customization from common CSS
+- uniffi: Create AttachmentDataError
+
+### Fixes
+
+- [ET-5334] Upgrade html2text
+
+
+## [mail-uniffi-v0.157.4] - 2025-11-10
+
+### Fixes
+
+- stash: Drop cyclic dependency between worker threads and their pools (the "database busy" error)
+
+
+## [mail-uniffi-v0.157.3] - 2025-11-10
+
+### Fixes
+
+- user-context: Fix cancellation of action queue tasks
+
+
+## [mail-uniffi-v0.157.2] - 2025-11-07
+
+### Features
+
+- Read-only support for blocked domains
+
+### Fixes
+
+- [ET-3605] Resume background tasks for push notification actions
+- [ET-3605] Lower default timeout for push notification action to 30s
+- [ET-3605] Move logic to mail-common
+- [ET-5315] Explicit cancellation on Drop
+
+
+## [mail-uniffi-v0.157.1] - 2025-11-06
+
+### Features
+
+- [ET-5026] Support bypassing image proxy
+
+### Fixes
+
+- [ET-3605] Do not fetch message from API in case of notification action
+- [ET-3605] Breaking Change - add timeLeft to the push notification action
+- Search scroller must also respect message sync rules
+- [ET-5274] Do not delete draft body if send is not yet complete
+- Dot preserve deleted flag on scroller updates
+
+
+## [mail-uniffi-v0.157.0] - 2025-11-05
+
+### Fixes
+
+- [ET-5278] Force attachment re-encryption on draft creation
+
+
 ## [mail-uniffi-v0.156.4] - 2025-11-04
 
 ### Changed

@@ -12,6 +12,7 @@ pub mod service;
 pub mod services;
 pub mod session;
 pub mod store;
+pub mod utils;
 pub mod verification;
 
 pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;

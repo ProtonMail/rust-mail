@@ -1278,6 +1278,12 @@ macro_rules! declare_local_id {
                 ::proton_action_queue::action::ActionDependencyKey::from(format!("{prefix}-{}-{}",stringify!($name), self.0))
             }
         }
+
+        impl From<$name> for ::proton_action_queue::rebase::RebaseKey {
+            fn from(id: $name) -> Self {
+                ::proton_action_queue::rebase::RebaseKey::from(format!("{}-{}", stringify!($name), id.0))
+            }
+        }
     };
 }
 

@@ -297,6 +297,7 @@ pub async fn build_attachment_key_packets(
     ctx: &MailUserContext,
     address_id: &AddressId,
     attachments: &[Attachment],
+    force_re_encrypt: bool,
     tether: &Tether,
 ) -> MailContextResult<DraftAttachmentKeyPackets> {
     let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
@@ -325,9 +326,9 @@ pub async fn build_attachment_key_packets(
         // If the address of the sender changed we need to regenerate the key packets for this
         // attachment, this required decrypting the current key packets and re-encrypting them
         // with the new address key.
-        if *attachment_address_id != *address_id {
+        if force_re_encrypt || *attachment_address_id != *address_id {
             tracing::info!(
-                "Address id has changed, re-encrypting attachment {} key packets",
+                "Re-encrypting attachment {} key packets",
                 attachment.local_id.unwrap()
             );
 

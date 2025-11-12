@@ -22,6 +22,7 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, FactoryResult, Handler, Priority, Type, VersionConverter,
     VersionConverterError, WriterGuard, WriterGuardError, deserialize,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
@@ -409,6 +410,7 @@ impl Handler for SaveHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

@@ -9,6 +9,7 @@ use crate::action::{
 use crate::db::{
     self, ActionDependency, DEFAULT_LOCK_TIMEOUT, DependencyType, ExecutionGuard, StoredAction,
 };
+use crate::rebase::RebaseChangeSet;
 use anyhow::anyhow;
 use bitflags::bitflags;
 use chrono::DateTime;
@@ -691,15 +692,24 @@ impl Queue {
     }
 
     #[cfg(feature = "rebase")]
-    pub async fn rebase(&self, action_group: ActionGroup) -> QueuedResult<()> {
+    pub async fn rebase(
+        &self,
+        action_group: ActionGroup,
+        change_set: &RebaseChangeSet,
+    ) -> QueuedResult<()> {
         let mut tether = self.shared.stash.connection().await?;
         tether
-            .tx(async |tx| self.rebase_in(action_group, tx).await)
+            .tx(async |tx| self.rebase_in(action_group, change_set, tx).await)
             .await
     }
 
     #[cfg(feature = "rebase")]
-    pub async fn rebase_in(&self, action_group: ActionGroup, tx: &Bond<'_>) -> QueuedResult<()> {
+    pub async fn rebase_in(
+        &self,
+        action_group: ActionGroup,
+        change_set: &RebaseChangeSet,
+        tx: &Bond<'_>,
+    ) -> QueuedResult<()> {
         let ids = StoredAction::rebase_action_order(action_group.as_ref(), tx).await?;
         if ids.is_empty() {
             return Ok(());
@@ -710,7 +720,7 @@ impl Queue {
                 .await?
                 .ok_or(QueuedError::ActionNotFound(id))?;
             let (mut decoded, meta) = decode_action(&self.shared.factory, action.clone())?;
-            decoded.rebase(action, meta, tx).await?;
+            decoded.rebase(action, meta, change_set, tx).await?;
         }
 
         Ok(())
@@ -759,6 +769,7 @@ pub(crate) trait ErasedQueuedAction: Send {
         &'a mut self,
         action: StoredAction,
         metadata: Arc<QueuedMetadata>,
+        change_set: &'a RebaseChangeSet,
         tx: &'a Bond,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 }
@@ -833,6 +844,7 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
         &'a mut self,
         mut action: StoredAction,
         metadata: Arc<QueuedMetadata>,
+        change_set: &'a RebaseChangeSet,
         tx: &'a Bond,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let span = tracing::debug_span!("queue::rebase", id=self.id.0, type=T::TYPE.0);
@@ -840,7 +852,7 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
             async move {
                 tracing::info!("Rebasing local state");
                 self.handler
-                    .rebase_local(self.id, &mut self.action, tx)
+                    .rebase_local(self.id, &mut self.action, change_set, tx)
                     .await
                     .map_err(|e| {
                         error!("Failed to rebase local changes: {e:?}");
@@ -866,6 +878,12 @@ pub struct QueueExecutor {
     shared: Arc<Shared>,
     action_group: ActionGroup,
     id: String,
+}
+
+impl Drop for QueueExecutor {
+    fn drop(&mut self) {
+        tracing::info!(?self.id, "Dropping QueueExecutor");
+    }
 }
 
 impl QueueExecutor {

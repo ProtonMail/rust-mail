@@ -2,6 +2,7 @@ pub mod attachment;
 pub mod conversations;
 pub mod db;
 pub mod db_states;
+pub mod images;
 pub mod init;
 pub mod labels;
 pub mod mailbox;

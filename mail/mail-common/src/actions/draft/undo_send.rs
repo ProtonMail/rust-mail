@@ -11,6 +11,7 @@ use crate::{AppError, MailContextError};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::consts::Mail;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::UnixTimestamp;
@@ -205,6 +206,7 @@ impl Handler for UndoSendHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

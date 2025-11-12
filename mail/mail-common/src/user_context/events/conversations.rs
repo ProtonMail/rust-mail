@@ -2,6 +2,7 @@ use crate::AppError;
 use crate::events::ConversationEvent;
 use crate::models::Conversation;
 use crate::user_context::events::subscriber::PostEventSyncData;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::events::Action;
 use proton_core_common::models::ModelIdExtension;
 use stash::params;
@@ -11,6 +12,7 @@ use tracing::warn;
 pub async fn handle_conversation_events(
     tx: &Bond<'_>,
     events: &[ConversationEvent],
+    rebase_change_set: &mut RebaseChangeSet,
     data: &mut PostEventSyncData,
 ) -> Result<(), AppError> {
     for event in events {
@@ -52,7 +54,8 @@ pub async fn handle_conversation_events(
                     continue;
                 };
 
-                Conversation::create_or_update_conversations(vec![cnv], tx).await?;
+                let ids = Conversation::create_or_update_conversations(vec![cnv], tx).await?;
+                rebase_change_set.add_many(ids);
             }
         }
     }

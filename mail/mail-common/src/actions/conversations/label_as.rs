@@ -13,6 +13,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
+use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
@@ -85,6 +86,7 @@ impl Handler for LabelAsHandler {
         &self,
         this_id: ActionId,
         action: &mut Self::Action,
+        _: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         //TODO(ET-5183): Test me!

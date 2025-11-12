@@ -2,7 +2,7 @@ use crate::actions::MailActionError;
 use crate::feature_flags::{FeatureFlagsBackgroundTask, FeatureFlagsService};
 use crate::mail_scroller::MailScrollerError;
 use crate::migration_snooper::MailMigrationSnooper;
-use crate::{AppError, MailUserContext, draft};
+use crate::{AppError, ImageLoaderError, MailUserContext, draft};
 use anyhow::anyhow;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
@@ -153,6 +153,8 @@ pub enum MailContextError {
     NonProcessableActions(QueuedError),
     #[error(transparent)]
     NetworkMonitorService(#[from] NetworkMonitorServiceError),
+    #[error("Couldn't load image via the image proxy (got empty response)")]
+    ImageProxyFailed,
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -233,6 +235,22 @@ impl From<CoreContextError> for MailContextError {
     }
 }
 
+impl From<ImageLoaderError<MailContextError>> for MailContextError {
+    fn from(value: ImageLoaderError<MailContextError>) -> Self {
+        match value {
+            ImageLoaderError::Api(err) => err.into(),
+            ImageLoaderError::LoadCid(err) => err,
+            ImageLoaderError::LostContext => Self::LostContext,
+            ImageLoaderError::ProxyFailed => Self::ImageProxyFailed,
+            ImageLoaderError::Stash(err) => err.into(),
+
+            value @ (ImageLoaderError::UnexpectedScheme(..) | ImageLoaderError::Url(..)) => {
+                Self::Other(value.into())
+            }
+        }
+    }
+}
+
 pub type MailContextResult<T> = Result<T, MailContextError>;
 
 impl<T: Action<Error: Into<MailContextError>>> From<QueueActionError<T>> for MailContextError {
@@ -258,6 +276,12 @@ pub struct MailContext {
     http_client: OnceLock<reqwest::Client>,
 }
 
+impl Drop for MailContext {
+    fn drop(&mut self) {
+        tracing::info!("Dropping MailContext");
+    }
+}
+
 impl MailContext {
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument("MailContextNew", skip_all)]
@@ -278,6 +302,8 @@ impl MailContext {
         network_monitor_config: proton_network_monitor_service::Config,
         issue_reporter: Arc<dyn IssueReporter>,
     ) -> Result<Arc<Self>, MailContextError> {
+        tracing::info!("Creating MailContext");
+
         let issue_reporter = Arc::new(TracedIssueReporter::new(issue_reporter));
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
@@ -1032,6 +1058,7 @@ impl MailContext {
     pub fn network_monitor_service(&self) -> &NetworkMonitorService {
         self.core_context.network_monitor_service()
     }
+
     pub fn issue_reporter_service(&self) -> &IssueReporterService {
         self.core_context.issue_reporter_service()
     }

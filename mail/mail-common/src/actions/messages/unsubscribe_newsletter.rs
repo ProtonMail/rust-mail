@@ -5,6 +5,7 @@ use crate::models::Message;
 use anyhow::anyhow;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler};
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::session::Session;
 use proton_core_common::models::ModelIdExtension;
@@ -153,6 +154,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())

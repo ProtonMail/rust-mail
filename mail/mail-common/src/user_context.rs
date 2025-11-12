@@ -9,15 +9,14 @@ mod initialization;
 
 use crate::actions::PREFETCH_ROLLBACK_ACTION_GROUP;
 use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
-use crate::datatypes::attachment::ContentId;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
-use crate::models::{AttachmentData, Conversation, MailSettings, Message};
+use crate::models::{Conversation, Message};
 #[cfg(feature = "prefetch")]
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchService};
 use crate::rsvp::RsvpService;
 use crate::upsell_eligibility_watcher::UpsellEligibilityWatcher;
-use crate::{AppError, MailContext, MailContextError, MailContextResult};
+use crate::{AppError, ImageLoader, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use attachment_cache::AttachmentCacheState;
 use builder::MailUserContextBuilder;
@@ -28,7 +27,6 @@ use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
-use proton_core_api::service::{ApiServiceError, ApiServiceResult};
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
 use proton_core_api::session::Session;
@@ -38,6 +36,7 @@ use proton_core_common::datatypes::{
 };
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, PaidSubscription, Role, User, UserSettings};
+use proton_core_common::services::user_issue_reporter_service::UserIssueReporterService;
 use proton_core_common::services::{EventPollConfigService, NetworkMonitorService};
 use proton_core_common::{
     ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
@@ -48,8 +47,8 @@ use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::Subscriber;
+use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use proton_task_service::Spawner;
-use reqwest::Method;
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use std::any::{Any, TypeId};
@@ -57,10 +56,6 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use url::Url;
-
-use proton_core_common::services::user_issue_reporter_service::UserIssueReporterService;
-use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::join;
@@ -190,14 +185,20 @@ impl MailUserContext {
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
+        tracing::info!("Creating MailUserContext");
         let user_context_cloned = user_context.clone();
-        async {
-            let origin = mail_context.core_context().origin();
-            let mut builder =
-                MailUserContextBuilder::new().with_service(AttachmentCacheState::new());
 
+        async {
             let span =
                 tracing::debug_span!(parent: None, "qac", user_id = %user_context.user_id().short_id());
+
+            let origin = mail_context.core_context().origin();
+
+            let mut builder =
+                MailUserContextBuilder::new()
+                    .with_service(AttachmentCacheState::new())
+                    .with_cyclic_service(ImageLoader::new);
+
             builder = match origin {
                 Origin::App => {
                     let builder = builder
@@ -289,6 +290,7 @@ impl MailUserContext {
                         .mail_context()
                         .core_context()
                         .get_service::<EventPollConfigService>();
+
                     if let EventPollMode::Automatic(interval) = config.mode() {
                         this.init_event_loop_poll(interval)?;
                     }
@@ -304,6 +306,7 @@ impl MailUserContext {
             // has been initialized, i.e. here:
             this.queues().resume();
 
+            tracing::info!("Creating MailUserContext...Done");
             Ok(this)
         }
         .await
@@ -834,89 +837,24 @@ impl MailUserContext {
         self.mail_context().http_client()
     }
 
-    pub async fn load_image_inner(
-        &self,
-        get_embedded_attachment: impl AsyncFnOnce(
-            &ContentId,
-            &MailUserContext,
-        ) -> MailContextResult<AttachmentData>,
-        mut url: Url,
-    ) -> MailContextResult<AttachmentData> {
-        let data = match url.scheme() {
-            "cid" => get_embedded_attachment(&url.path().into(), self).await?,
-            "http" => {
-                url.set_scheme("https").unwrap();
-                self.proxy_image(url).await?
-            }
-            "https" => self.proxy_image(url).await?,
-            "proton-http" | "proton-https" => {
-                // In that case we cannot use set_scheme.
-                // Because:
-                // > If either the old or new scheme is `http`, `https`,
-                // > `ws`,`wss` or `ftp` and the other is not one of these
-                // > then return Err.
-                let url = String::from(url);
-                let new_url = url.replacen("proton-", "", 1);
-                let new_url = Url::parse(&new_url).unwrap();
-
-                self.proxy_image(new_url).await?
-            }
-            _ => {
-                return Err(MailContextError::Other(anyhow::anyhow!(
-                    "invalid url scheme"
-                )));
-            }
-        };
-        Ok(data)
-    }
-
-    pub async fn proxy_image(&self, url: Url) -> ApiServiceResult<AttachmentData> {
-        let mail_settings = async {
-            let Ok(tether) = self.user_stash().connection().await else {
-                return MailSettings::default();
-            };
-            MailSettings::get_or_default(&tether).await
-        }
-        .await;
-        let is_proxy_enabled = mail_settings.is_proxy_enabled();
-
-        let data = if is_proxy_enabled {
-            self.session().proxy_img(&url).await?
-        } else {
-            self.http_client()
-                .request(Method::GET, url)
-                .header("User-Agent", "proton-mail/7.0.0")
-                .send()
-                .await
-                .map_err(|e| ApiServiceError::ConnectionError(e.to_string()))?
-                .error_for_status()
-                .map_err(|e| {
-                    ApiServiceError::UnknownError(format!(
-                        "Server returned error when getting image: {e:?}"
-                    ))
-                })?
-                .bytes()
-                .await
-                .map_err(|e| {
-                    ApiServiceError::UnknownError(format!(
-                        "error getting bytes from image request: {e:?}"
-                    ))
-                })?
-                .to_vec()
-        };
-
-        Ok(AttachmentData {
-            data,
-            mime: String::from("image/*"),
-        })
-    }
-
     pub fn network_monitor_service(&self) -> &NetworkMonitorService {
         self.mail_context.network_monitor_service()
     }
 
     pub fn issue_reporter_service(&self) -> &UserIssueReporterService {
         self.user_context.issue_reporter_service()
+    }
+
+    pub fn image_loader(&self) -> &ImageLoader {
+        self.get_service()
+    }
+}
+
+impl Drop for MailUserContext {
+    fn drop(&mut self) {
+        let user_id = self.user_id();
+        let session_id = self.session_id();
+        tracing::info!(?user_id, ?session_id, "Dropping MailUserContext");
     }
 }
 

@@ -7,6 +7,7 @@ use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{CachedScrollData, ConversationScrollData, ScrollData};
 use crate::models::{Conversation, ScrollCursor};
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
@@ -954,8 +955,9 @@ async fn test_create_or_get_local_fix_preserves_api_conversations_with_labels() 
     // Step 3: Call create_or_get_local (this is where the bug happened)
     tether
         .tx(async |bond| {
+            let mut change_set = RebaseChangeSet::default();
             api_conversation
-                .create_or_get_local(&LabelId::inbox(), bond)
+                .create_or_get_local(&LabelId::inbox(), &mut change_set, bond)
                 .await
                 .unwrap();
             Ok::<(), StashError>(())

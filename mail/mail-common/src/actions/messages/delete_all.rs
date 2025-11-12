@@ -4,6 +4,7 @@ use crate::models::Message;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::datatypes::LocalLabelId;
@@ -100,6 +101,7 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         &self,
         this_id: ActionId,
         action: &mut Self::Action,
+        _: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         //TODO(ET-5183): Test me!

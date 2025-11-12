@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.72"
+rust-version = "1.85"
 name = "html2text"
-version = "0.15.5"
+version = "0.16.2"
 authors = ["Chris Emerson <github@mail.nosreme.org>"]
 build = false
 autolib = false

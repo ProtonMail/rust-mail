@@ -373,6 +373,7 @@ impl Handler for ActionHandler2 {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> std::result::Result<(), <Self::Action as Action>::Error> {
         Ok(())

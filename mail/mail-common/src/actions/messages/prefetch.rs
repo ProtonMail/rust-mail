@@ -6,6 +6,7 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionGroup, ActionId, DefaultVersionConverter, Handler,
     Priority, Type, WriterGuard,
 };
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
@@ -114,6 +115,7 @@ impl Handler for PrefetchHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
+        _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())
