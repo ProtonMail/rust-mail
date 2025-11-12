@@ -16,8 +16,8 @@ use super::state::MailUserContextPtr;
 use super::{ImagePolicy, MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::core::datatypes::{Id, RemoteId, UnixTimestamp};
 use crate::errors::{
-    ActionError, AttachmentDataResult, BodyOutputResult, MobileActionsResult, ProtonError,
-    VoidActionResult,
+    ActionError, AttachmentDataError, AttachmentDataResult, BodyOutputResult, MobileActionsResult,
+    ProtonError, VoidActionResult,
 };
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::mail::datatypes::{LabelAsOutput, Undo};
@@ -147,7 +147,7 @@ impl DecryptedMessage {
         self: Arc<Self>,
         url: String,
         policy: ImagePolicy,
-    ) -> Result<AttachmentData, ProtonError> {
+    ) -> Result<AttachmentData, AttachmentDataError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
@@ -155,20 +155,14 @@ impl DecryptedMessage {
                 .map_err(MailContextError::from)
                 .map_err(RealProtonMailError::from)?;
 
-            let att = self
-                .body
-                .load_image(&ctx, url, policy.into())
-                .await
-                .map_err(RealProtonMailError::from)?;
+            let att = self.body.load_image(&ctx, url, policy.into()).await?;
 
-            Ok::<_, RealProtonMailError>(AttachmentData {
+            Ok(AttachmentData {
                 data: att.data,
                 mime: att.mime,
             })
         })
         .await
-        .map_err(ProtonError::from)
-        .into()
     }
 
     /// Checks if this mail contains an invitation and, if so, returns its

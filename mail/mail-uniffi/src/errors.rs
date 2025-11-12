@@ -1,4 +1,5 @@
 mod action_error;
+mod attachment_data_error;
 mod draft_error;
 mod error_reason;
 mod event_error;
@@ -10,6 +11,7 @@ mod snooze_error;
 pub(crate) mod unexpected;
 
 pub use self::action_error::*;
+pub use self::attachment_data_error::*;
 pub use self::draft_error::*;
 pub use self::error_reason::*;
 pub use self::event_error::*;
@@ -18,8 +20,8 @@ pub use self::proton_error::*;
 pub use self::scroller_error::*;
 pub use self::session_error::*;
 pub use self::snooze_error::*;
-
 use crate::mail::RsvpEvent;
+use crate::mail::datatypes::MobileAction;
 use crate::mail::messages::{AttachmentData, BodyOutput};
 
 #[macro_export]
@@ -104,8 +106,8 @@ export_void_result! {
 }
 
 export_typed_result! {
-    AttachmentDataResult(AttachmentData, ProtonError),
+    AttachmentDataResult(AttachmentData, AttachmentDataError),
     BodyOutputResult(BodyOutput, ProtonError),
     RsvpEventGetResult(RsvpEvent, ProtonError),
-    MobileActionsResult(Vec<crate::mail::datatypes::MobileAction>, ActionError),
+    MobileActionsResult(Vec<MobileAction>, ActionError),
 }
