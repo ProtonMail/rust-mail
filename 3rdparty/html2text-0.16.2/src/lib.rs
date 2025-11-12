@@ -162,8 +162,6 @@ use std::collections::{BTreeSet, HashMap};
 #[cfg(feature = "css_ext")]
 use std::ops::Range;
 use std::rc::Rc;
-#[cfg(feature = "css_ext")]
-use std::sync::Arc;
 use unicode_width::UnicodeWidthStr;
 
 use std::io;
@@ -1452,16 +1450,16 @@ where
 #[cfg(feature = "css_ext")]
 #[derive(Clone, Default)]
 struct HighlighterMap {
-    map: HashMap<String, Arc<SyntaxHighlighter>>,
+    map: HashMap<String, Rc<SyntaxHighlighter>>,
 }
 
 #[cfg(feature = "css_ext")]
 impl HighlighterMap {
-    pub fn get(&self, name: &str) -> Option<Arc<SyntaxHighlighter>> {
+    pub fn get(&self, name: &str) -> Option<Rc<SyntaxHighlighter>> {
         self.map.get(name).cloned()
     }
 
-    fn insert(&mut self, name: impl Into<String>, f: Arc<SyntaxHighlighter>) {
+    fn insert(&mut self, name: impl Into<String>, f: Rc<SyntaxHighlighter>) {
         self.map.insert(name.into(), f);
     }
 }
@@ -1500,6 +1498,7 @@ struct HtmlContext {
     wrap_links: bool,
     include_link_footnotes: bool,
     use_unicode_strikeout: bool,
+    image_mode: config::ImageRenderMode,
 
     #[cfg(feature = "css_ext")]
     syntax_highlighters: HighlighterMap,
@@ -1549,7 +1548,7 @@ impl RenderInput {
                 }
             }
 
-            if let Some(offset_range) = get_offset(&full_text, s) {
+            if let Some(offset_range) = get_offset(full_text, s) {
                 node_styles.push((offset_range, style));
             } // else we ignore the highlight.
         }
@@ -1558,9 +1557,10 @@ impl RenderInput {
     }
 
     // Return the children in the right form
+    #[allow(clippy::mut_range_bound)]
     fn children(&self) -> Vec<RenderInput> {
         #[cfg(feature = "css_ext")]
-        if self.extra_styles.borrow().len() > 0 {
+        if !self.extra_styles.borrow().is_empty() {
             let mut offset = 0;
             let mut result = Vec::new();
             let mut start_style_index = 0;
@@ -1577,6 +1577,9 @@ impl RenderInput {
                     }
                     if style_range.end <= offset {
                         // We don't need to look at this again
+                        // Note this is here to restart this loop in a different place
+                        // in the next run of the outer loop; hence allowing
+                        // clippy::mut_range_bound on the function.
                         start_style_index = es_idx;
                     }
                     // This piece must overlap!
@@ -1645,7 +1648,7 @@ impl RenderInput {
         RenderInput::do_extract_text(
             &mut result,
             &self.handle,
-            &mut *self.node_lengths.borrow_mut(),
+            &mut self.node_lengths.borrow_mut(),
         );
         result
     }
@@ -2006,9 +2009,10 @@ fn process_dom_node<T: Write>(
                             break;
                         }
                     }
-                    if let (Some(title), Some(src)) = (title, src) {
+                    // Ignore `<img>` without src.
+                    if let Some(src) = src {
                         Finished(RenderNode::new_styled(
-                            Img(src.into(), title.into()),
+                            Img(src.into(), title.unwrap_or("").into()),
                             computed,
                         ))
                     } else {
@@ -2038,11 +2042,10 @@ fn process_dom_node<T: Write>(
                         }
                     }
 
-                    if let Some(title) = title {
-                        Finished(RenderNode::new_styled(Svg(title.into()), computed))
-                    } else {
-                        Nothing
-                    }
+                    Finished(RenderNode::new_styled(
+                        Svg(title.unwrap_or_else(|| String::new())),
+                        computed,
+                    ))
                 }
                 expanded_name!(html "h1")
                 | expanded_name!(html "h2")
@@ -2863,6 +2866,21 @@ pub mod config {
     #[cfg(feature = "css_ext")]
     use crate::{HighlighterMap, SyntaxHighlighter};
 
+    /// Specify how images with missing or empty alt text are handled
+    #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+    #[non_exhaustive]
+    pub enum ImageRenderMode {
+        /// Ignore `<img>` without alt, or `<svg>` without `<title>`.
+        #[default]
+        IgnoreEmpty,
+        /// Always process images (will be handled by the decorator)
+        ShowAlways,
+        /// Use a fixed replacement text (e.g. emoji)
+        Replace(&'static str),
+        /// Replace with the last component of the link filename if any
+        Filename,
+    }
+
     /// Configure the HTML processing.
     pub struct Config<D: TextDecorator> {
         decorator: D,
@@ -2882,6 +2900,7 @@ pub mod config {
         wrap_links: bool,
         include_link_footnotes: bool,
         use_unicode_strikeout: bool,
+        image_mode: ImageRenderMode,
 
         #[cfg(feature = "css_ext")]
         syntax_highlighters: HighlighterMap,
@@ -2904,6 +2923,7 @@ pub mod config {
                 wrap_links: self.wrap_links,
                 include_link_footnotes: self.include_link_footnotes,
                 use_unicode_strikeout: self.use_unicode_strikeout,
+                image_mode: self.image_mode,
 
                 #[cfg(feature = "css_ext")]
                 syntax_highlighters: self.syntax_highlighters.clone(),
@@ -3130,6 +3150,12 @@ pub mod config {
             self
         }
 
+        /// Configure how images with no alt text are handled.
+        pub fn empty_img_mode(mut self, img_mode: ImageRenderMode) -> Self {
+            self.image_mode = img_mode;
+            self
+        }
+
         #[cfg(feature = "css_ext")]
         /// Register a named syntax highlighter.
         ///
@@ -3140,8 +3166,9 @@ pub mod config {
             name: impl Into<String>,
             f: SyntaxHighlighter,
         ) -> Self {
-            self.syntax_highlighters
-                .insert(name.into(), std::sync::Arc::new(f));
+            use std::rc::Rc;
+
+            self.syntax_highlighters.insert(name.into(), Rc::new(f));
             self
         }
     }
@@ -3219,6 +3246,7 @@ pub mod config {
             wrap_links: true,
             include_link_footnotes: false,
             use_unicode_strikeout: true,
+            image_mode: ImageRenderMode::IgnoreEmpty,
             #[cfg(feature = "css_ext")]
             syntax_highlighters: Default::default(),
         }
@@ -3259,6 +3287,7 @@ impl RenderTree {
             wrap_links: context.wrap_links,
             include_link_footnotes: context.include_link_footnotes,
             use_unicode_strikeout: context.use_unicode_strikeout,
+            img_mode: context.image_mode,
         };
         let test_decorator = decorator.make_subblock_decorator();
         let builder = SubRenderer::new(width, render_options, decorator);

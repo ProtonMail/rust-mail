@@ -3,6 +3,7 @@
 //! This module implements helpers and concrete types for rendering from HTML
 //! into different text formats.
 
+use crate::config::ImageRenderMode;
 use crate::Colour;
 use crate::WhiteSpace;
 use crate::WhitespaceExt as _;
@@ -1161,10 +1162,14 @@ impl<T: Clone> BorderHoriz<T> {
     {
         // Adjust the line pieces on either side.
         if pos > 0 {
-            self.segments.get_mut(pos - 1).map(|seg| seg.chop_right());
+            if let Some(seg) = self.segments.get_mut(pos - 1) {
+                seg.chop_right()
+            }
         }
         let rpos = pos + t.width();
-        self.segments.get_mut(rpos).map(|seg| seg.chop_left());
+        if let Some(seg) = self.segments.get_mut(rpos) {
+            seg.chop_left()
+        }
         self.holes.push((pos, t));
     }
 
@@ -1389,6 +1394,9 @@ pub(crate) struct RenderOptions {
 
     /// Whether to use Unicode combining characters for crossing text out.
     pub use_unicode_strikeout: bool,
+
+    /// Image rendering mode
+    pub img_mode: ImageRenderMode,
 }
 
 impl Default for RenderOptions {
@@ -1402,6 +1410,7 @@ impl Default for RenderOptions {
             wrap_links: true,
             include_link_footnotes: false,
             use_unicode_strikeout: true,
+            img_mode: Default::default(),
         }
     }
 }
@@ -1410,7 +1419,7 @@ fn get_wrapping_or_insert<'w, D: TextDecorator>(
     wrapping: &'w mut Option<WrappedBlock<Vec<D::Annotation>>>,
     options: &RenderOptions,
     width: usize,
-    default_tag: &Vec<D::Annotation>,
+    default_tag: &[D::Annotation],
 ) -> &'w mut WrappedBlock<Vec<D::Annotation>> {
     wrapping.get_or_insert_with(|| {
         let wwidth = match options.wrap_width {
@@ -1421,7 +1430,7 @@ fn get_wrapping_or_insert<'w, D: TextDecorator>(
             wwidth,
             options.pad_block_width,
             options.allow_width_overflow,
-            default_tag.clone(),
+            default_tag.to_owned(),
         )
     })
 }
@@ -1527,7 +1536,7 @@ impl<D: TextDecorator> SubRenderer<D> {
 
     #[cfg(feature = "html_trace")]
     /// Returns a string of the current builder contents (for testing).
-    #[allow(clippy::inherent_to_string)]
+    #[allow(clippy::inherent_to_string_shadow_display)]
     fn to_string(&self) -> String {
         let mut result = String::new();
         for line in &self.lines {
@@ -1926,7 +1935,9 @@ impl<D: TextDecorator> Renderer for SubRenderer<D> {
             }
         }
 
-        tot_width -= 1;
+        // If we haven't added any columns, tot_width will be 0; otherwise
+        // it will be one too high for a final unneeded border.
+        tot_width = tot_width.saturating_sub(1);
 
         let mut next_border = BorderHoriz::new(tot_width, self.ann_stack.clone());
 
@@ -2006,7 +2017,9 @@ impl<D: TextDecorator> Renderer for SubRenderer<D> {
             .max()
             .unwrap_or(0);
         let spaces: String = (0..tot_width).map(|_| ' ').collect();
-        let last_cellno = line_sets.len() - 1;
+        // line_sets can be empty; if so last_cellno can safely be 0 as
+        // we won't use it.
+        let last_cellno = line_sets.len().saturating_sub(1);
         for i in 0..cell_height {
             let mut line = TaggedLine::new();
             for (cellno, ls) in line_sets.iter_mut().enumerate() {
@@ -2041,7 +2054,7 @@ impl<D: TextDecorator> Renderer for SubRenderer<D> {
             let mut pos = 0;
             for mut ls in line_sets.into_iter() {
                 if ls.rowspan > 1 {
-                    if let Some(l) = (&ls.lines).get(cell_height) {
+                    if let Some(l) = ls.lines.get(cell_height) {
                         let mut tmppos = pos;
                         for ts in l.clone().into_tagged_line() {
                             let w = ts.width();
@@ -2052,7 +2065,7 @@ impl<D: TextDecorator> Renderer for SubRenderer<D> {
                         next_border.add_text_span(
                             pos,
                             TaggedLineElement::Str(TaggedString {
-                                s: " ".repeat(ls.width).into(),
+                                s: " ".repeat(ls.width),
                                 tag: next_border.tag.clone(),
                             }),
                         );
@@ -2184,7 +2197,22 @@ impl<D: TextDecorator> Renderer for SubRenderer<D> {
         Ok(())
     }
     fn add_image(&mut self, src: &str, title: &str) -> Result<()> {
-        let (s, tag) = self.decorator.decorate_image(src, title);
+        let (s, tag) = match (title, self.options.img_mode) {
+            ("", ImageRenderMode::IgnoreEmpty) => {
+                return Ok(());
+            }
+            ("", ImageRenderMode::Filename) => {
+                let slash = src.rfind('/');
+                let sub_title = match slash {
+                    Some(pos) => &src[pos + 1..],
+                    None => src,
+                };
+                self.decorator.decorate_image(src, sub_title)
+            }
+            ("", ImageRenderMode::ShowAlways) => self.decorator.decorate_image(src, title),
+            ("", ImageRenderMode::Replace(s)) => self.decorator.decorate_image(src, s),
+            (title, _) => self.decorator.decorate_image(src, title),
+        };
         self.ann_stack.push(tag);
         self.add_inline_text(&s)?;
         self.ann_stack.pop();
