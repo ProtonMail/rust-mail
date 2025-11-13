@@ -211,8 +211,10 @@ impl Draft {
                     (Some(decrypted), DraftSyncStatus::Synced)
                 }
 
-                Err(MailContextError::Api(api_err)) if api_err.is_network_failure() => {
-                    debug!("Failed to sync draft due to network error.");
+                Err(MailContextError::Api(api_err))
+                    if api_err.is_network_failure() || api_err.is_server_failure() =>
+                {
+                    debug!("Failed to sync draft due to network/service error.");
                     (None, DraftSyncStatus::Cached)
                 }
 
