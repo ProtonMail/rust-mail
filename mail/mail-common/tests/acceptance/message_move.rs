@@ -826,10 +826,7 @@ async fn move_message_also_moves_conversation() {
         vec![LabelId::inbox(), LabelId::all_mail()]
     );
 
-    assert_eq!(
-        message.exclusive_location.as_ref().unwrap().local_id(),
-        local_inbox
-    );
+    assert_eq!(message.location.as_ref().unwrap().local_id(), local_inbox);
 
     // Action:
     // * move message in the other folder
@@ -854,10 +851,7 @@ async fn move_message_also_moves_conversation() {
         vec![LabelId::spam(), LabelId::all_mail()]
     );
 
-    assert_eq!(
-        message.exclusive_location.as_ref().unwrap().local_id(),
-        local_spam
-    );
+    assert_eq!(message.location.as_ref().unwrap().local_id(), local_spam);
 
     conv_is_labeled(&convs[0], [LabelId::all_mail(), LabelId::spam()]);
 
@@ -885,10 +879,7 @@ async fn move_message_also_moves_conversation() {
         ]
     );
 
-    assert_eq!(
-        message.exclusive_location.as_ref().unwrap().local_id(),
-        local_inbox
-    );
+    assert_eq!(message.location.as_ref().unwrap().local_id(), local_inbox);
 }
 
 #[tokio::test]

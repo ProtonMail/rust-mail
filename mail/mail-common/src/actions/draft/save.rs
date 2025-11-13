@@ -874,7 +874,7 @@ impl Save {
             cc_list: self.cc_list.to_message_recipients().into(),
             bcc_list: self.bcc_list.to_message_recipients().into(),
             deleted: false,
-            exclusive_location: None,
+            location: None,
             expiration_time: 0.into(),
             external_id: None,
             flags: Default::default(),

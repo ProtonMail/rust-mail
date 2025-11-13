@@ -58,7 +58,7 @@ impl UsedVariables {
             message.label_ids.push(LabelId::starred());
         }
         if self.trash {
-            message.exclusive_location = Some(ExclusiveLocation::System {
+            message.location = Some(ExclusiveLocation::System {
                 name: SystemLabel::Trash,
                 local_id: 0.into(),
             });
@@ -68,7 +68,7 @@ impl UsedVariables {
                 panic!("Conflicting trash and spam fields")
             }
 
-            message.exclusive_location = Some(ExclusiveLocation::System {
+            message.location = Some(ExclusiveLocation::System {
                 name: SystemLabel::Trash,
                 local_id: 1.into(),
             });

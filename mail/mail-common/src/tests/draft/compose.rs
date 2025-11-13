@@ -853,7 +853,7 @@ fn existing_message() -> Message {
         },
         bcc_list: Default::default(),
         deleted: false,
-        exclusive_location: None,
+        location: None,
         expiration_time: 0.into(),
         external_id: None,
         flags: Default::default(),

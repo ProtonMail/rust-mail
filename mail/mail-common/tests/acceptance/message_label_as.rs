@@ -369,7 +369,7 @@ async fn label_as_with_archive() {
     assert!(message1.label_ids.contains(&LabelId::archive()));
     assert_eq!(message1.custom_labels.len(), 1);
     assert_eq!(
-        message1.exclusive_location,
+        message1.location,
         Some(ExclusiveLocation::System {
             name: SystemLabel::Archive,
             local_id: archive_id,
@@ -382,7 +382,7 @@ async fn label_as_with_archive() {
     assert!(message2.label_ids.contains(&LabelId::archive()));
     assert_eq!(message2.custom_labels.len(), 2);
     assert_eq!(
-        message2.exclusive_location,
+        message2.location,
         Some(ExclusiveLocation::System {
             name: SystemLabel::Archive,
             local_id: archive_id,

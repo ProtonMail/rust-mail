@@ -1506,7 +1506,7 @@ async fn open_draft_detects_sender_alias() {
         cc_list: Default::default(),
         bcc_list: Default::default(),
         deleted: false,
-        exclusive_location: None,
+        location: None,
         expiration_time: Default::default(),
         external_id: None,
         flags: Default::default(),
