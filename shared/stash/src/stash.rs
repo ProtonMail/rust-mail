@@ -45,12 +45,12 @@ use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::{self};
+use std::time::Instant;
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
-use tracing::{debug, error, trace};
-use uuid::Uuid;
 use tokio::task;
+use tracing::{Instrument, Span, debug, error, trace, warn};
 
 /// Set a timeout for a specified amount of time when a table is locked. This
 /// defaults to 5,000 milliseconds in the underlying libraries. This is currently only
@@ -81,26 +81,16 @@ enum Operation {
 }
 
 struct TracedOperation {
-    span: tracing::Span,
+    span: Span,
     operation: Operation,
-}
-
-impl TracedOperation {
-    fn inherited(operation: Operation) -> Self {
-        TracedOperation {
-            span: tracing::Span::current(),
-            operation,
-        }
-    }
-
-    fn with(span: tracing::Span, operation: Operation) -> Self {
-        TracedOperation { span, operation }
-    }
 }
 
 impl From<Operation> for TracedOperation {
     fn from(operation: Operation) -> Self {
-        TracedOperation::inherited(operation)
+        Self {
+            span: Span::current(),
+            operation,
+        }
     }
 }
 
@@ -527,8 +517,8 @@ impl Stash {
         } = config;
 
         match path {
-            Some(p) => debug!("New Stash with file: {:?}", p),
-            None => debug!("New Stash with in-memory database"),
+            Some(p) => debug!("Opening {:?}", p),
+            None => debug!("Opening in-memory database"),
         }
 
         let max_connections = pool_size.unwrap_or(MAX_CONNECTIONS) as usize;
@@ -1047,23 +1037,24 @@ impl Tether {
         let _guard = tx_lock.lock().await;
 
         async {
-            let span = tx_span();
-            let tx = self.transaction_impl(policy, span.clone()).await?;
+            let tx = self.transaction_impl(policy).await?;
             let r = closure(&tx).await;
 
             if r.is_err() {
-                if let Err(e) = tx.rollback(span.clone()).await {
+                if let Err(e) = tx.rollback().await {
                     error!("Failed to rollback transaction: {e:?}");
                 }
 
                 return r;
             }
-            tx.commit_(policy, span)
+
+            tx.commit_(policy)
                 .await
                 .inspect_err(|e| error!("Failed to commit transaction: {e:?}"))?;
 
             r
         }
+        .in_current_span()
         .into_non_pausable()
         .await
     }
@@ -1071,13 +1062,12 @@ impl Tether {
     async fn transaction_impl(
         &mut self,
         policy: TransactionTrackingPolicy,
-        span: tracing::Span,
     ) -> Result<Bond<'_>, StashError> {
         let (sender, receiver) = oneshot::channel();
         let operation = Operation::Transaction(OperationTransaction::Start(policy, sender));
 
         self.connection
-            .send_async(TracedOperation::with(span, operation))
+            .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
@@ -1098,9 +1088,12 @@ impl Tether {
     /// way, it is very similar to the main worker, but is connection-specific.
     ///
     async fn new(stash: &Stash) -> Result<Self, StashError> {
+        let span = Span::current();
         let pool = stash.pool.clone();
 
         let connection = task::spawn_blocking(move || {
+            let _span = span.entered();
+
             pool.acquire(Some(CONNECTION_ACQUIRE_TIMEOUT))
                 .map_err(|e| match e {
                     StashConnectionPoolError::Connection(e) => StashError::ExecutionError(e),
@@ -1117,10 +1110,13 @@ impl Tether {
         })
     }
 
-    pub async fn sync_query<T: Send + 'static>(
+    pub async fn sync_query<T>(
         &self,
         callback: impl FnOnce(&rusqlite::Connection) -> Result<T, StashError> + Send + 'static,
-    ) -> Result<T, StashError> {
+    ) -> Result<T, StashError>
+    where
+        T: Send + 'static,
+    {
         let closure = Box::new(move |conn: &rusqlite::Connection| {
             callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
@@ -1130,7 +1126,7 @@ impl Tether {
         let operation = Operation::Execution(OperationExec::Sync(sync_closure));
 
         self.connection
-            .send_async(TracedOperation::inherited(operation))
+            .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
@@ -1158,13 +1154,16 @@ impl Tether {
     }
 
     /// This runs the given callback in the tether thread.
-    async fn run_sync_tx<T: Send + 'static>(
+    async fn run_sync_tx<T>(
         &mut self,
         callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
         policy: TransactionTrackingPolicy,
-    ) -> StashResult<T> {
-        let tx_lock = self.tx_lock.clone();
-        let _guard = tx_lock.lock().await;
+    ) -> StashResult<T>
+    where
+        T: Send + 'static,
+    {
+        let _guard = self.tx_lock.lock().await;
+
         let closure = Box::new(move |tx: &rusqlite::Transaction| {
             callback(tx).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
@@ -1176,7 +1175,7 @@ impl Tether {
             Operation::Transaction(OperationTransaction::StartSync(sync_closure, policy));
 
         self.connection
-            .send_async(TracedOperation::with(tx_span(), operation))
+            .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
@@ -1197,9 +1196,7 @@ impl Debug for Tether {
 
 impl Drop for Tether {
     fn drop(&mut self) {
-        let _ = self
-            .connection
-            .send(TracedOperation::inherited(Operation::ReturnToPool));
+        let _ = self.connection.send(Operation::ReturnToPool.into());
     }
 }
 
@@ -1333,20 +1330,14 @@ impl<'tether> Bond<'tether> {
     ///
     /// see [`Bond::commit()`]
     ///
-    async fn commit_(
-        self,
-        transaction_policy: TransactionTrackingPolicy,
-        span: tracing::Span,
-    ) -> Result<(), StashError> {
+    async fn commit_(self, policy: TransactionTrackingPolicy) -> Result<(), StashError> {
         // drop() has an auto-rollback code we don't want to run here:
         let this = ManuallyDrop::new(self);
         let (sender, receiver) = oneshot::channel();
-
-        let operation =
-            Operation::Transaction(OperationTransaction::Commit(transaction_policy, sender));
+        let operation = Operation::Transaction(OperationTransaction::Commit(policy, sender));
 
         this.connection
-            .send_async(TracedOperation::with(span.clone(), operation))
+            .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
@@ -1356,7 +1347,7 @@ impl<'tether> Bond<'tether> {
         {
             error!("Commit error: {e:}");
 
-            return ManuallyDrop::into_inner(this).rollback(span).await;
+            return ManuallyDrop::into_inner(this).rollback().await;
         }
 
         Ok(())
@@ -1382,14 +1373,14 @@ impl<'tether> Bond<'tether> {
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///
-    async fn rollback(self, span: tracing::Span) -> Result<(), StashError> {
+    async fn rollback(self) -> Result<(), StashError> {
         // drop() has an auto-rollback code we don't want to run here:
         let this = ManuallyDrop::new(self);
         let (sender, receiver) = oneshot::channel();
         let operation = Operation::Transaction(OperationTransaction::Rollback(sender));
 
         this.connection
-            .send_async(TracedOperation::with(span, operation))
+            .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
 
@@ -1407,9 +1398,7 @@ impl<'tether> Bond<'tether> {
         &self,
         callback: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<T, StashError> + Send + 'static,
     ) -> Result<T, StashError> {
-        let span = tracing::Span::current();
         let closure = Box::new(move |conn: &rusqlite::Transaction| {
-            let _g = span.enter();
             callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
         });
 
@@ -1618,77 +1607,121 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     }
 
     fn handle_transaction(&mut self, operation: OperationTransaction) {
+        let tt = Instant::now();
+
         match operation {
             OperationTransaction::Start(policy, send_back) => {
+                trace!("Starting transaction");
                 assert!(self.transaction.is_none(), "Started transaction twice");
+
                 match self.start_transaction(policy) {
                     Ok(transaction) => {
                         self.transaction = Some(transaction);
+
+                        debug!(tt=?tt.elapsed(), "Transaction started");
                         _ = send_back.send(Ok(()));
                     }
+
                     Err(error) => {
+                        warn!(tt=?tt.elapsed(), ?error, "Couldn't start transaction");
                         _ = send_back.send(Err(StashError::ExecutionError(error)));
                     }
                 };
             }
 
             OperationTransaction::StartSync(BridgeClosure { closure, sender }, policy) => {
+                trace!("Starting sync-operation");
                 assert!(self.transaction.is_none(), "Started transaction twice");
+
                 let res = self.handle_start_sync(closure, policy);
+
+                match &res {
+                    Ok(_) => {
+                        debug!(tt=?tt.elapsed(), "Sync-operation completed");
+                    }
+                    Err(err) => {
+                        warn!(tt=?tt.elapsed(), ?err, "Sync-operation failed");
+                    }
+                }
+
                 _ = sender.send(res);
             }
 
             OperationTransaction::Commit(policy, send_back) => {
+                trace!("Comitting transaction");
+
                 match self
                     .transaction
                     .take()
                     .map(|tx| self.commit_transaction(tx, policy))
                 {
                     Some(Ok(())) => {
+                        debug!(tt=?tt.elapsed(), "Transaction committed");
                         _ = send_back.send(Ok(()));
                     }
-                    Some(Err(e)) => {
-                        error!("Error when committing a transaction: {e:?}");
-                        _ = send_back.send(Err(StashError::TransactionError(e)));
+
+                    Some(Err(err)) => {
+                        error!(tt=?tt.elapsed(), ?err, "Couldn't commit transaction");
+                        _ = send_back.send(Err(StashError::TransactionError(err)));
                     }
+
                     None => {
                         let err = anyhow!("Commit with no transaction open!?");
+
+                        error!(tt=?tt.elapsed(), ?err, "Couldn't commit transaction");
                         _ = send_back.send(Err(StashError::Critical(err)));
                     }
                 }
             }
+
             OperationTransaction::Rollback(send_back) => {
-                debug!("Rollback transaction");
+                trace!("Rolling-back transaction");
+
                 match self.transaction.take().map(|tx| tx.rollback()) {
                     Some(Ok(())) => {
-                        debug!("Rolled back transaction");
+                        debug!(tt=?tt.elapsed(), "Transaction rolled-back");
                         _ = send_back.send(Ok(()));
                     }
-                    Some(Err(e)) => {
-                        error!("Error when rolling back a transaction: {e:?}");
-                        _ = send_back.send(Err(StashError::TransactionError(e)));
+
+                    Some(Err(err)) => {
+                        error!(tt=?tt.elapsed(), ?err, "Couldn't roll-back transaction");
+                        _ = send_back.send(Err(StashError::TransactionError(err)));
                     }
+
                     None => {
                         let err = anyhow!("Rollback with no transaction open!?");
+
+                        error!(tt=?tt.elapsed(), ?err, "Couldn't roll-back transaction");
                         _ = send_back.send(Err(StashError::Critical(err)));
                     }
                 }
             }
+
             OperationTransaction::RollbackAbort => {
-                debug!("Rollback abort transaction");
+                trace!("Rolling-back transaction (abort)");
+
                 match self.transaction.take().map(|tx| tx.rollback()) {
                     Some(Ok(())) => {
-                        debug!("Aborted transaction")
+                        debug!(tt=?tt.elapsed(), "Transaction rolled-back (abort)");
                     }
-                    Some(Err(e)) => {
-                        error!("Error when aborting a transaction (Bond drop): {e:?}");
+
+                    Some(Err(err)) => {
+                        error!(tt=?tt.elapsed(), ?err, "Couldn't roll-back transaction (abort)");
                     }
+
                     None => {
-                        error!("Critical error: RollbackAbort with no transaction open!?");
+                        error!(
+                            tt=?tt.elapsed(),
+                            err="no transaction opened",
+                            "Couldn't roll-back transaction (abort)"
+                        );
                     }
                 }
             }
+
             OperationTransaction::Bridge(sync) => {
+                trace!("Executing bridge-closure");
+
                 let Some(tx) = &self.transaction else {
                     let e = anyhow!(
                         "Critical error: OperationTransaction::Bridge with no transaction open!?"
@@ -1701,21 +1734,22 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 let _ = sync.sender.send(res);
             }
         }
+
+        if tt.elapsed().as_millis() > 1000 {
+            warn!("Operation took a long time (>= 1s)");
+        }
     }
 
     fn start_transaction(
         &mut self,
         transaction_tracking_policy: TransactionTrackingPolicy,
     ) -> Result<Transaction<'a>, SqliteError> {
-        debug!("Start transaction");
         if transaction_tracking_policy == TransactionTrackingPolicy::Tracking
             && let Err(e) = self
                 .state
                 .sync_tables(self.watcher)
                 .execute(self.connection)
         {
-            error!("Failed to sync tables: {e:?}");
-
             return Err(e);
         }
 
@@ -1772,7 +1806,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         transaction: Transaction<'_>,
         transaction_tracking_policy: TransactionTrackingPolicy,
     ) -> Result<(), rusqlite::Error> {
-        debug!("Commit transaction");
         transaction.commit()?;
 
         if transaction_tracking_policy == TransactionTrackingPolicy::Tracking {
@@ -1796,13 +1829,16 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 let res = instruction.run(connection);
                 let _ = instruction.sender.send(res);
             }
+
             OperationExec::Batch(batch) => {
                 let res = batch.run(connection);
                 let _ = batch.sender.send(res);
             }
+
             OperationExec::Query(query) => {
                 query.run_and_send(connection);
             }
+
             OperationExec::Sync(sync) => {
                 let res = (sync.closure)(connection);
                 let _ = sync.sender.send(res);
@@ -1812,7 +1848,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
 
     fn handle_close(&mut self) {
         let Some(transaction) = self.transaction.take() else {
-            // No transaction happening, we can just exit the thread
             return;
         };
 
@@ -1831,14 +1866,16 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             .map_err(StashError::ExecutionError)?;
 
         match closure(&tx) {
-            Err(user_err) => {
-                tx.rollback().with_context(|| format!("Rollback error occurred when rolling back the transaction after this error: {user_err:?}"))?;
-                Err(user_err)
-            }
             Ok(e) => {
                 self.commit_transaction(tx, policy)
                     .map_err(StashError::TransactionError)?;
+
                 Ok(e)
+            }
+
+            Err(user_err) => {
+                tx.rollback().with_context(|| format!("Rollback error occurred when rolling back the transaction after this error: {user_err:?}"))?;
+                Err(user_err)
             }
         }
     }
@@ -1860,9 +1897,4 @@ impl<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static> DbR
     fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, ConversionError> {
         Ok(Self { value: row.get(0)? })
     }
-}
-
-fn tx_span() -> tracing::Span {
-    let tx_id = Uuid::new_v4().as_simple().to_string();
-    tracing::debug_span!("tx", id = tx_id)
 }

@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
+use tracing::{Span, debug, info};
 
 #[derive(Debug)]
 enum Source {
@@ -33,13 +34,14 @@ pub struct StashConnectionPool {
     interrupts: Vec<InterruptData>,
     interrupted: Mutex<bool>,
     wait_resume: Condvar,
-    span: tracing::Span,
+    span: Span,
 }
 
 impl Drop for StashConnectionPool {
     fn drop(&mut self) {
         let _entered = self.span.enter();
-        tracing::info!("Stash connection pool dropped");
+
+        debug!("Connection pool dropped");
     }
 }
 
@@ -105,7 +107,7 @@ impl StashConnectionPool {
                 interrupts,
                 interrupted: Default::default(),
                 wait_resume: Condvar::new(),
-                span: tracing::Span::current(),
+                span: Span::current(),
             }
         }))
     }
@@ -144,7 +146,7 @@ impl StashConnectionPool {
 
         // interrupt all connections
         if !was_interrupted {
-            tracing::info!("Interrupting stash");
+            info!("Interrupting stash");
             for handle in &self.interrupts {
                 handle.interrupt()
             }
@@ -153,7 +155,7 @@ impl StashConnectionPool {
 
     /// Resume execution and allow the tethers to proceed.
     pub fn resume(&self) {
-        tracing::info!("Resuming stash");
+        info!("Resuming stash");
         let mut is_interrupted = self.interrupted.lock();
         *is_interrupted = false;
         self.wait_resume.notify_all();
@@ -166,7 +168,7 @@ impl StashConnectionPool {
         if !*interrupted {
             return;
         }
-        tracing::info!("Stash is interrupted, waiting on resume");
+        info!("Stash is interrupted, waiting on resume");
         self.wait_resume.wait(&mut interrupted);
     }
 
@@ -178,12 +180,8 @@ impl StashConnectionPool {
             let mut connections = self.connections.lock();
 
             if connections.is_empty() {
-                let uuid = uuid::Uuid::new_v4();
-                let now = std::time::Instant::now();
-                tracing::info!(
-                    uuid = uuid.to_string(),
-                    "No connections available in the pool, waiting..."
-                );
+                debug!("No connections available, waiting");
+
                 if let Some(timeout) = timeout {
                     let result = self
                         .connections_cond_var
@@ -195,12 +193,6 @@ impl StashConnectionPool {
                 } else {
                     self.connections_cond_var.wait(&mut connections);
                 }
-                tracing::info!(
-                    uuid = uuid.to_string(),
-                    "Connections available: {}, elapsed: {:?}",
-                    connections.len(),
-                    now.elapsed(),
-                );
             }
 
             if let Some(connection) = connections.pop() {
