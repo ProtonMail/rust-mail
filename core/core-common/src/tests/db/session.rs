@@ -22,7 +22,7 @@ type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 async fn new_test_connection() -> Stash {
     _ = set_global_default(
         registry()
-            .with(EnvFilter::new("debug,stash=debug"))
+            .with(EnvFilter::new("debug"))
             .with(layer().with_test_writer()),
     );
 

@@ -181,7 +181,7 @@ impl TestContext {
     ) -> Arc<Self> {
         _ = set_global_default(
             registry()
-                .with(EnvFilter::new("debug,stash=info"))
+                .with(EnvFilter::new("debug"))
                 .with(layer().with_test_writer()),
         );
 

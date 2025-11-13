@@ -626,7 +626,7 @@ fn app_tracing_env_filter(trace: bool) -> EnvFilter {
         proton_action_queue={log_level},
         proton_calendar_common={log_level},
         proton_network_monitor_service=debug,
-        stash=debug,
+        stash=info,
         {}",
             LogService::silence_muon_errors_evn_filter()
         ))
