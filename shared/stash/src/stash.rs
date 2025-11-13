@@ -13,10 +13,6 @@
 //! This is to avoid having one connection in two threads, which can result in deadlocks.
 //! Under the bonnet, there is a background worker that manages the connection
 //!
-//!
-//! The database handling uses the [`r2d2`] for connection pooling and [`rusqlite`]
-//! to interface with sqlite.
-//!
 
 use crate::connection_manager::{
     StashConnectionPool, StashConnectionPoolError, StashPooledConnection,
