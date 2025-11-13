@@ -1237,7 +1237,7 @@ impl From<&str> for LabelColor {
 }
 
 /// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, SmartDefault, UniffiRecord)]
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MailSettings {
     /// TODO: Document this field.
@@ -1250,7 +1250,6 @@ pub struct MailSettings {
     pub auto_delete_spam_and_trash_days: Option<u32>,
 
     /// TODO: Document this field.
-    #[default = true]
     pub auto_save_contacts: bool,
 
     /// TODO: Document this field.
@@ -1260,11 +1259,9 @@ pub struct MailSettings {
     pub composer_mode: ComposerMode,
 
     /// TODO: Document this field.
-    #[default = true]
     pub confirm_link: bool,
 
     /// TODO: Document this field.
-    #[default = 10]
     pub delay_send_seconds: u32,
 
     /// TODO: Document this field.
@@ -1291,7 +1288,6 @@ pub struct MailSettings {
     pub image_proxy: u32,
 
     /// TODO: Document this field.
-    #[default = true]
     pub inherit_parent_folder_color: bool,
 
     /// TODO: Document this field.
@@ -1313,7 +1309,6 @@ pub struct MailSettings {
     pub pm_signature: PmSignature,
 
     /// TODO: Document this field.
-    #[default = true]
     pub pm_signature_referral_link: bool,
 
     /// TODO: Document this field.
@@ -1326,7 +1321,6 @@ pub struct MailSettings {
     pub right_to_left: ComposerDirection,
 
     /// TODO: Document this field.
-    #[default = true]
     pub shortcuts: bool,
 
     /// TODO: Document this field.

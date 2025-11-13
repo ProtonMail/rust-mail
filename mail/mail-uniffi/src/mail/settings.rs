@@ -22,24 +22,25 @@ pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserSe
     Ok(uniffi_async::<_, MailContextError, _>(async move {
         let tether = stash.connection().await?;
 
-        Ok(RealMailSettings::get_or_default(&tether).await.into())
+        Ok(RealMailSettings::get_or_default(&tether).await)
     })
     .await
-    .unwrap_or_default())
+    .unwrap_or_default()
+    .into())
 }
 
 #[uniffi_export]
 pub fn mail_settings_sync(ctx: &MailUserSession) -> Result<MailSettings, UserSessionError> {
     let stash = ctx.user_stash()?;
+
     Ok(async_runtime()
         .block_on(async move {
             let tether = stash.connection().await?;
 
-            Ok::<MailSettings, MailContextError>(
-                RealMailSettings::get_or_default(&tether).await.into(),
-            )
+            Ok::<_, MailContextError>(RealMailSettings::get_or_default(&tether).await)
         })
-        .unwrap_or_default())
+        .unwrap_or_default()
+        .into())
 }
 
 #[derive(Clone, Record)]
