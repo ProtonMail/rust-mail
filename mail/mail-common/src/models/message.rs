@@ -123,7 +123,7 @@ pub struct Message {
     pub deleted: bool,
 
     #[scroller_eq(skip)]
-    pub exclusive_location: Option<ExclusiveLocation>,
+    pub location: Option<ExclusiveLocation>,
 
     /// The unix timestamp at which this message is set to expire at.
     /// 0 means that it will not expire.
@@ -976,7 +976,7 @@ impl Message {
             r#"
             WHERE local_id IN (
                 SELECT local_label_id FROM message_labels WHERE local_message_id = ?
-            ) ORDER BY display_order ASC
+            ) ORDER BY label_type DESC, display_order ASC
             "#,
             (self.local_id,),
             conn,
@@ -1593,7 +1593,7 @@ impl Message {
             is_forwarded: value.is_forwarded,
             is_replied: value.is_replied,
             is_replied_all: value.is_replied_all,
-            exclusive_location,
+            location: exclusive_location,
             label_ids: value.label_ids,
             num_attachments: value.num_attachments,
             sender: value.sender.into(),
@@ -2677,7 +2677,7 @@ impl ConversationOrMessage for Message {
     }
 
     fn get_exclusive_location(&self) -> Option<LocalLabelId> {
-        self.exclusive_location.as_ref().map(|x| x.local_id())
+        self.location.as_ref().map(|x| x.local_id())
     }
 
     fn mark_read(
@@ -2708,7 +2708,7 @@ impl ModelHooks for Message {
 
         let labels = self.all_message_labels(conn)?;
 
-        self.exclusive_location = ExclusiveLocation::from_labels(&labels);
+        self.location = ExclusiveLocation::from_labels(&labels);
         self.label_ids = labels
             .iter()
             .map(|l| l.remote_id.clone().unwrap())
@@ -2808,8 +2808,8 @@ impl ModelHooks for Message {
             ?;
 
         // If exclusive location is not set, we try to calculate it now.
-        if self.exclusive_location.is_none() && !self.label_ids.is_empty() {
-            self.exclusive_location = ExclusiveLocation::from_label_ids_sync(&self.label_ids, tx)?;
+        if self.location.is_none() && !self.label_ids.is_empty() {
+            self.location = ExclusiveLocation::from_label_ids_sync(&self.label_ids, tx)?;
         }
 
         Ok(())
@@ -2911,7 +2911,7 @@ impl Message {
             is_replied: Default::default(),
             is_replied_all: Default::default(),
             label_ids: Default::default(),
-            exclusive_location: Default::default(),
+            location: Default::default(),
             num_attachments: Default::default(),
             display_order: Default::default(),
             sender: Default::default(),

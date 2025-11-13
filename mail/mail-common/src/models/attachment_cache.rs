@@ -682,7 +682,7 @@ fn get_utility(
         }
     }
 
-    if let Some(ExclusiveLocation::System { name, .. }) = &message.exclusive_location {
+    if let Some(ExclusiveLocation::System { name, .. }) = &message.location {
         if *name == SystemLabel::Trash {
             utility *= trash;
         } else if *name == SystemLabel::Spam {
@@ -772,7 +772,7 @@ mod test {
                 message.label_ids.push(LabelId::starred());
             }
             if self.trash {
-                message.exclusive_location = Some(ExclusiveLocation::System {
+                message.location = Some(ExclusiveLocation::System {
                     name: SystemLabel::Trash,
                     local_id: 0.into(),
                 });
@@ -782,7 +782,7 @@ mod test {
                     panic!("Conflicting trash and spam fields")
                 }
 
-                message.exclusive_location = Some(ExclusiveLocation::System {
+                message.location = Some(ExclusiveLocation::System {
                     name: SystemLabel::Trash,
                     local_id: 1.into(),
                 });

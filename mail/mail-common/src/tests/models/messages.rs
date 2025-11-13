@@ -646,7 +646,7 @@ async fn test_create_message() {
         .unwrap();
     resolve_local_ids(&tether, &mut expected).await;
     expected.local_id = Some(1.into());
-    expected.exclusive_location = ExclusiveLocation::new(
+    expected.location = ExclusiveLocation::new(
         &Label::find_by_remote_id(LabelId::inbox(), &tether)
             .await
             .unwrap()
@@ -2590,7 +2590,7 @@ async fn exclusive_location_from_api_metadata(
 
     // Validation
     if let Some((is_system, expected)) = expected {
-        match result.exclusive_location.unwrap() {
+        match result.location.unwrap() {
             ExclusiveLocation::System { name, .. } => {
                 assert!(is_system);
                 match name {
@@ -2604,7 +2604,7 @@ async fn exclusive_location_from_api_metadata(
             }
         }
     } else {
-        assert_eq!(result.exclusive_location, None);
+        assert_eq!(result.location, None);
     }
 }
 
@@ -2659,7 +2659,7 @@ async fn message_exclusive_location_on_save(
 
     // Validation
     if let Some((is_system, expected)) = expected {
-        match message.exclusive_location.unwrap() {
+        match message.location.unwrap() {
             ExclusiveLocation::System { name, .. } => {
                 assert!(is_system);
                 match name {
@@ -2673,7 +2673,7 @@ async fn message_exclusive_location_on_save(
             }
         }
     } else {
-        assert_eq!(message.exclusive_location, None);
+        assert_eq!(message.location, None);
     }
 }
 

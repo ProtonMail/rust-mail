@@ -160,7 +160,7 @@ async fn change_sender_address_with_alias() {
         cc_list: Default::default(),
         bcc_list: Default::default(),
         deleted: false,
-        exclusive_location: None,
+        location: None,
         expiration_time: Default::default(),
         external_id: None,
         flags: MessageFlags::RECEIVED,

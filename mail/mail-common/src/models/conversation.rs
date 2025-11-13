@@ -98,7 +98,7 @@ pub struct Conversation {
     /// This is important for the client to know when to display the time of reminder.
     pub snoozed_until: Option<UnixTimestamp>,
 
-    pub exclusive_location: Option<ExclusiveLocation>,
+    pub locations: Vec<ExclusiveLocation>,
 
     #[DbField]
     pub expiration_time: UnixTimestamp,
@@ -159,7 +159,7 @@ impl Conversation {
             deleted: false,
             display_snooze_reminder: false,
             snoozed_until: None,
-            exclusive_location: None,
+            locations: vec![],
             expiration_time: UnixTimestamp::new(0),
             labels: vec![],
             num_attachments: 0,
@@ -508,7 +508,7 @@ impl Conversation {
             deleted: false,
             display_snooze_reminder: false,
             snoozed_until: None,
-            exclusive_location: None,
+            locations: vec![],
             expiration_time: 0.into(),
             labels: vec![],
             num_attachments: 0,
@@ -1312,7 +1312,9 @@ impl Conversation {
 
         let placeholders = placeholders(&ids);
         let labels = Label::find_sync(
-            format!("WHERE local_id IN ({placeholders}) ORDER BY display_order ASC",),
+            format!(
+                "WHERE local_id IN ({placeholders}) ORDER BY label_type DESC, display_order ASC",
+            ),
             params_from_iter(ids),
             conn,
         )?;
@@ -2671,7 +2673,8 @@ impl ConversationOrMessage for Conversation {
     }
 
     fn get_exclusive_location(&self) -> Option<LocalLabelId> {
-        self.exclusive_location.as_ref().map(|x| x.local_id())
+        //TODO:(ET-5183): this will be address in the move action fix.
+        self.locations.first().map(|x| x.local_id())
     }
 
     fn mark_read(
@@ -2876,7 +2879,7 @@ impl ModelHooks for Conversation {
             .map(|l| l.context_snooze_time);
 
         // If exclusive location is not set, we try to calculate it now.
-        if self.exclusive_location.is_none() && !self.labels.is_empty() {
+        if self.locations.is_empty() && !self.labels.is_empty() {
             let label_ids = self
                 .labels
                 .iter()
@@ -2884,7 +2887,7 @@ impl ModelHooks for Conversation {
                 .map_into()
                 .collect_vec();
 
-            self.exclusive_location = ExclusiveLocation::from_label_ids_sync(&label_ids, tx)?;
+            self.locations = ExclusiveLocation::from_label_ids_many_sync(&label_ids, tx)?;
         }
 
         Ok(())
@@ -2904,7 +2907,7 @@ impl ModelHooks for Conversation {
             .map(|l| l.context_snooze_time);
 
         let labels = self.load_labels(conn)?;
-        self.exclusive_location = ExclusiveLocation::from_labels(&labels);
+        self.locations = ExclusiveLocation::from_labels_many(&labels);
         self.attachments_metadata =
             Attachment::load_conversation_attachment_metadata(self.id(), conn)?;
         self.custom_labels = labels
@@ -2957,7 +2960,7 @@ impl From<ApiConversation> for Conversation {
             display_snooze_reminder: value.display_snoozed_reminder,
             snoozed_until: None,
             expiration_time: value.expiration_time.into(),
-            exclusive_location: None,
+            locations: vec![],
             labels: value.labels.map_vec(),
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,
