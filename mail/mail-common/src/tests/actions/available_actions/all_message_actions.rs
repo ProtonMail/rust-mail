@@ -335,11 +335,93 @@ static REPLY_ALL_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
     ..create_default_message_test_case()
 });
 
-static DARK_MODE_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+static LIGHT_MODE_WITHOUT_OVERRIDE_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
     theme: ThemeOpts {
         current_theme: MailTheme::LightMode,
         supports_dark_mode_via_media_query: false,
         theme_override: None,
+    },
+    expected_visible: vec![
+        TestActions::MarkUnread,
+        TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+        TestActions::MoveTo,
+        TestActions::LabelAs,
+        TestActions::More,
+    ],
+    expected_hidden: vec![
+        TestActions::Star,
+        TestActions::Reply,
+        TestActions::Forward,
+        TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+        TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+        TestActions::Print,
+        TestActions::ViewHeaders,
+        TestActions::ViewHTML,
+        TestActions::ReportPhishing,
+    ],
+    ..create_default_message_test_case()
+});
+
+static LIGHT_MODE_WITH_OVERRIDE_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    theme: ThemeOpts {
+        current_theme: MailTheme::LightMode,
+        supports_dark_mode_via_media_query: false,
+        theme_override: Some(MailTheme::LightMode),
+    },
+    expected_visible: vec![
+        TestActions::MarkUnread,
+        TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+        TestActions::MoveTo,
+        TestActions::LabelAs,
+        TestActions::More,
+    ],
+    expected_hidden: vec![
+        TestActions::Star,
+        TestActions::Reply,
+        TestActions::Forward,
+        TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+        TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+        TestActions::Print,
+        TestActions::ViewHeaders,
+        TestActions::ViewHTML,
+        TestActions::ReportPhishing,
+    ],
+    ..create_default_message_test_case()
+});
+
+static DARK_MODE_WITHOUT_OVERRIDE_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    theme: ThemeOpts {
+        current_theme: MailTheme::DarkMode,
+        supports_dark_mode_via_media_query: false,
+        theme_override: None,
+    },
+    expected_visible: vec![
+        TestActions::MarkUnread,
+        TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+        TestActions::MoveTo,
+        TestActions::LabelAs,
+        TestActions::More,
+    ],
+    expected_hidden: vec![
+        TestActions::Star,
+        TestActions::Reply,
+        TestActions::Forward,
+        TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+        TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+        TestActions::Print,
+        TestActions::ViewHeaders,
+        TestActions::ViewHTML,
+        TestActions::ViewInLightMode,
+        TestActions::ReportPhishing,
+    ],
+    ..create_default_message_test_case()
+});
+
+static DARK_MODE_WITH_OVERRIDE_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
+    theme: ThemeOpts {
+        current_theme: MailTheme::DarkMode,
+        supports_dark_mode_via_media_query: false,
+        theme_override: Some(MailTheme::LightMode),
     },
     expected_visible: vec![
         TestActions::MarkUnread,
@@ -375,7 +457,10 @@ static DARK_MODE_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
 #[test_case(&SPAM_CASE; "spam")]
 #[test_case(&TOO_MANY_CASE; "too_many")]
 #[test_case(&REPLY_ALL_CASE; "reply_all")]
-#[test_case(&DARK_MODE_CASE; "dark_mode")]
+#[test_case(&LIGHT_MODE_WITHOUT_OVERRIDE_CASE; "light_mode_without_override")]
+#[test_case(&LIGHT_MODE_WITH_OVERRIDE_CASE; "light_mode_with_override")]
+#[test_case(&DARK_MODE_WITHOUT_OVERRIDE_CASE; "dark_mode_without_override")]
+#[test_case(&DARK_MODE_WITH_OVERRIDE_CASE; "dark_mode_with_override")]
 #[tokio::test]
 async fn message_actions(test_case: &TestCase<Message>) {
     use stash::stash::StashError;
