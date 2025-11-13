@@ -2451,7 +2451,8 @@ impl ConversationOrMessage for Message {
                     RETURNING local_message_id",
                     (id, local_label_id),
                 )
-                .is_ok()
+                .optional()?
+                .is_some()
             {
                 if let Some(message) = Message::load_by_id_sync(id, bond)? {
                     conversation_messages
@@ -2527,9 +2528,9 @@ impl ConversationOrMessage for Message {
                 indoc::formatdoc! {"
                     SELECT unread
                     FROM messages
-                    WHERE local_id = ?
+                    WHERE local_id=?
                 "},
-                (id,),
+                [id],
             )?;
 
             unread_msg_count += unread;
@@ -2595,13 +2596,20 @@ impl ConversationOrMessage for Message {
                     conversation_label.context_expiration_time = stats.expiration_time;
                     conversation_label.context_size = stats.size;
                     conversation_label.context_num_attachments = stats.num_attachments as u64;
-                    conversation_label.save_sync(tx)?;
+                    conversation_label.context_num_unread = stats.unread;
 
                     // If it had at least 1 unread message that has been removed &&
                     // there aren't any more in the conversation we can decrease the counter
                     // because the last unread message(s) for this conversation have been removed
                     if unread_msg_count != 0 && conversation_label.context_num_unread == 0 {
                         conv_counters.unread = conv_counters.unread.saturating_sub(1);
+                    }
+
+                    if conversation_label.context_num_messages == 0 {
+                        conv_counters.total = conv_counters.total.saturating_sub(1);
+                        conversation_label.delete_sync(tx)?;
+                    } else {
+                        conversation_label.save_sync(tx)?;
                     }
                 }
                 // If no more messages remain we can unlabel the conversation
@@ -2616,7 +2624,8 @@ impl ConversationOrMessage for Message {
                             "},
                             (local_label_id, conversation_id),
                         )
-                        .is_ok()
+                        .optional()?
+                        .is_some()
                     {
                         trace!("Deleting conversation label");
 
