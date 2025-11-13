@@ -86,7 +86,7 @@ macro_rules! device_contact {
 pub async fn new_core_test_connection() -> Stash {
     _ = set_global_default(
         registry()
-            .with(EnvFilter::new("debug,stash=debug"))
+            .with(EnvFilter::new("debug"))
             .with(layer().with_test_writer()),
     );
 
