@@ -26,7 +26,7 @@ pub enum StashConnectionPoolError {
 }
 
 type InitFn = dyn Fn(&mut Connection) -> Result<(), Error> + Send + Sync + 'static;
-/// Maintains a pool of sqlite connections.
+
 pub struct StashConnectionPool {
     connections: Mutex<Vec<PooledTether>>,
     connections_cond_var: Condvar,
@@ -125,6 +125,7 @@ impl StashConnectionPool {
         timeout: Option<Duration>,
     ) -> Result<StashPooledConnection, StashConnectionPoolError> {
         let connection = self.wait_or_acquire(timeout)?;
+
         Ok(StashPooledConnection::new(connection, self.clone()))
     }
 
@@ -175,6 +176,7 @@ impl StashConnectionPool {
     ) -> Result<PooledTether, StashConnectionPoolError> {
         loop {
             let mut connections = self.connections.lock();
+
             if connections.is_empty() {
                 let uuid = uuid::Uuid::new_v4();
                 let now = std::time::Instant::now();
@@ -186,6 +188,7 @@ impl StashConnectionPool {
                     let result = self
                         .connections_cond_var
                         .wait_for(&mut connections, timeout);
+
                     if result.timed_out() {
                         return Err(StashConnectionPoolError::TimedOut);
                     }

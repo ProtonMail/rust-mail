@@ -50,6 +50,7 @@ use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tracing::{debug, error, trace};
 use uuid::Uuid;
+use tokio::task;
 
 /// Set a timeout for a specified amount of time when a table is locked. This
 /// defaults to 5,000 milliseconds in the underlying libraries. This is currently only
@@ -617,7 +618,7 @@ impl Stash {
         let (sender, receiver) = unbounded();
         let watcher = self.watcher.clone();
 
-        let handle = tokio::task::spawn_blocking(move || {
+        let handle = task::spawn_blocking(move || {
             watcher
                 .add_observer_with_drop_remove(observer(sender))
                 .map_err(|e| {
@@ -691,9 +692,7 @@ impl WatcherHandle {
 /// thread, using message passing for executing the queries and waiting for the result.
 pub struct Tether {
     connection: StashPooledConnection,
-
     watcher: Arc<Watcher>,
-
     tx_lock: Arc<Mutex<()>>,
 }
 
@@ -759,15 +758,18 @@ impl Tether {
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
         let (sender, receiver) = oneshot::channel();
+
         let operation = Operation::Execution(OperationExec::Instruct(Instruction {
             sender,
             params,
             query: query.into(),
         }));
+
         self.connection
             .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         receiver
             .await
             .expect("Tether closed its channel with handles still open")
@@ -796,14 +798,17 @@ impl Tether {
     ///     connection from the pool.
     pub async fn batch<Q: Into<String>>(&self, queries: Q) -> Result<(), StashError> {
         let (sender, receiver) = oneshot::channel();
+
         let operation = Operation::Execution(OperationExec::Batch(Batch {
             sender,
             queries: queries.into(),
         }));
+
         self.connection
             .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         receiver
             .await
             .expect("Tether closed its channel with handles still open")
@@ -849,13 +854,16 @@ impl Tether {
             move |rows: Rows<'_>| Box::new(convert(rows)) as Box<dyn Any + Send + 'static>;
 
         let (sender, receiver) = oneshot::channel();
+
         let query = Query {
             sender,
             converter: Box::new(convert),
             params,
             query: query.into(),
         };
+
         let operation = Operation::Execution(OperationExec::Query(query));
+
         self.connection
             .send_async(operation.into())
             .await
@@ -864,7 +872,7 @@ impl Tether {
         let item = receiver
             .await
             .expect("Tether closed its channel with handles still open")?;
-        //
+
         // The type we receive back is described as Any so that it can pass through
         // the channel without introducing unnecessary type constraints, but is in
         // fact already known to be of type T, so we can downcast it safely.
@@ -963,6 +971,7 @@ impl Tether {
         T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
         let mut values = self.query_values::<_, T>(query.into(), params).await?;
+
         match values.len() {
             0 => Ok(None),
             1 => Ok(values.pop()),
@@ -1036,19 +1045,23 @@ impl Tether {
         //   transactions to be in flight at the same time.
         let tx_lock = self.tx_lock.clone();
         let _guard = tx_lock.lock().await;
+
         async {
             let span = tx_span();
             let tx = self.transaction_impl(policy, span.clone()).await?;
             let r = closure(&tx).await;
+
             if r.is_err() {
                 if let Err(e) = tx.rollback(span.clone()).await {
                     error!("Failed to rollback transaction: {e:?}");
                 }
+
                 return r;
             }
             tx.commit_(policy, span)
                 .await
                 .inspect_err(|e| error!("Failed to commit transaction: {e:?}"))?;
+
             r
         }
         .into_non_pausable()
@@ -1067,6 +1080,7 @@ impl Tether {
             .send_async(TracedOperation::with(span, operation))
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         receiver
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))??;
@@ -1085,7 +1099,8 @@ impl Tether {
     ///
     async fn new(stash: &Stash) -> Result<Self, StashError> {
         let pool = stash.pool.clone();
-        let connection = tokio::task::spawn_blocking(move || {
+
+        let connection = task::spawn_blocking(move || {
             pool.acquire(Some(CONNECTION_ACQUIRE_TIMEOUT))
                 .map_err(|e| match e {
                     StashConnectionPoolError::Connection(e) => StashError::ExecutionError(e),
@@ -1094,6 +1109,7 @@ impl Tether {
         })
         .await
         .map_err(|e| StashError::Custom(anyhow!("Failed to join blocking task: {e}")))??;
+
         Ok(Self {
             connection,
             watcher: stash.watcher.clone(),
@@ -1117,9 +1133,11 @@ impl Tether {
             .send_async(TracedOperation::inherited(operation))
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         let ret = receiver
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         // This cannot fail as the type system assures us that the return type of `callback` is T
         ret.map(|x| *x.downcast().expect("Downcast failed?"))
     }
@@ -1153,6 +1171,7 @@ impl Tether {
 
         let (sender, receiver) = oneshot::channel();
         let sync_closure = BridgeClosure { closure, sender };
+
         let operation =
             Operation::Transaction(OperationTransaction::StartSync(sync_closure, policy));
 
@@ -1160,9 +1179,11 @@ impl Tether {
             .send_async(TracedOperation::with(tx_span(), operation))
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         let ret = receiver
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         // This cannot fail as the type system assures us that the return type of `callback` is T
         ret.map(|x| *x.downcast().expect("Downcast failed?"))
     }
@@ -1196,7 +1217,7 @@ impl PooledTether {
             .spawn(move || {
                 Self::thread_loop(connection, receiver, watcher_cloned.as_ref());
             })
-            .expect("Failed to create named thread, please fix me");
+            .unwrap();
 
         Self { sender }
     }
@@ -1220,10 +1241,12 @@ impl PooledTether {
 
         while let Ok(operation) = receiver.recv() {
             let _span = operation.span.entered();
+
             if sm.handle_operation(operation.operation) {
                 break;
             }
         }
+
         sm.handle_close();
     }
 
@@ -1255,6 +1278,7 @@ impl PooledTetherInterruptNotifier {
 
 // PERF: Monomorphic SyncClosure for common use cases like () and usize.
 type SyncClosureRetTy = Result<Box<dyn Any + Send>, StashError>;
+
 struct SyncClosure {
     closure: Box<dyn FnOnce(&Connection) -> SyncClosureRetTy + Send>,
     sender: OneshotSender<SyncClosureRetTy>,
@@ -1397,9 +1421,11 @@ impl<'tether> Bond<'tether> {
             .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         let ret = receiver
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
+
         // This cannot fail as the type system assures us that the return type of `callback` is T
         ret.map(|x| *x.downcast().expect("Downcast failed?"))
     }
@@ -1605,6 +1631,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                     }
                 };
             }
+
             OperationTransaction::StartSync(BridgeClosure { closure, sender }, policy) => {
                 assert!(self.transaction.is_none(), "Started transaction twice");
                 let res = self.handle_start_sync(closure, policy);
@@ -1688,8 +1715,10 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 .execute(self.connection)
         {
             error!("Failed to sync tables: {e:?}");
+
             return Err(e);
         }
+
         // We call new_unchecked() here because new() requires a mutable borrow.
         // Being unchecked does not matter, as we perform the necessary checks
         // ourselves.
@@ -1745,12 +1774,14 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     ) -> Result<(), rusqlite::Error> {
         debug!("Commit transaction");
         transaction.commit()?;
+
         if transaction_tracking_policy == TransactionTrackingPolicy::Tracking {
             self.state
                 .publish_changes(self.watcher)
                 .execute(self.connection)
                 .inspect_err(|e| error!("Failed to report tracked changes: {e:?}"))?;
         }
+
         Ok(())
     }
 
@@ -1827,8 +1858,7 @@ impl<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static> DbR
     }
 
     fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, ConversionError> {
-        let value = row.get(0)?;
-        Ok(Self { value })
+        Ok(Self { value: row.get(0)? })
     }
 }
 
