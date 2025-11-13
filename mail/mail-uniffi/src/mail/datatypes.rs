@@ -1,53 +1,3 @@
-//! Data types for Proton Mail.
-//!
-//! This module contains the various data types used by Proton Mail, i.e. those
-//! that are specific to the Proton Mail application. They are used in addition
-//! to those presented from the Proton Core library.
-//!
-//! # Organisation
-//!
-//! The vast majority of the available data types are presented through this
-//! module, and the focus is on those data types that are persistent, i.e.
-//! stored in the database. In some cases there are special types with a
-//! specific purpose that might be presented elsewhere. This method of
-//! organisation may change over time as better patterns evolve.
-//!
-//! # Rust internals
-//!
-//! The types exposed here are carefully-prepared, lightweight facades that are
-//! somewhat but not exactly analogous to the internal types used by the Proton
-//! Core library. They are designed to be used by the FFI bindings, and are
-//! prepared with those in mind. In this way they represent a translation layer
-//! between the internal types and the FFI types, in the same way that there is
-//! also a translation layer between the internal types and the Proton REST API
-//! types. This gives the full ability to amend the external FFI interface as
-//! necessary without affecting the internal types, and vice versa.
-//!
-//! Generally speaking, [`From`] conversions to convert from the Proton internal
-//! types to the exported FFI types and vice versa are provided, but not any
-//! serialisation or deserialisation or other conversions. The conversions to
-//! and from internal types are usually very simple and indeed in many cases can
-//! be done without altering any data in memory.
-//!
-//! This separation does cause some duplication, but the overlap is not total.
-//! The various implementations for the types differ in each place; any logic
-//! for the application is in the internal types and not the FFI types; and
-//! the distinction allows customisation of how the FFI types work.
-//!
-//! # Notable exclusions
-//!
-//! The following types are excluded from export via UniFFI, as they do not need
-//! to be used outside of the Rust internals:
-//!
-//!   - [`ConversationLabel`](proton_core_common::models::ConversationLabel)
-//!
-//! The following fields are excluded from represented types (in addition to
-//! internal database fields):
-//!
-//!   - [`Conversation::labels`](proton_mail_common::models::Message::label_ids)
-//!   - [`Message::body`](proton_mail_common::models::Message::body)
-//!   - [`Message::label_ids`](proton_mail_common::models::Message::label_ids)
-//!
 mod attachment;
 mod available_action;
 mod folder_banner;
@@ -75,15 +25,14 @@ use proton_core_common::utils::MapVec as _;
 use proton_mail_api::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_mail_api::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
-use proton_mail_common::AppError;
 use proton_mail_common::actions::{LabelAsOutput as RealLabelAsOutput, Undo as RealUndo};
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
-    ConversationLabelsCount as RealConversationCount, CustomLabel as RealCustomLabel,
-    Disposition as RealDisposition, LabelDescription as RealLabelDescription, LocalConversationId,
-    LocalMessageId, MessageButtons as RealMessageButtons, MessageFlags as RealMessageFlags,
-    MessageLabelsCount as RealMessageCount, MessageRecipient as RealMessageRecipient,
+    CustomLabel as RealCustomLabel, Disposition as RealDisposition,
+    LabelDescription as RealLabelDescription, LocalConversationId, LocalMessageId,
+    MessageButtons as RealMessageButtons, MessageFlags as RealMessageFlags,
+    MessageRecipient as RealMessageRecipient,
     MessageRecipientDisplayMode as RealMessageRecipientDisplayMode,
     MessageSender as RealMessageSender, MimeType as RealMimeType, MobileAction as RealMobileAction,
     MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
@@ -111,17 +60,12 @@ use std::sync::Arc;
 pub use system_label::*;
 use tracing::warn;
 use uniffi_runtime::uniffi_async;
-//  ENUMS
-//==============================================================================
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum AlmostAllMail {
-    /// TODO: Document this variant.
     AllMail = 0,
 
-    /// TODO: Document this variant.
     #[default]
     AlmostAllMail = 1,
 }
@@ -144,15 +88,11 @@ impl From<RealAlmostAllMail> for AlmostAllMail {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum ComposerDirection {
-    /// TODO: Document this variant.
     #[default]
     LeftToRight = 0,
-
-    /// TODO: Document this variant.
     RightToLeft = 1,
 }
 
@@ -174,15 +114,11 @@ impl From<RealComposerDirection> for ComposerDirection {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum ComposerMode {
-    /// TODO: Document this variant.
     #[default]
     Normal = 0,
-
-    /// TODO: Document this variant.
     Maximized = 1,
 }
 
@@ -204,14 +140,10 @@ impl From<RealComposerMode> for ComposerMode {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum Disposition {
-    /// TODO: Document this variant.
     Attachment = 1,
-
-    /// TODO: Document this variant.
     Inline = 2,
 }
 
@@ -285,16 +217,9 @@ impl From<RealExclusiveLocation> for ExclusiveLocation {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum LabelType {
-    /// TODO: Document this field.
     Label = 1,
-
-    /// TODO: Document this field.
     ContactGroup = 2,
-
-    /// TODO: Document this field.
     Folder = 3,
-
-    /// TODO: Document this field.
     System = 4,
 }
 
@@ -331,18 +256,12 @@ impl From<RealLabelType> for LabelType {
     }
 }
 
-/// This enum is extended version of the `LabelType` enum. It contains additional
-/// information regarding the system label type.
+/// Extended version of [`LabelType`].
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 pub enum LabelDescription {
     Label,
     ContactGroup,
     Folder,
-
-    /// System field contain information about the system label type.
-    /// SystemLabel main purpose is to determine the type of the system label.
-    /// It is required for localization in the sidebar & dropdowns.
-    /// The information is optional as we cannot for see all possible system labels.
     System(Option<SystemLabel>),
 }
 
@@ -360,15 +279,11 @@ impl From<RealLabelDescription> for LabelDescription {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum MessageButtons {
-    /// TODO: Document this variant.
     #[default]
     ReadFirst = 0,
-
-    /// TODO: Document this variant.
     UnreadFirst = 1,
 }
 
@@ -467,18 +382,12 @@ impl From<MessageMimeType> for MimeType {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum NextMessageOnMove {
-    /// TODO: Document this variant.
     #[default]
     DisabledExplicit = 0,
-
-    /// TODO: Document this variant.
     DisabledImplicit = 1,
-
-    /// TODO: Document this variant.
     EnabledExplicit = 2,
 }
 
@@ -502,13 +411,9 @@ impl From<RealNextMessageOnMove> for NextMessageOnMove {
     }
 }
 
-/// A message parsed header value can either be a string or an array of strings.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 pub enum ParsedHeaderValue {
-    /// TODO: Document this variant.
     Array(Vec<String>),
-
-    /// TODO: Document this variant.
     String(String),
 }
 
@@ -530,14 +435,10 @@ impl From<RealParsedHeaderValue> for ParsedHeaderValue {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum PgpScheme {
-    /// TODO: Document this variant.
     Inline = 8,
-
-    /// TODO: Document this variant.
     #[default]
     Mime = 16,
 }
@@ -581,21 +482,13 @@ impl From<RealPmSignature> for PmSignature {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum ShowImages {
-    /// TODO: Document this variant.
     DoNotAutoLoad = 0,
-
-    /// TODO: Document this variant.
     AutoLoadRemote = 1,
-
-    /// TODO: Document this variant.
     #[default]
     AutoLoadEmbedded = 2,
-
-    /// TODO: Document this variant.
     AutoLoadBoth = 3,
 }
 
@@ -621,21 +514,13 @@ impl From<RealShowImages> for ShowImages {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum ShowMoved {
-    /// TODO: Document this variant.
     #[default]
     DoNotKeep = 0,
-
-    /// TODO: Document this variant.
     KeepInDrafts = 1,
-
-    /// TODO: Document this variant.
     KeepInSent = 2,
-
-    /// TODO: Document this variant.
     KeepBoth = 3,
 }
 
@@ -661,14 +546,10 @@ impl From<RealShowMoved> for ShowMoved {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum SpamAction {
-    /// TODO: Document this variant.
     DoNothing = 0,
-
-    /// TODO: Document this variant.
     UnsubscribeWithOneClick = 1,
 }
 
@@ -690,7 +571,6 @@ impl From<RealSpamAction> for SpamAction {
     }
 }
 
-/// See [`RealSwipeAction`]
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 pub enum SwipeAction {
     NoAction,
@@ -734,15 +614,11 @@ impl From<RealSwipeAction> for SwipeAction {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum ViewLayout {
-    /// TODO: Document this variant.
     #[default]
     Column = 0,
-
-    /// TODO: Document this variant.
     Row = 1,
 }
 
@@ -764,15 +640,11 @@ impl From<RealViewLayout> for ViewLayout {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum ViewMode {
-    /// TODO: Document this variant.
     #[default]
     Conversations = 0,
-
-    /// TODO: Document this variant.
     Messages = 1,
 }
 
@@ -809,9 +681,6 @@ impl From<RealMessageRecipientDisplayMode> for MessageRecipientDisplayMode {
     }
 }
 
-//  STRUCTS
-//==============================================================================
-
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct AttachmentMetadata {
     pub id: Id,
@@ -838,81 +707,35 @@ impl From<RealAttachmentMetadata> for AttachmentMetadata {
     }
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct Conversation {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     pub id: Id,
-
-    /// Metadata for all attachments in this conversation.
     pub attachments_metadata: Vec<AttachmentMetadata>,
-
-    /// List of custom labels.
     pub custom_labels: Vec<InlineCustomLabel>,
-
-    /// Whether to display the snooze reminder.
     pub display_snooze_reminder: bool,
-
-    /// When this conversation is snoozed until.
     pub snoozed_until: Option<UnixTimestamp>,
-
-    /// Exclusive location of the [`Conversation`] (e.g. Inbox, Archive, Outbox
-    /// etc.).
     pub exclusive_location: Option<ExclusiveLocation>,
-
-    /// When this conversation expires.
     pub expiration_time: UnixTimestamp,
-
-    /// Whether the conversation is starred.
     pub is_starred: bool,
-
-    /// Number of attachments in this conversation.
     pub num_attachments: u64,
-
-    /// Number of messages in this context.
     pub num_messages: u64,
-
-    /// Number of unread messages in this context.
     pub num_unread: u64,
-
-    /// Number of messages in this conversation.
     pub total_messages: u64,
-
-    /// Number of unread messages in this conversation.
     pub total_unread: u64,
-
-    /// Display order in the list.
     pub display_order: u64,
-
-    /// All recipients from messages in this conversation.
     pub recipients: Vec<MessageRecipient>,
-
-    /// All senders from messages in this conversation.
     pub senders: Vec<MessageSender>,
-
-    /// Total size of all the messages in this conversation.
     pub size: u64,
-
-    /// Subject of the conversation.
     pub subject: String,
-
-    /// Time of the last received message in this conversation.
     pub time: UnixTimestamp,
-
-    /// Avatar to be displayed for the sender.
     pub avatar: AvatarInformation,
-
-    /// Whether the conversation has hidden messages.
     pub hidden_messages_banner: Option<HiddenMessagesBanner>,
 }
 
 impl From<ContextualConversation> for Conversation {
     fn from(value: ContextualConversation) -> Self {
         let avatar = RealMessageSender::avatar_info(&value.senders.value);
+
         Self {
             id: value.local_id.into(),
             attachments_metadata: value
@@ -954,40 +777,6 @@ impl From<ContextualConversation> for Conversation {
             avatar: avatar.into(),
             hidden_messages_banner: value.hidden_messages_banner.map(Into::into),
         }
-    }
-}
-
-/// TODO: Document this struct.
-// TODO: This does not get saved directly in the database, so perhaps could be
-// TODO: removed from here and the API type used directly.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct ConversationCount {
-    /// TODO: Document this field.
-    pub label_id: Id,
-
-    /// TODO: Document this field.
-    pub total: u64,
-
-    /// TODO: Document this field.
-    pub unread: u64,
-}
-
-impl ConversationCount {
-    /// Converts a [`RealConversationCount`] into a [`ConversationCount`].
-    pub async fn try_from_real(
-        value: RealConversationCount,
-        tether: &Tether,
-    ) -> Result<Self, AppError> {
-        Ok(Self {
-            label_id: RealLabel::remote_id_counterpart(value.label_id.clone(), tether)
-                .await?
-                .ok_or_else(|| {
-                    AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into_inner())
-                })?
-                .into(),
-            total: value.total,
-            unread: value.unread,
-        })
     }
 }
 
@@ -1090,13 +879,6 @@ pub struct ConversationSearchOptions {
 }
 
 impl ConversationSearchOptions {
-    /// Converts incoming client options to API options.
-    ///
-    /// # Errors
-    ///
-    /// An error will be returned if there are problems running the queries to
-    /// look up the remote IDs for the local IDs specified.
-    ///
     pub async fn into_api_options(
         self,
         tether: &Tether,
@@ -1172,20 +954,10 @@ impl ConversationSearchOptions {
     }
 }
 
-/// User-defined labels, i.e. not system labels.
-///
-/// Information about [`Label`]s of type [`LabelType::Label`](RealLabelType::Label)
-/// that are applied to [`Conversation`]s or [`Message`]s.
-///
 #[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
 pub struct InlineCustomLabel {
-    /// Local ID of the label.
     pub id: Id,
-
-    /// Name of the label.
     pub name: String,
-
-    /// Color of the label.
     pub color: LabelColor,
 }
 
@@ -1236,136 +1008,49 @@ impl From<&str> for LabelColor {
     }
 }
 
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, SmartDefault, UniffiRecord)]
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MailSettings {
-    /// TODO: Document this field.
     pub almost_all_mail: AlmostAllMail,
-
-    /// TODO: Document this field.
     pub attach_public_key: bool,
-
-    /// TODO: Document this field.
     pub auto_delete_spam_and_trash_days: Option<u32>,
-
-    /// TODO: Document this field.
-    #[default = true]
     pub auto_save_contacts: bool,
-
-    /// TODO: Document this field.
     pub block_sender_confirmation: Option<bool>,
-
-    /// TODO: Document this field.
     pub composer_mode: ComposerMode,
-
-    /// TODO: Document this field.
-    #[default = true]
     pub confirm_link: bool,
-
-    /// TODO: Document this field.
-    #[default = 10]
     pub delay_send_seconds: u32,
-
-    /// TODO: Document this field.
     pub display_name: String,
-
-    /// TODO: Document this field.
     pub draft_mime_type: MimeType,
-
-    /// TODO: Document this field.
     pub enable_folder_color: bool,
-
-    /// TODO: Document this field.
     pub font_face: Option<String>,
-
-    /// This enables or disables remote content in the HTML.
     pub hide_remote_images: bool,
-
-    /// This enables or disables embedded content (`Disposition::Inline`) in the HTML.
     pub hide_embedded_images: bool,
-
     pub hide_sender_images: bool,
-
-    /// TODO: Document this field.
     pub image_proxy: u32,
-
-    /// TODO: Document this field.
-    #[default = true]
     pub inherit_parent_folder_color: bool,
-
-    /// TODO: Document this field.
     pub message_buttons: MessageButtons,
-
-    /// TODO: Document this field.
     pub mobile_settings: Option<MobileSettings>,
-
-    /// TODO: Document this field.
     pub next_message_on_move: Option<NextMessageOnMove>,
-
-    /// TODO: Document this field.
     pub num_message_per_page: u32,
-
-    /// TODO: Document this field.
     pub pgp_scheme: PgpScheme,
-
-    /// TODO: Document this field.
     pub pm_signature: PmSignature,
-
-    /// TODO: Document this field.
-    #[default = true]
     pub pm_signature_referral_link: bool,
-
-    /// TODO: Document this field.
     pub prompt_pin: bool,
-
-    /// TODO: Document this field.
     pub receive_mime_type: MimeType,
-
-    /// TODO: Document this field.
     pub right_to_left: ComposerDirection,
-
-    /// TODO: Document this field.
-    #[default = true]
     pub shortcuts: bool,
-
-    /// TODO: Document this field.
     pub show_images: ShowImages,
-
-    /// TODO: Document this field.
     pub show_mime_type: MimeType,
-
-    /// TODO: Document this field.
     pub show_moved: ShowMoved,
-
-    /// TODO: Document this field.
     pub sign: bool,
-
-    /// TODO: Document this field.
     pub signature: String,
-
-    /// TODO: Document this field.
     pub spam_action: Option<SpamAction>,
-
-    /// TODO: Document this field.
     pub sticky_labels: bool,
-
-    /// TODO: Document this field.
     pub submission_access: bool,
-
-    /// TODO: Document this field.
     pub swipe_left: SwipeAction,
-
-    /// TODO: Document this field.
     pub swipe_right: SwipeAction,
-
-    /// TODO: Document this field.
     pub theme: String,
-
-    /// TODO: Document this field.
     pub view_layout: ViewLayout,
-
-    /// TODO: Document this field.
     pub view_mode: ViewMode,
 }
 
@@ -1417,97 +1102,36 @@ impl From<RealMailSettings> for MailSettings {
     }
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Message {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     pub id: Id,
-
-    /// TODO: Document this field.
     pub conversation_id: Id,
-
-    /// TODO: Document this field.
     pub address_id: Id,
-
-    /// Attachment metadata associated with this message.
     pub attachments_metadata: Vec<AttachmentMetadata>,
-
-    /// TODO: Document this field.
     pub bcc_list: Vec<MessageRecipient>,
-
-    /// TODO: Document this field.
     pub cc_list: Vec<MessageRecipient>,
-
-    /// Exclusive location of the [`Message`] (e.g. Inbox, Archive, Outbox
-    /// etc.).
     pub exclusive_location: Option<ExclusiveLocation>,
-
-    /// TODO: Document this field.
     pub expiration_time: UnixTimestamp,
-
-    /// TODO: Document this field.
     pub flags: MessageFlags,
-
-    /// TODO: Document this field.
     pub is_forwarded: bool,
-
-    /// TODO: Document this field.
     pub is_replied: bool,
-
-    /// TODO: Document this field.
     pub is_replied_all: bool,
-
-    /// TODO: Document this field.
     pub num_attachments: u32,
-
-    /// TODO: Document this field.
     pub display_order: u64,
-
-    /// TODO: Document this field.
     pub sender: MessageSender,
-
-    /// TODO: Document this field.
     pub size: u64,
-
     pub snoozed_until: Option<UnixTimestamp>,
-
-    /// Whether the snooze reminder should be displayed.
-    /// Technically its impossible to snooze a message but if user
-    /// snoozes a conversation and switches view to a message, we need to
-    /// display the snooze reminder.
     pub display_snooze_reminder: bool,
-
-    /// TODO: Document this field.
     pub subject: String,
-
-    /// TODO: Document this field.
     pub time: UnixTimestamp,
-
-    /// TODO: Document this field.
     pub to_list: Vec<MessageRecipient>,
-
-    /// TODO: Document this field.
     pub unread: bool,
-
-    /// List of custom labels.
     pub custom_labels: Vec<InlineCustomLabel>,
-
-    /// Whether the message is starred.
     pub starred: bool,
-
-    /// Avatar to be displayed for the sender.
     pub avatar: AvatarInformation,
-
-    /// Whether this message is a draft.
     pub is_draft: bool,
-
     pub is_scheduled: bool,
-
     pub can_reply: bool,
 }
 
@@ -1558,25 +1182,13 @@ impl From<RealMessage> for Message {
     }
 }
 
-/// Message sender information.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageSender {
-    /// Recipient email address.
     pub address: String,
-
-    /// TODO: Document this field.
     pub bimi_selector: Option<String>,
-
-    /// Whether to display the sender image.
     pub display_sender_image: bool,
-
-    /// Whether the address is a proton address.
     pub is_proton: bool,
-
-    /// Whether address originated from simple login alias.
     pub is_simple_login: bool,
-
-    /// Recipient display name.
     pub name: String,
 }
 
@@ -1606,19 +1218,11 @@ impl From<RealMessageSender> for MessageSender {
     }
 }
 
-/// Message recipient information.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageRecipient {
-    /// Email of the recipient
     pub address: String,
-
-    /// Whether the recipient is a proton address.
     pub is_proton: bool,
-
-    /// Display name of the recipient,empty if none.
     pub name: String,
-
-    /// Name of the address group this recipient belongs too.
     pub group: Option<String>,
 }
 
@@ -1647,13 +1251,9 @@ impl From<MessageRecipient> for RealMessageRecipient {
     }
 }
 
-/// Message Reply-to component.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageReplyTo {
-    /// Email of the recipient
     pub address: String,
-
-    /// Display name of the recipient,empty if none.
     pub name: String,
 }
 
@@ -1666,38 +1266,6 @@ impl From<RealMessageReplyTo> for MessageReplyTo {
     }
 }
 
-/// TODO: Document this struct.
-// TODO: This does not get saved directly in the database, so perhaps could be
-// TODO: removed from here and the API type used directly.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct MessageCount {
-    /// TODO: Document this field.
-    pub label_id: Id,
-
-    /// TODO: Document this field.
-    pub total: u64,
-
-    /// TODO: Document this field.
-    pub unread: u64,
-}
-
-impl MessageCount {
-    /// Converts a [`RealMessageCount`] into a [`MessageCount`].
-    pub async fn try_from_real(value: RealMessageCount, tether: &Tether) -> Result<Self, AppError> {
-        Ok(Self {
-            label_id: RealLabel::remote_id_counterpart(value.label_id.clone(), tether)
-                .await?
-                .ok_or_else(|| {
-                    AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into_inner())
-                })?
-                .into(),
-            total: value.total,
-            unread: value.unread,
-        })
-    }
-}
-
-/// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageFlags {
     value: u64,
@@ -1807,13 +1375,6 @@ pub struct MessageSearchOptions {
 }
 
 impl MessageSearchOptions {
-    /// Converts incoming client options to API options.
-    ///
-    /// # Errors
-    ///
-    /// An error will be returned if there are problems running the queries to
-    /// look up the remote IDs for the local IDs specified.
-    ///
     pub async fn into_api_options(self, tether: &Tether) -> Result<GetMessagesOptions, StashError> {
         let ids = match self.ids {
             Some(local_ids) => {
@@ -1901,7 +1462,6 @@ impl MessageSearchOptions {
     }
 }
 
-/// Enumeration grouping all possible mobile toolbar actions.
 #[derive(Debug, Clone, Eq, PartialEq, UniffiEnum)]
 pub enum MobileAction {
     Archive,
@@ -1971,13 +1531,9 @@ impl From<MobileAction> for RealMobileAction {
     }
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MobileSetting {
-    /// TODO: Document this field.
     pub actions: Vec<MobileAction>,
-
-    /// TODO: Document this field.
     pub is_custom: bool,
 }
 
@@ -2003,16 +1559,10 @@ impl From<RealMobileSetting> for MobileSetting {
     }
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MobileSettings {
-    /// TODO: Document this field.
     pub conversation_toolbar: MobileSetting,
-
-    /// TODO: Document this field.
     pub list_toolbar: MobileSetting,
-
-    /// TODO: Document this field.
     pub message_toolbar: MobileSetting,
 }
 
@@ -2063,6 +1613,7 @@ impl Undo {
         };
 
         let ctx = ctx.ctx()?;
+
         uniffi_async(async move {
             let mut tether = ctx.user_stash().connection().await?;
             output.undo(ctx.action_queue(), &mut tether).await?;
