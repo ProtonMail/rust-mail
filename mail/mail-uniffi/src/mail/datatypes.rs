@@ -1661,37 +1661,6 @@ impl From<RealMessageReplyTo> for MessageReplyTo {
 }
 
 /// TODO: Document this struct.
-// TODO: This does not get saved directly in the database, so perhaps could be
-// TODO: removed from here and the API type used directly.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct MessageCount {
-    /// TODO: Document this field.
-    pub label_id: Id,
-
-    /// TODO: Document this field.
-    pub total: u64,
-
-    /// TODO: Document this field.
-    pub unread: u64,
-}
-
-impl MessageCount {
-    /// Converts a [`RealMessageCount`] into a [`MessageCount`].
-    pub async fn try_from_real(value: RealMessageCount, tether: &Tether) -> Result<Self, AppError> {
-        Ok(Self {
-            label_id: RealLabel::remote_id_counterpart(value.label_id.clone(), tether)
-                .await?
-                .ok_or_else(|| {
-                    AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into_inner())
-                })?
-                .into(),
-            total: value.total,
-            unread: value.unread,
-        })
-    }
-}
-
-/// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageFlags {
     value: u64,
