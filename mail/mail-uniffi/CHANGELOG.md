@@ -5,16 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- [ET-5384] Fix 5xx handling in queue
+
+
 ## [mail-uniffi-v0.157.6] - 2025-11-12
+
+### Fixes
+
+- [ET-5334] Upgrade html2text
+
+
+## [mail-uniffi-v0.157.5] - 2025-11-12
 
 ### Features
 
 - [ET-3505] Remove font and line-height customization from common CSS
 - uniffi: Create AttachmentDataError
-
-### Fixes
-
-- [ET-5334] Upgrade html2text
 
 
 ## [mail-uniffi-v0.157.4] - 2025-11-10
