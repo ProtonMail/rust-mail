@@ -132,7 +132,7 @@ impl OnlineTester for CoreOnlineTester {
             .await
             .inspect_err(|e| tracing::error!("Online check failed: {e:?}"))
         {
-            Err(e) if e.is_server_unreachable() => RequestNetworkStatus::ServerUnreachable,
+            Err(e) if e.is_server_failure() => RequestNetworkStatus::ServerUnreachable,
             Err(e) if e.is_network_failure() => RequestNetworkStatus::Offline,
             _ => RequestNetworkStatus::Online,
         }

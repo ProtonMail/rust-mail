@@ -176,23 +176,22 @@ pub enum ApiServiceError {
 impl ApiServiceError {
     /// Check if the error is the result of a network failure.
     ///
-    /// An error is considered a network failure the server replies with 429/5xx HTTP status codes
-    /// or there was an issue with the underlying network transport layer.
+    /// An error is considered a network failure only if there was an issue with the underlying network transport layer.
     #[must_use]
     pub fn is_network_failure(&self) -> bool {
         use ApiServiceError::*;
 
-        match self {
-            Redirect(_, _) | Timeout(_) | NetworkError(_) | ConnectionError(_) => true,
-            _ => self.is_server_unreachable(),
-        }
+        matches!(
+            self,
+            Redirect(_, _) | Timeout(_) | NetworkError(_) | ConnectionError(_)
+        )
     }
 
     /// Check if the error is the result of the server being unreachable.
     ///
     /// An error is considered a server unreachable when the server replies with 429/5xx HTTP status codes.
     #[must_use]
-    pub fn is_server_unreachable(&self) -> bool {
+    pub fn is_server_failure(&self) -> bool {
         use ApiServiceError::*;
 
         match self {
