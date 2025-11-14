@@ -2,15 +2,16 @@ use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::LabelType as ApiLabelType;
 use proton_core_api::services::proton::{Address as ApiAddress, Label as ApiLabel};
-use proton_core_common::models::Label;
+use proton_core_common::models::{Address, Label, ModelIdExtension};
 use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
+use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     MessageCount as ApiMessageCount,
 };
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Conversation, ConversationCounters, LabelWithCounters};
+use proton_mail_common::models::{Conversation, ConversationCounters, LabelWithCounters, Message};
 use proton_mail_common::test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
@@ -290,6 +291,35 @@ async fn action_label_as_with_archive() {
             let mut counters3 = ConversationCounters::new(label3.id());
             counters3.total = 3;
             counters3.save(tx).await.unwrap();
+
+            // Create messages (required for conversation move undo)
+            let addr_id = ApiAddress::test_address().id;
+            let local_addr_id = Address::remote_id_counterpart(addr_id.clone(), tx)
+                .await
+                .unwrap()
+                .unwrap();
+            for conv in get_convs(tx).await {
+                Message {
+                    remote_conversation_id: conv.remote_id.clone(),
+                    local_conversation_id: conv.local_id,
+                    local_address_id: local_addr_id,
+                    remote_address_id: addr_id.clone(),
+                    remote_id: Some(MessageId::from(format!(
+                        "msg-{:?}",
+                        conv.remote_id.as_ref().unwrap()
+                    ))),
+                    label_ids: conv
+                        .labels
+                        .iter()
+                        .map(|l| l.remote_label_id.clone().unwrap())
+                        .collect(),
+                    ..Message::test_default()
+                }
+                .save(tx)
+                .await
+                .unwrap();
+            }
+
             Ok((label1, label2))
         })
         .await

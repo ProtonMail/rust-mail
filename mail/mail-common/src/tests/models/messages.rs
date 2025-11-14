@@ -2544,6 +2544,81 @@ async fn unlabel_messages() {
         .unwrap();
 
     check_final_conv_state(&tether).await;
+
+    assert!(
+        ContextualConversation::load(conv, label, &tether)
+            .await
+            .expect("failed to get conversation")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn unlabel_message_correctly_updates_unread_counter() {
+    // assign a label to messages and progressively remove it.
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection().await.unwrap();
+    let mut state = new_test_label_db_state();
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
+
+    let conv = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let msg1 = *state_map
+        .messages
+        .get(state.messages[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let msg2 = *state_map
+        .messages
+        .get(state.messages[1].remote_id.as_ref().unwrap())
+        .unwrap();
+    let msg3 = *state_map
+        .messages
+        .get(state.messages[2].remote_id.as_ref().unwrap())
+        .unwrap();
+    let label = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            Message::apply_label_async(label, [msg1, msg2, msg3], tx)
+                .await
+                .expect("failed to label");
+
+            // unlabel first message.
+            Message::remove_label_async(label, [msg3], tx)
+                .await
+                .unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let db_conversation = ContextualConversation::load(conv, label, &tether)
+        .await
+        .expect("failed to get conversation")
+        .unwrap();
+
+    // Check conversation status.
+    assert_eq!(db_conversation.num_unread, 0);
+    assert_eq!(db_conversation.num_messages, 2);
+
+    // Check conversation counts have the new conversation.
+    {
+        let conv_counts = conv_counts_as_map(&tether).await;
+        let label_counts = conv_counts.get(&label).unwrap();
+        assert_eq!(label_counts.unread, 0);
+        assert_eq!(label_counts.total, 1);
+    }
+
+    // Check message counts.
+    {
+        let message_counts = msg_counts_as_map(&tether).await;
+        let label_counts = message_counts.get(&label).unwrap();
+        assert_eq!(label_counts.unread, 0);
+        assert_eq!(label_counts.total, 2);
+    }
 }
 
 pub(super) static MY_MESSAGE_ID: LazyLock<MessageId> =

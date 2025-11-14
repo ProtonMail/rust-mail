@@ -19,20 +19,20 @@ use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::messages::UndoLabelAsMessages;
 use crate::actions::messages::UndoMoveToMessages;
 use crate::actions::notifications_quick_actions::PushNotificationActionHandler;
-use crate::datatypes::LocalMessageId;
+use crate::datatypes::{LocalConversationId, LocalMessageId};
 use crate::datatypes::{RollbackItemType, SystemLabelId};
 use crate::models::RollbackItem;
 use crate::models::{MailLabel, Message};
 use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use indoc::formatdoc;
-use itertools::Itertools;
 use proton_action_queue::action::{
-    self, ActionDependencyKey, ActionDependencyKeys, ActionGroup, FactoryError, Handler,
+    self, ActionDependencyKey, ActionDependencyKeys, ActionGroup, ActionId, FactoryError, Handler,
     WriterGuard, WriterGuardError,
 };
 use proton_action_queue::queue::{ActionRequeueReason, Queue};
+use proton_action_queue::rebase::{RebaseChangeSet, RebaseKey};
 use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
@@ -50,7 +50,7 @@ use proton_mail_api::services::proton::response_data::OperationResult;
 use proton_sqlite3::rusqlite::ToSql;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use stash::exports::Transaction;
+use stash::exports::{Connection, Transaction};
 use stash::orm::Model;
 use stash::rusqlite::params_from_iter;
 use stash::stash::{Bond, StashError, Tether};
@@ -59,7 +59,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::mem;
 use std::sync::Weak;
 use tracing::error;
 
@@ -459,253 +458,246 @@ pub fn filter_responses_by_codes<T: ProtonIdMarker>(
         .collect::<Vec<_>>()
 }
 
-/// Action which moves target items between two labels.
+struct ActionMoveDataV2Ctx {
+    trash_id: LocalLabelId,
+    almost_all_mail_id: LocalLabelId,
+    spam_id: LocalLabelId,
+}
+
+impl ActionMoveDataV2Ctx {
+    fn new(tether: &Connection) -> Result<Self, StashError> {
+        let spam_id = LabelId::spam().local_id(tether)?;
+        let trash_id = LabelId::trash().local_id(tether)?;
+        let almost_all_mail_id = LabelId::almost_all_mail().local_id(tether)?;
+
+        Ok(Self {
+            trash_id,
+            spam_id,
+            almost_all_mail_id,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+struct ActionMoveDataV2Entry {
+    original_locations: Vec<LocalLabelId>,
+    removed_labels: Vec<LabelPair<LocalMessageId>>,
+    applied_labels: Vec<LabelPair<LocalMessageId>>,
+    marked_read: Vec<LocalMessageId>,
+    is_noop: bool,
+}
+impl ActionMoveDataV2Entry {
+    fn revert(&self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        if !self.marked_read.is_empty() {
+            Message::mark_read_or_unread(false, &self.marked_read, tx)?;
+        }
+
+        for label_pair in &self.removed_labels {
+            Message::apply_label(label_pair.label, [label_pair.id], tx)?;
+        }
+
+        for label_pair in &self.applied_labels {
+            Message::remove_label(label_pair.label, [label_pair.id], tx)?;
+        }
+
+        Ok(())
+    }
+
+    fn rebase<T: ConversationOrMessage>(
+        &mut self,
+        ctx: &ActionMoveDataV2Ctx,
+        destination: Option<LocalLabelId>,
+        id: T::IdType,
+        tx: &Transaction<'_>,
+    ) -> Result<(), StashError> {
+        tracing::info!("Rebasing {id:?}");
+        self.removed_labels.clear();
+        self.applied_labels.clear();
+        self.marked_read.clear();
+        self.is_noop = false;
+        let target = T::load_by_id_sync(id, tx)
+            .with_context(|| format!("Could not find {}", type_name::<T>()))?
+            .ok_or_else(|| StashError::Custom(anyhow!("Could not find {id:?}")))?;
+        self.original_locations = target.get_exclusive_locations();
+
+        self.move_to::<T>(ctx, destination, id, tx)
+    }
+
+    fn move_to<T: ConversationOrMessage>(
+        &mut self,
+        ctx: &ActionMoveDataV2Ctx,
+        destination: Option<LocalLabelId>,
+        id: T::IdType,
+        tx: &Transaction<'_>,
+    ) -> Result<(), StashError> {
+        if destination == Some(ctx.trash_id) {
+            self.marked_read = T::mark_read([id], tx)?;
+        }
+
+        if let Some(destination) = destination
+            && [ctx.trash_id, ctx.spam_id].contains(&destination)
+        {
+            self.removed_labels = T::remove_all_removable_labels(&[id], tx)?;
+        } else {
+            // If there are  no source labels, it means that this msg/conv is
+            // being moved from AllMail into somewhere else (e.g. because
+            // its parent folder got deleted and this object has no
+            // exclusive location anymore).
+            //
+            // In cases like these we don't want to remove the AllMail label
+            // since the object is not actually /moved/ out of AllMail.
+            for source_id in &self.original_locations {
+                if let Some(source_label) = Label::load_by_id_sync(*source_id, tx)? {
+                    let is_snoozed =
+                        SystemLabel::new(&source_label).is_some_and(|label| label.is_snoozed());
+                    if source_label.is_movable_out_of_folder() || is_snoozed {
+                        let removed = T::remove_label(*source_id, [id], tx)
+                            .context("Failed to remove source label")?;
+                        self.removed_labels
+                            .extend(removed.into_iter().map(|id| LabelPair {
+                                label: source_label.id(),
+                                id,
+                            }));
+                    }
+                }
+
+                if [ctx.trash_id, ctx.spam_id].contains(source_id) {
+                    let applied = T::apply_label(ctx.almost_all_mail_id, [id], tx)
+                        .context("Failed to add conversations to almost_all_mail")?;
+                    self.applied_labels
+                        .extend(applied.into_iter().map(|id| LabelPair {
+                            label: ctx.almost_all_mail_id,
+                            id,
+                        }));
+                }
+            }
+        }
+
+        if let Some(destination) = destination {
+            let applied = T::apply_label(destination, [id], tx)
+                .context("Failed to apply destination label")?;
+            self.applied_labels
+                .extend(applied.into_iter().map(|id| LabelPair {
+                    label: destination,
+                    id,
+                }));
+        } else {
+            // If there's no destination label, it means that this object is
+            // being moved into AllMail.
+            //
+            // This doesn't make sense as an action on its own[1], but it
+            // can happen when user undoes a move _from_ AllMail to Inbox,
+            // for example; this is simply a no-op then.
+            //
+            // [1] after all, by definition all mails are in AllMail anyway
+        }
+
+        self.is_noop = if self.marked_read.is_empty() {
+            let removed_label_ids = self.removed_labels.iter().collect::<HashSet<_>>();
+            let applied_label_ids = self.applied_labels.iter().collect::<HashSet<_>>();
+            removed_label_ids
+                .difference(&applied_label_ids)
+                .next()
+                .is_none()
+        } else {
+            false
+        };
+
+        Ok(())
+    }
+
+    pub fn is_skippable(&self) -> bool {
+        self.is_noop
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
+/*
+#[serde(bound(
+    deserialize = "<T as Model>::IdType : DeserializeOwned",
+    serialize = "<T as Model>::IdType : Serialize"
+))]*/
 pub struct ActionMoveData<T>
 where
     T: ConversationOrMessage,
 {
-    sources: HashMap<Option<LocalLabelId>, Vec<T::IdType>>,
     destination: Option<LocalLabelId>,
+    entries: HashMap<T::IdType, ActionMoveDataV2Entry>,
+}
 
-    // These 2 exist solely for the revert and undo
-    marked_read: Vec<LocalMessageId>,
-    removed_labels: Vec<LabelPair<T::IdType>>,
+// Trait to handle conversion of the unread message state stored in the previous action
+pub trait ActionMoveV1Compatability {
+    fn into_local_message_id(self) -> Option<LocalMessageId>;
+}
+
+impl ActionMoveV1Compatability for LocalMessageId {
+    fn into_local_message_id(self) -> Option<LocalMessageId> {
+        Some(self)
+    }
+}
+
+impl ActionMoveV1Compatability for LocalConversationId {
+    fn into_local_message_id(self) -> Option<LocalMessageId> {
+        // Unfortunately we don't have any good way to detect this during migration
+        // since we don't have db access. What this means is that if we need to revert/undo
+        // for this queue action some things maybe out of date.
+        // TODO: Do we really care?
+        None
+    }
 }
 
 impl<T> ActionMoveData<T>
 where
     T: ConversationOrMessage,
+    <T as Model>::IdType: ActionMoveV1Compatability,
 {
-    fn take(&mut self) -> Self {
-        mem::replace(
-            self,
-            Self {
-                sources: Default::default(),
-                destination: Default::default(),
-                marked_read: Default::default(),
-                removed_labels: Default::default(),
-            },
-        )
-    }
+    fn from_action_move_data(action: ActionMoveDataV1<T>) -> Self {
+        let mut entries = HashMap::with_capacity(action.sources.len());
+        for (label_id, ids) in action.sources {
+            for id in ids {
+                let (removed_labels, unread) =
+                    if let Some(local_msg_id) = id.into_local_message_id() {
+                        let removed_labels = action
+                            .removed_labels
+                            .iter()
+                            .filter_map(|v| {
+                                (v.id != id).then_some(LabelPair {
+                                    label: v.label,
+                                    id: local_msg_id,
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        (
+                            removed_labels,
+                            if action.marked_read.contains(&local_msg_id) {
+                                vec![local_msg_id]
+                            } else {
+                                vec![]
+                            },
+                        )
+                    } else {
+                        (vec![], vec![])
+                    };
 
-    /// Creates an action that moves `target_ids` from their exclusive locations
-    /// into `destination`.
-    pub async fn new(
-        tether: &Tether,
-        destination: LocalLabelId,
-        target_ids: impl IntoIterator<Item = T::IdType>,
-    ) -> Result<Option<Self>, StashError> {
-        let mut sources = HashMap::<_, Vec<_>>::new();
-
-        for target_id in target_ids {
-            let target = T::load(target_id, tether)
-                .await?
-                .with_context(|| format!("Could not find {}", type_name::<T>()))?;
-
-            sources
-                .entry(target.get_exclusive_location())
-                .or_default()
-                .push(target_id);
-        }
-
-        if sources.is_empty() {
-            return Ok(None); // Don't queue an action unnecessarily
-        }
-
-        Ok(Some(Self {
-            sources,
-            destination: Some(destination),
-            marked_read: vec![],
-            removed_labels: vec![],
-        }))
-    }
-
-    async fn move_to_async(&mut self, bond: &Bond<'_>) -> anyhow::Result<()> {
-        // This action modifies self, so we need to send it and get it back.
-        let mut this = self.clone();
-        let this = bond
-            .sync_bridge(move |tx| {
-                this.move_to(tx)?;
-                Ok(this)
-            })
-            .await?;
-
-        *self = this;
-        Ok(())
-    }
-
-    fn move_to(&mut self, tx: &Transaction<'_>) -> anyhow::Result<()> {
-        let spam = LabelId::spam().local_id(tx)?;
-        let trash = LabelId::trash().local_id(tx)?;
-        let almost_all_mail = LabelId::almost_all_mail().local_id(tx)?;
-
-        if self.destination == Some(trash) {
-            self.marked_read = T::mark_read(self.sources.values().flatten().copied(), tx)?;
-        }
-
-        for (source_id, ids) in &self.sources {
-            let source_label = if let Some(source_id) = source_id {
-                Some(
-                    Label::load_by_id_sync(*source_id, tx)?
-                        .context("Failed to load source label")?,
-                )
-            } else {
-                // If there's no source label, it means that this msg/conv is
-                // being moved from AllMail into somewhere else (e.g. because
-                // its parent folder got deleted and this object has no
-                // exclusive location anymore).
-                //
-                // In cases like these we don't want to remove the AllMail label
-                // since the object is not actually /moved/ out of AllMail.
-                None
-            };
-
-            let is_snoozed = source_label.as_ref().is_some_and(|source_label| {
-                SystemLabel::new(source_label).is_some_and(|label| label.is_snoozed())
-            });
-
-            if let Some(destination) = self.destination
-                && [trash, spam].contains(&destination)
-            {
-                self.removed_labels = T::remove_all_removable_labels(ids, tx)?;
-
-                if let Some(source_id) = source_id {
-                    self.removed_labels.retain(|x| x.label != *source_id);
-                }
-            } else if let Some(source_id) = source_id
-                && let Some(source_label) = source_label
-            {
-                if source_label.is_movable_out_of_folder() || is_snoozed {
-                    T::remove_label(*source_id, ids.iter().cloned(), tx)
-                        .context("Failed to remove source label")?;
-                }
-
-                if [trash, spam].contains(source_id) {
-                    T::apply_label(almost_all_mail, ids.iter().cloned(), tx)
-                        .context("Failed to add conversations to almost_all_mail")?;
-                }
-            }
-
-            if let Some(destination) = self.destination {
-                T::apply_label(destination, ids.clone(), tx)
-                    .context("Failed to apply destination label")?;
-            } else {
-                // If there's no destination label, it means that this object is
-                // being moved into AllMail.
-                //
-                // This doesn't make sense as an action on its own[1], but it
-                // can happen when user undoes a move _from_ AllMail to Inbox,
-                // for example; this is simply a no-op then.
-                //
-                // [1] after all, by definition all mails are in AllMail anyway
+                entries.insert(
+                    id,
+                    ActionMoveDataV2Entry {
+                        original_locations: label_id.map_or(vec![], |l| vec![l]),
+                        removed_labels,
+                        marked_read: unread,
+                        applied_labels: vec![],
+                        is_noop: false,
+                    },
+                );
             }
         }
 
-        Ok(())
-    }
-
-    async fn apply_remote(
-        &self,
-        api: &Session,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<(), MailActionError> {
-        let Some(dest_label) = self.destination else {
-            return Ok(());
-        };
-
-        let tether = guard.tether();
-
-        let dest_label = Label::resolve_remote_label_id(dest_label, tether).await?;
-        let mut all_remote_ids = Vec::new();
-        for ids in self.sources.values() {
-            let remote_ids = T::local_ids_counterpart(ids.clone(), tether).await?;
-            all_remote_ids.extend(remote_ids);
+        Self {
+            destination: action.destination,
+            entries,
         }
-
-        let failed = T::api_apply_label(api, all_remote_ids, dest_label.clone()).await?;
-        if !failed.is_empty() {
-            guard
-                .tx::<_, _, anyhow::Error>(async move |tx| {
-                    RollbackItem::save_many(tx, failed, T::ROLLBACK_ITEM_TYPE).await?;
-                    Ok(())
-                })
-                .await?;
-        }
-        Ok(())
     }
-
-    fn reverse(&self) -> impl Iterator<Item = Self> {
-        self.sources.clone().into_iter().map(|(source, ids)| {
-            let mut sources = HashMap::new();
-            sources.insert(self.destination, ids);
-            Self {
-                destination: source,
-                sources,
-                marked_read: vec![],
-                removed_labels: vec![],
-            }
-        })
-    }
-
-    async fn revert_local(&mut self, tx: &Bond<'_>) -> Result<(), MailActionError> {
-        let reverse = self.reverse().collect_vec();
-        let this = self.take();
-        tx.sync_bridge(move |tx| {
-            for mut reverse in reverse {
-                reverse.move_to(tx)?;
-            }
-
-            Message::mark_read_or_unread(false, &this.marked_read, tx)?;
-
-            for pair in this.removed_labels {
-                T::apply_label(pair.label, [pair.id], tx)?;
-            }
-            Ok(())
-        })
-        .await?;
-        self.queue_rollback_items(tx).await?;
-        Ok(())
-    }
-
-    async fn queue_rollback_items(&self, tx: &Bond<'_>) -> Result<(), StashError> {
-        let ids = self
-            .sources
-            .values()
-            .flat_map(|x| x.iter())
-            .cloned()
-            .collect();
-        let ids = T::local_ids_counterpart(ids, tx).await?;
-        RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
-        Ok(())
-    }
-
-    pub fn action_dependency_keys(&self) -> ActionDependencyKeys {
-        let mut keys = ActionDependencyKeysBuilder::default();
-
-        if let Some(destination) = self.destination {
-            keys = keys.with_required_related(destination);
-        }
-
-        for (source, ids) in &self.sources {
-            let Some(source) = source else {
-                continue;
-            };
-
-            // We could also potentially have several moves interlinked
-            // as a dependency where a move chain gets undoed, but it should
-            // be okay to have the conversation move to the last operation that succeeded.
-            keys = keys
-                .with_required_related(*source)
-                .with_optional_related_many(ids.iter().copied())
-                // if there is a label as, we should execute after that
-                .with_optional_many(label_as_action_dependency_key(ids.iter().copied()));
-        }
-
-        keys.build()
-    }
-
-    pub fn convert(old_version: u32, data: &[u8]) -> action::FactoryResult<Self> {
+    pub(crate) fn convert(old_version: u32, data: &[u8]) -> action::FactoryResult<Self> {
         #[allow(dead_code)]
         #[derive(Deserialize)]
         struct OldAction<T: ConversationOrMessage> {
@@ -721,19 +713,256 @@ where
                 let mut sources = HashMap::new();
                 sources.insert(Some(data.source_label_id), data.target_ids);
 
-                Ok(Self {
-                    destination: Some(data.destination_label_id),
-                    sources,
-                    marked_read: vec![],
-                    removed_labels: vec![],
-                })
+                Ok(ActionMoveData::from_action_move_data(
+                    ActionMoveDataV1::<T> {
+                        destination: Some(data.destination_label_id),
+                        sources,
+                        marked_read: vec![],
+                        removed_labels: vec![],
+                    },
+                ))
             }
 
-            2 => Ok(action::deserialize::<Self>(data)?),
+            2 => Ok(ActionMoveData::from_action_move_data(
+                action::deserialize::<ActionMoveDataV1<T>>(data)?,
+            )),
+
+            3 => Ok(action::deserialize::<Self>(data)?),
 
             other_version => Err(FactoryError::InvalidVersion(other_version)),
         }
     }
+}
+
+impl<T> ActionMoveData<T>
+where
+    T: ConversationOrMessage,
+    <T as Model>::IdType: Into<RebaseKey>,
+{
+    /// Creates an action that moves `target_ids` from their exclusive locations
+    /// into `destination`.
+    pub async fn new(
+        tether: &Tether,
+        destination: LocalLabelId,
+        target_ids: impl IntoIterator<Item = T::IdType>,
+    ) -> Result<Option<Self>, StashError> {
+        let mut entries = HashMap::new();
+
+        for target_id in target_ids {
+            let target = T::load(target_id, tether)
+                .await?
+                .with_context(|| format!("Could not find {}", type_name::<T>()))?;
+
+            entries.insert(
+                target_id,
+                ActionMoveDataV2Entry {
+                    original_locations: target.get_exclusive_locations(),
+                    removed_labels: vec![],
+                    marked_read: vec![],
+                    applied_labels: vec![],
+                    is_noop: false,
+                },
+            );
+        }
+
+        if entries.is_empty() {
+            return Ok(None); // Don't queue an action unnecessarily
+        }
+
+        Ok(Some(Self {
+            destination: Some(destination),
+            entries,
+        }))
+    }
+
+    async fn move_to_async(&mut self, bond: &Bond<'_>) -> anyhow::Result<()> {
+        //TODO: handle revert
+        // This action modifies self, so we need to send it and get it back.
+        let mut this = self.clone();
+        let this = bond
+            .sync_bridge(move |tx| {
+                this.move_to(tx)?;
+                Ok(this)
+            })
+            .await?;
+
+        *self = this;
+        Ok(())
+    }
+
+    fn move_to(&mut self, tx: &Transaction<'_>) -> anyhow::Result<()> {
+        let ctx = ActionMoveDataV2Ctx::new(tx)?;
+
+        for (id, data) in &mut self.entries {
+            data.move_to::<T>(&ctx, self.destination, *id, tx)?;
+        }
+
+        Ok(())
+    }
+
+    async fn apply_remote(
+        &self,
+        api: &Session,
+        mut guard: WriterGuard<'_>,
+    ) -> Result<(), MailActionError> {
+        //TODO: handle revert
+        let Some(dest_label) = self.destination else {
+            return Ok(());
+        };
+
+        let tether = guard.tether();
+
+        let dest_label = Label::resolve_remote_label_id(dest_label, tether).await?;
+        let all_remote_ids = T::local_ids_counterpart(
+            self.entries
+                .iter()
+                .filter_map(|(k, v)| {
+                    // remove any item that has 0 changes, which means there is nothing to do
+                    // and we should not communicate this to the server.
+                    if v.is_skippable() {
+                        tracing::info!("Skipping {k:?} due to noop");
+                        None
+                    } else {
+                        Some(*k)
+                    }
+                })
+                .collect::<Vec<_>>(),
+            tether,
+        )
+        .await?;
+
+        let failed = T::api_apply_label(api, all_remote_ids, dest_label.clone()).await?;
+        if !failed.is_empty() {
+            guard
+                .tx::<_, _, anyhow::Error>(async move |tx| {
+                    RollbackItem::save_many(tx, failed, T::ROLLBACK_ITEM_TYPE).await?;
+                    Ok(())
+                })
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn revert_local(&mut self, tx: &Bond<'_>) -> Result<(), MailActionError> {
+        //TODO: handle revert
+        let this = self.clone();
+        tx.sync_bridge(move |tx| {
+            for (_, data) in this.entries {
+                data.revert(tx)?;
+            }
+            Ok(())
+        })
+        .await?;
+        self.queue_rollback_items(tx).await?;
+        Ok(())
+    }
+
+    async fn rebase_local(
+        &mut self,
+        changeset: &RebaseChangeSet,
+        tx: &Bond<'_>,
+    ) -> Result<(), MailActionError> {
+        // sigh
+        let mut this = std::mem::replace(
+            self,
+            ActionMoveData {
+                destination: None,
+                entries: Default::default(),
+            },
+        );
+        let changeset = changeset.clone();
+        let this = tx
+            .sync_bridge(move |tx| {
+                this.rebase_local_sync(&changeset, tx)
+                    .context("Could not rebase local")?;
+                Ok(this)
+            })
+            .await?;
+        *self = this;
+        Ok(())
+    }
+    fn rebase_local_sync(
+        &mut self,
+        changeset: &RebaseChangeSet,
+        tx: &Transaction<'_>,
+    ) -> Result<(), MailActionError> {
+        let ctx = ActionMoveDataV2Ctx::new(tx)?;
+        for (id, data) in &mut self.entries {
+            let rebase_key: RebaseKey = (*id).into();
+            if changeset.contains(&rebase_key) {
+                data.rebase::<T>(&ctx, self.destination, *id, tx)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn queue_rollback_items(&self, tx: &Bond<'_>) -> Result<(), StashError> {
+        let ids = self.entries.keys().cloned().collect();
+        let ids = T::local_ids_counterpart(ids, tx).await?;
+        RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
+        Ok(())
+    }
+
+    pub fn action_dependency_keys(&self) -> ActionDependencyKeys {
+        let mut keys = ActionDependencyKeysBuilder::default();
+
+        if let Some(destination) = self.destination {
+            keys = keys.with_required_related(destination);
+        }
+
+        for (id, data) in &self.entries {
+            // We could also potentially have several moves interlinked
+            // as a dependency where a move chain gets undoed, but it should
+            // be okay to have the conversation move to the last operation that succeeded.
+            keys = keys
+                .with_required_related_many(data.original_locations.clone())
+                .with_optional_related(*id)
+                // if there is a label as, we should execute after that
+                .with_optional_many(label_as_action_dependency_key([*id]));
+        }
+
+        keys.build()
+    }
+
+    pub fn build_undo_states(&self) -> (messages::LabelAs, messages::Unread) {
+        let mut label_as = LabelAsData {
+            source_label_id: 0.into(), // This is fine because it's unused (no archiving, no undoing)
+            add: vec![],
+            remove: vec![],
+        };
+        let mut mark_unread = Vec::new();
+
+        for data in self.entries.values() {
+            mark_unread.extend(data.marked_read.iter().copied());
+
+            for pair in &data.removed_labels {
+                label_as.add.push(*pair);
+            }
+            for pair in &data.applied_labels {
+                label_as.remove.push(*pair);
+            }
+        }
+
+        (
+            messages::LabelAs(label_as),
+            messages::Unread::new(mark_unread),
+        )
+    }
+}
+
+/// Action which moves target items between two labels.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ActionMoveDataV1<T>
+where
+    T: ConversationOrMessage,
+{
+    sources: HashMap<Option<LocalLabelId>, Vec<T::IdType>>,
+    destination: Option<LocalLabelId>,
+
+    // These 2 exist solely for the revert and undo
+    marked_read: Vec<LocalMessageId>,
+    removed_labels: Vec<LabelPair<T::IdType>>,
 }
 
 #[allow(async_fn_in_trait, reason = "not used across threads")]
@@ -751,18 +980,15 @@ pub trait ConversationOrMessage:
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType>,
         tx: &Transaction<'_>,
-    ) -> Result<(), StashError>;
+    ) -> Result<Vec<LocalMessageId>, StashError>;
 
     fn remove_label(
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Transaction<'_>,
-    ) -> Result<(), StashError>;
+    ) -> Result<Vec<LocalMessageId>, StashError>;
 
     /// Returns the messages that actually were marked as read
-    //
-    // if you're wondering why mark_unread is not part of the trait, the fns are different for
-    // convs and messages.
     fn mark_read(
         ids: impl IntoIterator<Item = Self::IdType>,
         tx: &Transaction<'_>,
@@ -770,7 +996,7 @@ pub trait ConversationOrMessage:
 
     // -- HELPER DEFS
 
-    fn get_exclusive_location(&self) -> Option<LocalLabelId>;
+    fn get_exclusive_locations(&self) -> Vec<LocalLabelId>;
     fn grouped_labels_and_messages_query(placeholders: usize) -> String;
 
     // -- API DEFS
@@ -799,9 +1025,7 @@ pub trait ConversationOrMessage:
     fn remove_all_removable_labels(
         ids: &[Self::IdType],
         bond: &Transaction<'_>,
-    ) -> Result<Vec<LabelPair<Self::IdType>>, StashError> {
-        let almost_all_mail_id = LabelId::almost_all_mail().local_id(bond)?;
-
+    ) -> Result<Vec<LabelPair<LocalMessageId>>, StashError> {
         let non_removable_labels = {
             let non_removable_labels = LabelId::non_removable_system_labels();
             let mut result = HashSet::with_capacity(non_removable_labels.len());
@@ -837,14 +1061,12 @@ pub trait ConversationOrMessage:
 
         let mut res = vec![];
         for (label_id, parsed_ids) in labels_and_messages {
-            Self::remove_label(label_id, parsed_ids.iter().copied(), bond)?;
+            let modified_messages = Self::remove_label(label_id, parsed_ids.iter().copied(), bond)?;
 
-            if label_id != almost_all_mail_id {
-                res.extend(parsed_ids.iter().map(|&id| LabelPair {
-                    id,
-                    label: label_id,
-                }));
-            }
+            res.extend(modified_messages.iter().map(|&id| LabelPair {
+                id,
+                label: label_id,
+            }));
         }
         Ok(res)
     }
@@ -855,7 +1077,7 @@ pub trait ConversationOrMessage:
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType> + Send + 'static,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         bond.sync_bridge(move |tx| Self::apply_label(local_label_id, ids, tx))
             .await
     }
@@ -864,7 +1086,7 @@ pub trait ConversationOrMessage:
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = Self::IdType> + Send + 'static,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         bond.sync_bridge(move |tx| Self::remove_label(local_label_id, ids, tx))
             .await
     }
@@ -994,11 +1216,20 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
     ) -> Result<(), MailActionError> {
         let (add, remove) = self.segregate_label();
 
+        let almost_all_mail_id = LabelId::almost_all_mail();
+
         for (label, items) in add {
-            let label = Label::resolve_remote_label_id(label, guard.tether()).await?;
+            let label_id = Label::resolve_remote_label_id(label, guard.tether()).await?;
+
+            if label_id == almost_all_mail_id {
+                // This does not need to be communicated to the server, but this action is used
+                // by other actions to revert local state, so this may appear.
+                continue;
+            }
+
             let items = T::local_ids_counterpart(items, guard.tether()).await?;
 
-            let failed_ids = T::api_apply_label(api, items, label).await?;
+            let failed_ids = T::api_apply_label(api, items, label_id).await?;
             if !failed_ids.is_empty() {
                 guard
                     .tx::<_, _, anyhow::Error>(async move |tx| {
@@ -1010,10 +1241,16 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
         }
 
         for (label, items) in remove {
-            let label = Label::resolve_remote_label_id(label, guard.tether()).await?;
+            let label_id = Label::resolve_remote_label_id(label, guard.tether()).await?;
             let items = T::local_ids_counterpart(items, guard.tether()).await?;
 
-            let failed_ids = T::api_remove_label(api, items, label).await?;
+            if label_id == almost_all_mail_id {
+                // This does not need to be communicated to the server, but this action is used
+                // by other actions to revert local state, so this may appear.
+                continue;
+            }
+
+            let failed_ids = T::api_remove_label(api, items, label_id).await?;
             if !failed_ids.is_empty() {
                 guard
                     .tx::<_, _, anyhow::Error>(async move |tx| {
@@ -1124,6 +1361,15 @@ impl Undo {
             Undo::ConversationsLabelAs(u) => u.undo(queue, tether).await,
             Undo::MessagesMoveTo(u) => u.undo(queue, tether).await,
             Undo::ConversationsMoveTo(u) => u.undo(queue, tether).await,
+        }
+    }
+
+    pub fn action_id(&self) -> ActionId {
+        match self {
+            Undo::MessagesLabelAs(v) => v.id,
+            Undo::MessagesMoveTo(v) => v.id,
+            Undo::ConversationsLabelAs(v) => v.id,
+            Undo::ConversationsMoveTo(v) => v.id,
         }
     }
 }
