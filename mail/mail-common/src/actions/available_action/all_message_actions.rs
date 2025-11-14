@@ -141,10 +141,16 @@ pub enum MessageAction {
 }
 
 impl MessageAction {
-    fn toggle_view_mode(theme: Option<&ThemeOpts>) -> Self {
-        match theme.map(|t| t.current_theme) {
-            Some(MailTheme::DarkMode) => Self::ViewInLightMode,
-            _ => Self::ViewInDarkMode,
+    fn toggle_view_mode(theme: Option<&ThemeOpts>) -> Option<Self> {
+        // In light theme we do not want to have any theme-related actions
+        if theme?.current_theme == MailTheme::DarkMode {
+            if theme?.theme_override == Some(MailTheme::LightMode) {
+                Some(Self::ViewInDarkMode)
+            } else {
+                Some(Self::ViewInLightMode)
+            }
+        } else {
+            None
         }
     }
 
@@ -251,7 +257,7 @@ impl GenericMobileActions for MessageAction {
             Print => Some(Self::Print),
             ViewHeaders => Some(Self::ViewHeaders),
             ViewHTML => Some(Self::ViewHTML),
-            ToggleLight => Some(Self::toggle_view_mode(context.theme.as_ref())),
+            ToggleLight => Self::toggle_view_mode(context.theme.as_ref()),
             ReportPhishing => Some(Self::ReportPhishing),
             // Unsupported actions for messages
             Snooze | SaveAttachments | SavePDF | SenderEmails | Remind | Other(_) => None,
@@ -262,7 +268,10 @@ impl GenericMobileActions for MessageAction {
     fn get_low_priority_actions(context: &ActionContext) -> Vec<Self> {
         let mut actions = vec![Self::Print, Self::ViewHeaders, Self::ViewHTML];
 
-        actions.push(Self::toggle_view_mode(context.theme.as_ref()));
+        if let Some(toggle_view_mode) = Self::toggle_view_mode(context.theme.as_ref()) {
+            actions.push(toggle_view_mode);
+        }
+
         actions.push(Self::ReportPhishing);
 
         actions
