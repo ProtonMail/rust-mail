@@ -1136,3 +1136,47 @@ impl RecipientListTestExt for RecipientList {
             .collect()
     }
 }
+
+#[test]
+fn test_sanitize_pasted_content() {
+    let html_with_styles = r##"<html>
+            <head><style>.test {color: red;}</style></head>
+            <body>
+                <div style="margin:10px;" bgcolor="#fff">
+                    <p data-proton-original-style="font-size:14px;">Pasted content</p>
+                </div>
+            </body>
+        </html>"##;
+
+    let result = crate::draft::compose::sanitize_pasted_content(html_with_styles);
+
+    insta::assert_snapshot!(result);
+}
+
+#[test]
+fn test_sanitize_html_content_with_styles_no() {
+    let html = r#"<p style="color:red;" bgcolor="blue">Content</p>"#;
+    let mut transformer = proton_mail_html_transformer::Transformer::new(html);
+
+    crate::draft::compose::sanitize_html_content(
+        &mut transformer,
+        proton_mail_html_transformer::sanitizer::SanitizeStyles::No,
+    );
+    let result = transformer.to_string();
+
+    insta::assert_snapshot!(result);
+}
+
+#[test]
+fn test_sanitize_html_content_with_styles_yes() {
+    let html = r#"<p style="color:red;" bgcolor="blue">Content</p>"#;
+    let mut transformer = proton_mail_html_transformer::Transformer::new(html);
+
+    crate::draft::compose::sanitize_html_content(
+        &mut transformer,
+        proton_mail_html_transformer::sanitizer::SanitizeStyles::Yes,
+    );
+    let result = transformer.to_string();
+
+    insta::assert_snapshot!(result);
+}

@@ -19,6 +19,7 @@ use proton_action_queue::action::ActionId;
 use proton_calendar_common::{self as cal, RsvpError};
 use proton_core_api::services::proton::AddressId;
 use proton_mail_html_transformer::Transformer;
+use proton_mail_html_transformer::sanitizer::SanitizeStyles;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
 use stash::orm::Model;
@@ -552,7 +553,7 @@ mime_type: {mime_type:?}"
         transformer
     };
 
-    let tags_stripped = transformer.strip_whitelist();
+    let tags_stripped = transformer.strip_whitelist(SanitizeStyles::No);
     let utm_stripped = transformer.strip_utm();
 
     let (mut remote_images_count, mut embedded_images_count) =

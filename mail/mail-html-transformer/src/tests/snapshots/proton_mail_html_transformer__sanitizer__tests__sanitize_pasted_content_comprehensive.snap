@@ -1,0 +1,16 @@
+---
+source: mail/mail-html-transformer/src/tests/sanitizer.rs
+expression: result
+---
+<html><head></head>
+            <body>
+                <div>
+                    <p class="content">
+                        Pasted content with styles
+                    </p>
+                    <table>
+                        <tbody><tr><td>Cell</td></tr>
+                    </tbody></table>
+                </div>
+            
+        </body></html>
