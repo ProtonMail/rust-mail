@@ -925,11 +925,10 @@ where
         keys.build()
     }
 
-    pub fn build_undo_states(&self) -> (messages::LabelAs, messages::Unread) {
+    pub fn build_undo_states(&self) -> (messages::LabelAs, Option<messages::Unread>) {
         let mut label_as = LabelAsData {
-            source_label_id: 0.into(), // This is fine because it's unused (no archiving, no undoing)
-            add: vec![],
-            remove: vec![],
+            source_label_id: None,
+            items: Default::default(),
         };
         let mut mark_unread = Vec::new();
 
@@ -937,16 +936,28 @@ where
             mark_unread.extend(data.marked_read.iter().copied());
 
             for pair in &data.removed_labels {
-                label_as.add.push(*pair);
+                label_as
+                    .items
+                    .entry(pair.id)
+                    .or_default()
+                    .added
+                    .entry(pair.label)
+                    .or_default();
             }
             for pair in &data.applied_labels {
-                label_as.remove.push(*pair);
+                label_as
+                    .items
+                    .entry(pair.id)
+                    .or_default()
+                    .removed
+                    .entry(pair.label)
+                    .or_default();
             }
         }
 
         (
             messages::LabelAs(label_as),
-            messages::Unread::new(mark_unread),
+            (!mark_unread.is_empty()).then_some(messages::Unread::new(mark_unread)),
         )
     }
 }
@@ -1106,14 +1117,24 @@ pub struct LabelPair<T> {
     pub id: T,
 }
 
+type LabelModificationMap = HashMap<LocalLabelId, Vec<LocalMessageId>>;
+
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+struct LabelAsDataEntry {
+    added: LabelModificationMap,
+    removed: LabelModificationMap,
+}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LabelAsData<T: ConversationOrMessage> {
-    source_label_id: LocalLabelId,
-    add: Vec<LabelPair<T::IdType>>,
-    remove: Vec<LabelPair<T::IdType>>,
+    source_label_id: Option<LocalLabelId>,
+    items: HashMap<T::IdType, LabelAsDataEntry>,
 }
 
-impl<T: ConversationOrMessage> LabelAsData<T> {
+impl<T> LabelAsData<T>
+where
+    T: ConversationOrMessage,
+    <T as Model>::IdType: Into<RebaseKey>,
+{
     pub fn new(
         cartesian: HashSet<LabelPair<T::IdType>>,
         source_label_id: LocalLabelId,
@@ -1129,8 +1150,7 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
         //    and API calls).
         // 3. If a label is neither selected or partially selected it should be removed. Same
         //    rationale as above.
-        let mut add = vec![];
-        let mut remove = vec![];
+        let mut label_as_items: HashMap<_, LabelAsDataEntry> = HashMap::new();
 
         for &label in all_label_ids {
             if selected_label_ids.contains(&label) {
@@ -1138,7 +1158,12 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
                 for &id in &items {
                     let pair = LabelPair { label, id };
                     if !cartesian.contains(&pair) {
-                        add.push(pair);
+                        label_as_items
+                            .entry(id)
+                            .or_default()
+                            .added
+                            .entry(label)
+                            .or_default();
                     }
                 }
             } else if partially_selected_label_ids.contains(&label) {
@@ -1148,61 +1173,87 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
                 for &id in &items {
                     let pair = LabelPair { label, id };
                     if cartesian.contains(&pair) {
-                        remove.push(pair);
+                        label_as_items
+                            .entry(id)
+                            .or_default()
+                            .removed
+                            .entry(label)
+                            .or_default();
                     }
                 }
             }
         }
 
         Self {
-            add,
-            remove,
-            source_label_id,
+            items: label_as_items,
+            source_label_id: Some(source_label_id),
         }
     }
 
     pub fn new_remove(remove: Vec<LabelPair<T::IdType>>) -> Self {
         Self {
-            remove,
-            add: vec![],
-            source_label_id: 0.into(),
+            items: Self::convert_label_pair_vec([], remove),
+            source_label_id: None,
         }
     }
 
     pub fn new_add(add: Vec<LabelPair<T::IdType>>) -> Self {
         Self {
-            remove: vec![],
-            add,
-            source_label_id: 0.into(),
+            items: Self::convert_label_pair_vec(add, []),
+            source_label_id: None,
         }
     }
 
-    async fn apply_local_common(&self, tx: &Bond<'_>) -> Result<(), StashError> {
-        let (add, remove) = self.segregate_label();
+    fn convert_label_pair_vec(
+        to_add: impl IntoIterator<Item = LabelPair<T::IdType>>,
+        to_remove: impl IntoIterator<Item = LabelPair<T::IdType>>,
+    ) -> HashMap<T::IdType, LabelAsDataEntry> {
+        let mut result: HashMap<_, LabelAsDataEntry> = HashMap::new();
+        for pair in to_add.into_iter() {
+            let entry = result.entry(pair.id).or_default();
+            entry.added.entry(pair.label).or_default();
+        }
+        for pair in to_remove.into_iter() {
+            let entry = result.entry(pair.id).or_default();
+            entry.removed.entry(pair.label).or_default();
+        }
 
-        tx.sync_bridge(|tx| {
-            for (label, ids) in add {
-                T::apply_label(label, ids, tx)?;
-            }
+        result
+    }
 
-            for (label, ids) in remove {
-                T::remove_label(label, ids, tx)?;
-            }
-            Ok(())
-        })
-        .await
+    async fn apply_local_common(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
+        // to preserve perf of sync tx, we make a copy of the data and then reset it later
+        let mut items = self.items.clone();
+
+        let updated = tx
+            .sync_bridge(|tx| {
+                for (id, data) in &mut items {
+                    for (label_id, modified) in &mut data.added {
+                        *modified = T::apply_label(*label_id, [*id], tx)?;
+                    }
+                    for (label_id, modified) in &mut data.removed {
+                        *modified = T::remove_label(*label_id, [*id], tx)?;
+                    }
+                }
+                Ok(items)
+            })
+            .await?;
+
+        let _ = std::mem::replace(&mut self.items, updated);
+
+        Ok(())
     }
 
     async fn revert_local(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
-        let (add, remove) = self.segregate_label();
-
+        let items = std::mem::take(&mut self.items);
         tx.sync_bridge(|tx| {
-            for (label, ids) in add {
-                T::remove_label(label, ids, tx)?;
-            }
-
-            for (label, ids) in remove {
-                T::apply_label(label, ids, tx)?;
+            for data in items.into_values() {
+                for (label_id, modified) in data.added {
+                    Message::remove_label(label_id, modified, tx)?;
+                }
+                for (label_id, modified) in data.removed {
+                    Message::apply_label(label_id, modified, tx)?;
+                }
             }
             Ok(())
         })
@@ -1218,6 +1269,29 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
 
         let almost_all_mail_id = LabelId::almost_all_mail();
 
+        // TODO(ET-5398): The order has been inverted to handle a the undo move case correctly
+        // by first removing the current location label and then adding the target.
+        for (label, items) in remove {
+            let label_id = Label::resolve_remote_label_id(label, guard.tether()).await?;
+            let items = T::local_ids_counterpart(items, guard.tether()).await?;
+
+            if label_id == almost_all_mail_id {
+                // This does not need to be communicated to the server, but this action is used
+                // by other actions to revert local state, so this may appear.
+                continue;
+            }
+
+            let failed_ids = T::api_remove_label(api, items, label_id).await?;
+            if !failed_ids.is_empty() {
+                guard
+                    .tx::<_, _, anyhow::Error>(async move |tx| {
+                        RollbackItem::save_many(tx, failed_ids, T::ROLLBACK_ITEM_TYPE).await?;
+                        Ok(())
+                    })
+                    .await?;
+            }
+        }
+
         for (label, items) in add {
             let label_id = Label::resolve_remote_label_id(label, guard.tether()).await?;
 
@@ -1230,27 +1304,6 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
             let items = T::local_ids_counterpart(items, guard.tether()).await?;
 
             let failed_ids = T::api_apply_label(api, items, label_id).await?;
-            if !failed_ids.is_empty() {
-                guard
-                    .tx::<_, _, anyhow::Error>(async move |tx| {
-                        RollbackItem::save_many(tx, failed_ids, T::ROLLBACK_ITEM_TYPE).await?;
-                        Ok(())
-                    })
-                    .await?;
-            }
-        }
-
-        for (label, items) in remove {
-            let label_id = Label::resolve_remote_label_id(label, guard.tether()).await?;
-            let items = T::local_ids_counterpart(items, guard.tether()).await?;
-
-            if label_id == almost_all_mail_id {
-                // This does not need to be communicated to the server, but this action is used
-                // by other actions to revert local state, so this may appear.
-                continue;
-            }
-
-            let failed_ids = T::api_remove_label(api, items, label_id).await?;
             if !failed_ids.is_empty() {
                 guard
                     .tx::<_, _, anyhow::Error>(async move |tx| {
@@ -1275,13 +1328,22 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
         HashMap<LocalLabelId, Vec<T::IdType>>,
     ) {
         let mut add = HashMap::<_, Vec<_>>::new();
-        for &LabelPair { label, id } in &self.add {
-            add.entry(label).or_default().push(id);
-        }
-
         let mut remove = HashMap::<_, Vec<_>>::new();
-        for &LabelPair { label, id } in &self.remove {
-            remove.entry(label).or_default().push(id);
+        for (id, data) in &self.items {
+            for (label_id, _) in data
+                .added
+                .iter()
+                .filter(|(_, modified)| !modified.is_empty())
+            {
+                add.entry(*label_id).or_default().push(*id);
+            }
+            for (label_id, _) in data
+                .removed
+                .iter()
+                .filter(|(_, modified)| !modified.is_empty())
+            {
+                remove.entry(*label_id).or_default().push(*id);
+            }
         }
 
         (add, remove)
@@ -1302,7 +1364,7 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.add.is_empty() && self.remove.is_empty()
+        self.items.is_empty()
     }
 
     pub fn convert(old_version: u32, data: &[u8]) -> action::FactoryResult<Self> {
@@ -1315,34 +1377,78 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
             source_label_id: LocalLabelId,
         }
 
+        #[derive(Clone, Debug, Deserialize, Serialize)]
+        struct LabelAsDataV2<T: ConversationOrMessage> {
+            source_label_id: LocalLabelId,
+            add: Vec<LabelPair<T::IdType>>,
+            remove: Vec<LabelPair<T::IdType>>,
+        }
+
         match old_version {
             1 => {
                 let data = proton_action_queue::action::deserialize::<OldAction<T>>(data)?;
 
-                let add = data
-                    .added_labels
-                    .into_iter()
-                    .flat_map(|(id, labels)| {
-                        labels.into_iter().map(move |label| LabelPair { label, id })
-                    })
-                    .collect();
-                let remove = data
-                    .removed_labels
-                    .into_iter()
-                    .flat_map(|(id, labels)| {
-                        labels.into_iter().map(move |label| LabelPair { label, id })
-                    })
-                    .collect();
+                let mut items = HashMap::new();
+                for (id, labels_id) in data.added_labels {
+                    let entry: &mut LabelAsDataEntry = items.entry(id).or_default();
+                    for label_id in labels_id {
+                        entry.added.entry(label_id).or_default();
+                    }
+                }
+                for (id, labels_id) in data.removed_labels {
+                    let entry: &mut LabelAsDataEntry = items.entry(id).or_default();
+                    for label_id in labels_id {
+                        entry.removed.entry(label_id).or_default();
+                    }
+                }
 
                 Ok(Self {
-                    source_label_id: data.source_label_id,
-                    add,
-                    remove,
+                    source_label_id: (data.source_label_id.as_u64() != 0)
+                        .then_some(data.source_label_id),
+                    items,
                 })
             }
-            2 => Ok(proton_action_queue::action::deserialize::<Self>(data)?),
+            2 => {
+                let old = proton_action_queue::action::deserialize::<LabelAsDataV2<T>>(data)?;
+                Ok(Self {
+                    source_label_id: (old.source_label_id.as_u64() != 0)
+                        .then_some(old.source_label_id),
+                    items: Self::convert_label_pair_vec(old.add, old.remove),
+                })
+            }
+            3 => Ok(proton_action_queue::action::deserialize::<Self>(data)?),
             other_version => Err(FactoryError::InvalidVersion(other_version)),
         }
+    }
+
+    pub(crate) fn reversed(&self) -> Self {
+        let mut items = self.items.clone();
+        for data in items.values_mut() {
+            std::mem::swap(&mut data.added, &mut data.removed);
+        }
+        Self {
+            source_label_id: None,
+            items,
+        }
+    }
+
+    pub async fn rebase_local(
+        &mut self,
+        rebase_change_set: &RebaseChangeSet,
+        tx: &Bond<'_>,
+    ) -> Result<(), MailActionError> {
+        for (id, data) in &mut self.items {
+            let rebase_key: RebaseKey = (*id).into();
+            if rebase_change_set.contains(&rebase_key) {
+                for (label_id, values) in &mut data.added {
+                    *values = T::apply_label_async(*label_id, [*id], tx).await?;
+                }
+                for (label_id, values) in &mut data.removed {
+                    *values = T::remove_label_async(*label_id, [*id], tx).await?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 

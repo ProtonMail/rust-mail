@@ -390,6 +390,454 @@ async fn label_as_with_archive() {
     );
 }
 
+#[cfg(feature = "action_rebase")]
+mod rebase {
+    use super::*;
+    use pretty_assertions::{assert_eq, assert_ne};
+    use proton_action_queue::action::ActionGroup;
+    use proton_action_queue::rebase::RebaseChangeSet;
+    use proton_core_common::datatypes::LocalLabelId;
+    use proton_mail_common::models::ConversationLabel;
+    use proton_mail_common::test_utils::scroller::StoreLabeledModelMap;
+    use proton_mail_common::{MailUserContext, conv_id, conversation, message, msg_id};
+    use std::sync::Arc;
+
+    // NOTE: The must_archive rebase is handled by the message/conv move rules.
+    fn custom_label_id1() -> LabelId {
+        LabelId::from("Custom1")
+    }
+
+    fn custom_label_id2() -> LabelId {
+        LabelId::from("Custom2")
+    }
+
+    fn custom_label_id3() -> LabelId {
+        LabelId::from("Custom3")
+    }
+
+    async fn local_label_id(label_id: LabelId, tether: &Tether) -> LocalLabelId {
+        Label::remote_id_counterpart(label_id, &tether)
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
+    async fn setup() -> (MailTestContext, Arc<MailUserContext>, Message, Message) {
+        setup_with_mocks(async |_, _, _| {}).await
+    }
+
+    async fn setup_with_mocks(
+        mk_mocks: impl AsyncFnOnce(&MailTestContext, &Message, &Message),
+    ) -> (MailTestContext, Arc<MailUserContext>, Message, Message) {
+        let ctx = MailTestContext::new().await;
+        let mut params = TestParams::default_basic();
+        params.labels.entry(ApiLabelType::Folder).or_insert(vec![
+            ApiLabel {
+                id: custom_label_id1(),
+                parent_id: None,
+                color: "".to_string(),
+                display: false,
+                expanded: false,
+                label_type: ApiLabelType::Label,
+                name: "Custom1".to_string(),
+                notify: false,
+                order: 0,
+                path: None,
+                sticky: false,
+            },
+            ApiLabel {
+                id: custom_label_id2(),
+                parent_id: None,
+                color: "".to_string(),
+                display: false,
+                expanded: false,
+                label_type: ApiLabelType::Label,
+                name: "Custom2".to_string(),
+                notify: false,
+                order: 0,
+                path: None,
+                sticky: false,
+            },
+            ApiLabel {
+                id: custom_label_id3(),
+                parent_id: None,
+                color: "".to_string(),
+                display: false,
+                expanded: false,
+                label_type: ApiLabelType::Label,
+                name: "Custom3".to_string(),
+                notify: false,
+                order: 0,
+                path: None,
+                sticky: false,
+            },
+        ]);
+        ctx.setup_user(params.clone()).await;
+        let user_ctx = ctx.mail_user_context().await;
+
+        let tether = &mut user_ctx.user_stash().connection().await.unwrap();
+
+        let mut conv_data1 = hash_map! {
+            vec![LabelId::inbox(),custom_label_id1()]: vec![
+                conversation!(remote_id: conv_id!("my_conv"),
+            labels: vec![ConversationLabel{remote_label_id:Some(LabelId::all_mail()), ..ConversationLabel::test_default()}]),
+            ]
+        };
+        conv_data1.save_to_database(tether).await;
+
+        let mut conv_data2 = hash_map! {
+            vec![LabelId::inbox(), custom_label_id2()]: vec![
+                conversation!(remote_id: conv_id!("my_conv2"),
+            labels: vec![ConversationLabel{remote_label_id:Some(LabelId::all_mail()), ..ConversationLabel::test_default()}]),
+            ]
+        };
+        conv_data2.save_to_database(tether).await;
+        let conv = &conv_data1
+            .get(&vec![LabelId::inbox(), custom_label_id1()])
+            .unwrap()[0];
+
+        // Message with unread, custom label.
+        let mut msg_data = hash_map! {
+            vec![LabelId::inbox(), custom_label_id1()]:
+            vec![message!(
+                    remote_id: msg_id!("my_message"),
+                    local_conversation_id: conv.local_id,
+                    remote_conversation_id: conv.remote_id.clone(),
+                    label_ids:vec![LabelId::all_mail(), LabelId::almost_all_mail()],
+                    unread:true
+            )],
+        };
+        msg_data.save_to_database(tether).await;
+
+        let message_1 = msg_data
+            .get(&vec![LabelId::inbox(), custom_label_id1()])
+            .unwrap()[0]
+            .clone();
+
+        let conv = &conv_data2
+            .get(&vec![LabelId::inbox(), custom_label_id2()])
+            .unwrap()[0];
+        let mut msg_data = hash_map! {
+        vec![LabelId::inbox(), custom_label_id2()]:
+        vec![message!(
+                remote_id: msg_id!("my_message_2"),
+                local_conversation_id: conv.local_id,
+                remote_conversation_id: conv.remote_id.clone(),
+                label_ids:vec![LabelId::all_mail(), LabelId::almost_all_mail()],
+                unread:false
+        )]};
+        msg_data.save_to_database(tether).await;
+        let message_2 = msg_data
+            .get(&vec![LabelId::inbox(), custom_label_id2()])
+            .unwrap()[0]
+            .clone();
+
+        mk_mocks(&ctx, &message_1, &message_2).await;
+        ctx.catch_all().await;
+
+        (ctx, user_ctx, message_1, message_2)
+    }
+
+    #[tokio::test]
+    async fn simple() {
+        let (_test_ctx, user_ctx, mut original_message, _) = setup().await;
+
+        let tether = &mut user_ctx.user_stash().connection().await.unwrap();
+
+        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
+        let local_custom_label_id1 = local_label_id(custom_label_id1(), &tether).await;
+        let local_custom_label_id2 = local_label_id(custom_label_id2(), &tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+
+        let undo = Message::action_label_as(
+            tether,
+            user_ctx.action_queue(),
+            local_inbox,
+            vec![original_message.id()],
+            vec![local_custom_label_id3],
+            vec![local_custom_label_id1, local_custom_label_id2],
+            false,
+        )
+        .await
+        .unwrap();
+
+        let labeled_message = Message::find_by_id(original_message.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        // simulate state reset.
+        tether
+            .tx(async |tx| original_message.save(tx).await)
+            .await
+            .unwrap();
+
+        let rebase_change_set = RebaseChangeSet::from(original_message.id());
+
+        user_ctx
+            .action_queue()
+            .rebase(ActionGroup::default(), &rebase_change_set)
+            .await
+            .unwrap();
+
+        let rebased_message = Message::find_by_id(original_message.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(rebased_message, labeled_message);
+        assert_ne!(rebased_message, original_message);
+
+        undo.undo
+            .unwrap()
+            .undo(user_ctx.action_queue(), tether)
+            .await
+            .unwrap();
+
+        let undoed_message = Message::find_by_id(original_message.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(undoed_message, original_message);
+    }
+
+    #[tokio::test]
+    async fn rebase_to_same_state_is_noop() {
+        let (_test_ctx, user_ctx, original_message, _) = setup().await;
+
+        let tether = &mut user_ctx.user_stash().connection().await.unwrap();
+
+        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
+        let local_custom_label_id1 = local_label_id(custom_label_id1(), &tether).await;
+        let local_custom_label_id2 = local_label_id(custom_label_id2(), &tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+
+        let _ = Message::action_label_as(
+            tether,
+            user_ctx.action_queue(),
+            local_inbox,
+            vec![original_message.id()],
+            vec![local_custom_label_id3],
+            vec![local_custom_label_id1, local_custom_label_id2],
+            false,
+        )
+        .await
+        .unwrap();
+
+        let labeled_message = Message::find_by_id(original_message.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        // simulate state update to target.
+        let rebase_change_set = RebaseChangeSet::from(original_message.id());
+
+        user_ctx
+            .action_queue()
+            .rebase(ActionGroup::default(), &rebase_change_set)
+            .await
+            .unwrap();
+
+        let rebased_message = Message::find_by_id(original_message.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(rebased_message, labeled_message);
+        assert_ne!(rebased_message, original_message);
+
+        assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn rebase_reverts_to_last_updated_state() {
+        let (_test_ctx, user_ctx, original_message, _) = setup().await;
+
+        let tether = &mut user_ctx.user_stash().connection().await.unwrap();
+
+        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+
+        let undo = Message::action_label_as(
+            tether,
+            user_ctx.action_queue(),
+            local_inbox,
+            vec![original_message.id()],
+            vec![local_custom_label_id3],
+            vec![],
+            false,
+        )
+        .await
+        .unwrap();
+
+        let labeled_message = Message::find_by_id(original_message.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let mut updated_message = Message {
+            label_ids: vec![
+                LabelId::inbox(),
+                custom_label_id2(),
+                LabelId::almost_all_mail(),
+                LabelId::all_mail(),
+            ],
+            ..labeled_message.clone()
+        };
+
+        tether
+            .tx(async |tx| updated_message.save(tx).await)
+            .await
+            .unwrap();
+
+        // correct label order.
+        updated_message.reload(tether).await.unwrap();
+
+        // simulate state update to target.
+        let rebase_change_set = RebaseChangeSet::from(original_message.id());
+
+        user_ctx
+            .action_queue()
+            .rebase(ActionGroup::default(), &rebase_change_set)
+            .await
+            .unwrap();
+
+        user_ctx
+            .action_queue()
+            .cancel(undo.undo.unwrap().action_id())
+            .await
+            .unwrap();
+
+        let reverted_message = Message::find_by_id(original_message.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(reverted_message, updated_message);
+    }
+
+    #[tokio::test]
+    async fn rebase_only_targets_modified_items() {
+        let (_test_ctx, user_ctx, mut original_message1, mut original_message2) = setup().await;
+
+        let tether = &mut user_ctx.user_stash().connection().await.unwrap();
+
+        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
+        let local_custom_label_id1 = local_label_id(custom_label_id1(), &tether).await;
+        let local_custom_label_id2 = local_label_id(custom_label_id2(), &tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+
+        let _ = Message::action_label_as(
+            tether,
+            user_ctx.action_queue(),
+            local_inbox,
+            vec![original_message1.id(), original_message2.id()],
+            vec![local_custom_label_id3],
+            vec![local_custom_label_id1, local_custom_label_id2],
+            false,
+        )
+        .await
+        .unwrap();
+
+        let labeled_message1 = Message::find_by_id(original_message1.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let labeled_message2 = Message::find_by_id(original_message2.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        // simulate state reset.
+        tether
+            .tx(async |tx| {
+                original_message1.save(tx).await?;
+                original_message2.save(tx).await
+            })
+            .await
+            .unwrap();
+
+        let rebase_change_set = RebaseChangeSet::from(original_message1.id());
+
+        user_ctx
+            .action_queue()
+            .rebase(ActionGroup::default(), &rebase_change_set)
+            .await
+            .unwrap();
+
+        let rebased_message1 = Message::find_by_id(original_message1.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let rebased_message2 = Message::find_by_id(original_message2.id(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(rebased_message1, labeled_message1);
+        assert_ne!(rebased_message1, original_message1);
+        // message 2 was not modified
+        assert_eq!(rebased_message2, original_message2);
+        assert_ne!(rebased_message2, labeled_message2)
+    }
+
+    #[tokio::test]
+    async fn rebase_stack_still_applies_all_state_if_current_is_up_to_date() {
+        let (_test_ctx, user_ctx, original_message, _) = setup_with_mocks(async |ctx, msg1, _| {
+            ctx.mock_label_messages(&custom_label_id3(), vec![msg1.remote_id.clone().unwrap()])
+                .await;
+            ctx.mock_unlabel_messages(
+                &custom_label_id3(),
+                vec![msg1.remote_id.clone().unwrap()],
+                vec![],
+            )
+            .await;
+        })
+        .await;
+
+        let tether = &mut user_ctx.user_stash().connection().await.unwrap();
+
+        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+
+        let _ = Message::action_label_as(
+            tether,
+            user_ctx.action_queue(),
+            local_inbox,
+            vec![original_message.id()],
+            vec![local_custom_label_id3],
+            vec![],
+            false,
+        )
+        .await
+        .unwrap();
+
+        let _ = Message::action_label_as(
+            tether,
+            user_ctx.action_queue(),
+            local_inbox,
+            vec![original_message.id()],
+            vec![],
+            vec![],
+            false,
+        )
+        .await
+        .unwrap();
+
+        let rebase_change_set = RebaseChangeSet::from(original_message.id());
+
+        user_ctx
+            .action_queue()
+            .rebase(ActionGroup::default(), &rebase_change_set)
+            .await
+            .unwrap();
+
+        assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 2);
+    }
+}
+
 fn test_label(label_id: &LabelId, name: &str) -> ApiLabel {
     ApiLabel {
         id: label_id.clone(),
