@@ -3039,7 +3039,8 @@ pub struct ConversationLabel {
         Debug = "ignore",
         PartialEq = "ignore",
         Hash = "ignore",
-        PartialOrd = "ignore"
+        PartialOrd = "ignore",
+        Ord = "ignore"
     )]
     pub local_id: Option<u64>,
 
