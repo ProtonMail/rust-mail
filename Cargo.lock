@@ -5635,6 +5635,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-mail-html-transformer-fuzz"
+version = "0.0.0"
+dependencies = [
+ "libfuzzer-sys",
+ "proton-mail-html-transformer",
+]
+
+[[package]]
 name = "proton-mail-tui"
 version = "0.4.1"
 dependencies = [

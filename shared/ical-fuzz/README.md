@@ -9,7 +9,11 @@ Fuzzing suite for the ical crate.
 
 ``` bash
 $ cd shared/ical-fuzz
+
 $ rustup default nightly
+# ^ if you're using devenv, remember to comment-out rustc in there, so that
+#   the rustup override here is actually applied
+
 $ cargo fuzz run main --fuzz-dir=. -- -timeout=1s -max_len=32000
 ```
 
