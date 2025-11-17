@@ -17,6 +17,36 @@ use std::{collections::HashSet, sync::LazyLock};
 use tracing::warn;
 use velcro::hash_set;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StripStyleSheets {
+    Yes,
+    No,
+}
+
+static STYLE_ATTRIBUTES_SET: LazyLock<HashSet<LocalName>> = LazyLock::new(|| {
+    hash_set! {
+        LocalName::from("style"),
+        LocalName::from("data-proton-original-style"),
+        LocalName::from("bgcolor"),
+        LocalName::from("color"),
+        LocalName::from("background"),
+        LocalName::from("align"),
+        LocalName::from("valign"),
+        LocalName::from("border"),
+        LocalName::from("cellpadding"),
+        LocalName::from("cellspacing"),
+        LocalName::from("width"),
+        LocalName::from("height"),
+        LocalName::from("size"),
+        LocalName::from("face"),
+        LocalName::from("clear"),
+        // Some pasted HTML (e.g., from Wikipedia) includes `srcset` attributes
+        // with scheme-relative URLs such as `//upload.wikimedia.org/...`., causing images
+        // to fail loading and appear as empty frames.
+        LocalName::from("srcset"),
+    }
+});
+
 static TAG_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     hash_set! {
         "a",
@@ -275,8 +305,10 @@ static TAGS_TO_REMOVE_WITH_INNER_HTML: LazyLock<HashSet<&'static str>> = LazyLoc
 /// - Extra disallowed tags: `style`, `input`, `form`
 /// - Extra disallowed attributes `srcset`, `for`
 /// - Only html tags and attributes are included. This is, svg and mathML are disallowed.
-pub fn strip_whitelist(doc: NodeRef) -> u64 {
-    let css_style_attribute = ExpandedName::new("", "style");
+pub fn strip_whitelist(doc: NodeRef, strip_style_sheets: StripStyleSheets) -> u64 {
+    let css_style_attribute = LocalName::from("style");
+    let css_style_node = LocalName::from("style");
+
     let rem = doc
         .traverse_inclusive()
         .filter_map(|node| match node {
@@ -292,8 +324,12 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
                     return Some((node_ref, should_remove_inner_html));
                 }
 
-                // sanitize style sheet urls - invalid urls are stripped by the parser.
-                if e.name.local.as_ref() == "style" {
+                // Remove style elements when sanitizing pasted content
+                if e.name.local == css_style_node {
+                    if strip_style_sheets == StripStyleSheets::Yes {
+                        return Some((node_ref, true));
+                    }
+                    // sanitize style sheet urls - invalid urls are stripped by the parser.
                     node_ref.children().for_each(|child| {
                         if let NodeData::Text(text) = child.data() {
                             handle_style_sheet(&mut text.borrow_mut());
@@ -303,13 +339,20 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
 
                 let mut attrs = e.attributes.borrow_mut();
                 attrs.map.retain(|name, value| {
+                    // Remove style-related attributes when sanitizing pasted content
+                    if strip_style_sheets == StripStyleSheets::Yes
+                        && STYLE_ATTRIBUTES_SET.contains(&name.local)
+                    {
+                        return false;
+                    }
+
                     if !(ATTR_SET.contains(&name.local) && validate_uri_attribute(name, value)) {
                         return false;
                     }
 
                     // sanitize css style attributes urls - invalid urls are stripped
                     // by the parser.
-                    if *name == css_style_attribute {
+                    if name.local == css_style_attribute {
                         handle_style_attribute(&mut value.value);
                     }
 

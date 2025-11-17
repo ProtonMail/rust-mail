@@ -995,3 +995,8 @@ fn draft_options() -> DraftActorOptions {
         auto_save_every: Some(Duration::from_secs(0)),
     }
 }
+
+#[uniffi::export]
+pub fn sanitize_pasted_html(content: &str) -> String {
+    proton_mail_common::draft::compose::sanitize_pasted_content(content)
+}

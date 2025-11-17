@@ -1,0 +1,5 @@
+---
+source: mail/mail-common/src/draft/../tests/draft/compose.rs
+expression: result
+---
+<html><head></head><body><p style="color: red" bgcolor="blue">Content</p></body></html>

@@ -20,6 +20,7 @@ use proton_core_common::models::{Address, ModelIdExtension, PaidSubscription, Us
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
+use proton_mail_html_transformer::sanitizer::StripStyleSheets;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{
     BrowserCapabilities, IncludeFullStaticCss, InjectDarkModeOptions, dark_mode_for_plaintext,
@@ -340,7 +341,7 @@ pub fn html_to_text(input: &str) -> String {
     transformer.transform_from_proton_schemes();
     transformer.add_noreferrer();
     transformer.strip_utm();
-    transformer.strip_whitelist();
+    transformer.strip_whitelist(StripStyleSheets::No);
 
     match transformer.to_plain_text(Html2TextOptions {
         decorate_links: false,
@@ -403,16 +404,25 @@ pub fn inject_dark_mode(
     }
 }
 
+pub fn sanitize_html_content(transformer: &mut Transformer, strip_style_sheets: StripStyleSheets) {
+    transformer.transform_from_proton_schemes();
+    transformer.add_noreferrer();
+    transformer.strip_utm();
+    transformer.strip_whitelist(strip_style_sheets);
+    transformer.revert_dark_mode_in_inline_attributes();
+}
+
+pub fn sanitize_pasted_content(body: &str) -> String {
+    let mut transformer = Transformer::new(body);
+    sanitize_html_content(&mut transformer, StripStyleSheets::Yes);
+    transformer.to_string()
+}
+
 pub fn maybe_sanitize(mime_type: MessageMimeType, body: &str) -> String {
     match mime_type {
         MessageMimeType::TextHtml => {
             let mut transformer = Transformer::new(body);
-
-            transformer.transform_from_proton_schemes();
-            transformer.add_noreferrer();
-            transformer.strip_utm();
-            transformer.strip_whitelist();
-            transformer.revert_dark_mode_in_inline_attributes();
+            sanitize_html_content(&mut transformer, StripStyleSheets::No);
             transformer.to_string()
         }
 
@@ -424,7 +434,7 @@ pub fn maybe_sanitize(mime_type: MessageMimeType, body: &str) -> String {
 /// Extracts `<body>` innerHTML from the message.
 fn sanitize_reply(body: &str) -> String {
     let mut html = Transformer::new(body);
-    html.strip_whitelist();
+    html.strip_whitelist(StripStyleSheets::No);
     html.extract_body()
 }
 

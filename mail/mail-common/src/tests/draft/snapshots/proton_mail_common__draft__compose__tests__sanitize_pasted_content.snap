@@ -1,0 +1,11 @@
+---
+source: mail/mail-common/src/draft/../tests/draft/compose.rs
+expression: result
+---
+<html><head></head>
+            <body>
+                <div>
+                    <p>Pasted content</p>
+                </div>
+            
+        </body></html>
