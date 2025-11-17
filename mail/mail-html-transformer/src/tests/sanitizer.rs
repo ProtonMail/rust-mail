@@ -1,5 +1,6 @@
 use crate::Transformer;
 use crate::sanitizer::StripStyleSheets;
+use test_case::test_case;
 
 #[test]
 fn acceptable_html() {
@@ -110,14 +111,14 @@ fn sanitize_styles_no_preserves_style_elements() {
     insta::assert_snapshot!(result);
 }
 
-#[test]
-fn sanitize_styles_yes_removes_srcset() {
+#[test_case(StripStyleSheets::No)]
+#[test_case(StripStyleSheets::Yes)]
+fn sanitize_styles_always_removes_srcset(should_strip: StripStyleSheets) {
     // Required by android
-    let html =
-        r#"<img src="image.jpg" srcset="image-320w.jpg 320w, image-480w.jpg 480w" alt="test">"#;
+    let html = r#"<img src="http://localhost/image.jpg" srcset="image-320w.jpg 320w, image-480w.jpg 480w" alt="test">"#;
 
     let mut t = Transformer::new(html);
-    t.strip_whitelist(StripStyleSheets::Yes);
+    t.strip_whitelist(should_strip);
     let result = t.to_string();
 
     insta::assert_snapshot!(result);

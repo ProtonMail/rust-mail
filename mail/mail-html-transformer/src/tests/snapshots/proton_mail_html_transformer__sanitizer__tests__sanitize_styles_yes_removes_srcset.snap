@@ -1,5 +1,0 @@
----
-source: mail/mail-html-transformer/src/tests/sanitizer.rs
-expression: result
----
-<html><head></head><body><img alt="test"></body></html>
