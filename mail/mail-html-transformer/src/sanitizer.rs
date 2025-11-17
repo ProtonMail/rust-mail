@@ -306,7 +306,9 @@ static TAGS_TO_REMOVE_WITH_INNER_HTML: LazyLock<HashSet<&'static str>> = LazyLoc
 /// - Extra disallowed attributes `srcset`, `for`
 /// - Only html tags and attributes are included. This is, svg and mathML are disallowed.
 pub fn strip_whitelist(doc: NodeRef, strip_style_sheets: StripStyleSheets) -> u64 {
-    let css_style_attribute = ExpandedName::new("", "style");
+    let css_style_attribute = LocalName::from("style");
+    let css_style_node = LocalName::from("style");
+
     let rem = doc
         .traverse_inclusive()
         .filter_map(|node| match node {
@@ -323,7 +325,7 @@ pub fn strip_whitelist(doc: NodeRef, strip_style_sheets: StripStyleSheets) -> u6
                 }
 
                 // Remove style elements when sanitizing pasted content
-                if e.name.local.as_ref() == "style" {
+                if e.name.local == css_style_node {
                     if strip_style_sheets == StripStyleSheets::Yes {
                         return Some((node_ref, true));
                     }
@@ -350,7 +352,7 @@ pub fn strip_whitelist(doc: NodeRef, strip_style_sheets: StripStyleSheets) -> u6
 
                     // sanitize css style attributes urls - invalid urls are stripped
                     // by the parser.
-                    if *name == css_style_attribute {
+                    if name.local == css_style_attribute {
                         handle_style_attribute(&mut value.value);
                     }
 
