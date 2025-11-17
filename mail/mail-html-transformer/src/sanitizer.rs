@@ -18,7 +18,7 @@ use tracing::warn;
 use velcro::hash_set;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SanitizeStyles {
+pub enum StripStyleSheets {
     Yes,
     No,
 }
@@ -305,7 +305,7 @@ static TAGS_TO_REMOVE_WITH_INNER_HTML: LazyLock<HashSet<&'static str>> = LazyLoc
 /// - Extra disallowed tags: `style`, `input`, `form`
 /// - Extra disallowed attributes `srcset`, `for`
 /// - Only html tags and attributes are included. This is, svg and mathML are disallowed.
-pub fn strip_whitelist(doc: NodeRef, sanitize_styles: SanitizeStyles) -> u64 {
+pub fn strip_whitelist(doc: NodeRef, strip_style_sheets: StripStyleSheets) -> u64 {
     let css_style_attribute = ExpandedName::new("", "style");
     let rem = doc
         .traverse_inclusive()
@@ -324,7 +324,7 @@ pub fn strip_whitelist(doc: NodeRef, sanitize_styles: SanitizeStyles) -> u64 {
 
                 // Remove style elements when sanitizing pasted content
                 if e.name.local.as_ref() == "style" {
-                    if sanitize_styles == SanitizeStyles::Yes {
+                    if strip_style_sheets == StripStyleSheets::Yes {
                         return Some((node_ref, true));
                     }
                     // sanitize style sheet urls - invalid urls are stripped by the parser.
@@ -338,7 +338,7 @@ pub fn strip_whitelist(doc: NodeRef, sanitize_styles: SanitizeStyles) -> u64 {
                 let mut attrs = e.attributes.borrow_mut();
                 attrs.map.retain(|name, value| {
                     // Remove style-related attributes when sanitizing pasted content
-                    if sanitize_styles == SanitizeStyles::Yes
+                    if strip_style_sheets == StripStyleSheets::Yes
                         && STYLE_ATTRIBUTES_SET.contains(&name.local)
                     {
                         return false;

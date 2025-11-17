@@ -37,7 +37,7 @@
 use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
 use message_detector::SplitDoc;
-use sanitizer::SanitizeStyles;
+use sanitizer::StripStyleSheets;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 use transforms::{ColorMode, keep_spaces_and_escape_gt_and_lt, styles::BrowserCapabilities};
@@ -160,8 +160,8 @@ impl Transformer {
     ///
     /// See [`sanitizer::strip_whitelist`] for more details.
     #[tracing::instrument(skip_all)]
-    pub fn strip_whitelist(&mut self, sanitize_styles: SanitizeStyles) -> u64 {
-        sanitizer::strip_whitelist(self.document.clone(), sanitize_styles)
+    pub fn strip_whitelist(&mut self, strip_style_sheets: StripStyleSheets) -> u64 {
+        sanitizer::strip_whitelist(self.document.clone(), strip_style_sheets)
     }
 
     /// Reverts dark mode injection in inline attributes.

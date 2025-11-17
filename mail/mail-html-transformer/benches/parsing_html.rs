@@ -7,7 +7,7 @@ use std::hint::black_box;
 
 use proton_mail_html_transformer::{
     Transformer, message_detector, remote_content,
-    sanitizer::{self, SanitizeStyles},
+    sanitizer::{self, StripStyleSheets},
     transforms::{
         self,
         styles::{BrowserCapabilities, IncludeFullStaticCss},
@@ -69,7 +69,7 @@ pub fn parse(c: &mut Criterion) {
         c.bench_function("strip", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                let _ = sanitizer::strip_whitelist(tr.document(), SanitizeStyles::No);
+                let _ = sanitizer::strip_whitelist(tr.document(), StripStyleSheets::No);
             })
         });
 
@@ -136,7 +136,7 @@ pub fn all_transforms(c: &mut Criterion) {
                 t.strip_utm();
                 t.disable_content(true, true);
                 t.inject_ios_content_size();
-                _ = t.strip_whitelist(SanitizeStyles::No);
+                _ = t.strip_whitelist(StripStyleSheets::No);
                 t.inject_dark_mode(
                     "test@pm.me",
                     transforms::ColorMode::LightMode,

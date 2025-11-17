@@ -1160,7 +1160,7 @@ fn test_sanitize_html_content_with_styles_no() {
 
     crate::draft::compose::sanitize_html_content(
         &mut transformer,
-        proton_mail_html_transformer::sanitizer::SanitizeStyles::No,
+        proton_mail_html_transformer::sanitizer::StripStyleSheets::No,
     );
     let result = transformer.to_string();
 
@@ -1174,7 +1174,7 @@ fn test_sanitize_html_content_with_styles_yes() {
 
     crate::draft::compose::sanitize_html_content(
         &mut transformer,
-        proton_mail_html_transformer::sanitizer::SanitizeStyles::Yes,
+        proton_mail_html_transformer::sanitizer::StripStyleSheets::Yes,
     );
     let result = transformer.to_string();
 

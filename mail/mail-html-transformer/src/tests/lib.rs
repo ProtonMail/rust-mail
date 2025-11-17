@@ -1,5 +1,5 @@
 use super::*;
-use crate::sanitizer::SanitizeStyles;
+use crate::sanitizer::StripStyleSheets;
 
 #[test]
 fn pathologic_nested() {
@@ -10,7 +10,7 @@ fn pathologic_nested() {
     t.strip_utm();
     t.disable_content(true, true);
     t.inject_ios_content_size();
-    _ = t.strip_whitelist(SanitizeStyles::No);
+    _ = t.strip_whitelist(StripStyleSheets::No);
     t.inject_dark_mode(
         "",
         ColorMode::LightMode,
