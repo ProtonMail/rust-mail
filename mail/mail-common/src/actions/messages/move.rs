@@ -99,8 +99,11 @@ impl UndoMoveToMessages {
         // The queue couldn't revert. This means that we're on our own to undo this.
         let (label_as, mark_unread) = self.action.0.build_undo_states();
 
-        enqueue!(queue, [label_as, mark_unread,])?;
-
+        if let Some(mark_unread) = mark_unread {
+            enqueue!(queue, [label_as, mark_unread])?;
+        } else {
+            enqueue!(queue, [label_as])?;
+        }
         Ok(())
     }
 }

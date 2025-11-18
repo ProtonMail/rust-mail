@@ -1,17 +1,13 @@
 use proton_core_api::session::Session;
-use std::collections::HashSet;
-use std::mem;
 
 use crate::AppError;
-use crate::actions::conversations::Move as MoveAction;
-use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
+use crate::actions::conversations::Move;
+use crate::actions::{LabelAsData, MailActionError};
 use crate::models::{Conversation, ConversationCounters};
-use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionDependencyKeys, ActionId, FactoryResult, Handler, Type, VersionConverter,
-    WriterGuard,
+    Action, ActionDependencyKeys, ActionId, FactoryResult, Handler, Metadata, Type,
+    VersionConverter, WriterGuard,
 };
-use proton_action_queue::enqueue;
 use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{Deserialize, Serialize};
@@ -30,7 +26,7 @@ impl VersionConverter for LabelAs {
 }
 impl Action for LabelAs {
     const TYPE: Type = Type("label_conversation_as");
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     type VersionConverter = Self;
     type Handler = LabelAsHandler;
     type RemoteOutput = ();
@@ -57,9 +53,13 @@ impl Handler for LabelAsHandler {
     ) -> Result<bool, <Self::Action as Action>::Error> {
         action.0.apply_local_common(tx).await?;
 
-        let total = ConversationCounters::load(action.0.source_label_id, tx)
-            .await?
-            .map_or(0, |x| x.total);
+        let total = if let Some(label_id) = action.0.source_label_id {
+            ConversationCounters::load(label_id, tx)
+                .await?
+                .map_or(0, |x| x.total)
+        } else {
+            0
+        };
         Ok(total == 0)
     }
 
@@ -84,13 +84,12 @@ impl Handler for LabelAsHandler {
 
     async fn rebase_local(
         &self,
-        this_id: ActionId,
+        _: ActionId,
         action: &mut Self::Action,
-        _: &RebaseChangeSet,
+        changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        //TODO(ET-5183): Test me!
-        self.apply_local(this_id, action, tx).await?;
+        action.0.rebase_local(changeset, tx).await?;
         Ok(())
     }
 }
@@ -98,41 +97,55 @@ impl Handler for LabelAsHandler {
 pub struct UndoLabelAsConversations {
     pub action: LabelAs,
     pub id: ActionId,
-    pub must_archive: bool,
+    pub must_archive: Option<UndoLabelAsArchiveConversations>,
+}
+
+pub struct UndoLabelAsArchiveConversations {
+    pub action: Move,
+    pub id: ActionId,
 }
 
 impl UndoLabelAsConversations {
-    pub async fn undo(self, queue: &Queue, tether: &Tether) -> Result<(), AppError> {
-        let mut action = self.action;
-        if queue.cancel(self.id).await.is_ok() {
-            // The undoing is done by the revert_local of the action.
-            return Ok(());
+    pub async fn undo(self, queue: &Queue, _: &Tether) -> Result<(), AppError> {
+        let cancelled_id = match queue.cancel(self.id).await {
+            Ok(ids) => ids,
+            Err(_) => {
+                // The queue couldn't revert. This means that we're on our own to undo this.
+                // Let's create the opposite action: Swap add and remove.
+                let action = LabelAs(self.action.0.reversed());
+                queue
+                    .queue_action_with_metadata(
+                        action,
+                        Metadata::builder().with_dependency(self.id).build(),
+                    )
+                    .await?;
+                vec![]
+            }
         };
 
-        // The queue couldn't revert. This means that we're on our own to undo this.
-        // Let's create the opposite action: Swap add and remove.
-        mem::swap(&mut action.0.add, &mut action.0.remove);
-        if self.must_archive {
-            let mut all = HashSet::new();
-            for &i in &action.0.add {
-                all.insert(i.id);
-            }
-
-            for &i in &action.0.remove {
-                all.insert(i.id);
-            }
-
-            if let Some(move_action_data) =
-                ActionMoveData::new(tether, action.0.source_label_id, all).await?
+        if let Some(move_action) = self.must_archive {
+            if !cancelled_id.contains(&move_action.id)
+                && queue.cancel(move_action.id).await.is_err()
             {
-                let _id = enqueue!(queue, [action, MoveAction(move_action_data)])?;
-                return Ok(());
+                let (label, unread) = move_action.action.0.build_undo_states();
+                queue
+                    .tether()
+                    .await?
+                    .tx::<_, _, AppError>(async |tx| {
+                        let metadata = Metadata::builder().with_dependency(move_action.id).build();
+                        queue
+                            .queue_action_with_metadata_in_tx(label, metadata.clone(), tx)
+                            .await?;
+                        if let Some(unread) = unread {
+                            queue
+                                .queue_action_with_metadata_in_tx(unread, metadata.clone(), tx)
+                                .await?;
+                        }
+                        Ok(())
+                    })
+                    .await?;
             }
         };
-        queue
-            .queue_action(action)
-            .await
-            .context("Error queuing action")?;
         Ok(())
     }
 }

@@ -389,6 +389,9 @@ async fn move_into_trash_remove_label_and_mark_read() {
         .respond_with(vec![message.metadata.clone()])
         .await;
 
+    ctx.mock_unlabel_messages(&LabelId::trash(), vec![message.metadata.id.clone()], vec![])
+        .await;
+
     ctx.mock_label_messages(&LabelId::trash(), vec![message.metadata.id.clone()])
         .await;
 
@@ -927,6 +930,8 @@ async fn move_conversation_between_folders_and_undo() {
 
     ctx.mock_label_messages(&LabelId::inbox(), vec![message_id.clone()])
         .await;
+    ctx.mock_unlabel_messages(&LabelId::archive(), vec![message_id.clone()], vec![])
+        .await;
     ctx.mock_label_conversation(
         &LabelId::archive(),
         vec![conversation.id.clone()],
@@ -1207,8 +1212,16 @@ async fn move_conversation_mix_unread() {
         );
 
         let msgs = Message::in_label(local_inbox, tether).await.unwrap();
-        let unreads = msgs.iter().map(|m| m.unread).collect_vec();
-        assert_eq!(unreads, vec![false, true, true]);
+        let unreads = msgs
+            .iter()
+            .map(|m| (m.remote_id.clone(), m.unread))
+            .sorted_by(|(m1, _), (m2, _)| m1.cmp(m2))
+            .collect_vec();
+
+        assert_eq!(
+            unreads,
+            vec![(msg_id!(1), false), (msg_id!(2), true), (msg_id!(3), true)]
+        );
         for message in msgs {
             assert_eq!(
                 message.label_ids,

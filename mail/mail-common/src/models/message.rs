@@ -6,12 +6,12 @@ mod message_body;
 mod message_mime_type;
 pub use self::message_body::*;
 pub use self::message_mime_type::*;
-use crate::actions::messages::Delete;
 use crate::actions::messages::DeleteAllMessagesInLabel;
 use crate::actions::messages::Ham;
 use crate::actions::messages::Read;
 use crate::actions::messages::ReportPhishing;
 use crate::actions::messages::Unread;
+use crate::actions::messages::{Delete, UndoLabelAsArchiveMessages};
 use crate::actions::messages::{LabelAs, UndoLabelAsMessages};
 use crate::actions::messages::{Move, UndoMoveToMessages};
 use crate::actions::{
@@ -448,7 +448,7 @@ impl Message {
 
         // There are 4 possibilities:
         // - No labels   && no archive -> do nothing,  no undo
-        // - some labels && no archive -> queue label, no undo
+        // - some labels && no archive -> queue label, undo
         // - no labels   && archive    -> just move,   undo
         // - some labels && archive    -> queue both,  undo
 
@@ -461,16 +461,20 @@ impl Message {
                 }
             }
             (Some(label_as_action), None) => {
-                debug!("some labels && no archive -> queue label, no undo");
-                let input_label_is_empty = queue
-                    .queue_action(label_as_action)
+                debug!("some labels && no archive -> queue label, undo");
+
+                let action_output = queue
+                    .queue_action(label_as_action.clone())
                     .await
-                    .context("Error labeling locally")?
-                    .local;
+                    .context("Error labeling locally")?;
 
                 LabelAsOutput {
-                    input_label_is_empty,
-                    undo: None,
+                    input_label_is_empty: action_output.local,
+                    undo: Some(Undo::MessagesLabelAs(UndoLabelAsMessages {
+                        action: label_as_action,
+                        id: action_output.id,
+                        must_archive: None,
+                    })),
                 }
             }
             (None, Some(move_action)) => {
@@ -501,14 +505,17 @@ impl Message {
                     .with_dependency(queued_label_as.id)
                     .build();
 
-                queue
+                let queued_move = queue
                     .queue_action_with_metadata(move_action, meta)
                     .await
                     .context("Error queuing with move to archive dependency")?;
                 let undo = Some(Undo::MessagesLabelAs(UndoLabelAsMessages {
                     action: label_as_action,
                     id: queued_label_as.id,
-                    must_archive: true,
+                    must_archive: Some(UndoLabelAsArchiveMessages {
+                        id: queued_move.id,
+                        action: queued_move.local,
+                    }),
                 }));
 
                 LabelAsOutput {
@@ -2480,11 +2487,7 @@ impl ConversationOrMessage for Message {
     ) -> Result<Vec<LocalMessageId>, StashError> {
         let mut ids = ids.into_iter().peekable();
         if ids.peek().is_none() {
-            if cfg!(debug_assertions) {
-                panic!("remove_label for no messages")
-            } else {
-                return Ok(vec![]);
-            }
+            return Ok(vec![]);
         }
 
         // First let's unlabel all messages.

@@ -2,15 +2,16 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::LabelType as ApiLabelType;
 use proton_core_api::services::proton::{Address as ApiAddress, Label as ApiLabel};
 use proton_core_common::datatypes::LabelType;
-use proton_core_common::models::Label;
+use proton_core_common::models::{Address, Label, ModelIdExtension};
 use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
+use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     MessageCount as ApiMessageCount,
 };
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::Conversation;
+use proton_mail_common::models::{Conversation, Message};
 use proton_mail_common::test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::labels::ApiLabelTestUtils;
@@ -26,7 +27,7 @@ async fn test_labeling_conversation_with_custom_label() {
     // General setup
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let tether = user_ctx.user_stash().connection().await.unwrap();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Set up test data
     let remote_label_name = "selected";
@@ -91,6 +92,24 @@ async fn test_labeling_conversation_with_custom_label() {
     .expect("failed to create mailbox");
     let custom_label_local_label = custom_label_mailbox.get_local_label(&tether).await;
     let local_conversation_id = local_conversation.id();
+
+    // At least one message is required for this to work.
+    let message_id = MessageId::from("my-msg");
+    let addr_id = ApiAddress::test_address().id;
+    let local_addr_id = Address::remote_id_counterpart(addr_id.clone(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut message = Message {
+        remote_id: Some(message_id.clone()),
+        remote_conversation_id: Some(ConversationId::from(remote_conversation_id)),
+        label_ids: vec![LabelId::inbox()],
+        local_address_id: local_addr_id,
+        remote_address_id: addr_id,
+        ..Message::test_default()
+    };
+
+    tether.tx(async |tx| message.save(tx).await).await.unwrap();
 
     // Apply label action
     Conversation::action_apply_label(
@@ -162,7 +181,7 @@ async fn test_labeling_conversation_with_custom_label() {
 async fn test_labeling_conversation_with_starred_label() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let tether = user_ctx.user_stash().connection().await.unwrap();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let remote_conversation_id = "first";
     let inbox_mailbox = Mailbox::with_remote_id(
@@ -222,6 +241,24 @@ async fn test_labeling_conversation_with_starred_label() {
         .await
         .unwrap()
         .unwrap();
+
+    // At least one message is required for this to work.
+    let message_id = MessageId::from("my-msg");
+    let addr_id = ApiAddress::test_address().id;
+    let local_addr_id = Address::remote_id_counterpart(addr_id.clone(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut message = Message {
+        remote_id: Some(message_id.clone()),
+        remote_conversation_id: Some(ConversationId::from(remote_conversation_id)),
+        label_ids: vec![LabelId::inbox()],
+        local_address_id: local_addr_id,
+        remote_address_id: addr_id,
+        ..Message::test_default()
+    };
+
+    tether.tx(async |tx| message.save(tx).await).await.unwrap();
 
     // Apply label action
     Conversation::action_apply_label(

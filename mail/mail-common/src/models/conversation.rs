@@ -5,7 +5,7 @@ mod conversations;
 use super::network::split_request;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::r#move::UndoMoveToConversations;
-use crate::actions::conversations::{LabelAs, Snooze};
+use crate::actions::conversations::{LabelAs, Snooze, UndoLabelAsArchiveConversations};
 use crate::actions::conversations::{MarkRead, MarkUnread, Move, Unsnooze};
 use crate::actions::{
     ActionMoveData, ConversationOrMessage, LabelAsAction, LabelAsData, LabelAsOutput, LabelPair,
@@ -390,7 +390,7 @@ impl Conversation {
 
         // There are 4 possibilities:
         // - No labels   && no archive -> do nothing,  no undo
-        // - some labels && no archive -> queue label, no undo
+        // - some labels && no archive -> queue label, undo
         // - no labels   && archive    -> just move,   undo
         // - some labels && archive    -> queue both,  undo
 
@@ -403,16 +403,20 @@ impl Conversation {
                 }
             }
             (Some(label_as_action), None) => {
-                debug!("some labels && no archive -> queue label, no undo");
-                let input_label_is_empty = queue
-                    .queue_action(label_as_action)
+                debug!("some labels && no archive -> queue label, undo");
+
+                let action_output = queue
+                    .queue_action(label_as_action.clone())
                     .await
-                    .context("Error labeling locally")?
-                    .local;
+                    .context("Error labeling locally")?;
 
                 LabelAsOutput {
-                    input_label_is_empty,
-                    undo: None,
+                    input_label_is_empty: action_output.local,
+                    undo: Some(Undo::ConversationsLabelAs(UndoLabelAsConversations {
+                        action: label_as_action,
+                        id: action_output.id,
+                        must_archive: None,
+                    })),
                 }
             }
             (None, Some(move_action)) => {
@@ -443,14 +447,17 @@ impl Conversation {
                     .with_dependency(queued_label_as.id)
                     .build();
 
-                queue
+                let queued_move = queue
                     .queue_action_with_metadata(move_action, meta)
                     .await
                     .context("Error queuing with move to archive dependency")?;
                 let undo = Some(Undo::ConversationsLabelAs(UndoLabelAsConversations {
                     action: label_as_action,
                     id: queued_label_as.id,
-                    must_archive: true,
+                    must_archive: Some(UndoLabelAsArchiveConversations {
+                        id: queued_move.id,
+                        action: queued_move.local,
+                    }),
                 }));
 
                 LabelAsOutput {
@@ -2578,11 +2585,7 @@ impl ConversationOrMessage for Conversation {
     ) -> Result<Vec<LocalMessageId>, StashError> {
         let mut ids = ids.into_iter().peekable();
         if ids.peek().is_none() {
-            if cfg!(debug_assertions) {
-                panic!("remove_label for no conversations")
-            } else {
-                return Ok(vec![]);
-            }
+            return Ok(vec![]);
         }
 
         let mut conv_counter = ConversationCounters::load_by_id_exact_sync(label_id, tx)?;
@@ -2604,6 +2607,8 @@ impl ConversationOrMessage for Conversation {
                     "},
                 (id, label_id),
             )?;
+
+            modified_messages.extend(message_ids.iter().copied());
 
             // We can only do this part if we have conversation metadata.
             if !message_ids.is_empty() {
@@ -2645,8 +2650,6 @@ impl ConversationOrMessage for Conversation {
                 }
                 conv_counter.total = conv_counter.total.saturating_sub(1);
             }
-
-            modified_messages.extend(message_ids);
         }
 
         conv_counter.save_sync(tx)?;
@@ -3039,7 +3042,8 @@ pub struct ConversationLabel {
         Debug = "ignore",
         PartialEq = "ignore",
         Hash = "ignore",
-        PartialOrd = "ignore"
+        PartialOrd = "ignore",
+        Ord = "ignore"
     )]
     pub local_id: Option<u64>,
 
