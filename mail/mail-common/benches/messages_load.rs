@@ -1,13 +1,13 @@
 mod profiler;
 use criterion::{Criterion, criterion_group, criterion_main};
 use proton_core_api::services::proton::{AddressId, LabelId};
-use proton_core_common::datatypes::{AddressStatus, AddressType, LabelType};
+use proton_core_common::datatypes::{AddressFlags, AddressStatus, AddressType, LabelType};
 use proton_core_common::db::migrations::migrate_core_db;
 use proton_core_common::models::{Address, Label, ModelExtension};
 use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_mail_api::services::proton::prelude::{AttachmentMetadata, Disposition, MessageFlags};
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::db::migrations::migrate_db;
+use proton_mail_common::db::offline_migrations::run as migrate_mail_db;
 use proton_mail_common::models::Message;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashConfiguration, StashError};
@@ -85,7 +85,8 @@ pub fn current_benchmark(c: &mut Criterion) {
 
 async fn setup_db(stash: &Stash) -> (LabelId, AddressId) {
     migrate_core_db(stash).await.unwrap();
-    migrate_db(stash).await.unwrap();
+    migrate_mail_db(stash).await.unwrap();
+
     let address_id: AddressId = AddressId::from(Uuid::new_v4().to_string());
     let label_id: LabelId = LabelId::from(Uuid::new_v4().to_string());
 
@@ -109,6 +110,7 @@ async fn setup_db(stash: &Stash) -> (LabelId, AddressId) {
                 signature: "".to_string(),
                 signed_key_list: Default::default(),
                 status: AddressStatus::Enabled,
+                flags: Some(AddressFlags::default()),
             };
             address.save(tx).await.unwrap();
 

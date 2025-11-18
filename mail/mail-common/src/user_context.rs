@@ -9,6 +9,7 @@ mod initialization;
 
 use crate::actions::PREFETCH_ROLLBACK_ACTION_GROUP;
 use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
+use crate::db::online_migrations;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
@@ -282,9 +283,10 @@ impl MailUserContext {
 
             match origin {
                 Origin::App => {
-                    DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;
+                    DraftStagingAreaCleaner::new().run(&this)?;
                     this.init_expiration_loop();
                     this.register_subscribers().await?;
+                    online_migrations::run(&this).await?;
 
                     let config = this
                         .mail_context()

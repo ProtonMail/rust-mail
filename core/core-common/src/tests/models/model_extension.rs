@@ -1,5 +1,5 @@
 use crate::{
-    datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType},
+    datatypes::{AddressFlags, AddressKeys, AddressSignedKeyList, AddressStatus, AddressType},
     models::Address,
     tests::common::new_core_test_connection,
 };
@@ -57,5 +57,6 @@ fn create_test_address(id: usize) -> Address {
             signature: None,
             revision: 20,
         },
+        flags: Some(AddressFlags::default()),
     }
 }

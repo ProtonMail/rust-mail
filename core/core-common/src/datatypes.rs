@@ -55,26 +55,27 @@ pub use self::issue_report::*;
 pub use self::push_notifications::*;
 pub use self::system_label::*;
 pub use self::timestamp::*;
-
+use bitflags::bitflags;
 use derive_more::Into;
 use derive_more::derive::TryFrom;
 use itertools::Itertools;
 use jiff::civil::Weekday;
 use proton_core_api::services::proton::muon::rt::DynResolver;
 use proton_core_api::services::proton::{
-    AddressId, ContactEmailId, ContactId, DeviceEnvironment as ApiDeviceEnvironment, LabelId,
-    LabelType as ApiLabelType, LightOrDarkMode as ApiLightOrDarkMode,
-};
-use proton_core_api::services::proton::{
-    AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
-    AddressType as ApiAddressType, ContactSendingPreferences as ApiContactSendingPreferences,
-    DateFormat as ApiDateFormat, Density as ApiDensity, EarlyAccess as ApiEarlyAccess,
-    Email as ApiEmail, FidoKey as ApiFidoKey, Flags as ApiFlags, HighSecurity as ApiHighSecurity,
-    LogAuth as ApiLogAuth, Password as ApiPassword, PasswordMode as ApiPasswordMode,
-    Phone as ApiPhone, ProductUsedSpace as ApiProductUsedSpace, Referral as ApiReferral,
+    AddressFlags as ApiAddressFlags, AddressSignedKeyList as ApiAddressSignedKeyList,
+    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
+    ContactSendingPreferences as ApiContactSendingPreferences, DateFormat as ApiDateFormat,
+    Density as ApiDensity, EarlyAccess as ApiEarlyAccess, Email as ApiEmail, FidoKey as ApiFidoKey,
+    Flags as ApiFlags, HighSecurity as ApiHighSecurity, LogAuth as ApiLogAuth,
+    Password as ApiPassword, PasswordMode as ApiPasswordMode, Phone as ApiPhone,
+    ProductUsedSpace as ApiProductUsedSpace, Referral as ApiReferral,
     SettingsFlags as ApiSettingsFlags, TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat,
     TwoFa as ApiTwoFa, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
     WeekStart as ApiWeekStart,
+};
+use proton_core_api::services::proton::{
+    AddressId, ContactEmailId, ContactId, DeviceEnvironment as ApiDeviceEnvironment, LabelId,
+    LabelType as ApiLabelType, LightOrDarkMode as ApiLightOrDarkMode,
 };
 use proton_core_api::session::{Config as RealApiConfig, EnvId};
 use proton_core_api::store::{MbpMode, TfaMode};
@@ -130,6 +131,33 @@ impl FromSql for AddressStatus {
 impl ToSql for AddressStatus {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AddressFlags(pub u32);
+
+impl Default for AddressFlags {
+    fn default() -> Self {
+        ApiAddressFlags::default().into()
+    }
+}
+
+impl From<ApiAddressFlags> for AddressFlags {
+    fn from(value: ApiAddressFlags) -> Self {
+        Self(value.0)
+    }
+}
+
+impl FromSql for AddressFlags {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        Ok(Self(u32::column_result(value)?))
+    }
+}
+
+impl ToSql for AddressFlags {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(i64::from(self.0))))
     }
 }
 
@@ -1727,7 +1755,7 @@ pub struct RegisteredDevice {
 #[repr(transparent)]
 pub struct ImageProxy(pub u32);
 
-bitflags::bitflags! {
+bitflags! {
     impl ImageProxy: u32 {
         const ENABLED = 2;
     }
@@ -1755,7 +1783,7 @@ impl ToSql for ImageProxy {
 #[repr(transparent)]
 pub struct NotificationSettings(pub u32);
 
-bitflags::bitflags! {
+bitflags! {
     impl NotificationSettings: u32 {
         const ANNOUNCEMENTS = 1 << 0;
         const FEATURES = 1 << 1;

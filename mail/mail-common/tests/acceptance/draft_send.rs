@@ -11,8 +11,9 @@ use proton_core_api::services::proton::{
     GetKeysAllResponse,
 };
 use proton_core_api::services::proton::{
-    Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
-    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
+    Address as ApiAddress, AddressFlags as ApiAddressFlags,
+    AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
+    AddressType as ApiAddressType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId, UserId};
 use proton_core_common::datatypes::UnixTimestamp;
@@ -2090,6 +2091,7 @@ fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
             signature: Some("GIBBERISH".to_owned()),
             revision: 1,
         },
+        flags: ApiAddressFlags::default(),
     });
     params
 }

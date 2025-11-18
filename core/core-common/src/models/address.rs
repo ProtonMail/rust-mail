@@ -1,22 +1,18 @@
-use std::sync::Arc;
-
+use super::{InitializationError, InitializationWatcher, InitializedComponent};
 use crate::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, InitializationKey,
+    AddressFlags, AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, InitializationKey,
     LocalAddressId,
 };
+use crate::models::ModelIdExtension;
 use crate::{CoreContextError, CoreContextResult};
 use proton_core_api::services::proton::{Address as ApiAddress, AddressId, ProtonCore};
-
 use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::{DbRecord, Model, ModelHooks};
 use stash::params;
 use stash::rusqlite::params_from_iter;
 use stash::stash::{Stash, StashError, StashResult, Tether};
-
-use crate::models::ModelIdExtension;
-
-use super::{InitializationError, InitializationWatcher, InitializedComponent};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("addresses")]
@@ -67,6 +63,9 @@ pub struct Address {
 
     #[DbField]
     pub status: AddressStatus,
+
+    #[DbField]
+    pub flags: Option<AddressFlags>,
 }
 
 impl ModelHooks for Address {
@@ -177,6 +176,7 @@ impl From<ApiAddress> for Address {
             signature: value.signature,
             signed_key_list: value.signed_key_list.into(),
             status: value.status.into(),
+            flags: Some(value.flags.into()),
         }
     }
 }

@@ -10,6 +10,7 @@ categories = ["api-bindings"]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
+bitflags = { workspace = true }
 chrono = { workspace = true }
 cookie = { workspace = true }
 derive_more = { workspace = true }

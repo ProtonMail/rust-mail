@@ -1,7 +1,7 @@
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 use crate::test_utils::test_context::MailTestContext;
 use proton_core_api::services::proton::{
-    Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
+    Address as ApiAddress, AddressFlags, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
     ContactEmail as ApiContactEmail, Label as ApiLabel, User as ApiUser,
     UserSettings as ApiUserSettings,
@@ -129,6 +129,7 @@ impl Params {
                 catch_all: false,
                 proton_mx: false,
                 signed_key_list: AddressSignedKeyList::default(),
+                flags: AddressFlags::default(),
             }],
             recipient_keys: vec![(
                 TEST_OTHER_USER_EMAIL.to_owned(),

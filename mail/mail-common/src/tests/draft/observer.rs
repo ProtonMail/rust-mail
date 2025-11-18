@@ -9,7 +9,7 @@ use crate::models::{
 use proton_action_queue::action::Priority;
 use proton_action_queue::db::StoredAction;
 use proton_core_api::services::proton::AddressId;
-use proton_core_common::datatypes::{AddressStatus, AddressType};
+use proton_core_common::datatypes::{AddressFlags, AddressStatus, AddressType};
 use proton_core_common::models::Address;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_common::test_utils::db::new_test_connection_file;
@@ -419,6 +419,7 @@ async fn create_test_messages(count: usize, bond: &Bond<'_>) {
         signature: "".to_string(),
         signed_key_list: Default::default(),
         status: AddressStatus::Disabled,
+        flags: Some(AddressFlags::default()),
     };
     address.save(bond).await.unwrap();
     let mut conversation = Conversation {

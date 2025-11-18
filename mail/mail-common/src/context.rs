@@ -1078,7 +1078,7 @@ pub struct MailUserDatabaseInitializer {}
 #[async_trait::async_trait]
 impl UserDatabaseInitializer for MailUserDatabaseInitializer {
     async fn initialize(&self, stash: &Stash) -> Result<(), MigratorError> {
-        crate::db::migrations::migrate_db(stash).await?;
+        crate::db::offline_migrations::run(stash).await?;
         Ok(())
     }
 }

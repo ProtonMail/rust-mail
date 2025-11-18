@@ -10,9 +10,9 @@ use include_dir::{Dir, include_dir};
 use proton_sqlite3::{Migrator, MigratorError, file::embedded_migrations};
 use stash::stash::Stash;
 
-pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
+pub async fn run(stash: &Stash) -> Result<usize, MigratorError> {
     const TABLE: &str = "proton_mail_db_version";
-    const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations");
+    const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/offline_migrations");
 
     let mut migrations = embedded_migrations(&MIGRATIONS);
 
@@ -45,14 +45,14 @@ pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Stash, run as migrate_mail_db};
     use proton_core_common::db::migrations::migrate_core_db;
 
     #[tokio::test]
-    async fn test_migration_on_empty_data_set() {
-        let stash = Stash::new(None).expect("Failed to create Stash");
+    async fn smoke() {
+        let stash = Stash::new(None).unwrap();
 
-        migrate_core_db(&stash).await.expect("failed to migrate");
-        migrate_db(&stash).await.expect("failed to migrate");
+        migrate_core_db(&stash).await.unwrap();
+        migrate_mail_db(&stash).await.unwrap();
     }
 }

@@ -90,6 +90,9 @@ CoreEvent {
                             ),
                         },
                         status: Enabled,
+                        flags: AddressFlags(
+                            48,
+                        ),
                     },
                 ),
             },

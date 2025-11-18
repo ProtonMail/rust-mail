@@ -1,6 +1,6 @@
 use super::*;
 use crate::AppError;
-use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType};
+use proton_core_common::datatypes::{AddressFlags, AddressKeys, AddressStatus, AddressType};
 use proton_core_common::models::Address;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -70,6 +70,7 @@ async fn test_attachment_create_with_metadata() {
         .unwrap();
     assert_eq!(expected, db_attachment);
 }
+
 fn test_attachment() -> ApiAttachment {
     ApiAttachment {
         id: AttachmentId::from("attachment"),
@@ -99,9 +100,11 @@ fn test_attachment() -> ApiAttachment {
 fn address_id() -> AddressId {
     AddressId::from("addr")
 }
+
 fn conversation_id() -> ConversationId {
     ConversationId::from("conv")
 }
+
 fn message_id() -> MessageId {
     MessageId::from("msg")
 }
@@ -129,6 +132,7 @@ async fn create_attachment_dependencies(
                 catch_all: false,
                 proton_mx: false,
                 signed_key_list: Default::default(),
+                flags: Some(AddressFlags::default()),
             }
             .save(tx)
             .await?;

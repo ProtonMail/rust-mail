@@ -1,4 +1,5 @@
-pub mod migrations;
+pub mod offline_migrations;
+pub mod online_migrations;
 
 pub type DBMigrationError = MigratorError;
 
