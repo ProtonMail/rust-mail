@@ -65,7 +65,6 @@ macro_rules! find_in_query {
     }};
 }
 
-/// Errors that may occur while using the ProtonMail app.
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("Snooze time is in the past")]

@@ -44,14 +44,6 @@ impl TestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving addresses.
-    ///
-    /// This function will mock the response for the given addresses.
-    ///
-    /// # Parameters
-    ///
-    /// * `addresses` - The addresses to respond with. If `None`, an empty list will be used.
-    ///
     #[function_name::named]
     pub async fn mock_get_addresses(
         &self,
@@ -80,7 +72,6 @@ pub trait ApiAddressTestUtils {
     fn test_addresses() -> Vec<ApiAddress>;
 }
 
-/// `ApiAddress` test utils to generate test user adress(es) when required.
 impl ApiAddressTestUtils for ApiAddress {
     fn test_address() -> ApiAddress {
         let lock_key = LockedKey{

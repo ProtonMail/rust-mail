@@ -429,14 +429,10 @@ impl MailUserContext {
         self.user_context.get_service::<UserMetricService>()
     }
 
-    /// Get `MailUserContext` for each logged in account.
-    ///
     pub async fn all_mail_user_ctxs(&self) -> MailContextResult<Vec<Arc<Self>>> {
         self.mail_context.get_all_logged_in_user_ctx().await
     }
 
-    /// Get `MailUserContext` for any other than self, logged in account.
-    ///
     pub async fn other_mail_user_ctxs(&self) -> MailContextResult<Vec<Arc<Self>>> {
         self.mail_context
             .get_other_logged_in_user_ctx(self.session_id())
