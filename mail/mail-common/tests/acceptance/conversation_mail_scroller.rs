@@ -6,19 +6,21 @@ use proton_core_common::{
     datatypes::SystemLabel,
     models::{Label, ModelIdExtension},
 };
+use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{ConversationEvent, MailEvent};
 use proton_mail_api::services::proton::response_data::ConversationCount;
 use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
     response_data::ConversationLabel as ApiConversationLabel,
+    response_data::MessageMetadata as ApiMessageMetadata,
 };
-use proton_mail_common::datatypes::IncludeSwitch;
+use proton_mail_common::datatypes::{ConversationViewOptions, IncludeSwitch};
 use proton_mail_common::datatypes::{
     SystemLabelId,
     labels::{ScrollOrderDir, ScrollOrderField},
 };
-use proton_mail_common::models::{CachedScrollData, ConversationLabel};
+use proton_mail_common::models::{CachedScrollData, ConversationLabel, Message};
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
     scroller::{
@@ -167,6 +169,11 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     let params = TestParams::default_basic();
     let conversations = params.conversations.clone();
 
+    ctx.mock_get_messages()
+        .given_conversation_ids(conversations.iter().map(|c| c.id.clone()))
+        .expect(3..=5)
+        .respond_with(vec![])
+        .await;
     ctx.mock_get_conversations(conversations, 3..5).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
@@ -198,6 +205,135 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     // Additional fetch_more should result in no new data
     let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
     assert!(next_page.is_empty());
+}
+
+#[tokio::test]
+async fn conversation_scroller_also_fetch_message_metadata() {
+    let ctx = MailTestContext::new().await;
+    let params = TestParams::default_basic();
+
+    let conv1_id = ConversationId::from("conv1");
+    let conv2_id = ConversationId::from("conv2");
+    let msg1_id = MessageId::from("message1");
+    let msg2_id = MessageId::from("message2");
+    let msg3_id = MessageId::from("message3");
+
+    let conversations = vec![
+        ApiConversation {
+            id: conv1_id.clone(),
+            labels: vec![ApiConversationLabel {
+                id: LabelId::inbox(),
+                context_expiration_time: 0,
+                context_num_attachments: 0,
+                context_num_messages: 0,
+                context_num_unread: 0,
+                context_size: 0,
+                context_snooze_time: 0,
+                context_time: 0,
+            }],
+            ..ApiConversation::test_default()
+        },
+        ApiConversation {
+            id: conv2_id.clone(),
+            labels: vec![ApiConversationLabel {
+                id: LabelId::inbox(),
+                context_expiration_time: 0,
+                context_num_attachments: 0,
+                context_num_messages: 0,
+                context_num_unread: 0,
+                context_size: 0,
+                context_snooze_time: 0,
+                context_time: 0,
+            }],
+            ..ApiConversation::test_default()
+        },
+    ];
+
+    let messages = vec![
+        ApiMessageMetadata {
+            id: msg1_id.clone(),
+            conversation_id: conv1_id.clone(),
+            address_id: params.addresses[0].id.clone(),
+            ..ApiMessageMetadata::test_default()
+        },
+        ApiMessageMetadata {
+            id: msg2_id.clone(),
+            conversation_id: conv1_id.clone(),
+            address_id: params.addresses[0].id.clone(),
+            ..ApiMessageMetadata::test_default()
+        },
+        ApiMessageMetadata {
+            id: msg3_id.clone(),
+            conversation_id: conv2_id.clone(),
+            address_id: params.addresses[0].id.clone(),
+            ..ApiMessageMetadata::test_default()
+        },
+    ];
+
+    ctx.mock_get_messages()
+        .given_conversation_ids(conversations.iter().map(|c| c.id.clone()))
+        .expect(1..=2)
+        .respond_with(messages.clone())
+        .await;
+    ctx.mock_get_conversations(conversations, 1..=2).await;
+    ctx.mock_ping_success().await;
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let page_size = 5;
+
+    let mut test_scroller = TestScroller::conversations(&user_ctx, local_label_id, page_size)
+        .await
+        .unwrap();
+
+    // Conversations can be accessed only when progressed.
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(actual.len(), 2);
+
+    // Verify we have the expected data
+    assert_eq!(test_scroller.items().len(), 2);
+
+    let local_conv1 = Conversation::find_by_remote_id(conv1_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let local_conv2 = Conversation::find_by_remote_id(conv2_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(local_conv2.has_messages);
+    assert!(local_conv1.has_messages);
+
+    let conv1_messages =
+        Message::in_conversation(local_conv1.id(), ConversationViewOptions::All, &tether)
+            .await
+            .unwrap();
+    assert_eq!(conv1_messages.len(), 2);
+    assert!(
+        conv1_messages
+            .iter()
+            .any(|m| m.remote_id == Some(msg1_id.clone()))
+    );
+    assert!(
+        conv1_messages
+            .iter()
+            .any(|m| m.remote_id == Some(msg2_id.clone()))
+    );
+
+    let conv2_messages =
+        Message::in_conversation(local_conv2.id(), ConversationViewOptions::All, &tether)
+            .await
+            .unwrap();
+    assert_eq!(conv2_messages.len(), 1);
+    assert!(
+        conv2_messages
+            .iter()
+            .any(|m| m.remote_id == Some(msg3_id.clone()))
+    );
 }
 
 #[tokio::test]
@@ -376,6 +512,11 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     ctx.mock_server().reset().await;
     ctx.mock_ping_success().await;
     ctx.mock_get_conversations(vec![conversation.clone()], 2)
+        .await;
+    ctx.mock_get_messages()
+        .given_conversation_ids([conversation.id.clone()])
+        .expect(2)
+        .respond_with(vec![])
         .await;
     test_scroller.fetch_more().unwrap();
     // None because we have no data
@@ -1202,6 +1343,15 @@ async fn test_conversation_mail_scroller_fetch_new() {
     // Mock next page
     mock_get_conversations_page(&ctx, vec![], "myconv", &remote_label_id, 1).await;
     // Mock first page
+
+    // This method will be called 2 times from previous and first. Since the keys are the same,
+    // it needs to be mocked separately.
+    ctx.mock_get_messages()
+        .given_conversation_ids(conversations.iter().map(|c| c.id.clone()))
+        .expect(2)
+        .respond_with(vec![])
+        .await;
+
     ctx.mock_get_conversations(conversations, 1).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
@@ -1252,6 +1402,12 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
     test_conversation.order = 9;
     test_conversation.context_time = Some(9);
     ctx.mock_get_conversations(vec![test_conversation], 2).await;
+    // Empty response is fine, just to satisfy network check requirements.
+    ctx.mock_get_messages()
+        .given_conversation_ids([conv_id_1.clone()])
+        .expect(2)
+        .respond_with(vec![])
+        .await;
     //mock_get_conversations_page(&ctx, vec![], &test_conv_id, 1).await;
     ctx.catch_all().await;
 
@@ -1460,6 +1616,13 @@ async fn test_conversation_mail_scroller_handles_stale_data_in_inbox_on_next_and
             .expect(2..=4)
     })
     .await;
+
+    ctx.mock_get_messages()
+        .given_conversation_ids(api_page.iter().map(|c| c.id.clone()))
+        .expect(2..=4)
+        .respond_with(vec![])
+        .await;
+
     ctx.mock_ping_success().await;
     ctx.catch_all().await;
 
@@ -1518,6 +1681,11 @@ async fn test_conversation_mail_scroller_handles_stale_data_in_trash_on_next_and
             .expect(2..=4)
     })
     .await;
+    ctx.mock_get_messages()
+        .given_conversation_ids(api_page.iter().map(|c| c.id.clone()))
+        .expect(2..=4)
+        .respond_with(vec![])
+        .await;
     ctx.mock_ping_success().await;
     ctx.catch_all().await;
 
@@ -1550,6 +1718,11 @@ async fn test_conversation_mail_scroller_handles_stale_data_in_trash_on_next_and
 
     // Lets test recovery
     ctx.mock_server().reset().await;
+    ctx.mock_get_messages()
+        .given_conversation_ids(api_page.iter().map(|c| c.id.clone()))
+        .expect(2..=3)
+        .respond_with(vec![])
+        .await;
     ctx.mock_get_conversations_with(move |builder| {
         builder
             .respond_with(
@@ -1606,6 +1779,11 @@ async fn test_conversation_mail_scroller_change_label() {
             .expect(2..=8)
     })
     .await;
+    ctx.mock_get_messages()
+        .given_conversation_ids(api_page.iter().map(|c| c.id.clone()))
+        .expect(2..=8)
+        .respond_with(vec![])
+        .await;
     ctx.mock_ping_success().await;
     ctx.catch_all().await;
 
@@ -1691,6 +1869,11 @@ async fn test_conversation_mail_scroller_change_include() {
             .expect(2..=8)
     })
     .await;
+    ctx.mock_get_messages()
+        .given_conversation_ids(api_page.iter().map(|c| c.id.clone()))
+        .expect(2..=8)
+        .respond_with(vec![])
+        .await;
     ctx.mock_ping_success().await;
     ctx.catch_all().await;
 
@@ -1911,6 +2094,11 @@ async fn setup_api_conversation_pages(
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
     let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
 
+    ctx.mock_get_messages()
+        .given_conversation_ids(second_page.iter().map(|c| c.id.clone()))
+        .expect(0..=2)
+        .respond_with(vec![])
+        .await;
     mock_get_conversations_page(ctx, second_page, &first_page_last_id, label, 1_u64).await;
     // last page is empty
     mock_get_conversations_page(
@@ -1921,6 +2109,11 @@ async fn setup_api_conversation_pages(
         empty_pages_requests,
     )
     .await;
+    ctx.mock_get_messages()
+        .given_conversation_ids(first_page.iter().map(|c| c.id.clone()))
+        .expect(0..=2)
+        .respond_with(vec![])
+        .await;
     ctx.mock_get_conversations(first_page, 1_u64).await;
 
     // Do not download any conv on init

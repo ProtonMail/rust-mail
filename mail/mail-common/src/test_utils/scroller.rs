@@ -431,7 +431,7 @@ where
     }
 
     pub async fn match_next_update(&mut self, expected: TestUpdate) {
-        let _ = self.wait_for_update().await;
+        let _ = self.try_wait_for_update(TIMEOUT).await;
         let actual = self.updates.last().unwrap();
         assert!(
             Self::assert_single_update(actual, &expected),

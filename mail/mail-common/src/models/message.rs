@@ -692,17 +692,20 @@ impl Message {
         rebase_change_set: &mut RebaseChangeSet,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone()
-            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
+        #[cfg(not(feature = "action_rebase"))]
         {
-            *self = existing;
+            if let Some(remote_id) = self.remote_id.clone()
+                && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
+            {
+                *self = existing;
 
-            tracing::trace!(
-                remote_id = ?self.remote_id,
-                "Skipping saving message, we already have it in the local DB"
-            );
+                tracing::trace!(
+                    remote_id = ?self.remote_id,
+                    "Skipping saving message, we already have it in the local DB"
+                );
 
-            return Ok(());
+                return Ok(());
+            }
         }
 
         self.save(bond).await?;
