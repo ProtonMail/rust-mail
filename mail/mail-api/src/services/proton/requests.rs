@@ -162,7 +162,7 @@ pub struct GetMessagesOptions {
 
     /// Filter messages by conversation ID.
     #[serde(rename = "ConversationID")]
-    pub conversation_id: Option<ConversationId>,
+    pub conversation_id: Option<Vec<ConversationId>>,
 
     /// If `true`, sort results descending. If `false`, sort ascending.
     #[serde_as(as = "Option<BoolFromInt>")]

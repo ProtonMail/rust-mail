@@ -182,7 +182,7 @@ async fn refresh_conversation_messages(
         let remote_msgs = ctx.spawn(async move {
             Message::fetch_metadata(
                 GetMessagesOptions {
-                    conversation_id: Some(conversation.remote_id.clone().unwrap()),
+                    conversation_id: Some(vec![conversation.remote_id.clone().unwrap()]),
                     ..Default::default()
                 },
                 &api,
