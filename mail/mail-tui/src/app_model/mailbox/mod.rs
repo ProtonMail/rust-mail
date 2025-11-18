@@ -25,8 +25,7 @@ use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailM
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::{
     AddressId, PrivateEmail,
 };
-use proton_mail_common::rsvp::RsvpEvent;
-use proton_mail_common::{MailUserContext, Mailbox};
+use proton_mail_common::{MailUserContext, Mailbox, RsvpEvent};
 use search::{Search, SearchStatusBar};
 use secrecy::SecretString;
 use std::path::PathBuf;

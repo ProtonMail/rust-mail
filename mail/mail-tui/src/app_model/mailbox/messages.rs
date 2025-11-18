@@ -37,8 +37,7 @@ use proton_mail_common::models::{
     Attachment, IncomingDefault, LabelWithCounters, Message as MailMessage, MessageBodyMetadata,
 };
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::PrivateEmail;
-use proton_mail_common::rsvp::RsvpEvent;
-use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox};
+use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox, RsvpEvent};
 use proton_mail_html_transformer::Html2TextOptions;
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
