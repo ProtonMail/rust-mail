@@ -1470,26 +1470,47 @@ where
         (prefix_count, 0) => {
             let idx = prefix_count;
             let items = new[prefix_count..].to_vec();
+
             debug!("Replace from: {idx}, items number: {}", items.len());
+
             ScrollerListUpdate::ReplaceFrom { src, idx, items }.into()
         }
+
         (0, suffix_count) => {
             let idx = old.len().saturating_sub(suffix_count);
+
             let items = {
                 let idx = new.len().saturating_sub(suffix_count);
+
                 new[..idx].to_vec()
             };
+
             debug!("Replace before: {idx}, items number: {}", items.len());
+
             ScrollerListUpdate::ReplaceBefore { src, idx, items }.into()
         }
+
         (prefix_count, suffix_count) => {
             let from = prefix_count;
             let to = old.len().saturating_sub(suffix_count);
+
             let items = {
                 let to = new.len().saturating_sub(suffix_count);
+
+                if from > to {
+                    return ScrollerListUpdate::ReplaceFrom {
+                        src,
+                        idx: 0,
+                        items: new.to_vec(),
+                    }
+                    .into();
+                }
+
                 new[from..to].to_vec()
             };
+
             debug!("Replace range: {from}..{to}, items number: {}", items.len());
+
             ScrollerListUpdate::ReplaceRange {
                 src,
                 from,
@@ -1627,10 +1648,10 @@ mod tests {
     #[test_case(vec![1, 2, 3, 4], vec![1, 0, 0, 0] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 1, items, .. }) if items == vec![0, 0, 0]; "Test 34: prefix common > suffix common")]
     #[test_case(vec![1, 2, 3, 4, 5, 6], vec![0, 0, 0, 4, 5, 6] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 3, items, .. }) if items == vec![0, 0, 0]; "Test 35: suffix wins over prefix")]
     // Large vectors to test performance characteristics
-    #[test_case((1..=100).collect::<Vec<_>>(), (0..=100).collect::<Vec<_>>() => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![0]; "Test 36: large vector add at beginning")]
-    #[test_case((1..=100).collect::<Vec<_>>(), (1..=101).collect::<Vec<_>>() => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![101]; "Test 37: large vector add at end")]
-
-    // Test the actual function
+    #[test_case((1..=100).collect(), (0..=100).collect() => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![0]; "Test 36: large vector add at beginning")]
+    #[test_case((1..=100).collect(), (1..=101).collect() => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![101]; "Test 37: large vector add at end")]
+    // Miscellaneous
+    #[test_case(vec![1, 2, 3, 3, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items.len() == 5; "Test 38: duplicates")]
     fn test_calculate_scroller_update(old: Vec<i32>, new: Vec<i32>) -> ScrollerUpdate<i32> {
         let result = calculate_scroller_update(&old, &new, test_source());
         let actual = apply_scroller_update(old, &result);
