@@ -10,3 +10,10 @@ fn remove_from_url() {
     let new_url = strip_from_string(url);
     assert!(new_url.is_err());
 }
+
+#[test]
+fn preserve_params_without_values() {
+    let url = "https://example.com?foo&bar=1";
+    let new_url = strip_from_string(url).unwrap();
+    assert_eq!(new_url.0.as_str(), "https://example.com/?foo&bar=1");
+}
