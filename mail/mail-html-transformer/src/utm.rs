@@ -70,7 +70,13 @@ pub fn strip_from_url(url: &Url) -> (Url, u64) {
 
     for (key, value) in url.query_pairs() {
         if !GLOBAL_RULES.contains(&key.to_lowercase().as_ref()) {
-            stripped_url.query_pairs_mut().append_pair(&key, &value);
+            let mut query_pairs = stripped_url.query_pairs_mut();
+
+            if value.is_empty() {
+                query_pairs.append_key_only(&key);
+            } else {
+                query_pairs.append_pair(&key, &value);
+            }
         }
     }
 
