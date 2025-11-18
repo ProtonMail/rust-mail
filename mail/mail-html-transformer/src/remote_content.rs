@@ -1,9 +1,4 @@
 #![allow(clippy::must_use_candidate)]
-//! This pass focuses on blocking remote content from loading and/or patching remote content Urls to
-//! go through the Proton Proxy.
-//!
-//! Since these are use configurable options, each of these has a separate pass which undoes the
-//! changes.
 
 #[cfg(test)]
 #[path = "tests/remote_content.rs"]
@@ -28,26 +23,6 @@ pub enum Error {
     Url(#[from] url::ParseError),
 }
 
-/// Disable all remote content by prefixing known attributes with `proton-`.
-///
-/// To reverse this pass, see [`undo_disable_remote_content()`].
-///
-/// # Example
-///
-/// This will convert:
-///
-/// ``` html
-/// <img src="...">
-/// ```
-/// Into:
-///
-/// ``` html
-/// <img proton-src="...">
-/// ```
-///
-/// # Errors
-///
-/// Returns an error if the selector failed to build.
 pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: bool) -> (u64, u64) {
     if !hide_remote && !hide_embedded {
         return (0, 0);

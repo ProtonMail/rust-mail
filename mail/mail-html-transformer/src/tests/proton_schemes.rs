@@ -7,6 +7,7 @@ fn transform_to_proton_schemes_basic() {
         <body>
             <img src="https://example.com/image.png" />
             <img src="http://test.com/photo.jpg" />
+            <img src="" />
             <div style="background-image: url('https://background.com/bg.png');">Content</div>
         </body>
     </html>

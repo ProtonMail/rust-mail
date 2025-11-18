@@ -29,7 +29,6 @@ use std::sync::Arc;
 use tokio::fs;
 use tokio::task::JoinHandle;
 use tracing::{debug, trace, warn};
-use url::Url;
 
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
@@ -257,7 +256,7 @@ impl DecryptedMessageBody {
     pub async fn load_image(
         &self,
         ctx: &MailUserContext,
-        url: Url,
+        url: &str,
         policy: ImagePolicy,
     ) -> MailContextResult<AttachmentData> {
         ctx.image_loader()
