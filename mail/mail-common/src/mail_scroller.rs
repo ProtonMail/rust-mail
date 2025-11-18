@@ -1497,6 +1497,15 @@ where
             let items = {
                 let to = new.len().saturating_sub(suffix_count);
 
+                if from > to {
+                    return ScrollerListUpdate::ReplaceFrom {
+                        src,
+                        idx: 0,
+                        items: new.to_vec(),
+                    }
+                    .into();
+                }
+
                 new[from..to].to_vec()
             };
 
@@ -1641,6 +1650,8 @@ mod tests {
     // Large vectors to test performance characteristics
     #[test_case((1..=100).collect(), (0..=100).collect() => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![0]; "Test 36: large vector add at beginning")]
     #[test_case((1..=100).collect(), (1..=101).collect() => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![101]; "Test 37: large vector add at end")]
+    // Miscellaneous
+    #[test_case(vec![1, 2, 3, 3, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items.len() == 5; "Test 38: duplicates")]
     fn test_calculate_scroller_update(old: Vec<i32>, new: Vec<i32>) -> ScrollerUpdate<i32> {
         let result = calculate_scroller_update(&old, &new, test_source());
         let actual = apply_scroller_update(old, &result);
