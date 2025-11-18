@@ -381,7 +381,13 @@ pub struct Address {
 
     /// TODO: Document this field.
     pub status: AddressStatus,
+    pub flags: AddressFlags,
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[repr(transparent)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+pub struct AddressFlags(pub u32);
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]

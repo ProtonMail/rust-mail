@@ -8,8 +8,8 @@ use crate::models::{
 use crate::test_utils::search::MY_ADDRESS_ID;
 use futures::{FutureExt as _, StreamExt};
 use proton_core_api::services::proton::{
-    Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
-    LabelId,
+    Address as ApiAddress, AddressFlags, AddressStatus as ApiAddressStatus,
+    AddressType as ApiAddressType, LabelId,
 };
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
@@ -395,5 +395,6 @@ pub fn test_api_address() -> ApiAddress {
         catch_all: false,
         proton_mx: false,
         signed_key_list: Default::default(),
+        flags: AddressFlags::default(),
     }
 }

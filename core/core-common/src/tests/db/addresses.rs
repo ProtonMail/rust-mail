@@ -1,4 +1,6 @@
-use crate::datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType};
+use crate::datatypes::{
+    AddressFlags, AddressKeys, AddressSignedKeyList, AddressStatus, AddressType,
+};
 use crate::models::Address;
 use crate::tests::common::new_core_test_connection;
 use proton_core_api::services::proton::AddressId;
@@ -150,6 +152,7 @@ fn create_test_address() -> Address {
             signature: None,
             revision: 20,
         },
+        flags: Some(AddressFlags::default()),
     }
 }
 
@@ -179,5 +182,6 @@ fn create_test_address_updated() -> Address {
             signature: None,
             revision: 20,
         },
+        flags: Some(AddressFlags::default()),
     }
 }

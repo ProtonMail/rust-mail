@@ -1,6 +1,6 @@
 use proton_core_api::services::proton::prelude::{Address as ApiAddress, Label as ApiLabel};
 use proton_core_api::services::proton::{
-    Action, AddressId, AddressStatus, AddressType, EventId, LabelId, LabelType,
+    Action, AddressFlags, AddressId, AddressStatus, AddressType, EventId, LabelId, LabelType,
 };
 use proton_core_common::models::{Address, Label, ModelIdExtension};
 use proton_crypto_account::keys::AddressKeys;
@@ -62,6 +62,7 @@ async fn event_fetches_missing_dependencies() {
         signature: "".to_string(),
         signed_key_list: Default::default(),
         status: AddressStatus::Disabled,
+        flags: AddressFlags::default(),
     };
 
     let new_conversation = ApiConversation {

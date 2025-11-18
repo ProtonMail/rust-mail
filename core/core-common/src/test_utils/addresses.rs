@@ -1,6 +1,5 @@
-use std::sync::LazyLock;
-
 use crate::test_utils::test_context::TestContext;
+use proton_core_api::services::proton::AddressFlags;
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_core_api::services::proton::{
@@ -11,6 +10,7 @@ use proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, ArmoredPrivateKey, EncryptedKeyToken, KeyFlag, KeyId,
     KeyTokenSignature, LockedKey,
 };
+use std::sync::LazyLock;
 use wiremock::Times;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -44,14 +44,6 @@ impl TestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving addresses.
-    ///
-    /// This function will mock the response for the given addresses.
-    ///
-    /// # Parameters
-    ///
-    /// * `addresses` - The addresses to respond with. If `None`, an empty list will be used.
-    ///
     #[function_name::named]
     pub async fn mock_get_addresses(
         &self,
@@ -80,7 +72,6 @@ pub trait ApiAddressTestUtils {
     fn test_addresses() -> Vec<ApiAddress>;
 }
 
-/// `ApiAddress` test utils to generate test user adress(es) when required.
 impl ApiAddressTestUtils for ApiAddress {
     fn test_address() -> ApiAddress {
         let lock_key = LockedKey{
@@ -121,6 +112,7 @@ impl ApiAddressTestUtils for ApiAddress {
             catch_all: false,
             proton_mx: true,
             signed_key_list,
+            flags: AddressFlags::default(),
         }
     }
 
@@ -163,6 +155,7 @@ impl ApiAddressTestUtils for ApiAddress {
                 signature: Some("-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwqkEARYKAFsFgmYnt8kJkMPlKcdzOYbrMxSAAAAAABEAGWNvbnRleHRAcHJv\ndG9uLmNoa2V5LXRyYW5zcGFyZW5jeS5rZXktbGlzdBYhBBGxOGij+Oleubds\nX8PlKcdzOYbrAABnFwD+JukILCsHB7JxsMY4zP9EU8SGhu5/Gwx2aLod9GR1\nfucBANdiI900lTkhTRMHDof4aZ/8Ef5uV1pmQ/CFHQYTcj4P\n=QEZt\n-----END PGP SIGNATURE-----\n".to_owned()),
                 revision: 1,
             },
+            flags: AddressFlags::default(),
         }]
     }
 }

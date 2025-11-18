@@ -1,9 +1,11 @@
 use crate::datatypes::SystemLabelId;
 use crate::test_utils::test_context::MailTestContext;
-use proton_core_api::services::proton::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
     Label as ApiLabel,
+};
+use proton_core_api::services::proton::{
+    AddressFlags, AddressSignedKeyList as ApiAddressSignedKeyList,
 };
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
@@ -187,6 +189,7 @@ impl MailTestContext {
             signature: String::default(),
             signed_key_list: ApiAddressSignedKeyList::default(),
             status: ApiAddressStatus::Enabled,
+            flags: AddressFlags::default(),
         }
     }
 

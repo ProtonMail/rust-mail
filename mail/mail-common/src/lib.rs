@@ -1,41 +1,40 @@
 pub mod actions;
-pub mod context;
+pub mod background_execution;
+mod context;
 pub mod datatypes;
 pub mod db;
+pub mod draft;
 pub mod errors;
 mod events;
+pub mod feature_flags;
 mod image_loader;
 pub mod ios_share_ext;
+#[allow(clippy::result_large_err)]
+pub mod mail_cursor;
+#[allow(clippy::result_large_err)]
+pub mod mail_scroller;
 mod mailbox;
 pub mod migration_snooper;
 pub mod models;
 #[cfg(feature = "prefetch")]
 pub mod prefetch;
-pub mod sidebar;
+mod rsvp;
+mod send_queries;
+mod sidebar;
 pub mod snooze;
 pub mod traits;
-mod user_context;
-
-pub mod background_execution;
-pub mod draft;
-pub mod feature_flags;
-#[allow(clippy::result_large_err)]
-pub mod mail_cursor;
-#[allow(clippy::result_large_err)]
-pub mod mail_scroller;
-pub mod rsvp;
-mod send_queries;
 pub mod upsell_eligibility_watcher;
+mod user_context;
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 
-pub use self::context::{MailContext, MailContextError, MailContextResult};
+pub use self::context::*;
 pub use self::image_loader::*;
-pub use self::mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
-pub use self::rsvp::{RsvpEvent, RsvpEventId};
-pub use self::sidebar::{Sidebar, SidebarError, SidebarResult};
-pub use self::user_context::MailUserContext;
+pub use self::mailbox::*;
+pub use self::rsvp::*;
+pub use self::sidebar::*;
+pub use self::user_context::*;
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{LocalAttachmentId, LocalMessageId};
 use datatypes::attachment::ContentId;
@@ -65,7 +64,6 @@ macro_rules! find_in_query {
     }};
 }
 
-/// Errors that may occur while using the ProtonMail app.
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("Snooze time is in the past")]

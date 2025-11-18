@@ -428,12 +428,14 @@ impl DecryptedMessageBody {
             debug!("Analyzing invite attachment");
 
             let mut tether = ctx.user_stash().connection().await?;
+
             let ics = Attachment::get_attachment(ctx, invite, &mut tether)
                 .await
                 .map_err(|err| {
                     warn!(?err, "Couldn't get the RSVP attachment");
                     err
                 })?;
+
             drop(tether);
 
             let ics = fs::read(&ics.data_path).await.map_err(|err| {

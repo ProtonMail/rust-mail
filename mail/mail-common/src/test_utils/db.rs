@@ -1,4 +1,4 @@
-use crate::db::migrations::migrate_db;
+use crate::db::offline_migrations::run as migrate_mail_db;
 use proton_core_common::db::migrations::migrate_core_db;
 use stash::stash::{Stash, StashConfiguration};
 use tempfile::{TempDir, tempdir};
@@ -17,7 +17,7 @@ pub async fn new_test_connection() -> Stash {
     let stash = Stash::new(StashConfiguration::test()).unwrap();
 
     migrate_core_db(&stash).await.unwrap();
-    migrate_db(&stash).await.unwrap();
+    migrate_mail_db(&stash).await.unwrap();
 
     stash
 }
@@ -37,7 +37,7 @@ pub async fn new_test_connection_file() -> (Stash, TempDir) {
     .unwrap();
 
     migrate_core_db(&stash).await.unwrap();
-    migrate_db(&stash).await.unwrap();
+    migrate_mail_db(&stash).await.unwrap();
 
     (stash, db_dir)
 }

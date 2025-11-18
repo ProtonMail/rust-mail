@@ -28,12 +28,11 @@ use proton_core_common::pin_code::PinCode;
 use proton_core_common::{CoreContextError, OnSessionDeletedResponse, Origin as RealOrigin};
 use proton_issue_reporter_service_uniffi::{IssueReporter, IssueReporterWrapper};
 use proton_log_service::LogService;
-use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::{
     ContextErrorReason, MailErrorReason, ProtonMailError as RealProtonMailError,
 };
-use proton_mail_common::{MailContext, MailContextError};
+use proton_mail_common::{MailContext, MailContextError, ShouldInitializeMailUserContext};
 use proton_network_monitor_service::OsNetworkStatus as RealOsNetworkStatus;
 use stash::orm::Model;
 use stash::stash::{Stash, WatcherHandle};
@@ -58,6 +57,7 @@ impl Origin {
                 },
             ));
         }
+
         Ok(())
     }
 }

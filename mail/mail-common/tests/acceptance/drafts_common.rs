@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 use proton_core_api::services::proton::{
-    Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
-    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
+    Address as ApiAddress, AddressFlags as ApiAddressFlags,
+    AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
+    AddressType as ApiAddressType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
@@ -32,9 +33,11 @@ const MOCK_ATTACHMENT_KEY_PACKET: &str = "wV4DGS71hsmM2EQSAQdAwLggNHWQfw7ZdO/BJr
 pub fn draft_test_params() -> TestParams {
     draft_test_params_impl(None)
 }
+
 pub fn draft_test_params_with_mime_type(mime_type: MimeType) -> TestParams {
     draft_test_params_impl(Some(mime_type))
 }
+
 pub fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
     let mut mail_settings = message_body_test_mail_settings();
     if let Some(mime_type) = mime_type {
@@ -88,6 +91,7 @@ pub fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
             signature: Some("GIBBERISH".to_owned()),
             revision: 1,
         },
+        flags: ApiAddressFlags::default(),
     });
     params
 }
@@ -110,6 +114,7 @@ pub fn expected_create_draft_params() -> DraftParams {
         mime_type: MailSettings::default().draft_mime_type,
     }
 }
+
 pub fn expected_create_reply_draft_params(
     message: &Message,
     mime_type: MimeType,
@@ -191,6 +196,7 @@ pub fn gen_inline_attachment() -> MessageAttachment {
         size: 123,
     }
 }
+
 pub fn gen_normal_attachment() -> MessageAttachment {
     MessageAttachment {
         id: "MyAttachment".into(),

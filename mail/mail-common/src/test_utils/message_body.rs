@@ -1,11 +1,11 @@
-//! Message body related state and test data
 use crate::datatypes::SystemLabelId;
 use crate::test_utils::init::Params as TestParams;
 use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::proton::{
-    Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
-    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, DelinquentState,
-    Flags as ApiFlags, ProductUsedSpace as ApiProductUsedSpace, Role as ApiRole, User as ApiUser,
+    Address as ApiAddress, AddressFlags as ApiAddressFlags,
+    AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
+    AddressType as ApiAddressType, DelinquentState, Flags as ApiFlags,
+    ProductUsedSpace as ApiProductUsedSpace, Role as ApiRole, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId, UserId};
@@ -41,8 +41,10 @@ pub fn message_body_test_params() -> crate::test_utils::init::Params {
 
 pub const TEST_USER_ID: &str =
     "jctxnoKsvmlISYpOtESCWNC4tcFbddXmcQ6yyM94YP4tBngrw4O9IKf8jxSLThqZyqFlX972kKwQCPriEeh4qg==";
+
 pub const TEST_USER_ADDRESS_ID: &str =
     "LGXtB3TbNifsW1elXtCp5zyysma52yRf8NZZ10pUQrJfp1QQCSoFTXcIVDCZJycme6KYHsxCE_xdneJ10dt_iA==";
+
 pub const TEST_USER_KEY_ID: &str =
     "aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ==";
 
@@ -155,6 +157,7 @@ pub fn message_body_test_addresses() -> Vec<ApiAddress> {
             signature: Some("-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwqkEARYKAFsFgmYnt8kJkMPlKcdzOYbrMxSAAAAAABEAGWNvbnRleHRAcHJv\ndG9uLmNoa2V5LXRyYW5zcGFyZW5jeS5rZXktbGlzdBYhBBGxOGij+Oleubds\nX8PlKcdzOYbrAABnFwD+JukILCsHB7JxsMY4zP9EU8SGhu5/Gwx2aLod9GR1\nfucBANdiI900lTkhTRMHDof4aZ/8Ef5uV1pmQ/CFHQYTcj4P\n=QEZt\n-----END PGP SIGNATURE-----\n".to_owned()),
             revision: 1,
         },
+        flags: ApiAddressFlags::default(),
     }]
 }
 
@@ -348,5 +351,6 @@ pub fn generate_new_api_address(
             signature: Some(skl_signature.0),
             revision: 1,
         },
+        flags: ApiAddressFlags::default(),
     }
 }

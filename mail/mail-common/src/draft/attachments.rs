@@ -211,12 +211,14 @@ impl DraftStagingAreaCleaner {
     /// # Errors
     ///
     /// If we failed to create the staging area.
-    pub fn run(self, context: Arc<MailUserContext>) -> std::io::Result<()> {
+    pub fn run(self, context: &Arc<MailUserContext>) -> std::io::Result<()> {
         let staging_area = context.attachment_staging_path();
+
         std::fs::create_dir_all(&staging_area)
             .inspect_err(|e| error!("failed to create draft staging area: {e:?}"))?;
 
-        let weak_context = Arc::downgrade(&context);
+        let weak_context = Arc::downgrade(context);
+
         context.spawn(async move {
             async {
                 loop {
@@ -244,6 +246,7 @@ impl DraftStagingAreaCleaner {
             .instrument(debug_span!("draft-staging-cleanup"))
             .await;
         });
+
         Ok(())
     }
 

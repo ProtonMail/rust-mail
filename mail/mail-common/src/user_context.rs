@@ -9,6 +9,7 @@ mod initialization;
 
 use crate::actions::PREFETCH_ROLLBACK_ACTION_GROUP;
 use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
+use crate::db::online_migrations;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
@@ -282,9 +283,10 @@ impl MailUserContext {
 
             match origin {
                 Origin::App => {
-                    DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;
+                    DraftStagingAreaCleaner::new().run(&this)?;
                     this.init_expiration_loop();
                     this.register_subscribers().await?;
+                    online_migrations::run(&this).await?;
 
                     let config = this
                         .mail_context()
@@ -429,14 +431,10 @@ impl MailUserContext {
         self.user_context.get_service::<UserMetricService>()
     }
 
-    /// Get `MailUserContext` for each logged in account.
-    ///
     pub async fn all_mail_user_ctxs(&self) -> MailContextResult<Vec<Arc<Self>>> {
         self.mail_context.get_all_logged_in_user_ctx().await
     }
 
-    /// Get `MailUserContext` for any other than self, logged in account.
-    ///
     pub async fn other_mail_user_ctxs(&self) -> MailContextResult<Vec<Arc<Self>>> {
         self.mail_context
             .get_other_logged_in_user_ctx(self.session_id())

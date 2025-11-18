@@ -17,6 +17,7 @@ use crate::models::{Attachment, MessageBodyMetadata, MessageReplyTo};
 use crate::proton_mail_api::services::proton::prelude::ConversationId;
 use insta::assert_snapshot;
 use proton_core_api::services::proton::LabelId;
+use proton_core_common::datatypes::AddressFlags;
 use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId};
 use proton_core_common::datatypes::{UserMnemonicStatus, UserType};
 use proton_core_common::models::{PaidSubscription, User};
@@ -802,6 +803,7 @@ fn address() -> Address {
         signature: String::new(),
         signed_key_list: Default::default(),
         status: AddressStatus::Disabled,
+        flags: Some(AddressFlags::default()),
     }
 }
 
@@ -943,6 +945,7 @@ fn validate_address(params: ValidateAddressParams) {
         signature: "".to_string(),
         signed_key_list: Default::default(),
         status: params.status,
+        flags: Some(AddressFlags::default()),
     };
 
     let user = User {
