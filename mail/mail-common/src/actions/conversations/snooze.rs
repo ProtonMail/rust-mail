@@ -100,9 +100,12 @@ impl Handler for SnoozeHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        action.action_data.resolve_ids(guard.tether()).await?;
+        let (_, remote_target_ids) = action
+            .action_data
+            .resolve_ids_legacy(guard.tether())
+            .await?;
 
-        if action.action_data.data.remote_target_ids.is_empty() {
+        if remote_target_ids.is_empty() {
             tracing::warn!(
                 "No remote target ids to snooze, local only ids: {:?}",
                 action.action_data.data.target_ids
@@ -117,10 +120,7 @@ impl Handler for SnoozeHandler {
 
         let response = self
             .api
-            .put_conversations_snooze(
-                action.action_data.data.remote_target_ids.clone(),
-                action.snooze_until.as_u64(),
-            )
+            .put_conversations_snooze(remote_target_ids, action.snooze_until.as_u64())
             .await?;
 
         let responses = filter_responses(response.responses);

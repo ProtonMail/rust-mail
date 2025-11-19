@@ -242,7 +242,6 @@ where
     T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
 {
     target_ids: Vec<T::IdType>,
-    remote_target_ids: Vec<T::RemoteId>,
     phantom: PhantomData<T>,
 }
 
@@ -253,7 +252,6 @@ where
     pub fn new(target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
         Self {
             target_ids: Vec::from_iter(target_ids),
-            remote_target_ids: vec![],
             phantom: PhantomData,
         }
     }
@@ -265,7 +263,10 @@ where
     /// # Errors
     ///
     /// Returns error if ids could not be resolved.
-    async fn resolve_ids(&mut self, tether: &Tether) -> Result<(), MailActionError> {
+    async fn resolve_ids_legacy(
+        &mut self,
+        tether: &Tether,
+    ) -> Result<Vec<T::RemoteId>, MailActionError> {
         if self.target_ids.is_empty() {
             return Err(MailActionError::NoInput);
         }
@@ -277,9 +278,7 @@ where
                 e
             })?;
 
-        self.remote_target_ids = remote_target_ids;
-
-        Ok(())
+        Ok(remote_target_ids)
     }
 
     /// Return the ids of all the items which do not have a remote id.
@@ -320,15 +319,26 @@ where
     }
 
     /// Mark the action items to be rollback
-    async fn mark_rollback(
-        &self,
+    async fn mark_rollback<'a>(
+        remote_ids: impl IntoIterator<Item = &'a T::RemoteId>,
         item_type: RollbackItemType,
         tx: &Bond<'_>,
     ) -> Result<(), MailActionError> {
-        for remote_id in self.remote_target_ids.iter() {
+        for remote_id in remote_ids {
             RollbackItem::new(remote_id.to_string(), item_type)
                 .save(tx)
                 .await?;
+        }
+
+        Ok(())
+    }
+    fn mark_rollback_sync<'a>(
+        remote_ids: impl IntoIterator<Item = &'a T::RemoteId>,
+        item_type: RollbackItemType,
+        tx: &Transaction<'_>,
+    ) -> Result<(), StashError> {
+        for remote_id in remote_ids {
+            RollbackItem::new(remote_id.to_string(), item_type).save_sync(tx)?
         }
 
         Ok(())
@@ -358,10 +368,6 @@ where
 {
     /// Local label id which this action applies to.
     label_id: LocalLabelId,
-    /// Resolved remote label id.
-    ///
-    /// Note: this is only for user with remote execution, it should be set by then.
-    remote_label_id: Option<LabelId>,
     /// Generic data
     data: GenericActionData<T>,
 }
@@ -374,7 +380,6 @@ where
     pub fn new(label_id: LocalLabelId, target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
         Self {
             label_id,
-            remote_label_id: None,
             data: GenericActionData::new(target_ids),
         }
     }
@@ -386,12 +391,14 @@ where
     /// # Errors
     ///
     /// Returns error if ids could not be resolved.
-    async fn resolve_ids(&mut self, tether: &Tether) -> Result<(), MailActionError> {
-        self.data.resolve_ids(tether).await?;
+    async fn resolve_ids_legacy(
+        &mut self,
+        tether: &Tether,
+    ) -> Result<(Option<LabelId>, Vec<T::RemoteId>), MailActionError> {
+        let remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tether).await?);
+        let ids = self.data.resolve_ids_legacy(tether).await?;
 
-        self.remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tether).await?);
-
-        Ok(())
+        Ok((remote_label_id, ids))
     }
 
     /// Return the ids of all the items which do not have a remote id.
@@ -401,17 +408,6 @@ where
     /// Returns error if the query failed.
     async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, MailActionError> {
         self.data.unsynced_item_ids(tether).await
-    }
-
-    /// Mark the action items to be rollback
-    async fn mark_rollback(
-        &self,
-        item_type: RollbackItemType,
-        tx: &Bond<'_>,
-    ) -> Result<(), MailActionError> {
-        self.data.mark_rollback(item_type, tx).await?;
-
-        Ok(())
     }
 }
 

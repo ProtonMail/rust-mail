@@ -1,5 +1,5 @@
 use crate::actions::{
-    ConversationOrMessage, GenericLabelRelatedActionData, MailActionError,
+    ConversationOrMessage, GenericActionData, GenericLabelRelatedActionData, MailActionError,
     filter_responses_by_codes,
 };
 use crate::datatypes::LocalConversationId;
@@ -75,9 +75,10 @@ impl Handler for MarkReadHandler {
             .map(|c| c.local_id)
             .collect();
 
-        action.data.resolve_ids(tx).await?;
-
         let ids = action.data.data.target_ids.clone();
+        if ids.is_empty() {
+            return Err(MailActionError::NoInput);
+        }
 
         Conversation::mark_read_async(ids, tx).await?;
         Ok(())
@@ -99,11 +100,6 @@ impl Handler for MarkReadHandler {
             tx,
         )
         .await?;
-        action
-            .data
-            .mark_rollback(RollbackItemType::Conversation, tx)
-            .await?;
-
         Ok(())
     }
 
@@ -113,11 +109,9 @@ impl Handler for MarkReadHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let responses = Conversation::mark_multiple_as_read_remote(
-            action.data.data.remote_target_ids.clone(),
-            &self.api,
-        )
-        .await?;
+        let (_, remote_target_ids) = action.data.resolve_ids_legacy(guard.tether()).await?;
+        let responses =
+            Conversation::mark_multiple_as_read_remote(remote_target_ids, &self.api).await?;
 
         // In this case General::NotExists is returned also for conversations already marked as read
         let failed_ids = filter_responses_by_codes(
@@ -129,6 +123,12 @@ impl Handler for MarkReadHandler {
             error!("Mark read operation failed for: {:?}", failed_ids);
             guard
                 .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                    GenericActionData::<Conversation>::mark_rollback(
+                        &failed_ids,
+                        RollbackItemType::Conversation,
+                        tx,
+                    )
+                    .await?;
                     let local_ids =
                         Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 

@@ -77,10 +77,6 @@ impl Handler for ReadHandler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::mark_unread_async(action.0.target_ids.clone(), tx).await?;
-        action
-            .0
-            .mark_rollback(RollbackItemType::Message, tx)
-            .await?;
         Ok(())
     }
 
@@ -94,8 +90,7 @@ impl Handler for ReadHandler {
             return Ok(());
         }
 
-        let message_ids =
-            Message::local_ids_counterpart(action.0.target_ids.clone(), guard.tether()).await?;
+        let message_ids = action.0.resolve_ids_legacy(guard.tether()).await?;
         info!("Marking {message_ids:?} as read");
 
         let response = self.api.put_messages_read(message_ids).await?.responses;
@@ -111,6 +106,13 @@ impl Handler for ReadHandler {
 
             guard
                 .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                    GenericActionData::<Message>::mark_rollback(
+                        &failed_ids,
+                        RollbackItemType::Message,
+                        tx,
+                    )
+                    .await?;
+
                     let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
                     Message::mark_unread_async(local_ids, tx)
