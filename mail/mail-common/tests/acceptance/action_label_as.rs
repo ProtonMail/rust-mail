@@ -476,7 +476,7 @@ mod rebase {
         MessageId::from(format!("conv{conv}-msg{msg}"))
     }
     async fn local_label_id(label_id: LabelId, tether: &Tether) -> LocalLabelId {
-        Label::remote_id_counterpart(label_id, &tether)
+        Label::remote_id_counterpart(label_id, tether)
             .await
             .unwrap()
             .unwrap()

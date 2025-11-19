@@ -1,4 +1,6 @@
-use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
+use crate::actions::{
+    GenericActionData, GenericLabelRelatedActionData, MailActionError, filter_responses,
+};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::{Conversation, Message};
@@ -73,10 +75,6 @@ impl Handler for DeleteHandler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::mark_undeleted(action.0.data.target_ids.clone(), tx).await?;
-        action
-            .0
-            .mark_rollback(RollbackItemType::Message, tx)
-            .await?;
         Ok(())
     }
 
@@ -86,7 +84,7 @@ impl Handler for DeleteHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        action.0.resolve_ids(guard.tether()).await?;
+        let (label_id, remote_target_ids) = action.0.resolve_ids_legacy(guard.tether()).await?;
 
         let local_ids_without_remote_id = action
             .0
@@ -94,14 +92,12 @@ impl Handler for DeleteHandler {
             .await
             .inspect_err(|e| error!("Failed to load local only ids: {e:?}"))?;
 
-        let failed_ids = if action.0.data.remote_target_ids.is_empty() {
+        let failed_ids = if remote_target_ids.is_empty() {
             vec![]
         } else {
-            let message_ids = action.0.data.remote_target_ids.clone();
+            let message_ids = remote_target_ids;
 
             info!("Deleting {message_ids:?}");
-
-            let label_id = action.0.remote_label_id.clone();
 
             let response = self
                 .api
@@ -118,6 +114,7 @@ impl Handler for DeleteHandler {
             guard.tx::<_,_, <Self::Action as Action>::Error>(
                 async |tx| {
                     if !failed_ids.is_empty() {
+                        GenericActionData::<Message>::mark_rollback(&failed_ids, RollbackItemType::Message, tx).await?;
                         let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
                         Message::mark_undeleted(local_ids, tx)

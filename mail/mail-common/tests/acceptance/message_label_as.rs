@@ -416,7 +416,7 @@ mod rebase {
     }
 
     async fn local_label_id(label_id: LabelId, tether: &Tether) -> LocalLabelId {
-        Label::remote_id_counterpart(label_id, &tether)
+        Label::remote_id_counterpart(label_id, tether)
             .await
             .unwrap()
             .unwrap()
@@ -544,10 +544,10 @@ mod rebase {
 
         let tether = &mut user_ctx.user_stash().connection().await.unwrap();
 
-        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
-        let local_custom_label_id1 = local_label_id(custom_label_id1(), &tether).await;
-        let local_custom_label_id2 = local_label_id(custom_label_id2(), &tether).await;
-        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+        let local_inbox = local_label_id(LabelId::inbox(), tether).await;
+        let local_custom_label_id1 = local_label_id(custom_label_id1(), tether).await;
+        let local_custom_label_id2 = local_label_id(custom_label_id2(), tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), tether).await;
 
         let undo = Message::action_label_as(
             tether,
@@ -607,10 +607,10 @@ mod rebase {
 
         let tether = &mut user_ctx.user_stash().connection().await.unwrap();
 
-        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
-        let local_custom_label_id1 = local_label_id(custom_label_id1(), &tether).await;
-        let local_custom_label_id2 = local_label_id(custom_label_id2(), &tether).await;
-        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+        let local_inbox = local_label_id(LabelId::inbox(), tether).await;
+        let local_custom_label_id1 = local_label_id(custom_label_id1(), tether).await;
+        let local_custom_label_id2 = local_label_id(custom_label_id2(), tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), tether).await;
 
         let _ = Message::action_label_as(
             tether,
@@ -655,8 +655,8 @@ mod rebase {
 
         let tether = &mut user_ctx.user_stash().connection().await.unwrap();
 
-        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
-        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+        let local_inbox = local_label_id(LabelId::inbox(), tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), tether).await;
 
         let undo = Message::action_label_as(
             tether,
@@ -722,10 +722,10 @@ mod rebase {
 
         let tether = &mut user_ctx.user_stash().connection().await.unwrap();
 
-        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
-        let local_custom_label_id1 = local_label_id(custom_label_id1(), &tether).await;
-        let local_custom_label_id2 = local_label_id(custom_label_id2(), &tether).await;
-        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+        let local_inbox = local_label_id(LabelId::inbox(), tether).await;
+        let local_custom_label_id1 = local_label_id(custom_label_id1(), tether).await;
+        let local_custom_label_id2 = local_label_id(custom_label_id2(), tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), tether).await;
 
         let _ = Message::action_label_as(
             tether,
@@ -799,8 +799,8 @@ mod rebase {
 
         let tether = &mut user_ctx.user_stash().connection().await.unwrap();
 
-        let local_inbox = local_label_id(LabelId::inbox(), &tether).await;
-        let local_custom_label_id3 = local_label_id(custom_label_id3(), &tether).await;
+        let local_inbox = local_label_id(LabelId::inbox(), tether).await;
+        let local_custom_label_id3 = local_label_id(custom_label_id3(), tether).await;
 
         let _ = Message::action_label_as(
             tether,
