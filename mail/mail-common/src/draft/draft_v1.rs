@@ -466,15 +466,17 @@ impl Draft {
                 (address, None)
             };
 
-        let Some(source_message_body) = Message::load_decrypted_message_from_cache(
-            message_id,
-            &source_message.remote_address_id,
-            &tether,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to get source decrypted message: {e:?}"))?
-        else {
-            return Err(OpenError::MessageBodyMissing(message_id).into());
+        let source_message_body = match source_message
+            .fetch_message_body(context, &mut tether)
+            .await
+        {
+            Ok(body) => body,
+
+            Err(err) => {
+                error!(?err, "Couldn't get source message");
+
+                return Err(OpenError::MessageBodyMissing(message_id).into());
+            }
         };
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
