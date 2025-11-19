@@ -3,7 +3,10 @@ use jiff::Zoned;
 use proton_calendar_api::{self as cal, ProtonCalendarMock};
 use proton_calendar_common::{RsvpAnswer, RsvpEventId, RsvpOrganizer};
 use proton_core_api::services::proton::{GetKeysAllResponse, PrivateString, UserId};
-use proton_core_common::models::{Contact, ContactEmail, ModelExtension};
+use proton_core_common::datatypes::AddressFlags;
+use proton_core_common::models::{
+    Address, Contact, ContactEmail, ModelExtension, ModelIdExtension,
+};
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, KeyPackets};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
@@ -221,7 +224,34 @@ async fn fetch_and_answer() {
     let msg_body = msg.fetch_message_body(&user_ctx, &mut db).await.unwrap();
 
     // ---
-    // Step 2: Find RSVP.
+    // Step 2a: Find RSVP, pretending we've got a BYOE address.
+    //
+    // This returns `None`, because our RSVP logic doesn't support BYOE
+    // addresses yet.
+
+    let mut address = Address::find_by_remote_id(msg_body.address_id.clone(), &db)
+        .await
+        .unwrap()
+        .unwrap();
+
+    db.tx(async |tx| {
+        address.flags = Some(AddressFlags::BYOE);
+        address.save(tx).await
+    })
+    .await
+    .unwrap();
+
+    assert!(msg_body.identify_rsvp(&user_ctx).await.unwrap().is_none());
+
+    db.tx(async |tx| {
+        address.flags = Some(AddressFlags::default());
+        address.save(tx).await
+    })
+    .await
+    .unwrap();
+
+    // ---
+    // Step 2b: Find RSVP, this time for real (for a normal address).
 
     let rsvp = msg_body.identify_rsvp(&user_ctx).await.unwrap().unwrap();
 
