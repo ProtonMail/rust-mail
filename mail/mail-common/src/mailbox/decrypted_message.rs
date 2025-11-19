@@ -18,6 +18,7 @@ use parking_lot::Mutex;
 use proton_action_queue::action::ActionId;
 use proton_calendar_common::{self as cal, RsvpError};
 use proton_core_api::services::proton::AddressId;
+use proton_core_common::models::{Address, ModelIdExtension};
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::sanitizer::StripStyleSheets;
 use proton_mail_html_transformer::transforms::ColorMode;
@@ -409,6 +410,26 @@ impl DecryptedMessageBody {
         let Some(msg_id) = self.metadata.local_message_id else {
             return Ok(None);
         };
+
+        // ---
+
+        let tether = ctx.user_stash().connection().await?;
+
+        let Some(address) = Address::find_by_remote_id(self.address_id.clone(), &tether).await?
+        else {
+            return Ok(None);
+        };
+
+        // Currently we don't support RSVP wiget for BYOE addresses
+        if let Some(flags) = address.flags
+            && flags.is_byoe()
+        {
+            return Ok(None);
+        }
+
+        drop(tether);
+
+        // ---
 
         if let Some(id) = cal::RsvpEventId::from_headers(&self.metadata.parsed_headers.headers) {
             debug!("Identified RSVP via headers");

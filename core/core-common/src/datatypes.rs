@@ -137,6 +137,22 @@ impl ToSql for AddressStatus {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AddressFlags(pub u32);
 
+bitflags! {
+    impl AddressFlags: u32 {
+        const BYOE = 1 << 6;
+
+        // Safeguard against unknown values
+        const _ = !0;
+    }
+}
+
+impl AddressFlags {
+    #[must_use]
+    pub fn is_byoe(&self) -> bool {
+        self.contains(Self::BYOE)
+    }
+}
+
 impl Default for AddressFlags {
     fn default() -> Self {
         ApiAddressFlags::default().into()
