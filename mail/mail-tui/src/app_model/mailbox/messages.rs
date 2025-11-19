@@ -1573,7 +1573,8 @@ fn mark_message_read(ctx: Arc<MailUserContext>, ids: Vec<LocalMessageId>) -> Com
     Command::from_future(async move {
         MailMessage::action_mark_read(ctx.action_queue(), ids)
             .await
-            .context("Failed to mark message as read")
+            .context("Failed to mark message as read")?;
+        Ok(())
     })
 }
 
@@ -1581,7 +1582,8 @@ fn mark_message_unread(ctx: Arc<MailUserContext>, ids: Vec<LocalMessageId>) -> C
     Command::from_future(async move {
         MailMessage::action_mark_unread(ctx.action_queue(), ids)
             .await
-            .context("Failed to mark message as unread")
+            .context("Failed to mark message as unread")?;
+        Ok(())
     })
 }
 

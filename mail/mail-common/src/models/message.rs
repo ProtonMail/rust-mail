@@ -16,7 +16,7 @@ use crate::actions::messages::{LabelAs, UndoLabelAsMessages};
 use crate::actions::messages::{Move, UndoMoveToMessages};
 use crate::actions::{
     ActionMoveData, AllListActions, AllMessageActions, LabelAsData, LabelAsOutput, LabelPair,
-    MailActionError, MovableSystemFolderAction, Undo,
+    MovableSystemFolderAction, Undo,
 };
 use crate::datatypes::ConversationViewOptions;
 use crate::datatypes::MimeType;
@@ -267,12 +267,9 @@ impl Message {
     pub async fn action_mark_read(
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<(), QueueActionError<Read>> {
+    ) -> Result<QueuedActionOutput<Read>, QueueActionError<Read>> {
         let action = Read::new(message_ids);
-        match queue.queue_action(action).await {
-            Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
-            Err(other) => Err(other),
-        }
+        queue.queue_action(action).await
     }
 
     /// Mark multiple messages as unread.
@@ -284,12 +281,9 @@ impl Message {
     pub async fn action_mark_unread(
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<(), QueueActionError<Unread>> {
+    ) -> Result<QueuedActionOutput<Unread>, QueueActionError<Unread>> {
         let action = Unread::new(message_ids);
-        match queue.queue_action(action).await {
-            Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
-            Err(other) => Err(other),
-        }
+        queue.queue_action(action).await
     }
 
     /// Mark multiple messages as read.

@@ -481,7 +481,8 @@ pub async fn mark_conversations_as_read(
             ids.map_vec(),
         )
         .await
-        .map_err(RealProtonMailError::from)
+        .map_err(RealProtonMailError::from)?;
+        Ok::<_, RealProtonMailError>(())
     })
     .await
     .map_err(ActionError::from)
@@ -508,7 +509,8 @@ pub async fn mark_conversations_as_unread(
             ids.map_vec(),
         )
         .await
-        .map_err(RealProtonMailError::from)
+        .map_err(RealProtonMailError::from)?;
+        Ok::<_, RealProtonMailError>(())
     })
     .await
     .map_err(ActionError::from)

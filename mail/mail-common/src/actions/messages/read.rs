@@ -1,6 +1,4 @@
-use crate::actions::{
-    ConversationOrMessage, GenericActionData, MailActionError, filter_responses_by_codes,
-};
+use crate::actions::{GenericActionData, MailActionError, filter_responses_by_codes};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use proton_action_queue::action::{
@@ -57,16 +55,10 @@ impl Handler for ReadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // API call return an error 2501(Message does not exist) for message already
-        // read, so we only pass to apply_remote the things that were unread.
-
-        action.0.target_ids =
-            Message::mark_read_async(action.0.target_ids.iter().copied(), tx).await?;
-
-        if action.0.target_ids.is_empty() {
-            tracing::warn!("mark read doesn't do anything.");
-            return Ok(());
-        }
+        action
+            .0
+            .apply_changes_sync(tx, |id, tx| Message::mark_read_or_unread(true, &[id], tx))
+            .await?;
         Ok(())
     }
 
@@ -76,7 +68,7 @@ impl Handler for ReadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::mark_unread_async(action.0.target_ids.clone(), tx).await?;
+        Message::mark_unread_async(action.0.target_ids_with_modifications(), tx).await?;
         Ok(())
     }
 
@@ -86,11 +78,12 @@ impl Handler for ReadHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        if action.0.target_ids.is_empty() {
+        // API call return an error 2501(Message does not exist) for message already
+        // read, so we only pass to apply_remote the things that were unread.
+        let message_ids = action.0.resolve_ids(guard.tether()).await?;
+        if message_ids.is_empty() {
             return Ok(());
         }
-
-        let message_ids = action.0.resolve_ids_legacy(guard.tether()).await?;
         info!("Marking {message_ids:?} as read");
 
         let response = self.api.put_messages_read(message_ids).await?.responses;
@@ -127,13 +120,17 @@ impl Handler for ReadHandler {
 
     async fn rebase_local(
         &self,
-        this_id: ActionId,
+        _: ActionId,
         action: &mut Self::Action,
-        _: &RebaseChangeSet,
+        changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        //TODO(ET-5183): Test me!
-        self.apply_local(this_id, action, tx).await?;
+        action
+            .0
+            .rebase_changes_sync(changeset, tx, |id, _, tx| {
+                Message::mark_read_or_unread(true, &[id], tx)
+            })
+            .await?;
         Ok(())
     }
 }

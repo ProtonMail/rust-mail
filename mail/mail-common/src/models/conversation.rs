@@ -9,7 +9,7 @@ use crate::actions::conversations::{LabelAs, Snooze, UndoLabelAsArchiveConversat
 use crate::actions::conversations::{MarkRead, MarkUnread, Move, Unsnooze};
 use crate::actions::{
     ActionMoveData, ConversationOrMessage, LabelAsAction, LabelAsData, LabelAsOutput, LabelPair,
-    MailActionError, MoveAction, Undo, filter_responses,
+    MoveAction, Undo, filter_responses,
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
@@ -225,12 +225,9 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<(), QueueActionError<MarkRead>> {
+    ) -> Result<QueuedActionOutput<MarkRead>, QueueActionError<MarkRead>> {
         let action = MarkRead::new(label_id, conversation_ids);
-        match queue.queue_action(action).await {
-            Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
-            Err(other) => Err(other),
-        }
+        queue.queue_action(action).await
     }
 
     /// Mark multiple conversations as unread.
@@ -243,12 +240,9 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<(), QueueActionError<MarkUnread>> {
+    ) -> Result<QueuedActionOutput<MarkUnread>, QueueActionError<MarkUnread>> {
         let action = MarkUnread::new(label_id, conversation_ids);
-        match queue.queue_action(action).await {
-            Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
-            Err(other) => Err(other),
-        }
+        queue.queue_action(action).await
     }
 
     /// Delete multiple conversations.
@@ -1377,7 +1371,8 @@ impl Conversation {
         local_label_id: LocalLabelId,
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
         tx: &Transaction<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        let mut modified = Vec::new();
         for conversation_id in conversation_ids {
             info!("Marking {conversation_id:?} as unread");
             let Some(mut conversation) = Conversation::load_by_id_sync(conversation_id, tx)? else {
@@ -1437,6 +1432,7 @@ impl Conversation {
             // Update the message
             message.unread = true;
             message.save_sync(tx)?;
+            modified.push(message.id());
 
             // Update the label counts
 
@@ -1480,7 +1476,7 @@ impl Conversation {
             conversation.num_unread += 1;
             conversation.save_sync(tx)?;
         }
-        Ok(())
+        Ok(modified)
     }
 
     pub async fn mark_unread_async(

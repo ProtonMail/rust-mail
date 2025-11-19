@@ -1975,7 +1975,8 @@ async fn test_conversation_mark_unread() {
     tether
         .sync_tx(move |tx| {
             // Mark last one as unread
-            Conversation::mark_unread(local_label_id1, [local_conv_id], tx)
+            Conversation::mark_unread(local_label_id1, [local_conv_id], tx)?;
+            Ok(())
         })
         .await
         .unwrap();

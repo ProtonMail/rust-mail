@@ -239,21 +239,43 @@ pub(crate) fn register_actions(
 #[serde(bound = "")]
 struct GenericActionData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + Hash>,
 {
     target_ids: Vec<T::IdType>,
+    #[serde(default)]
+    modified_set: HashMap<T::IdType, HashSet<LocalMessageId>>,
     phantom: PhantomData<T>,
 }
 
 impl<T> GenericActionData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + Hash + Into<RebaseKey>>,
 {
     pub fn new(target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
+        // Filter out possible duplicates
+        let target_ids = target_ids.into_iter().collect::<HashSet<_>>();
+        let modified_set = HashMap::with_capacity(target_ids.len());
         Self {
-            target_ids: Vec::from_iter(target_ids),
+            target_ids: target_ids.into_iter().collect(),
+            modified_set,
             phantom: PhantomData,
         }
+    }
+
+    pub fn target_ids_with_modifications(&self) -> Vec<T::IdType> {
+        let mut result = Vec::with_capacity(self.target_ids.len());
+        for (id, _) in self.modified_set.iter().filter(|(_, m)| !m.is_empty()) {
+            result.push(id.clone());
+        }
+        result
+    }
+
+    pub fn modified_message_ids(&self) -> Vec<LocalMessageId> {
+        let mut result = Vec::with_capacity(self.target_ids.len());
+        for modified in self.modified_set.values() {
+            result.extend(modified);
+        }
+        result
     }
 
     /// Resolve all remote ids.
@@ -279,6 +301,98 @@ where
             })?;
 
         Ok(remote_target_ids)
+    }
+
+    async fn resolve_ids(&mut self, tether: &Tether) -> Result<Vec<T::RemoteId>, MailActionError> {
+        if self.target_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let remote_target_ids = T::local_ids_counterpart(self.target_ids.clone(), tether)
+            .await
+            .map_err(|e| {
+                error!("Failed to resolve ids: {e:?}");
+                e
+            })?;
+
+        Ok(remote_target_ids)
+    }
+
+    /*
+    async fn apply_changes(
+        &mut self,
+        tx: &Bond<'_>,
+        closure: impl AsyncFn(T::IdType, &Bond<'_>) -> Result<Vec<LocalMessageId>, StashError>,
+    ) -> Result<(), MailActionError> {
+        for id in &self.target_ids {
+            let modified = closure(id.clone(), tx).await?;
+            self.modified_set
+                .entry(id.clone())
+                .or_default()
+                .extend(modified);
+        }
+        Ok(())
+    }*/
+
+    async fn apply_changes_sync(
+        &mut self,
+        tx: &Bond<'_>,
+        closure: impl Fn(T::IdType, &Transaction<'_>) -> Result<Vec<LocalMessageId>, StashError>
+        + Send
+        + 'static,
+    ) -> Result<(), MailActionError> {
+        let mut modified_set = std::mem::take(&mut self.modified_set);
+        let target_ids = self.target_ids.clone();
+        let modified_set = tx
+            .sync_bridge(move |tx| {
+                for id in target_ids {
+                    let modified = closure(id.clone(), tx)?;
+                    modified_set.entry(id).or_default().extend(modified);
+                }
+                Ok(modified_set)
+            })
+            .await?;
+        let _ = std::mem::replace(&mut self.modified_set, modified_set);
+        Ok(())
+    }
+
+    async fn rebase_changes_sync(
+        &mut self,
+        changeset: &RebaseChangeSet,
+        tx: &Bond<'_>,
+        closure: impl Fn(
+            T::IdType,
+            &HashSet<LocalMessageId>,
+            &Transaction<'_>,
+        ) -> Result<Vec<LocalMessageId>, StashError>
+        + Send
+        + 'static,
+    ) -> Result<(), MailActionError> {
+        let target_ids = self
+            .target_ids
+            .iter()
+            .filter(|&id| {
+                let rebase_key: RebaseKey = id.clone().into();
+                changeset.contains(&rebase_key)
+            })
+            .cloned()
+            .collect::<Vec<T::IdType>>();
+        if target_ids.is_empty() {
+            return Ok(());
+        }
+        let mut modified_set = std::mem::take(&mut self.modified_set);
+        let modified_set = tx
+            .sync_bridge(move |tx| {
+                for id in target_ids {
+                    let entry = modified_set.entry(id.clone()).or_default();
+                    let modified = closure(id.clone(), entry, tx)?;
+                    *entry = modified.into_iter().collect();
+                }
+                Ok(modified_set)
+            })
+            .await?;
+        let _ = std::mem::replace(&mut self.modified_set, modified_set);
+        Ok(())
     }
 
     /// Return the ids of all the items which do not have a remote id.
@@ -347,7 +461,7 @@ where
 
 impl<T> GenericActionData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + LocalIdActionDepExt>,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + LocalIdActionDepExt + Eq + Hash>,
 {
     fn read_unread_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
         ActionDependencyKeysBuilder::new()
@@ -364,7 +478,7 @@ where
 #[serde(bound = "")]
 struct GenericLabelRelatedActionData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + Hash>,
 {
     /// Local label id which this action applies to.
     label_id: LocalLabelId,
@@ -374,7 +488,7 @@ where
 
 impl<T> GenericLabelRelatedActionData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + Hash + Into<RebaseKey>>,
 {
     /// Create a new instance with the given `label_id` and target `ids`.
     pub fn new(label_id: LocalLabelId, target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
@@ -409,11 +523,50 @@ where
     async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, MailActionError> {
         self.data.unsynced_item_ids(tether).await
     }
+
+    async fn resolve_ids(
+        &mut self,
+        tether: &Tether,
+    ) -> Result<(LabelId, Vec<T::RemoteId>), MailActionError> {
+        let label_id = Label::local_id_counterpart(self.label_id, tether)
+            .await?
+            .ok_or_else(|| AppError::LabelDoesNotHaveRemoteId(self.label_id))?;
+        let ids = self.data.resolve_ids(tether).await?;
+        Ok((label_id, ids))
+    }
+
+    pub fn modified_message_ids(&self) -> Vec<LocalMessageId> {
+        self.data.modified_message_ids()
+    }
+    async fn apply_changes_sync(
+        &mut self,
+        tx: &Bond<'_>,
+        closure: impl Fn(T::IdType, &Transaction<'_>) -> Result<Vec<LocalMessageId>, StashError>
+        + Send
+        + 'static,
+    ) -> Result<(), MailActionError> {
+        self.data.apply_changes_sync(tx, closure).await
+    }
+
+    async fn rebase_changes_sync(
+        &mut self,
+        changeset: &RebaseChangeSet,
+        tx: &Bond<'_>,
+        closure: impl Fn(
+            T::IdType,
+            &HashSet<LocalMessageId>,
+            &Transaction<'_>,
+        ) -> Result<Vec<LocalMessageId>, StashError>
+        + Send
+        + 'static,
+    ) -> Result<(), MailActionError> {
+        self.data.rebase_changes_sync(changeset, tx, closure).await
+    }
 }
 
 impl<T> GenericLabelRelatedActionData<T>
 where
-    T: ModelIdExtension<IdType: LocalIdActionDepExt + Serialize + DeserializeOwned>,
+    T: ModelIdExtension<IdType: LocalIdActionDepExt + Serialize + DeserializeOwned + Eq + Hash>,
 {
     fn action_dependency_keys_builder_optional(&self) -> ActionDependencyKeysBuilder {
         ActionDependencyKeysBuilder::new()

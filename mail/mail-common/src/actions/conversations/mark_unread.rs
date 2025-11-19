@@ -3,8 +3,8 @@ use crate::actions::{
     filter_responses_by_codes,
 };
 use crate::datatypes::LocalConversationId;
-use crate::datatypes::{ContextualConversation, RollbackItemType};
-use crate::models::Conversation;
+use crate::datatypes::RollbackItemType;
+use crate::models::{Conversation, Message};
 use anyhow::Context;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
@@ -57,20 +57,12 @@ impl Handler for MarkUnreadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // API call return an error 2501(Conversation was not updated) for conversation already unread
-        let conversations = Conversation::find_by_ids(action.0.data.target_ids.clone(), tx).await?;
-        action.0.data.target_ids = conversations
-            .into_iter()
-            .filter_map(|c| ContextualConversation::new(c, action.0.label_id))
-            .filter(|c| c.num_unread < c.num_messages)
-            .map(|c| c.local_id)
-            .collect();
-
-        if action.0.data.target_ids.is_empty() {
-            return Err(MailActionError::NoInput);
-        }
-
-        Conversation::mark_unread_async(action.0.label_id, action.0.data.target_ids.clone(), tx)
+        let label_id = action.0.label_id;
+        action
+            .0
+            .apply_changes_sync(tx, move |id, tx| {
+                Conversation::mark_unread(label_id, [id], tx)
+            })
             .await?;
         Ok(())
     }
@@ -81,7 +73,8 @@ impl Handler for MarkUnreadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::mark_read_async(action.0.data.target_ids.clone(), tx).await?;
+        let modified_message_ids = action.0.modified_message_ids();
+        Message::mark_read_async(modified_message_ids, tx).await?;
         Ok(())
     }
 
@@ -91,11 +84,14 @@ impl Handler for MarkUnreadHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let (remote_label_id, remote_target_ids) =
-            action.0.resolve_ids_legacy(guard.tether()).await?;
+        // API call return an error 2501(Conversation was not updated) for conversation already unread
+        let (remote_label_id, remote_target_ids) = action.0.resolve_ids(guard.tether()).await?;
+        if remote_target_ids.is_empty() {
+            return Ok(());
+        }
         let responses = Conversation::mark_multiple_as_unread_remote(
             remote_target_ids,
-            remote_label_id.expect("Should be set"),
+            remote_label_id,
             &self.api,
         )
         .await?;
@@ -128,13 +124,22 @@ impl Handler for MarkUnreadHandler {
 
     async fn rebase_local(
         &self,
-        this_id: ActionId,
+        _: ActionId,
         action: &mut Self::Action,
-        _: &RebaseChangeSet,
+        changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        //TODO(ET-5183): Test me!
-        self.apply_local(this_id, action, tx).await?;
+        let label_id = action.0.label_id;
+        action
+            .0
+            .rebase_changes_sync(changeset, tx, move |id, modified, tx| {
+                // Reset the previously modified message back to read to reset the calculation.
+                if !modified.is_empty() {
+                    Message::mark_read(modified.iter().copied(), tx)?;
+                }
+                Conversation::mark_unread(label_id, [id], tx)
+            })
+            .await?;
         Ok(())
     }
 }
