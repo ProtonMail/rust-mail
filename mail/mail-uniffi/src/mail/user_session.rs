@@ -660,6 +660,17 @@ impl MailUserSession {
         .await
         .map_err(UserSessionError::from)
     }
+
+    /// Check if the user has at least one valid non-BYOE sender address.
+    pub async fn has_valid_sender_address(&self) -> Result<bool, ProtonError> {
+        let ctx = self.ctx()?;
+        uniffi_async(async move {
+            let address = ctx.account_service().find_valid_sender_address().await?;
+            Result::<_, RealProtonMailError>::Ok(address.is_some())
+        })
+        .await
+        .map_err(ProtonError::from)
+    }
 }
 
 impl TryFrom<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {

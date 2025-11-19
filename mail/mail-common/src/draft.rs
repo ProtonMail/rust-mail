@@ -7,7 +7,6 @@ use crate::models::{
 };
 use crate::{ImagePolicy, MailContextError, MailContextResult, MailUserContext};
 use chrono::{DateTime, Local};
-use compose::find_default_sender_address;
 use derive_more::Display;
 use derive_more::derive::TryFrom;
 use non_empty_string::NonEmptyString;
@@ -705,7 +704,9 @@ impl DraftActor {
         let mut body = String::new();
         let mut tether = context.user_stash().connection().await?;
 
-        let address_id = find_default_sender_address(&tether)
+        let address_id = context
+            .account_service()
+            .find_valid_sender_address()
             .await?
             .ok_or(OpenError::UserHasNoAddresses)?
             .remote_id
