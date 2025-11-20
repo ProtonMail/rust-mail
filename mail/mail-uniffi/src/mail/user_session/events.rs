@@ -6,8 +6,8 @@ use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason}
 use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_core_common::actions::event_poll::{ActionEventLoopError, EventPoll};
 use proton_event_loop::EventLoopError;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::errors::unexpected::Unexpected;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
+use proton_mail_common::Unexpected;
 use std::sync::Arc;
 use tokio::task::AbortHandle;
 

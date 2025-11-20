@@ -23,7 +23,7 @@ use proton_account_uniffi::password_validator::PasswordValidatorService;
 use proton_core_api::services::proton::ProtonAuth;
 use proton_core_common::UserContext;
 use proton_core_common::services::PaymentsService;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
 use proton_mail_common::{MailContextError, MailUserContext};
 use proton_observability::PreLoginMetricRecorder;

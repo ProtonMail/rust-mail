@@ -22,6 +22,7 @@ use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
 use chrono::Local;
 use proton_core_api::services::proton::PrivateEmail;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::draft::recipients::ExpirationFeatureSupportReport;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftActorOptions, DraftEvent,
@@ -30,7 +31,6 @@ use proton_mail_common::draft::{
     compose::DraftAddressValidationError as RealDraftAddressValidationError,
     compose::DraftAddressValidationResult as RealDraftAddressValidationResult,
 };
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::DraftSendResult as RealDraftSendResult;
 use proton_mail_common::models::{DraftMetadata, MessageMimeType};
 use proton_mail_common::{MailContextError, MailUserContext};

@@ -12,7 +12,7 @@ use itertools::Itertools;
 use proton_core_common::datatypes::DeviceContact as RealDeviceContact;
 use proton_core_common::models::{AppSettings, Contact as RealContact};
 use proton_core_common::utils::MapVec as _;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::{MailContextError, MailUserContext};
 use std::{
     sync::{

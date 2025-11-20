@@ -1,11 +1,10 @@
 use super::ProtonError;
 use crate::UniffiEnum;
 use crate::errors::MailScrollerErrorReason;
-
 use derive_more::From;
-use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
-use proton_mail_common::errors::MailScrollerErrorReason as RealMailScrollerErrorReason;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::MailErrorReason as RealMailErrorReason;
+use proton_mail_common::MailScrollerErrorReason as RealMailScrollerErrorReason;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 
 #[derive(Debug, From, UniffiEnum)]
 pub enum MailScrollerError {

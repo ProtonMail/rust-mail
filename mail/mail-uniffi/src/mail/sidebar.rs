@@ -8,7 +8,7 @@ use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::state::MailUserContextPtr;
 use crate::{LiveQueryCallback, WatchHandle, declare_live_query_tagger, uniffi_async};
 use proton_core_common::utils::MapVec as _;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::LabelWithCounters as RealLabelWithCounters;
 use proton_mail_common::{MailUserContext, Sidebar as RealSidebar};
 use stash::stash::Stash;

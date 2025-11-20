@@ -3,7 +3,7 @@ use crate::errors::ProtonError;
 use crate::mail::MailUserSession;
 use proton_core_common::datatypes::SystemLabel as RealSystemLabel;
 use proton_core_common::models::Label as RealLabel;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use stash::orm::Model;
 use std::sync::Arc;
 use uniffi::Enum as UniffiEnum;

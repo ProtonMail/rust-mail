@@ -8,12 +8,12 @@ use uniffi::Record as UniffiRecord;
 
 use super::MailUserSession;
 use super::datatypes::SystemLabel;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::datatypes::{
     AssignedSwipeAction as RealAssignedSwipeAction,
     AssignedSwipeActions as RealAssignedSwipeActions,
     SwipeActionMoveToTarget as RealSwipeActionMoveToTarget,
 };
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 /// Contains information of what exactly has to happen when user swipes item (conversation, message)
 /// right or left.

@@ -25,6 +25,7 @@ use proton_core_common::utils::MapVec as _;
 use proton_mail_api::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_mail_api::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
+use proton_mail_common::ProtonMailError;
 use proton_mail_common::actions::{LabelAsOutput as RealLabelAsOutput, Undo as RealUndo};
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
@@ -46,7 +47,6 @@ use proton_mail_common::datatypes::{
     HiddenMessagesBanner as RealHiddenMessagesBanner,
 };
 use proton_mail_common::draft::recipients::MaybeEmptyString;
-use proton_mail_common::errors::ProtonMailError;
 use proton_mail_common::models::{
     Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
     MessageMimeType, MessageReplyTo as RealMessageReplyTo,

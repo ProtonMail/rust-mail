@@ -5,12 +5,12 @@ use itertools::Itertools;
 use non_empty_string::NonEmptyString;
 use proton_core_api::services::proton::PrivateString;
 use proton_mail_common::MailContextError;
+use proton_mail_common::ProtonMailError;
 use proton_mail_common::draft::recipients::{
     GroupRecipient, Recipient as RealRecipient, RecipientEntry, RecipientError, SingleRecipient,
     ValidationState,
 };
 use proton_mail_common::draft::{Draft as RealDraft, Error, RecipientGroupId};
-use proton_mail_common::errors::ProtonMailError;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::error;

@@ -1,5 +1,5 @@
 use crate::{UniffiEnum, mail::Origin};
-use proton_mail_common::errors::{
+use proton_mail_common::{
     ActionErrorReason as RealActionErrorReason, ContextErrorReason as RealContextErrorReason,
     DraftAttachmentDispositionSwapErrorReason as RealDraftAttachmentDispositionSwapErrorReason,
     DraftAttachmentUploadErrorReason as RealDraftAttachmentErrorReason,

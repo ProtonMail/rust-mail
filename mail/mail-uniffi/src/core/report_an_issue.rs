@@ -8,7 +8,7 @@ use crate::{
 
 use super::datatypes::IssueReport;
 use proton_core_common::datatypes::report_an_issue as real_report_an_issue;
-use proton_mail_common::{MailContextError, errors::ProtonMailError as RealProtonMailError};
+use proton_mail_common::{MailContextError, ProtonMailError as RealProtonMailError};
 
 #[uniffi_export]
 #[returns(VoidSessionResult)]

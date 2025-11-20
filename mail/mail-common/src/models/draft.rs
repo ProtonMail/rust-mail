@@ -2,7 +2,6 @@
 #[path = "../tests/models/draft_metadata.rs"]
 mod draft_metadata;
 
-use crate::MailContextError;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{LocalAttachmentId, LocalConversationId};
@@ -11,13 +10,12 @@ use crate::draft::{
     AttachmentDispositionSwapError, AttachmentUploadError, DraftExpirationTime, Error,
     PackageError, PasswordError, ReplyMode, SaveError, SendError,
 };
-use crate::errors::api_service_error::UserApiServiceError;
-use crate::errors::unexpected::Unexpected;
-use crate::errors::{
-    DraftAttachmentDispositionSwapErrorReason, DraftAttachmentUploadErrorReason,
-    DraftSaveErrorReason, DraftSendErrorReason, MailErrorReason, ProtonMailError,
-};
 use crate::models::{Attachment, Message, MessageBodyMetadata};
+use crate::{
+    DraftAttachmentDispositionSwapErrorReason, DraftAttachmentUploadErrorReason,
+    DraftSaveErrorReason, DraftSendErrorReason, MailContextError, MailErrorReason, ProtonMailError,
+    Unexpected, UserApiServiceError,
+};
 use anyhow::anyhow;
 use chrono::Utc;
 use derive_more::derive::TryFrom;

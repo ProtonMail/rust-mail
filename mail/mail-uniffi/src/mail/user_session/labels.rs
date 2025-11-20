@@ -7,10 +7,10 @@ use proton_core_api::services::proton::LabelId as RealLabelId;
 use proton_core_common::datatypes::LabelType as RealLabelType;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec as _;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::datatypes::labels::custom_folder::CustomFolder as RealCustomFolder;
 use proton_mail_common::datatypes::labels::custom_labels::CustomLabel as RealCustomLabel;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 #[uniffi_export]
 impl MailUserSession {

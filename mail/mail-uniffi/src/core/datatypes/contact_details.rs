@@ -16,7 +16,7 @@ use proton_core_common::datatypes::contact_details::VCardUrl as RealVCardUrl;
 use proton_core_common::datatypes::contact_details::VCardUrlValue as RealVCardUrlValue;
 use proton_core_common::datatypes::contact_details::VcardPropType as RealVcardPropType;
 use proton_core_common::utils::MapVec as _;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_vcard::values::date_and_or_time::DateAndOrTimeValue;
 use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 
