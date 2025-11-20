@@ -1743,8 +1743,14 @@ mod rebase_messages {
     }
 
     #[tokio::test]
-    async fn rebase_to_same_state_does_not_trigger_network() {
-        let (_test_ctx, user_ctx, mut updated_message, _) = setup_move_rebase().await;
+    async fn rebase_to_same_state_still_triggers_server_call() {
+        let (_test_ctx, user_ctx, mut updated_message, _) =
+            setup_move_rebase_with_mocks(async |ctx, msg, _| {
+                ctx.mock_label_messages(&LabelId::trash(), vec![msg.remote_id.clone().unwrap()])
+                    .await;
+            })
+            .await;
+
         let tether = &mut user_ctx.user_stash().connection().await.unwrap();
 
         updated_message.unread = false;
@@ -2244,8 +2250,18 @@ mod rebase_conversations {
     }
 
     #[tokio::test]
-    async fn rebase_to_same_state_does_not_trigger_network() {
-        let (_test_ctx, user_ctx, mut original_conversation, _) = setup_move_rebase().await;
+    async fn rebase_to_same_state_still_applies_on_server() {
+        let (_test_ctx, user_ctx, mut original_conversation, _) =
+            setup_move_rebase_with_mocks(async |ctx, conv1, _| {
+                ctx.mock_label_conversation(
+                    &LabelId::trash(),
+                    vec![conv1.remote_id.clone().unwrap()],
+                    None,
+                    vec![],
+                )
+                .await;
+            })
+            .await;
         original_conversation.sort_labels();
 
         {
