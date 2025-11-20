@@ -69,6 +69,7 @@ proton-mail-html-transformer = { workspace = true }
 proton-sqlite3 = { workspace = true }
 proton-task-service = { workspace = true }
 proton-mail-common-derive = { workspace = true }
+proton-mailto = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

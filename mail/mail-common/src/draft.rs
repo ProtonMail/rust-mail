@@ -22,6 +22,7 @@ use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
 use proton_crypto_inbox::message::MessageError;
 use proton_mail_api::services::proton::request_data::DraftAction;
 use proton_mail_api::services::proton::response_data::Message as ApiMessage;
+use proton_mailto::Mailto;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use secrecy::{ExposeSecret, SecretString};
@@ -570,6 +571,7 @@ impl fmt::Debug for DraftActor {
 }
 
 const DRAFT_EVENT_CHANNEL_CAPACITY: usize = 8;
+
 impl DraftActor {
     pub fn subscribe(&self) -> broadcast::Receiver<DraftEvent> {
         self.event_sender.subscribe()
@@ -618,7 +620,60 @@ impl DraftActor {
         options: DraftActorOptions,
     ) -> Result<Self, MailContextError> {
         let draft = draft_v1::Draft::empty(context).await?;
+
         Ok(Self::create(context, draft, options))
+    }
+
+    #[instrument(skip_all)]
+    pub async fn mailto(
+        context: &MailUserContext,
+        options: DraftActorOptions,
+        mailto: Mailto,
+    ) -> Result<Self, MailContextError> {
+        info!("Creating draft from a mailto link");
+
+        let draft = Self::empty_ex(context, options).await?;
+
+        let recipients = {
+            let tos = mailto
+                .to
+                .into_iter()
+                .map(|email| (RecipientGroupId::To, email));
+
+            let ccs = mailto
+                .cc
+                .into_iter()
+                .map(|email| (RecipientGroupId::Cc, email));
+
+            let bccs = mailto
+                .bcc
+                .into_iter()
+                .map(|email| (RecipientGroupId::Bcc, email));
+
+            tos.chain(ccs).chain(bccs)
+        };
+
+        for (group, email) in recipients {
+            draft
+                .add_single_recipient(
+                    group,
+                    RecipientEntry {
+                        name: None,
+                        email: email.into(),
+                    },
+                )
+                .await?;
+        }
+
+        if let Some(subject) = mailto.subject {
+            draft.set_subject(subject).await?;
+        }
+
+        if let Some(body) = mailto.body {
+            draft.set_body(body).await?;
+        }
+
+        Ok(draft)
     }
 
     #[instrument(skip_all)]
@@ -1578,6 +1633,7 @@ impl DraftActor {
             event_sender,
         }
     }
+
     async fn act<T: Send>(
         &self,
         build_message: impl FnOnce(oneshot::Sender<T>) -> DraftActorMessage,

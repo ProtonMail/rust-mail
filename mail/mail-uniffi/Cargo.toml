@@ -34,6 +34,7 @@ proton-task-service = { workspace = true }
 proton-issue-reporter-service-uniffi = { workspace = true }
 proton-ical = { workspace = true }
 proton-vcard = { workspace = true }
+proton-mailto = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 smart-default = { workspace = true }

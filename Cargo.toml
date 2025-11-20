@@ -46,6 +46,7 @@ members = [
   "shared/proton-issue-reporter-service",
   "shared/proton-issue-reporter-service-uniffi",
   "shared/proton-observability",
+  "shared/mailto",
 ]
 
 [workspace.package]
@@ -349,6 +350,9 @@ registry = "proton"
 
 [workspace.dependencies.proton-observability]
 path = "shared/proton-observability"
+
+[workspace.dependencies.proton-mailto]
+path = "shared/mailto"
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"
