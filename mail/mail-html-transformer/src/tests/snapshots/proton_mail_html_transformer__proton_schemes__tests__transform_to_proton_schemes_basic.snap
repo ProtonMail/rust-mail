@@ -5,6 +5,7 @@ expression: transformer.to_string()
 <html><head></head><body>
             <img src="proton-https://example.com/image.png">
             <img src="proton-http://test.com/photo.jpg">
+            <img src="">
             <div style="background-image: url(&quot;proton-https://background.com/bg.png&quot;)">Content</div>
         
     

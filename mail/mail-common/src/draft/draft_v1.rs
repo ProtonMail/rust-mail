@@ -53,7 +53,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs;
 use tracing::{debug, error, info, warn};
-use url::Url;
 
 /// Represent a new message that is being drafted.
 ///
@@ -917,7 +916,7 @@ impl Draft {
     pub async fn load_image(
         metadata_id: MetadataId,
         ctx: &MailUserContext,
-        url: Url,
+        url: &str,
         policy: ImagePolicy,
     ) -> MailContextResult<AttachmentData> {
         ctx.image_loader()

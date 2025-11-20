@@ -28,16 +28,13 @@ use crate::mail::mail_scroller::{
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async};
 use crate::{PaginatorSearchOptions, declare_live_query_tagger};
 use itertools::Itertools as _;
+use proton_core_api::services::proton::AddressId;
+use proton_core_api::services::proton::PrivateEmail;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
-use proton_mail_common::errors::unexpected::Unexpected;
-use proton_mail_common::{MailContextError, MailUserContext};
-use url::Url;
-
-use proton_core_api::services::proton::AddressId;
-use proton_core_api::services::proton::PrivateEmail;
 use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{
@@ -48,6 +45,7 @@ use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
     TransformOpts as RealTransformOpts,
 };
+use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
@@ -151,11 +149,7 @@ impl DecryptedMessage {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            let url = Url::try_from(url.as_str())
-                .map_err(MailContextError::from)
-                .map_err(RealProtonMailError::from)?;
-
-            let att = self.body.load_image(&ctx, url, policy.into()).await?;
+            let att = self.body.load_image(&ctx, &url, policy.into()).await?;
 
             Ok(AttachmentData {
                 data: att.data,

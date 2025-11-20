@@ -2865,10 +2865,19 @@ impl TableObserver for MessageWatcher {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AttachmentData {
     pub data: Vec<u8>,
     pub mime: String,
+}
+
+impl AttachmentData {
+    pub fn empty() -> Self {
+        Self {
+            data: Vec::new(),
+            mime: "image/*".into(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]

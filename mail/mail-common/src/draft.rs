@@ -794,8 +794,6 @@ impl DraftActor {
     }
 
     pub async fn load_image(&self, url: String) -> MailContextResult<AttachmentData> {
-        let url = url::Url::parse(&url)?;
-
         self.act(|sender| DraftActorMessage::LoadImage { url, sender })
             .await?
     }
@@ -1356,7 +1354,7 @@ enum DraftActorMessage {
 
     #[display("LoadImage")]
     LoadImage {
-        url: url::Url,
+        url: String,
         sender: oneshot::Sender<Result<AttachmentData, MailContextError>>,
     },
 
@@ -1761,7 +1759,7 @@ impl DraftActor {
                     let policy = draft.image_policy;
 
                     ctx_cloned.spawn(async move {
-                        let r = draft_v1::Draft::load_image(id, &ctx, url, policy).await;
+                        let r = draft_v1::Draft::load_image(id, &ctx, &url, policy).await;
                         let _ = sender.send(r);
                     });
                 }

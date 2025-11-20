@@ -9,7 +9,7 @@ use proton_core_api::{
 };
 use reqwest::Method;
 use stash::stash::StashError;
-use std::sync::Weak;
+use std::{str::FromStr, sync::Weak};
 use thiserror::Error as TError;
 use tracing::instrument;
 use url::Url;
@@ -28,16 +28,35 @@ impl ImageLoader {
     ///
     /// If given address uses the `cid` (content id) schema, this function
     /// fetches data using the `load_cid` callback.
-    #[instrument(skip(self, url, load_cid), fields(url.scheme = ?url.scheme()))]
+    #[instrument(skip(self, url, load_cid))]
     pub async fn load<L, C>(
         &self,
-        url: Url,
+        url: &str,
         policy: ImagePolicy,
         load_cid: L,
     ) -> Result<AttachmentData, ImageLoaderError<C>>
     where
         L: AsyncFnOnce(&ContentId) -> Result<AttachmentData, C>,
     {
+        // If the URL is empty, return an empty attachment that ends up being
+        // displayed as a "question mark image" on the device.
+        //
+        // This is a somewhat hacky way of handling disabled remote content - if
+        // user has that setting active, our html transformer will convert:
+        //
+        //     <img src="https://funny-dogs.io/123.jpg" />
+        //
+        // ... into:
+        //
+        //     <img src="" />
+        //
+        // ... and that empty `src` is what we get as `url` here.
+        if url.trim().is_empty() {
+            return Ok(AttachmentData::empty());
+        }
+
+        let url = Url::from_str(url)?;
+
         match url.scheme() {
             "cid" => load_cid(&url.path().into())
                 .await
@@ -194,7 +213,6 @@ mod tests {
     use crate::test_utils::test_context::MailTestContext;
     use proton_core_common::datatypes::ImageProxy;
     use stash::orm::Model;
-    use std::str::FromStr;
     use test_case::test_case;
     use wiremock::{
         Mock, ResponseTemplate,
@@ -410,16 +428,14 @@ mod tests {
             ExpectedRequest::Proxied(_) => case.given_url.to_string(),
         };
 
-        let url = Url::from_str(&url).unwrap();
-
-        let att = uctx
+        let img = uctx
             .image_loader()
-            .load(url, case.given_policy, async |_| Err(()))
+            .load(&url, case.given_policy, async |_| Err(()))
             .await
             .unwrap();
 
-        assert_eq!(vec![1, 2, 3], att.data);
-        assert_eq!("image/*", att.mime);
+        assert_eq!(vec![1, 2, 3], img.data);
+        assert_eq!("image/*", img.mime);
     }
 
     #[tokio::test]
@@ -429,10 +445,10 @@ mod tests {
 
         // ---
 
-        let url = Url::from_str("cid:raise-your-horns").unwrap();
+        let url = "cid:raise-your-horns";
         let policy = ImagePolicy::Safe;
 
-        let att = uctx
+        let img = uctx
             .image_loader()
             .load::<_, ()>(url, policy, async |cid| {
                 assert_eq!("raise-your-horns", cid.as_str());
@@ -445,8 +461,27 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(vec![1, 2, 3], att.data);
-        assert_eq!("image/bmp", att.mime);
+        assert_eq!(vec![1, 2, 3], img.data);
+        assert_eq!("image/bmp", img.mime);
+    }
+
+    #[tokio::test]
+    async fn load_empty() {
+        let ctx = MailTestContext::new().await;
+        let uctx = ctx.uninitialized_mail_user_context().await;
+
+        // ---
+
+        let url = "";
+        let policy = ImagePolicy::Safe;
+
+        let img = uctx
+            .image_loader()
+            .load(url, policy, async |_| Err(()))
+            .await
+            .unwrap();
+
+        assert_eq!(AttachmentData::empty(), img);
     }
 
     #[tokio::test]
@@ -459,7 +494,7 @@ mod tests {
         ctx.mock_proxy_img("https://le.ona/covers/bleeding-love.tiff", vec![])
             .await;
 
-        let url = Url::from_str("https://le.ona/covers/bleeding-love.tiff").unwrap();
+        let url = "https://le.ona/covers/bleeding-love.tiff";
         let policy = ImagePolicy::Safe;
 
         let err = uctx
