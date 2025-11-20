@@ -1429,6 +1429,7 @@ impl MessageSearchOptions {
                 Some(id) => {
                     RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
                         .await?
+                        .map(|v| vec![v])
                 }
                 None => None,
             },

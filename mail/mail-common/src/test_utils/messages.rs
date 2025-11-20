@@ -4,7 +4,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_common::utils::MapVec;
 use proton_crypto_inbox::keys::PackageCryptoType;
-use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::prelude::{
     AddressSubPackage, AuthInput, IncomingDefault, Package, PostCancelSendResponse,
     PostIncomingDefaultResponse, PostSendDirectMessageResponse, PostSendRequest,
@@ -779,6 +779,7 @@ pub struct GetMessagesMock<'a> {
     keyword: Option<String>,
     end_id: Option<String>,
     expect: Option<Times>,
+    conversation_ids: Option<Vec<ConversationId>>,
 }
 
 impl<'a> GetMessagesMock<'a> {
@@ -790,6 +791,7 @@ impl<'a> GetMessagesMock<'a> {
             keyword: None,
             end_id: None,
             expect: None,
+            conversation_ids: None,
         }
     }
 
@@ -805,6 +807,14 @@ impl<'a> GetMessagesMock<'a> {
 
     pub fn given_end_id(mut self, end_id: &str) -> Self {
         self.end_id = Some(end_id.into());
+        self
+    }
+
+    pub fn given_conversation_ids(
+        mut self,
+        conversation_ids: impl IntoIterator<Item = ConversationId>,
+    ) -> Self {
+        self.conversation_ids = Some(conversation_ids.into_iter().collect());
         self
     }
 
