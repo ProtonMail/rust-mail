@@ -729,8 +729,31 @@ mod rebase {
     }
 
     #[tokio::test]
-    async fn rebase_to_same_state_is_noop() {
-        let (_test_ctx, user_ctx, original_conv, _) = setup().await;
+    async fn rebase_to_same_state_still_runs_server_requests() {
+        let (_test_ctx, user_ctx, original_conv, _) = setup_with_mocks(async |ctx, conv1, _| {
+            ctx.mock_label_conversation(
+                &custom_label_id3(),
+                vec![conv1.remote_id.clone().unwrap()],
+                None,
+                vec![],
+            )
+            .await;
+
+            ctx.mock_unlabel_conversation(
+                &custom_label_id1(),
+                vec![conv1.remote_id.clone().unwrap()],
+                vec![],
+            )
+            .await;
+
+            ctx.mock_unlabel_conversation(
+                &custom_label_id2(),
+                vec![conv1.remote_id.clone().unwrap()],
+                vec![],
+            )
+            .await;
+        })
+        .await;
 
         let tether = &mut user_ctx.user_stash().connection().await.unwrap();
 
@@ -974,8 +997,19 @@ mod rebase {
             )
             .await;
 
-            // Unlabel custom labels 1&2 are not triggered since they are no longer
-            // present in the final state.
+            ctx.mock_unlabel_conversation(
+                &custom_label_id1(),
+                vec![conv1.remote_id.clone().unwrap()],
+                vec![],
+            )
+            .await;
+
+            ctx.mock_unlabel_conversation(
+                &custom_label_id2(),
+                vec![conv1.remote_id.clone().unwrap()],
+                vec![],
+            )
+            .await;
 
             ctx.mock_unlabel_conversation(
                 &custom_label_id3(),

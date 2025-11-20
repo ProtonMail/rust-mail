@@ -601,10 +601,6 @@ impl ActionMoveDataV2Entry {
 
         Ok(())
     }
-
-    pub fn is_skippable(&self) -> bool {
-        self.is_noop
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -809,23 +805,9 @@ where
         let tether = guard.tether();
 
         let dest_label = Label::resolve_remote_label_id(dest_label, tether).await?;
-        let all_remote_ids = T::local_ids_counterpart(
-            self.entries
-                .iter()
-                .filter_map(|(k, v)| {
-                    // remove any item that has 0 changes, which means there is nothing to do
-                    // and we should not communicate this to the server.
-                    if v.is_skippable() {
-                        tracing::info!("Skipping {k:?} due to noop");
-                        None
-                    } else {
-                        Some(*k)
-                    }
-                })
-                .collect::<Vec<_>>(),
-            tether,
-        )
-        .await?;
+        let all_remote_ids =
+            T::local_ids_counterpart(self.entries.keys().cloned().collect::<Vec<_>>(), tether)
+                .await?;
 
         let failed = T::api_apply_label(api, all_remote_ids, dest_label.clone()).await?;
         if !failed.is_empty() {
@@ -1326,18 +1308,10 @@ where
         let mut add = HashMap::<_, Vec<_>>::new();
         let mut remove = HashMap::<_, Vec<_>>::new();
         for (id, data) in &self.items {
-            for (label_id, _) in data
-                .added
-                .iter()
-                .filter(|(_, modified)| !modified.is_empty())
-            {
+            for (label_id, _) in data.added.iter() {
                 add.entry(*label_id).or_default().push(*id);
             }
-            for (label_id, _) in data
-                .removed
-                .iter()
-                .filter(|(_, modified)| !modified.is_empty())
-            {
+            for (label_id, _) in data.removed.iter() {
                 remove.entry(*label_id).or_default().push(*id);
             }
         }

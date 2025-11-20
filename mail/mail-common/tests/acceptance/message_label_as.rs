@@ -602,8 +602,12 @@ mod rebase {
     }
 
     #[tokio::test]
-    async fn rebase_to_same_state_is_noop() {
-        let (_test_ctx, user_ctx, original_message, _) = setup().await;
+    async fn rebase_to_same_state_still_executes_on_server() {
+        let (_test_ctx, user_ctx, original_message, _) = setup_with_mocks(async |ctx, msg1, _| {
+            ctx.mock_label_messages(&custom_label_id3(), vec![msg1.remote_id.clone().unwrap()])
+                .await;
+        })
+        .await;
 
         let tether = &mut user_ctx.user_stash().connection().await.unwrap();
 
@@ -788,6 +792,12 @@ mod rebase {
         let (_test_ctx, user_ctx, original_message, _) = setup_with_mocks(async |ctx, msg1, _| {
             ctx.mock_label_messages(&custom_label_id3(), vec![msg1.remote_id.clone().unwrap()])
                 .await;
+            ctx.mock_unlabel_messages(
+                &custom_label_id1(),
+                vec![msg1.remote_id.clone().unwrap()],
+                vec![],
+            )
+            .await;
             ctx.mock_unlabel_messages(
                 &custom_label_id3(),
                 vec![msg1.remote_id.clone().unwrap()],
