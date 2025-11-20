@@ -24,6 +24,7 @@ mod acceptance {
     mod mailbox_create;
     mod message_body;
     mod message_bulk_unread_status;
+    mod message_delete;
     mod message_label;
     mod message_label_as;
     mod message_mail_scroller;

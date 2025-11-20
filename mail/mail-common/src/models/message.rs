@@ -1685,6 +1685,23 @@ impl Message {
             .await
     }
 
+    pub async fn ids_in_label_with_deleted(
+        local_label_id: LocalLabelId,
+        tether: &Tether,
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        tether
+            .query_values::<_, LocalMessageId>(
+                indoc!(
+                    "
+                SELECT local_message_id FROM message_labels
+                    WHERE message_labels.local_label_id = ?
+                "
+                ),
+                params![local_label_id],
+            )
+            .await
+    }
+
     /// Get all messages which belong to the conversation with
     /// `local_conversation_id`.
     ///

@@ -341,7 +341,7 @@ async fn message_action_ham() {
         .await;
 
     ctx.mock_put_message_ham(&message.metadata.id).await;
-    ctx.mock_empty_label().await;
+    ctx.mock_empty_label(LabelId::inbox()).await;
 
     ctx.catch_all().await;
 
