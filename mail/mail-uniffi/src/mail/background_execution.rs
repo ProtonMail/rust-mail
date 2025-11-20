@@ -2,11 +2,11 @@ use crate::async_runtime;
 use crate::errors::UserSessionError;
 use crate::mail::MailSession;
 use proton_mail_common::MailContext;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::background_execution::{
     BackgroundExecutionContext, BackgroundExecutionResult as RealBackgroundExecutionResult,
     BackgroundExecutionStatus as RealBackgroundExecutionStatus,
 };
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::mpsc;

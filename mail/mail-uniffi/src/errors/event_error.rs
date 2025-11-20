@@ -1,8 +1,8 @@
 use super::{EventErrorReason, ProtonError};
 use crate::UniffiEnum;
 use derive_more::From;
-use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::MailErrorReason as RealMailErrorReason;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 
 #[derive(Debug, From, UniffiEnum)]
 pub enum EventError {

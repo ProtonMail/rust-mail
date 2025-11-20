@@ -5,9 +5,9 @@ use crate::{core::datatypes::ApiConfig, uniffi_async};
 use futures::{FutureExt, TryFutureExt};
 use itertools::Itertools;
 use proton_core_api::verification as hv;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::errors::api_service_error::UserApiServiceError as RealUserApiServiceError;
-use proton_mail_common::errors::unexpected::Unexpected;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
+use proton_mail_common::Unexpected;
+use proton_mail_common::UserApiServiceError as RealUserApiServiceError;
 use std::{ops::Deref, sync::Arc};
 use tracing::error;
 

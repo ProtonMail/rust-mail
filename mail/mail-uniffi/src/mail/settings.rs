@@ -4,7 +4,7 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ProtonError, UserSessionError};
 use crate::{LiveQueryCallback, WatchHandle, declare_live_query_tagger, uniffi_async};
 use proton_core_common::models::ModelExtension;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::{
     CustomSettings as RealCustomSettings, MailSettings as RealMailSettings,
     MobileSignatureStatus as RealMobileSignatureStatus,

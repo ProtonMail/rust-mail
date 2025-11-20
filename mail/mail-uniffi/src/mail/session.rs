@@ -28,8 +28,8 @@ use proton_core_common::pin_code::PinCode;
 use proton_core_common::{CoreContextError, OnSessionDeletedResponse, Origin as RealOrigin};
 use proton_issue_reporter_service_uniffi::{IssueReporter, IssueReporterWrapper};
 use proton_log_service::LogService;
-use proton_mail_common::errors::unexpected::Unexpected;
-use proton_mail_common::errors::{
+use proton_mail_common::Unexpected;
+use proton_mail_common::{
     ContextErrorReason, MailErrorReason, ProtonMailError as RealProtonMailError,
 };
 use proton_mail_common::{MailContext, MailContextError, ShouldInitializeMailUserContext};

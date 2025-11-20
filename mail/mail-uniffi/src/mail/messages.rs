@@ -35,6 +35,7 @@ use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_common::MailUserContext;
+use proton_mail_common::Unexpected;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{
@@ -45,13 +46,12 @@ use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
     TransformOpts as RealTransformOpts,
 };
-use proton_mail_common::errors::unexpected::Unexpected;
-use proton_mail_common::errors::{
-    ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
-};
 use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::{
     self, IncomingDefault, Message as RealMessage, MessageBodyMetadata, MessageMimeType,
+};
+use proton_mail_common::{
+    ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
 use stash::orm::Model as _;
 use std::sync::Arc;

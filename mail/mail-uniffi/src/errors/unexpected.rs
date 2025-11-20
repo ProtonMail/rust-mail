@@ -1,4 +1,4 @@
-use proton_mail_common::errors::unexpected::Unexpected as RealUnexpected;
+use proton_mail_common::Unexpected as RealUnexpected;
 
 /// Categories for Unexpected error
 #[derive(Debug, uniffi::Enum)]

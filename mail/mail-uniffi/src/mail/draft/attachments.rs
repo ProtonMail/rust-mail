@@ -10,6 +10,7 @@ use crate::mail::state::MailUserContextPtr;
 use crate::{AsyncLiveQueryCallback, uniffi_async};
 use anyhow::anyhow;
 use proton_mail_common::MailContextError;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId};
 use proton_mail_common::draft::Draft as RealDraft;
@@ -21,7 +22,6 @@ use proton_mail_common::draft::attachments::{
     DraftAttachmentUploadError as RealDraftAttachmentUploadError,
 };
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment as RealAttachment;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

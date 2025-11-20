@@ -2,9 +2,9 @@ use crate::UniffiEnum;
 use crate::errors::OtherErrorReason;
 use crate::errors::unexpected::UnexpectedError;
 use derive_more::From;
-use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::errors::api_service_error::UserApiServiceError as RealUserApiServiceError;
+use proton_mail_common::MailErrorReason as RealMailErrorReason;
+use proton_mail_common::ProtonMailError as RealProtonMailError;
+use proton_mail_common::UserApiServiceError as RealUserApiServiceError;
 use uniffi_common::errors::UserApiServiceError;
 
 #[derive(Debug, From, UniffiEnum)]
