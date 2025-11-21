@@ -550,6 +550,7 @@ impl Conversation {
     ///
     /// Returns an error if the local conversation id is not set or the query failed.
     ///
+    #[tracing::instrument(skip(self, rebase_change_set, bond), fields(remote_id = ?self.remote_id))]
     pub async fn create_or_get_local(
         &mut self,
         current_label_id: &LabelId,
@@ -570,34 +571,37 @@ impl Conversation {
                         .find(|l| l.remote_label_id.as_ref() == Some(current_label_id)),
                 ) {
                     (Some(this_label), Some(other_label)) => {
+                        tracing::debug!(
+                            "Both API and remote have the same {current_label_id:?}. Checking if stats are equal"
+                        );
                         this_label.are_stats_equal(other_label)
                     }
                     (Some(_), None) | (None, Some(_)) => false,
-                    (None, None) => true,
+                    (None, None) => {
+                        tracing::debug!("Both API and remote have {current_label_id:?}");
+                        true
+                    }
                 };
 
                 if should_skip {
                     *self = existing;
-                    tracing::trace!(
-                        remote_id = ?self.remote_id,
+                    debug!(
+                        local_id=?self.local_id,
                         "Skipping saving conversation, we already have it in the local DB"
                     );
                     return Ok(());
                 }
                 self.local_id = existing.local_id;
-                tracing::debug!(
-                remote_id = ?self.remote_id,
-                    "Updating unknown conversation with API data"
-                );
+                tracing::debug!("Updating known conversation with API data");
             } else {
                 // Otherwise, update the unknown conversation with API data
                 self.local_id = existing.local_id;
-                tracing::debug!(
-                remote_id = ?self.remote_id,
-                    "Updating unknown conversation with API data"
-                );
+                tracing::debug!("Updating unknown conversation with API data");
             }
+        } else {
+            tracing::debug!("Saving new conversation from API");
         }
+        tracing::debug!(deleted=?self.deleted, local_id=?self.local_id, "Saving conversation");
 
         <Self as Model>::save(self, bond).await?;
         rebase_change_set.add(self.id());

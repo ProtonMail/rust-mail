@@ -738,7 +738,6 @@ impl DraftActor {
             context,
             message_id,
             reply_mode,
-            ImagePolicy::Safe,
             use_utc,
             DraftActorOptions::default(),
         )
@@ -749,12 +748,10 @@ impl DraftActor {
         context: &MailUserContext,
         message_id: LocalMessageId,
         reply_mode: ReplyMode,
-        image_policy: ImagePolicy,
         use_utc: bool,
         options: DraftActorOptions,
     ) -> Result<Self, MailContextError> {
-        let draft =
-            draft_v1::Draft::reply(context, message_id, reply_mode, image_policy, use_utc).await?;
+        let draft = draft_v1::Draft::reply(context, message_id, reply_mode, use_utc).await?;
 
         Ok(Self::create(context, draft, options))
     }
@@ -793,9 +790,17 @@ impl DraftActor {
         self.act(DraftActorMessage::GetConversationId).await?
     }
 
-    pub async fn load_image(&self, url: String) -> MailContextResult<AttachmentData> {
-        self.act(|sender| DraftActorMessage::LoadImage { url, sender })
-            .await?
+    pub async fn load_image(
+        &self,
+        url: String,
+        policy: ImagePolicy,
+    ) -> MailContextResult<AttachmentData> {
+        self.act(|sender| DraftActorMessage::LoadImage {
+            url,
+            policy,
+            sender,
+        })
+        .await?
     }
 
     pub async fn delete_attachment_if_in_staging_area(&self, ctx: &MailUserContext, path: &Path) {
@@ -1355,6 +1360,7 @@ enum DraftActorMessage {
     #[display("LoadImage")]
     LoadImage {
         url: String,
+        policy: ImagePolicy,
         sender: oneshot::Sender<Result<AttachmentData, MailContextError>>,
     },
 
@@ -1752,11 +1758,14 @@ impl DraftActor {
                     let _ = sender.send(r);
                 }
 
-                DraftActorMessage::LoadImage { url, sender } => {
+                DraftActorMessage::LoadImage {
+                    url,
+                    policy,
+                    sender,
+                } => {
                     // We don't wait to wait for this to finish so we can run in parallel
                     let ctx_cloned = ctx.clone();
                     let id = draft.metadata_id;
-                    let policy = draft.image_policy;
 
                     ctx_cloned.spawn(async move {
                         let r = draft_v1::Draft::load_image(id, &ctx, &url, policy).await;

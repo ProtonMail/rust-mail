@@ -2,7 +2,6 @@ mod attachments;
 mod observer;
 mod recipients;
 
-use super::ImagePolicy;
 use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
@@ -12,13 +11,13 @@ use crate::errors::{
     VoidDraftExpirationResult, VoidDraftPasswordResult, VoidDraftSaveResult, VoidDraftSendResult,
     VoidDraftUndoSendResult,
 };
-use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
 use crate::mail::draft::attachments::AttachmentList;
 use crate::mail::draft::observer::DraftSendResult;
 use crate::mail::draft::recipients::{ComposerRecipient, ComposerRecipientValidationCallback};
 use crate::mail::messages::{AttachmentData, ThemeOpts};
 use crate::mail::state::MailUserContextPtr;
+use crate::mail::{ImagePolicy, MailUserSession};
 use crate::{async_runtime, uniffi_async};
 use chrono::Local;
 use proton_core_api::services::proton::PrivateEmail;
@@ -329,7 +328,6 @@ pub struct DraftSenderAddressList {
 pub async fn new_draft(
     session: &MailUserSession,
     create_mode: DraftCreateMode,
-    image_policy: ImagePolicy,
 ) -> Result<Arc<Draft>, DraftOpenError> {
     let ctx = session.ctx()?;
     let ptr = session.ptr();
@@ -339,43 +337,15 @@ pub async fn new_draft(
 
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty_ex(&ctx, options).await,
-
             DraftCreateMode::Reply(id) => {
-                RealDraft::reply_ex(
-                    &ctx,
-                    id.into(),
-                    ReplyMode::Sender,
-                    image_policy.into(),
-                    false,
-                    options,
-                )
-                .await
+                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Sender, false, options).await
             }
-
             DraftCreateMode::ReplyAll(id) => {
-                RealDraft::reply_ex(
-                    &ctx,
-                    id.into(),
-                    ReplyMode::All,
-                    image_policy.into(),
-                    false,
-                    options,
-                )
-                .await
+                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::All, false, options).await
             }
-
             DraftCreateMode::Forward(id) => {
-                RealDraft::reply_ex(
-                    &ctx,
-                    id.into(),
-                    ReplyMode::Forward,
-                    image_policy.into(),
-                    false,
-                    options,
-                )
-                .await
+                RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Forward, false, options).await
             }
-
             DraftCreateMode::FromIosShareExtension => {
                 RealDraft::from_ios_share_extension(&ctx, options).await
             }
@@ -558,8 +528,12 @@ impl Draft {
     // NOTE: iOS request we share the same result types between
     //       this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
-    pub async fn load_image(self: Arc<Self>, url: String) -> Result<AttachmentData, ProtonError> {
-        uniffi_async(async move { self.load_image_impl(url).await })
+    pub async fn load_image(
+        self: Arc<Self>,
+        url: String,
+        policy: ImagePolicy,
+    ) -> Result<AttachmentData, ProtonError> {
+        uniffi_async(async move { self.load_image_impl(url, policy).await })
             .await
             .map_err(ProtonError::from)
             .into()
@@ -568,9 +542,13 @@ impl Draft {
     // NOTE: iOS request we share the same result types between
     //       this function and the DecryptedMessageBody equivalent.
     #[returns(AttachmentDataResult)]
-    pub fn load_image_sync(self: Arc<Self>, cid: String) -> Result<AttachmentData, ProtonError> {
+    pub fn load_image_sync(
+        self: Arc<Self>,
+        cid: String,
+        policy: ImagePolicy,
+    ) -> Result<AttachmentData, ProtonError> {
         async_runtime()
-            .block_on(self.load_image_impl(cid))
+            .block_on(self.load_image_impl(cid, policy))
             .map_err(ProtonError::from)
             .into()
     }
@@ -835,10 +813,14 @@ impl Draft {
 }
 
 impl Draft {
-    async fn load_image_impl(&self, url: String) -> Result<AttachmentData, RealProtonMailError> {
+    async fn load_image_impl(
+        &self,
+        url: String,
+        policy: ImagePolicy,
+    ) -> Result<AttachmentData, RealProtonMailError> {
         let att = self
             .instance
-            .load_image(url)
+            .load_image(url, policy.into())
             .await
             .map_err(RealProtonMailError::from)?;
 

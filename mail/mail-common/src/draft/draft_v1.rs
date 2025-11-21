@@ -76,7 +76,6 @@ pub struct Draft {
     pub address_id: AddressId,
     pub subject: String,
     pub send_result: Option<DraftSendResult>,
-    pub image_policy: ImagePolicy,
 
     #[debug(skip)]
     body: String,
@@ -274,7 +273,6 @@ impl Draft {
             address_id: message.remote_address_id,
             subject: message.subject,
             send_result,
-            image_policy: ImagePolicy::Safe,
             body: decrypted.body,
             mime_type: decrypted.mime_type,
             address_validation_result: None,
@@ -407,7 +405,6 @@ impl Draft {
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
             send_result: None,
-            image_policy: ImagePolicy::Safe,
             mime_type,
             body,
             address_validation_result: None,
@@ -426,7 +423,6 @@ impl Draft {
         context: &MailUserContext,
         message_id: LocalMessageId,
         reply_mode: ReplyMode,
-        image_policy: ImagePolicy,
         use_utc: bool,
     ) -> Result<Self, MailContextError> {
         info!("Creating new draft reply");
@@ -469,15 +465,17 @@ impl Draft {
                 (address, None)
             };
 
-        let Some(source_message_body) = Message::load_decrypted_message_from_cache(
-            message_id,
-            &source_message.remote_address_id,
-            &tether,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to get source decrypted message: {e:?}"))?
-        else {
-            return Err(OpenError::MessageBodyMissing(message_id).into());
+        let source_message_body = match source_message
+            .fetch_message_body(context, &mut tether)
+            .await
+        {
+            Ok(body) => body,
+
+            Err(err) => {
+                error!(?err, "Couldn't get source message");
+
+                return Err(OpenError::MessageBodyMissing(message_id).into());
+            }
         };
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
@@ -514,7 +512,6 @@ impl Draft {
                     &contact_group_resolver,
                     metadata.id.unwrap(),
                     reply_mode,
-                    image_policy,
                     &address,
                     &mail_settings,
                     &custom_settings,
@@ -599,7 +596,6 @@ impl Draft {
         contact_group_resolver: &impl ContactGroupResolver,
         metadata_id: MetadataId,
         reply_mode: ReplyMode,
-        image_policy: ImagePolicy,
         address: &Address,
         mail_settings: &MailSettings,
         custom_settings: &CustomSettings,
@@ -666,7 +662,6 @@ impl Draft {
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
             send_result: None,
-            image_policy,
             body,
             mime_type,
             address_validation_result,

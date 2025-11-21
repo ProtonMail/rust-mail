@@ -5,7 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.157.12] - 2025-11-20
+
+### Fixes
+
+- Upsell telemetry - make sure we are using async runtime
+
+
+## [mail-uniffi-v0.157.10] - 2025-11-19
+
+### Fixes
+
+- [ET-5274] When replying, sync the replied-to message if its body is missing
+
+
+## [mail-uniffi-v0.157.8] - 2025-11-14
+
+### Changed
+
+- Unify composer's and message's `loadImage()`
+
+
+## [mail-uniffi-v0.157.7] - 2025-11-13
 
 ### Fixes
 

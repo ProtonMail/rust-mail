@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::error;
+use uniffi_runtime::async_runtime;
 
 #[derive(Debug, Error)]
 pub enum ObservabilityError {
@@ -15,6 +16,8 @@ pub enum ObservabilityError {
     FutureDate(String),
     #[error("Database error: {0}")]
     Database(String),
+    #[error("Async runtime error: {0}")]
+    Task(#[from] tokio::task::JoinError),
 }
 
 fn calculate_days_from_timestamps(
@@ -206,38 +209,47 @@ pub async fn record_upsell_button_tapped(
     user_session: Arc<MailUserSession>,
     general: GeneralDimensions,
 ) {
-    let user_context = match user_session.ctx() {
-        Ok(ctx) => ctx,
-        Err(err) => {
-            error!("Failed to get user context: {err:?}");
-            return;
-        }
-    };
+    if let Err(err) = async_runtime()
+        .spawn(async move {
+            let user_context = match user_session.ctx() {
+                Ok(ctx) => ctx,
+                Err(err) => {
+                    error!("Failed to get user context: {err:?}");
+                    return;
+                }
+            };
 
-    let days_since_account_creation =
-        match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
+            let days_since_account_creation = match calculate_days_since_account_creation(
+                user_context.as_ref(),
+                UnixTimestamp::now(),
+            )
             .await
-        {
-            Ok(days) => days,
-            Err(err) => {
-                error!("Failed to calculate days since account creation: {err:?}");
-                return;
+            {
+                Ok(days) => days,
+                Err(err) => {
+                    error!("Failed to calculate days since account creation: {err:?}");
+                    return;
+                }
+            };
+
+            let metric = UpsellButtonTappedTotal::new(
+                general.upsell_entry_point,
+                general.plan_before_upgrade,
+                days_since_account_creation,
+                general.modal_variant,
+            );
+
+            if let Err(err) = user_context
+                .observability_service()
+                .record_metric_if_enabled(metric)
+                .await
+            {
+                error!("Failed to record upsell button tapped metric: {err:?}");
             }
-        };
-
-    let metric = UpsellButtonTappedTotal::new(
-        general.upsell_entry_point,
-        general.plan_before_upgrade,
-        days_since_account_creation,
-        general.modal_variant,
-    );
-
-    if let Err(err) = user_context
-        .observability_service()
-        .record_metric_if_enabled(metric)
+        })
         .await
     {
-        error!("Failed to record upsell button tapped metric: {err:?}");
+        error!("Failed to spawn uniffi async task: {err}");
     }
 }
 
@@ -247,36 +259,45 @@ pub async fn record_drive_spotlight_mailbox_button_tapped(
     user_session: Arc<MailUserSession>,
     plan_before_upgrade: String,
 ) {
-    let user_context = match user_session.ctx() {
-        Ok(ctx) => ctx,
-        Err(err) => {
-            error!("Failed to get user context: {err:?}");
-            return;
-        }
-    };
+    if let Err(err) = async_runtime()
+        .spawn(async move {
+            let user_context = match user_session.ctx() {
+                Ok(ctx) => ctx,
+                Err(err) => {
+                    error!("Failed to get user context: {err:?}");
+                    return;
+                }
+            };
 
-    let days_since_account_creation =
-        match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
+            let days_since_account_creation = match calculate_days_since_account_creation(
+                user_context.as_ref(),
+                UnixTimestamp::now(),
+            )
             .await
-        {
-            Ok(days) => days,
-            Err(err) => {
-                error!("Failed to calculate days since account creation: {err:?}");
-                return;
+            {
+                Ok(days) => days,
+                Err(err) => {
+                    error!("Failed to calculate days since account creation: {err:?}");
+                    return;
+                }
+            };
+
+            let metric = DriveSpotlightMailboxButtonTappedTotal::new(
+                plan_before_upgrade,
+                days_since_account_creation,
+            );
+
+            if let Err(err) = user_context
+                .observability_service()
+                .record_metric_if_enabled(metric)
+                .await
+            {
+                error!("Failed to record drive spotlight mailbox button tapped metric: {err:?}");
             }
-        };
-
-    let metric = DriveSpotlightMailboxButtonTappedTotal::new(
-        plan_before_upgrade,
-        days_since_account_creation,
-    );
-
-    if let Err(err) = user_context
-        .observability_service()
-        .record_metric_if_enabled(metric)
+        })
         .await
     {
-        error!("Failed to record drive spotlight mailbox button tapped metric: {err:?}");
+        error!("Failed to spawn uniffi async task: {err}");
     }
 }
 
@@ -286,34 +307,45 @@ pub async fn record_drive_spotlight_cta_button_tapped(
     user_session: Arc<MailUserSession>,
     plan_before_upgrade: String,
 ) {
-    let user_context = match user_session.ctx() {
-        Ok(ctx) => ctx,
-        Err(err) => {
-            error!("Failed to get user context: {err:?}");
-            return;
-        }
-    };
+    if let Err(err) = async_runtime()
+        .spawn(async move {
+            let user_context = match user_session.ctx() {
+                Ok(ctx) => ctx,
+                Err(err) => {
+                    error!("Failed to get user context: {err:?}");
+                    return;
+                }
+            };
 
-    let days_since_account_creation =
-        match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
+            let days_since_account_creation = match calculate_days_since_account_creation(
+                user_context.as_ref(),
+                UnixTimestamp::now(),
+            )
             .await
-        {
-            Ok(days) => days,
-            Err(err) => {
-                error!("Failed to calculate days since account creation: {err:?}");
-                return;
+            {
+                Ok(days) => days,
+                Err(err) => {
+                    error!("Failed to calculate days since account creation: {err:?}");
+                    return;
+                }
+            };
+
+            let metric = DriveSpotlightCtaButtonTappedTotal::new(
+                plan_before_upgrade,
+                days_since_account_creation,
+            );
+
+            if let Err(err) = user_context
+                .observability_service()
+                .record_metric_if_enabled(metric)
+                .await
+            {
+                error!("Failed to record drive spotlight cta button tapped metric: {err:?}");
             }
-        };
-
-    let metric =
-        DriveSpotlightCtaButtonTappedTotal::new(plan_before_upgrade, days_since_account_creation);
-
-    if let Err(err) = user_context
-        .observability_service()
-        .record_metric_if_enabled(metric)
+        })
         .await
     {
-        error!("Failed to record drive spotlight cta button tapped metric: {err:?}");
+        error!("Failed to spawn uniffi async task: {err}");
     }
 }
 
@@ -324,41 +356,50 @@ pub async fn record_upgrade_attempt(
     general: GeneralDimensions,
     plan_specific: PlanSpecificDimensions,
 ) {
-    let user_context = match user_session.ctx() {
-        Ok(ctx) => ctx,
-        Err(err) => {
-            error!("Failed to get user context: {err:?}");
-            return;
-        }
-    };
+    if let Err(err) = async_runtime()
+        .spawn(async move {
+            let user_context = match user_session.ctx() {
+                Ok(ctx) => ctx,
+                Err(err) => {
+                    error!("Failed to get user context: {err:?}");
+                    return;
+                }
+            };
 
-    let days_since_account_creation =
-        match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
+            let days_since_account_creation = match calculate_days_since_account_creation(
+                user_context.as_ref(),
+                UnixTimestamp::now(),
+            )
             .await
-        {
-            Ok(days) => days,
-            Err(err) => {
-                error!("Failed to calculate days since account creation: {err:?}");
-                return;
+            {
+                Ok(days) => days,
+                Err(err) => {
+                    error!("Failed to calculate days since account creation: {err:?}");
+                    return;
+                }
+            };
+
+            let metric = UpgradeAttemptTotal::new(
+                general.upsell_entry_point,
+                general.plan_before_upgrade,
+                days_since_account_creation,
+                general.modal_variant,
+                plan_specific.selected_plan,
+                plan_specific.selected_cycle,
+                plan_specific.upsell_is_promotional,
+            );
+
+            if let Err(err) = user_context
+                .observability_service()
+                .record_metric_if_enabled(metric)
+                .await
+            {
+                error!("Failed to record upgrade attempt metric: {err:?}");
             }
-        };
-
-    let metric = UpgradeAttemptTotal::new(
-        general.upsell_entry_point,
-        general.plan_before_upgrade,
-        days_since_account_creation,
-        general.modal_variant,
-        plan_specific.selected_plan,
-        plan_specific.selected_cycle,
-        plan_specific.upsell_is_promotional,
-    );
-
-    if let Err(err) = user_context
-        .observability_service()
-        .record_metric_if_enabled(metric)
+        })
         .await
     {
-        error!("Failed to record upgrade attempt metric: {err:?}");
+        error!("Failed to spawn uniffi async task: {err}");
     }
 }
 
@@ -369,41 +410,50 @@ pub async fn record_upgrade_error(
     general: GeneralDimensions,
     plan_specific: PlanSpecificDimensions,
 ) {
-    let user_context = match user_session.ctx() {
-        Ok(ctx) => ctx,
-        Err(err) => {
-            error!("Failed to get user context: {err:?}");
-            return;
-        }
-    };
+    if let Err(err) = async_runtime()
+        .spawn(async move {
+            let user_context = match user_session.ctx() {
+                Ok(ctx) => ctx,
+                Err(err) => {
+                    error!("Failed to get user context: {err:?}");
+                    return;
+                }
+            };
 
-    let days_since_account_creation =
-        match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
+            let days_since_account_creation = match calculate_days_since_account_creation(
+                user_context.as_ref(),
+                UnixTimestamp::now(),
+            )
             .await
-        {
-            Ok(days) => days,
-            Err(err) => {
-                error!("Failed to calculate days since account creation: {err:?}");
-                return;
+            {
+                Ok(days) => days,
+                Err(err) => {
+                    error!("Failed to calculate days since account creation: {err:?}");
+                    return;
+                }
+            };
+
+            let metric = UpgradeErrorTotal::new(
+                general.upsell_entry_point,
+                general.plan_before_upgrade,
+                days_since_account_creation,
+                general.modal_variant,
+                plan_specific.selected_plan,
+                plan_specific.selected_cycle,
+                plan_specific.upsell_is_promotional,
+            );
+
+            if let Err(err) = user_context
+                .observability_service()
+                .record_metric_if_enabled(metric)
+                .await
+            {
+                error!("Failed to record upgrade error metric: {err:?}");
             }
-        };
-
-    let metric = UpgradeErrorTotal::new(
-        general.upsell_entry_point,
-        general.plan_before_upgrade,
-        days_since_account_creation,
-        general.modal_variant,
-        plan_specific.selected_plan,
-        plan_specific.selected_cycle,
-        plan_specific.upsell_is_promotional,
-    );
-
-    if let Err(err) = user_context
-        .observability_service()
-        .record_metric_if_enabled(metric)
+        })
         .await
     {
-        error!("Failed to record upgrade error metric: {err:?}");
+        error!("Failed to spawn uniffi async task: {err}");
     }
 }
 
@@ -414,41 +464,50 @@ pub async fn record_upgrade_cancelled_by_user(
     general: GeneralDimensions,
     plan_specific: PlanSpecificDimensions,
 ) {
-    let user_context = match user_session.ctx() {
-        Ok(ctx) => ctx,
-        Err(err) => {
-            error!("Failed to get user context: {err:?}");
-            return;
-        }
-    };
+    if let Err(err) = async_runtime()
+        .spawn(async move {
+            let user_context = match user_session.ctx() {
+                Ok(ctx) => ctx,
+                Err(err) => {
+                    error!("Failed to get user context: {err:?}");
+                    return;
+                }
+            };
 
-    let days_since_account_creation =
-        match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
+            let days_since_account_creation = match calculate_days_since_account_creation(
+                user_context.as_ref(),
+                UnixTimestamp::now(),
+            )
             .await
-        {
-            Ok(days) => days,
-            Err(err) => {
-                error!("Failed to calculate days since account creation: {err:?}");
-                return;
+            {
+                Ok(days) => days,
+                Err(err) => {
+                    error!("Failed to calculate days since account creation: {err:?}");
+                    return;
+                }
+            };
+
+            let metric = UpgradeCancelledByUserTotal::new(
+                general.upsell_entry_point,
+                general.plan_before_upgrade,
+                days_since_account_creation,
+                general.modal_variant,
+                plan_specific.selected_plan,
+                plan_specific.selected_cycle,
+                plan_specific.upsell_is_promotional,
+            );
+
+            if let Err(err) = user_context
+                .observability_service()
+                .record_metric_if_enabled(metric)
+                .await
+            {
+                error!("Failed to record upgrade cancelled by user metric: {err:?}");
             }
-        };
-
-    let metric = UpgradeCancelledByUserTotal::new(
-        general.upsell_entry_point,
-        general.plan_before_upgrade,
-        days_since_account_creation,
-        general.modal_variant,
-        plan_specific.selected_plan,
-        plan_specific.selected_cycle,
-        plan_specific.upsell_is_promotional,
-    );
-
-    if let Err(err) = user_context
-        .observability_service()
-        .record_metric_if_enabled(metric)
+        })
         .await
     {
-        error!("Failed to record upgrade cancelled by user metric: {err:?}");
+        error!("Failed to spawn uniffi async task: {err}");
     }
 }
 
@@ -459,41 +518,50 @@ pub async fn record_upgrade_success(
     general: GeneralDimensions,
     plan_specific: PlanSpecificDimensions,
 ) {
-    let user_context = match user_session.ctx() {
-        Ok(ctx) => ctx,
-        Err(err) => {
-            error!("Failed to get user context: {err:?}");
-            return;
-        }
-    };
+    if let Err(err) = async_runtime()
+        .spawn(async move {
+            let user_context = match user_session.ctx() {
+                Ok(ctx) => ctx,
+                Err(err) => {
+                    error!("Failed to get user context: {err:?}");
+                    return;
+                }
+            };
 
-    let days_since_account_creation =
-        match calculate_days_since_account_creation(user_context.as_ref(), UnixTimestamp::now())
+            let days_since_account_creation = match calculate_days_since_account_creation(
+                user_context.as_ref(),
+                UnixTimestamp::now(),
+            )
             .await
-        {
-            Ok(days) => days,
-            Err(err) => {
-                error!("Failed to calculate days since account creation: {err:?}");
-                return;
+            {
+                Ok(days) => days,
+                Err(err) => {
+                    error!("Failed to calculate days since account creation: {err:?}");
+                    return;
+                }
+            };
+
+            let metric = UpgradeSuccessTotal::new(
+                general.upsell_entry_point,
+                general.plan_before_upgrade,
+                days_since_account_creation,
+                general.modal_variant,
+                plan_specific.selected_plan,
+                plan_specific.selected_cycle,
+                plan_specific.upsell_is_promotional,
+            );
+
+            if let Err(err) = user_context
+                .observability_service()
+                .record_metric_if_enabled(metric)
+                .await
+            {
+                error!("Failed to record upgrade success metric: {err:?}");
             }
-        };
-
-    let metric = UpgradeSuccessTotal::new(
-        general.upsell_entry_point,
-        general.plan_before_upgrade,
-        days_since_account_creation,
-        general.modal_variant,
-        plan_specific.selected_plan,
-        plan_specific.selected_cycle,
-        plan_specific.upsell_is_promotional,
-    );
-
-    if let Err(err) = user_context
-        .observability_service()
-        .record_metric_if_enabled(metric)
+        })
         .await
     {
-        error!("Failed to record upgrade success metric: {err:?}");
+        error!("Failed to spawn uniffi async task: {err}");
     }
 }
 
