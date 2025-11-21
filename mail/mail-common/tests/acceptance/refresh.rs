@@ -4,6 +4,7 @@ use proton_action_queue::queue::QueuedError;
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::test_utils::account::test_api_address;
 use proton_core_common::test_utils::addresses::MY_ADDRESS_ID;
 use proton_mail_api::services::proton::prelude::ViewMode;
 use proton_mail_common::models::{Conversation, DraftMetadata, Message};
@@ -12,7 +13,6 @@ use proton_mail_common::test_utils::scroller::{
     StoreLabeledModelMap, UNIQUE_CONV_ID, create_single_message, test_conversations, test_messages,
 };
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
-use proton_mail_common::test_utils::utils::test_api_address;
 use proton_mail_common::{MailUserContext, api_conversation, api_message_meta};
 use stash::orm::Model;
 use velcro::hash_map;

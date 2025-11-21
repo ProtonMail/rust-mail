@@ -1,5 +1,6 @@
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 use crate::test_utils::test_context::MailTestContext;
+use proton_core_api::services::proton::GetKeysAllResponse;
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressFlags, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
@@ -7,7 +8,6 @@ use proton_core_api::services::proton::{
     UserSettings as ApiUserSettings,
 };
 use proton_core_api::services::proton::{AddressId, EventId, LabelId, LabelType as ApiLabelType};
-use proton_core_api::services::proton::{GetEventsLatestResponse, GetKeysAllResponse};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::prelude::GetIncomingDefaultResponse;
 use proton_mail_api::services::proton::request_data::{
@@ -205,40 +205,25 @@ impl MailTestContext {
     ///
     #[allow(clippy::too_many_lines)]
     pub async fn setup_user_repeated(&self, mut params: Params, number_of_calls: u64) {
-        // Latest event id
-        Mock::given(method("GET"))
-            .and(path("/api/core/v4/events/latest"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetEventsLatestResponse {
-                    event_id: params.last_event_id.unwrap_or(EventId::from("0")),
-                }),
-            )
-            .expect(1) // this should only ever be initialized once at the moment
-            .named("Setup user get latest events")
-            .mount(self.mock_server())
+        self.core_test_context()
+            .mock_last_event_id(params.last_event_id.unwrap_or(EventId::from("0")))
             .await;
 
-        // User info
         self.mock_get_user(params.user_info, number_of_calls).await;
 
-        // User settings
         self.mock_get_user_settings(params.user_settings, number_of_calls)
             .await;
 
-        // Mail settings
         self.mock_get_mail_settings(params.mail_settings, number_of_calls)
             .await;
 
-        // Mail addresses
         self.core_test_context
             .mock_get_addresses(Some(params.addresses), number_of_calls)
             .await;
 
-        // Incoming defaults
         self.mock_get_incoming_defaults(Some(vec![]), number_of_calls)
             .await;
 
-        // Labels
         for label_type in ALL_LABEL_TYPES {
             let labels = params.labels.remove(&label_type.into()).unwrap_or_default();
             self.mock_get_labels_and(
@@ -256,11 +241,9 @@ impl MailTestContext {
             .mock_get_contacts(Some(params.contacts), number_of_calls)
             .await;
 
-        // Message counts
         self.mock_get_messages_count(Some(params.message_count), number_of_calls)
             .await;
 
-        // Conversation counts
         self.mock_get_conversations_count(Some(params.conversation_count), number_of_calls)
             .await;
 

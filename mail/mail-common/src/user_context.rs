@@ -37,8 +37,9 @@ use proton_core_common::datatypes::{
 };
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, PaidSubscription, Role, User, UserSettings};
-use proton_core_common::services::user_issue_reporter_service::UserIssueReporterService;
-use proton_core_common::services::{EventPollConfigService, NetworkMonitorService};
+use proton_core_common::services::{
+    EventPollConfigService, NetworkMonitorService, UserIssueReporterService,
+};
 use proton_core_common::{
     ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
     services::UserMetricService,
@@ -271,6 +272,7 @@ impl MailUserContext {
                         },
                     })
                     .with_cyclic_service(QueuesService::new),
+
             };
 
             let this = builder.build(mail_context, user_context).await?;

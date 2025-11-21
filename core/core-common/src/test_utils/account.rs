@@ -1,4 +1,10 @@
 use proton_core_api::auth::UserKeySecret;
+use proton_core_api::services::proton::{
+    Address as ApiAddress, AddressFlags, AddressId, AddressSignedKeyList,
+    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
+};
+use std::sync::LazyLock;
+
 use proton_crypto_account::keys::{
     AddressKeys, ArmoredPrivateKey, DecryptedUserKey, EncryptedKeyToken, KeyFlag, KeyId,
     KeyTokenSignature, LockedKey, UnlockedUserKey, UnlockedUserKeys, UserKeys,
@@ -134,4 +140,28 @@ where
     };
 
     UnlockedUserKeys::from(vec![user_key])
+}
+
+pub const TEST_ADDRESS_EMAIL: &str = "hello@world";
+pub static MY_ADDRESS_ID: LazyLock<AddressId> = LazyLock::new(|| AddressId::from("MyRemoteId"));
+
+#[must_use]
+pub fn test_api_address() -> ApiAddress {
+    ApiAddress {
+        id: MY_ADDRESS_ID.clone(),
+        email: TEST_ADDRESS_EMAIL.to_owned(),
+        send: true,
+        receive: true,
+        status: ApiAddressStatus::Enabled,
+        domain_id: None,
+        address_type: ApiAddressType::Original,
+        order: 0,
+        display_name: "HelloWorld".to_owned(),
+        signature: "SIGNATURE".to_owned(),
+        keys: AddressKeys::new(vec![]),
+        catch_all: false,
+        proton_mx: false,
+        signed_key_list: AddressSignedKeyList::default(),
+        flags: AddressFlags::default(),
+    }
 }
