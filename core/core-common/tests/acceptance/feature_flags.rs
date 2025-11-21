@@ -1,11 +1,13 @@
 use std::time::Duration;
 
+use proton_core_api::services::proton::{
+    GetUnleashFeaturesResponse, UnleashToggle, UnleashToggleVariant,
+};
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::FeatureFlag;
-use proton_mail_api::services::proton::response_data::{UnleashToggle, UnleashToggleVariant};
-use proton_mail_api::services::proton::responses::GetUnleashFeaturesResponse;
-use proton_mail_common::feature_flags::FeatureFlagsService;
-use proton_mail_common::test_utils::test_context::{MailTestContext, RespondNthTime};
+use proton_core_common::services::FeatureFlagsService;
+use proton_core_common::test_utils::test_context::TestContext;
+use proton_core_common::test_utils::utils::RespondNthTime;
 use serde_json::json;
 use stash::orm::Model;
 use wiremock::matchers::{method, path};
@@ -13,7 +15,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 async fn test_feature_flags_cold_start_background_fetch() {
-    let ctx = MailTestContext::new().await;
+    let ctx = TestContext::new().await;
 
     let mock_response = GetUnleashFeaturesResponse {
         toggles: vec![
@@ -56,7 +58,7 @@ async fn test_feature_flags_cold_start_background_fetch() {
 
 #[tokio::test]
 async fn test_feature_flags_warm_start_immediate_return() {
-    let ctx = MailTestContext::new().await;
+    let ctx = TestContext::new().await;
 
     {
         let past = UnixTimestamp::new(12);
@@ -125,7 +127,7 @@ async fn test_feature_flags_warm_start_immediate_return() {
 
 #[tokio::test]
 async fn test_feature_flags_warm_start_background_refresh() {
-    let ctx = MailTestContext::new().await;
+    let ctx = TestContext::new().await;
 
     {
         let past = UnixTimestamp::new(10);
@@ -215,7 +217,7 @@ async fn test_feature_flags_warm_start_background_refresh() {
 
 #[tokio::test]
 async fn test_feature_flags_network_failure_preserves_cache() {
-    let ctx = MailTestContext::new().await;
+    let ctx = TestContext::new().await;
 
     {
         let past = UnixTimestamp::new(5);
@@ -261,7 +263,7 @@ async fn test_feature_flags_network_failure_preserves_cache() {
 
 #[tokio::test]
 async fn test_feature_flags_handle_network_failure() {
-    let ctx = MailTestContext::new().await;
+    let ctx = TestContext::new().await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/tests/ping"))

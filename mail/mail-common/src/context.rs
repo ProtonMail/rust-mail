@@ -1,5 +1,4 @@
 use crate::actions::MailActionError;
-use crate::feature_flags::{FeatureFlagsBackgroundTask, FeatureFlagsService};
 use crate::mail_scroller::MailScrollerError;
 use crate::migration_snooper::MailMigrationSnooper;
 use crate::{AppError, ImageLoaderError, MailUserContext, draft};
@@ -26,6 +25,7 @@ use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::pin_code::{PinCode, PinError};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
+use proton_core_common::services::feature_flags::FeatureFlagsBackgroundTask;
 use proton_core_common::services::issue_reporter_service::IssueReporterService;
 use proton_core_common::services::{
     DeviceInfoService, NetworkMonitorService, SessionObserverService,
@@ -323,11 +323,7 @@ impl MailContext {
             event_poll_mode,
             network_monitor_config,
             issue_reporter,
-            |builder| {
-                builder.with_cyclic_service(|ctx| {
-                    FeatureFlagsService::new(ctx, FeatureFlagsBackgroundTask::Enabled)
-                })
-            },
+            FeatureFlagsBackgroundTask::Enabled,
         )
         .await?;
 
@@ -360,10 +356,6 @@ impl MailContext {
         }
 
         Ok(ctx)
-    }
-
-    pub fn feature_flags(&self) -> &FeatureFlagsService {
-        self.core_context.get_service::<FeatureFlagsService>()
     }
 
     pub async fn new_with_core_context(

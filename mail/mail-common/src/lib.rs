@@ -6,7 +6,6 @@ pub mod db;
 pub mod draft;
 mod errors;
 mod events;
-pub mod feature_flags;
 mod image_loader;
 pub mod ios_share_ext;
 #[allow(clippy::result_large_err)]
