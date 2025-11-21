@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- s/Message.exclusive_location/Message.location
+- [ET-5183] Rebase LabelAs actions
+- [ET-5183] Rebase move message and conversation
+
+### Features
+
+- [ET-5390] Sanitize pasted content
+- Support address flags
+- P1-271: Skip RSVPs for BYOE addresses
+- [ET-5426] Message Metadata is now fetched with conversations
+- [ET-5408] Provide DraftCreateMode::Mailto
+- [ET-5428] Rebase delete in label
+- [ET-5427] Rebase mark read/unread actions
+
+### Fixes
+
+- [ET-5183] Conversation Exclusive location
+- [ET-5183] unlabel message unread counter update
+- [ET-4469] View in light/dark mode
+- [ET-4971] URL query is malformed after stripping UTM
+- Support proxied-blocked remote content
+- [ET-5183] Always execute on server even if noops are detected
+- [ET-5427] Mark conversation unread should be noop if already unread
+
+
 ## [mail-uniffi-v0.157.12] - 2025-11-20
 
 ### Fixes
