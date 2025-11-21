@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- [ET-5103] Enable rebasing of actions
+
+
+## [mail-uniffi-v0.158.0] - 2025-11-21
+
 ### Changed
 
 - s/Message.exclusive_location/Message.location
