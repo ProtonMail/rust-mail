@@ -1,4 +1,3 @@
-mod account_service;
 pub mod actions;
 pub mod background_execution;
 mod context;
@@ -30,7 +29,6 @@ mod user_context;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 
-pub use self::account_service::*;
 pub use self::context::*;
 pub use self::errors::*;
 pub use self::image_loader::*;

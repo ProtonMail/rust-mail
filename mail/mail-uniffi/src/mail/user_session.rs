@@ -665,7 +665,12 @@ impl MailUserSession {
     pub async fn has_valid_sender_address(&self) -> Result<bool, ProtonError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
-            let address = ctx.account_service().find_valid_sender_address().await?;
+            let address = ctx
+                .user_context()
+                .address_service()
+                .find_valid_sender_address()
+                .await
+                .map_err(MailContextError::from)?;
             Result::<_, RealProtonMailError>::Ok(address.is_some())
         })
         .await

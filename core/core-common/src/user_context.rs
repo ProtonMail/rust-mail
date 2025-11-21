@@ -7,6 +7,7 @@ use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_core_db, verify_core_db};
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
+use crate::services::AddressService;
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::subscriber::CoreEventLoopContext;
 use proton_action_queue::queue::{self, Queue};
@@ -133,9 +134,11 @@ impl UserContext {
 
             let this = {
                 let mut builder = builder::UserContextBuilder::new();
-                builder = builder.with_cyclic_service(|weak| {
-                    UserIssueReporterService::new(weak, user_issue_reporter)
-                });
+                builder = builder
+                    .with_cyclic_service(|weak| {
+                        UserIssueReporterService::new(weak, user_issue_reporter)
+                    })
+                    .with_cyclic_service(AddressService::new);
 
                 if matches!(origin, Origin::App) {
                     builder = builder
@@ -442,6 +445,11 @@ impl UserContext {
     #[must_use]
     pub fn issue_reporter_service(&self) -> &UserIssueReporterService {
         self.get_service::<UserIssueReporterService>()
+    }
+
+    #[must_use]
+    pub fn address_service(&self) -> &AddressService {
+        self.get_service::<AddressService>()
     }
 }
 

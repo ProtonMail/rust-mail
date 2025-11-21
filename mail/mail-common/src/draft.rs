@@ -705,7 +705,8 @@ impl DraftActor {
         let mut tether = context.user_stash().connection().await?;
 
         let address_id = context
-            .account_service()
+            .user_context()
+            .address_service()
             .find_valid_sender_address()
             .await?
             .ok_or(OpenError::UserHasNoAddresses)?

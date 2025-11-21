@@ -297,7 +297,8 @@ impl Draft {
                 );
 
                 let new_address = context
-                    .account_service()
+                    .user_context()
+                    .address_service()
                     .find_valid_sender_address()
                     .await?
                     .ok_or(OpenError::UserHasNoAddresses)?;
@@ -335,7 +336,8 @@ impl Draft {
         let mut tether = context.user_stash().connection().await?;
 
         let address = context
-            .account_service()
+            .user_context()
+            .address_service()
             .find_valid_sender_address()
             .await?
             .ok_or(OpenError::UserHasNoAddresses)
@@ -457,7 +459,8 @@ impl Draft {
                 warn!("Sender address ({}) is not valid: {}", e.email, e.error);
 
                 let addr = context
-                    .account_service()
+                    .user_context()
+                    .address_service()
                     .find_valid_sender_address()
                     .await?
                     .ok_or(OpenError::UserHasNoAddresses)

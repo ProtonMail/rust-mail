@@ -1,3 +1,4 @@
+pub mod address_service;
 pub mod context_event_service;
 pub mod device_info_service;
 pub mod event_poll_config_service;
@@ -9,6 +10,7 @@ pub mod service;
 pub mod session_observer_service;
 pub mod user_metric_service;
 
+pub use address_service::AddressService;
 pub use context_event_service::ContextEventService;
 pub use device_info_service::DeviceInfoService;
 pub use event_poll_config_service::EventPollConfigService;

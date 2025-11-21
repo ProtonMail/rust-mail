@@ -7,7 +7,6 @@ mod events;
 mod images;
 mod initialization;
 
-use crate::account_service::AccountService;
 use crate::actions::PREFETCH_ROLLBACK_ACTION_GROUP;
 use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
 use crate::db::online_migrations;
@@ -38,8 +37,9 @@ use proton_core_common::datatypes::{
 };
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, PaidSubscription, Role, User, UserSettings};
-use proton_core_common::services::user_issue_reporter_service::UserIssueReporterService;
-use proton_core_common::services::{EventPollConfigService, NetworkMonitorService};
+use proton_core_common::services::{
+    EventPollConfigService, NetworkMonitorService, UserIssueReporterService,
+};
 use proton_core_common::{
     ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
     services::UserMetricService,
@@ -240,8 +240,7 @@ impl MailUserContext {
                         .with_service(InitializationMediator::new(
                             mail_context.core_context().task_service().task_service(),
                         ))
-                        .with_service(RsvpService::new(user_context.stash()))
-                        .with_cyclic_service(AccountService::new);
+                        .with_service(RsvpService::new(user_context.stash()));
 
                     #[cfg(feature = "prefetch")]
                     let builder = { builder.with_service(PrefetchService::new()) };
@@ -272,8 +271,8 @@ impl MailUserContext {
                             )
                         },
                     })
-                    .with_cyclic_service(QueuesService::new)
-                    .with_cyclic_service(AccountService::new),
+                    .with_cyclic_service(QueuesService::new),
+
             };
 
             let this = builder.build(mail_context, user_context).await?;
@@ -454,10 +453,6 @@ impl MailUserContext {
 
     pub(crate) fn rsvp_service(&self) -> &RsvpService {
         self.get_service::<RsvpService>()
-    }
-
-    pub fn account_service(&self) -> &AccountService {
-        self.get_service::<AccountService>()
     }
 
     pub fn attachment_cache_state(&self) -> &AttachmentCacheState {
