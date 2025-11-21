@@ -8,7 +8,7 @@ use crate::models::Conversation;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_action_queue::rebase::RebaseChangeSet;
+use proton_action_queue::rebase::{RebaseChangeSet, RebaseKey};
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
@@ -146,12 +146,17 @@ impl Handler for DeleteHandler {
 
     async fn rebase_local(
         &self,
-        this_id: ActionId,
+        _: ActionId,
         action: &mut Self::Action,
-        _: &RebaseChangeSet,
+        changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        //TODO(ET-5183): Test me!
-        self.apply_local(this_id, action, tx).await
+        for id in &action.0.data.target_ids {
+            let rebase_key: RebaseKey = (*id).into();
+            if changeset.contains(&rebase_key) {
+                Conversation::mark_deleted(action.0.label_id, [*id], tx).await?;
+            }
+        }
+        Ok(())
     }
 }
