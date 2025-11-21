@@ -99,13 +99,16 @@ impl Handler for DeleteAllMessagesInLabelHandler {
     }
     async fn rebase_local(
         &self,
-        this_id: ActionId,
+        _: ActionId,
         action: &mut Self::Action,
         _: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        //TODO(ET-5183): Test me!
-        self.apply_local(this_id, action, tx).await?;
+        // Since new conversation and messages/conversations can be added to this label
+        // while the action is active, we need to always recalculate until we have support
+        // for delete up to.
+        action.ids_for_rollback = Message::ids_in_label_with_deleted(action.local_id, tx).await?;
+        Message::mark_deleted(action.ids_for_rollback.clone(), tx).await?;
         Ok(())
     }
 }
