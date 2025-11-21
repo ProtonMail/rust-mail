@@ -2099,6 +2099,103 @@ async fn test_conversation_marks_only_the_last_message_with_the_same_label_as_un
 }
 
 #[tokio::test]
+async fn mark_conversation_unread_does_nothing_if_already_unread() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection().await.unwrap();
+    let mut state = new_test_unread_db_state();
+    for msg in &mut state.messages {
+        msg.unread = false;
+    }
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
+
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+
+    let db_conversation = Conversation::load(local_conv_id, &tether)
+        .await
+        .expect("failed to get conversation")
+        .expect("should have value");
+
+    assert_eq!(db_conversation.num_unread, 0);
+
+    let modified = tether
+        .tx::<_, _, StashError>(async |tx| {
+            // Mark last one as unread
+            Conversation::mark_unread_async(local_label_id1, [local_conv_id], tx).await
+        })
+        .await
+        .unwrap();
+
+    let db_conversation = Conversation::load(local_conv_id, &tether)
+        .await
+        .expect("failed to get conversation")
+        .expect("should have value");
+
+    let messages = Message::find(
+        "WHERE local_conversation_id=?",
+        params![local_conv_id],
+        &tether,
+    )
+    .await
+    .unwrap();
+    let unread_message = &messages[3];
+    assert_eq!(modified.len(), 1);
+    assert_eq!(unread_message.time, 400.into());
+    assert_eq!(unread_message.id(), modified[0]);
+    // There should be 1 unread message.
+    assert_eq!(db_conversation.num_unread, 1);
+    assert_eq!(
+        db_conversation
+            .labels
+            .iter()
+            .find(|l| l.local_label_id.unwrap() == local_label_id1)
+            .unwrap()
+            .context_num_unread,
+        1
+    );
+
+    // mark unread again, should be noop.
+    let modified = tether
+        .tx::<_, _, StashError>(async |tx| {
+            // Mark last one as unread
+            Conversation::mark_unread_async(local_label_id1, [local_conv_id], tx).await
+        })
+        .await
+        .unwrap();
+
+    let db_conversation = Conversation::load(local_conv_id, &tether)
+        .await
+        .expect("failed to get conversation")
+        .expect("should have value");
+
+    let messages = Message::find(
+        "WHERE local_conversation_id=?",
+        params![local_conv_id],
+        &tether,
+    )
+    .await
+    .unwrap();
+    assert!(modified.is_empty());
+    let unread_message = &messages[3];
+    assert_eq!(unread_message.time, 400.into());
+    // There should be 1 unread message.
+    assert_eq!(db_conversation.num_unread, 1);
+    assert_eq!(
+        db_conversation
+            .labels
+            .iter()
+            .find(|l| l.local_label_id.unwrap() == local_label_id1)
+            .unwrap()
+            .context_num_unread,
+        1
+    );
+}
+
+#[tokio::test]
 async fn test_conversation_label_with_message_metadata() {
     // Label conversation with a label that was never assigned to the conversation.
     let (stash, _db_dir) = new_test_connection_file().await;

@@ -1379,6 +1379,17 @@ impl Conversation {
                 warn!("Conversation with id {conversation_id} does not exist!");
                 continue;
             };
+
+            // if conversation already has an unread message in this label context, skip.
+            if let Some(conv_label) = conversation
+                .labels
+                .iter()
+                .find(|l| l.local_label_id == Some(local_label_id))
+                && conv_label.context_num_unread != 0
+            {
+                continue;
+            }
+
             // Find all messages that need to be marked as read.
             let message = Message::find_first_sync(
                 "
@@ -1483,9 +1494,9 @@ impl Conversation {
         local_label_id: LocalLabelId,
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
         tx: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         let ids = Vec::from_iter(conversation_ids);
-        tx.sync_bridge(move |tx| Self::mark_unread(local_label_id, ids, tx).map(|_| ()))
+        tx.sync_bridge(move |tx| Self::mark_unread(local_label_id, ids, tx))
             .await
     }
 
