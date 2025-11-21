@@ -654,7 +654,7 @@ impl DraftActor {
         };
 
         for (group, email) in recipients {
-            draft
+            let result = draft
                 .add_single_recipient(
                     group,
                     RecipientEntry {
@@ -662,15 +662,27 @@ impl DraftActor {
                         email: email.into(),
                     },
                 )
-                .await?;
+                .await;
+
+            if let Err(err) = result {
+                warn!(?err, "Couldn't add recipient, continuing without it");
+            }
         }
 
         if let Some(subject) = mailto.subject {
-            draft.set_subject(subject).await?;
+            let result = draft.set_subject(subject).await;
+
+            if let Err(err) = result {
+                warn!(?err, "Couldn't set subject, continuing without it");
+            }
         }
 
         if let Some(body) = mailto.body {
-            draft.set_body(body).await?;
+            let result = draft.set_body(body).await;
+
+            if let Err(err) = result {
+                warn!(?err, "Couldn't set body, continuing without it");
+            }
         }
 
         Ok(draft)
