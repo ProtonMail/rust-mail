@@ -29,7 +29,17 @@ impl FromStr for Mailto {
         let to = url.path().trim();
 
         if !to.is_empty() && to != "@" {
-            this.to = to.split(',').map(|to| to.trim().into()).collect();
+            this.to = to
+                .split(',')
+                .map(|to| {
+                    let to = to.trim();
+
+                    match percent_encoding::percent_decode(to.as_bytes()).decode_utf8() {
+                        Ok(to) => to.to_string(),
+                        Err(_) => to.to_string(),
+                    }
+                })
+                .collect();
         }
 
         // ---
@@ -87,6 +97,17 @@ mod tests {
         given: "mailto:jimmy@proton",
         expected: || Mailto {
             to: vec!["jimmy@proton".into()],
+            cc: vec![],
+            bcc: vec![],
+            subject: None,
+            body: None,
+        },
+    };
+
+    const TEST_TO_ENCODED: TestCase = TestCase {
+        given: "mailto:encoded%25jimmy@proton",
+        expected: || Mailto {
+            to: vec!["encoded%jimmy@proton".into()],
             cc: vec![],
             bcc: vec![],
             subject: None,
@@ -239,6 +260,7 @@ mod tests {
 
     #[allow(clippy::needless_pass_by_value)]
     #[test_case(TEST_TO)]
+    #[test_case(TEST_TO_ENCODED)]
     #[test_case(TEST_TO_QUERY_1)]
     #[test_case(TEST_TO_QUERY_2)]
     #[test_case(TEST_TWO_TO)]

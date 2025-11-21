@@ -5740,6 +5740,7 @@ dependencies = [
 name = "proton-mailto"
 version = "0.1.0"
 dependencies = [
+ "percent-encoding",
  "test-case",
  "thiserror 1.0.69",
  "url",

@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+percent-encoding = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 
