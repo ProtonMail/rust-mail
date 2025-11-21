@@ -46,6 +46,7 @@ members = [
   "shared/proton-issue-reporter-service",
   "shared/proton-issue-reporter-service-uniffi",
   "shared/proton-observability",
+  "shared/mailto",
 ]
 
 [workspace.package]
@@ -149,6 +150,7 @@ reqwest = { version = "0.12.23", features = [
 criterion = "0.7.0"
 pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
 topological-sort = "0.2.2"
+percent-encoding = "2.3.2"
 
 [workspace.dependencies.email_address]
 version = "0.2.9"
@@ -349,6 +351,9 @@ registry = "proton"
 
 [workspace.dependencies.proton-observability]
 path = "shared/proton-observability"
+
+[workspace.dependencies.proton-mailto]
+path = "shared/mailto"
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"

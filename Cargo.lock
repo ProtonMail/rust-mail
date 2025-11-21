@@ -5575,6 +5575,7 @@ dependencies = [
  "proton-mail-common",
  "proton-mail-common-derive",
  "proton-mail-html-transformer",
+ "proton-mailto",
  "proton-network-monitor-service",
  "proton-observability",
  "proton-sqlite3",
@@ -5713,6 +5714,7 @@ dependencies = [
  "proton-log-service",
  "proton-mail-api",
  "proton-mail-common",
+ "proton-mailto",
  "proton-network-monitor-service",
  "proton-observability",
  "proton-task-service",
@@ -5731,6 +5733,16 @@ dependencies = [
  "uniffi-common",
  "uniffi-macros",
  "uniffi-runtime",
+ "url",
+]
+
+[[package]]
+name = "proton-mailto"
+version = "0.1.0"
+dependencies = [
+ "percent-encoding",
+ "test-case",
+ "thiserror 1.0.69",
  "url",
 ]
 

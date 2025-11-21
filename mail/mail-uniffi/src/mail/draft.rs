@@ -33,18 +33,22 @@ use proton_mail_common::draft::{
 use proton_mail_common::models::DraftSendResult as RealDraftSendResult;
 use proton_mail_common::models::{DraftMetadata, MessageMimeType};
 use proton_mail_common::{MailContextError, MailUserContext};
+use proton_mailto::Mailto;
 use recipients::ComposerRecipientList;
 use secrecy::{ExposeSecret, SecretString};
+use std::str::FromStr;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{RwLock, broadcast};
+use tracing::warn;
 
-#[derive(Debug, Copy, Clone, uniffi::Enum)]
+#[derive(Debug, Clone, uniffi::Enum)]
 pub enum DraftCreateMode {
     Empty,
     Reply(Id),
     ReplyAll(Id),
     Forward(Id),
+    Mailto(String),
     FromIosShareExtension,
 }
 
@@ -62,10 +66,12 @@ pub struct HtmlForComposer {
     /// It does not provide `<head>` tag on its own.
     /// Therefore, the returned HTML can be inserted alongside with other html nodes.
     pub head_content: String,
+
     /// Initial body of the draft. Usually contains signature
     /// and replied quote.
     pub initial_body: String,
 }
+
 impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOptions {
     fn from(value: ScheduleSendOptions<Local>) -> Self {
         Self {
@@ -96,6 +102,7 @@ impl From<RealDraftAddressValidationError> for DraftAddressValidationError {
         }
     }
 }
+
 #[derive(Debug, uniffi::Record)]
 pub struct DraftAddressValidationResult {
     pub email: String,
@@ -139,8 +146,6 @@ struct CachedDraftData {
     bcc_list_cb: Option<Arc<dyn ComposerRecipientValidationCallback>>,
 }
 
-/// Represents a draft message which can be crafted as empty or as a reply/forward
-/// to an existing message.
 #[derive(uniffi::Object)]
 pub struct Draft {
     instance: RealDraft,
@@ -148,6 +153,7 @@ pub struct Draft {
     ctx: MailUserContextPtr,
     attachment_list: Arc<AttachmentList>,
 }
+
 impl Draft {
     async fn new_impl(
         ctx: MailUserContextPtr,
@@ -337,6 +343,7 @@ pub async fn new_draft(
 
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty_ex(&ctx, options).await,
+
             DraftCreateMode::Reply(id) => {
                 RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Sender, false, options).await
             }
@@ -346,6 +353,20 @@ pub async fn new_draft(
             DraftCreateMode::Forward(id) => {
                 RealDraft::reply_ex(&ctx, id.into(), ReplyMode::Forward, false, options).await
             }
+
+            DraftCreateMode::Mailto(mailto) => match Mailto::from_str(&mailto) {
+                Ok(mailto) => RealDraft::mailto(&ctx, options, mailto).await,
+
+                Err(err) => {
+                    warn!(
+                        ?err,
+                        "Couldn't parse given mailto link - creating an empty draft"
+                    );
+
+                    RealDraft::empty_ex(&ctx, options).await
+                }
+            },
+
             DraftCreateMode::FromIosShareExtension => {
                 RealDraft::from_ios_share_extension(&ctx, options).await
             }

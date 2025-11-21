@@ -10,6 +10,7 @@ mod acceptance {
     mod conversation_mail_scroller;
     mod draft_attachments;
     mod draft_change_sender;
+    mod draft_constructors;
     mod draft_discard;
     mod draft_ios_share_ext;
     mod draft_recipients;
