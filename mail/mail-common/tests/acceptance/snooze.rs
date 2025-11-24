@@ -492,3 +492,121 @@ async fn snooze_and_unsnooze_are_perfect_counterparts() {
         .unwrap();
     pretty_assertions::assert_eq!(sent_message, actual_sent_message);
 }
+
+#[cfg(feature = "action_rebase")]
+mod rebase {
+    use super::*;
+    use proton_action_queue::action::ActionGroup;
+    use proton_action_queue::rebase::RebaseChangeSet;
+
+    #[tokio::test]
+    async fn unsnooze_rebase_updates_revert_time() {
+        let ctx = MailTestContext::new().await;
+        let params = TestParams::default_basic();
+
+        ctx.setup_user(params.clone()).await;
+
+        // Create snooze time (1 hour from now)
+        let snooze_time: DateTime<Local> = Local::now() + Duration::hours(1);
+        let snooze_timestamp = UnixTimestamp::from(snooze_time);
+        let user_ctx = ctx.mail_user_context().await;
+        let mut tether = user_ctx.user_stash().connection().await.unwrap();
+        let inbox = SystemLabel::Inbox.load(&tether).await.unwrap().unwrap();
+        let snoozed = SystemLabel::Snoozed.load(&tether).await.unwrap().unwrap();
+        let TestData {
+            conversation: expected_conv,
+            label_message: snoozed_message,
+            ..
+        } = setup_test_label(inbox.id(), &mut tether).await;
+        // Snooze the conversation
+        let snoozed_action_id = Conversation::action_snooze(
+            user_ctx.action_queue(),
+            inbox.id(),
+            vec![expected_conv.id()],
+            snooze_timestamp,
+        )
+        .await
+        .unwrap()
+        .id;
+
+        let mut actual = Conversation::load(expected_conv.id(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let mut actual_message = Message::load(snoozed_message.id(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Unsnooze the conversation
+        let unsooze_action_id = Conversation::action_unsnooze(
+            user_ctx.action_queue(),
+            snoozed.id(),
+            vec![expected_conv.id()],
+        )
+        .await
+        .unwrap()
+        .id;
+
+        let new_snooze_time = UnixTimestamp::new(99999);
+
+        actual
+            .labels
+            .iter_mut()
+            .find(|l| l.local_label_id.unwrap() == snoozed.id())
+            .unwrap()
+            .context_snooze_time = new_snooze_time;
+
+        actual_message.snooze_time = new_snooze_time;
+
+        // simulate update to conversation
+        tether
+            .tx(async |tx| {
+                actual.save(tx).await?;
+                actual_message.save(tx).await
+            })
+            .await
+            .unwrap();
+
+        // Delete snooze action id so we don't trigger revert and leave the conversation
+        // in the updated snoozed state.
+        user_ctx
+            .action_queue()
+            .delete_action(snoozed_action_id)
+            .await
+            .unwrap();
+
+        user_ctx
+            .action_queue()
+            .rebase(
+                ActionGroup::default(),
+                &RebaseChangeSet::from(expected_conv.id()),
+            )
+            .await
+            .unwrap();
+
+        user_ctx
+            .action_queue()
+            .cancel(unsooze_action_id)
+            .await
+            .unwrap();
+
+        actual.reload(&tether).await.unwrap();
+
+        // Remove local ids from labels to make fair comparison
+        // ConversationLabels are removed and added back with different local ids
+        assert_eq!(
+            actual
+                .labels
+                .iter()
+                .find(|l| l.local_label_id.unwrap() == snoozed.id())
+                .unwrap()
+                .context_snooze_time,
+            new_snooze_time
+        );
+
+        // Messages are equal
+        assert_eq!(actual_message.snooze_time, new_snooze_time);
+    }
+}

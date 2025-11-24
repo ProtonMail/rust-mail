@@ -1552,6 +1552,14 @@ impl Conversation {
             return Err(AppError::SnoozeTimeInThePast);
         }
 
+        Self::snooze_unchecked(ids, snooze_until, bond).await
+    }
+
+    pub async fn snooze_unchecked(
+        ids: &[LocalConversationId],
+        snooze_until: UnixTimestamp,
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
         let local_inbox_id = SystemLabel::Inbox
             .local_id(bond)
             .await?
