@@ -100,7 +100,7 @@ async fn create_mail_context() -> Result<Arc<MailContext>> {
 }
 
 async fn list_feature_flags(ctx: &Arc<MailContext>) -> Result<()> {
-    let service = ctx.feature_flags();
+    let service = ctx.core_context().feature_flags();
     let flags = service.list_all().await;
 
     if flags.is_empty() {
@@ -117,7 +117,7 @@ async fn list_feature_flags(ctx: &Arc<MailContext>) -> Result<()> {
 }
 
 async fn check_feature_flag(ctx: &Arc<MailContext>, flag_name: &str) -> Result<()> {
-    let service = ctx.feature_flags();
+    let service = ctx.core_context().feature_flags();
     match service.get(flag_name).await? {
         Some(true) => info!("✅ {} is ENABLED", flag_name),
         Some(false) => info!("❌ {} is DISABLED", flag_name),
@@ -127,7 +127,7 @@ async fn check_feature_flag(ctx: &Arc<MailContext>, flag_name: &str) -> Result<(
 }
 
 async fn refresh_feature_flags(ctx: &Arc<MailContext>) -> Result<()> {
-    let service = ctx.feature_flags();
+    let service = ctx.core_context().feature_flags();
     match service.refresh().await {
         Ok(()) => info!("✅ Feature flags refreshed successfully"),
         Err(e) => error!("❌ Refresh failed: {}", e),

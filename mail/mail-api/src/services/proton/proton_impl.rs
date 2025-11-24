@@ -12,7 +12,7 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use crate::services::proton::prelude::*;
-use crate::services::proton::{MAIL_V4, Package, PostSendRequest, UNLEASH_V2};
+use crate::services::proton::{MAIL_V4, Package, PostSendRequest};
 use crate::services::proton::{PostSendMessageResponse, ProtonMail};
 use crate::{INCOMING_DEFAULTS_PAGE_SIZE, MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 
@@ -612,14 +612,6 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
             .await?
             .ok()?;
         Ok(())
-    }
-
-    async fn get_unleash_feature_flags(&self) -> ApiServiceResult<GetUnleashFeaturesResponse> {
-        Ok(GET!("{UNLEASH_V2}/frontend")
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
     }
 
     async fn mark_unsubscribed(&self, ids: Vec<MessageId>) -> ApiServiceResult<()> {

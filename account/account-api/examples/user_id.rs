@@ -11,6 +11,7 @@ use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::migration_snooper::NoopMigrationSnooper;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
+use proton_core_common::services::feature_flags::FeatureFlagsBackgroundTask;
 use proton_core_common::{Context, Origin};
 use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::LogService;
@@ -161,7 +162,7 @@ async fn create_context() -> Arc<Context> {
         #[allow(clippy::default_trait_access)]
         Default::default(),
         Arc::new(NoopIssueReporter),
-        |builder| builder,
+        FeatureFlagsBackgroundTask::Disabled,
     )
     .await
     .expect("failed to create core context")
