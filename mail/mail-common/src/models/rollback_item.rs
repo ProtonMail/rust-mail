@@ -1,7 +1,7 @@
 use crate::MailContextError;
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, Message, MessageSyncDecision};
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::stream::{FuturesOrdered, FuturesUnordered, StreamExt};
 use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
@@ -11,8 +11,8 @@ use proton_core_api::session::Session;
 use proton_core_common::models::Label;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
-use proton_mail_api::services::proton::prelude::MessageMetadata;
-use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
+use proton_mail_api::services::proton::prelude::{GetConversationResponse, MessageMetadata};
+use proton_mail_api::services::proton::requests::GetMessagesOptions;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -344,7 +344,7 @@ impl RollbackHandler for MessageRollbackHandler {
 struct ConversationRollbackHandler {}
 
 impl RollbackHandler for ConversationRollbackHandler {
-    type Item = proton_mail_api::services::proton::response_data::Conversation;
+    type Item = GetConversationResponse;
     type RemoteId = ConversationId;
 
     fn item_type() -> RollbackItemType {
@@ -355,14 +355,16 @@ impl RollbackHandler for ConversationRollbackHandler {
         api: &Session,
         remote_ids: &[Self::RemoteId],
     ) -> Result<Vec<Self::Item>, ApiServiceError> {
-        let options = GetConversationsOptions {
-            page: 0,
-            page_size: remote_ids.len() as u64,
-            ids: Some(remote_ids.to_vec()),
-            ..Default::default()
-        };
+        let iter = remote_ids.iter().map(|id| api.get_conversation(id.clone()));
 
-        Ok(api.get_conversations(options).await?.conversations)
+        let mut tasks = FuturesOrdered::from_iter(iter);
+
+        let mut result = Vec::with_capacity(remote_ids.len());
+        while let Some(output) = tasks.next().await {
+            result.push(output?);
+        }
+
+        Ok(result)
     }
 
     async fn store_items(
@@ -371,9 +373,13 @@ impl RollbackHandler for ConversationRollbackHandler {
         tx: &Bond<'_>,
     ) -> Result<(), MailContextError> {
         for item in items {
-            let mut c = Conversation::from(item);
+            let mut c = Conversation::from(item.conversation);
             c.save(tx).await?;
             changeset.add(c.id());
+
+            let ids =
+                Message::create_or_update_messages_from_metadata(item.messages, None, tx).await?;
+            changeset.add_many(ids);
         }
 
         Ok(())
