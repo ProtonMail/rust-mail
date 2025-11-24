@@ -65,7 +65,6 @@ use stash::params;
 use stash::rusqlite::{OptionalExtension, params_from_iter};
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{ConnectionExt, IterMapToSql, MapToSql as _, placeholders, placeholders_n};
-use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::ops::{AddAssign, Deref, DerefMut};
@@ -2710,6 +2709,9 @@ impl ConversationOrMessage for Conversation {
         bond: &Transaction<'_>,
     ) -> Result<Vec<LocalMessageId>, StashError> {
         let mut read_messages = vec![];
+        let mut conversation_label_counts = HashMap::new();
+        let mut message_label_counts = HashMap::new();
+
         for conversation_id in ids {
             info!("Marking {conversation_id:?} as read");
             let mut conversation = Conversation::load_by_id_exact_sync(conversation_id, bond)?;
@@ -2726,37 +2728,20 @@ impl ConversationOrMessage for Conversation {
             // Otherwise, update conversation unread count.
             conversation.num_unread = 0;
             conversation.display_snooze_reminder = false;
-            conversation.save_sync(bond)?;
 
-            // Update conversation labels unread stats.
-            let conversation_labels = ConversationLabel::find_sync(
-                "WHERE local_conversation_id=? AND context_num_unread <> 0",
-                (conversation_id,),
-                bond,
-            )?;
-
-            let mut label_counts = HashMap::new();
-            for mut conversation_label in conversation_labels {
-                label_counts
+            for conversation_label in conversation
+                .labels
+                .iter_mut()
+                .filter(|l| l.context_num_unread != 0)
+            {
+                conversation_label.context_num_unread = 0;
+                conversation_label_counts
                     .entry(conversation_label.local_label_id.unwrap())
                     .and_modify(|x| *x += 1)
                     .or_insert(1);
-
-                conversation_label.context_num_unread = 0;
-                conversation_label.save_sync(bond)?
             }
 
-            for (label_id, count) in &mut label_counts {
-                if let Some(mut conv_counter) =
-                    ConversationCounters::load_by_id_sync(*label_id, bond)?
-                {
-                    conv_counter.unread = conv_counter.unread.saturating_sub(*count);
-                    conv_counter.save_sync(bond)?;
-                }
-
-                // reset for messages.
-                *count = 0;
-            }
+            conversation.save_sync(bond)?;
 
             // Update messages
             let messages = Message::find_sync(
@@ -2779,23 +2764,27 @@ impl ConversationOrMessage for Conversation {
                     .collect::<Result<Vec<LocalLabelId>, _>>()?;
 
                 for label_id in label_ids {
-                    match label_counts.entry(label_id) {
-                        HmEntry::Occupied(mut o) => {
-                            *o.get_mut() += 1;
-                        }
-                        HmEntry::Vacant(v) => {
-                            v.insert(1);
-                        }
-                    }
+                    message_label_counts
+                        .entry(label_id)
+                        .and_modify(|x| *x += 1)
+                        .or_insert(1);
                 }
             }
+        }
 
-            // update message label counters
-            for (label_id, count) in &mut label_counts {
-                if let Some(mut counters) = MessageCounters::load_by_id_sync(*label_id, bond)? {
-                    counters.unread = counters.unread.saturating_sub(*count);
-                    counters.save_sync(bond)?;
-                }
+        // update message label counters
+        for (label_id, count) in &mut message_label_counts {
+            if let Some(mut counters) = MessageCounters::load_by_id_sync(*label_id, bond)? {
+                counters.unread = counters.unread.saturating_sub(*count);
+                counters.save_sync(bond)?;
+            }
+        }
+        // Update conversation counters
+        for (label_id, count) in &mut conversation_label_counts {
+            if let Some(mut conv_counter) = ConversationCounters::load_by_id_sync(*label_id, bond)?
+            {
+                conv_counter.unread = conv_counter.unread.saturating_sub(*count);
+                conv_counter.save_sync(bond)?;
             }
         }
 
