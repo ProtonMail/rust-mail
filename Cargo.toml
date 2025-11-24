@@ -34,9 +34,6 @@ members = [
   "mail/mail-html-transformer-fuzz",
   "mail/mail-tui",
   "mail/mail-uniffi",
-  "payment/payment-crux",
-  "payment/payment-sdk",
-  "payment/payment-uniffi",
   "uniffi/uniffi-bindgen",
   "uniffi/uniffi-common",
   "uniffi/uniffi-macros",
@@ -302,11 +299,6 @@ registry = "proton"
 [workspace.dependencies.proton-task-service]
 version = "0.1"
 path = "shared/task-service"
-registry = "proton"
-
-[workspace.dependencies.proton-payment-sdk]
-version = "0.1.0"
-path = "payment/payment-sdk"
 registry = "proton"
 
 [workspace.dependencies.proton-calendar-api]
