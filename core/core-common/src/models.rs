@@ -40,6 +40,7 @@ mod feature_flags;
 mod initialized_components;
 mod labels;
 mod user;
+mod user_feature_flags;
 mod user_settings;
 
 pub use self::address::*;
@@ -51,6 +52,7 @@ pub use self::feature_flags::*;
 pub use self::initialized_components::*;
 pub use self::labels::*;
 pub use self::user::*;
+pub use self::user_feature_flags::*;
 pub use self::user_settings::*;
 
 use crate::datatypes::LocalIdMarker;
