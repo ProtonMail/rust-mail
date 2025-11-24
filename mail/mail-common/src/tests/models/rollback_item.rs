@@ -8,7 +8,7 @@ use proton_core_common::models::ModelIdExtension;
 use proton_core_common::test_utils::test_context::MockApiEnv;
 use proton_core_common::test_utils::utils::mock_auth_endpoints;
 use proton_mail_api::services::proton::common::ConversationId;
-use proton_mail_api::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
+use proton_mail_api::services::proton::responses::GetMessagesResponse;
 use proton_mail_common::test_utils::db::new_test_connection_file;
 use proton_mail_common::{
     api_conversation, api_label, api_message_meta, conversation, label, message,
@@ -290,29 +290,24 @@ async fn start_server(tether: &Tether, batch_size: usize) -> (MockServer, Sessio
 
 #[function_name::named]
 async fn mock_get_conversation(mock_server: &MockServer, items: Vec<RollbackItem>) {
-    let mut api_conversations = Vec::with_capacity(items.len());
-
-    let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/conversations".to_string()));
-
-    for (index, item) in items.iter().enumerate() {
-        mock = mock.and(query_param_contains(
-            format!("ID[{index}]"),
-            item.remote_id.clone(),
-        ));
-        api_conversations.push(api_conversation!(id: item.remote_id.clone().into()));
+    for item in items {
+        let conv = api_conversation!(id: item.remote_id.clone().into());
+        Mock::given(method("GET"))
+            .and(path(format!(
+                "/api/mail/v4/conversations/{}",
+                item.remote_id
+            )))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetConversationResponse {
+                    conversation: conv,
+                    messages: vec![],
+                }),
+            )
+            .expect(1)
+            .named(function_name!())
+            .mount(mock_server)
+            .await;
     }
-
-    mock.respond_with(
-        ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
-            conversations: api_conversations,
-            stale: false,
-            total: 1,
-        }),
-    )
-    .expect(1)
-    .named(function_name!())
-    .mount(mock_server)
-    .await;
 }
 
 #[function_name::named]
