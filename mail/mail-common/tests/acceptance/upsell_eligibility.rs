@@ -325,8 +325,8 @@ async fn setup_feature_flags(ctx: &MailTestContext, flags: TestedFeatureFlags) {
         .mount(ctx.mock_server())
         .await;
 
-    ctx.context()
-        .core_context()
+    ctx.user_context()
+        .await
         .feature_flags()
         .refresh()
         .await

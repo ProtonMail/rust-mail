@@ -7,6 +7,7 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::Label;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain, KeyChainExt};
+use proton_core_common::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
 use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::LogService;
 use proton_mail_common::{MailContext, ShouldInitializeMailUserContext};
@@ -165,7 +166,11 @@ async fn main() {
     let session = et_context.get_session(session_id).await.unwrap().unwrap();
 
     let ctx = et_context
-        .user_context_from_session(&session, ShouldInitializeMailUserContext::Yes)
+        .user_context_from_session(
+            &session,
+            ShouldInitializeMailUserContext::Yes,
+            UserFeatureFlagsBackgroundTask::Disabled,
+        )
         .await
         .unwrap();
 

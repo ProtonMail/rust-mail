@@ -7,6 +7,7 @@ use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::CoreAccount;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::KeyChain;
+use proton_core_common::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
 use proton_core_common::{CoreAccountState, Origin};
 use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::{Config as LogConfig, LogService};
@@ -84,7 +85,13 @@ async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<Mail
             continue;
         };
 
-        return Ok(ctx.user_context_from_session(&session, Init::Yes).await?);
+        return Ok(ctx
+            .user_context_from_session(
+                &session,
+                Init::Yes,
+                UserFeatureFlagsBackgroundTask::Disabled,
+            )
+            .await?);
     }
 
     Err(anyhow!("account not found"))

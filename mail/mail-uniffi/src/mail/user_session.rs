@@ -11,8 +11,8 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
 use crate::{
-    AsyncLiveQueryCallback, WatchHandle, async_runtime, declare_live_query_tagger, uniffi_async,
-    watch_table,
+    AsyncLiveQueryCallback, LiveQueryCallback, WatchHandle, async_runtime,
+    declare_live_query_tagger, uniffi_async, watch_table,
 };
 use futures::TryFutureExt;
 use muon::common::IntoDyn;
@@ -676,6 +676,49 @@ impl MailUserSession {
         .await
         .map_err(ProtonError::from)
     }
+
+    /// Is the Unleash feature enabled.
+    /// Currently:
+    /// * Returns None if feature is not found
+    /// * Returns Some(true) if feature is present
+    ///
+    /// NOTE: It never returns Some(false) as in this stage of the implementation.
+    pub async fn is_feature_enabled(
+        &self,
+        feature_id: String,
+    ) -> Result<Option<bool>, ProtonError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            let flag = ctx
+                .user_context()
+                .feature_flags()
+                .get(&feature_id)
+                .await
+                .map_err(MailContextError::from)?;
+
+            Ok::<_, RealProtonMailError>(flag)
+        })
+        .await
+        .map_err(ProtonError::from)
+        .into()
+    }
+
+    pub async fn watch_feature_flags_stream(
+        &self,
+    ) -> Result<Arc<WatchUserFeatureFlagsStream>, ProtonError> {
+        let ctx = self.ctx()?;
+
+        uniffi_runtime().block_on(async {
+            let handle = ctx
+                .user_context()
+                .feature_flags()
+                .watch()
+                .await
+                .map_err(MailContextError::from)?;
+            Ok(Arc::new(WatchUserFeatureFlagsStream { handle }))
+        })
+    }
 }
 
 impl TryFrom<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
@@ -713,4 +756,27 @@ pub trait ExecuteWhenOnlineCallbackAsync: Send + Sync {
 #[uniffi::export(with_foreign)]
 pub trait ExecuteWhenOnlineCallback: Send + Sync {
     fn on_online(&self);
+}
+
+#[derive(uniffi::Object)]
+pub struct WatchUserFeatureFlagsStream {
+    pub handle: WatcherHandle,
+}
+
+#[uniffi_export]
+impl WatchUserFeatureFlagsStream {
+    pub fn next_sync(&self) -> Result<(), ProtonError> {
+        self.handle
+            .receiver
+            .recv()
+            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    }
+
+    pub async fn next_async(&self) -> Result<(), ProtonError> {
+        self.handle
+            .receiver
+            .recv_async()
+            .await
+            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    }
 }

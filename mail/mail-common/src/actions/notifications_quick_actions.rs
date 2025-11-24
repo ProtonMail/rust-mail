@@ -14,6 +14,7 @@ use proton_core_api::session::Session;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::db::account::CoreSession;
 use proton_core_common::models::{LabelError, ModelIdExtension};
+use proton_core_common::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
@@ -39,7 +40,13 @@ pub async fn exec(
     ctx.core_context()
         .task_service()
         .scope_background_async(async || {
-            if let Some(user_ctx) = ctx.initialized_user_context_from_session(session).await? {
+            if let Some(user_ctx) = ctx
+                .initialized_user_context_from_session(
+                    session,
+                    UserFeatureFlagsBackgroundTask::Disabled,
+                )
+                .await?
+            {
                 exec_inner(&user_ctx, action, time_left_ms).await?;
             }
             Ok(())

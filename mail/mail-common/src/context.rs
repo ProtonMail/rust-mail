@@ -27,6 +27,7 @@ use proton_core_common::pin_code::{PinCode, PinError};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
 use proton_core_common::services::feature_flags::FeatureFlagsBackgroundTask;
 use proton_core_common::services::issue_reporter_service::IssueReporterService;
+use proton_core_common::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
 use proton_core_common::services::{
     DeviceInfoService, NetworkMonitorService, SessionObserverService,
 };
@@ -607,7 +608,12 @@ impl MailContext {
 
         let user_ctx = self
             .core_context
-            .new_user_context(user_id, session, session_id)
+            .new_user_context(
+                user_id,
+                session,
+                session_id,
+                UserFeatureFlagsBackgroundTask::Enabled,
+            )
             .await
             .map_err(MailContextError::from)?;
         Arc::clone(self)
@@ -628,8 +634,12 @@ impl MailContext {
     pub async fn initialized_user_context_from_session(
         self: &Arc<Self>,
         session: &CoreSession,
+        ff_task: UserFeatureFlagsBackgroundTask,
     ) -> MailContextResult<Option<Arc<MailUserContext>>> {
-        let ctx = self.core_context.user_context_from_session(session).await?;
+        let ctx = self
+            .core_context
+            .user_context_from_session(session, ff_task)
+            .await?;
 
         self.new_initialized_user_context(ctx).await
     }
@@ -642,8 +652,12 @@ impl MailContext {
         self: &Arc<Self>,
         session: &CoreSession,
         init: ShouldInitializeMailUserContext,
+        ff_task: UserFeatureFlagsBackgroundTask,
     ) -> MailContextResult<Arc<MailUserContext>> {
-        let ctx = self.core_context.user_context_from_session(session).await?;
+        let ctx = self
+            .core_context
+            .user_context_from_session(session, ff_task)
+            .await?;
 
         Arc::clone(self).new_user_context(ctx, init).await
     }
@@ -664,8 +678,12 @@ impl MailContext {
 
         for session in sessions {
             ctxs.push(
-                self.user_context_from_session(&session, ShouldInitializeMailUserContext::No)
-                    .await?,
+                self.user_context_from_session(
+                    &session,
+                    ShouldInitializeMailUserContext::No,
+                    UserFeatureFlagsBackgroundTask::Disabled,
+                )
+                .await?,
             );
         }
 
@@ -690,8 +708,12 @@ impl MailContext {
 
         for session in sessions.filter(|s| &s.remote_id != current_session_id) {
             ctxs.push(
-                self.user_context_from_session(&session, ShouldInitializeMailUserContext::No)
-                    .await?,
+                self.user_context_from_session(
+                    &session,
+                    ShouldInitializeMailUserContext::No,
+                    UserFeatureFlagsBackgroundTask::Disabled,
+                )
+                .await?,
             );
         }
 
@@ -1028,7 +1050,13 @@ impl MailContext {
         let mut ctxs = Vec::new();
 
         for session in sessions {
-            match self.initialized_user_context_from_session(&session).await {
+            match self
+                .initialized_user_context_from_session(
+                    &session,
+                    UserFeatureFlagsBackgroundTask::Enabled,
+                )
+                .await
+            {
                 Ok(Some(user_context)) => ctxs.push(user_context),
                 Ok(None) => {
                     tracing::debug!("{} has non-initialized context", session.account_id);

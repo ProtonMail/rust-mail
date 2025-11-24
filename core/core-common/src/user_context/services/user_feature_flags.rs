@@ -1,36 +1,50 @@
-use std::collections::BTreeMap;
-use std::sync::Weak;
-use std::time::{Duration, Instant};
+//! Note: This service is for per-user feature flags.
+//! If you are looking for global feature flags,
+//! please see [`crate::services::FeatureFlagsService`].
 
-use crate::app_events::OnEnterForegroundEvent;
-use crate::datatypes::UnixTimestamp;
-use crate::models::{FeatureFlag, ModelExtension};
-use crate::{Context, services::Service};
-use crate::{CoreContextError, CoreContextResult};
-use anyhow::{Context as _, Result};
-use proton_core_api::services::proton::ProtonCore as _;
-use proton_core_api::services::proton::muon::common::WithTimeout;
-use proton_core_api::session::Session;
+use std::{
+    collections::BTreeMap,
+    sync::Weak,
+    time::{Duration, Instant},
+};
 
-use stash::stash::WatcherHandle;
-use stash::watcher::TableWatcher;
+use anyhow::Context;
+use proton_core_api::{
+    services::proton::{ProtonCore, muon::common::WithTimeout},
+    session::Session,
+};
+use stash::{stash::WatcherHandle, watcher::TableWatcher};
 use tracing::error;
 
+use crate::{
+    CoreContextError, CoreContextResult, UserContext,
+    app_events::OnEnterForegroundEvent,
+    datatypes::UnixTimestamp,
+    models::{ModelExtension, UserFeatureFlag},
+};
+
+// Note: There are identical constants in global service:
+const REFRESH_THROTTLE_SECS: u64 = 60; // 1 minute
+const REFRESH_TIMEOUT_SECS: u64 = 600; // 10 minutes
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FeatureFlagsBackgroundTask {
+pub enum UserFeatureFlagsBackgroundTask {
     Enabled,
     Disabled,
 }
 
 #[derive(Clone)]
-pub struct FeatureFlagsService {
-    ctx: Weak<Context>,
-    background_task_setting: FeatureFlagsBackgroundTask,
+pub struct UserFeatureFlagsService {
+    ctx: Weak<UserContext>,
+    background_task_setting: UserFeatureFlagsBackgroundTask,
 }
 
-impl FeatureFlagsService {
+impl UserFeatureFlagsService {
     #[must_use]
-    pub fn new(ctx: Weak<Context>, background_task_setting: FeatureFlagsBackgroundTask) -> Self {
+    pub fn new(
+        ctx: Weak<UserContext>,
+        background_task_setting: UserFeatureFlagsBackgroundTask,
+    ) -> Self {
         Self {
             ctx,
             background_task_setting,
@@ -44,9 +58,9 @@ impl FeatureFlagsService {
         let response = api.get_unleash_feature_flags().await?;
         tracing::info!("Fetched {} featured flags from API", response.toggles.len());
 
-        let mut tether = ctx.account_stash().connection().await?;
+        let mut tether = ctx.stash().connection().await?;
 
-        let mut flags = FeatureFlag::all(&tether)
+        let mut flags = UserFeatureFlag::all(&tether)
             .await
             .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
             .unwrap_or_default()
@@ -54,7 +68,7 @@ impl FeatureFlagsService {
             .map(|flag| {
                 (
                     flag.name.clone(),
-                    FeatureFlag {
+                    UserFeatureFlag {
                         // If the flag is not fetched from API but exists in the database,
                         // we mark it as disabled.
                         enabled: false,
@@ -62,14 +76,14 @@ impl FeatureFlagsService {
                     },
                 )
             })
-            .collect::<BTreeMap<String, FeatureFlag>>();
+            .collect::<BTreeMap<String, UserFeatureFlag>>();
 
         let modify_time = UnixTimestamp::now();
 
         for toggle in response.toggles {
             let flag = flags
                 .entry(toggle.name.clone())
-                .or_insert_with(|| FeatureFlag {
+                .or_insert_with(|| UserFeatureFlag {
                     name: toggle.name,
                     enabled: false,
                     modify_time,
@@ -84,7 +98,7 @@ impl FeatureFlagsService {
         let flags = flags.into_values().collect();
 
         tether
-            .tx(async |tx| FeatureFlag::save_all(flags, tx).await)
+            .tx(async |tx| UserFeatureFlag::save_all(flags, tx).await)
             .await?;
 
         Ok(())
@@ -93,16 +107,15 @@ impl FeatureFlagsService {
     pub async fn get(&self, key: &str) -> CoreContextResult<Option<bool>> {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
         let feature_flag = {
-            let tether = ctx.account_stash().connection().await?;
-            FeatureFlag::by_name(key, &tether).await?
+            let tether = ctx.stash().connection().await?;
+            UserFeatureFlag::by_name(key, &tether).await?
         };
         Ok(feature_flag.map(|flag| flag.enabled))
     }
 
     pub async fn refresh(&self) -> CoreContextResult<()> {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
-        let session = ctx.new_api_session(None).await?;
-        self.fetch_and_update(&session).await
+        self.fetch_and_update(ctx.session()).await
     }
 
     pub async fn list_all(&self) -> Vec<(String, bool)> {
@@ -110,11 +123,11 @@ impl FeatureFlagsService {
             tracing::warn!("Failed to upgrade context");
             return vec![];
         };
-        let Ok(tether) = ctx.account_stash().connection().await else {
+        let Ok(tether) = ctx.stash().connection().await else {
             tracing::warn!("Failed to connect to account stash");
             return vec![];
         };
-        let flags = FeatureFlag::all(&tether)
+        let flags = UserFeatureFlag::all(&tether)
             .await
             .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
             .unwrap_or_default();
@@ -130,56 +143,50 @@ impl FeatureFlagsService {
     pub async fn watch(&self) -> CoreContextResult<WatcherHandle> {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
 
-        let stash = ctx.account_stash();
-        TableWatcher::<FeatureFlag>::watch(stash)
+        let stash = ctx.stash();
+        TableWatcher::<UserFeatureFlag>::watch(stash)
             .await
             .map_err(CoreContextError::from)
     }
-}
 
-const REFRESH_THROTTLE_SECS: u64 = 60; // 1 minute
-const REFRESH_TIMEOUT_SECS: u64 = 600; // 10 minutes
-
-#[async_trait::async_trait]
-impl Service for FeatureFlagsService {
-    type Error = CoreContextError;
-
-    async fn init(&self) -> Result<(), Self::Error> {
-        if self.background_task_setting == FeatureFlagsBackgroundTask::Disabled {
-            tracing::warn!("Feature flags background task is disabled");
+    #[allow(clippy::result_large_err)]
+    pub fn init(&self) -> CoreContextResult<()> {
+        if self.background_task_setting == UserFeatureFlagsBackgroundTask::Disabled {
+            tracing::warn!("User feature flags background task is disabled");
             return Ok(());
         }
-        let ctx = self
-            .ctx
-            .upgrade()
-            .context("Could not upgrade context")
-            .map_err(CoreContextError::Other)?;
 
-        let task_service = ctx.task_service();
-        let event_service = ctx.event_service();
+        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
+
+        let task_service = ctx.context.task_service();
+        let event_service = ctx.context.event_service();
+
         let self_clone = self.clone();
         let Some(mut event_stream) = event_service.subscribe::<OnEnterForegroundEvent>() else {
             error!("Failed to subscribe to OnEnterForegroundEvent");
             return Ok(());
         };
+
+        // This task will be cancelled when user context is removed.
+        // Which happens when user logs-out
         task_service.spawn(async move {
-            let ctx = self_clone.ctx.upgrade().expect("Could not upgrade context");
-            let Ok(session) = ctx.new_api_session(None).await else {
-                error!("Failed to create API session");
-                return;
-            };
-            drop(ctx);
             loop {
-                if let Err(error) = self_clone.fetch_and_update(&session).await {
-                    error!(%error, "Failed to refresh feature flags");
+                let Some(ctx) = self_clone.ctx.upgrade() else {
+                    error!("Failed to upgrade context");
+                    return;
+                };
+                let session = ctx.session();
+                if let Err(error) = self_clone.fetch_and_update(session).await {
+                    error!(%error, "Failed to refresh user feature flags");
                 }
                 let last_updated = Instant::now();
                 loop {
-                    if let Ok(Err(_)) = event_stream
+                    if let Err(error) = event_stream
                         .next()
                         .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
                         .await
                     {
+                        tracing::error!(%error, "Failed to receive OnEnterForegroundEvent");
                         return;
                     }
                     if last_updated.elapsed() >= Duration::from_secs(REFRESH_THROTTLE_SECS) {
@@ -188,6 +195,7 @@ impl Service for FeatureFlagsService {
                 }
             }
         });
+
         Ok(())
     }
 }
