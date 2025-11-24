@@ -1,5 +1,6 @@
 use crate::MailContextError;
 use crate::datatypes::RollbackItemType;
+use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::models::{Conversation, Message, MessageSyncDecision};
 use futures::stream::{FuturesOrdered, FuturesUnordered, StreamExt};
 use proton_action_queue::queue::Queue;
@@ -237,6 +238,15 @@ impl RollbackItem {
                 error!("Failed to fetch batch ({:?}): {e:?}", H::item_type());
             })?;
 
+            H::fetch_and_apply_dependencies(&items, api, tx_runner)
+                .await
+                .inspect_err(|e| {
+                    error!(
+                        "Failed to sync dependencies for batch ({:?}): {e:?}",
+                        H::item_type()
+                    )
+                })?;
+
             let mut changeset = RebaseChangeSet::default();
             tx_runner
                 .run_tx(async |tx| {
@@ -292,6 +302,12 @@ trait RollbackHandler: 'static + Send + Sync {
         remote_ids: &[Self::RemoteId],
     ) -> impl Future<Output = Result<Vec<Self::Item>, ApiServiceError>> + Send;
 
+    fn fetch_and_apply_dependencies(
+        items: &[Self::Item],
+        api: &Session,
+        tx_runner: &mut impl RunTransaction,
+    ) -> impl Future<Output = Result<(), MailContextError>>;
+
     fn store_items(
         items: Vec<Self::Item>,
         changeset: &mut RebaseChangeSet,
@@ -321,6 +337,22 @@ impl RollbackHandler for MessageRollbackHandler {
         };
 
         Ok(api.get_messages(options).await?.messages)
+    }
+
+    async fn fetch_and_apply_dependencies(
+        items: &[Self::Item],
+        api: &Session,
+        tx_runner: &mut impl RunTransaction,
+    ) -> Result<(), MailContextError> {
+        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        let tether = tx_runner.tether();
+        for item in items {
+            dependency_fetcher
+                .check_api_message_metadata(item, tether)
+                .await?;
+        }
+
+        dependency_fetcher.fetch_and_store(api, tx_runner).await
     }
 
     async fn store_items(
@@ -367,6 +399,27 @@ impl RollbackHandler for ConversationRollbackHandler {
         Ok(result)
     }
 
+    async fn fetch_and_apply_dependencies(
+        items: &[Self::Item],
+        api: &Session,
+        tx_runner: &mut impl RunTransaction,
+    ) -> Result<(), MailContextError> {
+        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        let tether = tx_runner.tether();
+        for item in items {
+            dependency_fetcher
+                .check_api_conversation(&item.conversation, tether)
+                .await?;
+            for message in &item.messages {
+                dependency_fetcher
+                    .check_api_message_metadata(message, tether)
+                    .await?;
+            }
+        }
+
+        dependency_fetcher.fetch_and_store(api, tx_runner).await
+    }
+
     async fn store_items(
         items: Vec<Self::Item>,
         changeset: &mut RebaseChangeSet,
@@ -401,6 +454,15 @@ impl RollbackHandler for LabelRollbackHandler {
         remote_ids: &[Self::RemoteId],
     ) -> Result<Vec<Self::Item>, ApiServiceError> {
         Ok(api.get_labels_by_ids(remote_ids.to_vec()).await?.labels)
+    }
+
+    async fn fetch_and_apply_dependencies(
+        _: &[Self::Item],
+        _: &Session,
+        _: &mut impl RunTransaction,
+    ) -> Result<(), MailContextError> {
+        //TODO(ET-5440) - labels may have parent dependencies
+        Ok(())
     }
 
     async fn store_items(

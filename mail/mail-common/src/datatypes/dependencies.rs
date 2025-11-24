@@ -79,7 +79,7 @@ impl MessageOrConversationDependencyFetcher {
     pub async fn fetch_and_store(
         &self,
         api: &Session,
-        tx: &mut (impl RunTransaction + Send),
+        tx: &mut impl RunTransaction,
     ) -> Result<(), MailContextError> {
         if !self.label_ids.is_empty() {
             info!("Syncing missing labels: {:?}", self.label_ids);
