@@ -23,19 +23,23 @@ async fn test_has_valid_sender_address_with_non_byoe_address() {
 }
 
 #[tokio::test]
-async fn test_has_valid_sender_address_with_only_byoe_addresses() {
+async fn test_has_valid_sender_address_with_byoe_address() {
     let test_ctx = TestContext::new().await;
-
-    let addresses = vec![
-        create_test_address("byoe1", "byoe1@example.com", AddressFlags::BYOE),
-        create_test_address("byoe2", "byoe2@example.com", AddressFlags::BYOE),
-    ];
     let user_ctx = test_ctx.user_context().await;
-    setup(&user_ctx, addresses).await;
+    setup(
+        &user_ctx,
+        vec![create_test_address(
+            "byoe",
+            "byoe@example.com",
+            AddressFlags::BYOE,
+        )],
+    )
+    .await;
 
     let result = user_ctx.address_service().find_valid_sender_address().await;
 
-    assert!(result.unwrap().is_none());
+    let address = result.unwrap().unwrap();
+    assert_eq!(address.email, "byoe@example.com");
 }
 
 #[tokio::test]
@@ -53,7 +57,7 @@ async fn test_has_valid_sender_address_mixed_addresses() {
     let result = user_ctx.address_service().find_valid_sender_address().await;
 
     let address = result.unwrap().unwrap();
-    assert_eq!(address.email, "normal1@proton.me");
+    assert_eq!(address.email, "byoe1@example.com");
 }
 
 #[tokio::test]
@@ -170,7 +174,10 @@ async fn test_has_valid_sender_address_complex_scenario() {
 
     let result = user_ctx.address_service().find_valid_sender_address().await;
 
-    assert!(result.unwrap().is_none());
+    assert_eq!(
+        result.unwrap().unwrap().email,
+        "enabled_byoe_valid@example.com"
+    );
 }
 
 async fn setup(ctx: &UserContext, addresses: Vec<Address>) {
