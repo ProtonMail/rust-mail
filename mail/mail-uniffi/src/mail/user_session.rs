@@ -11,8 +11,8 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
 use crate::{
-    AsyncLiveQueryCallback, LiveQueryCallback, WatchHandle, async_runtime,
-    declare_live_query_tagger, uniffi_async, watch_table,
+    AsyncLiveQueryCallback, WatchHandle, async_runtime, declare_live_query_tagger, uniffi_async,
+    watch_table,
 };
 use futures::TryFutureExt;
 use muon::common::IntoDyn;
@@ -704,18 +704,19 @@ impl MailUserSession {
         .into()
     }
 
-    pub async fn watch_feature_flags_stream(
+    pub fn watch_feature_flags_stream(
         &self,
     ) -> Result<Arc<WatchUserFeatureFlagsStream>, ProtonError> {
         let ctx = self.ctx()?;
 
-        uniffi_runtime().block_on(async {
+        async_runtime().block_on(async {
             let handle = ctx
                 .user_context()
                 .feature_flags()
                 .watch()
                 .await
-                .map_err(MailContextError::from)?;
+                .map_err(MailContextError::from)
+                .map_err(RealProtonMailError::from)?;
             Ok(Arc::new(WatchUserFeatureFlagsStream { handle }))
         })
     }

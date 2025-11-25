@@ -4,7 +4,7 @@ use crate::db::account::{CoreAccount, CoreSession};
 use crate::event_loop::EventPollMode;
 use crate::events::CoreEvent;
 use crate::models::ModelExtension;
-use crate::services::feature_flags::FeatureFlagsBackgroundTask;
+use crate::services::global_feature_flags::FeatureFlagsBackgroundTask;
 use crate::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::test_utils::utils::{catch_all, mock_auth_endpoints};

@@ -4,7 +4,7 @@ mod builder;
 mod registry;
 pub mod services;
 use registry::ServiceRegistry;
-use services::feature_flags::FeatureFlagsBackgroundTask;
+use services::global_feature_flags::FeatureFlagsBackgroundTask;
 use services::logging_service::LoggingService;
 use tokio::runtime;
 

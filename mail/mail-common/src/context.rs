@@ -25,7 +25,7 @@ use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::pin_code::{PinCode, PinError};
 use proton_core_common::post_login_check::DefaultPostLoginValidator;
-use proton_core_common::services::feature_flags::FeatureFlagsBackgroundTask;
+use proton_core_common::services::global_feature_flags::FeatureFlagsBackgroundTask;
 use proton_core_common::services::issue_reporter_service::IssueReporterService;
 use proton_core_common::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
 use proton_core_common::services::{

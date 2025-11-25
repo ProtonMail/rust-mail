@@ -157,13 +157,17 @@ impl Service for FeatureFlagsService {
 
         let task_service = ctx.task_service();
         let event_service = ctx.event_service();
+
         let self_clone = self.clone();
         let Some(mut event_stream) = event_service.subscribe::<OnEnterForegroundEvent>() else {
             error!("Failed to subscribe to OnEnterForegroundEvent");
             return Ok(());
         };
         task_service.spawn(async move {
-            let ctx = self_clone.ctx.upgrade().expect("Could not upgrade context");
+            let Some(ctx) = self_clone.ctx.upgrade() else {
+                error!("Could not upgrade context");
+                return;
+            };
             let Ok(session) = ctx.new_api_session(None).await else {
                 error!("Failed to create API session");
                 return;
@@ -175,11 +179,12 @@ impl Service for FeatureFlagsService {
                 }
                 let last_updated = Instant::now();
                 loop {
-                    if let Ok(Err(_)) = event_stream
+                    if let Err(error) = event_stream
                         .next()
                         .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
                         .await
                     {
+                        error!(%error, "Failed to receive event");
                         return;
                     }
                     if last_updated.elapsed() >= Duration::from_secs(REFRESH_THROTTLE_SECS) {

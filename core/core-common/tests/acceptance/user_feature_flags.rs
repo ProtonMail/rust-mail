@@ -64,11 +64,7 @@ async fn test_user_feature_flags_warm_start_immediate_return() {
     {
         let past = UnixTimestamp::new(12);
         let user_context = ctx.user_context().await;
-        let mut tether = user_context
-            .stash()
-            .connection()
-            .await
-            .unwrap();
+        let mut tether = user_context.stash().connection().await.unwrap();
         let mut cached_x = UserFeatureFlag {
             name: "CachedFeatureX".to_string(),
             enabled: true,
@@ -134,11 +130,7 @@ async fn test_user_feature_flags_warm_start_background_refresh() {
     {
         let past = UnixTimestamp::new(10);
         let user_context = ctx.user_context().await;
-        let mut tether = user_context
-            .stash()
-            .connection()
-            .await
-            .unwrap();
+        let mut tether = user_context.stash().connection().await.unwrap();
         let mut existing_flag = UserFeatureFlag {
             name: "ExistingFeature".to_string(),
             enabled: true,
@@ -201,11 +193,7 @@ async fn test_user_feature_flags_warm_start_background_refresh() {
 
     {
         let user_context = ctx.user_context().await;
-        let tether = user_context
-            .stash()
-            .connection()
-            .await
-            .unwrap();
+        let tether = user_context.stash().connection().await.unwrap();
         let existing_flag = UserFeatureFlag::by_name("ExistingFeature", &tether)
             .await
             .unwrap();
@@ -225,11 +213,7 @@ async fn test_user_feature_flags_network_failure_preserves_cache() {
     {
         let past = UnixTimestamp::new(5);
         let user_context = ctx.user_context().await;
-        let mut tether = user_context
-            .stash()
-            .connection()
-            .await
-            .unwrap();
+        let mut tether = user_context.stash().connection().await.unwrap();
         let mut cached_flag = UserFeatureFlag {
             name: "CachedFlag".to_string(),
             enabled: true,
