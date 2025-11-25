@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-uniffi"
-version = "0.159.0"
+version = "0.159.1"
 edition.workspace = true
 rust-version.workspace = true
 publish = false
