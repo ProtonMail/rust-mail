@@ -14,7 +14,7 @@ use proton_core_api::session::Session;
 
 use stash::stash::WatcherHandle;
 use stash::watcher::TableWatcher;
-use tracing::error;
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FeatureFlagsBackgroundTask {
@@ -42,13 +42,13 @@ impl FeatureFlagsService {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
 
         let response = api.get_unleash_feature_flags().await?;
-        tracing::info!("Fetched {} featured flags from API", response.toggles.len());
+        info!("Fetched {} featured flags from API", response.toggles.len());
 
         let mut tether = ctx.account_stash().connection().await?;
 
         let mut flags = FeatureFlag::all(&tether)
             .await
-            .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
+            .inspect_err(|err| warn!("Failed to fetch feature flags: {}", err))
             .unwrap_or_default()
             .into_iter()
             .map(|flag| {
@@ -107,19 +107,19 @@ impl FeatureFlagsService {
 
     pub async fn list_all(&self) -> Vec<(String, bool)> {
         let Some(ctx) = self.ctx.upgrade() else {
-            tracing::warn!("Failed to upgrade context");
+            warn!("Failed to upgrade context");
             return vec![];
         };
         let Ok(tether) = ctx.account_stash().connection().await else {
-            tracing::warn!("Failed to connect to account stash");
+            warn!("Failed to connect to account stash");
             return vec![];
         };
         let flags = FeatureFlag::all(&tether)
             .await
-            .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
+            .inspect_err(|err| warn!("Failed to fetch feature flags: {}", err))
             .unwrap_or_default();
 
-        tracing::info!("Retrieved {} feature flags", flags.len());
+        info!("Retrieved {} feature flags", flags.len());
 
         flags
             .iter()
@@ -146,7 +146,7 @@ impl Service for FeatureFlagsService {
 
     async fn init(&self) -> Result<(), Self::Error> {
         if self.background_task_setting == FeatureFlagsBackgroundTask::Disabled {
-            tracing::warn!("Feature flags background task is disabled");
+            warn!("Feature flags background task is disabled");
             return Ok(());
         }
         let ctx = self
@@ -165,7 +165,7 @@ impl Service for FeatureFlagsService {
         };
         task_service.spawn(async move {
             let Some(ctx) = self_clone.ctx.upgrade() else {
-                error!("Could not upgrade context");
+                debug!("Could not upgrade context");
                 return;
             };
             let Ok(session) = ctx.new_api_session(None).await else {
@@ -175,7 +175,7 @@ impl Service for FeatureFlagsService {
             drop(ctx);
             loop {
                 let Some(ctx) = self_clone.ctx.upgrade() else {
-                    error!("Could not upgrade context");
+                    debug!("Could not upgrade context");
                     return;
                 };
                 let user_contexts: Vec<_> = ctx
