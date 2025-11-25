@@ -7,21 +7,9 @@ members = [
   "account/account-uniffi",
   "calendar/calendar-api",
   "calendar/calendar-common",
-  "shared/action-queue",
   "core/core-api",
   "core/core-common",
   "core/event-loop",
-  "shared/ical",
-  "shared/ical-cli",
-  "shared/ical-fuzz",
-  "shared/ical-tz",
-  "shared/log-service",
-  "shared/proton-canonical-email",
-  "shared/sqlite3",
-  "shared/stash",
-  "shared/stash-macros",
-  "shared/task-service",
-  "shared/vcard",
   "crypto/crypto-calendar",
   "crypto/crypto-inbox",
   "crypto/crypto-inbox-mime",
@@ -34,16 +22,28 @@ members = [
   "mail/mail-html-transformer-fuzz",
   "mail/mail-tui",
   "mail/mail-uniffi",
+  "shared/action-queue",
+  "shared/event-service",
+  "shared/ical",
+  "shared/ical-cli",
+  "shared/ical-fuzz",
+  "shared/ical-tz",
+  "shared/issue-reporter-service",
+  "shared/issue-reporter-service-uniffi",
+  "shared/log-service",
+  "shared/mailto",
+  "shared/network-monitor-service",
+  "shared/observability",
+  "shared/canonical-email",
+  "shared/sqlite3",
+  "shared/stash",
+  "shared/stash-macros",
+  "shared/task-service",
+  "shared/vcard",
   "uniffi/uniffi-bindgen",
   "uniffi/uniffi-common",
   "uniffi/uniffi-macros",
   "uniffi/uniffi-runtime",
-  "shared/proton-event-service",
-  "shared/proton-network-monitor-service",
-  "shared/proton-issue-reporter-service",
-  "shared/proton-issue-reporter-service-uniffi",
-  "shared/proton-observability",
-  "shared/mailto",
 ]
 
 [workspace.package]
@@ -197,7 +197,7 @@ registry = "proton"
 
 [workspace.dependencies.proton-canonical-email]
 version = "0.1"
-path = "shared/proton-canonical-email"
+path = "shared/canonical-email"
 registry = "proton"
 
 [workspace.dependencies.proton-ical]
@@ -323,26 +323,26 @@ registry = "proton"
 
 [workspace.dependencies.proton-event-service]
 version = "0.1.0"
-path = "shared/proton-event-service"
+path = "shared/event-service"
 registry = "proton"
 
 [workspace.dependencies.proton-network-monitor-service]
 version = "0.1.0"
-path = "shared/proton-network-monitor-service"
+path = "shared/network-monitor-service"
 registry = "proton"
 
 [workspace.dependencies.proton-issue-reporter-service]
 version = "0.1.0"
-path = "shared/proton-issue-reporter-service"
+path = "shared/issue-reporter-service"
 registry = "proton"
 
 [workspace.dependencies.proton-issue-reporter-service-uniffi]
 version = "0.1.0"
-path = "shared/proton-issue-reporter-service-uniffi"
+path = "shared/issue-reporter-service-uniffi"
 registry = "proton"
 
 [workspace.dependencies.proton-observability]
-path = "shared/proton-observability"
+path = "shared/observability"
 
 [workspace.dependencies.proton-mailto]
 path = "shared/mailto"
