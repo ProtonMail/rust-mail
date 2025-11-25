@@ -4,7 +4,7 @@ mod builder;
 mod registry;
 pub mod services;
 use registry::ServiceRegistry;
-use services::feature_flags::FeatureFlagsBackgroundTask;
+use services::global_feature_flags::FeatureFlagsBackgroundTask;
 use services::logging_service::LoggingService;
 use tokio::runtime;
 
@@ -26,6 +26,7 @@ use crate::nuke_utils::{
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::pin_code::PinCode;
 use crate::services::issue_reporter_service::IssueReporterService;
+
 use crate::services::{ContextEventService, NetworkMonitorService};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Context as _, Error as AnyhowError, anyhow};

@@ -17,8 +17,8 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
 
 #[derive(Parser)]
-#[command(name = "feature_flags")]
-#[command(about = "Unleash Feature Flags CLI Example")]
+#[command(name = "global_feature_flags")]
+#[command(about = "Unleash Global Feature Flags CLI Example")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -105,7 +105,7 @@ async fn list_feature_flags(ctx: &Arc<MailContext>) -> Result<()> {
 
     if flags.is_empty() {
         warn!("No feature flags found");
-        warn!("Try: cargo run --example feature_flags -- refresh");
+        warn!("Try: cargo run --example global_feature_flags -- refresh");
     } else {
         info!("Found {} feature flags:", flags.len());
         for (name, enabled) in flags {

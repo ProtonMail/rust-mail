@@ -9,6 +9,7 @@ use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::UserId;
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
+
 use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
 use proton_event_loop::subscriber::SubscriberError;
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};

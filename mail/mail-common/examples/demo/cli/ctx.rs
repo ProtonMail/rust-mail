@@ -7,6 +7,7 @@ use proton_core_common::datatypes::ApiConfig;
 use proton_core_common::db::account::CoreAccount;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::KeyChain;
+
 use proton_core_common::{CoreAccountState, Origin};
 use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::{Config as LogConfig, LogService};

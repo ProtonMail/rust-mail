@@ -3,6 +3,7 @@ use crate::models::DraftMetadata;
 use crate::{MailContext, MailContextError};
 use proton_core_api::services::proton::UserId;
 use proton_core_common::CoreSessionState;
+
 use std::sync::Arc;
 
 impl MailContext {

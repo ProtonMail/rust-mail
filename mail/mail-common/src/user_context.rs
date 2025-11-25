@@ -526,7 +526,7 @@ impl MailUserContext {
     }
 
     async fn upsell_type(&self, user: User) -> MailContextResult<UpsellType> {
-        let feature_flags = self.core_context().feature_flags();
+        let feature_flags = self.user_context().feature_flags();
         let black_friday_promo_live = feature_flags
             .get(FF_BLACK_FRIDAY)
             .await?

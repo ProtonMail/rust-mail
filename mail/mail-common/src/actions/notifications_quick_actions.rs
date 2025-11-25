@@ -14,6 +14,7 @@ use proton_core_api::session::Session;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::db::account::CoreSession;
 use proton_core_common::models::{LabelError, ModelIdExtension};
+
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};

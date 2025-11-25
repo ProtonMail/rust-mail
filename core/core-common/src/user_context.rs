@@ -16,7 +16,7 @@ use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use services::PaymentsService;
+use services::{PaymentsService, UserFeatureFlagsService};
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use stash::watcher::TableWatcher;
@@ -96,7 +96,7 @@ impl Drop for UserContext {
 }
 
 impl UserContext {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     #[tracing::instrument(name = "NewUserContext", skip_all, fields(user_id=%user_id))]
     pub(crate) async fn new(
         session: Session,
@@ -142,6 +142,7 @@ impl UserContext {
 
                 if matches!(origin, Origin::App) {
                     builder = builder
+                        .with_cyclic_service(UserFeatureFlagsService::new)
                         .with_cyclic_service(PaymentsService::new)
                         .with_cyclic_service(move |weak_ref: Weak<UserContext>| {
                             let event_ctx = CoreEventLoopContext::from(weak_ref);
@@ -450,6 +451,11 @@ impl UserContext {
     #[must_use]
     pub fn address_service(&self) -> &AddressService {
         self.get_service::<AddressService>()
+    }
+
+    #[must_use]
+    pub fn feature_flags(&self) -> &UserFeatureFlagsService {
+        self.get_service::<UserFeatureFlagsService>()
     }
 }
 

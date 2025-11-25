@@ -14,7 +14,7 @@ use proton_core_api::session::Session;
 
 use stash::stash::WatcherHandle;
 use stash::watcher::TableWatcher;
-use tracing::error;
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FeatureFlagsBackgroundTask {
@@ -42,13 +42,13 @@ impl FeatureFlagsService {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
 
         let response = api.get_unleash_feature_flags().await?;
-        tracing::info!("Fetched {} featured flags from API", response.toggles.len());
+        info!("Fetched {} featured flags from API", response.toggles.len());
 
         let mut tether = ctx.account_stash().connection().await?;
 
         let mut flags = FeatureFlag::all(&tether)
             .await
-            .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
+            .inspect_err(|err| warn!("Failed to fetch feature flags: {}", err))
             .unwrap_or_default()
             .into_iter()
             .map(|flag| {
@@ -107,19 +107,19 @@ impl FeatureFlagsService {
 
     pub async fn list_all(&self) -> Vec<(String, bool)> {
         let Some(ctx) = self.ctx.upgrade() else {
-            tracing::warn!("Failed to upgrade context");
+            warn!("Failed to upgrade context");
             return vec![];
         };
         let Ok(tether) = ctx.account_stash().connection().await else {
-            tracing::warn!("Failed to connect to account stash");
+            warn!("Failed to connect to account stash");
             return vec![];
         };
         let flags = FeatureFlag::all(&tether)
             .await
-            .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
+            .inspect_err(|err| warn!("Failed to fetch feature flags: {}", err))
             .unwrap_or_default();
 
-        tracing::info!("Retrieved {} feature flags", flags.len());
+        info!("Retrieved {} feature flags", flags.len());
 
         flags
             .iter()
@@ -146,39 +146,71 @@ impl Service for FeatureFlagsService {
 
     async fn init(&self) -> Result<(), Self::Error> {
         if self.background_task_setting == FeatureFlagsBackgroundTask::Disabled {
-            tracing::warn!("Feature flags background task is disabled");
+            warn!("Feature flags background task is disabled");
             return Ok(());
         }
         let ctx = self
             .ctx
             .upgrade()
-            .expect("Context to be there during initialization");
+            .context("Could not upgrade context")
+            .map_err(CoreContextError::Other)?;
 
         let task_service = ctx.task_service();
         let event_service = ctx.event_service();
+
         let self_clone = self.clone();
         let Some(mut event_stream) = event_service.subscribe::<OnEnterForegroundEvent>() else {
             error!("Failed to subscribe to OnEnterForegroundEvent");
             return Ok(());
         };
         task_service.spawn(async move {
-            let ctx = self_clone.ctx.upgrade().expect("Could not upgrade context");
+            let Some(ctx) = self_clone.ctx.upgrade() else {
+                debug!("Could not upgrade context");
+                return;
+            };
             let Ok(session) = ctx.new_api_session(None).await else {
                 error!("Failed to create API session");
                 return;
             };
             drop(ctx);
             loop {
-                if let Err(error) = self_clone.fetch_and_update(&session).await {
-                    error!(%error, "Failed to refresh feature flags");
+                let Some(ctx) = self_clone.ctx.upgrade() else {
+                    debug!("Could not upgrade context");
+                    return;
+                };
+                let user_contexts: Vec<_> = ctx
+                    .active_user_contexts
+                    .lock()
+                    .await
+                    .values()
+                    .cloned()
+                    // We clone and collect to release the lock ASAP.
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .filter_map(|ctx| ctx.upgrade())
+                    .collect();
+
+                drop(ctx);
+
+                if user_contexts.is_empty() {
+                    if let Err(error) = self_clone.fetch_and_update(&session).await {
+                        error!(%error, "Failed to refresh global feature flags");
+                    }
+                } else {
+                    for user_ctx in user_contexts {
+                        if let Err(error) = user_ctx.feature_flags().refresh().await {
+                            error!(%error, "Failed to refresh user feature flags");
+                        }
+                    }
                 }
                 let last_updated = Instant::now();
                 loop {
-                    if let Ok(Err(_)) = event_stream
+                    if let Err(error) = event_stream
                         .next()
                         .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
                         .await
                     {
+                        error!(%error, "Failed to receive event");
                         return;
                     }
                     if last_updated.elapsed() >= Duration::from_secs(REFRESH_THROTTLE_SECS) {

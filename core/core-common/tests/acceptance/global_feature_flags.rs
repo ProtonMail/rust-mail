@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use proton_core_api::services::proton::{
     GetUnleashFeaturesResponse, UnleashToggle, UnleashToggleVariant,
 };
@@ -8,7 +10,6 @@ use proton_core_common::test_utils::test_context::TestContext;
 use proton_core_common::test_utils::utils::RespondNthTime;
 use serde_json::json;
 use stash::orm::Model;
-use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
