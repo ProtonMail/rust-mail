@@ -1,5 +1,5 @@
 use crate::errors::{OtherErrorReason, ProtonError};
-use proton_mail_common::ios_share_ext::{self as ext, IosShareExtension};
+use proton_mail_common::{self as ext, IosShareExtension};
 use std::path::PathBuf;
 use tracing::{instrument, warn};
 

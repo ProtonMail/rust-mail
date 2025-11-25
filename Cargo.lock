@@ -5666,6 +5666,7 @@ dependencies = [
  "proton-core-common",
  "proton-issue-reporter-service",
  "proton-log-service",
+ "proton-mail-api",
  "proton-mail-common",
  "proton-mail-html-transformer",
  "proton-network-monitor-service",

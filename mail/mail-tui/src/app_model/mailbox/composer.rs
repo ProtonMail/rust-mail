@@ -18,6 +18,7 @@ use chrono::{DateTime, Local};
 use crossterm::event::{KeyCode, KeyModifiers};
 use futures::FutureExt;
 use proton_core_common::models::ModelExtension;
+use proton_mail_api::proton_core_api::services::proton::AddressId;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, LocalMessageId};
 use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentState};
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
@@ -27,7 +28,6 @@ use proton_mail_common::draft::{
     recipients,
 };
 use proton_mail_common::models::{Attachment, MessageMimeType, MetadataId};
-use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
 use proton_mail_common::{MailContextError, MailUserContext, Mailbox};
 use proton_mail_html_transformer::Html2TextOptions;
 use ratatui::Frame;

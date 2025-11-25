@@ -8,12 +8,12 @@ use proton_mail_common::datatypes::{
     ContextualConversation as RealContextualConversation, IncludeSwitch as RealIncludeSwitch,
     ReadFilter as RealReadFilter,
 };
-use proton_mail_common::mail_cursor::{MailCursor as RealMailCursor, NextMailCursorItem};
-use proton_mail_common::mail_scroller::{
+use proton_mail_common::models::Message as RealMessage;
+use proton_mail_common::{MailCursor as RealMailCursor, NextMailCursorItem};
+use proton_mail_common::{
     MailScroller as RealMailScroller, MailScrollerHandle, ScrollerListUpdate, ScrollerStatusUpdate,
     ScrollerUpdate,
 };
-use proton_mail_common::models::Message as RealMessage;
 use std::sync::Arc;
 
 /// A callback interface for live queries.

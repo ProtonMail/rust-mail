@@ -1,13 +1,12 @@
-use std::time::Duration;
-
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::FeatureFlag;
 use proton_mail_api::services::proton::response_data::{UnleashToggle, UnleashToggleVariant};
 use proton_mail_api::services::proton::responses::GetUnleashFeaturesResponse;
-use proton_mail_common::feature_flags::FeatureFlagsService;
+use proton_mail_common::FeatureFlagsService;
 use proton_mail_common::test_utils::test_context::{MailTestContext, RespondNthTime};
 use serde_json::json;
 use stash::orm::Model;
+use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 

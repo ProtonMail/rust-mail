@@ -13,13 +13,13 @@ use crate::draft::Recipient;
 use crate::draft::draft_v1::Draft;
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::models::{Attachment, MessageBodyMetadata, MessageReplyTo};
-use crate::proton_mail_api::services::proton::prelude::ConversationId;
 use insta::assert_snapshot;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::AddressFlags;
 use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId};
 use proton_core_common::datatypes::{UserMnemonicStatus, UserType};
 use proton_core_common::models::{PaidSubscription, User};
+use proton_mail_api::services::proton::prelude::ConversationId;
 use std::str::FromStr;
 use test_case::test_case;
 

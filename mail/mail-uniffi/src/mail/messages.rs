@@ -34,6 +34,7 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_common::MailScroller;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::Unexpected;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
@@ -46,7 +47,6 @@ use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
     TransformOpts as RealTransformOpts,
 };
-use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::{
     self, IncomingDefault, Message as RealMessage, MessageBodyMetadata, MessageMimeType,
 };

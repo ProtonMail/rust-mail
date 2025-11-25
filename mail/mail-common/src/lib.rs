@@ -1,40 +1,49 @@
 pub mod actions;
-pub mod background_execution;
+mod background_execution;
 mod context;
 pub mod datatypes;
 pub mod db;
 pub mod draft;
 mod errors;
 mod events;
-pub mod feature_flags;
+mod feature_flags;
 mod image_loader;
-pub mod ios_share_ext;
+mod ios_share_ext;
 #[allow(clippy::result_large_err)]
-pub mod mail_cursor;
+mod mail_cursor;
 #[allow(clippy::result_large_err)]
-pub mod mail_scroller;
+mod mail_scroller;
 mod mailbox;
-pub mod migration_snooper;
+mod migration_snooper;
 pub mod models;
 #[cfg(feature = "prefetch")]
-pub mod prefetch;
+mod prefetch;
 mod rsvp;
 mod send_queries;
 mod sidebar;
-pub mod snooze;
-pub mod traits;
-pub mod upsell_eligibility_watcher;
+mod snooze;
+mod traits;
+mod upsell_eligibility_watcher;
 mod user_context;
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 
+pub use self::background_execution::*;
 pub use self::context::*;
 pub use self::errors::*;
+pub use self::feature_flags::*;
 pub use self::image_loader::*;
+pub use self::ios_share_ext::*;
+pub use self::mail_cursor::*;
+pub use self::mail_scroller::*;
 pub use self::mailbox::*;
+pub use self::migration_snooper::*;
 pub use self::rsvp::*;
 pub use self::sidebar::*;
+pub use self::snooze::*;
+pub use self::traits::*;
+pub use self::upsell_eligibility_watcher::*;
 pub use self::user_context::*;
 use crate::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId};
 use datatypes::attachment::ContentId;
@@ -42,11 +51,9 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError, MultiActionError};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::LabelId;
-pub use proton_core_common;
 use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
 use proton_core_common::models::LabelError;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
-pub use proton_mail_api;
 use proton_mail_api::services::proton::common::ConversationId;
 use stash::stash::StashError;
 use thiserror::Error;

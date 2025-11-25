@@ -27,13 +27,13 @@ use itertools::Itertools;
 use proton_core_common::datatypes::{SystemLabel, WeekStart as RealWeekStart};
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
+use proton_mail_common::MailScroller;
 use proton_mail_common::Unexpected;
 use proton_mail_common::datatypes::{
     ContextualConversation, ContextualConversationAndMessages, ConversationViewOptions,
     LocalConversationId, MobileAction as RealMobileAction,
     OpenConversationOrigin as RealOpenConversationOrigin,
 };
-use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::Conversation as RealConversation;
 use proton_mail_common::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,

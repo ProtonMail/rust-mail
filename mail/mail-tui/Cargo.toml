@@ -20,6 +20,7 @@ proton-action-queue = { workspace = true }
 proton-calendar-api = { workspace = true }
 proton-calendar-common = { workspace = true }
 proton-core-common = { workspace = true }
+proton-mail-api = { workspace = true }
 proton-mail-common = { workspace = true }
 proton-mail-html-transformer = { workspace = true }
 proton-issue-reporter-service = { workspace = true }

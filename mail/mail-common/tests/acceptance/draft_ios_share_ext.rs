@@ -3,8 +3,8 @@ use proton_core_api::services::proton::UserId;
 use proton_core_common::test_utils::account::TEST_USER_ID;
 use proton_mail_common::{
     draft::Draft,
-    ios_share_ext::{IosShareExtDraft, IosShareExtension},
     test_utils::{message_body::message_body_test_user_secret, test_context::MailTestContext},
+    {IosShareExtDraft, IosShareExtension},
 };
 
 #[tokio::test]

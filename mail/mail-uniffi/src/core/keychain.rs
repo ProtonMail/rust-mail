@@ -1,5 +1,5 @@
 use proton_core_common::os::KeyChainEntryKind;
-use proton_mail_common::proton_core_common::os::{KeyChain, KeyChainError};
+use proton_core_common::os::{KeyChain, KeyChainError};
 use secrecy::{ExposeSecret, SecretString};
 
 /// Errors for keychain operations.

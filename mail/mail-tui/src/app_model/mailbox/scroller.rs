@@ -2,7 +2,7 @@ use crate::app::Command;
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::messages::Messages;
 use futures::FutureExt;
-use proton_mail_common::mail_scroller::{
+use proton_mail_common::{
     MailScroller as RealMailScroller, MailScrollerHandle, MailScrollerItem, ScrollerUpdate,
 };
 use std::{ops::Deref, sync::Arc};

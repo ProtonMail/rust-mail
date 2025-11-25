@@ -8,7 +8,7 @@ mod widgets;
 use crate::app::App;
 use clap::Parser;
 use proton_core_common::datatypes::{ApiConfig, AppDetails};
-use proton_mail_common::proton_mail_api::proton_core_api::session::EnvId;
+use proton_mail_api::proton_core_api::session::EnvId;
 
 use crate::app_model::AppModel;
 use crossterm::ExecutableCommand;

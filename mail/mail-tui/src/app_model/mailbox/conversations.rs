@@ -12,11 +12,11 @@ use crossterm::event::KeyModifiers;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
 use proton_mail_common::datatypes::{ContextualConversation, IncludeSwitch, LocalConversationId};
-use proton_mail_common::mail_scroller::{
-    MailScroller as RealMailScroller, ScrollerListUpdate, ScrollerStatusUpdate, ScrollerUpdate,
-};
 use proton_mail_common::models::{Conversation, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::{MailContextResult, MailUserContext, Mailbox};
+use proton_mail_common::{
+    MailScroller as RealMailScroller, ScrollerListUpdate, ScrollerStatusUpdate, ScrollerUpdate,
+};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
