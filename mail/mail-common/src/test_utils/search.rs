@@ -22,7 +22,6 @@ use stash::stash::{StashError, Tether};
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
-pub static MY_ADDRESS_ID: LazyLock<AddressId> = LazyLock::new(|| AddressId::from("MyRemoteId"));
 pub static MY_LABEL_ID1: LazyLock<LabelId> = LazyLock::new(|| LabelId::from("MyLabelID1"));
 pub static MY_LABEL_ID2: LazyLock<LabelId> = LazyLock::new(|| LabelId::from("MyLabelID2"));
 pub static MY_ATTACHMENT_ID: LazyLock<AttachmentId> =

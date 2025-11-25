@@ -19,7 +19,6 @@ mod acceptance {
     mod draft_undo_send;
     mod drafts_common;
     mod events;
-    mod feature_flags;
     mod init;
     mod mailbox_conversation;
     mod mailbox_create;
@@ -36,7 +35,7 @@ mod acceptance {
 
     mod mock;
     mod pin_code;
-    mod refersh;
+    mod refresh;
     mod rsvp;
     mod search;
     mod search_mail_scroller;

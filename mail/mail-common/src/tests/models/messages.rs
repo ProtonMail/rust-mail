@@ -14,8 +14,8 @@ use crate::test_utils::db_states::{
     new_test_label_db_state, new_test_unread_db_state, new_test_unread_db_state_multi_conv,
 };
 use crate::test_utils::search::{
-    MY_ADDRESS_ID, MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels,
-    test_conversation, test_starred_label,
+    MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels, test_conversation,
+    test_starred_label,
 };
 use crate::test_utils::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
@@ -28,6 +28,7 @@ use futures::{FutureExt, StreamExt as _};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType};
 use proton_core_common::models::Label;
+use proton_core_common::test_utils::addresses::MY_ADDRESS_ID;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_api::services::proton::common::AttachmentId;
 use proton_mail_api::services::proton::prelude::ContentDisposition;

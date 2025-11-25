@@ -2,6 +2,7 @@ pub mod account;
 pub mod addresses;
 pub mod addresses_public;
 pub mod contacts;
+pub mod events;
 pub mod images_logo;
 pub mod labels;
 pub mod test_context;

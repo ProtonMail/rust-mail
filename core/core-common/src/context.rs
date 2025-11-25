@@ -4,6 +4,7 @@ mod builder;
 mod registry;
 pub mod services;
 use registry::ServiceRegistry;
+use services::feature_flags::FeatureFlagsBackgroundTask;
 use services::logging_service::LoggingService;
 use tokio::runtime;
 
@@ -58,7 +59,8 @@ use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretVec};
 use serde_json::json;
 use services::{
-    DeviceInfoService, EventPollConfigService, HvNotifierService, SessionObserverService,
+    DeviceInfoService, EventPollConfigService, FeatureFlagsService, HvNotifierService,
+    SessionObserverService,
 };
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
@@ -322,12 +324,12 @@ impl Context {
         event_poll_mode: EventPollMode,
         network_monitor_config: proton_network_monitor_service::Config,
         issue_reporter: Arc<dyn IssueReporter>,
-        extra_builder: impl FnOnce(ContextBuilder) -> ContextBuilder,
+        ff_task: FeatureFlagsBackgroundTask,
     ) -> CoreContextResult<Arc<Self>> {
         tracing::info!("Creating Context");
         let mut builder = ContextBuilder::new();
         let issue_reporter_cloned = issue_reporter.clone();
-        async {
+        async move {
             let account_db_path = account_db_path.into();
             let user_db_path = user_db_path.into();
 
@@ -380,6 +382,7 @@ impl Context {
                 .with_service(CoreClock::default())
                 .with_service(LoggingService::new(log_service))
                 .with_service(ContextEventService::new())
+                .with_cyclic_service(move |ctx| FeatureFlagsService::new(ctx, ff_task))
                 .with_service(IssueReporterService::new(issue_reporter))
                 .with_cyclic_service(|ctx| NetworkMonitorService::new(ctx, network_monitor_config));
 
@@ -392,7 +395,6 @@ impl Context {
                     .with_service(DeviceInfoService::new(device_info_provider))
                     .with_service(EventPollConfigService::new(event_poll_mode));
             }
-            builder = extra_builder(builder);
 
             builder
                 .build(
@@ -1286,6 +1288,10 @@ impl Context {
 
     pub fn issue_reporter_service(&self) -> &IssueReporterService {
         self.get_service::<IssueReporterService>()
+    }
+
+    pub fn feature_flags(&self) -> &FeatureFlagsService {
+        self.get_service::<FeatureFlagsService>()
     }
 }
 

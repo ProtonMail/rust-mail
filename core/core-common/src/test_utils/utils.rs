@@ -1,5 +1,7 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use rand::{Rng, distributions::Uniform};
-use wiremock::{Mock, MockServer, Request, matchers::any};
+use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate, matchers::any};
 /// Generates a random string of the specified length, including alphanumeric and special characters.
 ///
 #[must_use]
@@ -87,4 +89,35 @@ pub async fn catch_all(mock_server: &MockServer) {
         .named("Catch all mock")
         .mount(mock_server)
         .await;
+}
+
+/// Whenever we need to test a specific response pattern.
+/// Example: Service is unavailable for the first 3 times.
+pub struct RespondNthTime {
+    count: AtomicUsize,
+    max: usize,
+    before: ResponseTemplate,
+    after: ResponseTemplate,
+}
+
+impl RespondNthTime {
+    #[must_use]
+    pub fn new(max: usize, before: ResponseTemplate, after: ResponseTemplate) -> Self {
+        Self {
+            count: AtomicUsize::new(0),
+            max,
+            before,
+            after,
+        }
+    }
+}
+impl Respond for RespondNthTime {
+    fn respond(&self, _request: &wiremock::Request) -> ResponseTemplate {
+        let time = self.count.fetch_add(1, Ordering::SeqCst);
+        if time < self.max {
+            return self.before.clone();
+        }
+
+        self.after.clone()
+    }
 }

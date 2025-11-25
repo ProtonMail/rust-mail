@@ -1,10 +1,11 @@
+use proton_core_api::services::proton::{
+    GetUnleashFeaturesResponse, UnleashToggle, UnleashToggleVariant,
+};
 use proton_core_common::datatypes::{
     BlackFridayWave, NotificationSettings, UpsellEligibility, UpsellType,
 };
 use proton_core_common::models::{DelinquentState, ModelExtension, Role};
 use proton_core_common::models::{PaidSubscription, User};
-use proton_mail_api::services::proton::response_data::{UnleashToggle, UnleashToggleVariant};
-use proton_mail_api::services::proton::responses::GetUnleashFeaturesResponse;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::test_context::MailTestContext;
@@ -325,6 +326,7 @@ async fn setup_feature_flags(ctx: &MailTestContext, flags: TestedFeatureFlags) {
         .await;
 
     ctx.context()
+        .core_context()
         .feature_flags()
         .refresh()
         .await

@@ -1230,6 +1230,7 @@ impl MailSession {
 
         uniffi_async(async move {
             let flag = mail_ctx
+                .core_context()
                 .feature_flags()
                 .get(&feature_id)
                 .await
@@ -1250,6 +1251,7 @@ impl MailSession {
 
         uniffi_async(async move {
             let rx = ctx
+                .core_context()
                 .feature_flags()
                 .watch()
                 .await
@@ -1269,6 +1271,7 @@ impl MailSession {
 
         uniffi_async(async move {
             let rx = ctx
+                .core_context()
                 .feature_flags()
                 .watch()
                 .await

@@ -6,7 +6,6 @@ pub mod db;
 pub mod draft;
 mod errors;
 mod events;
-mod feature_flags;
 mod image_loader;
 mod ios_share_ext;
 #[allow(clippy::result_large_err)]
@@ -32,7 +31,6 @@ pub mod test_utils;
 pub use self::background_execution::*;
 pub use self::context::*;
 pub use self::errors::*;
-pub use self::feature_flags::*;
 pub use self::image_loader::*;
 pub use self::ios_share_ext::*;
 pub use self::mail_cursor::*;
