@@ -7,7 +7,7 @@ use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
 use futures::FutureExt;
 use proton_core_common::models::{ModelExtension, User};
-use proton_mail_common::background_execution::{
+use proton_mail_common::{
     BackgroundExecutionContext, BackgroundExecutionResult, BackgroundExecutionStatus,
 };
 use proton_mail_common::{MailContext, MailContextResult, MailUserContext};

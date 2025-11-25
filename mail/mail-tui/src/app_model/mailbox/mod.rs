@@ -17,14 +17,12 @@ use chrono::{DateTime, Local};
 use messages::BlockOrUnblock;
 pub use model::MailboxModel;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId, Refresh, UnixTimestamp};
+use proton_mail_api::proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
 };
 use proton_mail_common::draft::attachments::DraftAttachment;
 use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
-use proton_mail_common::proton_mail_api::proton_core_api::services::proton::{
-    AddressId, PrivateEmail,
-};
 use proton_mail_common::{MailUserContext, Mailbox, RsvpEvent};
 use search::{Search, SearchStatusBar};
 use secrecy::SecretString;

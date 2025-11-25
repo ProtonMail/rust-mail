@@ -22,13 +22,13 @@ use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
+use proton_mail_api::proton_core_api::services::proton::LabelId;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::observers::{DraftSendResultWatcher, DraftSendResultWatcherMode};
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendResult, DraftSendResultOrigin, LabelWithCounters,
 };
-use proton_mail_common::proton_mail_api::proton_core_api::services::proton::LabelId;
 use proton_mail_common::{
     AppError, MailContext, MailContextError, MailContextResult, MailUserContext, Mailbox,
 };
