@@ -41,6 +41,7 @@ tui-logger = { version = "0.12.1", features = ["tracing-support"] }
 tui-textarea = { version = "0.6.1", features = ["ratatui"] }
 qrcode = "0.14.1"
 proton-network-monitor-service = { workspace = true }
+zeroizing-alloc = { workspace = true }
 
 [target.'cfg(target_os="linux")'.dependencies]
 keyring = { version = "3.6.1", features = ["linux-native"] }

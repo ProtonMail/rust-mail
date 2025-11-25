@@ -53,6 +53,7 @@ sqlite-watcher = { workspace = true }
 non-empty-string = { workspace = true }
 proton-network-monitor-service = { workspace = true }
 url = { workspace = true }
+zeroizing-alloc = { workspace = true }
 
 [dev-dependencies]
 proton-mail-api = { workspace = true }

@@ -539,7 +539,7 @@ dependencies = [
  "bitflags 2.9.4",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -3522,7 +3522,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.53.3",
 ]
 
 [[package]]
@@ -5685,6 +5685,7 @@ dependencies = [
  "tui-input",
  "tui-logger",
  "tui-textarea",
+ "zeroizing-alloc",
 ]
 
 [[package]]
@@ -5735,6 +5736,7 @@ dependencies = [
  "uniffi-macros",
  "uniffi-runtime",
  "url",
+ "zeroizing-alloc",
 ]
 
 [[package]]
@@ -9162,6 +9164,12 @@ dependencies = [
  "quote",
  "syn 2.0.106",
 ]
+
+[[package]]
+name = "zeroizing-alloc"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebff5e6b81c1c7dca2d0bd333b2006da48cb37dbcae5a8da888f31fcb3c19934"
 
 [[package]]
 name = "zerotrie"

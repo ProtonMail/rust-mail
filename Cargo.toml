@@ -148,6 +148,7 @@ criterion = "0.7.0"
 pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
 topological-sort = "0.2.2"
 percent-encoding = "2.3.2"
+zeroizing-alloc = "0.1.0"
 
 [workspace.dependencies.email_address]
 version = "0.2.9"
