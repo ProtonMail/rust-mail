@@ -16,7 +16,6 @@ use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
-use services::user_feature_flags::UserFeatureFlagsBackgroundTask;
 use services::{PaymentsService, UserFeatureFlagsService};
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
@@ -107,7 +106,6 @@ impl UserContext {
         user_id: UserId,
         session_id: SessionId,
         cache_path: PathBuf,
-        ff_task: UserFeatureFlagsBackgroundTask,
     ) -> CoreContextResult<Arc<Self>> {
         info!("Creating new UserContext");
         let issue_reporter = context.issue_reporter_service();
@@ -144,9 +142,7 @@ impl UserContext {
 
                 if matches!(origin, Origin::App) {
                     builder = builder
-                        .with_cyclic_service(move |weak| {
-                            UserFeatureFlagsService::new(weak, ff_task)
-                        })
+                        .with_cyclic_service(UserFeatureFlagsService::new)
                         .with_cyclic_service(PaymentsService::new)
                         .with_cyclic_service(move |weak_ref: Weak<UserContext>| {
                             let event_ctx = CoreEventLoopContext::from(weak_ref);
@@ -179,11 +175,6 @@ impl UserContext {
 
             fs::create_dir_all(this.sender_images_cache_path())?;
             fs::create_dir_all(this.trash_path())?;
-
-            if matches!(origin, Origin::App) {
-                let ff_service = this.get_service::<UserFeatureFlagsService>();
-                ff_service.init()?;
-            }
 
             if matches!(origin, Origin::App)
                 && let Some(init_service) = this.get_service_opt::<InitializationService>()

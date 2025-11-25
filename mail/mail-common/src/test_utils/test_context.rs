@@ -9,7 +9,7 @@ use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::UserId;
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
-use proton_core_common::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
+
 use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
 use proton_event_loop::subscriber::SubscriberError;
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
@@ -125,11 +125,7 @@ impl MailTestContext {
     pub async fn uninitialized_mail_user_context(&self) -> Arc<MailUserContext> {
         let ctx = self
             .mail_context
-            .user_context_from_session(
-                &self.core_session,
-                ShouldInitializeMailUserContext::No,
-                UserFeatureFlagsBackgroundTask::Disabled,
-            )
+            .user_context_from_session(&self.core_session, ShouldInitializeMailUserContext::No)
             .await
             .expect("failed to create user context");
 
@@ -154,11 +150,7 @@ impl MailTestContext {
     pub async fn mail_user_context(&self) -> Arc<MailUserContext> {
         let ctx = self
             .mail_context
-            .user_context_from_session(
-                &self.core_session,
-                ShouldInitializeMailUserContext::Yes,
-                UserFeatureFlagsBackgroundTask::Disabled,
-            )
+            .user_context_from_session(&self.core_session, ShouldInitializeMailUserContext::Yes)
             .await
             .expect("failed to create user context");
 
@@ -176,11 +168,7 @@ impl MailTestContext {
     pub async fn try_mail_user_context(&self) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .mail_context
-            .user_context_from_session(
-                &self.core_session,
-                ShouldInitializeMailUserContext::Yes,
-                UserFeatureFlagsBackgroundTask::Disabled,
-            )
+            .user_context_from_session(&self.core_session, ShouldInitializeMailUserContext::Yes)
             .await?;
 
         // Disable auto queue executor as we don't want these to interfere with our test execution.
@@ -194,10 +182,7 @@ impl MailTestContext {
     pub async fn initialized_mail_user_context(&self) -> Option<Arc<MailUserContext>> {
         let ctx = self
             .mail_context
-            .initialized_user_context_from_session(
-                &self.core_session,
-                UserFeatureFlagsBackgroundTask::Disabled,
-            )
+            .initialized_user_context_from_session(&self.core_session)
             .await
             .unwrap()?;
 

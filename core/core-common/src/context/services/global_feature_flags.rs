@@ -174,8 +174,34 @@ impl Service for FeatureFlagsService {
             };
             drop(ctx);
             loop {
-                if let Err(error) = self_clone.fetch_and_update(&session).await {
-                    error!(%error, "Failed to refresh feature flags");
+                let Some(ctx) = self_clone.ctx.upgrade() else {
+                    error!("Could not upgrade context");
+                    return;
+                };
+                let user_contexts: Vec<_> = ctx
+                    .active_user_contexts
+                    .lock()
+                    .await
+                    .values()
+                    .cloned()
+                    // We clone and collect to release the lock ASAP.
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .filter_map(|ctx| ctx.upgrade())
+                    .collect();
+
+                drop(ctx);
+
+                if user_contexts.is_empty() {
+                    if let Err(error) = self_clone.fetch_and_update(&session).await {
+                        error!(%error, "Failed to refresh global feature flags");
+                    }
+                } else {
+                    for user_ctx in user_contexts {
+                        if let Err(error) = user_ctx.feature_flags().refresh().await {
+                            error!(%error, "Failed to refresh user feature flags");
+                        }
+                    }
                 }
                 let last_updated = Instant::now();
                 loop {

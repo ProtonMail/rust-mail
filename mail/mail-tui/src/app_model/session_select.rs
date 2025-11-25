@@ -10,7 +10,7 @@ use futures::StreamExt as _;
 use futures::stream::iter;
 use proton_core_common::CoreAccountState;
 use proton_core_common::db::account::CoreAccount;
-use proton_core_common::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
+
 use proton_mail_common::{MailContext, MailContextError, ShouldInitializeMailUserContext};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
@@ -209,7 +209,6 @@ impl AppStateHandler for SessionSelectModel {
                                     .user_context_from_session(
                                         sess,
                                         ShouldInitializeMailUserContext::Yes,
-                                        UserFeatureFlagsBackgroundTask::Enabled,
                                     )
                                     .await
                                     .context("Error creating MailUserContext")?;

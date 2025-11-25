@@ -22,7 +22,6 @@ use crate::{
     datatypes::{RegisteredDevice, StoredDevicePrivateKey, StoredDevicePublicKey},
     db::account::CoreSession,
     models::ModelExtension,
-    services::user_feature_flags::UserFeatureFlagsBackgroundTask,
 };
 
 /// How long we should sleep just in case there was a network error other than offline issue.
@@ -267,9 +266,7 @@ async fn register_session(
     registered_sessions: &mut HashSet<SessionId>,
     device: &RegisteredDevice,
 ) -> Result<(), RegisteredDeviceTaskError> {
-    let session_ctx = ctx
-        .user_context_from_session(&session, UserFeatureFlagsBackgroundTask::Disabled)
-        .await?;
+    let session_ctx = ctx.user_context_from_session(&session).await?;
 
     let pgp = proton_crypto::new_pgp_provider();
 

@@ -2,58 +2,33 @@
 //! If you are looking for global feature flags,
 //! please see [`crate::services::FeatureFlagsService`].
 
-use std::{
-    collections::BTreeMap,
-    sync::Weak,
-    time::{Duration, Instant},
-};
+use std::{collections::BTreeMap, sync::Weak};
 
 use anyhow::Context;
-use proton_core_api::{
-    services::proton::{ProtonCore, muon::common::WithTimeout},
-    session::Session,
-};
+use proton_core_api::services::proton::ProtonCore;
 use stash::{stash::WatcherHandle, watcher::TableWatcher};
-use tracing::error;
 
 use crate::{
     CoreContextError, CoreContextResult, UserContext,
-    app_events::OnEnterForegroundEvent,
     datatypes::UnixTimestamp,
     models::{ModelExtension, UserFeatureFlag},
 };
 
-// Note: There are identical constants in global service:
-const REFRESH_THROTTLE_SECS: u64 = 60; // 1 minute
-const REFRESH_TIMEOUT_SECS: u64 = 600; // 10 minutes
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UserFeatureFlagsBackgroundTask {
-    Enabled,
-    Disabled,
-}
-
 #[derive(Clone)]
 pub struct UserFeatureFlagsService {
     ctx: Weak<UserContext>,
-    background_task_setting: UserFeatureFlagsBackgroundTask,
 }
 
 impl UserFeatureFlagsService {
     #[must_use]
-    pub fn new(
-        ctx: Weak<UserContext>,
-        background_task_setting: UserFeatureFlagsBackgroundTask,
-    ) -> Self {
-        Self {
-            ctx,
-            background_task_setting,
-        }
+    pub fn new(ctx: Weak<UserContext>) -> Self {
+        Self { ctx }
     }
 
-    #[tracing::instrument(skip_all, name = "FeatureFlagsFetchAndUpdate")]
-    async fn fetch_and_update(&self, api: &Session) -> CoreContextResult<()> {
+    #[tracing::instrument(skip_all, name = "UserFeatureFlagsRefresh")]
+    pub async fn refresh(&self) -> CoreContextResult<()> {
         let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
+        let api = ctx.session();
 
         let response = api.get_unleash_feature_flags().await?;
         tracing::info!("Fetched {} featured flags from API", response.toggles.len());
@@ -113,11 +88,6 @@ impl UserFeatureFlagsService {
         Ok(feature_flag.map(|flag| flag.enabled))
     }
 
-    pub async fn refresh(&self) -> CoreContextResult<()> {
-        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
-        self.fetch_and_update(ctx.session()).await
-    }
-
     pub async fn list_all(&self) -> Vec<(String, bool)> {
         let Some(ctx) = self.ctx.upgrade() else {
             tracing::warn!("Failed to upgrade context");
@@ -147,55 +117,5 @@ impl UserFeatureFlagsService {
         TableWatcher::<UserFeatureFlag>::watch(stash)
             .await
             .map_err(CoreContextError::from)
-    }
-
-    #[allow(clippy::result_large_err)]
-    pub fn init(&self) -> CoreContextResult<()> {
-        if self.background_task_setting == UserFeatureFlagsBackgroundTask::Disabled {
-            tracing::warn!("User feature flags background task is disabled");
-            return Ok(());
-        }
-
-        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
-
-        let task_service = ctx.context.task_service();
-        let event_service = ctx.context.event_service();
-
-        let self_clone = self.clone();
-        let Some(mut event_stream) = event_service.subscribe::<OnEnterForegroundEvent>() else {
-            error!("Failed to subscribe to OnEnterForegroundEvent");
-            return Ok(());
-        };
-
-        // This task will be cancelled when user context is removed.
-        // Which happens when user logs-out
-        task_service.spawn(async move {
-            loop {
-                let Some(ctx) = self_clone.ctx.upgrade() else {
-                    error!("Failed to upgrade context");
-                    return;
-                };
-                let session = ctx.session();
-                if let Err(error) = self_clone.fetch_and_update(session).await {
-                    error!(%error, "Failed to refresh user feature flags");
-                }
-                let last_updated = Instant::now();
-                loop {
-                    if let Err(error) = event_stream
-                        .next()
-                        .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
-                        .await
-                    {
-                        tracing::error!(%error, "Failed to receive OnEnterForegroundEvent");
-                        return;
-                    }
-                    if last_updated.elapsed() >= Duration::from_secs(REFRESH_THROTTLE_SECS) {
-                        break;
-                    }
-                }
-            }
-        });
-
-        Ok(())
     }
 }

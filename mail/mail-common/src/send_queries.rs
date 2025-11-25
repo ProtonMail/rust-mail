@@ -3,7 +3,7 @@ use crate::models::DraftMetadata;
 use crate::{MailContext, MailContextError};
 use proton_core_api::services::proton::UserId;
 use proton_core_common::CoreSessionState;
-use proton_core_common::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
+
 use std::sync::Arc;
 
 impl MailContext {
@@ -25,12 +25,7 @@ impl MailContext {
                     CoreSessionState::Authenticated
                 ) =>
             {
-                let Some(user_ctx) = self
-                    .initialized_user_context_from_session(
-                        &session,
-                        UserFeatureFlagsBackgroundTask::Enabled,
-                    )
-                    .await?
+                let Some(user_ctx) = self.initialized_user_context_from_session(&session).await?
                 else {
                     return Err(MailContextError::UserContextNotInitialized(user_id));
                 };

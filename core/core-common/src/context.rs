@@ -26,7 +26,7 @@ use crate::nuke_utils::{
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::pin_code::PinCode;
 use crate::services::issue_reporter_service::IssueReporterService;
-use crate::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
+
 use crate::services::{ContextEventService, NetworkMonitorService};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Context as _, Error as AnyhowError, anyhow};
@@ -696,7 +696,6 @@ impl Context {
     pub async fn user_context_from_session(
         &self,
         session: &CoreSession,
-        ff_task: UserFeatureFlagsBackgroundTask,
     ) -> CoreContextResult<Arc<UserContext>> {
         // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
@@ -722,8 +721,7 @@ impl Context {
             .await
             .inspect_err(|e| tracing::error!("Could not create api session: {e:?}"))?;
 
-        self.new_user_context(user_id, session, session_id, ff_task)
-            .await
+        self.new_user_context(user_id, session, session_id).await
     }
 
     /// Logs out all sessions of an account without deleting the account's data.
@@ -809,10 +807,7 @@ impl Context {
 
         if let Some(session) = session {
             tracing::info!("Clear all user data from database");
-            if let Ok(user_ctx) = self
-                .user_context_from_session(&session, UserFeatureFlagsBackgroundTask::Disabled)
-                .await
-            {
+            if let Ok(user_ctx) = self.user_context_from_session(&session).await {
                 let tether = user_ctx.stash().connection().await?;
 
                 if let Err(e) = drop_all_tables_in_database(tether).await {
@@ -1130,7 +1125,6 @@ impl Context {
         user_id: UserId,
         session: ApiSession,
         session_id: SessionId,
-        ff_task: UserFeatureFlagsBackgroundTask,
     ) -> Result<Arc<UserContext>, CoreContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;
 
@@ -1167,7 +1161,6 @@ impl Context {
             user_id.clone(),
             session_id,
             cache_path,
-            ff_task,
         )
         .await?;
 

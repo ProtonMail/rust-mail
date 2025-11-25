@@ -15,7 +15,6 @@ use crate::version::rust_sdk_version;
 use crate::{AsyncLiveQueryCallback, declare_live_query_tagger};
 use crate::{LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async};
 use proton_core_common::services::SessionObserverService;
-use proton_core_common::services::user_feature_flags::UserFeatureFlagsBackgroundTask;
 
 use chrono::Local;
 use futures::TryFutureExt;
@@ -318,13 +317,10 @@ impl MailSession {
 
         let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
-            ctx.initialized_user_context_from_session(
-                session.session(),
-                UserFeatureFlagsBackgroundTask::Enabled,
-            )
-            .map_err(RealProtonMailError::from)
-            .await
-            .map(|ctx| ctx.map(|ctx| user_ctx.insert(ctx)))
+            ctx.initialized_user_context_from_session(session.session())
+                .map_err(RealProtonMailError::from)
+                .await
+                .map(|ctx| ctx.map(|ctx| user_ctx.insert(ctx)))
         })
         .map_ok(|ctx| ctx.map(MailUserSession::new))
         .await?;
@@ -342,14 +338,10 @@ impl MailSession {
 
         let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
-            ctx.user_context_from_session(
-                session.session(),
-                ShouldInitializeMailUserContext::Yes,
-                UserFeatureFlagsBackgroundTask::Enabled,
-            )
-            .map_err(RealProtonMailError::from)
-            .await
-            .map(|ctx| user_ctx.insert(ctx))
+            ctx.user_context_from_session(session.session(), ShouldInitializeMailUserContext::Yes)
+                .map_err(RealProtonMailError::from)
+                .await
+                .map(|ctx| user_ctx.insert(ctx))
         })
         .map_ok(MailUserSession::new)
         .await?;
@@ -1050,10 +1042,7 @@ impl MailSession {
             );
 
             let user_ctx = ctx
-                .initialized_user_context_from_session(
-                    &primary_session,
-                    UserFeatureFlagsBackgroundTask::Enabled,
-                )
+                .initialized_user_context_from_session(&primary_session)
                 .await?;
 
             let Some(user_ctx) = user_ctx else {
