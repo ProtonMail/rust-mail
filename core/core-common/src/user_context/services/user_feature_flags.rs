@@ -5,12 +5,15 @@
 use std::{collections::BTreeMap, sync::Weak};
 
 use anyhow::Context;
-use proton_core_api::services::proton::ProtonCore;
-use stash::{stash::WatcherHandle, watcher::TableWatcher};
+use proton_core_api::services::proton::{GetUnleashFeaturesResponse, ProtonCore};
+use stash::{
+    stash::{Tether, WatcherHandle},
+    watcher::TableWatcher,
+};
 
 use crate::{
     CoreContextError, CoreContextResult, UserContext,
-    datatypes::UnixTimestamp,
+    datatypes::{UnixTimestamp, UserFeatureFlagSource},
     models::{ModelExtension, UserFeatureFlag},
 };
 
@@ -25,17 +28,8 @@ impl UserFeatureFlagsService {
         Self { ctx }
     }
 
-    #[tracing::instrument(skip_all, name = "UserFeatureFlagsRefresh")]
-    pub async fn refresh(&self) -> CoreContextResult<()> {
-        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
-        let api = ctx.session();
-
-        let response = api.get_unleash_feature_flags().await?;
-        tracing::info!("Fetched {} featured flags from API", response.toggles.len());
-
-        let mut tether = ctx.stash().connection().await?;
-
-        let mut flags = UserFeatureFlag::all(&tether)
+    async fn fetch_from_cache(tether: &Tether) -> BTreeMap<String, UserFeatureFlag> {
+        UserFeatureFlag::all(tether)
             .await
             .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
             .unwrap_or_default()
@@ -51,16 +45,23 @@ impl UserFeatureFlagsService {
                     },
                 )
             })
-            .collect::<BTreeMap<String, UserFeatureFlag>>();
+            .collect::<BTreeMap<String, UserFeatureFlag>>()
+    }
 
-        let modify_time = UnixTimestamp::now();
-
+    fn set_flags_from_unleash(
+        flags: &mut BTreeMap<String, UserFeatureFlag>,
+        response: GetUnleashFeaturesResponse,
+        modify_time: UnixTimestamp,
+    ) {
         for toggle in response.toggles {
             let flag = flags
                 .entry(toggle.name.clone())
                 .or_insert_with(|| UserFeatureFlag {
                     name: toggle.name,
                     enabled: false,
+                    source: UserFeatureFlagSource::Unleash,
+                    writable: false,
+                    r#override: None,
                     modify_time,
                 });
 
@@ -69,6 +70,24 @@ impl UserFeatureFlagsService {
             flag.enabled = true;
             flag.modify_time = modify_time;
         }
+    }
+
+    #[tracing::instrument(skip_all, name = "UserFeatureFlagsRefresh")]
+    pub async fn refresh(&self) -> CoreContextResult<()> {
+        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
+        let api = ctx.session();
+
+        let unleash_response = api.get_unleash_feature_flags().await?;
+        tracing::info!(
+            "Fetched {} featured flags from API",
+            unleash_response.toggles.len()
+        );
+
+        let mut tether = ctx.stash().connection().await?;
+        let mut flags = Self::fetch_from_cache(&tether).await;
+
+        let modify_time = UnixTimestamp::now();
+        Self::set_flags_from_unleash(&mut flags, unleash_response, modify_time);
 
         let flags = flags.into_values().collect();
 
@@ -85,7 +104,7 @@ impl UserFeatureFlagsService {
             let tether = ctx.stash().connection().await?;
             UserFeatureFlag::by_name(key, &tether).await?
         };
-        Ok(feature_flag.map(|flag| flag.enabled))
+        Ok(feature_flag.map(|flag| flag.is_enabled()))
     }
 
     pub async fn list_all(&self) -> Vec<(String, bool)> {
