@@ -23,6 +23,11 @@ use std::sync::LazyLock;
 
 pub type TerminalType = Terminal<CrosstermBackend<Stdout>>;
 
+use zeroizing_alloc::ZeroAlloc;
+
+#[global_allocator]
+static ALLOC: ZeroAlloc<std::alloc::System> = ZeroAlloc(std::alloc::System);
+
 fn initialize_panic_handler() {
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {

@@ -166,6 +166,11 @@ pub mod version;
 #[cfg(target_os = "android")]
 pub mod jni;
 
+use zeroizing_alloc::ZeroAlloc;
+
+#[global_allocator]
+static ALLOC: ZeroAlloc<std::alloc::System> = ZeroAlloc(std::alloc::System);
+
 uniffi::setup_scaffolding!();
 
 /// A callback interface for live queries.
