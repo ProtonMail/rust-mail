@@ -23,6 +23,9 @@ pub const CORE_V4: &str = "/core/v4";
 /// The Proton Core API base path (v5).
 pub const CORE_V5: &str = "/core/v5";
 
+/// The Unleash API base path (v2).
+pub const UNLEASH_V2: &str = "/feature/v2";
+
 #[allow(async_fn_in_trait)]
 pub trait ProtonCore {
     /// GETs a list of addresses.
@@ -260,4 +263,8 @@ pub trait ProtonCore {
 
     /// Gets an image through proton's proxy.
     async fn proxy_img(&self, url: &url::Url) -> ApiServiceResult<Vec<u8>>;
+
+    /// Gets feature flags defined in Unleash service.
+    /// See: <https://docs.getunleash.io/reference/api/unleash/get-frontend-features/>
+    async fn get_unleash_feature_flags(&self) -> ApiServiceResult<GetUnleashFeaturesResponse>;
 }

@@ -11,7 +11,6 @@ use crate::models::{
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::DateTime;
 use derive_more::Display;
-use indoc::indoc;
 use proton_canonical_email::CanonicalEmail;
 use proton_core_api::services::proton::AddressId;
 use proton_core_common::Platform;
@@ -27,7 +26,6 @@ use proton_mail_html_transformer::transforms::styles::{
 };
 use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use stash::orm::Model as _;
-use stash::params;
 use stash::stash::{StashError, Tether};
 use std::fmt::Display;
 use std::fmt::Write as _;
@@ -809,22 +807,4 @@ pub fn validate_sender_address(
     }
 
     None
-}
-
-pub async fn find_default_sender_address(tether: &Tether) -> Result<Option<Address>, StashError> {
-    Address::find_first(
-        indoc! {"
-            WHERE
-                send=1 AND
-                receive=1 AND
-                status=?
-            ORDER BY display_order
-            "},
-        params![AddressStatus::Enabled],
-        tether,
-    )
-    .await
-    .inspect_err(|e| {
-        error!("Failed to load addresses: {e:?}");
-    })
 }

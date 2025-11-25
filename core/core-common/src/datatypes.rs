@@ -164,6 +164,11 @@ impl From<ApiAddressFlags> for AddressFlags {
         Self(value.0)
     }
 }
+impl From<AddressFlags> for ApiAddressFlags {
+    fn from(value: AddressFlags) -> Self {
+        Self(value.0)
+    }
+}
 
 impl FromSql for AddressFlags {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {

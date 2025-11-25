@@ -38,8 +38,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_with::{BoolFromInt, DefaultOnNull, serde_as};
 
-use super::prelude::UnleashToggle;
-
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
@@ -342,13 +340,6 @@ pub struct PostIncomingDefaultResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct PutIncomingDefaultResponse {
     pub incoming_default: IncomingDefault,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(feature = "mocks", derive(Serialize))]
-#[serde(rename_all = "camelCase")]
-pub struct GetUnleashFeaturesResponse {
-    pub toggles: Vec<UnleashToggle>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

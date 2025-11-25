@@ -1,8 +1,10 @@
+use crate::Origin;
 use crate::datatypes::ApiConfig;
 use crate::db::account::{CoreAccount, CoreSession};
 use crate::event_loop::EventPollMode;
 use crate::events::CoreEvent;
 use crate::models::ModelExtension;
+use crate::services::feature_flags::FeatureFlagsBackgroundTask;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::test_utils::utils::{catch_all, mock_auth_endpoints};
 use crate::{
@@ -10,7 +12,6 @@ use crate::{
     db::account::SessionEncryptionKey,
     os::{InMemoryKeyChain, KeyChain, KeyChainExt},
 };
-use crate::{ContextBuilder, Origin};
 use proton_core_api::auth::{Tokens, UserKeySecret};
 use proton_core_api::exports::RetryPolicy;
 use proton_core_api::services::proton::{SessionId, UserId};
@@ -142,34 +143,25 @@ impl TestContext {
     }
 
     pub async fn new() -> Arc<Self> {
-        Self::_new(None, None, None, None, |builder| builder).await
+        Self::_new(None, None, None, None).await
     }
 
     pub async fn with_user_secret_and_user_id(
         user_key_secret: UserKeySecret,
         user_id: UserId,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
-        extra_builder: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> Arc<Self> {
-        Self::_new(
-            Some(user_key_secret),
-            Some(user_id),
-            initializers,
-            None,
-            extra_builder,
-        )
-        .await
+        Self::_new(Some(user_key_secret), Some(user_id), initializers, None).await
     }
 
     pub async fn with_initializers(
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
-        extra_builder: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> Arc<Self> {
-        Self::_new(None, None, initializers, None, extra_builder).await
+        Self::_new(None, None, initializers, None).await
     }
 
     pub async fn with_issue_reporter(reporter: Arc<dyn IssueReporter>) -> Arc<Self> {
-        Self::_new(None, None, None, Some(reporter), |builder| builder).await
+        Self::_new(None, None, None, Some(reporter)).await
     }
 
     async fn _new(
@@ -177,7 +169,6 @@ impl TestContext {
         user_id: Option<UserId>,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
         issue_reporter: Option<Arc<dyn IssueReporter>>,
-        extra_builder: impl FnOnce(ContextBuilder) -> ContextBuilder,
     ) -> Arc<Self> {
         _ = set_global_default(
             registry()
@@ -230,7 +221,7 @@ impl TestContext {
             EventPollMode::Manual,
             test_network_monitor_service_config(),
             issue_reporter.unwrap_or(Arc::new(NoopIssueReporter)),
-            extra_builder,
+            FeatureFlagsBackgroundTask::Disabled,
         )
         .await
         .expect("failed to create core context");

@@ -7,7 +7,7 @@ use proton_action_queue::action::{
     Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
 };
 use proton_action_queue::action::{ActionId, Handler};
-use proton_action_queue::rebase::RebaseChangeSet;
+use proton_action_queue::rebase::{RebaseChangeSet, RebaseKey};
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
@@ -109,13 +109,15 @@ impl Handler for ReportPhishingHandler {
 
     async fn rebase_local(
         &self,
-        this_id: ActionId,
+        _: ActionId,
         action: &mut Self::Action,
-        _: &RebaseChangeSet,
+        changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        //TODO(ET-5183): Test me!
-        self.apply_local(this_id, action, tx).await?;
+        let rebase_key: RebaseKey = action.message_id.into();
+        if changeset.contains(&rebase_key) {
+            Message::set_flags(action.message_id, MessageFlags::PHISHING_MANUAL, tx).await?;
+        }
         Ok(())
     }
 }

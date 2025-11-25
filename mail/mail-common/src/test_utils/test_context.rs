@@ -1,27 +1,25 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::context::{MailUserDatabaseInitializer, ShouldInitializeMailUserContext};
 use crate::events::MailEvent;
-use crate::feature_flags::{FeatureFlagsBackgroundTask, FeatureFlagsService};
 use crate::{MailContext, MailContextResult, MailUserContext};
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
 use proton_core_api::auth::UserKeySecret;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::UserId;
+use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
-use proton_core_common::{ContextBuilder, UserDatabaseInitializer};
 use proton_event_loop::subscriber::SubscriberError;
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::ops::Deref;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tempfile::TempDir;
 use tracing::info;
+use wiremock::MockServer;
 use wiremock::matchers::any;
-use wiremock::{Mock, Request, Respond};
-use wiremock::{MockServer, ResponseTemplate};
+use wiremock::{Mock, Request};
 
 /// Test context for mail tests.
 ///
@@ -83,16 +81,10 @@ impl MailTestContext {
         let initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>> =
             Some(vec![Box::new(MailUserDatabaseInitializer {})]);
 
-        let extra = |e: ContextBuilder| {
-            e.with_cyclic_service(|ctx| {
-                FeatureFlagsService::new(ctx, FeatureFlagsBackgroundTask::Disabled)
-            })
-        };
-
         let core_test_context = if let (Some(secret), Some(id)) = (user_key_secret, user_id) {
-            TestContext::with_user_secret_and_user_id(secret, id, initializers, extra).await
+            TestContext::with_user_secret_and_user_id(secret, id, initializers).await
         } else {
-            TestContext::with_initializers(initializers, extra).await
+            TestContext::with_initializers(initializers).await
         };
 
         let tmp_dir = TempDir::new().expect("failed to create temp dir");
@@ -318,35 +310,5 @@ impl MailUserContextTestExtension for MailUserContext {
 async fn wait_for_impl(user_ctx: &MailUserContext, fun: impl Fn(ConnectionStatus) -> bool) {
     while !fun(user_ctx.network_monitor_service().combined_status()) {
         tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-}
-
-/// Whenever we need to test a specific response pattern.
-/// Example: Service is unavailable for the first 3 times.
-pub struct RespondNthTime {
-    count: AtomicUsize,
-    max: usize,
-    before: ResponseTemplate,
-    after: ResponseTemplate,
-}
-
-impl RespondNthTime {
-    pub fn new(max: usize, before: ResponseTemplate, after: ResponseTemplate) -> Self {
-        Self {
-            count: AtomicUsize::new(0),
-            max,
-            before,
-            after,
-        }
-    }
-}
-impl Respond for RespondNthTime {
-    fn respond(&self, _request: &wiremock::Request) -> ResponseTemplate {
-        let time = self.count.fetch_add(1, Ordering::SeqCst);
-        if time < self.max {
-            return self.before.clone();
-        }
-
-        self.after.clone()
     }
 }

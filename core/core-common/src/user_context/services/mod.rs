@@ -6,3 +6,4 @@ pub mod user_issue_reporter_service;
 pub use event_loop_service::EventLoopService;
 pub use initialization_service::InitializationService;
 pub use payments_service::PaymentsService;
+pub use user_issue_reporter_service::UserIssueReporterService;

@@ -5,13 +5,15 @@ use itertools::Itertools;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_action_queue::rebase::RebaseChangeSet;
+use proton_action_queue::rebase::{RebaseChangeSet, RebaseKey};
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel, UnixTimestamp};
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{self, Deserialize, Serialize};
 use stash::exports::ToSql;
 use stash::orm::Model;
+use stash::params;
 use stash::stash::Bond;
 use stash::utils::placeholders;
 use tracing::error;
@@ -108,8 +110,20 @@ impl Handler for UnsnoozeHandler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         for (conv_id, snoozed_until) in action.conv_snooze_time.iter() {
-            Conversation::snooze(action.action_data.label_id, &[*conv_id], *snoozed_until, tx)
+            // we don't want to validate the previous snoozed state.
+            Conversation::snooze_unchecked(&[*conv_id], *snoozed_until, tx).await?;
+            // Resync conversation just in we are re-snoozing to some time in the past
+            // or the snooze period has already ended.
+            if let Some(api_conversation_id) =
+                Conversation::local_id_counterpart(*conv_id, tx).await?
+            {
+                RollbackItem::new(
+                    api_conversation_id.into_inner(),
+                    RollbackItemType::Conversation,
+                )
+                .save(tx)
                 .await?;
+            }
         }
 
         Ok(())
@@ -162,13 +176,34 @@ impl Handler for UnsnoozeHandler {
 
     async fn rebase_local(
         &self,
-        this_id: ActionId,
+        _: ActionId,
         action: &mut Self::Action,
-        _: &RebaseChangeSet,
+        changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        //TODO(ET-5183): Test me!
-        self.apply_local(this_id, action, tx).await?;
+        for id in &action.action_data.data.target_ids {
+            let rebase_key: RebaseKey = (*id).into();
+
+            if let Some(label) = ConversationLabel::find_first(
+                "WHERE local_conversation_id=? AND remote_label_id=?",
+                params![*id, SystemLabel::Snoozed.remote_id()],
+                tx,
+            )
+            .await?
+            {
+                if let Some((_, time)) = action
+                    .conv_snooze_time
+                    .iter_mut()
+                    .find(|(conv_id, _)| *conv_id == *id)
+                {
+                    *time = label.context_snooze_time;
+                }
+            }
+
+            if changeset.contains(&rebase_key) {
+                Conversation::unsnooze(action.action_data.label_id, &[*id], tx).await?;
+            }
+        }
         Ok(())
     }
 }

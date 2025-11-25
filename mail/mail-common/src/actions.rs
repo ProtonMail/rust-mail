@@ -205,7 +205,7 @@ pub(crate) fn register_actions(
             replace(queue, draft::AttachmentUploadHandler { ctx: ctx.clone() });
             reg(queue, draft::AttachmentRemoveHandler { api: api.clone() });
             replace(queue, refresh::ActionRefreshHandler { ctx: ctx.clone() });
-            reg(queue, rollback::RollbackActionHandler { api: api.clone() });
+            replace(queue, rollback::RollbackActionHandler { ctx: ctx.clone() });
             reg(
                 queue,
                 mail_settings::UpdateMobileActionsHandler { api: api.clone() },

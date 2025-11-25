@@ -1,7 +1,10 @@
 use crate::MailContextError;
 use crate::datatypes::RollbackItemType;
-use crate::models::{Conversation, Message};
-use futures::stream::{FuturesUnordered, StreamExt};
+use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::models::{Conversation, Message, MessageSyncDecision};
+use futures::stream::{FuturesOrdered, FuturesUnordered, StreamExt};
+use proton_action_queue::queue::Queue;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
@@ -9,8 +12,8 @@ use proton_core_api::session::Session;
 use proton_core_common::models::Label;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
-use proton_mail_api::services::proton::prelude::MessageMetadata;
-use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
+use proton_mail_api::services::proton::prelude::{GetConversationResponse, MessageMetadata};
+use proton_mail_api::services::proton::requests::GetMessagesOptions;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -92,13 +95,14 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
+        queue: &Queue,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>> + Copy,
     {
-        Self::sync_labels(api, tx, batch).await?;
-        Self::sync_messages(api, tx, batch).await?;
-        Self::sync_conversations(api, tx, batch).await?;
+        Self::sync_labels(api, tx, batch, queue).await?;
+        Self::sync_messages(api, tx, batch, queue).await?;
+        Self::sync_conversations(api, tx, batch, queue).await?;
 
         Ok(())
     }
@@ -108,11 +112,12 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
+        queue: &Queue,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
     {
-        Self::sync_items_impl::<LabelRollbackHandler, _>(api, tx, batch.into()).await
+        Self::sync_items_impl::<LabelRollbackHandler, _>(api, tx, batch.into(), queue).await
     }
 
     #[tracing::instrument(skip_all)]
@@ -120,11 +125,12 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
+        queue: &Queue,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
     {
-        Self::sync_items_impl::<MessageRollbackHandler, _>(api, tx, batch.into()).await
+        Self::sync_items_impl::<MessageRollbackHandler, _>(api, tx, batch.into(), queue).await
     }
 
     #[tracing::instrument(skip_all)]
@@ -132,11 +138,12 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
+        queue: &Queue,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
     {
-        Self::sync_items_impl::<ConversationRollbackHandler, _>(api, tx, batch.into()).await
+        Self::sync_items_impl::<ConversationRollbackHandler, _>(api, tx, batch.into(), queue).await
     }
 
     /// This helper method is used to find all rollback items of a specific kind.
@@ -201,6 +208,7 @@ impl RollbackItem {
         api: &Session,
         tx_runner: &mut T,
         batch: Option<usize>,
+        #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))] queue: &Queue,
     ) -> Result<(), MailContextError> {
         let items: Vec<H::RemoteId> =
             Self::find_remote_ids_by_kind(H::item_type(), tx_runner.tether())
@@ -230,11 +238,23 @@ impl RollbackItem {
                 error!("Failed to fetch batch ({:?}): {e:?}", H::item_type());
             })?;
 
+            H::fetch_and_apply_dependencies(&items, api, tx_runner)
+                .await
+                .inspect_err(|e| {
+                    error!(
+                        "Failed to sync dependencies for batch ({:?}): {e:?}",
+                        H::item_type()
+                    )
+                })?;
+
+            let mut changeset = RebaseChangeSet::default();
             tx_runner
                 .run_tx(async |tx| {
-                    H::store_items(items, tx).await.inspect_err(|e| {
-                        error!("Failed to store items ({:?}): {e:?}", H::item_type());
-                    })?;
+                    H::store_items(items, &mut changeset, tx)
+                        .await
+                        .inspect_err(|e| {
+                            error!("Failed to store items ({:?}): {e:?}", H::item_type());
+                        })?;
 
                     for id in ids {
                         Self::delete_by_rid_and_kind(Some((*id).to_string()), H::item_type(), tx)
@@ -245,6 +265,18 @@ impl RollbackItem {
                                     H::item_type()
                                 );
                             })?;
+                    }
+
+                    #[cfg(feature = "action_rebase")]
+                    if let Err(e) = queue
+                        .rebase_in(
+                            proton_action_queue::action::ActionGroup::default(),
+                            &changeset,
+                            tx,
+                        )
+                        .await
+                    {
+                        tracing::error!("Failed to rebase: {e:?}");
                     }
 
                     Ok(())
@@ -270,8 +302,15 @@ trait RollbackHandler: 'static + Send + Sync {
         remote_ids: &[Self::RemoteId],
     ) -> impl Future<Output = Result<Vec<Self::Item>, ApiServiceError>> + Send;
 
+    fn fetch_and_apply_dependencies(
+        items: &[Self::Item],
+        api: &Session,
+        tx_runner: &mut impl RunTransaction,
+    ) -> impl Future<Output = Result<(), MailContextError>>;
+
     fn store_items(
         items: Vec<Self::Item>,
+        changeset: &mut RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> impl Future<Output = Result<(), MailContextError>>;
 }
@@ -300,9 +339,34 @@ impl RollbackHandler for MessageRollbackHandler {
         Ok(api.get_messages(options).await?.messages)
     }
 
-    async fn store_items(items: Vec<Self::Item>, tx: &Bond<'_>) -> Result<(), MailContextError> {
+    async fn fetch_and_apply_dependencies(
+        items: &[Self::Item],
+        api: &Session,
+        tx_runner: &mut impl RunTransaction,
+    ) -> Result<(), MailContextError> {
+        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        let tether = tx_runner.tether();
         for item in items {
-            Message::from_api_metadata(item, tx).await?.save(tx).await?;
+            dependency_fetcher
+                .check_api_message_metadata(item, tether)
+                .await?;
+        }
+
+        dependency_fetcher.fetch_and_store(api, tx_runner).await
+    }
+
+    async fn store_items(
+        items: Vec<Self::Item>,
+        changeset: &mut RebaseChangeSet,
+        tx: &Bond<'_>,
+    ) -> Result<(), MailContextError> {
+        for item in items {
+            if Message::sync_decision(&item, None, tx).await? == MessageSyncDecision::Skip {
+                continue;
+            }
+            let mut m = Message::from_api_metadata(item, tx).await?;
+            m.save(tx).await?;
+            changeset.add(m.id());
         }
 
         Ok(())
@@ -312,7 +376,7 @@ impl RollbackHandler for MessageRollbackHandler {
 struct ConversationRollbackHandler {}
 
 impl RollbackHandler for ConversationRollbackHandler {
-    type Item = proton_mail_api::services::proton::response_data::Conversation;
+    type Item = GetConversationResponse;
     type RemoteId = ConversationId;
 
     fn item_type() -> RollbackItemType {
@@ -323,19 +387,52 @@ impl RollbackHandler for ConversationRollbackHandler {
         api: &Session,
         remote_ids: &[Self::RemoteId],
     ) -> Result<Vec<Self::Item>, ApiServiceError> {
-        let options = GetConversationsOptions {
-            page: 0,
-            page_size: remote_ids.len() as u64,
-            ids: Some(remote_ids.to_vec()),
-            ..Default::default()
-        };
+        let iter = remote_ids.iter().map(|id| api.get_conversation(id.clone()));
 
-        Ok(api.get_conversations(options).await?.conversations)
+        let mut tasks = FuturesOrdered::from_iter(iter);
+
+        let mut result = Vec::with_capacity(remote_ids.len());
+        while let Some(output) = tasks.next().await {
+            result.push(output?);
+        }
+
+        Ok(result)
     }
 
-    async fn store_items(items: Vec<Self::Item>, tx: &Bond<'_>) -> Result<(), MailContextError> {
+    async fn fetch_and_apply_dependencies(
+        items: &[Self::Item],
+        api: &Session,
+        tx_runner: &mut impl RunTransaction,
+    ) -> Result<(), MailContextError> {
+        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        let tether = tx_runner.tether();
         for item in items {
-            Conversation::from(item).save(tx).await?;
+            dependency_fetcher
+                .check_api_conversation(&item.conversation, tether)
+                .await?;
+            for message in &item.messages {
+                dependency_fetcher
+                    .check_api_message_metadata(message, tether)
+                    .await?;
+            }
+        }
+
+        dependency_fetcher.fetch_and_store(api, tx_runner).await
+    }
+
+    async fn store_items(
+        items: Vec<Self::Item>,
+        changeset: &mut RebaseChangeSet,
+        tx: &Bond<'_>,
+    ) -> Result<(), MailContextError> {
+        for item in items {
+            let mut c = Conversation::from(item.conversation);
+            c.save(tx).await?;
+            changeset.add(c.id());
+
+            let ids =
+                Message::create_or_update_messages_from_metadata(item.messages, None, tx).await?;
+            changeset.add_many(ids);
         }
 
         Ok(())
@@ -359,9 +456,24 @@ impl RollbackHandler for LabelRollbackHandler {
         Ok(api.get_labels_by_ids(remote_ids.to_vec()).await?.labels)
     }
 
-    async fn store_items(items: Vec<Self::Item>, tx: &Bond<'_>) -> Result<(), MailContextError> {
+    async fn fetch_and_apply_dependencies(
+        _: &[Self::Item],
+        _: &Session,
+        _: &mut impl RunTransaction,
+    ) -> Result<(), MailContextError> {
+        //TODO(ET-5440) - labels may have parent dependencies
+        Ok(())
+    }
+
+    async fn store_items(
+        items: Vec<Self::Item>,
+        changeset: &mut RebaseChangeSet,
+        tx: &Bond<'_>,
+    ) -> Result<(), MailContextError> {
         for item in items {
-            Label::from(item).save(tx).await?;
+            let mut l = Label::from(item);
+            l.save(tx).await?;
+            changeset.add(l.id());
         }
 
         Ok(())

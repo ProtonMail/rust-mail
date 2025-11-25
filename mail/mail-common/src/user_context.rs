@@ -37,8 +37,9 @@ use proton_core_common::datatypes::{
 };
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, PaidSubscription, Role, User, UserSettings};
-use proton_core_common::services::user_issue_reporter_service::UserIssueReporterService;
-use proton_core_common::services::{EventPollConfigService, NetworkMonitorService};
+use proton_core_common::services::{
+    EventPollConfigService, NetworkMonitorService, UserIssueReporterService,
+};
 use proton_core_common::{
     ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
     services::UserMetricService,
@@ -271,6 +272,7 @@ impl MailUserContext {
                         },
                     })
                     .with_cyclic_service(QueuesService::new),
+
             };
 
             let this = builder.build(mail_context, user_context).await?;
@@ -524,7 +526,7 @@ impl MailUserContext {
     }
 
     async fn upsell_type(&self, user: User) -> MailContextResult<UpsellType> {
-        let feature_flags = self.mail_context().feature_flags();
+        let feature_flags = self.core_context().feature_flags();
         let black_friday_promo_live = feature_flags
             .get(FF_BLACK_FRIDAY)
             .await?

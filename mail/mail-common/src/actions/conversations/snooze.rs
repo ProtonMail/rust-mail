@@ -1,11 +1,11 @@
 use crate::AppError;
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
-use crate::datatypes::LocalConversationId;
-use crate::models::Conversation;
+use crate::datatypes::{LocalConversationId, RollbackItemType};
+use crate::models::{Conversation, RollbackItem};
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_action_queue::rebase::RebaseChangeSet;
+use proton_action_queue::rebase::{RebaseChangeSet, RebaseKey};
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelIdExtension;
@@ -91,6 +91,17 @@ impl Handler for SnoozeHandler {
         )
         .await?;
 
+        for id in &action.action_data.data.target_ids {
+            if let Some(api_conversation_id) = Conversation::local_id_counterpart(*id, tx).await? {
+                RollbackItem::new(
+                    api_conversation_id.into_inner(),
+                    RollbackItemType::Conversation,
+                )
+                .save(tx)
+                .await?;
+            }
+        }
+
         Ok(())
     }
 
@@ -149,13 +160,17 @@ impl Handler for SnoozeHandler {
     }
     async fn rebase_local(
         &self,
-        this_id: ActionId,
+        _: ActionId,
         action: &mut Self::Action,
-        _: &RebaseChangeSet,
+        changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        //TODO(ET-5183): Test me!
-        self.apply_local(this_id, action, tx).await?;
+        for id in &action.action_data.data.target_ids {
+            let rebase_key: RebaseKey = (*id).into();
+            if changeset.contains(&rebase_key) {
+                Conversation::snooze_unchecked(&[*id], action.snooze_until, tx).await?;
+            }
+        }
         Ok(())
     }
 }

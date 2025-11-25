@@ -9,10 +9,9 @@ use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
 use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
 use crate::draft::compose::{
     DraftAddressChangeOutput, DraftAddressChangeRequest, DraftAddressValidationResult,
-    PM_SIGNATURE_DIV_CLASS, draft_sender_addresses, encrypt_draft_body,
-    find_default_sender_address, get_alias_component, get_full_signature, inject_dark_mode,
-    maybe_sanitize, patch_draft_with_reply_mode, prepare_html_reply, prepare_text_reply,
-    resolve_sender_alias, validate_sender_address,
+    PM_SIGNATURE_DIV_CLASS, draft_sender_addresses, encrypt_draft_body, get_alias_component,
+    get_full_signature, inject_dark_mode, maybe_sanitize, patch_draft_with_reply_mode,
+    prepare_html_reply, prepare_text_reply, resolve_sender_alias, validate_sender_address,
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::draft::{
@@ -297,7 +296,10 @@ impl Draft {
                     result.email, result.error
                 );
 
-                let new_address = find_default_sender_address(tether)
+                let new_address = context
+                    .user_context()
+                    .address_service()
+                    .find_valid_sender_address()
                     .await?
                     .ok_or(OpenError::UserHasNoAddresses)?;
 
@@ -333,7 +335,10 @@ impl Draft {
 
         let mut tether = context.user_stash().connection().await?;
 
-        let address = find_default_sender_address(&tether)
+        let address = context
+            .user_context()
+            .address_service()
+            .find_valid_sender_address()
             .await?
             .ok_or(OpenError::UserHasNoAddresses)
             .inspect_err(|_| error!("No suitable address found"))?;
@@ -453,7 +458,10 @@ impl Draft {
             if let Some(e) = validate_sender_address(&address, &user) {
                 warn!("Sender address ({}) is not valid: {}", e.email, e.error);
 
-                let addr = find_default_sender_address(&tether)
+                let addr = context
+                    .user_context()
+                    .address_service()
+                    .find_valid_sender_address()
                     .await?
                     .ok_or(OpenError::UserHasNoAddresses)
                     .inspect_err(|_| error!("Failed to locate default sender address"))?;

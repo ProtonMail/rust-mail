@@ -2,15 +2,15 @@ use std::collections::BTreeMap;
 use std::sync::Weak;
 use std::time::{Duration, Instant};
 
+use crate::app_events::OnEnterForegroundEvent;
+use crate::datatypes::UnixTimestamp;
+use crate::models::{FeatureFlag, ModelExtension};
+use crate::{Context, services::Service};
+use crate::{CoreContextError, CoreContextResult};
 use anyhow::{Context as _, Result};
+use proton_core_api::services::proton::ProtonCore as _;
 use proton_core_api::services::proton::muon::common::WithTimeout;
 use proton_core_api::session::Session;
-use proton_core_common::app_events::OnEnterForegroundEvent;
-use proton_core_common::datatypes::UnixTimestamp;
-use proton_core_common::models::{FeatureFlag, ModelExtension};
-use proton_core_common::{Context, services::Service};
-use proton_core_common::{CoreContextError, CoreContextResult};
-use proton_mail_api::services::proton::ProtonMail;
 
 use stash::stash::WatcherHandle;
 use stash::watcher::TableWatcher;
@@ -29,6 +29,7 @@ pub struct FeatureFlagsService {
 }
 
 impl FeatureFlagsService {
+    #[must_use]
     pub fn new(ctx: Weak<Context>, background_task_setting: FeatureFlagsBackgroundTask) -> Self {
         Self {
             ctx,
@@ -170,7 +171,7 @@ impl Service for FeatureFlagsService {
             loop {
                 if let Err(error) = self_clone.fetch_and_update(&session).await {
                     error!(%error, "Failed to refresh feature flags");
-                };
+                }
                 let last_updated = Instant::now();
                 loop {
                     if let Ok(Err(_)) = event_stream

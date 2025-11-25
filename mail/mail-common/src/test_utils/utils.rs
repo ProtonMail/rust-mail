@@ -5,15 +5,11 @@ use crate::datatypes::{
 use crate::models::{
     Conversation, ConversationCounters, ConversationLabel, Message, MessageCounters,
 };
-use crate::test_utils::search::MY_ADDRESS_ID;
 use futures::{FutureExt as _, StreamExt};
-use proton_core_api::services::proton::{
-    Address as ApiAddress, AddressFlags, AddressStatus as ApiAddressStatus,
-    AddressType as ApiAddressType, LabelId,
-};
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
-use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
+use proton_core_common::test_utils::account::test_api_address;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
@@ -371,30 +367,7 @@ pub async fn create_address(tether: &mut Tether) -> Address {
     address
 }
 
-pub const TEST_ADDRESS_EMAIL: &str = "hello@world";
-
 #[must_use]
 pub fn test_address() -> Address {
     Address::from(test_api_address())
-}
-
-#[must_use]
-pub fn test_api_address() -> ApiAddress {
-    ApiAddress {
-        id: MY_ADDRESS_ID.clone(),
-        email: TEST_ADDRESS_EMAIL.to_owned(),
-        send: true,
-        receive: true,
-        status: ApiAddressStatus::Enabled,
-        domain_id: None,
-        address_type: ApiAddressType::Original,
-        order: 0,
-        display_name: "HelloWorld".to_owned(),
-        signature: "SIGNATURE".to_owned(),
-        keys: ApiAddressKeys::new(vec![]),
-        catch_all: false,
-        proton_mx: false,
-        signed_key_list: Default::default(),
-        flags: AddressFlags::default(),
-    }
 }

@@ -6,13 +6,12 @@ use crate::datatypes::{
     attachment,
 };
 use crate::models::{AttachmentType, Conversation, ConversationLabel, Message};
-use crate::test_utils::search::{
-    MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2, test_label1, test_label2,
-};
+use crate::test_utils::search::{MY_LABEL_ID1, MY_LABEL_ID2, test_label1, test_label2};
 use crate::test_utils::utils::{TestDBState, test_address};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelType, UnixTimestamp};
 use proton_core_common::models::Label;
+use proton_core_common::test_utils::account::MY_ADDRESS_ID;
 use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
 
 // ------- TEST DATA -------

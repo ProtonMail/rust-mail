@@ -288,4 +288,12 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
             .ok()?
             .into_body())
     }
+
+    async fn get_unleash_feature_flags(&self) -> ApiServiceResult<GetUnleashFeaturesResponse> {
+        Ok(GET!("{UNLEASH_V2}/frontend")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
 }
