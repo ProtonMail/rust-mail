@@ -127,7 +127,41 @@ where
 impl IcsRead<Value> for EmailAddress {
     fn read(r: &mut IcsReader) -> Option<Self> {
         if r.try_string("mailto:").is_some() {
-            Some(Self { value: r.value()? })
+            return Some(Self { value: r.value()? });
+        }
+
+        // RFC says that all email addresses must be prefixed by `mailto:`, but
+        // in practice some clients don't bother doing that. This forces us to
+        // inspect the string ahead of us and try to guess whether it might be
+        // an email address or not.
+        //
+        // Note that we cannot blindly assume that we're looking at an email
+        // address - that's because this parser, EmailAddress, is part of a
+        // larger type, CalAddress, where:
+        //
+        //     CalAddress = EmailAddress | UrlAddress
+        //
+        // In most cases this `mailto:` prefix is used to disambiguate between
+        // emails and urls, so when it's missing we must really take an educated
+        // guess, since we don't want to accidentally overdo and say that an URL
+        // is an email address.
+        let value = r.attempt(|r| {
+            let value = r.spanned(|r| r.attempt(Text::read))?;
+
+            let mail = email_address::EmailAddress::parse_with_options(
+                value.as_str(),
+                email_address::Options::default()
+                    .with_required_tld()
+                    .without_domain_literal()
+                    .without_display_text(),
+            );
+
+            if mail.is_ok() { Some(value) } else { None }
+        });
+
+        if let Some(value) = value {
+            r.warn(value.span, "quirky email address (missing `mailto:`)");
+            Some(Self { value: value.value })
         } else {
             r.error(Span::one(r.pos()), "expected an email address (mailto:)");
             None
@@ -201,6 +235,7 @@ impl IcsWrite<Value> for UrlAddress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
     #[test]
     fn email() {
@@ -215,14 +250,40 @@ mod tests {
     }
 
     #[test]
-    fn url() {
-        let target = CalAddress::from(UrlAddress::from("https://proton.me"));
+    fn email_without_mailto() {
+        // Technically illegal, but some clients really do forget to generate
+        // the `mailto:` bit
 
-        assert_eq!("https://proton.me", target.to_string(Value));
+        let (obj, msgs) = CalAddress::from_str_ex("someone@somewhere.com", Value);
 
         assert_eq!(
-            target,
-            CalAddress::from_str("https://proton.me", Value).unwrap()
+            Some(CalAddress::from(EmailAddress::from(
+                "someone@somewhere.com"
+            ))),
+            obj,
         );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 1), (1, 22))),
+                body: "quirky email address (missing `mailto:`)".into(),
+                kind: ReadMsgKind::Warning,
+                context: vec![Spanned::new(
+                    Span::new((1, 1), (1, 1)),
+                    "`EmailAddress`".into()
+                )],
+            }],
+            msgs,
+        );
+    }
+
+    #[test_case("https://proton.me")]
+    #[test_case("proton.me")] // without protocol
+    #[test_case("localhost")] // without TLD
+    fn url(url: &str) {
+        let target = CalAddress::from(UrlAddress::from(url));
+
+        assert_eq!(url, target.to_string(Value));
+        assert_eq!(target, CalAddress::from_str(url, Value).unwrap());
     }
 }
