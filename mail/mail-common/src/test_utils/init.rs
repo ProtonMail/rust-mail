@@ -42,46 +42,20 @@ use velcro::hash_map;
 use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockBuilder, ResponseTemplate, Times};
 
-/// Initialization parameters.
 #[derive(Clone, Default)]
 pub struct Params {
-    /// Last event id. If `None`, it will be set to `0`.
     pub last_event_id: Option<EventId>,
-
-    /// User info. If `None`, some default values will be set.
     pub user_info: Option<ApiUser>,
-
-    /// User settings. If `None`, some default values will be set.
     pub user_settings: Option<ApiUserSettings>,
-
-    /// List of user addresses.
     pub addresses: Vec<ApiAddress>,
-
-    /// Keys from other users by email in format (email, key response).
     pub recipient_keys: Vec<(String, GetKeysAllResponse)>,
-
-    /// Mail settings. If `None`, some default values will be set.
     pub mail_settings: Option<ApiMailSettings>,
-
-    /// List of labels by type.
     pub labels: HashMap<ApiLabelType, Vec<ApiLabel>>,
-
-    /// List of conversations.
     pub conversations: Vec<ApiConversation>,
-
-    /// List of attachments.
     pub attachments: Vec<ApiAttachment>,
-
-    /// List of conversation counts.
     pub conversation_count: Vec<ApiConversationCount>,
-
-    /// List of message counts.
     pub message_count: Vec<ApiMessageCount>,
-
-    /// List of contacts
     pub contacts: Vec<ApiContactBasic>,
-
-    /// List of email contacts
     pub emails: Vec<ApiContactEmail>,
 }
 
@@ -256,10 +230,6 @@ impl MailTestContext {
         self.mock_ping_success().await;
     }
 
-    /// Generate new mock expectations for retrieving conversations.
-    ///
-    /// This function will mock the response for the given conversations.
-    ///
     #[function_name::named]
     pub async fn mock_get_conversations(
         &self,
@@ -281,10 +251,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving conversations.
-    ///
-    /// This function will mock the response for the given conversations.
-    ///
     #[function_name::named]
     pub async fn mock_get_conversations_and(
         &self,
@@ -307,10 +273,6 @@ impl MailTestContext {
         .await;
     }
 
-    /// Generate new mock expectations for retrieving conversations.
-    ///
-    /// This function will mock the response for the given conversations.
-    ///
     #[function_name::named]
     pub async fn mock_get_conversations_with(&self, with: impl Fn(MockBuilder) -> Mock) {
         with(Mock::given(method("GET")).and(path("/api/mail/v4/conversations")))
@@ -319,10 +281,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock for `ping` request
-    ///
-    /// This function will mock the response any ping request, returning 200.
-    ///
     pub async fn mock_ping_success(&self) {
         Mock::given(method("GET"))
             .and(path("/api/core/v4/tests/ping"))
@@ -331,10 +289,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving conversations pages.
-    ///
-    /// This function will mock the response for the given conversations.
-    ///
     #[function_name::named]
     pub async fn mock_get_conversations_page(
         &self,
@@ -368,10 +322,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving message metadata.
-    ///
-    /// This function will mock the response for the given message metadata.
-    ///
     #[function_name::named]
     pub async fn mock_get_message_metadata(
         &self,
@@ -393,10 +343,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving message metadata.
-    ///
-    /// This function will mock the response for the given message metadata.
-    ///
     #[function_name::named]
     pub async fn mock_get_message_metadata_and(
         &self,
@@ -419,10 +365,6 @@ impl MailTestContext {
         .await;
     }
 
-    /// Generate new mock expectations for retrieving message metadata pages.
-    ///
-    /// This function will mock the response for the given message metadata.
-    ///
     #[function_name::named]
     pub async fn mock_get_message_metadata_page(
         &self,
@@ -456,10 +398,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving conversation's messages.
-    ///
-    /// This function will mock the response for the given conversations.
-    ///
     #[function_name::named]
     pub async fn mock_get_conversation_messages(
         &self,
@@ -503,10 +441,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving message counts.
-    ///
-    /// This function will mock the response for the given message counts.
-    ///
     #[function_name::named]
     pub async fn mock_get_messages_count(
         &self,
@@ -525,10 +459,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving conversation counts.
-    ///
-    /// This function will mock the response for the given conversation counts.
-    ///
     #[function_name::named]
     pub async fn mock_get_conversations_count(
         &self,
@@ -547,10 +477,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving incoming defaults.
-    ///
-    /// This function will mock the response for the given incoming defaults.
-    ///
     #[function_name::named]
     pub async fn mock_get_incoming_defaults(
         &self,

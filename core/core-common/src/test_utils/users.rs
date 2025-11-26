@@ -19,10 +19,6 @@ use wiremock::{
 };
 
 impl TestContext {
-    /// Generate new mock expectations for retrieving user settings.
-    ///
-    /// This function will mock the response for the given user settings.
-    ///
     #[function_name::named]
     pub async fn mock_get_user_settings(
         &self,
@@ -42,10 +38,6 @@ impl TestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving user information.
-    ///
-    /// This function will mock the response for the given user.
-    ///
     #[function_name::named]
     pub async fn mock_get_user(&self, user: Option<ApiUser>, expect: impl Into<Times>) {
         Mock::given(method("GET"))
