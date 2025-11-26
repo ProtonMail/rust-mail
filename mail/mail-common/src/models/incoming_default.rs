@@ -332,9 +332,10 @@ impl IncomingDefault {
 
         let page = INCOMING_DEFAULTS_PAGE_SIZE;
         let mut tasks = vec![];
+        //TODO (ET-5084): Replace with Paginatable trait
         if let Some(rem) = initial.global_total.checked_sub(page) {
             let rem = rem.div_ceil(page);
-            tracing::debug!("Requesting {rem} batches for contacts");
+            tracing::debug!("Requesting {rem} batches for incoming defaults");
             for page in 1..=rem {
                 let api = api.clone();
                 let task = tasks_service.spawn(async move {

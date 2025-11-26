@@ -4,6 +4,7 @@ mod tests;
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use proton_crypto::generate_secure_random_bytes;
+use tokio::task::JoinSet;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Returns the first grapheme of the string in uppercase.
@@ -77,4 +78,64 @@ const NONCE_SIZE: usize = 32;
 pub fn generate_csp_nonce() -> String {
     let bytes: [u8; NONCE_SIZE] = generate_secure_random_bytes();
     BASE64_STANDARD.encode(bytes)
+}
+
+pub trait PaginateOptions {
+    fn from_zero(size: usize) -> Self;
+    fn next_page(page: usize, size: usize) -> Self;
+}
+
+pub trait PaginateResponse<T> {
+    fn total(&self) -> usize;
+    fn items(self) -> Vec<T>;
+}
+
+#[allow(async_fn_in_trait)]
+pub trait Paginatable {
+    type PaginateOptions: PaginateOptions;
+    type Response: PaginateResponse<Self::Output>;
+    type Output: Sized + Send + 'static;
+    type Error: Send + 'static;
+    type API: Send + Clone + 'static;
+    const NAME: &'static str;
+    const PAGE_SIZE: usize;
+
+    fn fetch(
+        api: &Self::API,
+        options: Self::PaginateOptions,
+    ) -> impl std::future::Future<Output = Result<Self::Response, Self::Error>> + std::marker::Send;
+
+    async fn fetch_all(api: &Self::API) -> Result<Vec<Self::Output>, Self::Error> {
+        let first_response =
+            Self::fetch(api, Self::PaginateOptions::from_zero(Self::PAGE_SIZE)).await?;
+
+        let mut joinset = JoinSet::new();
+        if let Some(rem) = first_response.total().checked_sub(Self::PAGE_SIZE) {
+            let rem = rem.div_ceil(Self::PAGE_SIZE);
+            tracing::debug!("Requesting {rem} batches for {}", Self::NAME);
+            for page in 1..=rem {
+                let api = api.clone();
+                joinset.spawn(async move {
+                    Self::fetch(
+                        &api,
+                        Self::PaginateOptions::next_page(page, Self::PAGE_SIZE),
+                    )
+                    .await
+                    .map(PaginateResponse::items)
+                });
+            }
+        }
+
+        let rest = joinset.join_all().await;
+
+        let result: Vec<_> = std::iter::once(Ok(first_response.items()))
+            .chain(rest)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        tracing::debug!("Fetched {} {}", result.len(), Self::NAME);
+        Ok(result)
+    }
 }

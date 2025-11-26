@@ -245,6 +245,7 @@ impl Contact {
         let mut emails_joinset = JoinSet::new();
 
         let page = SYNC_CONTACT_PAGE_SIZE as u64;
+        //TODO (ET-5084): Replace with Paginatable trait
         if let Some(rem) = first_contacts.total.checked_sub(page) {
             let rem = rem.div_ceil(page);
             debug!("Requesting {rem} batches for contacts");
@@ -262,6 +263,7 @@ impl Contact {
             }
         }
 
+        //TODO (ET-5084): Replace with Paginatable trait
         if let Some(rem) = first_emails.total.checked_sub(page) {
             let rem = rem.div_ceil(page);
             debug!("Requesting {rem} batches for emails");
