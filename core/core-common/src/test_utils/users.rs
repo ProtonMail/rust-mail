@@ -1,5 +1,4 @@
-use std::sync::LazyLock;
-
+use crate::models::PaidSubscription;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_keys};
 use crate::test_utils::test_context::TestContext;
 use proton_core_api::services::proton::{
@@ -29,7 +28,7 @@ impl TestContext {
             .and(path("/api/core/v4/settings"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetCoreSettingsResponse {
-                    user_settings: settings.unwrap_or_else(|| DEFAULT_USER_SETTINGS.clone()),
+                    user_settings: settings.unwrap_or_else(DEFAULT_USER_SETTINGS),
                 }),
             )
             .expect(expect)
@@ -43,7 +42,7 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path("/api/core/v4/users"))
             .respond_with(ResponseTemplate::new(200).set_body_json(GetUsersResponse {
-                user: user.unwrap_or_else(|| DEFAULT_USER.clone()),
+                user: user.unwrap_or_else(DEFAULT_USER),
             }))
             .expect(expect)
             .named(function_name!())
@@ -52,7 +51,7 @@ impl TestContext {
     }
 }
 
-static DEFAULT_USER_SETTINGS: LazyLock<ApiUserSettings> = LazyLock::new(|| ApiUserSettings {
+pub const DEFAULT_USER_SETTINGS: fn() -> ApiUserSettings = || ApiUserSettings {
     email: ApiEmail {
         value: String::new(),
         status: 0,
@@ -99,9 +98,9 @@ static DEFAULT_USER_SETTINGS: LazyLock<ApiUserSettings> = LazyLock::new(|| ApiUs
         value: false,
     },
     session_account_recovery: false,
-});
+};
 
-static DEFAULT_USER: LazyLock<ApiUser> = LazyLock::new(|| ApiUser {
+pub const DEFAULT_USER: fn() -> ApiUser = || ApiUser {
     id: UserId::from(TEST_USER_ID),
     name: None,
     display_name: None,
@@ -125,7 +124,7 @@ static DEFAULT_USER: LazyLock<ApiUser> = LazyLock::new(|| ApiUser {
     mnemonic_status: ApiUserMnemonicStatus::Disabled,
     role: ApiRole::None,
     private: false,
-    subscribed: 0,
+    subscribed: PaidSubscription::MAIL.0,
     services: 0,
     delinquent: DelinquentState::Paid,
     flags: ApiFlags {
@@ -139,4 +138,4 @@ static DEFAULT_USER: LazyLock<ApiUser> = LazyLock::new(|| ApiUser {
         no_proton_address: false,
         has_a_byoe_address: false,
     },
-});
+};

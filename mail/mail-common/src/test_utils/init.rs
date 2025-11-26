@@ -160,6 +160,11 @@ impl Params {
             emails: vec![],
         }
     }
+
+    pub fn with_user(mut self, user: ApiUser) -> Self {
+        self.user_info = Some(user);
+        self
+    }
 }
 
 impl MailTestContext {
@@ -200,6 +205,7 @@ impl MailTestContext {
 
         for label_type in ALL_LABEL_TYPES {
             let labels = params.labels.remove(&label_type.into()).unwrap_or_default();
+
             self.mock_get_labels_and(
                 labels,
                 |mock| mock.and(query_param("Type", (label_type as u8).to_string())),
@@ -211,6 +217,7 @@ impl MailTestContext {
         self.core_test_context
             .mock_get_contacts_emails(Some(params.emails), number_of_calls)
             .await;
+
         self.core_test_context
             .mock_get_contacts(Some(params.contacts), number_of_calls)
             .await;
@@ -484,6 +491,7 @@ impl MailTestContext {
         expect: impl Into<Times>,
     ) {
         let incoming_defaults = incoming_defaults.unwrap_or_default();
+
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/incomingdefaults"))
             .respond_with(

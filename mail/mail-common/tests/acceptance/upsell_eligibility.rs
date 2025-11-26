@@ -1,3 +1,4 @@
+use proton_core_api::services::proton::User as ApiUser;
 use proton_core_api::services::proton::{
     GetUnleashFeaturesResponse, UnleashToggle, UnleashToggleVariant,
 };
@@ -6,6 +7,7 @@ use proton_core_common::datatypes::{
 };
 use proton_core_common::models::{DelinquentState, ModelExtension, Role};
 use proton_core_common::models::{PaidSubscription, User};
+use proton_core_common::test_utils::users::DEFAULT_USER;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::test_context::MailTestContext;
@@ -17,10 +19,15 @@ use wiremock::{Mock, ResponseTemplate};
 const FF_BLACK_FRIDAY: &str = "MailBlackFriday2025";
 const FF_BLACK_FRIDAY_WAVE2: &str = "MailBlackFriday2025Wave2";
 
+const USER: fn() -> ApiUser = || ApiUser {
+    subscribed: 0,
+    ..DEFAULT_USER()
+};
+
 #[tokio::test]
 async fn standard_upsell() {
     let ctx = MailTestContext::new().await;
-    let params = TestParams::default_basic();
+    let params = TestParams::default_basic().with_user(USER());
     ctx.setup_user(params).await;
     setup_feature_flags(&ctx, TestedFeatureFlags::default()).await;
 
@@ -36,7 +43,7 @@ async fn standard_upsell() {
 #[tokio::test]
 async fn black_friday_wave1() {
     let ctx = MailTestContext::new().await;
-    let params = TestParams::default_basic();
+    let params = TestParams::default_basic().with_user(USER());
     ctx.setup_user(params).await;
     setup_feature_flags(
         &ctx,
@@ -67,7 +74,7 @@ async fn black_friday_wave1() {
 #[tokio::test]
 async fn black_friday_wave2() {
     let ctx = MailTestContext::new().await;
-    let params = TestParams::default_basic();
+    let params = TestParams::default_basic().with_user(USER());
     ctx.setup_user(params).await;
     setup_feature_flags(
         &ctx,
@@ -97,7 +104,7 @@ async fn black_friday_wave2() {
 #[tokio::test]
 async fn black_friday_wave2_but_promo_ended() {
     let ctx = MailTestContext::new().await;
-    let params = TestParams::default_basic();
+    let params = TestParams::default_basic().with_user(USER());
     ctx.setup_user(params).await;
     setup_feature_flags(
         &ctx,
@@ -120,7 +127,7 @@ async fn black_friday_wave2_but_promo_ended() {
 #[tokio::test]
 async fn paid_user_not_eligible() {
     let ctx = MailTestContext::new().await;
-    let params = TestParams::default_basic();
+    let params = TestParams::default_basic().with_user(USER());
     ctx.setup_user(params).await;
     setup_feature_flags(&ctx, TestedFeatureFlags::default()).await;
 
@@ -142,7 +149,7 @@ async fn paid_user_not_eligible() {
 #[tokio::test]
 async fn paid_user_other_services_not_eligible() {
     let ctx = MailTestContext::new().await;
-    let params = TestParams::default_basic();
+    let params = TestParams::default_basic().with_user(USER());
     ctx.setup_user(params).await;
     setup_feature_flags(&ctx, TestedFeatureFlags::default()).await;
 
@@ -162,7 +169,7 @@ async fn paid_user_other_services_not_eligible() {
 #[tokio::test]
 async fn member_role_not_eligible() {
     let ctx = MailTestContext::new().await;
-    let params = TestParams::default_basic();
+    let params = TestParams::default_basic().with_user(USER());
     ctx.setup_user(params).await;
     setup_feature_flags(&ctx, TestedFeatureFlags::default()).await;
 
@@ -182,7 +189,7 @@ async fn member_role_not_eligible() {
 #[tokio::test]
 async fn black_friday_disabled_notifications() {
     let ctx = MailTestContext::new().await;
-    let params = TestParams::default_basic();
+    let params = TestParams::default_basic().with_user(USER());
     ctx.setup_user(params).await;
     setup_feature_flags(
         &ctx,
@@ -212,7 +219,7 @@ async fn black_friday_disabled_notifications() {
 #[tokio::test]
 async fn black_friday_delinquent_user() {
     let ctx = MailTestContext::new().await;
-    let params = TestParams::default_basic();
+    let params = TestParams::default_basic().with_user(USER());
     ctx.setup_user(params).await;
     setup_feature_flags(
         &ctx,

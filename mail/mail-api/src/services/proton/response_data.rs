@@ -166,18 +166,7 @@ pub enum PgpScheme {
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[repr(transparent)]
-pub struct PmSignature(u8);
-
-bitflags::bitflags! {
-    impl PmSignature:u8 {
-        const ENABLED = 1 << 0;
-
-        const LOCKED = 1 << 1;
-
-        // Safeguard against unknown values
-        const _ = !0;
-    }
-}
+pub struct PmSignature(pub u8);
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]

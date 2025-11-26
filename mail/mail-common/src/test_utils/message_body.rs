@@ -9,6 +9,7 @@ use proton_core_api::services::proton::{
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId, UserId};
+use proton_core_common::models::PaidSubscription;
 use proton_crypto_account::keys::{
     ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature, LocalAddressKey, LocalSignedKeyList,
     LocalUserKey, UnlockedAddressKeys,
@@ -83,7 +84,7 @@ pub fn message_body_test_user_info() -> ApiUser {
         mnemonic_status: ApiUserMnemonicStatus::Unknown,
         role: ApiRole::None,
         private: false,
-        subscribed: 0,
+        subscribed: PaidSubscription::MAIL.0,
         services: 0,
         delinquent: DelinquentState::Paid,
         flags: ApiFlags {

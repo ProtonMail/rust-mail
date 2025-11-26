@@ -5,7 +5,7 @@ use proton_core_api::services::proton::{
 };
 use proton_core_api::services::proton::{AddressId, LabelId, LabelType as ApiLabelType, UserId};
 use proton_core_common::datatypes::SystemLabel;
-use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension, PaidSubscription};
 use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
@@ -26,6 +26,7 @@ use velcro::hash_map;
 
 const TEST_USER_ID: &str =
     "jctxnoKsvmlISYpOtESCWNC4tcFbddXmcQ6yyM94YP4tBngrw4O9IKf8jxSLThqZyqFlX972kKwQCPriEeh4qg==";
+
 const TEST_USER_ADDRESS_ID: &str =
     "LGXtB3TbNifsW1elXtCp5zyysma52yRf8NZZ10pUQrJfp1QQCSoFTXcIVDCZJycme6KYHsxCE_xdneJ10dt_iA==";
 
@@ -913,7 +914,7 @@ fn test_user_info() -> ApiUser {
         mnemonic_status: ApiUserMnemonicStatus::Unknown,
         role: ApiRole::None,
         private: false,
-        subscribed: 0,
+        subscribed: PaidSubscription::MAIL.0,
         services: 0,
         delinquent: DelinquentState::NotReceived,
         flags: ApiFlags {
