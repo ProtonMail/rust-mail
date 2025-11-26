@@ -1,11 +1,11 @@
 use stash::{
     macros::Model,
     orm::Model,
+    params,
     stash::{Bond, StashError, Tether},
 };
 
 use crate::datatypes::{UnixTimestamp, UserFeatureFlagSource};
-use crate::models::ModelExtension;
 
 #[derive(Debug, Clone, PartialEq, Model)]
 #[TableName("user_feature_flags")]
@@ -23,7 +23,7 @@ pub struct UserFeatureFlag {
     pub writable: bool,
 
     #[DbField]
-    pub r#override: Option<bool>,
+    pub overrided_value: Option<bool>,
 
     #[DbField]
     pub modify_time: UnixTimestamp,
@@ -37,7 +37,24 @@ impl UserFeatureFlag {
             enabled: true,
             source: UserFeatureFlagSource::Unleash,
             writable: false,
-            r#override: None,
+            overrided_value: None,
+            modify_time,
+        }
+    }
+
+    #[must_use]
+    pub fn legacy(
+        name: impl Into<String>,
+        enabled: bool,
+        writable: bool,
+        modify_time: UnixTimestamp,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            enabled,
+            source: UserFeatureFlagSource::Legacy,
+            writable,
+            overrided_value: None,
             modify_time,
         }
     }
@@ -46,7 +63,14 @@ impl UserFeatureFlag {
         name: impl Into<String>,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        Self::find_by_id(name.into(), tether).await
+        let name: String = name.into();
+        Self::find_first(
+            // If there are two flags with the same name, use Unleash one.
+            "WHERE name = ? ORDER BY source ASC",
+            params![name],
+            tether,
+        )
+        .await
     }
 
     pub async fn save_all(new: Vec<Self>, tx: &Bond<'_>) -> Result<(), StashError> {
@@ -59,6 +83,6 @@ impl UserFeatureFlag {
 
     #[must_use]
     pub fn is_enabled(&self) -> bool {
-        self.r#override.unwrap_or(self.enabled)
+        self.overrided_value.unwrap_or(self.enabled)
     }
 }

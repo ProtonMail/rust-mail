@@ -6,17 +6,17 @@ CREATE TABLE user_feature_flags (
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     source INTEGER NOT NULL DEFAULT 0, -- 0 Unleash, 1 Legacy
     writable BOOLEAN NOT NULL,
-    override BOOLEAN,
+    overrided_value BOOLEAN,
     modify_time INTEGER NOT NULL,
 
     CHECK (
-        (source = 0 AND writable = FALSE AND override IS NULL)
+        (source = 0 AND writable = FALSE AND overrided_value IS NULL)
         OR
         (source = 1)
     )
 );
 
-INSERT INTO user_feature_flags (name, enabled, source, writable, override, modify_time)
+INSERT INTO user_feature_flags (name, enabled, source, writable, overrided_value, modify_time)
 SELECT name, enabled, 0, FALSE, NULL, modify_time
 FROM old_user_feature_flags;
 
