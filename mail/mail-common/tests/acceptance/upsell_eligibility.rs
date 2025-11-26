@@ -1,5 +1,5 @@
 use proton_core_api::services::proton::{
-    GetUnleashFeaturesResponse, UnleashToggle, UnleashToggleVariant,
+    GetLegacyFeaturesResponse, GetUnleashFeaturesResponse, UnleashToggle, UnleashToggleVariant,
 };
 use proton_core_common::datatypes::{
     BlackFridayWave, NotificationSettings, UpsellEligibility, UpsellType,
@@ -322,6 +322,18 @@ async fn setup_feature_flags(ctx: &MailTestContext, flags: TestedFeatureFlags) {
         .and(path("/api/feature/v2/frontend"))
         .respond_with(ResponseTemplate::new(200).set_body_json(mock_response))
         .named("Feature flags setup")
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetLegacyFeaturesResponse {
+                total: 0,
+                features: vec![],
+            }),
+        )
+        .named("Empty Legacy fetch")
         .mount(ctx.mock_server())
         .await;
 
