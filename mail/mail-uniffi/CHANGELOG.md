@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.158.3] - 2025-11-25
+## [mail-uniffi-v0.158.4] - 2025-11-26
 
 ### Changed
 
@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Rollback of conversations should also fetch messages
 - Rollback items also sync missing dependencies
+- [ET-5478] ics: Support email addresses without `mailto:` prefix
 
 
 ## [mail-uniffi-v0.158.2] - 2025-11-24
