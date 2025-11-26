@@ -24,7 +24,7 @@ use crate::{
     CoreContextError, CoreContextResult, UserContext,
     datatypes::{UnixTimestamp, UserFeatureFlagSource},
     models::{ModelExtension, UserFeatureFlag},
-    utils::{Paginatable, PaginateOptions, PaginateResponse},
+    utils::Paginatable,
 };
 
 #[derive(Clone)]
@@ -236,31 +236,6 @@ impl UserFeatureFlagsService {
 
 struct PaginateLegacyFeatureFlags;
 
-impl PaginateResponse<LegacyFeatureFlag> for GetLegacyFeaturesResponse {
-    fn total(&self) -> usize {
-        self.total
-    }
-
-    fn items(self) -> Vec<LegacyFeatureFlag> {
-        self.features
-    }
-}
-impl PaginateOptions for GetLegacyFeatureFlagsOptions {
-    fn from_zero(size: usize) -> Self {
-        Self {
-            page_size: size,
-            page: 0,
-        }
-    }
-
-    fn next_page(page: usize, size: usize) -> Self {
-        Self {
-            page_size: size,
-            page: page as u64,
-        }
-    }
-}
-
 impl Paginatable for PaginateLegacyFeatureFlags {
     type PaginateOptions = GetLegacyFeatureFlagsOptions;
 
@@ -274,7 +249,7 @@ impl Paginatable for PaginateLegacyFeatureFlags {
 
     const NAME: &'static str = "Legacy Feature Flags";
 
-    const PAGE_SIZE: usize = 100;
+    const PAGE_SIZE: u64 = 100;
 
     async fn fetch(
         api: &Self::API,

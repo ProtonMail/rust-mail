@@ -26,6 +26,7 @@
 //! are used by both requests and responses.
 //!
 
+use proton_api_utils::PaginateResponse;
 use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup as PublicAddressKeyGroup,
     APIUnverifiedPublicAddressKeyGroup as UnverifiedPublicAddressKeyGroup, ArmoredPrivateKey,
@@ -83,17 +84,32 @@ pub struct GetContactsEmailsResponse {
     /// TODO: Document this field.
     pub total: u64,
 }
+impl PaginateResponse<ContactEmail> for GetContactsEmailsResponse {
+    fn total(&self) -> u64 {
+        self.total
+    }
 
-/// TODO: Document this struct.
+    fn items(self) -> Vec<ContactEmail> {
+        self.contact_emails
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetContactsResponse {
-    /// TODO: Document this field.
     pub contacts: Vec<ContactBasic>,
 
-    /// TODO: Document this field.
     pub total: u64,
+}
+impl PaginateResponse<ContactBasic> for GetContactsResponse {
+    fn total(&self) -> u64 {
+        self.total
+    }
+
+    fn items(self) -> Vec<ContactBasic> {
+        self.contacts
+    }
 }
 
 /// TODO: Document this struct.
@@ -291,8 +307,17 @@ pub struct GetUnleashFeaturesResponse {
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetLegacyFeaturesResponse {
-    pub total: usize,
+    pub total: u64,
     pub features: Vec<LegacyFeatureFlag>,
+}
+impl PaginateResponse<LegacyFeatureFlag> for GetLegacyFeaturesResponse {
+    fn total(&self) -> u64 {
+        self.total
+    }
+
+    fn items(self) -> Vec<LegacyFeatureFlag> {
+        self.features
+    }
 }
 
 //  TRAITS

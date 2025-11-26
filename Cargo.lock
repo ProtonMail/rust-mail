@@ -5132,6 +5132,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-api-utils"
+version = "0.1.0"
+
+[[package]]
 name = "proton-calendar-api"
 version = "0.1.0"
 dependencies = [
@@ -5196,6 +5200,7 @@ dependencies = [
  "insta",
  "muon",
  "parking_lot",
+ "proton-api-utils",
  "proton-core-api",
  "proton-crypto-account",
  "proton-network-monitor-service",
@@ -5242,6 +5247,7 @@ dependencies = [
  "parking_lot",
  "pretty_assertions",
  "proton-action-queue",
+ "proton-api-utils",
  "proton-core-api",
  "proton-core-common",
  "proton-crypto",
@@ -5504,6 +5510,7 @@ dependencies = [
  "insta",
  "muon",
  "proton-account-api",
+ "proton-api-utils",
  "proton-core-api",
  "proton-core-common",
  "proton-crypto-inbox",

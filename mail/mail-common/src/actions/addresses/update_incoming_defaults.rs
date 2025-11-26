@@ -63,9 +63,7 @@ impl Handler for SyncIncomingDefaultsHandler {
         _: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
-
-        let data = IncomingDefault::sync(&self.api, ctx.core_context().task_service()).await?;
+        let data = IncomingDefault::sync(&self.api).await?;
 
         tracing::info!("Updating incoming defaults");
 
