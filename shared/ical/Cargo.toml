@@ -15,6 +15,7 @@ harness = false
 php = ["ext-php-rs"]
 
 [dependencies]
+email_address = { workspace = true }
 ext-php-rs = { workspace = true, optional = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
