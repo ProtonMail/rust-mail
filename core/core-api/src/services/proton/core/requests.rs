@@ -282,3 +282,14 @@ pub struct PostReportBug {
     /// Logs (filename, zipped bytes)
     pub logs: Option<(String, Vec<u8>)>,
 }
+
+#[derive(Clone, Debug, Serialize, SmartDefault)]
+#[serde(rename_all = "PascalCase")]
+pub struct GetLegacyFeatureFlagsOptions {
+    /// Page index, i.e. the page in the resultset.
+    pub page: u64,
+
+    /// Number of records per page.
+    #[default(MAX_PAGE_ELEMENT_COUNT)]
+    pub page_size: usize,
+}

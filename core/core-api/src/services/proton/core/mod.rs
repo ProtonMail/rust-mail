@@ -267,4 +267,10 @@ pub trait ProtonCore {
     /// Gets feature flags defined in Unleash service.
     /// See: <https://docs.getunleash.io/reference/api/unleash/get-frontend-features/>
     async fn get_unleash_feature_flags(&self) -> ApiServiceResult<GetUnleashFeaturesResponse>;
+
+    /// Gets feature flags defined in our own legacy service.
+    async fn get_legacy_feature_flags(
+        &self,
+        options: GetLegacyFeatureFlagsOptions,
+    ) -> ApiServiceResult<GetLegacyFeaturesResponse>;
 }

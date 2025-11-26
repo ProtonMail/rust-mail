@@ -287,6 +287,14 @@ pub struct GetUnleashFeaturesResponse {
     pub toggles: Vec<UnleashToggle>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct GetLegacyFeaturesResponse {
+    pub total: usize,
+    pub features: Vec<LegacyFeatureFlag>,
+}
+
 //  TRAITS
 //==============================================================================
 
