@@ -178,4 +178,25 @@ mod tests {
     fn smoke(s: &str) {
         assert_trip!(s, Attendee as Property);
     }
+
+    #[test]
+    fn without_mailto() {
+        // Technically illegal, but some clients really do forget to generate
+        // the `mailto:` bit
+        assert_trip!(
+            ":someone@localhost.com" => ":mailto:someone@localhost.com",
+            yielding [
+                ReadMsg {
+                    at: Some(Span::new((1, 2), (1, 23))),
+                    body: "quirky email address (missing `mailto:`)".into(),
+                    kind: ReadMsgKind::Warning,
+                    context: vec![
+                        Spanned::new(Span::new((1, 2), (1, 2)), "`CalAddress`".into()),
+                        Spanned::new(Span::new((1, 2), (1, 2)), "`EmailAddress`".into()),
+                    ],
+                },
+            ],
+            Attendee as Property
+        );
+    }
 }
