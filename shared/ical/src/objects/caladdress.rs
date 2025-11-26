@@ -153,7 +153,8 @@ impl IcsRead<Value> for EmailAddress {
                 email_address::Options::default()
                     .with_required_tld()
                     .without_domain_literal()
-                    .without_display_text(),
+                    .without_display_text()
+                    .with_long_local_parts(),
             );
 
             if mail.is_ok() { Some(value) } else { None }
