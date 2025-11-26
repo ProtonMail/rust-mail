@@ -37,7 +37,7 @@ use proton_core_api::services::proton::AddressId;
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::db::account::EncryptedPassword;
-use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension, User};
 use proton_core_common::{Origin, Platform};
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
@@ -335,6 +335,8 @@ impl Draft {
 
         let mut tether = context.user_stash().connection().await?;
 
+        let user = context.user().await?;
+
         let address = context
             .user_context()
             .address_service()
@@ -377,6 +379,7 @@ impl Draft {
 
         Ok(Self::new_empty_draft(
             metadata.id.unwrap(),
+            &user,
             &address,
             &mail_settings,
             &custom_settings,
@@ -385,6 +388,7 @@ impl Draft {
 
     pub(super) fn new_empty_draft(
         metadata_id: MetadataId,
+        user: &User,
         address: &Address,
         mail_settings: &MailSettings,
         custom_settings: &CustomSettings,
@@ -394,6 +398,7 @@ impl Draft {
         });
 
         let body = compose::get_full_signature(
+            user,
             address,
             mail_settings,
             custom_settings,
@@ -520,6 +525,7 @@ impl Draft {
                     &contact_group_resolver,
                     metadata.id.unwrap(),
                     reply_mode,
+                    &user,
                     &address,
                     &mail_settings,
                     &custom_settings,
@@ -604,6 +610,7 @@ impl Draft {
         contact_group_resolver: &impl ContactGroupResolver,
         metadata_id: MetadataId,
         reply_mode: ReplyMode,
+        user: &User,
         address: &Address,
         mail_settings: &MailSettings,
         custom_settings: &CustomSettings,
@@ -615,6 +622,7 @@ impl Draft {
         let mime_type = source_message_body.mime_type;
 
         let mut body = get_full_signature(
+            user,
             address,
             mail_settings,
             custom_settings,

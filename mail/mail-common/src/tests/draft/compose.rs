@@ -25,10 +25,17 @@ use test_case::test_case;
 
 #[test]
 fn new_draft_message_creation() {
+    let user = user();
     let address = address();
     let mail_settings = mail_settings();
     let custom_settings = custom_settings();
-    let draft = Draft::new_empty_draft(MetadataId(0), &address, &mail_settings, &custom_settings);
+    let draft = Draft::new_empty_draft(
+        MetadataId(0),
+        &user,
+        &address,
+        &mail_settings,
+        &custom_settings,
+    );
 
     assert!(draft.subject.is_empty());
     assert_eq!(draft.address_id, address.remote_id.unwrap());
@@ -360,10 +367,10 @@ async fn forward_draft_message_creation() {
 
 mod signatures {
     use super::*;
-    use crate::datatypes::PmSignature;
     use test_case::test_case;
 
     struct TestCase {
+        given_user: fn() -> User,
         given_address: fn() -> Address,
         given_mail_settings: fn() -> MailSettings,
         given_custom_settings: fn() -> CustomSettings,
@@ -373,6 +380,7 @@ mod signatures {
     }
 
     const TEST_NO_SIGNATURES: TestCase = TestCase {
+        given_user: || user().with_paying_for_mail(),
         given_address: address,
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -385,8 +393,10 @@ mod signatures {
         expected_mobile: "",
     };
 
-    // On a fresh setup, we want to have the PM signature enabled by default
+    // On a fresh setup we want to have the PM signature enabled by default even
+    // if user's paying for mail (product decision)
     const TEST_DEFAULT_CUSTOM_SETTINGS: TestCase = TestCase {
+        given_user: || user().with_paying_for_mail(),
         given_address: address,
         given_mail_settings: mail_settings,
         given_custom_settings: custom_settings,
@@ -396,6 +406,7 @@ mod signatures {
     };
 
     const TEST_ADDRESS_SIGNATURE: TestCase = TestCase {
+        given_user: || user().with_paying_for_mail(),
         given_address: || address().with_signature("cheers, jerry"),
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -409,6 +420,7 @@ mod signatures {
     };
 
     const TEST_MOBILE_SIGNATURE: TestCase = TestCase {
+        given_user: || user().with_paying_for_mail(),
         given_address: address,
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -422,6 +434,7 @@ mod signatures {
     };
 
     const TEST_DISABLED_MOBILE_SIGNATURE: TestCase = TestCase {
+        given_user: || user().with_paying_for_mail(),
         given_custom_settings: || {
             custom_settings()
                 .with_mobile_signature("sent from my iandroid")
@@ -433,6 +446,7 @@ mod signatures {
     };
 
     const TEST_ADDRESS_AND_MOBILE_SIGNATURE: TestCase = TestCase {
+        given_user: || user().with_paying_for_mail(),
         given_address: || address().with_signature("cheers, jerry"),
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -447,13 +461,14 @@ mod signatures {
     };
 
     const TEST_ADDRESS_AND_MOBILE_SIGNATURE_FREE: TestCase = TestCase {
-        given_mail_settings: || mail_settings().with_pm_signature(PmSignature::LOCKED),
+        given_user: user,
         expected_desktop: "\n\ncheers, jerry\n\nSent from Proton Mail.",
         expected_mobile: "\n\ncheers, jerry\n\nSent from Proton Mail.",
         ..TEST_ADDRESS_AND_MOBILE_SIGNATURE
     };
 
     const TEST_HTML_SIGNATURES: TestCase = TestCase {
+        given_user: || user().with_paying_for_mail(),
         given_address: || address().with_signature("cheers, <b>jerry</b>"),
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -468,6 +483,7 @@ mod signatures {
     };
 
     const TEST_HTML_SIGNATURES_TO_TEXT: TestCase = TestCase {
+        given_user: || user().with_paying_for_mail(),
         given_address: || address().with_signature("cheers, <b>jerry</b>"),
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -483,6 +499,7 @@ mod signatures {
 
     // `MailSettings.signature` is deprecated and should not be accessed
     const TEST_MAIL_SETTINGS_SIGNATURE: TestCase = TestCase {
+        given_user: || user().with_paying_for_mail(),
         given_address: address,
         given_mail_settings: || mail_settings().with_signature("med vänliga hälsningar"),
         given_custom_settings: || {
@@ -508,6 +525,7 @@ mod signatures {
     fn test(case: TestCase) {
         for platform in [Platform::Desktop, Platform::Mobile] {
             let actual = get_full_signature(
+                &(case.given_user)(),
                 &(case.given_address)(),
                 &(case.given_mail_settings)(),
                 &(case.given_custom_settings)(),
@@ -530,10 +548,13 @@ mod signatures {
 #[test]
 fn html_signature_converted_to_plain_text() {
     let signature = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">My Default Signature<br></div>"#;
+    let user = user().with_paying_for_mail();
     let address = address().with_signature(signature);
     let mail_settings = mail_settings();
     let custom_settings = custom_settings();
+
     let signature = get_full_signature(
+        &user,
         &address,
         &mail_settings,
         &custom_settings,
@@ -746,6 +767,7 @@ async fn create_reply_with_mime_and_body_and_message(
     source_body_mime_type: MessageMimeType,
     source_message: Message,
 ) -> (Draft, Message, Vec<Attachment>) {
+    let user = user().with_paying_for_mail();
     let address = address();
 
     let mail_settings = MailSettings {
@@ -771,6 +793,7 @@ async fn create_reply_with_mime_and_body_and_message(
         &resolver,
         MetadataId(0),
         reply_mode,
+        &user,
         &address,
         &mail_settings,
         &custom_settings,
@@ -782,6 +805,10 @@ async fn create_reply_with_mime_and_body_and_message(
     .await;
 
     (draft, source_message, attachments)
+}
+
+fn user() -> User {
+    User::default()
 }
 
 fn address() -> Address {

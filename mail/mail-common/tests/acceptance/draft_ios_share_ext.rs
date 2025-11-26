@@ -1,10 +1,12 @@
 use super::drafts_common::*;
 use proton_core_api::services::proton::UserId;
-use proton_core_common::test_utils::account::TEST_USER_ID;
 use proton_mail_common::{
+    IosShareExtDraft, IosShareExtension,
     draft::Draft,
-    test_utils::{message_body::message_body_test_user_secret, test_context::MailTestContext},
-    {IosShareExtDraft, IosShareExtension},
+    test_utils::{
+        message_body::{TEST_USER_ID, message_body_test_user_secret},
+        test_context::MailTestContext,
+    },
 };
 
 #[tokio::test]

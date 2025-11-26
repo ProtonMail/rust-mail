@@ -171,6 +171,12 @@ impl User {
     }
 
     #[must_use]
+    pub fn with_paying_for_mail(mut self) -> Self {
+        self.subscribed.insert(PaidSubscription::MAIL);
+        self
+    }
+
+    #[must_use]
     pub fn is_paying_for_mail(&self) -> bool {
         self.subscribed.contains(PaidSubscription::MAIL) && !self.is_deliquent()
     }

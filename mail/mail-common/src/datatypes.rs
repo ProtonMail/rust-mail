@@ -488,9 +488,8 @@ impl ToSql for PgpScheme {
 pub struct PmSignature(u8);
 
 bitflags::bitflags! {
-    impl PmSignature:u8 {
+    impl PmSignature: u8 {
         const ENABLED = 1 << 0;
-        const LOCKED = 1 << 1;
 
         // Safeguard against unknown values
         const _ = !0;
@@ -500,29 +499,20 @@ bitflags::bitflags! {
 impl PmSignature {
     #[must_use]
     pub fn is_enabled(self) -> bool {
-        self.intersects(PmSignature::ENABLED | PmSignature::LOCKED)
-    }
-
-    #[must_use]
-    pub fn is_locked(self) -> bool {
-        self.contains(Self::LOCKED)
-    }
-
-    #[must_use]
-    pub fn is_unlocked(self) -> bool {
-        !self.is_locked()
+        self.intersects(PmSignature::ENABLED)
     }
 }
 
 impl From<ApiPmSignature> for PmSignature {
     fn from(value: ApiPmSignature) -> Self {
-        Self(value.bits())
+        Self(value.0)
     }
 }
 
 impl FromSql for PmSignature {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         let val = u8::column_result(value)?;
+
         PmSignature::from_bits(val).ok_or(FromSqlError::OutOfRange(i64::from(val)))
     }
 }

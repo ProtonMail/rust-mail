@@ -124,6 +124,7 @@ fn reply_all_recipients_for_received(
 /// `mime_type` is passed in explicitly since it can be overridden when reply to html content
 /// for instance.
 pub(super) fn get_full_signature(
+    user: &User,
     address: &Address,
     mail_settings: &MailSettings,
     custom_settings: &CustomSettings,
@@ -138,15 +139,13 @@ pub(super) fn get_full_signature(
     let mut signature = String::new();
 
     let show_pm_signature = match platform {
-        Platform::Desktop => mail_settings.pm_signature.is_enabled(),
-        Platform::Mobile => mail_settings.pm_signature.is_locked(),
+        Platform::Desktop => !user.is_paying_for_mail() || mail_settings.pm_signature.is_enabled(),
+        Platform::Mobile => !user.is_paying_for_mail(),
     };
 
     let show_mobile_signature = match platform {
         Platform::Desktop => false,
-        Platform::Mobile => {
-            mail_settings.pm_signature.is_unlocked() && custom_settings.mobile_signature_enabled()
-        }
+        Platform::Mobile => user.is_paying_for_mail() && custom_settings.mobile_signature_enabled(),
     };
 
     _ = write!(
