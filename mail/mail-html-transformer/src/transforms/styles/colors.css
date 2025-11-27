@@ -1,0 +1,28 @@
+mark {
+    background-color: var(--bgcolor-mark, #ff0);
+    color: var(--color-mark, currentColor);
+}
+
+a:link {
+    color: var(--primary);
+}
+
+blockquote {
+    border-color: var(--primary) !important;
+}
+
+:root {
+    /**
+	  If we want to follow some app themes, we have to inject values and/or update --primary for link/blockquote
+
+	--background-norm: white;
+	--text-norm: #262a33;
+    */
+
+    --primary: #8a6eff;
+}
+
+body {
+    background: var(--background-norm, Canvas);
+    color: var(--text-norm, CanvasText);
+}

@@ -82,15 +82,6 @@ pre {
     word-wrap: break-word;
 }
 
-mark {
-    background-color: var(--bgcolor-mark, #ff0);
-    color: var(--color-mark, currentColor);
-}
-
-a:link {
-    color: var(--primary);
-}
-
 a:link img,
 a:visited img,
 img {
@@ -180,9 +171,8 @@ blockquote {
     padding-block: 0.2rem !important;
     padding-inline: 1.2rem !important;
     margin: 0 !important;
-    border: 3px solid var(--primary) !important;
-    border-block-width: 0 !important;
-    border-inline-end-width: 0 !important;
+    border-style: solid !important;
+    border-width: 0 !important;
     border-inline-start-width: 3px !important;
 }
 
@@ -196,21 +186,11 @@ blockquote blockquote blockquote blockquote blockquote blockquote {
 }
 
 :root {
-    /**
-	  If we want to follow some app themes, we have to inject values and/or update --primary for link/blockquote
-
-	--background-norm: white;
-	--text-norm: #262a33;
-    */
-
-    --primary: #8a6eff;
     padding: 1rem;
 }
 
 body {
     inline-size: 100%;
-    background: var(--background-norm, Canvas);
-    color: var(--text-norm, CanvasText);
     font-family:
         -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans,
         Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
@@ -230,8 +210,6 @@ body>pre:first-child {
     font-family:
         -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans,
         Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-    background: var(--background-norm, Canvas);
-    color: var(--text-norm, CanvasText);
 }
 
 /* This should not be needed, but in some cases the resulting HTML contains a <pre> within a styled body. */
@@ -242,6 +220,4 @@ body:not([class])>pre:first-child {
     font-family:
         -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans,
         Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-    background: var(--background-norm, Canvas);
-    color: var(--text-norm, CanvasText);
 }

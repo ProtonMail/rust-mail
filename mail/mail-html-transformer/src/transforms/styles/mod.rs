@@ -57,6 +57,10 @@ pub enum IncludeFullStaticCss {
     No,
 }
 
+pub fn inject_common_css(document: &NodeRef) {
+    inject_style(document, include_str!("./common.css"));
+}
+
 /// This function provides stylesheets for dark mode in plaintext messages.
 /// In plaintext we do not need to parse HTML/CSS and just need to return static
 /// stylesheets builtin in the SDK.
@@ -77,7 +81,7 @@ pub fn dark_mode_for_plaintext(
             // If dark mode is currently not supported, let's just inject static css style.
             //
             if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
-                concat!(include_str!("./common.css"), include_str!("./light.css"))
+                concat!(include_str!("./colors.css"), include_str!("./light.css"))
             } else {
                 "/* <light_css> */"
             }
@@ -85,7 +89,7 @@ pub fn dark_mode_for_plaintext(
         (_, false) => {
             // We detected, that the message can be safely rendered in the dark mode.
             if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
-                concat!(include_str!("./common.css"), include_str!("./dark.css"))
+                concat!(include_str!("./colors.css"), include_str!("./dark.css"))
             } else {
                 "/* <dark_css> */"
             }
@@ -95,7 +99,7 @@ pub fn dark_mode_for_plaintext(
             // So instead switching between light/dark CSS we can inject merged one
             if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
                 concat!(
-                    include_str!("./common.css"),
+                    include_str!("./colors.css"),
                     include_str!("./light_and_dark.css")
                 )
             } else {
@@ -174,7 +178,7 @@ pub fn inject_dark_mode(source: NodeRef, target: NodeRef, options: InjectDarkMod
             if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
                 inject_style(
                     &target,
-                    concat!(include_str!("./common.css"), include_str!("./light.css")),
+                    concat!(include_str!("./colors.css"), include_str!("./light.css")),
                 );
             } else {
                 inject_style(&target, "/* <light_css> */");
@@ -186,7 +190,7 @@ pub fn inject_dark_mode(source: NodeRef, target: NodeRef, options: InjectDarkMod
             if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
                 inject_style(
                     &target,
-                    concat!(include_str!("./common.css"), include_str!("./dark.css")),
+                    concat!(include_str!("./colors.css"), include_str!("./dark.css")),
                 );
             } else {
                 inject_style(&target, "/* <dark_css> */");
@@ -198,7 +202,7 @@ pub fn inject_dark_mode(source: NodeRef, target: NodeRef, options: InjectDarkMod
                 inject_style(
                     &target,
                     concat!(
-                        include_str!("./common.css"),
+                        include_str!("./colors.css"),
                         include_str!("./light_and_dark.css")
                     ),
                 );
@@ -221,7 +225,7 @@ pub fn inject_dark_mode(source: NodeRef, target: NodeRef, options: InjectDarkMod
                     inject_style(
                         &target,
                         concat!(
-                            include_str!("./common.css"),
+                            include_str!("./colors.css"),
                             include_str!("./light_and_dark.css")
                         ),
                     );
@@ -245,7 +249,7 @@ pub fn inject_dark_mode(source: NodeRef, target: NodeRef, options: InjectDarkMod
                 if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
                     inject_style(
                         &target,
-                        concat!(include_str!("./common.css"), include_str!("./dark.css")),
+                        concat!(include_str!("./colors.css"), include_str!("./dark.css")),
                     );
                 } else {
                     inject_style(&target, "/* <dark_css> */");

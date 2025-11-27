@@ -592,6 +592,8 @@ mime_type: {mime_type:?}"
         trusted_senders,
     );
 
+    transformer.inject_common_css();
+
     if opts.hide_remote_images && remote_images_count > 0 {
         banners.push(MessageBanner::RemoteContent);
 
