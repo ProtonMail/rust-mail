@@ -9,7 +9,7 @@ use proton_core_api::{
     service::ApiServiceError,
     services::proton::{
         GetLegacyFeatureFlagsOptions, GetLegacyFeaturesResponse, GetUnleashFeaturesResponse,
-        LegacyFeatureFlag, ProtonCore,
+        LegacyFeatureFlag, LegacyFeatureFlagType, ProtonCore,
     },
     session::Session,
 };
@@ -154,7 +154,11 @@ impl UserFeatureFlagsService {
         stash: &Stash,
         modify_time: UnixTimestamp,
     ) -> CoreContextResult<()> {
-        let response = PaginateLegacyFeatureFlags::fetch_all(api).await?;
+        let initial_flags = GetLegacyFeatureFlagsOptions {
+            feature_type: Some(LegacyFeatureFlagType::Boolean),
+            ..Default::default()
+        };
+        let response = PaginateLegacyFeatureFlags::fetch_all_filtered(api, initial_flags).await?;
 
         let mut tether = stash.connection().await?;
         let mut flags = Self::fetch_from_cache(&tether, UserFeatureFlagSource::Legacy).await;
@@ -248,8 +252,6 @@ impl Paginatable for PaginateLegacyFeatureFlags {
     type API = Session;
 
     const NAME: &'static str = "Legacy Feature Flags";
-
-    const PAGE_SIZE: u64 = 100;
 
     async fn fetch(
         api: &Self::API,

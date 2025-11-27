@@ -718,7 +718,7 @@ impl Paginatable for PaginateContacts {
 
     const NAME: &'static str = "Contacts";
 
-    const PAGE_SIZE: u64 = SYNC_CONTACT_PAGE_SIZE;
+    const DEFAULT_PAGE_SIZE: u64 = SYNC_CONTACT_PAGE_SIZE;
 
     async fn fetch(
         api: &Self::API,
@@ -742,7 +742,7 @@ impl Paginatable for PaginateEmails {
 
     const NAME: &'static str = "Emails";
 
-    const PAGE_SIZE: u64 = SYNC_CONTACT_PAGE_SIZE;
+    const DEFAULT_PAGE_SIZE: u64 = SYNC_CONTACT_PAGE_SIZE;
 
     async fn fetch(
         api: &Self::API,

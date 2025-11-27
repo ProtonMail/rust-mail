@@ -1,6 +1,7 @@
 pub trait PaginateOptions {
     fn from_zero(size: u64) -> Self;
-    fn next_page(page: u64, size: u64) -> Self;
+    fn with_page(self, page: u64) -> Self;
+    fn size(&self) -> u64;
 }
 
 pub trait PaginateResponse<T> {

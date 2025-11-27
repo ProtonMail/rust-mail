@@ -71,12 +71,12 @@ impl PaginateOptions for GetContactsEmailsOptions {
         }
     }
 
-    fn next_page(page: u64, page_size: u64) -> Self {
-        Self {
-            page,
-            page_size,
-            ..Default::default()
-        }
+    fn with_page(self, page: u64) -> Self {
+        Self { page, ..self }
+    }
+
+    fn size(&self) -> u64 {
+        self.page_size
     }
 }
 
@@ -106,12 +106,12 @@ impl PaginateOptions for GetContactsOptions {
         }
     }
 
-    fn next_page(page: u64, page_size: u64) -> Self {
-        Self {
-            page,
-            page_size,
-            ..Default::default()
-        }
+    fn with_page(self, page: u64) -> Self {
+        Self { page, ..self }
+    }
+
+    fn size(&self) -> u64 {
+        self.page_size
     }
 }
 
@@ -328,14 +328,25 @@ pub struct GetLegacyFeatureFlagsOptions {
     /// Number of records per page.
     #[default(MAX_PAGE_ELEMENT_COUNT)]
     pub page_size: u64,
+
+    #[serde(rename = "Type", skip_serializing_if = "Option::is_none")]
+    pub feature_type: Option<LegacyFeatureFlagType>,
 }
 
 impl PaginateOptions for GetLegacyFeatureFlagsOptions {
     fn from_zero(page_size: u64) -> Self {
-        Self { page: 0, page_size }
+        Self {
+            page: 0,
+            page_size,
+            ..Default::default()
+        }
     }
 
-    fn next_page(page: u64, page_size: u64) -> Self {
-        Self { page, page_size }
+    fn with_page(self, page: u64) -> Self {
+        Self { page, ..self }
+    }
+
+    fn size(&self) -> u64 {
+        self.page_size
     }
 }

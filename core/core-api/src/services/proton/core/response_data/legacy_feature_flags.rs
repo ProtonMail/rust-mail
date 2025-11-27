@@ -55,6 +55,17 @@ pub enum LegacyFeatureFlagVariant {
     Mixed(Value<serde_json::Value>),
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LegacyFeatureFlagType {
+    Boolean,
+    Integer,
+    Float,
+    String,
+    Enumeration,
+    Mixed,
+}
+
 impl LegacyFeatureFlagVariant {
     #[must_use]
     pub fn into_bool(self) -> Option<Value<bool>> {

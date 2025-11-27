@@ -329,6 +329,7 @@ impl IncomingDefault {
 }
 
 struct PaginateIncomingDefaults;
+#[derive(Clone, Copy)]
 struct IncomingDefaultPage(u64);
 
 impl PaginateOptions for IncomingDefaultPage {
@@ -336,8 +337,12 @@ impl PaginateOptions for IncomingDefaultPage {
         Self(0)
     }
 
-    fn next_page(page: u64, _size: u64) -> Self {
+    fn with_page(self, page: u64) -> Self {
         Self(page)
+    }
+
+    fn size(&self) -> u64 {
+        INCOMING_DEFAULTS_PAGE_SIZE
     }
 }
 impl Paginatable for PaginateIncomingDefaults {
@@ -353,7 +358,7 @@ impl Paginatable for PaginateIncomingDefaults {
 
     const NAME: &'static str = "Incoming Defaults";
 
-    const PAGE_SIZE: u64 = INCOMING_DEFAULTS_PAGE_SIZE;
+    const DEFAULT_PAGE_SIZE: u64 = INCOMING_DEFAULTS_PAGE_SIZE;
 
     async fn fetch(
         api: &Self::API,
