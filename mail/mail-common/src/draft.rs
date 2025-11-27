@@ -934,12 +934,12 @@ impl DraftActor {
         self.act(DraftActorMessage::GetAttachments).await?
     }
 
-    pub async fn html_head_content_for_composer(
+    pub async fn composer_content(
         &self,
         theme_opts: ThemeOpts,
         editor_id: String,
     ) -> Result<(String, String), MailContextError> {
-        self.act(|sender| DraftActorMessage::HtmlHeadForComposer {
+        self.act(|sender| DraftActorMessage::ComposerContent {
             theme_opts,
             editor_id,
             sender,
@@ -1392,8 +1392,8 @@ enum DraftActorMessage {
     #[display("GetBody")]
     GetBody(oneshot::Sender<String>),
 
-    #[display("HtmlHeadForComposer")]
-    HtmlHeadForComposer {
+    #[display("ComposerContent")]
+    ComposerContent {
         theme_opts: ThemeOpts,
         editor_id: String,
         sender: oneshot::Sender<(String, String)>,
@@ -1779,7 +1779,7 @@ impl DraftActor {
                     let _ = sender.send(draft.body().to_owned());
                 }
 
-                DraftActorMessage::HtmlHeadForComposer {
+                DraftActorMessage::ComposerContent {
                     theme_opts,
                     editor_id,
                     sender,
