@@ -8,9 +8,9 @@ use crate::{
     mail_scroller::MailScrollerSource,
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
 };
-use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
+use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::{
@@ -116,7 +116,7 @@ impl SearchScrollerSource {
                 remote_label_id,
                 search,
                 page_size,
-                ctx_cloned.action_queue(),
+                ctx_cloned.rebaseable_queue().await,
             )
             .await?;
 
@@ -150,7 +150,7 @@ impl SearchScrollerSource {
                     time,
                     search,
                     page_size,
-                    ctx_cloned.action_queue(),
+                    ctx_cloned.rebaseable_queue().await,
                 )
                 .await?;
             }
@@ -169,7 +169,7 @@ impl SearchScrollerSource {
         remote_label_id: LabelId,
         search: SearchOptions,
         page_size: usize,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
 
@@ -213,7 +213,7 @@ impl SearchScrollerSource {
         last_time: UnixTimestamp,
         search: SearchOptions,
         page_size: usize,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_time}"
@@ -254,12 +254,11 @@ impl SearchScrollerSource {
         Self::save_messages(response.messages, session, &mut tether, queue).await
     }
 
-    #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))]
     async fn save_messages(
         api_messages: Vec<ApiMessageMetadata>,
         api: &Session,
         tether: &mut Tether,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         if api_messages.is_empty() {
             return Ok(vec![]);
@@ -284,9 +283,13 @@ impl SearchScrollerSource {
                     .map(|s| s.display_order.saturating_add(1))
                     .unwrap_or_default();
 
-                let mut messages =
-                    Message::save_scroller_messages(api_messages, &mut rebase_change_set, tx)
-                        .await?;
+                let mut messages = Message::save_scroller_messages(
+                    api_messages,
+                    &mut rebase_change_set,
+                    queue.is_rebase_enabled(),
+                    tx,
+                )
+                .await?;
                 // Save all messages.
                 for message in messages.iter_mut() {
                     SearchScrollData::builder()
@@ -298,7 +301,6 @@ impl SearchScrollerSource {
                     display_order = display_order.saturating_add(1);
                 }
 
-                #[cfg(feature = "action_rebase")]
                 if let Err(e) = queue
                     .rebase_in(
                         proton_action_queue::action::ActionGroup::default(),

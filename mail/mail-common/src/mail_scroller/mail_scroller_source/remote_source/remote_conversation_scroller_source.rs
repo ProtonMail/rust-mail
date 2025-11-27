@@ -12,12 +12,11 @@ use crate::{
     models::{Conversation, ConversationScrollData},
 };
 use anyhow::anyhow;
-#[cfg(feature = "action_rebase")]
 use proton_action_queue::action::ActionGroup;
-use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::{services::proton::LabelId, session::Session};
+use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_mail_api::services::proton::prelude::GetMessagesOptions;
 use proton_mail_api::services::proton::{
@@ -66,7 +65,7 @@ impl RemoteSource for ConversationScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.action_queue(),
+                ctx_cloned.rebaseable_queue().await,
             )
             .await?;
 
@@ -150,7 +149,7 @@ impl RemoteSource for ConversationScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.action_queue(),
+                ctx_cloned.rebaseable_queue().await,
             )
             .await?;
 
@@ -201,7 +200,7 @@ impl RemoteConversationScrollerSource {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.action_queue(),
+                ctx_cloned.rebaseable_queue().await,
             )
             .await?;
 
@@ -222,7 +221,7 @@ impl RemoteConversationScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
 
@@ -293,7 +292,7 @@ impl RemoteConversationScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!(
             "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
@@ -368,7 +367,7 @@ impl RemoteConversationScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         tracing::info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
@@ -471,7 +470,6 @@ impl RemoteConversationScrollerSource {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg_attr(feature = "action_rebase", allow(unused_variables))]
     async fn save_conversations(
         local_label_id: LocalLabelId,
         remote_label_id: &LabelId,
@@ -484,7 +482,7 @@ impl RemoteConversationScrollerSource {
         order_field: ScrollOrderField,
         api: &Session,
         tether: &mut Tether,
-        #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))] queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<(), MailContextError> {
         // Resolve missing dependencies.
         let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
@@ -509,25 +507,26 @@ impl RemoteConversationScrollerSource {
                 for conversation in conversations.iter_mut() {
                     // since we now fetch the messages, this should be set to true.
                     conversation.has_messages = true;
-                    #[cfg(not(feature = "action_rebase"))]
-                    {
+                    if queue.is_rebase_enabled() {
+                        use stash::orm::Model;
+                        conversation.save(tx).await?;
+                        rebase_change_set.add(conversation.id());
+                    } else {
                         conversation
                             .create_or_get_local(remote_label_id, &mut rebase_change_set, tx)
                             .await?;
                     }
-                    #[cfg(feature = "action_rebase")]
-                    {
-                        use stash::orm::Model;
-                        conversation.save(tx).await?;
-                        rebase_change_set.add(conversation.id());
-                    }
                 }
 
-                Message::save_scroller_messages(message_metadata, &mut rebase_change_set, tx)
-                    .await?;
+                Message::save_scroller_messages(
+                    message_metadata,
+                    &mut rebase_change_set,
+                    queue.is_rebase_enabled(),
+                    tx,
+                )
+                .await?;
 
                 // We don't want this to cause failures in the scroller.
-                #[cfg(feature = "action_rebase")]
                 if let Err(e) = queue
                     .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                     .await

@@ -7,10 +7,10 @@ use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_core_db, verify_core_db};
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
-use crate::services::AddressService;
+use crate::services::{AddressService, FeatureFlagsService};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::subscriber::CoreEventLoopContext;
-use proton_action_queue::queue::{self, Queue};
+use proton_action_queue::queue::{self, Queue, QueuedResult};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Session;
 use proton_event_loop::EventPoll;
@@ -18,7 +18,7 @@ use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use services::PaymentsService;
 use stash::orm::Model;
-use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
+use stash::stash::{Bond, Stash, StashConfiguration, StashError, WatcherHandle};
 use stash::watcher::TableWatcher;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -29,8 +29,11 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
+use crate::services::feature_flags::MAIL_ET_REBASE_FEATURE_KEY;
 use crate::services::user_issue_reporter_service::UserIssueReporterService;
 use anyhow::anyhow;
+use proton_action_queue::action::ActionGroup;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_issue_reporter_service::{IssueLevel, IssueReportKeys};
 use tokio::task::{self, JoinHandle};
@@ -60,6 +63,42 @@ pub trait UserDatabaseInitializer: Send + Sync {
         Self: Sized + 'static,
     {
         Box::new(self)
+    }
+}
+
+/// Smaller helper type to avoid having to remember to check a feature flag manually.
+#[derive(Default)]
+pub struct RebasableQueue<'a>(Option<&'a Queue>);
+
+impl RebasableQueue<'_> {
+    pub async fn rebase(
+        &self,
+        action_group: ActionGroup,
+        changeset: &RebaseChangeSet,
+    ) -> QueuedResult<()> {
+        if let Some(queue) = self.0 {
+            queue.rebase(action_group, changeset).await
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn rebase_in(
+        &self,
+        action_group: ActionGroup,
+        changeset: &RebaseChangeSet,
+        tx: &Bond<'_>,
+    ) -> QueuedResult<()> {
+        if let Some(queue) = self.0 {
+            queue.rebase_in(action_group, changeset, tx).await
+        } else {
+            Ok(())
+        }
+    }
+
+    #[must_use]
+    pub fn is_rebase_enabled(&self) -> bool {
+        self.0.is_some()
     }
 }
 
@@ -450,6 +489,20 @@ impl UserContext {
     #[must_use]
     pub fn address_service(&self) -> &AddressService {
         self.get_service::<AddressService>()
+    }
+
+    pub async fn has_rebase_feature(&self) -> bool {
+        self.context
+            .get_service::<FeatureFlagsService>()
+            .get(MAIL_ET_REBASE_FEATURE_KEY)
+            .await
+            .inspect_err(|e| error!("Failed to load feature flag: {e}"))
+            .unwrap_or_default()
+            .unwrap_or(false)
+    }
+
+    pub async fn rebaseable_queue(&self) -> RebasableQueue {
+        RebasableQueue(self.has_rebase_feature().await.then_some(&self.queue))
     }
 }
 

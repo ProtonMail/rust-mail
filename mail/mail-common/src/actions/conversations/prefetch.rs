@@ -99,7 +99,7 @@ impl Handler for PrefetchHandler {
             &mut guard,
             ctx.session(),
             false,
-            ctx.action_queue(),
+            ctx.rebaseable_queue().await,
         )
         .await;
 

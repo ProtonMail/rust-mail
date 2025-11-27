@@ -11,11 +11,10 @@ use crate::{
     models::{Message, MessageScrollData},
 };
 use anyhow::anyhow;
-#[cfg(feature = "action_rebase")]
 use proton_action_queue::action::ActionGroup;
-use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
+use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions, prelude::GetMessagesResponse,
@@ -59,7 +58,7 @@ impl RemoteSource for MessageScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.action_queue(),
+                ctx_cloned.rebaseable_queue().await,
             )
             .await?;
 
@@ -142,7 +141,7 @@ impl RemoteSource for MessageScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.action_queue(),
+                ctx_cloned.rebaseable_queue().await,
             )
             .await?;
 
@@ -193,7 +192,7 @@ impl RemoteMessageScrollerSource {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.action_queue(),
+                ctx_cloned.rebaseable_queue().await,
             )
             .await?;
 
@@ -214,7 +213,7 @@ impl RemoteMessageScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!("Syncing first page in {remote_label_id:?}");
 
@@ -267,7 +266,7 @@ impl RemoteMessageScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
@@ -336,7 +335,7 @@ impl RemoteMessageScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         tracing::info!(
             "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
@@ -391,7 +390,7 @@ impl RemoteMessageScrollerSource {
         order_field: ScrollOrderField,
         api: &Session,
         tether: &mut Tether,
-        #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))] queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         if api_messages.is_empty() {
             return Ok(vec![]);
@@ -413,12 +412,15 @@ impl RemoteMessageScrollerSource {
                 // Save all messages.
                 let mut rebase_change_set = RebaseChangeSet::default();
 
-                let messages =
-                    Message::save_scroller_messages(api_messages, &mut rebase_change_set, tx)
-                        .await?;
+                let messages = Message::save_scroller_messages(
+                    api_messages,
+                    &mut rebase_change_set,
+                    queue.is_rebase_enabled(),
+                    tx,
+                )
+                .await?;
 
                 // We don't want this to cause failures in the scroller.
-                #[cfg(feature = "action_rebase")]
                 if let Err(e) = queue
                     .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                     .await

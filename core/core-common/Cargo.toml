@@ -86,4 +86,3 @@ test-utils = [
   "dep:rand",
   "proton-core-api/mocks",
 ]
-action_rebase = ["proton-action-queue/rebase"]

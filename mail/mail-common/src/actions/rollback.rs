@@ -77,7 +77,7 @@ impl Handler for RollbackActionHandler {
             ctx.session(),
             &mut writer_guard,
             Some(ROLLBACK_BATCH_SIZE),
-            ctx.action_queue(),
+            &ctx.rebaseable_queue().await,
         )
         .await?;
 

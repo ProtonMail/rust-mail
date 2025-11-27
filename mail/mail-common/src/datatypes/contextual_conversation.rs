@@ -14,9 +14,9 @@ use crate::models::{
 use crate::{AppError, MailContextResult, MailUserContext};
 use futures::try_join;
 use itertools::Itertools;
-use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::session::Session;
+use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::{Label, LabelError, ModelExtension, ModelIdExtension as _, User};
 use proton_core_common::services::NetworkMonitorService;
@@ -230,7 +230,7 @@ impl ContextualConversation {
                     view_options,
                     stash,
                     api,
-                    ctx.action_queue(),
+                    ctx.rebaseable_queue().await,
                 )
                 .await?
             }
@@ -242,7 +242,7 @@ impl ContextualConversation {
                     view_options,
                     stash,
                     api,
-                    ctx.action_queue(),
+                    ctx.rebaseable_queue().await,
                 )
                 .await?
             }
@@ -277,7 +277,7 @@ impl ContextualConversation {
         view_options: ConversationViewOptions,
         stash: &Stash,
         api: &Session,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection().await?;
@@ -348,7 +348,8 @@ impl ContextualConversation {
         view_options: ConversationViewOptions,
         stash: &Stash,
         api: &Session,
-        queue: &Queue,
+        // set to some for rebasing
+        queue: RebasableQueue<'_>,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         Self::conversation_and_messages_impl(
             network_monitor_service,
@@ -371,7 +372,7 @@ impl ContextualConversation {
         view_options: ConversationViewOptions,
         stash: &Stash,
         api: &Session,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         Self::conversation_and_messages_impl(
             network_monitor_service,
@@ -395,7 +396,7 @@ impl ContextualConversation {
         stash: &Stash,
         api: &Session,
         extra_sync_allowed: bool,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection().await?;
