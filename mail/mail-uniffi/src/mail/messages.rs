@@ -9,7 +9,8 @@
 //!
 
 use super::datatypes::{
-    AllListActions, AllMessageActions, Message, MessageActionSheet, MobileAction,
+    AllListActions, AllMessageActions, AttachmentMetadata, Message, MessageActionSheet,
+    MobileAction,
 };
 use super::datatypes::{LabelAsAction, MimeType, MoveAction};
 use super::state::MailUserContextPtr;
@@ -40,8 +41,8 @@ use proton_mail_common::Unexpected;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{
-    ConversationViewOptions, LocalConversationId, MobileAction as RealMobileAction,
-    ParsedHeaderValue,
+    AttachmentMetadata as RealAttachmentMetadata, ConversationViewOptions, LocalConversationId,
+    MobileAction as RealMobileAction, ParsedHeaderValue,
 };
 use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
@@ -96,6 +97,19 @@ impl DecryptedMessage {
         .await
         .map_err(ProtonError::from)
         .into()
+    }
+
+    /// The full attachment list contained inside the message body.
+    ///
+    /// Message/Conversation attachments are limited to only 10.
+    pub fn attachments(&self) -> Vec<AttachmentMetadata> {
+        self.body
+            .metadata
+            .attachments
+            .iter()
+            .cloned()
+            .map(|a| RealAttachmentMetadata::from(a).into())
+            .collect()
     }
 
     #[must_use]
