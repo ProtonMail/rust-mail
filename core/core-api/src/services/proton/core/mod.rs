@@ -273,4 +273,11 @@ pub trait ProtonCore {
         &self,
         options: GetLegacyFeatureFlagsOptions,
     ) -> ApiServiceResult<GetLegacyFeaturesResponse>;
+
+    /// Override a legacy feature flag value.
+    async fn put_feature_flag_override(
+        &self,
+        flag_name: &str,
+        new_value: bool,
+    ) -> ApiServiceResult<()>;
 }

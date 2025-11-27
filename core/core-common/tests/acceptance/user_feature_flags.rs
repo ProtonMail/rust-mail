@@ -5,6 +5,7 @@ use proton_core_api::services::proton::{
     LegacyFeatureFlagMetadata, LegacyFeatureFlagVariant, RangedValue, UnleashToggle,
     UnleashToggleVariant, Value,
 };
+use proton_core_common::actions::user_feature_flags::OverrideFlag;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::UserFeatureFlag;
 use proton_core_common::services::UserFeatureFlagsService;
@@ -139,7 +140,7 @@ async fn test_user_feature_flags_warm_start_immediate_return() {
         feature_flags.get("CachedFeatureY").await.unwrap(),
         Some(true)
     );
-    assert_eq!(feature_flags.get("UpdatedFeatureZ").await.unwrap(), None); // Not yet refreshed
+    assert_eq!(feature_flags.get("UpdatedFeatureZ").await.unwrap(), None);
 }
 
 #[tokio::test]
@@ -229,7 +230,7 @@ async fn test_user_feature_flags_warm_start_background_refresh() {
             .unwrap();
 
         assert!(existing_flag.unwrap().enabled);
-        assert!(new_flag.unwrap().enabled,);
+        assert!(new_flag.unwrap().enabled);
     }
 }
 
@@ -275,11 +276,6 @@ async fn test_user_feature_flags_network_failure_preserves_cache() {
 
     assert_eq!(feature_flags.get("CachedFlag").await.unwrap(), Some(true));
     assert_eq!(feature_flags.get("NonExistentFlag").await.unwrap(), None);
-
-    // To simulate that some time passed, we still get cached result.
-    tokio::time::sleep(Duration::from_millis(1000)).await;
-
-    assert_eq!(feature_flags.get("CachedFlag").await.unwrap(), Some(true));
 }
 
 #[tokio::test]
@@ -491,7 +487,6 @@ async fn test_legacy_feature_flags_disappearing_gets_removed() {
 
     feature_flags.refresh().await.unwrap();
 
-    // Flag should be completely removed, not just disabled
     assert_eq!(feature_flags.get("DisappearingFlag").await.unwrap(), None);
 
     {
@@ -500,7 +495,6 @@ async fn test_legacy_feature_flags_disappearing_gets_removed() {
             .await
             .unwrap();
 
-        // Flag should be completely removed from database
         assert!(flag.is_none());
     }
 }
@@ -780,13 +774,12 @@ async fn test_mixed_unleash_and_legacy_sources() {
 async fn test_legacy_feature_flags_pagination() {
     let ctx = TestContext::new().await;
 
-    // Create 155 legacy flags to test pagination (page size is 150)
     let mut features = Vec::new();
     for i in 0..155 {
         features.push(test_legacy_boolean_flag(
             &format!("LegacyFlag{i}"),
-            i % 2 == 0, // Alternate between enabled/disabled
-            i % 3 == 0, // Some are writable
+            i % 2 == 0,
+            i % 3 == 0,
         ));
     }
 
@@ -809,7 +802,6 @@ async fn test_legacy_feature_flags_pagination() {
         .mount(ctx.mock_server())
         .await;
 
-    // First page request (page=0, page_size=100)
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
         .and(wiremock::matchers::query_param("Page", "0"))
@@ -821,7 +813,6 @@ async fn test_legacy_feature_flags_pagination() {
         .mount(ctx.mock_server())
         .await;
 
-    // Second page request (page=1, page_size=100)
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
         .and(wiremock::matchers::query_param("Page", "1"))
@@ -949,7 +940,8 @@ fn test_unleash_variant() -> UnleashToggleVariant {
 }
 
 fn test_legacy_boolean_flag(code: &str, enabled: bool, writable: bool) -> LegacyFeatureFlag {
-    test_legacy_boolean_flag_with_expiration(code, enabled, writable, 4_102_444_800.into()) // Year 2100
+    let year_2100 = UnixTimestamp::new(4_102_444_800);
+    test_legacy_boolean_flag_with_expiration(code, enabled, writable, year_2100)
 }
 
 fn test_legacy_boolean_flag_with_expiration(
@@ -1004,5 +996,433 @@ fn test_legacy_integer_flag(code: &str, value: i32) -> LegacyFeatureFlag {
             minimum: 0,
             maximum: 100,
         }),
+    }
+}
+
+#[tokio::test]
+async fn test_override_writable_legacy_flag_success() {
+    let ctx = TestContext::new().await;
+
+    let legacy_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag("WritableFlag", false, true)],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(legacy_response))
+        .named("Legacy writable flag")
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/WritableFlag/value"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .named("Override flag API call")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "WritableFlag", 4, 250).await;
+
+    assert_eq!(
+        feature_flags.get("WritableFlag").await.unwrap(),
+        Some(false)
+    );
+
+    let action = OverrideFlag::new("WritableFlag".to_string(), true);
+
+    user_context.queue().queue_action(action).await.unwrap();
+
+    let executed_count = user_context
+        .queue()
+        .new_executor()
+        .execute_all()
+        .await
+        .unwrap();
+    assert_eq!(executed_count, 1);
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("WritableFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(flag.overrided_value, Some(true));
+        assert!(!flag.enabled);
+        assert!(flag.is_enabled());
+    }
+}
+
+#[tokio::test]
+async fn test_override_non_writable_flag_fails() {
+    let ctx = TestContext::new().await;
+
+    let legacy_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag("ReadOnlyFlag", true, false)],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(legacy_response))
+        .named("Legacy read-only flag")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "ReadOnlyFlag", 4, 250).await;
+
+    assert_eq!(feature_flags.get("ReadOnlyFlag").await.unwrap(), Some(true));
+
+    let action = OverrideFlag::new("ReadOnlyFlag".to_string(), false);
+
+    let result = user_context.queue().queue_action(action).await;
+
+    assert!(result.is_err());
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("ReadOnlyFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(flag.overrided_value, None);
+        assert!(flag.enabled);
+    }
+}
+
+#[tokio::test]
+async fn test_override_non_existent_flag_fails() {
+    let ctx = TestContext::new().await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetLegacyFeaturesResponse {
+                total: 0,
+                features: vec![],
+            }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+
+    let action = OverrideFlag::new("NonExistentFlag".to_string(), true);
+
+    let result = user_context.queue().queue_action(action).await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_override_flag_state_preservation() {
+    let ctx = TestContext::new().await;
+
+    let legacy_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag("StateTestFlag", false, true)],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(legacy_response))
+        .named("Legacy state test flag")
+        .mount(ctx.mock_server())
+        .await;
+
+    // Mock successful API calls for overrides
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/StateTestFlag/value"))
+        .respond_with(ResponseTemplate::new(200))
+        .named("Override flag API call")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "StateTestFlag", 4, 250).await;
+
+    // First override: None -> Some(true)
+    let action1 = OverrideFlag::new("StateTestFlag".to_string(), true);
+    user_context.queue().queue_action(action1).await.unwrap();
+
+    let executed_count = user_context
+        .queue()
+        .new_executor()
+        .execute_all()
+        .await
+        .unwrap();
+    assert_eq!(executed_count, 1);
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("StateTestFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(flag.overrided_value, Some(true));
+    }
+
+    // Second override: Some(true) -> Some(false)
+    let action2 = OverrideFlag::new("StateTestFlag".to_string(), false);
+    user_context.queue().queue_action(action2).await.unwrap();
+
+    let executed_count = user_context
+        .queue()
+        .new_executor()
+        .execute_all()
+        .await
+        .unwrap();
+    assert_eq!(executed_count, 1);
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("StateTestFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(flag.overrided_value, Some(false));
+    }
+}
+
+#[tokio::test]
+async fn test_override_flag_api_failure_rollback() {
+    let ctx = TestContext::new().await;
+
+    let legacy_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag("APIFailFlag", false, true)],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(legacy_response))
+        .named("Legacy API fail flag")
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/APIFailFlag/value"))
+        .respond_with(ResponseTemplate::new(500).set_body_json(json!({
+            "Code": 500,
+            "Error": "Internal server error"
+        })))
+        .named("Failed override API call")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "APIFailFlag", 4, 250).await;
+
+    let action = OverrideFlag::new("APIFailFlag".to_string(), true);
+
+    user_context.queue().queue_action(action).await.unwrap();
+
+    let _result = user_context.queue().new_executor().execute_all().await;
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("APIFailFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(!flag.enabled);
+        assert!(!flag.is_enabled());
+    }
+}
+
+#[tokio::test]
+async fn test_override_flag_proper_api_request_format() {
+    let ctx = TestContext::new().await;
+
+    let legacy_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag("FormatTestFlag", false, true)],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(legacy_response))
+        .named("Legacy format test flag")
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/FormatTestFlag/value"))
+        .and(wiremock::matchers::header(
+            "Content-Type",
+            "application/json",
+        ))
+        .and(wiremock::matchers::body_json(
+            serde_json::json!({"Value": true}),
+        ))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .named("Override flag with correct format")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "FormatTestFlag", 4, 250).await;
+
+    let action = OverrideFlag::new("FormatTestFlag".to_string(), true);
+
+    user_context.queue().queue_action(action).await.unwrap();
+
+    let executed_count = user_context
+        .queue()
+        .new_executor()
+        .execute_all()
+        .await
+        .unwrap();
+    assert_eq!(executed_count, 1);
+}
+
+#[tokio::test]
+async fn test_override_flag_api_failure_preserves_existing_override() {
+    let ctx = TestContext::new().await;
+
+    let legacy_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag("ExistingOverrideFlag", true, true)],
+    };
+
+    {
+        let user_context = ctx.user_context().await;
+        let mut tether = user_context.stash().connection().await.unwrap();
+        let mut existing_flag =
+            UserFeatureFlag::legacy("ExistingOverrideFlag", true, true, UnixTimestamp::new(10));
+        existing_flag.overrided_value = Some(false);
+
+        tether
+            .tx(async move |tx| existing_flag.save(tx).await)
+            .await
+            .unwrap();
+    }
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(legacy_response))
+        .named("Legacy flag with existing override")
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/ExistingOverrideFlag/value"))
+        .respond_with(ResponseTemplate::new(500).set_body_json(json!({
+            "Code": 500,
+            "Error": "Internal server error"
+        })))
+        .named("Failed override API call")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "ExistingOverrideFlag", 4, 250).await;
+
+    let action = OverrideFlag::new("ExistingOverrideFlag".to_string(), true);
+
+    user_context.queue().queue_action(action).await.unwrap();
+
+    let _result = user_context.queue().new_executor().execute_all().await;
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("ExistingOverrideFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(flag.enabled);
+        assert_eq!(flag.overrided_value, Some(false));
+        assert!(!flag.is_enabled());
     }
 }

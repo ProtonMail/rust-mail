@@ -22,6 +22,7 @@ use proton_account_uniffi::password::PasswordFlow;
 use proton_account_uniffi::password_validator::PasswordValidatorService;
 use proton_core_api::services::proton::ProtonAuth;
 use proton_core_common::UserContext;
+use proton_core_common::actions::user_feature_flags::OverrideFlag;
 use proton_core_common::services::PaymentsService;
 use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
@@ -719,6 +720,30 @@ impl MailUserSession {
                 .map_err(RealProtonMailError::from)?;
             Ok(Arc::new(WatchUserFeatureFlagsStream { handle }))
         })
+    }
+
+    pub async fn override_user_feature_flag(
+        &self,
+        flag_name: String,
+        new_value: bool,
+    ) -> Result<(), ActionError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            let action = OverrideFlag::new(flag_name, new_value);
+            ctx.user_context()
+                .queue()
+                .queue_action(action)
+                .await
+                .map_err(|e| {
+                    RealProtonMailError::Unexpected(
+                        anyhow::anyhow!("Feature flag override failed: {e}").into(),
+                    )
+                })?;
+            Ok::<_, RealProtonMailError>(())
+        })
+        .await
+        .map_err(ActionError::from)
     }
 }
 
