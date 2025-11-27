@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use muon::common::{RetryPolicy, Sender};
-use muon::http::AsQuery;
 use muon::util::ProtonRequestExt;
 use muon::{DELETE, GET, PATCH, POST, PUT};
 use muon::{ProtonRequest, ProtonResponse, serde_to_query};
