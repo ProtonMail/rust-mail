@@ -435,7 +435,7 @@ async fn test_legacy_feature_flags_writable_property() {
 }
 
 #[tokio::test]
-async fn test_legacy_feature_flags_disappearing_becomes_disabled() {
+async fn test_legacy_feature_flags_disappearing_gets_removed() {
     let ctx = TestContext::new().await;
 
     {
@@ -491,20 +491,17 @@ async fn test_legacy_feature_flags_disappearing_becomes_disabled() {
 
     feature_flags.refresh().await.unwrap();
 
-    assert_eq!(
-        feature_flags.get("DisappearingFlag").await.unwrap(),
-        Some(false)
-    );
+    // Flag should be completely removed, not just disabled
+    assert_eq!(feature_flags.get("DisappearingFlag").await.unwrap(), None);
 
     {
         let tether = user_context.stash().connection().await.unwrap();
         let flag = UserFeatureFlag::by_name("DisappearingFlag", &tether)
             .await
-            .unwrap()
             .unwrap();
 
-        assert!(!flag.enabled);
-        assert!(flag.writable);
+        // Flag should be completely removed from database
+        assert!(flag.is_none());
     }
 }
 
@@ -683,18 +680,16 @@ async fn test_legacy_feature_flag_becomes_expired_disabled() {
 
     assert_eq!(
         feature_flags.get("BecomingExpiredFlag").await.unwrap(),
-        Some(false)
+        None
     );
 
     {
         let tether = user_context.stash().connection().await.unwrap();
         let flag = UserFeatureFlag::by_name("BecomingExpiredFlag", &tether)
             .await
-            .unwrap()
             .unwrap();
 
-        assert!(!flag.enabled);
-        assert!(flag.writable);
+        assert!(flag.is_none());
     }
 }
 

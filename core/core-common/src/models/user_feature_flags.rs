@@ -3,6 +3,7 @@ use stash::{
     orm::Model,
     params,
     stash::{Bond, StashError, Tether},
+    utils::{IterMapToSql, placeholders_n},
 };
 
 use crate::datatypes::{UnixTimestamp, UserFeatureFlagSource};
@@ -78,6 +79,23 @@ impl UserFeatureFlag {
             Self::save(&mut flag, tx).await?;
         }
 
+        Ok(())
+    }
+
+    pub async fn delete_batch_from_source(
+        names: Vec<String>,
+        source: UserFeatureFlagSource,
+        tx: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        tx.execute(
+            format!(
+                "DELETE FROM {} WHERE name IN ({}) AND source = ?",
+                Self::table_name(),
+                placeholders_n(names.len())
+            ),
+            names.bridge_sql_iter().chain(params![source]).collect(),
+        )
+        .await?;
         Ok(())
     }
 

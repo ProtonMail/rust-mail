@@ -27,6 +27,11 @@ use crate::{
     utils::Paginatable,
 };
 
+enum FlagPersistence {
+    Persist,
+    DontPersist,
+}
+
 #[derive(Clone)]
 pub struct UserFeatureFlagsService {
     ctx: Weak<UserContext>,
@@ -92,7 +97,7 @@ impl UserFeatureFlagsService {
     }
 
     fn set_flags_from_legacy(
-        flags: &mut BTreeMap<String, UserFeatureFlag>,
+        flags: &mut BTreeMap<String, (UserFeatureFlag, FlagPersistence)>,
         api_flags: Vec<LegacyFeatureFlag>,
         now: UnixTimestamp,
     ) {
@@ -112,17 +117,21 @@ impl UserFeatureFlagsService {
         for (metadata, value) in boolean_features {
             let enabled = value.value;
 
-            let flag = flags
-                .entry(metadata.code.clone())
-                .or_insert_with(|| UserFeatureFlag {
-                    name: metadata.code,
-                    enabled,
-                    source: UserFeatureFlagSource::Legacy,
-                    writable: metadata.writable,
-                    overrided_value: None,
-                    modify_time: now,
-                });
+            let (flag, persistence) = flags.entry(metadata.code.clone()).or_insert_with(|| {
+                (
+                    UserFeatureFlag {
+                        name: metadata.code,
+                        enabled,
+                        source: UserFeatureFlagSource::Legacy,
+                        writable: metadata.writable,
+                        overrided_value: None,
+                        modify_time: now,
+                    },
+                    FlagPersistence::Persist,
+                )
+            });
 
+            *persistence = FlagPersistence::Persist;
             flag.enabled = enabled;
             flag.source = UserFeatureFlagSource::Legacy;
             flag.writable = metadata.writable;
@@ -164,14 +173,34 @@ impl UserFeatureFlagsService {
         let response = PaginateLegacyFeatureFlags::fetch_all_filtered(api, initial_flags).await?;
 
         let mut tether = stash.connection().await?;
-        let mut flags = Self::fetch_from_cache(&tether, UserFeatureFlagSource::Legacy).await;
+        let mut cached_flags = Self::fetch_from_cache(&tether, UserFeatureFlagSource::Legacy)
+            .await
+            .into_iter()
+            .map(|(key, flag)| (key, (flag, FlagPersistence::DontPersist)))
+            .collect::<BTreeMap<_, _>>();
 
-        Self::set_flags_from_legacy(&mut flags, response, modify_time);
+        Self::set_flags_from_legacy(&mut cached_flags, response, modify_time);
 
-        let flags = flags.into_values().collect();
+        let mut flags_to_remove = Vec::new();
+        let mut flags_to_save = Vec::new();
+
+        for (name, (flag, persistence)) in cached_flags {
+            match persistence {
+                FlagPersistence::Persist => flags_to_save.push(flag),
+                FlagPersistence::DontPersist => flags_to_remove.push(name),
+            }
+        }
 
         tether
-            .tx(async |tx| UserFeatureFlag::save_all(flags, tx).await)
+            .tx(async |tx| {
+                UserFeatureFlag::delete_batch_from_source(
+                    flags_to_remove,
+                    UserFeatureFlagSource::Legacy,
+                    tx,
+                )
+                .await?;
+                UserFeatureFlag::save_all(flags_to_save, tx).await
+            })
             .await?;
         Ok(())
     }
