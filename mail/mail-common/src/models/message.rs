@@ -24,7 +24,6 @@ use crate::models::*;
 use crate::{MailContextError, find_in_query};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
-#[cfg(feature = "action_rebase")]
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::enqueue;
@@ -60,6 +59,7 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_api::services::proton::{PrivateEmail, PrivateString};
+use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{
     LabelType, LocalAddressId, LocalLabelId, SystemLabel, UnixTimestamp,
 };
@@ -691,22 +691,21 @@ impl Message {
     pub async fn create_or_get_local(
         &mut self,
         rebase_change_set: &mut RebaseChangeSet,
+        rebase_feature_enabled: bool,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        #[cfg(not(feature = "action_rebase"))]
+        if !rebase_feature_enabled
+            && let Some(remote_id) = self.remote_id.clone()
+            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
         {
-            if let Some(remote_id) = self.remote_id.clone()
-                && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
-            {
-                *self = existing;
+            *self = existing;
 
-                tracing::trace!(
-                    remote_id = ?self.remote_id,
-                    "Skipping saving message, we already have it in the local DB"
-                );
+            tracing::trace!(
+                remote_id = ?self.remote_id,
+                "Skipping saving message, we already have it in the local DB"
+            );
 
-                return Ok(());
-            }
+            return Ok(());
         }
 
         self.save(bond).await?;
@@ -1334,9 +1333,13 @@ impl Message {
             )));
         }
 
-        let (_, encrypted_body) =
-            Self::sync_message_and_body(remote_id, ctx.session(), &mut tx, ctx.action_queue())
-                .await?;
+        let (_, encrypted_body) = Self::sync_message_and_body(
+            remote_id,
+            ctx.session(),
+            &mut tx,
+            ctx.rebaseable_queue().await,
+        )
+        .await?;
 
         trace!("Message successfully downloaded. Decrypting...");
 
@@ -1754,7 +1757,7 @@ impl Message {
             "SELECT local_id FROM messages WHERE local_conversation_id = ? AND messages.deleted = 0",
             params![local_conversation_id],
         )
-        .await
+            .await
     }
 
     pub async fn remote_ids_in_conversation_unordered(
@@ -1942,9 +1945,13 @@ impl Message {
     ) -> MailContextResult<(Message, DecryptedMessageBody)> {
         tracing::info!("Force syncing");
 
-        let (message, encrypted) =
-            Self::sync_message_and_body(message_id, ctx.session(), tether, ctx.action_queue())
-                .await?;
+        let (message, encrypted) = Self::sync_message_and_body(
+            message_id,
+            ctx.session(),
+            tether,
+            ctx.rebaseable_queue().await,
+        )
+        .await?;
 
         let decrypted = Self::decrypt_message_body(
             ctx,
@@ -1977,12 +1984,11 @@ impl Message {
     /// Returns error if the message failed to fetch from the server or update the
     /// metadata on the server.
     #[tracing::instrument(skip(api, tx, queue))]
-    #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))]
     async fn sync_message_and_body(
         message_id: MessageId,
         api: &Session,
         tx: &mut impl RunTransaction,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         info!("Fetching message");
         let message = api.get_message(message_id).await.map(|v| v.message)?;
@@ -2002,15 +2008,12 @@ impl Message {
                 error!("Failed to save message body metadata: {e:?}");
             })?;
 
-            #[cfg(feature = "action_rebase")]
+            let rebase_change_set = RebaseChangeSet::from(message.id());
+            if let Err(e) = queue
+                .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
+                .await
             {
-                let rebase_change_set = RebaseChangeSet::from(message.id());
-                if let Err(e) = queue
-                    .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
-                    .await
-                {
-                    tracing::error!("Failed to rebase: {e}")
-                }
+                tracing::error!("Failed to rebase: {e}")
             }
 
             Ok(())
@@ -2359,6 +2362,7 @@ impl Message {
     pub(crate) async fn save_scroller_messages(
         api_messages: Vec<ApiMessageMetadata>,
         rebase_change_set: &mut RebaseChangeSet,
+        has_rebase_feature: bool,
         tx: &Bond<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         let mut messages = Vec::with_capacity(api_messages.len());
@@ -2369,7 +2373,9 @@ impl Message {
                 Message::find_by_remote_id(api_message.id.clone(), tx).await?
             } else {
                 let mut message = Message::from_api_metadata(api_message, tx).await?;
-                message.create_or_get_local(rebase_change_set, tx).await?;
+                message
+                    .create_or_get_local(rebase_change_set, has_rebase_feature, tx)
+                    .await?;
                 Some(message)
             }) else {
                 continue;
@@ -2820,7 +2826,7 @@ impl ModelHooks for Message {
                 .to_sql_extend_iter(&*attachment_ids),
         );
         tx.execute(
-                &formatdoc!("
+            &formatdoc!("
                     DELETE FROM message_attachments WHERE
                             local_attachment_id IN (
                                 SELECT local_id FROM attachments
@@ -3150,16 +3156,16 @@ impl ModelHooks for MessageBodyMetadata {
                )"},
             (self.local_message_id, AttachmentType::Pgp,),
         )
-        ?;
+            ?;
 
         for attachment in &mut self.attachments {
             attachment.save_sync(tx)?;
             tx
-                    .execute(
-                        "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",
-                        (attachment.id(), self.local_message_id,),
-                    )
-                    ?;
+                .execute(
+                    "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",
+                    (attachment.id(), self.local_message_id,),
+                )
+                ?;
         }
 
         self.reply_to.store_reply_to(self.id(), tx)?;
@@ -3276,7 +3282,7 @@ impl MessageCounters {
         Self::find(
             "INNER JOIN labels ON labels.local_id = local_label_id WHERE label_type = ? ORDER BY labels.display_order ASC",
             params![kind],
-            tether
+            tether,
         ).await
     }
 

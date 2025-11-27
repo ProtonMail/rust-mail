@@ -445,7 +445,6 @@ async fn action_label_as_with_archive() {
     assert_state0(&tether).await;
 }
 
-#[cfg(feature = "action_rebase")]
 mod rebase {
     use super::*;
     use pretty_assertions::{assert_eq, assert_ne};

@@ -17,7 +17,6 @@ use anyhow::Context;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use indoc::formatdoc;
-#[cfg(feature = "action_rebase")]
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_action_queue::rebase::RebaseChangeSet;
@@ -136,8 +135,8 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                     // actual data, so we better reload all.
                     data.queue_incoming_default |= event.incoming_defaults.is_some();
 
-                    #[cfg(feature = "action_rebase")]
-                    ctx.action_queue()
+                    ctx.rebaseable_queue()
+                        .await
                         .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                         .await
                         .context("Failed to rebase")?;

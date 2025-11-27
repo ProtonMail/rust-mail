@@ -41,8 +41,8 @@ use proton_core_common::services::{
     EventPollConfigService, NetworkMonitorService, UserIssueReporterService,
 };
 use proton_core_common::{
-    ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin, UserContext,
-    services::UserMetricService,
+    ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin,
+    RebasableQueue, UserContext, services::UserMetricService,
 };
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
@@ -182,7 +182,8 @@ pub struct MailUserContext {
 }
 
 impl MailUserContext {
-    #[instrument(name = "NewMailUserContext", skip_all, fields(mode, user_id=%user_context.user_id()))]
+    #[instrument(name = "NewMailUserContext", skip_all, fields(mode, user_id=%user_context.user_id()
+    ))]
     pub(crate) async fn new(
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
@@ -255,7 +256,7 @@ impl MailUserContext {
                                 user_context.queue(),
                                 SHARE_EXT_ACTION_GROUP.clone(),
                             )
-                            .await
+                                .await
                             {
                                 tracing::warn!("Could not clear share extension queue: {}", e);
                                 tracing::warn!("Continuing with existing queue");
@@ -272,7 +273,6 @@ impl MailUserContext {
                         },
                     })
                     .with_cyclic_service(QueuesService::new),
-
             };
 
             let this = builder.build(mail_context, user_context).await?;
@@ -310,19 +310,41 @@ impl MailUserContext {
             // has been initialized, i.e. here:
             this.queues().resume();
 
+            // This section is just for us to have clues in the logs on whether the feature got enabled
+            // disabled for this user at some point. To be removed after it becomes permament.
+            let weak_this = this.this.clone();
+            let mut rebase_enabled = this.user_context().has_rebase_feature().await;
+            let user_id = this.user_id().clone();
+            tracing::info!("Rebase feature = {}", rebase_enabled);
+            if let Ok(watcher) = this.mail_context.core_context().feature_flags().watch().await.inspect_err(|e| error!("Failed to watch feature flags :{e}")) {
+                this.spawn(async move {
+                  while let Ok(()) = watcher.receiver.recv_async().await {
+                      let Some(ctx) = weak_this.upgrade() else {
+                          return;
+                      };
+
+                      let new_value = ctx.user_context().has_rebase_feature().await;
+                      if new_value != rebase_enabled {
+                          tracing::info!(?user_id, "Rebase feature updated = {}", rebase_enabled);
+                          rebase_enabled = new_value;
+                      }
+                  }
+                });
+            }
+
             tracing::info!("Creating MailUserContext...Done");
             Ok(this)
         }
-        .await
-        .inspect_err(|e| {
-            if !e.is_network_failure() {
-                user_context_cloned.issue_reporter_service().report(
-                    IssueLevel::Critical,
-                    "Failed to create new mail user context".into(),
-                    issue_report_keys_from_error(e),
-                )
-            }
-        })
+            .await
+            .inspect_err(|e| {
+                if !e.is_network_failure() {
+                    user_context_cloned.issue_reporter_service().report(
+                        IssueLevel::Critical,
+                        "Failed to create new mail user context".into(),
+                        issue_report_keys_from_error(e),
+                    )
+                }
+            })
     }
 
     /// Get a mandatory service - returns error if service is not registered
@@ -847,6 +869,10 @@ impl MailUserContext {
 
     pub fn image_loader(&self) -> &ImageLoader {
         self.get_service()
+    }
+
+    pub async fn rebaseable_queue(&self) -> RebasableQueue {
+        self.user_context.rebaseable_queue().await
     }
 }
 

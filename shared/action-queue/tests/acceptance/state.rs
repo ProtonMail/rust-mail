@@ -46,7 +46,6 @@ async fn state_preserved_after_local_change() {
     executor.execute_all().await.unwrap();
 }
 
-#[cfg(feature = "rebase")]
 #[tokio::test]
 async fn rebase_state() {
     // Check if the action state is persisted after local changes and correctly transmitted

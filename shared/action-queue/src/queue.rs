@@ -691,7 +691,6 @@ impl Queue {
         Ok(())
     }
 
-    #[cfg(feature = "rebase")]
     pub async fn rebase(
         &self,
         action_group: ActionGroup,
@@ -703,7 +702,6 @@ impl Queue {
             .await
     }
 
-    #[cfg(feature = "rebase")]
     pub async fn rebase_in(
         &self,
         action_group: ActionGroup,
@@ -764,7 +762,6 @@ pub(crate) trait ErasedQueuedAction: Send {
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 
-    #[cfg_attr(not(feature = "rebase"), allow(dead_code))]
     fn rebase<'a>(
         &'a mut self,
         action: StoredAction,

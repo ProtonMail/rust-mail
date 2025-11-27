@@ -103,7 +103,6 @@ pub use macros::*;
 
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 
-#[cfg(feature = "action_rebase")]
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::rebase::RebaseChangeSet;
 
@@ -257,8 +256,8 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
                 handle_event(event, tx, &user_id, &mut rebase_change_set).await?;
             }
 
-            #[cfg(feature = "action_rebase")]
-            ctx.queue
+            ctx.rebaseable_queue()
+                .await
                 .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                 .await
                 .context("Failed to rebase")?;

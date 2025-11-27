@@ -493,7 +493,6 @@ async fn snooze_and_unsnooze_are_perfect_counterparts() {
     pretty_assertions::assert_eq!(sent_message, actual_sent_message);
 }
 
-#[cfg(feature = "action_rebase")]
 mod rebase {
     use super::*;
     use proton_action_queue::action::ActionGroup;

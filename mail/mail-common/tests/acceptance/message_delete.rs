@@ -36,7 +36,6 @@ async fn smoke() {
     user_ctx.execute_single_action().await.unwrap();
 }
 
-#[cfg(feature = "action_rebase")]
 mod rebase {
     use super::*;
     use proton_action_queue::action::ActionGroup;
