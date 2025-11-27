@@ -60,16 +60,18 @@ pub struct DraftScheduleSendOptions {
 }
 
 #[derive(Debug, uniffi::Record)]
-pub struct HtmlForComposer {
+pub struct ComposerContent {
     /// HTML content that should be injected into `<head>` tag.
     ///
     /// It does not provide `<head>` tag on its own.
     /// Therefore, the returned HTML can be inserted alongside with other html nodes.
-    pub head_content: String,
+    pub head: String,
 
-    /// Initial body of the draft. Usually contains signature
-    /// and replied quote.
-    pub initial_body: String,
+    /// The body of the draft. Initially contains signature
+    /// and replied quote (if applicable).
+    ///
+    /// It does not provide `<body>` tag on its own.
+    pub body: String,
 }
 
 impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOptions {
@@ -444,9 +446,9 @@ impl Draft {
     /// # Example of usage
     ///
     /// ```ignore
-    /// let html_for_composer = draft.html_for_composer(theme_opts, "editor");
-    /// let head_to_inject = html_for_composer.head_content;
-    /// let initial_body = html_for_composer.initial_body;
+    /// let composer_content = draft.composer_content(theme_opts, "editor");
+    /// let head_to_inject = composer_content.head;
+    /// let body = composer_content.body;
     ///
     /// let template = format!("
     /// <html>
@@ -459,29 +461,26 @@ impl Draft {
     /// </head>
     /// <body>
     /// ...
-    /// {initial_body}
+    /// {body}
     /// ...
     /// </body>
     /// </html>
     /// ");
     /// ```
-    pub fn html_for_composer(
+    pub fn composer_content(
         &self,
         theme_opts: ThemeOpts,
         editor_id: String,
-    ) -> Result<HtmlForComposer, ProtonError> {
+    ) -> Result<ComposerContent, ProtonError> {
         let theme_opts = theme_opts.into();
 
         Ok(async_runtime().block_on(async {
-            let (head_content, initial_body) = self
+            let (head, body) = self
                 .instance
-                .html_head_content_for_composer(theme_opts, editor_id)
+                .composer_content(theme_opts, editor_id)
                 .await?;
 
-            Ok::<_, RealProtonMailError>(HtmlForComposer {
-                head_content,
-                initial_body,
-            })
+            Ok::<_, RealProtonMailError>(ComposerContent { head, body })
         })?)
     }
 
