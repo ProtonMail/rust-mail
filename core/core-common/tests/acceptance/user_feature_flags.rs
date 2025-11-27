@@ -565,6 +565,140 @@ async fn test_unleash_vs_legacy_collision_unleash_wins() {
 }
 
 #[tokio::test]
+async fn test_legacy_feature_flags_expired_filtering() {
+    let ctx = TestContext::new().await;
+
+    let current_time = UnixTimestamp::now();
+    let expired_time = current_time.saturating_sub(3600); // 1 hour ago
+    let future_time = current_time.saturating_add(3600); // 1 hour in the future
+
+    let legacy_response = GetLegacyFeaturesResponse {
+        total: 3,
+        features: vec![
+            test_legacy_boolean_flag_with_expiration("ExpiredFlag", true, true, expired_time),
+            test_legacy_boolean_flag_with_expiration("ValidFlag", true, true, future_time),
+            test_legacy_boolean_flag("NonExpiringFlag", false, false), // Default: no expiration
+        ],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(legacy_response))
+        .named("Legacy flags with expiration times")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+
+    wait_for_flag(feature_flags, "ValidFlag", 4, 250).await;
+
+    assert_eq!(feature_flags.get("ExpiredFlag").await.unwrap(), None);
+    assert_eq!(feature_flags.get("ValidFlag").await.unwrap(), Some(true));
+    assert_eq!(
+        feature_flags.get("NonExpiringFlag").await.unwrap(),
+        Some(false)
+    );
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let expired_flag = UserFeatureFlag::by_name("ExpiredFlag", &tether)
+            .await
+            .unwrap();
+        let valid_flag = UserFeatureFlag::by_name("ValidFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(expired_flag.is_none());
+        assert!(valid_flag.enabled);
+    }
+}
+
+#[tokio::test]
+async fn test_legacy_feature_flag_becomes_expired_disabled() {
+    let ctx = TestContext::new().await;
+
+    {
+        let past = UnixTimestamp::new(10);
+        let user_context = ctx.user_context().await;
+        let mut tether = user_context.stash().connection().await.unwrap();
+        let mut existing_flag = UserFeatureFlag::legacy("BecomingExpiredFlag", true, true, past);
+
+        tether
+            .tx(async move |tx| existing_flag.save(tx).await)
+            .await
+            .unwrap();
+    }
+
+    let current_time = UnixTimestamp::now();
+    let expired_time = current_time.saturating_sub(3600); // 1 hour ago
+
+    let first_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag_with_expiration(
+            "BecomingExpiredFlag",
+            true,
+            true,
+            expired_time,
+        )],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(first_response))
+        .named("Legacy flag that became expired")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    assert_eq!(
+        feature_flags.get("BecomingExpiredFlag").await.unwrap(),
+        Some(true)
+    );
+
+    feature_flags.refresh().await.unwrap();
+
+    assert_eq!(
+        feature_flags.get("BecomingExpiredFlag").await.unwrap(),
+        Some(false)
+    );
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("BecomingExpiredFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(!flag.enabled);
+        assert!(flag.writable);
+    }
+}
+
+#[tokio::test]
 async fn test_mixed_unleash_and_legacy_sources() {
     let ctx = TestContext::new().await;
 
@@ -651,9 +785,9 @@ async fn test_mixed_unleash_and_legacy_sources() {
 async fn test_legacy_feature_flags_pagination() {
     let ctx = TestContext::new().await;
 
-    // Create 105 legacy flags to test pagination (page size is 100)
+    // Create 155 legacy flags to test pagination (page size is 150)
     let mut features = Vec::new();
-    for i in 0..105 {
+    for i in 0..155 {
         features.push(test_legacy_boolean_flag(
             &format!("LegacyFlag{i}"),
             i % 2 == 0, // Alternate between enabled/disabled
@@ -662,13 +796,13 @@ async fn test_legacy_feature_flags_pagination() {
     }
 
     let first_page = GetLegacyFeaturesResponse {
-        total: 105,
-        features: features[0..100].to_vec(),
+        total: 155,
+        features: features[0..150].to_vec(),
     };
 
     let second_page = GetLegacyFeaturesResponse {
-        total: 105,
-        features: features[100..105].to_vec(),
+        total: 155,
+        features: features[150..155].to_vec(),
     };
 
     Mock::given(method("GET"))
@@ -684,7 +818,8 @@ async fn test_legacy_feature_flags_pagination() {
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
         .and(wiremock::matchers::query_param("Page", "0"))
-        .and(wiremock::matchers::query_param("PageSize", "100"))
+        .and(wiremock::matchers::query_param("PageSize", "150"))
+        .and(wiremock::matchers::query_param("Type", "boolean"))
         .respond_with(ResponseTemplate::new(200).set_body_json(first_page))
         .expect(1)
         .named("Legacy flags - page 1")
@@ -695,7 +830,8 @@ async fn test_legacy_feature_flags_pagination() {
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
         .and(wiremock::matchers::query_param("Page", "1"))
-        .and(wiremock::matchers::query_param("PageSize", "100"))
+        .and(wiremock::matchers::query_param("PageSize", "150"))
+        .and(wiremock::matchers::query_param("Type", "boolean"))
         .respond_with(ResponseTemplate::new(200).set_body_json(second_page))
         .expect(1)
         .named("Legacy flags - page 2")
@@ -725,7 +861,7 @@ async fn test_legacy_feature_flags_pagination() {
     );
 
     let all_flags = feature_flags.list_all().await;
-    assert_eq!(all_flags.len(), 105);
+    assert_eq!(all_flags.len(), 155);
 }
 
 #[tokio::test]
@@ -818,12 +954,21 @@ fn test_unleash_variant() -> UnleashToggleVariant {
 }
 
 fn test_legacy_boolean_flag(code: &str, enabled: bool, writable: bool) -> LegacyFeatureFlag {
+    test_legacy_boolean_flag_with_expiration(code, enabled, writable, 4_102_444_800.into()) // Year 2100
+}
+
+fn test_legacy_boolean_flag_with_expiration(
+    code: &str,
+    enabled: bool,
+    writable: bool,
+    expiration_time: UnixTimestamp,
+) -> LegacyFeatureFlag {
     LegacyFeatureFlag {
         metadata: LegacyFeatureFlagMetadata {
             code: code.to_string(),
             global: false,
             writable,
-            expiration_time: 0,
+            expiration_time: expiration_time.as_u64(),
             update_time: 0,
         },
         variant: LegacyFeatureFlagVariant::Boolean(Value {

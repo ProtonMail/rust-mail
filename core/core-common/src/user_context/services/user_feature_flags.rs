@@ -9,7 +9,7 @@ use proton_core_api::{
     service::ApiServiceError,
     services::proton::{
         GetLegacyFeatureFlagsOptions, GetLegacyFeaturesResponse, GetUnleashFeaturesResponse,
-        LegacyFeatureFlag, LegacyFeatureFlagType, ProtonCore,
+        LegacyFeatureFlag, LegacyFeatureFlagType, MAX_LEGACY_FEATURES_PER_PAGE, ProtonCore,
     },
     session::Session,
 };
@@ -94,11 +94,14 @@ impl UserFeatureFlagsService {
     fn set_flags_from_legacy(
         flags: &mut BTreeMap<String, UserFeatureFlag>,
         api_flags: Vec<LegacyFeatureFlag>,
-        modify_time: UnixTimestamp,
+        now: UnixTimestamp,
     ) {
         let boolean_features = api_flags
             .into_iter()
-            //TODO: Filter based on expiration time
+            .filter(|feature| {
+                let expiration_time: UnixTimestamp = feature.metadata.expiration_time.into();
+                expiration_time >= now
+            })
             .filter_map(|feature| {
                 let LegacyFeatureFlag { metadata, variant } = feature;
                 // Currently we support only boolean feature flags.
@@ -117,13 +120,13 @@ impl UserFeatureFlagsService {
                     source: UserFeatureFlagSource::Legacy,
                     writable: metadata.writable,
                     overrided_value: None,
-                    modify_time,
+                    modify_time: now,
                 });
 
             flag.enabled = enabled;
             flag.source = UserFeatureFlagSource::Legacy;
             flag.writable = metadata.writable;
-            flag.modify_time = modify_time;
+            flag.modify_time = now;
         }
     }
 
@@ -252,6 +255,8 @@ impl Paginatable for PaginateLegacyFeatureFlags {
     type API = Session;
 
     const NAME: &'static str = "Legacy Feature Flags";
+
+    const DEFAULT_PAGE_SIZE: u64 = MAX_LEGACY_FEATURES_PER_PAGE;
 
     async fn fetch(
         api: &Self::API,

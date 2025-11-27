@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use muon::common::{RetryPolicy, Sender};
+use muon::http::AsQuery;
 use muon::util::ProtonRequestExt;
 use muon::{DELETE, GET, PATCH, POST, PUT};
 use muon::{ProtonRequest, ProtonResponse, serde_to_query};
@@ -301,8 +302,12 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
         &self,
         options: GetLegacyFeatureFlagsOptions,
     ) -> ApiServiceResult<GetLegacyFeaturesResponse> {
+        let query = serde_to_query(options)?;
+        for q in query.as_query() {
+            tracing::warn!("Legacy ff option: {q:#?}");
+        }
         Ok(GET!("{CORE_V4}/features")
-            .query(serde_to_query(options)?)
+            .query(query)
             .send_with(self)
             .await?
             .ok()?

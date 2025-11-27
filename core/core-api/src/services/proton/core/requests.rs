@@ -319,6 +319,9 @@ pub struct PostReportBug {
     pub logs: Option<(String, Vec<u8>)>,
 }
 
+/// Maximum page size supported by the API.
+pub const MAX_LEGACY_FEATURES_PER_PAGE: u64 = 150;
+
 #[derive(Clone, Debug, Serialize, SmartDefault)]
 #[serde(rename_all = "PascalCase")]
 pub struct GetLegacyFeatureFlagsOptions {
@@ -326,7 +329,7 @@ pub struct GetLegacyFeatureFlagsOptions {
     pub page: u64,
 
     /// Number of records per page.
-    #[default(MAX_PAGE_ELEMENT_COUNT)]
+    #[default(MAX_LEGACY_FEATURES_PER_PAGE)]
     pub page_size: u64,
 
     #[serde(rename = "Type", skip_serializing_if = "Option::is_none")]
