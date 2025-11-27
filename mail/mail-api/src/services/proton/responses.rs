@@ -33,6 +33,7 @@ use crate::services::proton::response_data::{
     Attachment, Conversation, ConversationCount, MailSettings, Message, MessageCount,
     MessageMetadata, OperationResult, UndoToken,
 };
+use proton_api_utils::PaginateResponse;
 use serde::Deserialize;
 #[cfg(feature = "mocks")]
 use serde::Serialize;
@@ -326,6 +327,16 @@ pub struct GetIncomingDefaultResponse {
     pub incoming_defaults: Vec<IncomingDefault>,
     pub total: u64,
     pub global_total: u64,
+}
+impl PaginateResponse<IncomingDefault> for GetIncomingDefaultResponse {
+    #[allow(clippy::misnamed_getters)] // This is not a mistake
+    fn total(&self) -> u64 {
+        self.global_total
+    }
+
+    fn items(self) -> Vec<IncomingDefault> {
+        self.incoming_defaults
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

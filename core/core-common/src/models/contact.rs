@@ -1,6 +1,5 @@
-use crate::utils::MapVec as _;
+use crate::utils::{MapVec as _, Paginatable};
 use std::collections::{BTreeSet, HashMap};
-use std::iter;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -13,7 +12,7 @@ use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension}
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use anyhow::Context;
 use bytes::Buf as _;
-use futures::future::{try_join, try_join_all};
+use futures::future::try_join_all;
 use futures::try_join;
 use ical::VcardParser;
 use itertools::Itertools;
@@ -21,12 +20,12 @@ use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_core_api::SYNC_CONTACT_PAGE_SIZE;
 use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::ContactId;
-use proton_core_api::services::proton::ContactUID;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{
-    ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
+    ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactFull as ApiContactFull,
 };
+use proton_core_api::services::proton::{ContactId, GetContactsResponse};
+use proton_core_api::services::proton::{ContactUID, GetContactsEmailsResponse};
 use proton_core_api::services::proton::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_core_api::session::Session;
 use proton_crypto::crypto::PGPProviderSync;
@@ -40,7 +39,6 @@ use stash::orm::{DbRecord, Model, ModelHooks};
 use stash::params;
 use stash::rusqlite::params_from_iter;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
-use tokio::task::JoinSet;
 use tracing::{debug, error, info};
 
 use super::{InitializationError, InitializationWatcher, InitializedComponent, Label};
@@ -214,93 +212,13 @@ impl Contact {
     #[allow(clippy::too_many_lines)]
     pub async fn sync(api: &Session) -> Result<SyncedContacts, ApiServiceError> {
         info!("Syncing contacts");
-        // In order to maximize throughput we do as follows:
-        // 1. We download the first batch
-        // 2. We calculate how many batches are left and request them all in parallel.
-        // 3. When all of the batches arrive we store them in the database efficiently. This is, without
-        //    going through the on_save method and calling `[Model::save]` diretly which performs too many
-        //    queries. Previously nlogn, now n.
-        //    This is fine because
-        //    * We empty the database beforehand
-        //    * We don't update any record
-        //    * We manually map the ContactId from the contact to the ContactEmail.
 
-        let t0 = Instant::now();
-        let (first_contacts, first_emails) = try_join(
-            api.get_contacts(GetContactsOptions {
-                page: 0,
-                page_size: SYNC_CONTACT_PAGE_SIZE,
-                ..Default::default()
-            }),
-            api.get_contacts_emails(GetContactsEmailsOptions {
-                page: 0,
-                page_size: SYNC_CONTACT_PAGE_SIZE,
-                ..Default::default()
-            }),
-        )
-        .await?;
-        debug!("Requested initial batch in {:?}", t0.elapsed());
+        let contacts = PaginateContacts::fetch_all(api);
+        let emails = PaginateEmails::fetch_all(api);
 
-        let mut contacts_joinset = JoinSet::new();
-        let mut emails_joinset = JoinSet::new();
-
-        let page = SYNC_CONTACT_PAGE_SIZE as u64;
-        if let Some(rem) = first_contacts.total.checked_sub(page) {
-            let rem = rem.div_ceil(page);
-            debug!("Requesting {rem} batches for contacts");
-            for page in 1..=rem {
-                let api = api.clone();
-                contacts_joinset.spawn(async move {
-                    api.get_contacts(GetContactsOptions {
-                        page,
-                        page_size: SYNC_CONTACT_PAGE_SIZE,
-                        ..Default::default()
-                    })
-                    .await
-                    .map(|x| x.contacts)
-                });
-            }
-        }
-
-        if let Some(rem) = first_emails.total.checked_sub(page) {
-            let rem = rem.div_ceil(page);
-            debug!("Requesting {rem} batches for emails");
-            for page in 1..=rem {
-                let api = api.clone();
-                emails_joinset.spawn(async move {
-                    api.get_contacts_emails(GetContactsEmailsOptions {
-                        page,
-                        page_size: SYNC_CONTACT_PAGE_SIZE,
-                        ..Default::default()
-                    })
-                    .await
-                    .map(|x| x.contact_emails)
-                });
-            }
-        }
-        let contacts = contacts_joinset.join_all().await;
-        let contacts: Vec<Contact> = iter::once(Ok(first_contacts.contacts))
-            .chain(contacts)
-            .flatten()
-            .flatten()
-            .map(Into::into)
-            .collect();
-        debug!("Fetched {} contacts", contacts.len());
-
-        let emails = emails_joinset.join_all().await;
-        // We don't need the data afterwards so we don't need to Arc it.
-        let emails: Vec<ContactEmail> = iter::once(Ok(first_emails.contact_emails))
-            .chain(emails)
-            .flatten()
-            .flatten()
-            .map(Into::into)
-            .collect();
-
-        debug!("Fetched {} emails", emails.len());
-        debug!(
-            "Downloaded and converted all contacts in {:?}",
-            t0.elapsed()
-        );
+        let (contacts, emails) = tokio::try_join!(contacts, emails)?;
+        let contacts = contacts.into_iter().map(Into::into).collect();
+        let emails = emails.into_iter().map(Into::into).collect();
 
         // We are splitting the store and download functions in two so that it's faster.
         Ok(SyncedContacts { contacts, emails })
@@ -783,5 +701,53 @@ impl SyncedContacts {
 
         debug!("Stored all to the db in {:?}", t1.elapsed());
         Ok(())
+    }
+}
+
+struct PaginateContacts;
+impl Paginatable for PaginateContacts {
+    type PaginateOptions = GetContactsOptions;
+
+    type Response = GetContactsResponse;
+
+    type Output = ApiContactBasic;
+
+    type Error = ApiServiceError;
+
+    type API = Session;
+
+    const NAME: &'static str = "Contacts";
+
+    const DEFAULT_PAGE_SIZE: u64 = SYNC_CONTACT_PAGE_SIZE;
+
+    async fn fetch(
+        api: &Self::API,
+        options: Self::PaginateOptions,
+    ) -> Result<Self::Response, Self::Error> {
+        api.get_contacts(options).await
+    }
+}
+
+struct PaginateEmails;
+impl Paginatable for PaginateEmails {
+    type PaginateOptions = GetContactsEmailsOptions;
+
+    type Response = GetContactsEmailsResponse;
+
+    type Output = ApiContactEmail;
+
+    type Error = ApiServiceError;
+
+    type API = Session;
+
+    const NAME: &'static str = "Emails";
+
+    const DEFAULT_PAGE_SIZE: u64 = SYNC_CONTACT_PAGE_SIZE;
+
+    async fn fetch(
+        api: &Self::API,
+        options: Self::PaginateOptions,
+    ) -> Result<Self::Response, Self::Error> {
+        api.get_contacts_emails(options).await
     }
 }

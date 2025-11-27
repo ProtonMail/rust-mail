@@ -12,6 +12,7 @@ bytes = { workspace = true }
 indexmap = { workspace = true }
 muon = { workspace = true }
 proton-account-api = { workspace = true }
+proton-api-utils = { workspace = true }
 proton-core-api = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-task-service = { workspace = true }

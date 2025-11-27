@@ -25,6 +25,7 @@ include_dir = { workspace = true }
 indexmap = { workspace = true }
 parking_lot = { workspace = true }
 proton-core-api = { workspace = true, features = ["sql"] }
+proton-api-utils = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-crypto = { workspace = true }
 proton-crypto-account = { workspace = true, features = ["sql"] }

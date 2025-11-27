@@ -23,6 +23,7 @@ members = [
   "mail/mail-tui",
   "mail/mail-uniffi",
   "shared/action-queue",
+  "shared/api-utils",
   "shared/event-service",
   "shared/ical",
   "shared/ical-cli",
@@ -155,6 +156,10 @@ version = "0.2.9"
 features = ["serde"]
 git = "https://github.com/LBeernaertProton/rust-email_address.git"
 branch = "feat/allow-long-local-parts"
+
+[workspace.dependencies.proton-api-utils]
+version = "0.1.0"
+path = "shared/api-utils"
 
 [workspace.dependencies.proton-account-api]
 version = "0.1"

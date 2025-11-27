@@ -296,4 +296,16 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
             .ok()?
             .into_body_json()?)
     }
+
+    async fn get_legacy_feature_flags(
+        &self,
+        options: GetLegacyFeatureFlagsOptions,
+    ) -> ApiServiceResult<GetLegacyFeaturesResponse> {
+        Ok(GET!("{CORE_V4}/features")
+            .query(serde_to_query(options)?)
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
 }

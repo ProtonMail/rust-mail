@@ -17,6 +17,7 @@ derive_more = { workspace = true }
 futures = { workspace = true }
 muon = { workspace = true }
 parking_lot = { workspace = true }
+proton-api-utils = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-task-service = { workspace = true }
 serde = { workspace = true }

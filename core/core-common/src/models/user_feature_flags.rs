@@ -1,14 +1,14 @@
-use smart_default::SmartDefault;
 use stash::{
     macros::Model,
     orm::Model,
+    params,
     stash::{Bond, StashError, Tether},
+    utils::{IterMapToSql, placeholders_n},
 };
 
-use crate::datatypes::UnixTimestamp;
-use crate::models::ModelExtension;
+use crate::datatypes::{UnixTimestamp, UserFeatureFlagSource};
 
-#[derive(Debug, Clone, PartialEq, Model, SmartDefault)]
+#[derive(Debug, Clone, PartialEq, Model)]
 #[TableName("user_feature_flags")]
 pub struct UserFeatureFlag {
     #[IdField]
@@ -18,15 +18,60 @@ pub struct UserFeatureFlag {
     pub enabled: bool,
 
     #[DbField]
+    pub source: UserFeatureFlagSource,
+
+    #[DbField]
+    pub writable: bool,
+
+    #[DbField]
+    pub overrided_value: Option<bool>,
+
+    #[DbField]
     pub modify_time: UnixTimestamp,
 }
 
 impl UserFeatureFlag {
+    #[must_use]
+    pub fn unleash(name: impl Into<String>, modify_time: UnixTimestamp) -> Self {
+        Self {
+            name: name.into(),
+            enabled: true,
+            source: UserFeatureFlagSource::Unleash,
+            writable: false,
+            overrided_value: None,
+            modify_time,
+        }
+    }
+
+    #[must_use]
+    pub fn legacy(
+        name: impl Into<String>,
+        enabled: bool,
+        writable: bool,
+        modify_time: UnixTimestamp,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            enabled,
+            source: UserFeatureFlagSource::Legacy,
+            writable,
+            overrided_value: None,
+            modify_time,
+        }
+    }
+
     pub async fn by_name(
         name: impl Into<String>,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        Self::find_by_id(name.into(), tether).await
+        let name: String = name.into();
+        Self::find_first(
+            // If there are two flags with the same name, use Unleash one.
+            "WHERE name = ? ORDER BY source ASC",
+            params![name],
+            tether,
+        )
+        .await
     }
 
     pub async fn save_all(new: Vec<Self>, tx: &Bond<'_>) -> Result<(), StashError> {
@@ -35,5 +80,27 @@ impl UserFeatureFlag {
         }
 
         Ok(())
+    }
+
+    pub async fn delete_batch_from_source(
+        names: Vec<String>,
+        source: UserFeatureFlagSource,
+        tx: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        tx.execute(
+            format!(
+                "DELETE FROM {} WHERE name IN ({}) AND source = ?",
+                Self::table_name(),
+                placeholders_n(names.len())
+            ),
+            names.bridge_sql_iter().chain(params![source]).collect(),
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        self.overrided_value.unwrap_or(self.enabled)
     }
 }

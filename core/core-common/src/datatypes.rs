@@ -46,6 +46,7 @@ mod issue_report;
 mod push_notifications;
 mod system_label;
 mod timestamp;
+mod user_feature_flags;
 
 pub use self::account_details::AccountDetails;
 pub use self::avatar::AvatarInformation;
@@ -55,6 +56,8 @@ pub use self::issue_report::*;
 pub use self::push_notifications::*;
 pub use self::system_label::*;
 pub use self::timestamp::*;
+pub use self::user_feature_flags::*;
+
 use bitflags::bitflags;
 use derive_more::Into;
 use derive_more::derive::TryFrom;

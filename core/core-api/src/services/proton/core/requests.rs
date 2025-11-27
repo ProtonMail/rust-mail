@@ -22,6 +22,7 @@
 
 use crate::MAX_PAGE_ELEMENT_COUNT;
 use crate::services::proton::prelude::*;
+use proton_api_utils::PaginateOptions;
 use serde::Serialize;
 use serde_with::{BoolFromInt, serde_as};
 use smart_default::SmartDefault;
@@ -59,7 +60,24 @@ pub struct GetContactsEmailsOptions {
 
     /// Number of records per page.
     #[default(MAX_PAGE_ELEMENT_COUNT)]
-    pub page_size: usize,
+    pub page_size: u64,
+}
+impl PaginateOptions for GetContactsEmailsOptions {
+    fn from_zero(page_size: u64) -> Self {
+        Self {
+            page: 0,
+            page_size,
+            ..Default::default()
+        }
+    }
+
+    fn with_page(self, page: u64) -> Self {
+        Self { page, ..self }
+    }
+
+    fn size(&self) -> u64 {
+        self.page_size
+    }
 }
 
 /// Parameters for getting contacts.
@@ -76,7 +94,25 @@ pub struct GetContactsOptions {
 
     /// Number of records per page.
     #[default(MAX_PAGE_ELEMENT_COUNT)]
-    pub page_size: usize,
+    pub page_size: u64,
+}
+
+impl PaginateOptions for GetContactsOptions {
+    fn from_zero(page_size: u64) -> Self {
+        Self {
+            page: 0,
+            page_size,
+            ..Default::default()
+        }
+    }
+
+    fn with_page(self, page: u64) -> Self {
+        Self { page, ..self }
+    }
+
+    fn size(&self) -> u64 {
+        self.page_size
+    }
 }
 
 /// Parameters for getting an event.
@@ -281,4 +317,39 @@ pub struct PostReportBug {
     pub email: String,
     /// Logs (filename, zipped bytes)
     pub logs: Option<(String, Vec<u8>)>,
+}
+
+/// Maximum page size supported by the API.
+pub const MAX_LEGACY_FEATURES_PER_PAGE: u64 = 150;
+
+#[derive(Clone, Debug, Serialize, SmartDefault)]
+#[serde(rename_all = "PascalCase")]
+pub struct GetLegacyFeatureFlagsOptions {
+    /// Page index, i.e. the page in the resultset.
+    pub page: u64,
+
+    /// Number of records per page.
+    #[default(MAX_LEGACY_FEATURES_PER_PAGE)]
+    pub page_size: u64,
+
+    #[serde(rename = "Type", skip_serializing_if = "Option::is_none")]
+    pub feature_type: Option<LegacyFeatureFlagType>,
+}
+
+impl PaginateOptions for GetLegacyFeatureFlagsOptions {
+    fn from_zero(page_size: u64) -> Self {
+        Self {
+            page: 0,
+            page_size,
+            ..Default::default()
+        }
+    }
+
+    fn with_page(self, page: u64) -> Self {
+        Self { page, ..self }
+    }
+
+    fn size(&self) -> u64 {
+        self.page_size
+    }
 }

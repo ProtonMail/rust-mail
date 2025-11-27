@@ -1,11 +1,13 @@
-use anyhow::anyhow;
+use proton_core_api::service::ApiServiceError;
+use proton_core_common::utils::Paginatable;
+use proton_core_common::utils::PaginateOptions;
+use proton_mail_api::services::proton::prelude::GetIncomingDefaultResponse;
 use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;
 use stash::orm::ModelHooks;
 use std::sync::Arc;
 use std::sync::LazyLock;
-use std::time::Instant;
 
 use indoc::indoc;
 use proton_core_api::session::Session;
@@ -16,7 +18,6 @@ use proton_core_common::models::InitializationWatcher;
 use proton_core_common::models::InitializedComponent;
 use proton_mail_api::INCOMING_DEFAULTS_PAGE_SIZE;
 use proton_mail_api::services::proton::ProtonMail;
-use proton_task_service::BackgroundAwareTaskService;
 use stash::exports::Transaction;
 
 use derive_more::TryFrom;
@@ -305,14 +306,13 @@ impl IncomingDefault {
         watcher: Arc<InitializationWatcher>,
         api: &Session,
         stash: &Stash,
-        tasks: &BackgroundAwareTaskService,
     ) -> Result<(), InitializationError<MailContextError>> {
         InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[Address::INIT_KEY],
             stash.connection().await?,
-            async || Ok(Self::sync(api, tasks).await?),
+            async || Ok(Self::sync(api).await?),
             |tx, res| {
                 Self::replace_all_sync(res.into_iter().map(IncomingDefault::from).collect(), tx)?;
                 Ok(())
@@ -322,42 +322,49 @@ impl IncomingDefault {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn sync(
-        api: &Session,
-        tasks_service: &BackgroundAwareTaskService,
-    ) -> Result<Vec<ApiIncomingDefault>, MailActionError> {
-        let t0 = Instant::now();
-        let initial = api.get_incoming_defaults(0).await?;
-        tracing::debug!("Requested initial batch in {:?}", t0.elapsed());
+    pub async fn sync(api: &Session) -> Result<Vec<ApiIncomingDefault>, MailActionError> {
+        let defaults = PaginateIncomingDefaults::fetch_all(api).await?;
+        Ok(defaults)
+    }
+}
 
-        let page = INCOMING_DEFAULTS_PAGE_SIZE;
-        let mut tasks = vec![];
-        if let Some(rem) = initial.global_total.checked_sub(page) {
-            let rem = rem.div_ceil(page);
-            tracing::debug!("Requesting {rem} batches for contacts");
-            for page in 1..=rem {
-                let api = api.clone();
-                let task = tasks_service.spawn(async move {
-                    api.get_incoming_defaults(page)
-                        .await
-                        .map(|x| x.incoming_defaults)
-                });
-                tasks.push(task);
-            }
-        }
-        tracing::debug!("Requested all batches in {:?}", t0.elapsed());
+struct PaginateIncomingDefaults;
+#[derive(Clone, Copy)]
+struct IncomingDefaultPage(u64);
 
-        let ret = futures::future::join_all(tasks).await;
+impl PaginateOptions for IncomingDefaultPage {
+    fn from_zero(_size: u64) -> Self {
+        Self(0)
+    }
 
-        let mut out = vec![];
+    fn with_page(self, page: u64) -> Self {
+        Self(page)
+    }
 
-        for defs in std::iter::once(Ok(Ok(initial.incoming_defaults))).chain(ret) {
-            out.extend(
-                defs.map_err(|e| MailActionError::Other(anyhow!("Failed to join task: {}", e)))??,
-            );
-        }
+    fn size(&self) -> u64 {
+        INCOMING_DEFAULTS_PAGE_SIZE
+    }
+}
+impl Paginatable for PaginateIncomingDefaults {
+    type PaginateOptions = IncomingDefaultPage;
 
-        Ok(out)
+    type Response = GetIncomingDefaultResponse;
+
+    type Output = ApiIncomingDefault;
+
+    type Error = ApiServiceError;
+
+    type API = Session;
+
+    const NAME: &'static str = "Incoming Defaults";
+
+    const DEFAULT_PAGE_SIZE: u64 = INCOMING_DEFAULTS_PAGE_SIZE;
+
+    async fn fetch(
+        api: &Self::API,
+        options: Self::PaginateOptions,
+    ) -> Result<Self::Response, Self::Error> {
+        api.get_incoming_defaults(options.0).await
     }
 }
 

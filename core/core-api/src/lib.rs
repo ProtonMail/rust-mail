@@ -15,8 +15,8 @@ pub mod store;
 pub mod utils;
 pub mod verification;
 
-pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
-pub const SYNC_CONTACT_PAGE_SIZE: usize = 1000;
+pub const MAX_PAGE_ELEMENT_COUNT: u64 = 200;
+pub const SYNC_CONTACT_PAGE_SIZE: u64 = 1000;
 
 pub mod exports {
     pub use muon::common::RetryPolicy;

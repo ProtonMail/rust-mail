@@ -268,13 +268,7 @@ impl InitializationMediator {
             Address::initialize(watcher, ctx.session(), ctx.user_stash()).await
         });
         let inc_defs = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            IncomingDefault::initialize(
-                watcher,
-                ctx.session(),
-                ctx.user_stash(),
-                ctx.core_context().task_service(),
-            )
-            .await
+            IncomingDefault::initialize(watcher, ctx.session(), ctx.user_stash()).await
         });
 
         let abort_handles = vec![

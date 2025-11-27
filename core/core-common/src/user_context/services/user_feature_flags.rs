@@ -5,14 +5,32 @@
 use std::{collections::BTreeMap, sync::Weak};
 
 use anyhow::Context;
-use proton_core_api::services::proton::ProtonCore;
-use stash::{stash::WatcherHandle, watcher::TableWatcher};
+use proton_core_api::{
+    service::ApiServiceError,
+    services::proton::{
+        GetLegacyFeatureFlagsOptions, GetLegacyFeaturesResponse, GetUnleashFeaturesResponse,
+        LegacyFeatureFlag, LegacyFeatureFlagType, MAX_LEGACY_FEATURES_PER_PAGE, ProtonCore,
+    },
+    session::Session,
+};
+use stash::{
+    orm::Model,
+    params,
+    stash::{Stash, Tether, WatcherHandle},
+    watcher::TableWatcher,
+};
 
 use crate::{
     CoreContextError, CoreContextResult, UserContext,
-    datatypes::UnixTimestamp,
+    datatypes::{UnixTimestamp, UserFeatureFlagSource},
     models::{ModelExtension, UserFeatureFlag},
+    utils::Paginatable,
 };
+
+enum FlagPersistence {
+    Persist,
+    DontPersist,
+}
 
 #[derive(Clone)]
 pub struct UserFeatureFlagsService {
@@ -25,17 +43,11 @@ impl UserFeatureFlagsService {
         Self { ctx }
     }
 
-    #[tracing::instrument(skip_all, name = "UserFeatureFlagsRefresh")]
-    pub async fn refresh(&self) -> CoreContextResult<()> {
-        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
-        let api = ctx.session();
-
-        let response = api.get_unleash_feature_flags().await?;
-        tracing::info!("Fetched {} featured flags from API", response.toggles.len());
-
-        let mut tether = ctx.stash().connection().await?;
-
-        let mut flags = UserFeatureFlag::all(&tether)
+    async fn fetch_from_cache(
+        tether: &Tether,
+        source: UserFeatureFlagSource,
+    ) -> BTreeMap<String, UserFeatureFlag> {
+        UserFeatureFlag::find("where source=?", params![source], tether)
             .await
             .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
             .unwrap_or_default()
@@ -51,30 +63,168 @@ impl UserFeatureFlagsService {
                     },
                 )
             })
-            .collect::<BTreeMap<String, UserFeatureFlag>>();
+            .collect::<BTreeMap<String, UserFeatureFlag>>()
+    }
 
-        let modify_time = UnixTimestamp::now();
-
+    fn set_flags_from_unleash(
+        flags: &mut BTreeMap<String, UserFeatureFlag>,
+        response: GetUnleashFeaturesResponse,
+        modify_time: UnixTimestamp,
+    ) {
+        tracing::debug!(
+            "Fetched {} featured flags from unleash API",
+            response.toggles.len()
+        );
         for toggle in response.toggles {
             let flag = flags
                 .entry(toggle.name.clone())
                 .or_insert_with(|| UserFeatureFlag {
                     name: toggle.name,
                     enabled: false,
+                    source: UserFeatureFlagSource::Unleash,
+                    writable: false,
+                    overrided_value: None,
                     modify_time,
                 });
 
             // Currently we are ignoring variants,
             // and Unleash API says that feature is always enabled
             flag.enabled = true;
+            flag.source = UserFeatureFlagSource::Unleash;
+            flag.writable = false;
             flag.modify_time = modify_time;
         }
+    }
+
+    fn set_flags_from_legacy(
+        flags: &mut BTreeMap<String, (UserFeatureFlag, FlagPersistence)>,
+        api_flags: Vec<LegacyFeatureFlag>,
+        now: UnixTimestamp,
+    ) {
+        let boolean_features = api_flags
+            .into_iter()
+            .filter(|feature| {
+                let expiration_time: UnixTimestamp = feature.metadata.expiration_time.into();
+                expiration_time >= now
+            })
+            .filter_map(|feature| {
+                let LegacyFeatureFlag { metadata, variant } = feature;
+                // Currently we support only boolean feature flags.
+                let value = variant.into_bool();
+                value.map(|value| (metadata, value))
+            });
+
+        for (metadata, value) in boolean_features {
+            let enabled = value.value;
+
+            let (flag, persistence) = flags.entry(metadata.code.clone()).or_insert_with(|| {
+                (
+                    UserFeatureFlag {
+                        name: metadata.code,
+                        enabled,
+                        source: UserFeatureFlagSource::Legacy,
+                        writable: metadata.writable,
+                        overrided_value: None,
+                        modify_time: now,
+                    },
+                    FlagPersistence::Persist,
+                )
+            });
+
+            *persistence = FlagPersistence::Persist;
+            flag.enabled = enabled;
+            flag.source = UserFeatureFlagSource::Legacy;
+            flag.writable = metadata.writable;
+            flag.modify_time = now;
+        }
+    }
+
+    async fn refresh_unleash_flags(
+        &self,
+        api: &Session,
+        stash: &Stash,
+        modify_time: UnixTimestamp,
+    ) -> CoreContextResult<()> {
+        let response = api.get_unleash_feature_flags().await?;
+
+        let mut tether = stash.connection().await?;
+        let mut flags = Self::fetch_from_cache(&tether, UserFeatureFlagSource::Unleash).await;
+
+        Self::set_flags_from_unleash(&mut flags, response, modify_time);
 
         let flags = flags.into_values().collect();
 
         tether
             .tx(async |tx| UserFeatureFlag::save_all(flags, tx).await)
             .await?;
+        Ok(())
+    }
+
+    async fn refresh_legacy_flags(
+        &self,
+        api: &Session,
+        stash: &Stash,
+        modify_time: UnixTimestamp,
+    ) -> CoreContextResult<()> {
+        let initial_flags = GetLegacyFeatureFlagsOptions {
+            feature_type: Some(LegacyFeatureFlagType::Boolean),
+            ..Default::default()
+        };
+        let response = PaginateLegacyFeatureFlags::fetch_all_filtered(api, initial_flags).await?;
+
+        let mut tether = stash.connection().await?;
+        let mut cached_flags = Self::fetch_from_cache(&tether, UserFeatureFlagSource::Legacy)
+            .await
+            .into_iter()
+            .map(|(key, flag)| (key, (flag, FlagPersistence::DontPersist)))
+            .collect::<BTreeMap<_, _>>();
+
+        Self::set_flags_from_legacy(&mut cached_flags, response, modify_time);
+
+        let mut flags_to_remove = Vec::new();
+        let mut flags_to_save = Vec::new();
+
+        for (name, (flag, persistence)) in cached_flags {
+            match persistence {
+                FlagPersistence::Persist => flags_to_save.push(flag),
+                FlagPersistence::DontPersist => flags_to_remove.push(name),
+            }
+        }
+
+        tether
+            .tx(async |tx| {
+                UserFeatureFlag::delete_batch_from_source(
+                    flags_to_remove,
+                    UserFeatureFlagSource::Legacy,
+                    tx,
+                )
+                .await?;
+                UserFeatureFlag::save_all(flags_to_save, tx).await
+            })
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip_all, name = "UserFeatureFlagsRefresh")]
+    pub async fn refresh(&self) -> CoreContextResult<()> {
+        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
+        let api = ctx.session();
+
+        let modify_time = UnixTimestamp::now();
+
+        let legacy_flags = self.refresh_legacy_flags(api, ctx.stash(), modify_time);
+        let unleash_flags = self.refresh_unleash_flags(api, ctx.stash(), modify_time);
+
+        // We do not use `try_join` here because even if only one endpoint is working, we still want to
+        // update those flags.
+        let (legacy_flags, unleash_flags) = tokio::join!(legacy_flags, unleash_flags);
+
+        if let Err(error) = legacy_flags {
+            tracing::error!(%error, "Failed to refresh legacy flags");
+        }
+        if let Err(error) = unleash_flags {
+            tracing::error!(%error, "Failed to refresh Unleash flags", );
+        }
 
         Ok(())
     }
@@ -85,7 +235,7 @@ impl UserFeatureFlagsService {
             let tether = ctx.stash().connection().await?;
             UserFeatureFlag::by_name(key, &tether).await?
         };
-        Ok(feature_flag.map(|flag| flag.enabled))
+        Ok(feature_flag.map(|flag| flag.is_enabled()))
     }
 
     pub async fn list_all(&self) -> Vec<(String, bool)> {
@@ -117,5 +267,30 @@ impl UserFeatureFlagsService {
         TableWatcher::<UserFeatureFlag>::watch(stash)
             .await
             .map_err(CoreContextError::from)
+    }
+}
+
+struct PaginateLegacyFeatureFlags;
+
+impl Paginatable for PaginateLegacyFeatureFlags {
+    type PaginateOptions = GetLegacyFeatureFlagsOptions;
+
+    type Response = GetLegacyFeaturesResponse;
+
+    type Output = LegacyFeatureFlag;
+
+    type Error = ApiServiceError;
+
+    type API = Session;
+
+    const NAME: &'static str = "Legacy Feature Flags";
+
+    const DEFAULT_PAGE_SIZE: u64 = MAX_LEGACY_FEATURES_PER_PAGE;
+
+    async fn fetch(
+        api: &Self::API,
+        options: Self::PaginateOptions,
+    ) -> Result<Self::Response, Self::Error> {
+        api.get_legacy_feature_flags(options).await
     }
 }
