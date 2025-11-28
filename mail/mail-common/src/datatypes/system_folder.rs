@@ -3,8 +3,6 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
 
-/// This enum represents the system labels that are valid target for Move actions.
-/// Their values correspond to the remote ids of the labels in the core API database.
 #[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[repr(u8)]
 pub enum MovableSystemFolder {

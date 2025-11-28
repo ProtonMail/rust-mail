@@ -1,13 +1,4 @@
 #![allow(async_fn_in_trait)]
-//! This module contains mail specific push notifications.
-//!
-//! It's using shared base from [`proton_core_common`] but with the context of mail application
-//!
-
-use proton_mail_api::services::proton::common::MessageId;
-use proton_mail_api::services::push_notifications::DecryptedEmailPushNotificationAction as ApiDecryptedEmailPushNotificationAction;
-use proton_mail_api::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
-use proton_mail_api::services::push_notifications::NotificationSender as ApiNotificationSender;
 
 use crate::MailContextError;
 use proton_core_api::services::proton::{PrivateEmail, PrivateString};
@@ -17,6 +8,10 @@ use proton_core_common::os::KeyChain;
 use proton_core_common::os::KeyChainExt;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto;
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::push_notifications::DecryptedEmailPushNotificationAction as ApiDecryptedEmailPushNotificationAction;
+use proton_mail_api::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
+use proton_mail_api::services::push_notifications::NotificationSender as ApiNotificationSender;
 use secrecy::ExposeSecret;
 use serde_with::serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -32,8 +27,6 @@ pub enum PushNotificationQuickAction {
     MoveToTrash { remote_id: MessageId },
 }
 
-/// Decrypted notification usable only in the context of the Inbox application
-///
 #[derive(Clone, Debug)]
 pub enum DecryptedInboxPushNotification {
     /// Decrypted notification that is pushed when user receives a new email.
@@ -67,43 +60,19 @@ impl From<ApiDecryptedInboxPushNotification> for DecryptedInboxPushNotification 
     }
 }
 
-/// Decrypted notification that is pushed when user receives a new email.
-///
 #[derive(Clone, Debug)]
 pub struct DecryptedEmailPushNotification {
-    /// The subject of the email message
-    ///
     pub subject: String,
-
-    /// Information about who sent the message
-    ///
     pub sender: NotificationSender,
-
-    /// Remote message ID
-    ///
     pub message_id: MessageId,
-
-    /// What kind of action was made for this email
-    /// Note: This field is available only on Android
-    ///
     pub action: Option<DecryptedEmailPushNotificationAction>,
 }
 
-/// What kind of action was made for this email
-/// Note: This enum is available only on Android
-///
+// Note: This enum is available only on Android
 #[derive(Clone, Debug)]
 pub enum DecryptedEmailPushNotificationAction {
-    /// Message has been created. It requires a full notification
-    ///
     MessageCreated,
-    /// Message has been touched on another device. We want to hide
-    /// notification
-    ///
     MessageTouched,
-
-    /// Unexpected action
-    ///
     Unexpected(String),
 }
 
@@ -122,13 +91,8 @@ impl From<ApiDecryptedEmailPushNotificationAction> for DecryptedEmailPushNotific
 ///
 #[derive(Clone, Debug)]
 pub struct DecryptedOpenUrlPushNotification {
-    /// Content of the notification
     pub content: String,
-
-    /// Information about who sent the notification
     pub sender: NotificationSender,
-
-    /// URL
     pub url: String,
 }
 
@@ -138,16 +102,8 @@ pub struct DecryptedOpenUrlPushNotification {
 ///
 #[derive(Clone, Debug)]
 pub struct NotificationSender {
-    /// Name of the sender
-    ///
     pub name: PrivateString,
-
-    /// Email address of the sender
-    ///
     pub address: PrivateEmail,
-
-    /// Contact group of the sender
-    ///
     pub group: PrivateString,
 }
 
@@ -161,11 +117,7 @@ impl From<ApiNotificationSender> for NotificationSender {
     }
 }
 
-/// Notification specific for the Inbox, that can be decrypted and deserialized
-///
 pub trait DecryptableInboxPushNotification {
-    /// Decrypt and deserialize generic push notification into Inbox-specific notification
-    ///
     async fn try_into_decrypted_inbox_mail_notification(
         self,
         key_chain: Arc<dyn KeyChain>,

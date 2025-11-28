@@ -6,42 +6,19 @@ use proton_core_common::models::Label;
 use stash::orm::Model;
 use stash::stash::Tether;
 
-/// Representation of a `Label` defined by the system
 pub struct SystemLabel {
-    /// Local id of the Label.
     pub local_id: LocalLabelId,
-
-    /// Description of this Label.
     pub description: LabelDescription,
-
-    /// TODO: Document this field.
     pub display: bool,
-
-    /// The name of this Label.
     pub name: String,
-
-    /// TODO: Document this field.
     pub notify: bool,
-
-    /// Order to display relative to other `CustomLabel`.
     pub display_order: u32,
-
-    /// TODO: Document this field.
     pub sticky: bool,
-
-    /// Total count of the message in this Label.
     pub total: u64,
-
-    /// Count of unread message in this Label.
     pub unread: u64,
 }
 
 impl SystemLabel {
-    /// Create a new `SystemLabel`.
-    ///
-    /// Create a view on a [`Label`] keeping and transforming the field, so they contain the data
-    /// needed by UI.
-    ///
     pub async fn new(label: &Label, tether: &Tether) -> Result<Self, AppError> {
         let (unread, total) = messages_counts(label, tether).await?;
         let label_description = LabelDescription::new(label);
@@ -58,8 +35,6 @@ impl SystemLabel {
         })
     }
 
-    /// Create a vec of `SystemLabel` from a vec of [`Label`]
-    ///
     pub async fn from_labels(labels: &[Label], tether: &Tether) -> Result<Vec<Self>, AppError> {
         let mut result = Vec::with_capacity(labels.len());
         for label in labels {

@@ -36,6 +36,7 @@ pub enum OpenConversationOrigin {
     Default,
     PushNotification,
 }
+
 /// Contextual representation of a [`Conversation`] when it is opened for display
 /// in a [`Label`].
 ///
@@ -44,80 +45,34 @@ pub enum OpenConversationOrigin {
 /// to be displayed to the client.
 #[derive(Debug, Eq, PartialEq, Clone, ScrollerEq)]
 pub struct ContextualConversation {
-    /// Local id of the conversation.
     pub local_id: LocalConversationId,
-
-    /// Remote id of the conversation.
     pub remote_id: Option<ConversationId>,
-
-    /// Attachment metadata associated with this conversation.
     pub attachments_metadata: Vec<AttachmentMetadata>,
-
-    /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
-
-    /// Whether a snooze reminder should be displayed.
     pub display_snooze_reminder: bool,
-
-    /// Order in the list this conversation should be displayed.
     pub display_order: u64,
-
     #[scroller_eq(skip)]
     pub locations: Vec<ExclusiveLocation>,
-
-    /// Time at which this conversation expires.
     pub expiration_time: UnixTimestamp,
-
-    /// Whether this conversation is starred.
     pub is_starred: bool,
-
-    /// Number of attachments on the conversation.
     pub num_attachments: u64,
-
-    /// Number of messages in this context.
     pub num_messages: u64,
-
-    /// Number of unread messages in this context.
     pub num_unread: u64,
-
-    /// Number of messages in this conversation.
     pub total_messages: u64,
-
-    /// Number of unread messages in this conversation.
     pub total_unread: u64,
-
-    /// Address of the recipients of the messages contained within.
     pub recipients: MessageRecipients,
-
-    /// Address of all the senders in the messages.
     pub senders: MessageSenders,
-
     #[scroller_eq(skip)]
-    /// Total size of all the messages.
     pub size: u64,
-
-    /// Conversation subject.
     pub subject: String,
-
-    /// Time of reception of the last message in this conversation.
     pub time: UnixTimestamp,
-
-    /// Time of snooze of the conversation - It may not be snoozed at the moment.
     pub snooze_time: UnixTimestamp,
-
-    /// When this conversation is snoozed until - when present it is snoozed at the moment.
     pub snoozed_until: Option<UnixTimestamp>,
-
-    /// Whether the conversation has hidden messages.
     #[scroller_eq(skip)]
     pub hidden_messages_banner: Option<HiddenMessagesBanner>,
-
     #[scroller_eq(skip)]
-    /// Whether the conversation has messages downloaded.
     pub has_messages: bool,
-
     #[scroller_eq(skip)]
-    /// Whether the conversation is deleted.
     pub deleted: bool,
 }
 
@@ -166,10 +121,6 @@ impl ContextualConversation {
     ///
     /// If the `local_label_id` is not present in the `conversation`, `None` is
     /// returned. This means that the conversation is not present in this label.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if conversation could not be loaded from the database.
     pub async fn load(
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
@@ -189,10 +140,6 @@ impl ContextualConversation {
     }
 
     /// Retrieve all the conversations which are the label with `local_label_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub async fn in_label(
         local_label_id: LocalLabelId,
         tether: &Tether,
@@ -335,11 +282,6 @@ impl ContextualConversation {
     ///
     /// This function also retrieve the messages from the server if
     /// they have never been synced before.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed, syncing the data failed or
-    /// the conversation has no messages.
     #[tracing::instrument(skip(stash, api, network_monitor_service, queue))]
     pub async fn conversation_and_messages(
         network_monitor_service: &NetworkMonitorService,
@@ -443,23 +385,12 @@ impl ContextualConversation {
         }))
     }
 
-    /// Watch a conversation with `local_conversation_id` in the context of
-    /// `local_label_id`.
-    ///
-    /// A message is sent if the conversation or the conversation messages
-    /// are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries failed.
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(ContextualConversationWatcher { sender }))
             .await
     }
 
-    /// Get the available actions from bottom bar for given conversations
-    ///
     #[tracing::instrument(skip_all, fields(label_id=current_label_id.as_u64()))]
     pub async fn all_available_list_actions_for_conversations(
         current_label_id: LocalLabelId,
@@ -518,12 +449,6 @@ impl ContextualConversation {
         Ok(actions)
     }
 
-    /// Get the available conversation actions for a single conversation (similar to Message::all_available_message_actions_for_message)
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail or conversation is not found.
-    ///
     #[tracing::instrument(skip_all, fields(label_id=%current_label_id, conversation_id=conversation_id.as_u64()))]
     pub async fn all_available_conversation_actions_for_conversation(
         current_label_id: LocalLabelId,
@@ -578,15 +503,6 @@ impl ContextualConversation {
         Ok(actions)
     }
 
-    /// Get the available actions to populate the conversation action sheet.
-    ///
-    /// Conversation sheet contains context aware set of actions for given conversation.
-    /// It is split up into different categories to be easy to display in the UI.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
-    ///
     #[tracing::instrument(skip_all, fields(label_id=%current_label_id, conversation_id=conversation_id.as_u64()))]
     pub async fn all_available_conversation_actions_for_action_sheet(
         current_label_id: LocalLabelId,
@@ -603,10 +519,6 @@ impl ContextualConversation {
         Ok(actions.into())
     }
 
-    /// Gets the banner for folder autodelete.
-    ///
-    /// This can be called on any folder, it will only return the banner when it's in the
-    /// correct folders.
     pub async fn auto_delete_banner(
         local_label_id: LocalLabelId,
         ctx: &MailUserContext,
@@ -675,12 +587,8 @@ impl ContextualConversation {
     }
 }
 
-/// Result of calling [`ContextualConversation::conversation_and_messages`];
 pub struct ContextualConversationAndMessages {
-    /// The conversation
     pub conversation: ContextualConversation,
-
-    /// The conversation's messages.
     pub messages: Vec<Message>,
 
     /// The id of message to display first.
