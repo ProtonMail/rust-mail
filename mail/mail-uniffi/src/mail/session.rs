@@ -1216,7 +1216,11 @@ impl MailSession {
             .map(|v| v as u64)
     }
 
-    /// Is the Unleash feature enabled.
+    /// Is the Unleash feature enabled. Only returns **global** feature flags.
+    ///
+    /// These flags are not refreshed if there is an active user session.
+    /// Use [`MailUserSession::is_feature_enabled`] whenever it is possible.
+    ///
     /// Currently:
     /// * Returns None if feature is not found
     /// * Returns Some(true) if feature is present
