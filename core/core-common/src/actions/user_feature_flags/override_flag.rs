@@ -122,11 +122,13 @@ impl Handler for OverrideFlagHandler {
 
     async fn rebase_local(
         &self,
-        this_id: ActionId,
-        action: &mut Self::Action,
+        _this_id: ActionId,
+        _action: &mut Self::Action,
         _: &RebaseChangeSet,
-        tx: &Bond<'_>,
+        _tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        self.apply_local(this_id, action, tx).await
+        // We do not track feature flag updates as a part of rebasing
+        // Nothing to do.
+        Ok(())
     }
 }
