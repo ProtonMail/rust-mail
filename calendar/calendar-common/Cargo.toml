@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+derive_more = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
 proton-calendar-api = { workspace = true }
@@ -15,10 +16,10 @@ proton-crypto = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-calendar = { workspace = true }
 proton-ical = { workspace = true }
+proton-network-monitor-service = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-proton-network-monitor-service = { workspace = true }
 
 [dev-dependencies]
 indoc = { workspace = true }

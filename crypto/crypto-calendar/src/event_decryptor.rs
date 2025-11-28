@@ -3,6 +3,7 @@ use crate::{
     UnlockedCalendarKey,
 };
 use base64::{Engine, prelude::BASE64_STANDARD};
+use derive_more::Debug;
 use proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant,
     PGPProviderSync, VerifiedData,
@@ -10,11 +11,15 @@ use proton_crypto::crypto::{
 use proton_crypto_account::keys::UnlockedAddressKeys;
 use std::iter;
 
+#[derive(Debug)]
 pub struct CalendarEventDecryptor<'a, P>
 where
     P: PGPProviderSync,
 {
+    #[debug(skip)]
     session_key: P::SessionKey,
+
+    #[debug(skip)]
     verification_keys: Vec<&'a P::PublicKey>,
 }
 

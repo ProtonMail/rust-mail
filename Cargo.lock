@@ -5158,6 +5158,7 @@ dependencies = [
 name = "proton-calendar-common"
 version = "0.1.0"
 dependencies = [
+ "derive_more 2.0.1",
  "indoc",
  "itertools 0.13.0",
  "jiff",
@@ -5327,6 +5328,7 @@ name = "proton-crypto-calendar"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "derive_more 2.0.1",
  "indoc",
  "pretty_assertions",
  "proton-calendar-api",
