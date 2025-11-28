@@ -102,6 +102,12 @@ impl Handler for AttachmentRemoveHandler {
         // the attachment metadata is present nonetheless.
         if let Some(message_id) = message_id {
             tx.execute(
+                "DELETE FROM message_attachments_metadata WHERE local_message_id=? AND local_attachment_id=?",
+                params![message_id, action.attachment_id],
+            )
+                .await
+                .inspect_err(|e| error!("Failed to remove attachment from message metadata: {e}"))?;
+            tx.execute(
                 "DELETE FROM message_attachments WHERE local_message_id=? AND local_attachment_id=?",
                 params![message_id, action.attachment_id],
             )
@@ -141,6 +147,11 @@ impl Handler for AttachmentRemoveHandler {
         };
         // re-assign attachment to message.
         if let Some(message_id) = action.local_message_id {
+            tx.execute(
+                "INSERT OR IGNORE INTO message_attachments_metadata (local_message_id, local_attachment_id) VALUES(?,?)",
+                params![message_id, action.attachment_id],
+            )
+                .await.inspect_err(|e| error!("Failed to assign attachment to message metadata: {e}"))?;
             tx.execute(
                 "INSERT OR IGNORE INTO message_attachments (local_message_id, local_attachment_id) VALUES(?,?)",
                 params![message_id, action.attachment_id],

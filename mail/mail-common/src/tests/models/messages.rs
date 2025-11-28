@@ -3187,7 +3187,11 @@ async fn message_save_preserves_pgp_attachments() {
     });
 
     tether
-        .tx::<_, _, StashError>(async |tx| message.save(tx).await)
+        .tx::<_, _, StashError>(async |tx| {
+            message.save(tx).await?;
+            // Simulate the attachment being present on the message body as well.
+            tx.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![message.id(), message.attachments_metadata[0].local_id.unwrap()]).await
+        })
         .await
         .unwrap();
 
@@ -3195,13 +3199,9 @@ async fn message_save_preserves_pgp_attachments() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(msg.attachments_metadata.len(), 2);
-    assert_eq!(
-        msg.attachments_metadata[0].local_id.unwrap(),
-        attachment.id()
-    );
+    assert_eq!(msg.attachments_metadata.len(), 1);
     assert_ne!(
-        msg.attachments_metadata[1].local_id.unwrap(),
+        msg.attachments_metadata[0].local_id.unwrap(),
         attachment.id()
     );
 
@@ -3232,13 +3232,9 @@ async fn message_save_preserves_pgp_attachments() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(msg.attachments_metadata.len(), 2);
-    assert_eq!(
-        msg.attachments_metadata[0].local_id.unwrap(),
-        attachment.id()
-    );
+    assert_eq!(msg.attachments_metadata.len(), 1);
     assert_ne!(
-        msg.attachments_metadata[1].local_id.unwrap(),
+        msg.attachments_metadata[0].local_id.unwrap(),
         attachment.id()
     );
 
@@ -3321,8 +3317,7 @@ async fn check_message_and_body_metadata_for_single_attachment(
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(msg.attachments_metadata.len(), 1);
-    assert_eq!(msg.attachments_metadata[0].local_id.unwrap(), attachment_id);
+    assert_eq!(msg.attachments_metadata.len(), 0);
 
     let msg_body_metadata = MessageBodyMetadata::for_message(message_id, tether)
         .await

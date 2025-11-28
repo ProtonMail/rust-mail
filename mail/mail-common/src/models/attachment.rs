@@ -232,7 +232,7 @@ impl Attachment {
         conn: &Connection,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
         let res = Self::find_sync(
-            "WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?) AND disposition = ?",
+            "WHERE local_id IN (SELECT local_attachment_id FROM message_attachments_metadata WHERE local_message_id = ?) AND disposition = ?",
             (message_id, Disposition::Attachment),
             conn,
         )?;

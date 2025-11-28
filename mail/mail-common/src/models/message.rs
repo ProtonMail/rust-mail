@@ -2805,7 +2805,7 @@ impl ModelHooks for Message {
 
             for id in &local_ids {
                 tx.execute(
-                    "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
+                    "INSERT OR IGNORE INTO message_attachments_metadata VALUES (?,?)",
                     (self.id(), *id),
                 )?;
             }
@@ -2821,14 +2821,13 @@ impl ModelHooks for Message {
         );
         tx.execute(
                 &formatdoc!("
-                    DELETE FROM message_attachments WHERE
+                    DELETE FROM message_attachments_metadata WHERE
                             local_attachment_id IN (
                                 SELECT local_id FROM attachments
-                                JOIN message_attachments ON message_attachments.local_message_id = ? AND
-                                    message_attachments.local_attachment_id = attachments.local_id
+                                JOIN message_attachments_metadata ON message_attachments_metadata.local_message_id = ? AND
+                                    message_attachments_metadata.local_attachment_id = attachments.local_id
                                 WHERE attachments.disposition = ? AND attachments.attachment_type <> ?
                                 AND attachments.local_id NOT IN ({})
-
                             )",
                     stash::utils::placeholders_n(attachment_ids.len()),
                 ),

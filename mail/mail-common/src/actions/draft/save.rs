@@ -762,6 +762,10 @@ impl Save {
                         );
                             // Unlink previous attachment.
                             bond.execute(indoc! {
+                            "DELETE FROM message_attachments_metadata WHERE local_message_id=? AND local_attachment_id = ?",
+                        }, params![local_message_id, original_attachment.id()]).await.inspect_err(|e|
+                                error!("Failed to unlink attachment from message metadata: {e:?}"))?;
+                            bond.execute(indoc! {
                             "DELETE FROM message_attachments WHERE local_message_id=? AND local_attachment_id = ?",
                         }, params![local_message_id, original_attachment.id()]).await.inspect_err(|e|
                                 error!("Failed to unlink attachment from message: {e:?}"))?;
@@ -777,7 +781,10 @@ impl Save {
                                 .await
                                 .inspect_err(|e| error!("Failed to save attachment: {e}"))?;
                             // Create link
-                            bond.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![local_message_id, new_attachment.id()]).await.inspect_err(|e| error!("Failed to link new attachment: {e:?}"))?;
+                            bond.execute("INSERT INTO message_attachments_metadata (local_message_id, local_attachment_id) VALUES (?,?)",
+                                         params![local_message_id, new_attachment.id()]).await.inspect_err(|e| error!("Failed to link new attachment metadata: {e:?}"))?;
+                            bond.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)",
+                                         params![local_message_id, new_attachment.id()]).await.inspect_err(|e| error!("Failed to link new attachment: {e:?}"))?;
                             // Creat new metadata entry
                             let mut new_attachment_metadata = DraftAttachmentMetadata::owned_and_uploaded(
                                 action.metadata_id,
