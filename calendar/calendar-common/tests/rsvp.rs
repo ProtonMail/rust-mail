@@ -272,6 +272,7 @@ where
     id: Option<&'static str>,
     calendar_id: Option<&'static str>,
     shared_event: Option<&'static str>,
+    shared_event_author: Option<&'static str>,
     attendees_event: Option<&'static str>,
     calendar_event: Option<&'static str>,
     attendees: Vec<CalendarAttendee>,
@@ -288,6 +289,7 @@ where
             calendar_id: None,
             encryption: "calendar-key",
             shared_event: None,
+            shared_event_author: None,
             attendees_event: None,
             calendar_event: None,
             attendees: Vec::new(),
@@ -314,6 +316,11 @@ where
 
     fn with_shared_event(mut self, ics: &'static str) -> Self {
         self.shared_event = Some(ics);
+        self
+    }
+
+    fn with_shared_event_author(mut self, author: &'static str) -> Self {
+        self.shared_event_author = Some(author);
         self
     }
 
@@ -375,6 +382,7 @@ where
         };
 
         let shared_event = self.shared_event.unwrap();
+        let shared_event_author = self.shared_event_author.unwrap_or("foo@pm.me");
 
         let (shared_event, _) = encryptor
             .encrypt(&self.world.pgp, shared_event.as_bytes())
@@ -398,7 +406,7 @@ where
                 ty: CalendarEventPayloadType::ClearText,
                 data: data.into(),
                 signature: None,
-                author: "foo@pm.me".into(),
+                author: shared_event_author.into(),
             })
             .collect();
 
