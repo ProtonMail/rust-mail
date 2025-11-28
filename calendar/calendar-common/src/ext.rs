@@ -7,7 +7,7 @@ use proton_crypto_calendar::{
 };
 use proton_ical as ical;
 use std::borrow::Cow;
-use tracing::debug;
+use tracing::{debug, instrument, trace};
 
 pub(crate) trait CalendarEventPayloadExt {
     /// Decrypts this event, returning the *.ics.
@@ -24,6 +24,7 @@ pub(crate) trait CalendarEventPayloadExt {
         P: PGPProviderSync;
 
     /// Decrypts this event (if it's encrypted) and parses it.
+    #[instrument(skip_all)]
     fn decrypt_and_parse<P>(
         &self,
         pgp: &P,
@@ -33,6 +34,12 @@ pub(crate) trait CalendarEventPayloadExt {
         P: PGPProviderSync,
     {
         let ics = self.decrypt(pgp, decryptor)?;
+
+        trace!(
+            "Decrypted *.ics payload:\n{}",
+            String::from_utf8_lossy(&ics)
+        );
+
         let out = ical::VCalendar::from_bytes(&ics)?;
 
         // Since clients are not necessarily 100% RFC-compliant, it's expected

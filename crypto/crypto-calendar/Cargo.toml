@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
+derive_more = { workspace = true }
 proton-calendar-api = { workspace = true }
 proton-crypto = { workspace = true }
 proton-crypto-account = { workspace = true }

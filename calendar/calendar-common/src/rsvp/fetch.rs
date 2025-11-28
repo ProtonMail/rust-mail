@@ -4,6 +4,7 @@ use crate::{
     RsvpFetchError, RsvpFetchResult, RsvpIntent, RsvpKeys, RsvpOccurrence, RsvpOrganizer,
     RsvpProgress, RsvpRecency, RsvpRecurrence, RsvpRelation, RsvpResult,
 };
+use derive_more::Debug;
 use itertools::{Either, Itertools};
 use jiff::{
     Zoned,
@@ -19,7 +20,7 @@ use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_calendar::CalendarEventDecryptor;
 use proton_ical as ical;
 use std::{collections::HashMap, num::NonZeroU32};
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn run<P, K>(
@@ -48,16 +49,20 @@ where
     let state = fetch(api, cache, id).await?;
     let state = decrypt(pgp, keys, state, &mut decryptor_keys).await?;
 
+    trace!("State (decryptable):\n{state:#?}");
+
     let Some(state) = inflate(pgp, id, state)? else {
         return Ok(None);
     };
 
-    let email = email::canonicalize_auto(email);
+    trace!("State (inflated):\n{state:#?}");
 
-    extract(pgp, contacts, now, &email, week_start, id, state)
-        .await
-        .map(Some)
-        .map_err(RsvpFetchError::from)
+    let email = email::canonicalize_auto(email);
+    let event = extract(pgp, contacts, now, &email, week_start, id, state).await?;
+
+    trace!("Event:\n{event:#?}");
+
+    Ok(Some(event))
 }
 
 #[derive(Debug)]
@@ -152,7 +157,9 @@ async fn fetch_ex(api: &Session, cache: &impl RsvpCache, id: &RsvpEventId) -> Rs
     }
 }
 
-enum Decrypted<'a, P>
+#[derive(Debug)]
+#[debug(bound())]
+enum Decryptable<'a, P>
 where
     P: PGPProviderSync,
 {
@@ -172,7 +179,7 @@ async fn decrypt<'a, P, K>(
     keys: &K,
     state: Fetched,
     decryptor_keys: &'a mut Option<CalendarDecryptorKeys<P>>,
-) -> RsvpFetchResult<Decrypted<'a, P>, K>
+) -> RsvpFetchResult<Decryptable<'a, P>, K>
 where
     P: PGPProviderSync,
     K: RsvpKeys,
@@ -193,7 +200,7 @@ where
 
             let decryptor = calendar.create_decryptor(pgp, decryptor_keys, &event)?;
 
-            Ok(Decrypted::Some {
+            Ok(Decryptable::Some {
                 decryptor,
                 calendar,
                 event,
@@ -203,10 +210,12 @@ where
 
         // If we've failed to fetch event from the API, there's nothing to
         // decrypt, so let's just carry the error with us to the next stage
-        Fetched::None(err) => Ok(Decrypted::None(err)),
+        Fetched::None(err) => Ok(Decryptable::None(err)),
     }
 }
 
+#[derive(Debug)]
+#[debug(bound())]
 struct Inflated<'a, P>
 where
     P: PGPProviderSync,
@@ -221,7 +230,7 @@ where
 fn inflate<'a, P>(
     pgp: &P,
     id: &'a RsvpEventId,
-    state: Decrypted<'a, P>,
+    state: Decryptable<'a, P>,
 ) -> RsvpResult<Option<Inflated<'a, P>>>
 where
     P: PGPProviderSync,
@@ -229,14 +238,14 @@ where
     debug!("Inflating");
 
     let (decryptor, calendar, raw, children) = match state {
-        Decrypted::Some {
+        Decryptable::Some {
             decryptor,
             calendar,
             event,
             children,
         } => (decryptor, calendar, event, children),
 
-        Decrypted::None(err) => {
+        Decryptable::None(err) => {
             return match id {
                 // If we've failed to fetch event from the API, we might still
                 // display the widget using data solely from the invitation
@@ -322,6 +331,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
 async fn extract<P>(
     pgp: &P,
     contacts: &impl RsvpContacts,
