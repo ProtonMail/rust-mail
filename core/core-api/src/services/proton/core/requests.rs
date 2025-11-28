@@ -353,3 +353,9 @@ impl PaginateOptions for GetLegacyFeatureFlagsOptions {
         self.page_size
     }
 }
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutFeatureFlagOverride {
+    pub value: bool,
+}

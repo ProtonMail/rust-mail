@@ -1,6 +1,7 @@
 pub mod contacts;
 pub mod dependency_builder;
 pub mod event_poll;
+pub mod user_feature_flags;
 
 use crate::{Origin, UserContext};
 use proton_action_queue::action::{FactoryError, Handler};
@@ -35,6 +36,10 @@ pub(crate) fn register_actions(
         Origin::App => {
             reg(queue, event_poll::EventPollHandler { ctx: ctx.clone() });
             reg(queue, contacts::DeleteHandler { api: api.clone() });
+            reg(
+                queue,
+                user_feature_flags::OverrideFlagHandler { api: api.clone() },
+            );
         }
 
         Origin::ShareExt => {
