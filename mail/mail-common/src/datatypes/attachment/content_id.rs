@@ -10,14 +10,10 @@ use uuid::Uuid;
 pub struct ContentId(String);
 
 impl ContentId {
-    /// Create a new random content id.
     pub fn new() -> Self {
         Self(Uuid::new_v4().to_string())
     }
 
-    /// Create from an existing value.
-    ///
-    /// If the value is wrapped in `<>` this will be stripped.
     pub fn with<T: AsRef<str>>(value: T) -> Self {
         let value = value.as_ref();
         if value.starts_with('<') && value.ends_with('>') {

@@ -2,10 +2,6 @@ use super::custom_folder::CustomFolder;
 use itertools::Itertools;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
-/// Trait for a hierarchy of folders
-/// It requires from implementing type to have a
-/// local_id, parent_id, self referencial children vector and display_order
-///
 pub trait Hierarchy: Send + Sized + Clone {
     fn local_id(&self) -> u64;
     fn parent_id(&self) -> Option<u64>;
@@ -31,8 +27,6 @@ impl Hierarchy for CustomFolder {
     }
 }
 
-/// Create a folder hierarchy from a list of folders implementing the Hierarchy trait
-///
 pub fn custom_folder_hierarchy<H: Hierarchy>(labels: &[H]) -> Vec<H> {
     let mut index: BTreeMap<_, _> = labels
         .iter()

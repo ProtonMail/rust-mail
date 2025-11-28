@@ -1,42 +1,3 @@
-//! Persistent data types for the Proton Mail common library.
-//!
-//! This module contains various data types used by the Proton Mail common
-//! library. Many of these are used by the models in the [`models`](crate::models)
-//! module, where they represent child data structures for the models' fields.
-//! The models themselves should not be placed in this module.
-//!
-//! All data types used by [`Model`](stash::macros::Model) fields need to be
-//! convertible to and from database-compatible format using [`ToSql`] and
-//! [`FromSql`]. They do not generally need to be serializable or
-//! deserializable, as they are not used for network communication or any other
-//! interchange purpose as a general requirement, and so implementation of
-//! [`Serialize`] and [`Deserialize`] is not necessary and may be a sign of a
-//! mistake. The exception here is when these [`serde`] conversions are
-//! desirable to lean on in order to provide conversion to and from SQL types,
-//! for instance using [`sql_using_serde`], as a convenience mechanism. This is
-//! notably useful when wanting to store types as JSON in a database field, for
-//! instance.
-//!
-//! Generally speaking, [`From`] conversions to convert from the Proton API
-//! types to the internal types are provided, but not vice versa unless there is
-//! a specific need. Such conversions are usually very simple and indeed in many
-//! cases can be done without altering any data in memory.
-//!
-//! This separation does cause some duplication, but the overlap is not total.
-//! The various implementations for the types differ in each place; any logic
-//! for the application is in the application types and not the API types; and
-//! the distinction allows customisation of how the application deals with and
-//! stores its related data. Additionally, it promotes wider usability, as each
-//! application that depends upon the API types can interpret and managed them
-//! in its own way.
-//!
-//! Note: The current exception to this organisation rule is that of the data
-//! types used for events. These are not saved in the database, and so do not
-//! have a related model, and their data types are not placed into this module
-//! as they are not related to modelling of persistent data against storage.
-//! Hence event data types are placed into the [`events`](crate::events) module.
-//!
-
 mod assigned_actions;
 pub mod attachment;
 pub(crate) mod contextual_conversation;
@@ -123,18 +84,13 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use tracing::{error, trace};
-//  ENUMS
-//==============================================================================
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum AlmostAllMail {
-    /// TODO: Document this variant.
     AllMail = 0,
 
-    /// TODO: Document this variant.
     #[default]
     AlmostAllMail = 1,
 }
@@ -161,16 +117,12 @@ impl ToSql for AlmostAllMail {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum ComposerDirection {
-    /// TODO: Document this variant.
     #[default]
     LeftToRight = 0,
-
-    /// TODO: Document this variant.
     RightToLeft = 1,
 }
 
@@ -196,16 +148,12 @@ impl ToSql for ComposerDirection {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum ComposerMode {
-    /// TODO: Document this variant.
     #[default]
     Normal = 0,
-
-    /// TODO: Document this variant.
     Maximized = 1,
 }
 
@@ -231,16 +179,12 @@ impl ToSql for ComposerMode {
     }
 }
 
-/// Whether this is an embedded attachment.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, TryFrom, Default)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum Disposition {
     #[default]
-    /// This is meant to be shown as a regular attachment
     Attachment = 1,
-
-    /// This is meant to be shown as an image inside of the message.
     Inline = 2,
 }
 
@@ -284,16 +228,12 @@ impl ToSql for Disposition {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum MessageButtons {
-    /// TODO: Document this variant.
     #[default]
     ReadFirst = 0,
-
-    /// TODO: Document this variant.
     UnreadFirst = 1,
 }
 
@@ -393,19 +333,13 @@ impl ToSql for MimeType {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom, Serialize, Deserialize)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum NextMessageOnMove {
-    /// TODO: Document this variant.
     #[default]
     DisabledExplicit = 0,
-
-    /// TODO: Document this variant.
     DisabledImplicit = 1,
-
-    /// TODO: Document this variant.
     EnabledExplicit = 2,
 }
 
@@ -432,22 +366,18 @@ impl ToSql for NextMessageOnMove {
     }
 }
 
-/// A message parsed header value can either be a string or an array of strings.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ParsedHeaderValue {
     String(String),
     Array(Vec<String>),
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum PgpScheme {
-    /// TODO: Document this variant.
     Inline = 8,
 
-    /// TODO: Document this variant.
     #[default]
     Mime = 16,
 }
@@ -523,22 +453,14 @@ impl ToSql for PmSignature {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum ShowImages {
-    /// TODO: Document this variant.
     DoNotAutoLoad = 0,
-
-    /// TODO: Document this variant.
     AutoLoadRemote = 1,
-
-    /// TODO: Document this variant.
     #[default]
     AutoLoadEmbedded = 2,
-
-    /// TODO: Document this variant.
     AutoLoadBoth = 3,
 }
 
@@ -566,22 +488,14 @@ impl ToSql for ShowImages {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum ShowMoved {
-    /// TODO: Document this variant.
     #[default]
     DoNotKeep = 0,
-
-    /// TODO: Document this variant.
     KeepInDrafts = 1,
-
-    /// TODO: Document this variant.
     KeepInSent = 2,
-
-    /// TODO: Document this variant.
     KeepBoth = 3,
 }
 
@@ -609,15 +523,11 @@ impl ToSql for ShowMoved {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum SpamAction {
-    /// TODO: Document this variant.
     DoNothing = 0,
-
-    /// TODO: Document this variant.
     UnsubscribeWithOneClick = 1,
 }
 
@@ -643,26 +553,18 @@ impl ToSql for SpamAction {
     }
 }
 
-/// Where to move or what to do with the item when the user swipes it.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(i8)]
 pub enum SwipeAction {
     NoAction = -1,
-
     Trash = 0,
-
     Spam = 1,
-
     Star = 2,
-
     #[default]
     Archive = 3,
-
     MarkAsRead = 4,
-
     LabelAs = 5,
-
     MoveTo = 6,
 }
 
@@ -694,16 +596,12 @@ impl ToSql for SwipeAction {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum ViewLayout {
-    /// TODO: Document this variant.
     #[default]
     Column = 0,
-
-    /// TODO: Document this variant.
     Row = 1,
 }
 
@@ -729,16 +627,12 @@ impl ToSql for ViewLayout {
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum ViewMode {
-    /// TODO: Document this variant.
     #[default]
     Conversations = 0,
-
-    /// TODO: Document this variant.
     Messages = 1,
 }
 
@@ -764,18 +658,12 @@ impl ToSql for ViewMode {
     }
 }
 
-/// In certain label locations the message either needs to display the sender or the recipient.
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum MessageRecipientDisplayMode {
     Recipients,
     Sender,
 }
 
-//  STRUCTS
-//==============================================================================
-
-/// Wrapper type around [`RealAttachmentEncryptedSignature`] to implement
-/// [`FromSql`] and [`ToSql`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentEncryptedSignature {
     pub value: RealAttachmentEncryptedSignature,
@@ -907,8 +795,6 @@ impl From<ApiAttachmentMetadata> for AttachmentMetadata {
     }
 }
 
-/// Wrapper type around [`RealAttachmentSignature`] to implement [`FromSql`] and
-/// [`ToSql`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentSignature {
     pub value: RealAttachmentSignature,
@@ -962,13 +848,8 @@ sql_using_serde!(AttachmentSignature);
 // TODO: removed from here and the API type used directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversationLabelsCount {
-    /// Remote label ID
     pub label_id: LabelId,
-
-    /// Total number of conversations linked to one label
     pub total: u64,
-
-    /// Number of unread conversations linked to one label
     pub unread: u64,
 }
 
@@ -1018,24 +899,13 @@ impl ConversationLabelsCount {
     }
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EncryptedMessageBody {
-    /// TODO: Document this field.
     pub encrypted_body: String,
-
-    /// TODO: Document this field.
     pub metadata: MessageBodyMetadata,
 }
 
 impl EncryptedMessageBody {
-    /// Decrypt and convert the encrypted message into a [`DecryptedMessageBody`].
-    ///
-    /// It also stores the pgp attachments into the database.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the decryption failed.
     pub async fn into_decrypted_message<P>(
         mut self,
         ctx: &MailUserContext,
@@ -1209,19 +1079,15 @@ impl GettablePGPMessage for EncryptedMessageBody {
 }
 
 impl DecryptableMessage for EncryptedMessageBody {
-    /// TODO: Document this method.
     fn message_id(&self) -> Option<&str> {
         self.metadata.remote_message_id.as_ref().map(|v| v.as_ref())
     }
 
-    /// TODO: Document this method.
     fn message_is_mime(&self) -> bool {
         self.metadata.mime_type == MimeType::MultipartMixed
     }
 }
 
-/// Wrapper type around [`RealKeyPackets`] to implement [`FromSql`] and
-/// [`ToSql`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KeyPackets {
     pub value: RealKeyPackets,
@@ -1269,33 +1135,17 @@ impl Serialize for KeyPackets {
 
 sql_using_serde!(KeyPackets);
 
-/// Sender details of message
 #[derive(Clone, Default, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MessageSender {
-    /// Recipient email address.
-    // TODO: Proper email parsing
     pub address: PrivateEmail,
-
-    /// TODO: Document this field.
     pub bimi_selector: Option<String>,
-
-    /// Whether to display the sender image.
     pub display_sender_image: bool,
-
-    /// Whether the address is a proton address.
     pub is_proton: bool,
-
-    /// Whether address originated from simple login alias.
     pub is_simple_login: bool,
-
-    /// Recipient display name.
     pub name: PrivateString,
 }
 
 impl MessageSender {
-    /// Creates an AvatarInformation struct using the details of
-    /// the first MessageAddress in the provided slice.
-    ///
     pub fn avatar_info(address_list: &[MessageSender]) -> AvatarInformation {
         if let Some(address) = address_list.first() {
             AvatarInformation::from(address)
@@ -1356,26 +1206,15 @@ impl From<&str> for MessageSender {
 
 sql_using_serde!(MessageSender);
 
-/// Recipient address information.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct MessageRecipient {
-    /// Email of the recipient
     pub address: PrivateEmail,
-
-    /// Whether the recipient is a proton address.
     pub is_proton: bool,
-
-    /// Display name of the recipient, empty if none.
     pub name: PrivateString,
-
-    /// Name of the address group this recipient belongs too.
     pub group: MaybeEmptyString,
 }
 
 impl MessageRecipient {
-    /// Creates an AvatarInformation struct using the details of
-    /// the first MessageAddress in the provided slice.
-    ///
     pub fn avatar_info(recipients: &[MessageRecipient]) -> AvatarInformation {
         if let Some(recipient) = recipients.first() {
             AvatarInformation::from(recipient)
@@ -1384,6 +1223,7 @@ impl MessageRecipient {
         }
     }
 }
+
 impl From<ApiMessageRecipient> for MessageRecipient {
     fn from(value: ApiMessageRecipient) -> Self {
         Self {
@@ -1454,6 +1294,7 @@ impl From<Vec<MessageRecipient>> for MessageRecipients {
 
 impl Deref for MessageRecipients {
     type Target = Vec<MessageRecipient>;
+
     fn deref(&self) -> &Self::Target {
         &self.value
     }
@@ -1477,32 +1318,14 @@ sql_using_serde!(MessageSenders);
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct MessageAttachment {
-    /// TODO: Document this field.
     pub id: AttachmentId,
-
-    /// TODO: Document this field.
     pub disposition: Disposition,
-
-    /// TODO: Document this field.
     pub enc_signature: Option<AttachmentEncryptedSignature>,
-
-    /// TODO: Document this field.
     pub headers: MessageAttachmentHeaders,
-
-    /// TODO: Document this field.
     pub key_packets: KeyPackets,
-
-    /// TODO: Document this field.
-    // pub mime_type: String,
     pub mime_type: attachment::MimeType,
-
-    /// TODO: Document this field.
     pub signature: Option<AttachmentSignature>,
-
-    /// TODO: Document this field.
     pub name: String,
-
-    /// TODO: Document this field.
     pub size: u64,
 }
 
@@ -1545,10 +1368,7 @@ impl From<ApiMessageAttachmentHeaders> for MessageAttachmentHeaders {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MessageAttachmentInfo {
-    /// TODO: Document this field.
     pub attachment: u32,
-
-    /// TODO: Document this field.
     pub inline: u32,
 }
 
@@ -1620,13 +1440,8 @@ sql_using_serde!(MessageAttachments);
 // TODO: removed from here and the API type used directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MessageLabelsCount {
-    /// Remote label ID
     pub label_id: LabelId,
-
-    /// Total number of messages linked to one label
     pub total: u64,
-
-    /// Number of unread messages linked to one label
     pub unread: u64,
 }
 
@@ -1677,7 +1492,6 @@ impl MessageLabelsCount {
     }
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
 pub struct MessageFlags(u64);
 
@@ -1804,7 +1618,6 @@ bitflags::bitflags! {
 }
 
 impl MessageFlags {
-    /// Check whether this message is an auto-sent reply.
     #[must_use]
     pub fn is_sent_auto(&self) -> bool {
         if !self.intersects(MessageFlags::SENT) {
@@ -1814,7 +1627,6 @@ impl MessageFlags {
         self.intersects(MessageFlags::AUTO)
     }
 
-    /// Check whether this message is a draft.
     #[must_use]
     pub fn is_draft(&self) -> bool {
         !self.intersects(MessageFlags::SENT | MessageFlags::RECEIVED)
@@ -1830,6 +1642,7 @@ impl MessageFlags {
         self.intersects(MessageFlags::SENT)
     }
 
+    #[must_use]
     pub fn display_snooze_reminder(&self) -> bool {
         self.intersects(MessageFlags::DISPLAY_SNOOZE_REMINDER)
     }
@@ -1886,12 +1699,6 @@ impl From<MobileSetting> for ApiMobileSetting {
     }
 }
 
-/// All possible actions sent by API GET settings request
-///
-/// Found in MailSettings::MobileSettings::MessageToolbar::Actions /
-///          MailSettings::MobileSettings::ConversationToolbar::Actions /
-///          MailSettings::MobileSettings::ListToolbar::Actions
-///
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum MobileAction {
     Archive,
@@ -1972,7 +1779,6 @@ impl From<MobileAction> for ApiMobileAction {
 }
 
 impl MobileAction {
-    /// Compute the actions seen in the bottom bar on the list view (regardless of conversation grouping)
     pub async fn list_toolbar_actions(tether: &Tether) -> Result<Vec<MobileAction>, AppError> {
         let settings = MailSettings::get_or_default(tether).await;
 
@@ -1989,7 +1795,6 @@ impl MobileAction {
         Ok(actions)
     }
 
-    /// Compute the actions seen in the bottom bar and action sheet for conversation view
     pub async fn conversation_toolbar_actions(
         tether: &Tether,
     ) -> Result<Vec<MobileAction>, AppError> {
@@ -2008,7 +1813,6 @@ impl MobileAction {
         Ok(actions)
     }
 
-    /// Compute the actions seen in the bottom bar and action sheet for message view
     pub async fn message_toolbar_actions(tether: &Tether) -> Result<Vec<MobileAction>, AppError> {
         let settings = MailSettings::get_or_default(tether).await;
 
@@ -2073,16 +1877,10 @@ impl MobileAction {
     }
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MobileSettings {
-    /// TODO: Document this field.
     pub conversation_toolbar: MobileSetting,
-
-    /// TODO: Document this field.
     pub list_toolbar: MobileSetting,
-
-    /// TODO: Document this field.
     pub message_toolbar: MobileSetting,
 }
 
@@ -2132,9 +1930,6 @@ sql_using_serde!(ParsedHeaders);
 
 impl ParsedHeaders {
     pub fn can_unsubscribe(&self) -> bool {
-        // TODO: implement unsubscribe via email
-        // self.headers.get("List-Unsubscribe").is_some()
-        // HACK: This is only necessary until it's implemented.
         UnsubscribeNewsletter::new(self, LocalMessageId::from(0)).is_some()
     }
 }
@@ -2148,8 +1943,6 @@ pub struct NotAMagicLocalIdError {
     pub got: u32,
 }
 
-/// Mail settings local id. This is a special value that ALWAYS must be equal the constant
-/// [`MAGIC_ID`]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub struct MailSettingsId;
 
@@ -2178,10 +1971,6 @@ impl ToSql for MailSettingsId {
     }
 }
 
-//  TRAITS
-//==============================================================================
-
-/// System label identifiers that are constant for every account.
 pub trait SystemLabelId: for<'a> From<&'a str> + ToSql {
     #[must_use]
     fn inbox() -> Self {
@@ -2326,20 +2115,14 @@ pub trait SystemLabelId: for<'a> From<&'a str> + ToSql {
 
 impl SystemLabelId for LabelId {}
 
-/// Information about [`Label`] of type [`LabelType::Label`] that are applied
-/// to [`Conversation`] or [`Messages`].
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CustomLabel {
-    /// Local id of the label
     pub local_id: LocalLabelId,
-    /// Name of the label
     pub name: String,
-    /// Color of the label.
     pub color: LabelColor,
 }
 
 impl CustomLabel {
-    /// Create a new instance from a `label`
     pub fn new(label: &Label) -> Self {
         Self {
             local_id: label.id(),
@@ -2359,18 +2142,11 @@ impl From<Label> for CustomLabel {
     }
 }
 
-/// This enum is extended version of the `LabelType` enum. It contains additional
-/// information regarding the system label type.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum LabelDescription {
     Label,
     ContactGroup,
     Folder,
-
-    /// System field contain information about the system label type.
-    /// SystemLabel main purpose is to determine the type of the system label.
-    /// It is required for localization in the sidebar & dropdowns.
-    /// The information is optional as we cannot for see all possible system labels.
     System(Option<SystemLabel>),
 }
 
