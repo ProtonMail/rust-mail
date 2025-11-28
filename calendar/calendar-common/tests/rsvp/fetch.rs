@@ -230,6 +230,73 @@ async fn reminder_without_attendees() {
     assert_eq!(RsvpIntent::Reminder, actual.intent);
 }
 
+/// For reminders we usually fetch the author from `SharedEvents[].Author`, but
+/// if the shared event has an explicit `ORGANIZER` property, that one is more
+/// representative.
+#[tokio::test]
+async fn reminder_with_organizer_in_shared_event() {
+    const SHARED_EVENT: &str = indoc! {"
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        DTSTAMP:20180101T080000Z
+        DTSTART:20180101T120000Z
+        DTEND:20180101T133000Z
+        DESCRIPTION:some description
+        SUMMARY:some title
+        LOCATION:some location
+        ORGANIZER:mailto:joe@pm.me
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
+    let world = world().await;
+
+    let event = world.event(|event| {
+        event
+            .basic()
+            .with_shared_event(SHARED_EVENT)
+            .with_shared_event_author("foo@pm.me")
+    });
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_event(EVENT_UID, EVENT_ID, event.clone())
+        .await;
+
+    let actual = RsvpEventId::reminder(EVENT_UID, EVENT_ID)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "bar@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        RsvpOrganizer {
+            name: None,
+            reply_email: "joe@pm.me".into(),
+            display_email: "joe@pm.me".into(),
+        },
+        actual.organizer,
+    );
+}
+
 #[tokio::test]
 async fn alias() {
     const ATTENDEES_EVENT: &str = indoc! {"

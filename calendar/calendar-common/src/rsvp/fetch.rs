@@ -303,6 +303,7 @@ where
             lhs.dtstamp = lhs.dtstamp.or(rhs.dtstamp);
             lhs.dtstart = lhs.dtstart.or(rhs.dtstart);
             lhs.location = lhs.location.or(rhs.location);
+            lhs.organizer = lhs.organizer.or(rhs.organizer);
             lhs.rrule = lhs.rrule.or(rhs.rrule);
             lhs.sequence = lhs.sequence.or(rhs.sequence);
             lhs.status = lhs.status.or(rhs.status);
