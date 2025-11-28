@@ -92,6 +92,11 @@ impl MailUserContext {
                                 }
                             };
 
+                            // Skip this logic if the rebase feature is enabled.
+                            if ctx.user_context.has_rebase_feature().await {
+                                continue;
+                            }
+
                             // if we have queued an action in this process in the default group
                             // that is not the event loop, reset the timer and replace
                             // the event poll so it runs after this action. We also want to
