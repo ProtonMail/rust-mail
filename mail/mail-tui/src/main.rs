@@ -21,7 +21,7 @@ use std::io::{Stdout, stdout};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-pub type TerminalType = Terminal<CrosstermBackend<Stdout>>;
+type TerminalType = Terminal<CrosstermBackend<Stdout>>;
 
 use zeroizing_alloc::ZeroAlloc;
 
@@ -30,6 +30,7 @@ static ALLOC: ZeroAlloc<std::alloc::System> = ZeroAlloc(std::alloc::System);
 
 fn initialize_panic_handler() {
     let original_hook = std::panic::take_hook();
+
     std::panic::set_hook(Box::new(move |panic_info| {
         crossterm::execute!(std::io::stderr(), LeaveAlternateScreen).unwrap();
         disable_raw_mode().unwrap();
@@ -38,19 +39,19 @@ fn initialize_panic_handler() {
 }
 
 #[derive(Parser, Clone, Debug)]
-#[command(name = "proton-mail-tui", about = "proton mail tui application")]
+#[command(name = "proton-mail-tui")]
 struct CliArgs {
-    /// Enable proton black environment
+    /// Which API to connect to, defaults to production
     #[arg(long, short)]
-    api_dev_env: bool,
+    environment: Option<String>,
 
     /// Used to identify the app in the API
     #[arg(long, default_value = "ios")]
-    app_platform: String,
+    platform: String,
 
     /// Used to identify the app in the API
     #[arg(long, default_value = "mail")]
-    app_product: String,
+    product: String,
 
     /// Used to identify the app in the API
     #[arg(long, default_value = "7.1.0")]
@@ -68,15 +69,12 @@ struct CliArgs {
     #[arg(long)]
     html_dir: Option<PathBuf>,
 
-    /// Default username
     #[arg(long, short)]
     username: Option<String>,
 
-    /// Default password
     #[arg(long, short)]
     password: Option<String>,
 
-    /// The event loop poll time
     #[arg(long)]
     event_loop_time: Option<u64>,
 
@@ -85,13 +83,13 @@ struct CliArgs {
 }
 
 impl CliArgs {
-    pub fn dir(&self) -> &'static str {
-        if self.api_dev_env { "dev" } else { "" }
+    pub fn dir(&self) -> &str {
+        self.environment.as_deref().unwrap_or_default()
     }
 
     pub fn api_config(&self) -> ApiConfig {
-        let env_id = if self.api_dev_env {
-            EnvId::new_atlas()
+        let env_id = if let Some(env) = &self.environment {
+            EnvId::new_atlas_name(env)
         } else {
             EnvId::new_prod()
         };
@@ -107,8 +105,8 @@ impl CliArgs {
 
     pub fn app_details(&self) -> AppDetails {
         AppDetails {
-            platform: self.app_platform.clone(),
-            product: self.app_product.clone(),
+            platform: self.platform.clone(),
+            product: self.product.clone(),
             version: self.version.clone(),
         }
     }

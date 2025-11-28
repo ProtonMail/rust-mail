@@ -134,6 +134,7 @@ pub struct AppModel {
 impl AppModel {
     pub async fn new() -> anyhow::Result<Self> {
         let app_config = &CLI_ARGS;
+
         let cache_dir = dirs::cache_dir()
             .ok_or(anyhow!("Failed to get cache dir"))?
             .join(APP_ID)
