@@ -678,12 +678,17 @@ impl MailUserSession {
         .map_err(ProtonError::from)
     }
 
-    /// Is the Unleash feature enabled.
+    /// Is the Unleash OR legacy feature enabled. Returns not only global feature flags,
+    /// but also user-specific ones.
+    ///
+    /// If you don't have an active user session, use [`MailSession::is_feature_enabled`] instead.
+    ///
     /// Currently:
     /// * Returns None if feature is not found
-    /// * Returns Some(true) if feature is present
+    /// * Returns Some(true) if feature is enabled (or present in case of Unleash)
+    /// * Returns Some(false) if feature is disabled (only legacy, Unleash returns None in that case)
     ///
-    /// NOTE: It never returns Some(false) as in this stage of the implementation.
+    /// If there are two features with the same id, coming from unleash and legacy, unleash takes the precedence.
     pub async fn is_feature_enabled(
         &self,
         feature_id: String,
@@ -722,6 +727,10 @@ impl MailUserSession {
         })
     }
 
+    /// Fails if:
+    /// * Feature is missing
+    /// * Feature is not writable
+    ///     * All Unleash flags are not writable.
     pub async fn override_user_feature_flag(
         &self,
         flag_name: String,
