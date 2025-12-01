@@ -147,6 +147,22 @@ fn inject_style_transparency_handling() {
 }
 
 #[test]
+fn inject_style_transparent_background_on_body_html() {
+    let html = include_str!("../../tests/htmls/styles/transparent_background_body_html.html");
+    let mut html = Transformer::new(html);
+    html.inject_dark_mode(
+        "",
+        ColorMode::DarkMode,
+        BrowserCapabilities {
+            supports_dark_mode_via_media_query: true,
+        },
+        IncludeFullStaticCss::No,
+        &[],
+    );
+    insta::assert_snapshot!(html.to_string());
+}
+
+#[test]
 fn inject_style_to_another_target() {
     let html = include_str!("../../tests/htmls/styles/with_text_color_in_stylesheet.html");
     let mut html = Transformer::new(html);

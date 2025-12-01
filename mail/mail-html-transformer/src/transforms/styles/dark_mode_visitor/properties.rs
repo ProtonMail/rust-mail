@@ -9,7 +9,7 @@ use lightningcss::{
 
 use crate::transforms::styles::{ColorPurpose, PropertyWithPurpose};
 
-use super::colors::ColorVisitor;
+use super::colors::{ColorVisitor, ShouldModifyTransparentColors};
 
 /// All properties that might contain background color. Including all shorthands
 const BACKGROUND_COLOR_RELATED_PROPERTIES: &[PropertyId] = &[
@@ -57,13 +57,15 @@ pub(crate) struct PropertiesVisitor<'i> {
 
     /// We keep the result of the visitor which is a list of properties with already adjusted colors.
     pub(crate) overrides: Vec<PropertyWithPurpose<'i>>,
+    should_modify_transparent_colors: ShouldModifyTransparentColors,
 }
 
 impl<'i> PropertiesVisitor<'i> {
-    pub fn new() -> Self {
+    pub fn new(should_modify_transparent_colors: ShouldModifyTransparentColors) -> Self {
         Self {
             modified: Vec::default(),
             overrides: Vec::default(),
+            should_modify_transparent_colors,
         }
     }
 
@@ -97,7 +99,10 @@ impl<'i> Visitor<'i> for PropertiesVisitor<'i> {
         // By mutating we mean adjust the color to dark-mode-compliant.
         let mut new = property.clone();
 
-        new.visit_children(&mut ColorVisitor::new(color_purpose))?;
+        new.visit_children(&mut ColorVisitor::new(
+            color_purpose,
+            self.should_modify_transparent_colors,
+        ))?;
 
         if &new == property {
             // We have not changed a single color. We do not need to generate override

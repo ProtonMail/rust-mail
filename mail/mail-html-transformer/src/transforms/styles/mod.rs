@@ -1,5 +1,6 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
+use std::sync::LazyLock;
 use std::{cell::RefCell, collections::BTreeMap};
 
 pub use capabilities::BrowserCapabilities;
@@ -21,6 +22,7 @@ use lightningcss::{
 use support_level::DarkStyleSupportLevel;
 
 use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode};
+use dark_mode_visitor::ShouldModifyTransparentColors;
 
 use super::ColorMode;
 
@@ -28,6 +30,24 @@ mod capabilities;
 mod colors;
 mod dark_mode_visitor;
 mod support_level;
+
+static NODES_REQUIRING_TRANSPARENT_COLOR_MODIFICATION: LazyLock<HashSet<LocalName>> =
+    LazyLock::new(|| {
+        let mut set = HashSet::new();
+        set.insert(LocalName::from("html"));
+        set.insert(LocalName::from("body"));
+        set
+    });
+
+fn should_modify_transparent_colors_for_node(
+    node_name: &LocalName,
+) -> ShouldModifyTransparentColors {
+    if NODES_REQUIRING_TRANSPARENT_COLOR_MODIFICATION.contains(node_name) {
+        ShouldModifyTransparentColors::Yes
+    } else {
+        ShouldModifyTransparentColors::No
+    }
+}
 
 /// Reverts dark mode injection in inline attributes.
 /// This function removes modified `style` attribute and restores original style from `data-proton-original-style` attribute.
@@ -504,7 +524,14 @@ fn sanitize_dark_mode_in_deprecated_attributes(
                 continue;
             };
 
-            if color.is_transparent() {
+            let should_modify_transparent_colors =
+                should_modify_transparent_colors_for_node(&node.name.local);
+            if color.is_transparent()
+                && !matches!(
+                    should_modify_transparent_colors,
+                    ShouldModifyTransparentColors::Yes
+                )
+            {
                 continue;
             }
 
@@ -512,7 +539,7 @@ fn sanitize_dark_mode_in_deprecated_attributes(
             let property = css_property_for_deprecated_attribute(attr);
 
             // It is a bit simplified approach - we are not calculating the proper contrast ratio here.
-            let hsla = hsla_for_dark_mode(purpose, color);
+            let hsla = hsla_for_dark_mode(purpose, color, should_modify_transparent_colors);
 
             let new_color = CssColor::RGBA(hsla);
             let Ok(new_color) = new_color.to_css_string(PrinterOptions::default()) else {
@@ -588,7 +615,9 @@ fn sanitize_dark_mode_in_inline_attribute(
     node: NodeDataRef<ElementData>,
     overrides: &mut InlineStyleOverrides,
 ) {
-    let mut visitor = StyleAttributeVisitor::default();
+    let should_modify_transparent_colors =
+        should_modify_transparent_colors_for_node(&node.name.local);
+    let mut visitor = StyleAttributeVisitor::new(should_modify_transparent_colors);
 
     _ = style_attribute.visit(&mut visitor);
 
@@ -796,7 +825,7 @@ mod tests {
         // https://www.w3.org/TR/mediaqueries-4/ EXAMPLE 26 - < sign is a valid syntax here
         let style = "
             @media (width < 800px) {
-                
+
             }
         ";
 
