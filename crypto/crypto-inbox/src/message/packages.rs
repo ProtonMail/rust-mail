@@ -82,11 +82,6 @@ impl EncryptedPackageBody {
     ///
     /// This function attempts to extract the session key from the provided draft using the given `decryption_keys`.
     /// If successful, it constructs an [`EncryptedPackageBody`] with the specified `mime_type`.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`MessageError`] if the PGP message may not be imported (if it is malformed), or if decrypting the session key packet
-    /// fails.
     pub fn new_with_draft<Provider: PGPProviderSync, Draft: SessionKeyAndDataPacketsExtractable>(
         provider: &Provider,
         draft: &Draft,
@@ -117,10 +112,6 @@ pub trait EncryptablePackage {
     /// The returned [`EncryptedPackageBody`] can be used to create individual key packets
     /// for each recipient address of the package. It also allows extraction of the message
     /// session key to enable the server to decrypt the content for cleartext recipients.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`MessageError::Encryption`] error if the encryption fails.
     fn package_body_encrypt<P>(
         &self,
         pgp: &P,
@@ -143,10 +134,6 @@ pub trait EncryptablePackage {
 /// The returned [`EncryptedPackageBody`] can be used to create individual key packets
 /// for each recipient address of the package. It also allows extraction of the message
 /// session key to enable the server to decrypt the content for cleartext recipients.
-///
-/// # Errors
-///
-/// Returns a [`MessageError::Encryption`] error if the encryption fails.
 pub fn package_body_encrypt<P>(
     pgp: &P,
     address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,

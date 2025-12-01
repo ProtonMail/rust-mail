@@ -60,9 +60,6 @@ impl<T: AsRef<str>> From<T> for MaybeDateAndOrTime {
 
 impl DateAndOrTimeValue {
     /// Try to create a new `DateAndOrTimeValue`
-    ///
-    /// # Errors
-    ///   * if given value is not valid (see RFC6350 4.3.4 for valid formats)
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
     }

@@ -25,9 +25,6 @@ impl SortAs {
     }
 
     /// Try to create a new sort-as parameter
-    ///
-    /// # Errors
-    ///   * if at least one of the given value is not a valid param-value
     pub fn new_validated(values: &[String]) -> VCardParameterResult<Self> {
         Ok(Self {
             values: values

@@ -73,10 +73,6 @@ pub trait ProtonAuth {
     /// This endpoint initializes the SRP authentication process for the given user
     /// and returns the SRP parameters needed for authentication.
     ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn post_auth_info(
         &self,
         request: PostAuthInfoRequest,

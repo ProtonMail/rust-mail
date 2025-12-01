@@ -61,21 +61,12 @@ pub trait StoreInKeyChain: Sized {
 /// OS Keychain abstraction.
 pub trait KeyChain: Send + Sync {
     /// Store the string encoded encryption key into the keychain.
-    ///
-    /// # Errors
-    /// Should return error if the operation failed.
     fn store_entry(&self, kind: KeyChainEntryKind, key: SecretString) -> Result<(), KeyChainError>;
 
     /// Delete the encryption key from the keychain.
-    ///
-    /// # Errors
-    /// Should return error if the operation failed.
     fn delete_entry(&self, kind: KeyChainEntryKind) -> Result<(), KeyChainError>;
 
     /// Retrieve the encryption key from the keychain. Should return `None` if it does not exist.
-    ///
-    /// # Errors
-    /// Should return error if the operation failed.
     fn load_entry(&self, kind: KeyChainEntryKind) -> Result<Option<SecretString>, KeyChainError>;
 }
 
@@ -84,25 +75,16 @@ pub trait KeyChain: Send + Sync {
 /// It is implemented automatically
 pub trait KeyChainExt: KeyChain {
     /// Store the string encoded encryption key into the keychain.
-    ///
-    /// # Errors
-    /// Should return error if the operation failed.
     fn store<T: StoreInKeyChain>(&self, key: T) -> Result<(), KeyChainError> {
         self.store_entry(T::kind(), key.to_stored_string())
     }
 
     /// Delete the encryption key from the keychain.
-    ///
-    /// # Errors
-    /// Should return error if the operation failed.
     fn delete<T: StoreInKeyChain>(&self) -> Result<(), KeyChainError> {
         self.delete_entry(T::kind())
     }
 
     /// Retrieve the encryption key from the keychain. Should return `None` if it does not exist.
-    ///
-    /// # Errors
-    /// Should return error if the operation failed.
     fn load<T: StoreInKeyChain>(&self) -> Result<Option<T>, KeyChainError> {
         let entry = self.load_entry(T::kind())?;
         entry

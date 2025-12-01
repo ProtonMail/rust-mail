@@ -23,9 +23,6 @@ impl Component {
     }
 
     /// Try to create a new `Component` from a str comming from a vCard
-    ///
-    /// # Errors
-    ///   * if given value does not respect format (see RFC6350 4 for details)
     pub fn new_from_vcard(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
     }

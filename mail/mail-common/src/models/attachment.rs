@@ -204,10 +204,6 @@ impl Attachment {
     ///
     /// Only attachments with [`Disposition::Attachment`] are loaded. For the full attachment
     /// list we need to get the message body.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     pub fn load_conversation_attachment_metadata(
         conversation_id: LocalConversationId,
         conn: &Connection,
@@ -223,10 +219,6 @@ impl Attachment {
     ///
     /// Only attachments with [`Disposition::Attachment`] are loaded. For the full attachment
     /// list we need to get the message body.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     pub fn load_message_attachment_metadata(
         message_id: LocalMessageId,
         conn: &Connection,
@@ -246,10 +238,6 @@ impl Attachment {
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn fetch_content<PM: ProtonMail>(
         id: AttachmentId,
         api: &PM,
@@ -263,10 +251,6 @@ impl Attachment {
     /// content.
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn fetch_metadata<PM: ProtonMail>(
         id: AttachmentId,
@@ -294,11 +278,6 @@ impl Attachment {
     /// relevant information for decryption. To synchronize the full attachment
     /// metadata this method must be called.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
-    ///
     pub async fn sync_complete_metadata<PM: ProtonMail>(
         &mut self,
         api: &PM,
@@ -319,10 +298,6 @@ impl Attachment {
     ///
     /// These also include attachments that are pgp embedded and do not appear
     /// in the metadata list.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub async fn for_message(
         local_message_id: LocalMessageId,
         tether: &Tether,
@@ -350,10 +325,6 @@ impl Attachment {
 
     /// Create or update the attachment table with partial information contained in
     /// [`AttachmentMetadata`] from a [`Message`].
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub fn create_or_update_from_message_metadata(
         message: &mut Message,
         tx: &Transaction<'_>,
@@ -409,10 +380,6 @@ impl Attachment {
 
     /// Create or update the attachment table with partial information contained in
     /// [`AttachmentMetadata`] from a [`Conversation`].
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub fn create_or_update_from_conversation_metadata(
         conversation: &mut Conversation,
         tx: &Transaction<'_>,
@@ -463,10 +430,6 @@ impl Attachment {
 
     /// Get all attachments with the given IDs.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the query failed.
-    ///
     pub async fn find_by_ids(
         attachment_ids: impl IntoIterator<Item = LocalAttachmentId>,
         tether: &Tether,
@@ -487,10 +450,6 @@ impl Attachment {
     }
 
     /// Encrypt an attachment `data` with the given `address_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the encryption failed or the address can't be located.
     pub async fn encrypt(
         context: &MailUserContext,
         address_id: &AddressId,
@@ -684,10 +643,6 @@ impl Attachment {
     }
 
     /// Return the local id counterpart for a given `remote_id`.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
     pub async fn remote_id_counterpart(
         remote_id: AttachmentId,
         tether: &Tether,
@@ -718,10 +673,6 @@ impl Attachment {
     }
 
     /// Return the remote id counterpart for a given `local_id`.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
     pub async fn local_id_counterpart(
         local_attachment_id: LocalAttachmentId,
         tether: &Tether,
@@ -751,11 +702,6 @@ impl Attachment {
     /// Clone an attachment.
     ///
     /// This will create a copy of an existing attachment in the database and the cache.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we can't perform the clone operation or the attachment data is not
-    /// in the cache.
     pub async fn clone_attachment_by_id(
         ctx: &MailUserContext,
         address_id: AddressId,
@@ -772,11 +718,6 @@ impl Attachment {
     /// Clone an attachment.
     ///
     /// This will create a copy of an existing attachment in the database and the cache.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we can't perform the clone operation or the attachment data is not
-    /// in the cache.
     pub async fn clone_attachment(
         ctx: &MailUserContext,
         address_id: AddressId,

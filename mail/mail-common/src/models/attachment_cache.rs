@@ -293,10 +293,6 @@ impl Attachment {
     /// contents from the given `attachment_path`.
     ///
     /// Returns the path as a String.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the copy of the data or the db query failed.
     #[tracing::instrument(skip(ctx, bond))]
     pub async fn copy_attachment_to_cache(
         ctx: &MailUserContext,

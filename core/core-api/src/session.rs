@@ -293,11 +293,6 @@ impl Session {
     /// session. The child must present an app version that matches the platform
     /// and product.
     ///
-    /// # Errors
-    ///
-    /// Any of the [`ApiServiceError`] variants could be returned if there is a
-    /// problem with the HTTP request.
-    ///
     pub async fn fork(
         &self,
         platform: impl AsRef<str>,
@@ -357,10 +352,6 @@ impl Session {
     }
 
     /// Logout the user and invalidate the current session.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the database query fails.
     ///
     pub async fn logout(&self) -> ApiServiceResult<()> {
         self.client.logout().await;

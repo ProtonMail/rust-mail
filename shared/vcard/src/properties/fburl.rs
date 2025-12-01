@@ -57,9 +57,6 @@ impl FbUrl {
     }
 
     /// Try to create a new FBURL from given value without parameter or group
-    ///
-    /// # Errors
-    ///   * if given value is not a valid uri
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self {
             value: Uri::new_validated(value)

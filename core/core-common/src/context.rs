@@ -446,10 +446,6 @@ impl Context {
     /// An account is an entity representing a Proton account known to the system.
     /// When a user first authenticates via the login flow, a new account is created,
     /// and all subsequent sessions are associated with that account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the accounts from the db.
     pub async fn get_accounts(&self) -> CoreContextResult<Vec<CoreAccount>> {
         let tether = self.account_stash().connection().await?;
         Ok(CoreAccount::all(&tether).await?)
@@ -462,10 +458,6 @@ impl Context {
     /// Returns a tuple containing the initial list of accounts and a receiver for changes.
     /// The receiver is a channel over which change events are sent, such as when a new account is created,
     /// an existing account is updated, or an account is deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_accounts(&self) -> CoreContextResult<(Vec<CoreAccount>, WatcherHandle)> {
         let accounts = self.get_accounts().await?;
         let handle = CoreAccount::watch(self.account_stash()).await?;
@@ -478,10 +470,6 @@ impl Context {
     /// A session represents an authenticated session with the Proton API for a given account,
     /// including the authentication tokens granted by the API, the state of the session,
     /// and the user's key passphrase (once known).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> CoreContextResult<Vec<CoreSession>> {
         let tether = self.account_stash().connection().await?;
         Ok(CoreSession::all(&tether).await?)
@@ -489,17 +477,7 @@ impl Context {
 
     /// Get all authenticated API sessions.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the sessions from the db.
-    ///
-    /// # Returns
-    ///
-    /// Returns an iterator of authenticated sessions.
-    ///
-    /// More details on authenticated sessions can be found in the
-    /// [`get_sessions`] documentation.
-    ///
+    /// See: [`Self::get_session()`].
     pub async fn get_authenticated_sessions(
         &self,
     ) -> CoreContextResult<impl Iterator<Item = CoreSession>> {
@@ -510,10 +488,6 @@ impl Context {
     }
 
     /// Check if any account is logged in.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the sessions from the db.
     ///
     pub async fn any_logged_in_account(&self) -> CoreContextResult<bool> {
         let sessions = self.get_authenticated_sessions().await?;
@@ -534,10 +508,6 @@ impl Context {
     /// Returns a tuple containing the initial list of sessions and a receiver for changes.
     /// The receiver is a channel over which change events are sent, such as when a new session is created,
     /// an existing session is updated, or a session is deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions(&self) -> CoreContextResult<(Vec<CoreSession>, WatcherHandle)> {
         let tether = self.account_stash().connection().await?;
         let sessions = CoreSession::all(&tether).await?;
@@ -549,10 +519,6 @@ impl Context {
     /// Get all API sessions associated with a given account.
     ///
     /// See [`Context::get_sessions`] for more information on API sessions.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_account_sessions(
         &self,
         user_id: UserId,
@@ -564,10 +530,6 @@ impl Context {
     /// Watch an account's API sessions for changes.
     ///
     /// See [`Context::watch_sessions`] for more information on watching API sessions.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_account_sessions(
         // TODO: Two types of watchers on session, it needs to be unified.
         &self,
@@ -583,20 +545,12 @@ impl Context {
     ///
     /// This is a convenience method that enables retrieving a single account without requiring
     /// the full set of accounts to be loaded first.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_account(&self, user_id: UserId) -> CoreContextResult<Option<CoreAccount>> {
         let tether = self.account_stash().connection().await?;
         Ok(CoreAccount::find_by_id(user_id, &tether).await?)
     }
 
     /// Get the login state of an account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_account_state(
         &self,
         user_id: UserId,
@@ -617,10 +571,6 @@ impl Context {
     ///
     /// This is a convenience method that enables retrieving a single session without requiring
     /// the full set of sessions to be loaded first.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_session(
         &self,
         session_id: SessionId,
@@ -630,10 +580,6 @@ impl Context {
     }
 
     /// Get the login state of a session.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_session_state(
         &self,
         session_id: SessionId,
@@ -647,10 +593,6 @@ impl Context {
     }
 
     /// Get the account considered to be the primary account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_primary_account(&self) -> CoreContextResult<Option<CoreAccount>> {
         let tether = self.account_stash().connection().await?;
         for account in CoreAccount::by_primary_seq(&tether).await? {
@@ -667,10 +609,6 @@ impl Context {
     }
 
     /// Set the account considered to be the primary account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the account is not found.
     pub async fn set_primary_account(&self, user_id: UserId) -> CoreContextResult<()> {
         let mut tether = self.account_stash().connection().await?;
 
@@ -688,10 +626,6 @@ impl Context {
     }
 
     /// Get a user context from an existing session.
-    ///
-    /// # Errors
-    ///
-    /// TODO: Document errors
     ///
     pub async fn user_context_from_session(
         &self,
@@ -725,10 +659,6 @@ impl Context {
     }
 
     /// Logs out all sessions of an account without deleting the account's data.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn logout_account(&self, user_id: UserId) -> CoreContextResult<()> {
         for session in self.get_account_sessions(user_id.clone()).await? {
             let Ok(api) = self
@@ -885,10 +815,6 @@ impl Context {
     /// push notifications.
     ///
     /// It stores the private part in the key chain.
-    ///
-    /// # Errors
-    ///
-    /// It may return an error if crypto operation fails or if it fails to store key in the keychain.
     ///
     #[allow(clippy::result_large_err)]
     pub fn gen_device_key_pair<P>(&self, pgp: &P) -> CoreContextResult<StoredDevicePublicKey>
@@ -1114,12 +1040,6 @@ impl Context {
     ///
     /// If we detect that an existing context is active for a user
     /// but the session ids do not match we return an error.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the user context failed to initialize or
-    /// if we detect that we are trying to create duplicate contexts with
-    /// different session id.
     pub async fn new_user_context(
         &self,
         user_id: UserId,

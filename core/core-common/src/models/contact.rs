@@ -95,10 +95,6 @@ impl Contact {
     /// This function retrieves the cards for a contact from the database,
     /// stores them in the contact struct, and then returns them.
     ///
-    /// # Errors
-    ///
-    /// Returns a [`StashError`] if the cards cannot be retrieved.
-    ///
     pub async fn cards(&mut self, tether: &Tether) -> Result<&[ContactCard], StashError> {
         self.cards = ContactCard::find(
             "WHERE remote_contact_id = ?",
@@ -186,10 +182,6 @@ impl Contact {
     /// This function retrieves the emails for a contact from the database,
     /// stores them in the contact struct, and then returns them.
     ///
-    /// # Errors
-    ///
-    /// Returns a [`StashError`] if the emails cannot be retrieved.
-    ///
     pub async fn emails(&mut self, tether: &Tether) -> Result<&[ContactEmail], StashError> {
         self.contact_emails = ContactEmail::find(
             "WHERE remote_contact_id = ? ORDER BY display_order ASC",
@@ -203,10 +195,6 @@ impl Contact {
     /// Updates all user contacts including their emails without their cards.
     ///
     /// The result of this function MUST ONLY be used (as in [`SyncedContacts::store`]) after syncing contact labels.
-    ///
-    /// # Errors
-    ///
-    /// Errors when the API request fails or when the database query fails.
     ///
     #[tracing::instrument(skip(api))]
     #[allow(clippy::too_many_lines)]
@@ -350,10 +338,6 @@ impl Contact {
 
     /// Returns a list of contacts grouped by the first letter of their name.
     ///
-    /// # Errors
-    ///
-    /// when querying the database fails.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn contact_list(tether: &Tether) -> Result<Vec<GroupedContacts>, StashError> {
         // TODO (ET-2028): Use pagination
@@ -422,10 +406,6 @@ impl Contact {
     /// # Parameters
     ///
     /// * `device_contacts` - contacts stored in the device storage, not shared between proton clients.
-    ///
-    /// # Errors
-    ///
-    /// when querying the database fails.
     ///
     pub async fn contact_suggestions(
         device_contacts: Vec<DeviceContact>,

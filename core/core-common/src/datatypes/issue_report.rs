@@ -124,10 +124,6 @@ type ZippedFile = (String, Vec<u8>);
 
 /// Report an issue functionality.
 ///
-/// # Errors
-///
-/// When logs cannot be zipped or API request fail
-///
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn report_an_issue(
     report: IssueReport,

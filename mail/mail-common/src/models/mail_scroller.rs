@@ -706,10 +706,6 @@ impl<T: ScrollData> ScrollCursor<T> {
 
     /// Same as [`visible_elements`] but returns only the number of items that match.
     ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
-    ///
     pub async fn seen_count(&self, tether: &Tether) -> Result<u64, StashError> {
         ScrollQuery::new(self.clone()).count(tether).await
     }
@@ -723,10 +719,6 @@ impl<T: ScrollData> ScrollCursor<T> {
     /// It is possible those old elements become available due to interactions of actions
     /// and the event loop, but those should not be displayed until the user scrolls
     /// far enough.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     ///
     pub async fn visible_elements(&self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
         self.visible_elements_limit(None, None, false, tether).await
@@ -780,10 +772,6 @@ impl<T: ScrollData> CachedScrollData<T> {
     /// `page_size` - The size of the page to load.
     /// `tether` - The tether to use for the database access.
     ///
-    /// # Errors
-    ///
-    /// Specific to database access.
-    ///
     pub async fn new(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -830,10 +818,6 @@ impl<T: ScrollData> CachedScrollData<T> {
     /// `unread` - The read filter used in the scroll.
     /// `page_size` - The size of the page to load.
     /// `tether` - The tether to use for the database access.
-    ///
-    /// # Errors
-    ///
-    /// Specific to database access.
     ///
     pub fn all(
         local_label_id: LocalLabelId,
@@ -1131,11 +1115,8 @@ impl SearchScrollData {
 
         Ok(vec![])
     }
+
     /// Same as [`visible_elements`] but returns only the number of items that match.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     ///
     pub async fn visible_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
         let query = Self::query(None, None);
@@ -1151,10 +1132,6 @@ impl SearchScrollData {
     /// It is possible those old elements become available due to interactions of actions
     /// and the event loop, but those should not be displayed until the user scrolls
     /// far enough.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
     ///
     pub async fn visible_elements(&self, tether: &Tether) -> Result<Vec<Message>, StashError> {
         self.visible_elements_limit(None, None, tether).await

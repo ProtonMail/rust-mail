@@ -16,9 +16,6 @@ impl ListComponent {
     }
 
     /// Try to create a new `ListComponent` from given str
-    ///
-    /// # Errors
-    ///   * If not valid
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
     }

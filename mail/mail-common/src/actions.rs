@@ -281,10 +281,6 @@ where
     /// Resolve all remote ids.
     ///
     /// Resolved remote ids are stored on self.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if ids could not be resolved.
     async fn resolve_ids_legacy(
         &mut self,
         tether: &Tether,
@@ -396,10 +392,6 @@ where
     }
 
     /// Return the ids of all the items which do not have a remote id.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
     async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, MailActionError> {
         let placeholders = stash::utils::placeholders_n(self.target_ids.len());
         #[allow(trivial_casts)]
@@ -501,10 +493,6 @@ where
     /// Resolve all remote ids.
     ///
     /// Resolved remote ids are stored on self.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if ids could not be resolved.
     async fn resolve_ids_legacy(
         &mut self,
         tether: &Tether,
@@ -516,10 +504,6 @@ where
     }
 
     /// Return the ids of all the items which do not have a remote id.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
     async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, MailActionError> {
         self.data.unsynced_item_ids(tether).await
     }

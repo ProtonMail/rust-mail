@@ -177,10 +177,6 @@ impl StoredAction {
     /// Update the action state for this store action.
     ///
     /// Note this does not save to the database, use [`update_action_state()`] for that purpose.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the serialization of the action failed.
     pub(crate) fn set_action_state<T: Action>(
         &mut self,
         action: &T,
@@ -191,10 +187,6 @@ impl StoredAction {
     }
 
     /// Update the action state for this stored action.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub(crate) async fn update_action_state(&self, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.execute(
             format!("UPDATE {} SET state=? WHERE id = ?", Self::table_name()),
@@ -207,10 +199,6 @@ impl StoredAction {
     /// Update the retries for the stored action with the given `id`.
     ///
     /// Should be called only when it can be "requeued".
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     ///
     pub(crate) async fn update_retries(bond: &Bond<'_>, id: ActionId) -> Result<(), StashError> {
         bond.execute(
@@ -245,21 +233,11 @@ impl StoredAction {
     }
 
     /// Return the number of pending actions in the queue.
-    ///
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn pending_count(tether: &Tether) -> Result<u64, StashError> {
         Self::count("", vec![], tether).await
     }
 
     /// Return the number of pending actions in the queue for a given action type.
-    ///
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     ///
     pub async fn type_count<T: Action>(tether: &Tether) -> Result<u64, StashError> {
         Self::count("where action_type = ?", params![T::TYPE.as_ref()], tether).await
@@ -277,10 +255,6 @@ impl StoredAction {
     }
 
     /// Check whether the action with `id` is in the queue.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn contains(tether: &Tether, id: ActionId) -> Result<bool, StashError> {
         match tether
             .query_value::<_, ActionId>("SELECT id FROM action_queue WHERE id = ?", params![id])
@@ -321,10 +295,6 @@ impl StoredAction {
     /// Delete action with `id` from the database.
     ///
     /// Returns the type of the deleted action if it still exists.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the operation failed.
     pub async fn delete(bond: &Bond<'_>, id: ActionId) -> Result<Option<String>, StashError> {
         match bond
             .query_value::<_, String>(
@@ -348,10 +318,6 @@ impl StoredAction {
     }
 
     /// Get all the actions which depend on the action with `id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn all_dependees(
         tether: &Tether,
         id: ActionId,
@@ -385,10 +351,6 @@ impl StoredAction {
     }
 
     /// Get all the actions which depend on the action with `id` with a given dependency type.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn dependees_of_type(
         tether: &Tether,
         id: ActionId,
@@ -406,10 +368,6 @@ impl StoredAction {
     ///
     /// This takes into account dependencies, priority and execution delays. If `None` is returned
     /// from this function there are no actions that can be executed at this point.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub(crate) async fn next(
         action_group: &str,
         tether: &Tether,
@@ -421,10 +379,6 @@ impl StoredAction {
     ///
     /// This takes into account dependencies, priority and execution delays. If `None` is returned
     /// from this function there are no actions that can be executed at this point.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     async fn next_with_timeout(
         action_group: &str,
         timeout: Duration,
@@ -456,10 +410,6 @@ impl StoredAction {
     ///
     /// An update is only applied when the existing action type matches the new action type. If
     /// the type differ a new action is stored instead.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query fails.
     pub async fn create_or_update(
         &mut self,
         existing_id: ActionId,
@@ -491,10 +441,6 @@ impl StoredAction {
     ///
     /// This takes into account dependencies, priority and execution delays. If `None` is returned
     /// from this function there are no actions that can be executed at this point.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed or the executor could not be retrieved.
     pub async fn pop(
         executor_id: String,
         action_group: &str,
@@ -677,10 +623,6 @@ impl ExecutionGuard {
     /// This method does not check if we can legally acquire the execution lock.
     /// [`StoredAction::next()`] performs all the checks and returns the next action that
     /// can be acquired.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub async fn acquire(
         action_id: ActionId,
         executor_id: impl Into<String>,
@@ -690,10 +632,6 @@ impl ExecutionGuard {
     }
 
     /// Same as [`acquire`] but allows one to specify the [`timestamp`] of acquisition.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub async fn acquire_with_timestamp(
         action_id: ActionId,
         executor_id: impl Into<String>,
@@ -737,10 +675,6 @@ impl ExecutionGuard {
     }
 
     /// Release the current access privileges.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
     pub async fn release(self, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.execute(
             indoc! {"
@@ -763,13 +697,6 @@ impl ExecutionGuard {
     /// Every time we are able to write with a valid permit, we also update
     /// the timestamp. This allows for some longer running tasks to extend their lifetime a bit
     /// and prevent unnecessary re-runs.
-    ///
-    /// To prevent
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StashError`] if the transaction failed to acquire and [`WriterGuardError::Expired`]
-    /// if this execution lock has expired.
     pub async fn tx<F, T, E>(&self, tether: &mut Tether, closure: F) -> Result<T, E>
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,

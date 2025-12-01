@@ -12,7 +12,9 @@ struct V1Value {
     #[DbField]
     error: DraftAttachmentInternalUploadError,
 }
+
 pub struct DraftSendResultAttachmentErrorsMigration;
+
 #[async_trait::async_trait]
 impl Migration for DraftSendResultAttachmentErrorsMigration {
     fn name(&self) -> &str {

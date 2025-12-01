@@ -184,10 +184,6 @@ impl PasswordFlow {
     }
 
     /// Submit TOTP code for 2FA authentication.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the TOTP code submission fails.
     pub async fn submit_totp(&mut self, totp: String) -> Result<(), PasswordError> {
         match self.state {
             State::WantTfa(want_tfa) => {
@@ -214,10 +210,6 @@ impl PasswordFlow {
     }
 
     /// Submit FIDO2 data for 2FA authentication.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the FIDO2 submission fails.
     pub async fn submit_fido(&mut self, fido_data: fido2::Request) -> Result<(), PasswordError> {
         match self.state {
             State::WantTfa(want_tfa) => {
@@ -245,10 +237,6 @@ impl PasswordFlow {
     }
 
     /// Change the account password.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the password change request or crypto operations failed.
     pub async fn change_pass(
         &mut self,
         current_pass: impl Into<SecureString>,
@@ -288,10 +276,6 @@ impl PasswordFlow {
     }
 
     /// Change the mailbox password.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the mailbox password change request or crypto operations failed.
     pub async fn change_mbox_pass(
         &mut self,
         current_pass: impl Into<SecureString>,

@@ -122,10 +122,6 @@ impl From<ApiUser> for User {
 impl User {
     /// Download and store user info and settings into the database
     ///
-    /// # Errors
-    ///
-    /// TODO: Document the errors.
-    ///
     pub async fn sync_user_and_settings(
         api: &impl ProtonCore,
     ) -> Result<SyncedUserSettings, ApiServiceError> {

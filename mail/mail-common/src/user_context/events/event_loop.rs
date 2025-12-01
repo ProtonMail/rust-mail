@@ -140,10 +140,6 @@ impl MailUserContext {
     ///
     /// If we are in automatic mode this is a noop.
     ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to be queued.
-    ///
     pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
         // Delegate to UserContext
         self.user_context().poll_event_loop().await
@@ -151,10 +147,6 @@ impl MailUserContext {
 
     /// Queue an action to execute the event loop as soon as possible regardless of
     /// the selected polling mode.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to be queued.
     ///
     pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<EventPoll>> {
         // Delegate to UserContext

@@ -164,11 +164,6 @@ pub use sql_using_serde;
 /// This function converts a value to a SQLite value using [`serde_json`]. The
 /// type is expected to be text, and serialisable to JSON.
 ///
-/// # Errors
-///
-/// This function will return a [`SqliteError::ToSqlConversionFailure`] if the
-/// value cannot be serialised to JSON.
-///
 pub fn to_sql_using_serialize<T: Serialize>(value: &T) -> Result<ToSqlOutput<'_>, SqliteError> {
     Ok(ToSqlOutput::from(to_json(value).map_err(|err| {
         SqliteError::ToSqlConversionFailure(Box::new(err))
@@ -178,13 +173,7 @@ pub fn to_sql_using_serialize<T: Serialize>(value: &T) -> Result<ToSqlOutput<'_>
 /// Convert a SQLite value to a value using [`serde_json`].
 ///
 /// This function converts a SQLite value to a value using [`serde_json`]. The
-// /// type is expected to be text, and serialisable to JSON.
-///
-/// # Errors
-///
-/// This function will return a [`FromSqlError::InvalidType`] if the value is
-/// not a text value, and a [`FromSqlError::Other`] if the value cannot be
-/// deserialised from JSON.
+/// type is expected to be text, and serialisable to JSON.
 ///
 pub fn from_sql_using_deserialize<T: for<'de> Deserialize<'de>>(
     value: ValueRef<'_>,

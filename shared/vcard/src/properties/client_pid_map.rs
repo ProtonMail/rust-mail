@@ -36,9 +36,6 @@ impl ClientPidMap {
     }
 
     /// Try to create a new CLIENTPIDMAP property
-    ///
-    /// # Errors
-    ///   * if given value does not have the right format (ex: `1;urn:uuid:3df403f4-5924-4bb7-b077-3c711d9eb34b`)
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         let (index, uri) = Self::values_from_str(value)?;
         Ok(Self {

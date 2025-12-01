@@ -39,9 +39,6 @@ impl Any {
     }
 
     /// Try to create a new parameter out of vCard (but authorized by) specification
-    ///
-    /// # Errors
-    ///   * if any of the values is not a valid param-value
     pub fn new_validated(name: &str, values: &[String]) -> VCardParameterResult<Self> {
         if values.is_empty() {
             return Err(VCardParameterError::ExpectedAtLeastOneValue(

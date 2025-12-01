@@ -42,10 +42,6 @@ pub trait ProtonMail {
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
     ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes>;
 
     /// GETs metadata for an attachment.
@@ -54,10 +50,6 @@ pub trait ProtonMail {
     /// content.
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
     ///
     async fn get_attachment_metadata(
         &self,
@@ -101,20 +93,12 @@ pub trait ProtonMail {
     async fn delete_incoming_default(&self, id: &IncomingDefaultId) -> ApiServiceResult<()>;
 
     /// Upload attachment data with the given `params`.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
     async fn post_attachment(
         &self,
         params: NewAttachmentParams,
     ) -> ApiServiceResult<PostAttachmentResponse>;
 
     /// Delete an attachment with `id` on the server.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
     async fn delete_attachment(&self, id: AttachmentId) -> ApiServiceResult<()>;
 
     async fn put_attachment_disposition(
@@ -123,77 +107,29 @@ pub trait ProtonMail {
         new_attachment_disposition: NewAttachmentDisposition,
     ) -> ApiServiceResult<()>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn get_conversation(
         &self,
         conversation_id: ConversationId,
     ) -> ApiServiceResult<GetConversationResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn get_conversations(
         &self,
         options: GetConversationsOptions,
     ) -> ApiServiceResult<GetConversationsResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn get_conversations_count(&self) -> ApiServiceResult<GetConversationsCountResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn get_message(&self, message_id: MessageId) -> ApiServiceResult<GetMessageResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn get_messages(
         &self,
         options: GetMessagesOptions,
     ) -> ApiServiceResult<GetMessagesResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn get_messages_count(&self) -> ApiServiceResult<GetMessagesCountResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn get_mail_settings(&self) -> ApiServiceResult<GetMailSettingsResponse>;
 
-    /// Update mobile settings configuration.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_mobile_settings(
         &self,
         mobile_settings: PutMobileSettings,
@@ -204,24 +140,12 @@ pub trait ProtonMail {
         request: PutNextMessageOnMoveRequest,
     ) -> ApiServiceResult<PutNextMessageOnMoveResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_conversations_delete(
         &self,
         conversation_ids: Vec<ConversationId>,
         label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsDeleteResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_conversations_label(
         &self,
         conversation_ids: Vec<ConversationId>,
@@ -229,77 +153,40 @@ pub trait ProtonMail {
         spam_action: Option<bool>,
     ) -> ApiServiceResult<PutConversationsLabelResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_conversations_read(
         &self,
         conversation_ids: Vec<ConversationId>,
     ) -> ApiServiceResult<PutConversationsReadResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_conversations_unlabel(
         &self,
         conversation_ids: Vec<ConversationId>,
         label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsUnlabelResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_conversations_unread(
         &self,
         conversation_ids: Vec<ConversationId>,
         label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsUnreadResponse>;
 
-    /// Snooze conversations with the given `snooze_until` timestamp.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_conversations_snooze(
         &self,
         conversation_ids: Vec<ConversationId>,
         snooze_until: u64,
     ) -> ApiServiceResult<PutConversationsSnoozeResponse>;
 
-    /// Unsnooze conversations.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_conversations_unsnooze(
         &self,
         conversation_ids: Vec<ConversationId>,
     ) -> ApiServiceResult<PutConversationsUnsnoozeResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_messages_delete(
         &self,
         message_ids: Vec<MessageId>,
         label_id: Option<LabelId>,
     ) -> ApiServiceResult<PutMessagesDeleteResponse>;
 
-    /// Put a label on some messages.
     async fn put_messages_label(
         &self,
         message_ids: Vec<MessageId>,
@@ -328,35 +215,17 @@ pub trait ProtonMail {
         retry_policy: Option<RetryPolicy>,
     ) -> ApiServiceResult<PutMessagesReadResponse>;
 
-    /// Remove a label from some messages.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_messages_unlabel(
         &self,
         message_ids: Vec<MessageId>,
         label_id: LabelId,
     ) -> ApiServiceResult<PutMessagesUnlabelResponse>;
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_messages_unread(
         &self,
         message_ids: Vec<MessageId>,
     ) -> ApiServiceResult<PutMessagesUnreadResponse>;
 
-    /// Mark message as not spam (ham)
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
     async fn put_message_ham(&self, id: &MessageId) -> ApiServiceResult<PutMessageHamResponse>;
 
     /// Relabel a message.
@@ -364,10 +233,6 @@ pub trait ProtonMail {
     /// Set the message to have the labels passed in the request. The labels are added and removed as necessary.
     /// If either INBOX, SENT or DRAFT are supposed to be added. The correct one according to the message flags will be added.
     /// Note that a maximum of 150 labels IDs can be passed by request.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
     ///
     async fn relabel_message(
         &self,
@@ -383,10 +248,6 @@ pub trait ProtonMail {
     ///  * `attachments`             - Map of attachment id to attachment to base64 encoded
     ///    key packet.
     ///  * `reply_or_forward_params` - Required parameters when replying of forwarding a message.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the request fails.
     async fn create_draft(
         &self,
         message: DraftParams,
@@ -402,10 +263,6 @@ pub trait ProtonMail {
     ///  * `message`     - Draft message details
     ///  * `attachments` - Map of attachment id to attachment to base64 encoded
     ///    key packet.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the request fails.
     async fn update_draft(
         &self,
         message_id: MessageId,
@@ -422,10 +279,6 @@ pub trait ProtonMail {
     ///  * `auto_save_contacts` - Whether the server should automatically create contacts for the recipients.
     ///  * `delay`              - Duration by which the message should be delayed before sending
     ///  * `delivery_time`      - Timestamp when this message should be delivered.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the request fails.
     async fn send_mail(
         &self,
         message_id: MessageId,
@@ -455,17 +308,9 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<()>;
 
     /// Cancel the sending of a message with `message_id`, which was previously sent.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the request fails
     async fn cancel_send(&self, message_id: MessageId) -> ApiServiceResult<PostCancelSendResponse>;
 
     /// Delete all messages with a label/folder
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the request fails
     async fn delete_all_messages_in_label(&self, label_id: LabelId) -> ApiServiceResult<()>;
 
     async fn mark_unsubscribed(&self, id: Vec<MessageId>) -> ApiServiceResult<()>;

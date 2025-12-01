@@ -592,10 +592,6 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
     ///
     /// This function is specifically designed for creating send preferences for users sending to themselves, where encryption and
     /// signing are generally enabled by default.
-    ///
-    /// # Errors
-    ///
-    /// - [`EncryptionPreferencesError::NoPrimaryKey`] - If no valid primary key can be selected from the address keys.
     pub fn new_for_self<Priv: PrivateKey>(
         is_address_external: bool,
         address_keys: &[DecryptedAddressKey<Priv, Pub>],

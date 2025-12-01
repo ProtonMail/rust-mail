@@ -59,9 +59,6 @@ impl CryptoKeyManager {
     ///
     /// First tries to retrieve them from the cache else
     /// it loads and unlocks them from the database.
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     pub async fn user_keys<P>(
         &self,
         pgp: &P,
@@ -88,9 +85,6 @@ impl CryptoKeyManager {
     /// Returns the unlocked address keys of this user for the given address and [`UserContext`].
     ///
     /// Loads the address keys from the database and unlocks them with the user keys.
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     pub async fn address_keys<P>(
         &self,
         pgp: &P,
@@ -123,9 +117,6 @@ impl CryptoKeyManager {
     ///
     /// Imports the keys with the PGP provider. In the future, this function will also
     /// verify the keys with key transparency.
-    ///
-    /// # Errors
-    /// Returns a [`KeyHandlingError`] if the operation fails.
     pub async fn public_address_keys<P>(
         &self,
         pgp: &P,

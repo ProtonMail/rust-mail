@@ -72,10 +72,6 @@ pub trait EncryptableAttachment {
     ///
     /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
     /// containing the key packets, signatures, and encrypted signature.
-    ///
-    /// # Errors
-    ///
-    /// One of encryption, signing, or encoding steps fails.
     fn attachment_encrypt_and_sign<P>(
         &self,
         pgp: &P,
@@ -92,10 +88,6 @@ pub trait EncryptableAttachment {
 ///
 /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
 /// containing the key packets, signatures, and encrypted signature.
-///
-/// # Errors
-///
-/// One of encryption, signing, or encoding steps fails.
 pub fn encrypt<P>(
     pgp: &P,
     primary_address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
@@ -117,10 +109,6 @@ where
 /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
 /// containing the key packets, signatures, and encrypted signature.
 /// If no signing keys are provided, i.e., a zero length slice, no signatures are produced.
-///
-/// # Errors
-///
-/// One of encryption, signing, or encoding steps fails.
 fn encrypt_helper<P>(
     pgp: &P,
     encryption_keys: &[impl AsPublicKeyRef<P::PublicKey>],
@@ -171,10 +159,6 @@ where
 ///
 /// The key packets and signatures (i.e., attachment metadata) can be accessed with [`SigncryptedAttachmentWriter::finalize`]
 /// once all data has been written.
-///
-/// # Errors
-///
-/// One of encryption, signing, or encoding steps fails.
 pub fn encrypt_and_sign_to_writer<'a, P, W>(
     pgp: &'a P,
     primary_address_key: &'a PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
@@ -352,9 +336,6 @@ where
     /// Finalizes the encryption and returns the `EncryptedAttachmentMetadata`.
     ///
     /// Must be called once all attachment data has been written to this writer.
-    /// # Errors
-    ///
-    /// Writing final encryption and signature output fails.
     pub fn finalize(self) -> Result<EncryptedAttachmentMetadata, AttachmentEncryptionError> {
         let detached_signature_bytes = self
             .writer
@@ -393,11 +374,6 @@ impl ExtractedAttachmentInfo {
     ///
     /// Encrypts the internal symmetric session key with the provided public key
     /// using `OpenPGP`. The output is an `OpenPGP` PKESK packet (referred to as a key packet in the Proton context).
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
-    /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
     pub fn encrypt_session_key_to_recipient<P>(
         &self,
         pgp: &P,
@@ -413,11 +389,6 @@ impl ExtractedAttachmentInfo {
     ///
     /// Encrypts the internal symmetric session key with the provided passphrase
     /// using `OpenPGP`. The output is an `OpenPGP` SKESK packet (referred to as a key packet in the Proton context).
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
-    /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
     pub fn encrypt_session_key_to_password<P>(
         &self,
         pgp: &P,
@@ -430,10 +401,6 @@ impl ExtractedAttachmentInfo {
     }
 
     /// Encrypts the internal signature towards a new recipient if present.
-    ///
-    /// # Errors
-    ///
-    /// An [`AttachmentEncryptionError::SignatureEncryption`] if signature encryption fails.
     pub fn encrypt_signature_to_recipient<P>(
         &self,
         pgp: &P,

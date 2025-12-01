@@ -35,9 +35,6 @@ pub struct Birthday {
 
 impl Birthday {
     /// Try to create a new BDAY property
-    ///
-    /// # Errors
-    ///   * if given value is neither a date-and-or-time value nor a text
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self {
             value: value.into(),

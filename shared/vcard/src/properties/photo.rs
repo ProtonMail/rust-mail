@@ -58,9 +58,6 @@ impl Photo {
     }
 
     /// Try to create a new PHOTO property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if given value is not a valid uri value
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self {
             value: Uri::new_validated(value)

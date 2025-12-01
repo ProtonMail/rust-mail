@@ -84,10 +84,6 @@ impl UserContext {
     ///
     /// First tries to retrieve them from the cache else
     /// it loads and unlocks them from the database.
-    ///
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     pub async fn unlocked_user_keys<P, S>(
         &self,
         pgp: &P,
@@ -106,10 +102,6 @@ impl UserContext {
     /// Returns the unlocked address keys of this user for the given address.
     ///
     /// Loads the address keys from the database and unlocks them with the user keys.
-    ///
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     pub async fn unlocked_address_keys<P, S>(
         &self,
         pgp: &P,
@@ -130,10 +122,6 @@ impl UserContext {
     ///
     /// Imports the keys with the PGP provider. In the future, this function will also
     /// verify the keys with key transparency.
-    ///
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     pub async fn public_address_keys<P>(
         &self,
         pgp: &P,
@@ -156,12 +144,6 @@ impl UserContext {
     /// - Extracts the pinned keys from the signed `VCard` if any
     /// - Verifies the signature of the `VCard` with the unlocked user keys
     /// - Returns the pinned keys if any else None
-    ///
-    ///
-    /// # Errors
-    /// Returns an error on a database or sync failure.
-    /// - A DB/IO error if syncing the contact or accessing the contacts fails.
-    /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
     #[tracing::instrument(skip_all, fields(email=%email))]
     pub async fn public_address_keys_from_contacts<P>(
         &self,

@@ -244,11 +244,6 @@ impl WatchUserStream {
 #[uniffi_export]
 impl MailUserSession {
     /// Get the session UUID of the active user session.
-    ///
-    /// # Errors
-    ///
-    /// Any of the [`UserSessionError`] possibilities could be returned if
-    /// there is a problem with the HTTP request.
     pub async fn session_uuid(&self) -> Result<String, UserSessionError> {
         let ctx = self.ctx()?;
 
@@ -270,11 +265,6 @@ impl MailUserSession {
     /// If successful, this will return the "Selector" string for the new
     /// session. The child must present an app version that matches the platform
     /// and product.
-    ///
-    /// # Errors
-    ///
-    /// Any of the [`MailSessionError::Http`] possibilities could be returned if
-    /// there is a problem with the HTTP request.
     ///
     pub async fn fork(
         &self,
@@ -347,10 +337,6 @@ impl MailUserSession {
     }
 
     /// Provides a way to get the datatypes::User FFI instance.
-    ///
-    /// # Errors
-    ///
-    /// Either when MailSessionError::Stash occurs or somehow the user is missing.
     pub async fn user(&self) -> Result<User, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
@@ -364,9 +350,6 @@ impl MailUserSession {
     /// Retrieves the account details for the current user session.
     ///
     /// Returns the user's account details (name, email and avatar information) or an error if the operation fails.
-    ///
-    /// # Errors
-    /// - Returns `UserSessionError` if the account details cannot be retrieved.
     pub async fn account_details(&self) -> Result<AccountDetails, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
@@ -378,10 +361,6 @@ impl MailUserSession {
     }
 
     /// Retrieves the user's settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
     pub async fn user_settings(&self) -> Result<UserSettings, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
@@ -407,11 +386,6 @@ impl MailUserSession {
     ///
     /// Signature verification is currently always failing since no sender keys
     /// are fetched yet.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the encrypted attachment fetching or decryption fails.
-    /// Signature verification failures are not returned as errors.
     pub async fn get_attachment(
         &self,
         local_attachment_id: Id,

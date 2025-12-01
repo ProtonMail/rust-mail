@@ -57,9 +57,6 @@ impl CalendarAddress {
     }
 
     /// Try to create a new CALURI from given str
-    ///
-    /// # Errors
-    ///   * if given value is not a valid uri
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self::new(value.parse().map_err(|_| {
             VCardError::InvalidValue(PropertyKind::CalURI, value.to_owned())

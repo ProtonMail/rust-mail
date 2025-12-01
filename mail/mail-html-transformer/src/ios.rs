@@ -19,10 +19,6 @@ use std::cell::RefCell;
 /// ```html
 /// <meta name="viewport" content="width=device-width, initial-scale=1.0">
 /// ```
-///
-/// # Errors
-///
-/// Returns error if we could not find the `head` element in the document.
 pub fn inject_content_size(document: NodeRef) {
     let element = document.select_first("head").unwrap(); // kuckikiki always adds it
 

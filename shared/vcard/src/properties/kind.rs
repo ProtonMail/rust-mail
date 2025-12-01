@@ -36,9 +36,6 @@ impl Kind {
     }
 
     /// Try to create a new KIND property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if given value is not one of: "individual" / "group" / "org" / "location" / iana-token / x-name
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self::new(KindValue::try_from(value)?))
     }

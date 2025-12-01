@@ -8,10 +8,6 @@ use std::sync::Arc;
 
 impl MailContext {
     /// Get all unsent message ids for given `user_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we failed to retrieve the user context or retrieve the messages.
     pub async fn get_unsent_messages_ids_for_user(
         self: &Arc<Self>,
         user_id: UserId,

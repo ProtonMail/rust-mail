@@ -76,10 +76,6 @@ pub trait ModelExtension: Model {
     /// without any criteria. This happens remarkably often, and centralises the
     /// functionality, plus makes the intent clear.
     ///
-    /// # Errors
-    ///
-    /// See [`Model::find()`].
-    ///
     /// # See also
     ///
     /// * [`find()`](Model::find())
@@ -106,10 +102,6 @@ pub trait ModelExtension: Model {
     /// out this process, for uniformity and centralisation of this common
     /// operation.
     ///
-    /// # Errors
-    ///
-    /// See [`Model::find_first()`].
-    ///
     /// # See also
     ///
     /// * [`find_first()`](Model::find_first())
@@ -126,10 +118,6 @@ pub trait ModelExtension: Model {
 
     /// Finds a records by its IDs.
     /// Work with `local_id` field or `remote_id` field.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::find_first()`].
     ///
     /// # See also
     ///
@@ -190,10 +178,6 @@ pub trait ModelExtension: Model {
     ///   logic is optional — so if conditions are passed, for
     ///   instance, the `WHERE` keyword needs to be included.
     ///
-    /// # Errors
-    ///
-    /// See [`Model::find_first()`].
-    ///
     /// # See also
     ///
     /// * [`find()`](Model::find())
@@ -230,10 +214,6 @@ pub trait ModelExtension: Model {
     ///
     /// Especially useful for models which have `on_load` implementations
     ///
-    /// # Errors
-    ///
-    /// See [`Model::load()`].
-    ///
     async fn reload(&mut self, tether: &Tether) -> Result<(), StashError> {
         if let Some(this) = Self::load(self.id_value()?, tether).await? {
             *self = this;
@@ -243,10 +223,6 @@ pub trait ModelExtension: Model {
     }
 
     /// Checks if the model exists in the database.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::load()`].
     ///
     async fn exists(&self, tether: &Tether) -> Result<bool, StashError> {
         tether
@@ -265,10 +241,6 @@ pub trait ModelExtension: Model {
 
     /// Deletes the model instance from database.
     ///
-    /// # Errors
-    ///
-    /// When querying the database fails.
-    ///
     async fn delete(self, bond: &Bond<'_>) -> Result<bool, StashError> {
         Self::delete_by_id(self.id_value()?, bond).await
     }
@@ -280,10 +252,6 @@ pub trait ModelExtension: Model {
     /// # Returns
     ///
     /// Returns the number of rows deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to delete the item from the database.
     async fn delete_by_id(id: Self::IdType, bond: &Bond<'_>) -> Result<bool, StashError> {
         bond.sync_bridge(|tx| Self::delete_by_id_sync(id, tx)).await
     }
@@ -319,10 +287,6 @@ pub trait ModelExtension: Model {
     }
 
     /// Deletes the model instance from database.
-    ///
-    /// # Errors
-    ///
-    /// When querying the database fails.
     ///
     #[must_use]
     async fn delete_all(bond: &Bond<'_>) -> Result<usize, StashError> {
@@ -378,10 +342,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     /// out this process, for uniformity and centralisation of this common
     /// operation.
     ///
-    /// # Errors
-    ///
-    /// See [`Model::find_first()`].
-    ///
     /// # See also
     ///
     /// * [`find_first()`](Model::find_first())
@@ -426,10 +386,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
 
     /// Finds records by its remote IDs.
     ///
-    /// # Errors
-    ///
-    /// See [`Model::find_first()`].
-    ///
     /// # See also
     ///
     /// * [`find_first()`](Model::find_first())
@@ -462,10 +418,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     /// # Returns
     ///
     /// Returns the number of rows deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to delete the account from the db.
     async fn delete_by_remote_id(
         remote_id: Self::RemoteId,
         bond: &Bond<'_>,
@@ -531,10 +483,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     }
 
     /// Return the local id counterparts for a given set of `remote ids`.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
     #[must_use]
     async fn remote_ids_counterpart(
         remote_ids: Vec<Self::RemoteId>,
@@ -562,10 +510,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     }
 
     /// Return the remote id counterpart for a given `local_id`.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
     async fn local_id_counterpart(
         local_id: Self::IdType,
         tether: &Tether,
@@ -605,10 +549,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     }
 
     /// Return the remote id counterparts for a given set of `local ids`.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
     #[must_use]
     async fn local_ids_counterpart(
         local_ids: Vec<Self::IdType>,
@@ -659,10 +599,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     ///   required. It can be empty. Note that each part of the
     ///   logic is optional — so if conditions are passed, for
     ///   instance, the `WHERE` keyword needs to be included.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::find_first()`].
     ///
     /// # See also
     ///

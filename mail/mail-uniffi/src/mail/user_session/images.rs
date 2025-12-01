@@ -18,11 +18,6 @@ impl MailUserSession {
     /// * `format`: Desired image format, if none is specified the default format of the image will be used.
     ///
     /// Returns a path toward the image file or `None` if no image needs to be displayed.
-    ///
-    /// # Errors
-    /// Returns errors if the API call fails, the mode value is invalid, the conversation doesn't exist, or
-    /// if there's an issue with the sender that causes problems when creating the API request on our side.
-    /// Also returns errors if the path can't be converted into a string.
     #[allow(clippy::too_many_arguments)]
     pub async fn image_for_sender(
         &self,

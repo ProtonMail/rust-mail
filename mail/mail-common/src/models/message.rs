@@ -260,10 +260,6 @@ impl Message {
 
     /// Mark multiple messages as read.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn action_mark_read(
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
@@ -273,10 +269,6 @@ impl Message {
     }
 
     /// Mark multiple messages as unread.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn action_mark_unread(
         queue: &Queue,
@@ -288,10 +280,6 @@ impl Message {
 
     /// Mark multiple messages as read.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn action_delete(
         queue: &Queue,
         label_id: LocalLabelId,
@@ -302,10 +290,6 @@ impl Message {
     }
 
     /// Move multiple messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
     ///
     pub async fn action_move(
         tether: &Tether,
@@ -327,10 +311,6 @@ impl Message {
 
     /// Mark multiple messages as read.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
     pub async fn mark_multiple_as_read(
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
@@ -345,10 +325,6 @@ impl Message {
     }
 
     /// Mark multiple messages as ham (not spam).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn action_ham(
         queue: &Queue,
@@ -370,10 +346,6 @@ impl Message {
 
     /// Mark multiple messages as ham (not spam).
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn action_report_phishing(
         queue: &Queue,
         message_id: LocalMessageId,
@@ -390,10 +362,6 @@ impl Message {
     }
 
     /// Action to change labels of a group of messages and optionally archive them.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action can not be applied.
     ///
     pub async fn action_label_as(
         tether: &Tether,
@@ -523,10 +491,6 @@ impl Message {
     }
 
     /// Find a group of Messages by their IDs.
-    ///
-    /// # Errors
-    ///
-    /// When database request fail.
     ///
     pub(crate) async fn find_by_ids(
         message_ids: impl IntoIterator<Item = LocalMessageId>,
@@ -683,11 +647,6 @@ impl Message {
     ///
     /// Method also gives back existing message if it was not saved.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
     pub async fn create_or_get_local(
         &mut self,
         rebase_change_set: &mut RebaseChangeSet,
@@ -737,11 +696,6 @@ impl Message {
 
     /// Given a vec of message metadatas tries to create them in the database
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
-    ///
     pub async fn create_or_update_messages_from_metadata_vec(
         metadata: Vec<ApiMessageMetadata>,
         event_action: Option<Action>,
@@ -765,11 +719,6 @@ impl Message {
 
     /// Given a message metadata tries to create it in the database
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
-    ///
     pub async fn create_or_update_messages_from_metadata(
         metadata: Vec<ApiMessageMetadata>,
         event_action: Option<Action>,
@@ -785,10 +734,6 @@ impl Message {
     }
 
     /// Delete multiple messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn delete_multiple_remote<PM: ProtonMail>(
         ids: Vec<MessageId>,
@@ -812,10 +757,6 @@ impl Message {
     /// Adjust labels, conversations and conversation labels stats.
     /// Morover if all messages within a conversation were deleted, the conversation
     /// will be deleted as well.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_deleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
         info!("Marking {ids:?} as deleted");
@@ -877,10 +818,6 @@ impl Message {
     /// This is soft undelete of messages. It will assign deleted flag to false,
     /// Adjust labels, conversations and conversation labels stats.
     /// Morover if conversation was deleted it will be restored.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_undeleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
         info!("Unmarking {ids:?} as deleted");
@@ -945,10 +882,6 @@ impl Message {
 
     /// Get the message counts.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
     ) -> Result<Vec<MessageLabelsCount>, ApiServiceError> {
@@ -956,10 +889,6 @@ impl Message {
     }
 
     /// Get message metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn fetch_metadata<PM: ProtonMail>(
         filter: GetMessagesOptions,
@@ -969,11 +898,6 @@ impl Message {
     }
 
     /// Get all labels for the message.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
     ///
     pub fn all_message_labels(&self, conn: &Connection) -> Result<Vec<Label>, StashError> {
         let labels = Label::find_sync(
@@ -999,12 +923,6 @@ impl Message {
     /// Given a list of message metadata check if there are any missing dependencies like
     /// undownloaded labels or addresses.
     ///
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database.
-    ///
     async fn sync_dependencies_from_metadata(
         messages: &[MessageMetadata],
         api: &Session,
@@ -1026,12 +944,6 @@ impl Message {
     /// This function accepts search options and calls the API to find any
     /// messages that fit the criteria. It operates globally and is not based on
     /// a particular mailbox; this restriction can be applied via the options.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database. Can also return an error if the found message
-    /// cannot be loaded, although this would indicate a significant problem.
     ///
     pub async fn search(
         options: GetMessagesOptions,
@@ -1065,11 +977,6 @@ impl Message {
     }
 
     /// Synchronize the first `count` messages of the label with `label_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database.
     ///
     pub async fn sync_first_message_page<PM: ProtonMail>(
         label_id: LabelId,
@@ -1106,10 +1013,6 @@ impl Message {
     /// Message sheet contains context aware set of actions for given message.
     /// It is split up into different categories to be easy to display in the UI.
     ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
-    ///
     #[tracing::instrument(skip_all, fields(label_id=%current_label_id, message_id=message_id.as_u64()))]
     pub async fn all_available_message_actions_for_action_sheet(
         current_label_id: LocalLabelId,
@@ -1129,10 +1032,6 @@ impl Message {
     }
 
     /// Get the available `label as` actions for conversations
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
     ///
     #[tracing::instrument(skip_all)]
     pub async fn available_label_as_actions(
@@ -1179,10 +1078,6 @@ impl Message {
 
     /// Watches available `label as` actions for messages
     ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn watch_available_label_as_actions(
         message_ids: Vec<LocalMessageId>,
@@ -1214,10 +1109,6 @@ impl Message {
     }
 
     /// Get the available move actions for messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
     ///
     #[tracing::instrument(skip_all, fields(label_id=view.id().as_u64()))]
     pub async fn available_move_to_actions(
@@ -1251,13 +1142,6 @@ impl Message {
     ///
     /// This will attempt to fetch the message data from the servers if it has
     /// not yet been downloaded before.
-    ///
-    /// # Errors
-    ///
-    /// - if the message failed to download
-    /// - if the db query failed
-    /// - if the message body could not be written to the cache
-    /// - if a message with the given id could not be found
     #[tracing::instrument(skip(user_context))]
     pub async fn message_body(
         user_context: &MailUserContext,
@@ -1614,16 +1498,6 @@ impl Message {
     }
 
     /// Retrieve all the messages which are in a given label.
-    ///
-    /// # Params
-    ///
-    /// * `local_label_id` - Label where to search in
-    /// * `interface`      - Connection to the database
-    /// * `queue`          - Optional subscriber for changes.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub async fn in_label(
         local_label_id: LocalLabelId,
         tether: &Tether,
@@ -1646,16 +1520,6 @@ impl Message {
     }
 
     /// Retrieve all the message ids which are in a given label.
-    ///
-    /// # Params
-    ///
-    /// * `local_label_id` - Label where to search in
-    /// * `interface`      - Connection to the database
-    /// * `queue`          - Optional subscriber for changes.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub async fn ids_in_label(
         local_label_id: LocalLabelId,
         tether: &Tether,
@@ -1698,17 +1562,6 @@ impl Message {
 
     /// Get all messages which belong to the conversation with
     /// `local_conversation_id`.
-    ///
-    /// # Params
-    ///
-    /// * `local_conversation_id` - Conversation id to which the messages belong
-    ///   to.
-    /// * `interface`             - Connection to the database.
-    /// * `queue`                 - Optional subscriber for changes.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed
     pub async fn in_conversation(
         local_conversation_id: LocalConversationId,
         view_options: ConversationViewOptions,
@@ -1864,10 +1717,6 @@ impl Message {
     /// Finds the maximum display order value in all messages and adds 1
     /// to the existing value.
     ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
-    ///
     pub async fn next_display_order(tether: &Tether) -> Result<u64, StashError> {
         Ok(tether
             .query_value::<_, u64>(
@@ -1927,12 +1776,6 @@ impl Message {
     /// Sync the contents of the message and the body from the server for the given `message_id`.
     ///
     /// Note that this function always overrides the data that was previously available.
-    ///
-    /// # Errors
-    ///
-    /// - if the message failed to download
-    /// - if the db query failed
-    /// - if the message body could not be written to the cache
     #[tracing::instrument(skip(ctx, tether, with_attachment_prefetch))]
     pub async fn force_sync_message_and_body(
         ctx: &MailUserContext,
@@ -1971,11 +1814,6 @@ impl Message {
     }
 
     /// Sync message and body for mesasge with `message_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the message failed to fetch from the server or update the
-    /// metadata on the server.
     #[tracing::instrument(skip(api, tx, queue))]
     #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))]
     async fn sync_message_and_body(
@@ -2033,10 +1871,6 @@ impl Message {
     ///
     /// If `attachment_prefetch` is set to `true`, all the attachments will start prefetching
     /// the moment the object is created.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the decryption or loading addresses fails.
     async fn decrypt_message_body(
         ctx: &MailUserContext,
         address_id: &AddressId,
@@ -2053,10 +1887,6 @@ impl Message {
     }
 
     /// Load a [`DecryptedMessageBody`] for message with `local_id` from the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query or cache load fails.
     #[tracing::instrument(skip(tether))]
     pub(crate) async fn load_decrypted_message_from_cache(
         local_id: LocalMessageId,
@@ -2127,10 +1957,6 @@ impl Message {
     ///
     /// It may happen, that the [`RemoteId`] points to the message that does not exist in our
     /// database yet. In that case, Rust SDK will fetch necessary information from API before returning the id.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the network failed or if the database cannot write/read message.
     ///
     #[tracing::instrument(skip(ctx))]
     pub async fn find_or_fetch_by_remote_id(
@@ -2245,10 +2071,6 @@ impl Message {
     /// - trash
     /// - custom labels
     /// - custom folders
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
     ///
     pub async fn action_delete_all_in_label(
         queue: &Queue,
@@ -3004,10 +2826,6 @@ pub struct MessageBodyMetadata {
 
 impl MessageBodyMetadata {
     /// Load a message for the message with `local_message_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn for_message(
         local_message_id: LocalMessageId,
         tether: &Tether,
@@ -3064,10 +2882,6 @@ impl MessageBodyMetadata {
 
     /// Update the `header`, `parsed_headers` and `remote_message_id` fields after the
     /// draft has been created or updated on the server.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn update_fields_after_draft_create_or_update(
         &self,
         bond: &Bond<'_>,
@@ -3268,10 +3082,6 @@ impl MessageCounters {
     }
 
     /// Get all message counters linked to labels with given kind
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
     pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find(
             "INNER JOIN labels ON labels.local_id = local_label_id WHERE label_type = ? ORDER BY labels.display_order ASC",
@@ -3308,9 +3118,6 @@ impl MessageCounters {
     /// Watch message counter for changes.
     ///
     /// When a change occurs a message is produced in the returned receiver.
-    ///
-    /// # Errors
-    /// Returns error if the query failed
     ///
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash

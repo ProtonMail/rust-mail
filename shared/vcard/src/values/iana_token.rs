@@ -17,9 +17,6 @@ impl IanaToken {
     }
 
     /// Try to create a new iana-token
-    ///
-    /// # Errors
-    ///   * if given value is not a valid iana token (only alphanumeric and dash allowed)
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
     }

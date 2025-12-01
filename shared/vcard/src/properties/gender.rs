@@ -35,9 +35,6 @@ impl Gender {
     }
 
     /// Try to create a new GENDER property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if given value is not valid (see RFC6350 6.2.7 for more information)
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self::new(GenderValue::try_from(value)?))
     }

@@ -61,9 +61,6 @@ impl Logo {
     }
 
     /// Try to create a new LOGO property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if value is not a valid uri value
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self {
             value: Uri::new_validated(value)

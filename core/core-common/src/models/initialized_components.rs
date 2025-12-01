@@ -71,10 +71,6 @@ impl InitializedComponent {
     /// Returns a state matching given initialization key if exists.
     /// Otherwise returns not initialized status
     ///
-    /// # Errors
-    ///
-    /// Returns an error if database query fails
-    ///
     pub async fn state(
         key: InitializationKey,
         tether: &Tether,
@@ -85,11 +81,8 @@ impl InitializedComponent {
             .unwrap_or_default();
         Ok(state)
     }
+
     /// Checks whether component has been initialized
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
     ///
     async fn is_initialized(key: InitializationKey, tether: &Tether) -> Result<bool, StashError> {
         let state = Self::state(key, tether).await?;
@@ -110,10 +103,6 @@ impl InitializedComponent {
     ///
     /// * `fetch` that does not require a transaction, and does not wait for the dependencies,
     /// * `store` that provides a transaction, and is executed only if all dependencies are initialized
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
     ///
     #[tracing::instrument(skip_all, fields(key = key.0, dependencies = ?dependencies))]
     pub async fn initialize<E, CTX>(
@@ -198,10 +187,6 @@ impl InitializedComponent {
     /// # Warning
     ///
     /// This does not check whether the key was already initialized or not
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails
     ///
     pub async fn set_state(
         key: InitializationKey,

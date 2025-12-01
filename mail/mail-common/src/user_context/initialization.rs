@@ -60,10 +60,6 @@ impl MailUserContext {
 
     /// Checks whether initialization process finished suscesfully.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if query to the database fails.
-    ///
     pub async fn is_initialized(&self) -> Result<bool, MailContextError> {
         let tether = self.user_stash().connection().await?;
         let state = InitializedComponent::state(Self::CONTEXT_INIT_KEY, &tether).await?;
@@ -203,10 +199,6 @@ impl InitializationMediator {
     }
 
     /// Send an initialization request and wait for the result.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we can't communicate with the background task.
     pub(crate) async fn initialize(&self, ctx: Arc<MailUserContext>) -> MailContextResult<()> {
         let (sender, receiver) = tokio::sync::oneshot::channel();
         if self.sender.send_async((ctx, sender)).await.is_err() {
