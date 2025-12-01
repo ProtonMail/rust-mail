@@ -74,10 +74,6 @@ pub fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> Result<Arc<Mailbox>, 
 /// This mailbox will contain mail items from the Inbox alone, which is a
 /// special system label.
 ///
-/// # Errors
-///
-/// Returns an error if the mailbox could not be created or synced.
-///
 #[uniffi_export]
 pub fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserSessionError> {
     let ptr = ctx.ptr();
@@ -99,15 +95,6 @@ pub fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserSess
 ///
 /// This mailbox will contain all mail items, from all labels, using the
 /// special system label "All Mail".
-///
-/// # Parameters
-///
-/// * `ctx` - The mail user session. Note that this is a session that is
-///           already authenticated and has a valid user context.
-///
-/// # Errors
-///
-/// Returns an error if the mailbox could not be created or synced.
 ///
 #[uniffi_export]
 pub fn new_all_mail_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserSessionError> {
@@ -144,11 +131,8 @@ impl Mailbox {
     pub fn recipient_display_mode(&self) -> MessageRecipientDisplayMode {
         self.mbox.recipient_display_mode().into()
     }
+
     /// Get the number of unread items in this mailbox.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn unread_count(&self) -> Result<u64, UserSessionError> {
         let stash = self.user_stash()?;
         let mbox = self.mbox.clone();
@@ -164,10 +148,6 @@ impl Mailbox {
     }
 
     /// Subscribe for updates to the number of unread items in this mailbox.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn watch_unread_count(
         &self,
         callback: Box<dyn LiveQueryCallback>,

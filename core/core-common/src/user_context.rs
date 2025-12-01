@@ -45,16 +45,10 @@ mod keys;
 pub mod nuke_utils;
 pub mod services;
 
-/// Extra initializer for the user database.
 #[async_trait::async_trait]
 pub trait UserDatabaseInitializer: Send + Sync {
-    /// Initialize the database as needed by running database migrations.
-    ///
-    /// # Errors
-    /// Return error if the migration failed.
     async fn initialize(&self, stash: &Stash) -> Result<(), MigratorError>;
 
-    /// A helper to return a boxed trait object.
     fn boxed(self) -> Box<dyn UserDatabaseInitializer>
     where
         Self: Sized + 'static,

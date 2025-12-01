@@ -263,10 +263,6 @@ impl LoginFlow {
     }
 
     /// Start login with credentials while passing additional `info`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the login request or SRP proof calculations failed.
     pub async fn login_with_credentials(
         &mut self,
         user: impl Into<String>,
@@ -315,10 +311,6 @@ impl LoginFlow {
     }
 
     /// Submit TOTP 2FA code.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the request failed.
     pub async fn submit_totp(&mut self, code: String) -> Result<(), LoginError> {
         self.transition_with_validator(|s: State, validator: &dyn PostLoginValidator| {
             s.submit_totp(code, validator)
@@ -328,8 +320,6 @@ impl LoginFlow {
     }
 
     /// Submit FIDO 2FA code.
-    ///
-    /// Returns error if the request failed.
     pub async fn submit_fido(&mut self, fido_data: fido2::Request) -> Result<(), LoginError> {
         self.transition_with_validator(|s: State, validator: &dyn PostLoginValidator| {
             s.submit_fido(fido_data, validator)
@@ -376,10 +366,6 @@ impl LoginFlow {
     }
 
     /// Take the completed session from the flow.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the flow is incomplete.
     pub fn take_session(&mut self) -> Result<Session, LoginError> {
         self.take_state().into_session()
     }

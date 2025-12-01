@@ -43,10 +43,6 @@ impl UserContext {
     ///
     /// If we are in automatic mode this is a noop.
     ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to be queued.
-    ///
     pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
         tracing::debug!("Polling event loop (normal)");
         let event_loop_service = self.event_loop_service();
@@ -75,10 +71,6 @@ impl UserContext {
 
     /// Queue an action to execute the event loop as soon as possible regardless of
     /// the selected polling mode.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to be queued.
     ///
     pub async fn force_event_loop_poll(&self) -> Result<ActionId, ActionError<EventPoll>> {
         tracing::debug!("Polling event loop (forced)");

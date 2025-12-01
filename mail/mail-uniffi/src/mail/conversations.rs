@@ -43,10 +43,6 @@ use std::sync::Arc;
 
 /// Delete the given conversations.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn delete_conversations(
@@ -74,10 +70,6 @@ pub async fn delete_conversations(
 /// Returns available label_as actions for conversations.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn available_label_as_actions_for_conversations(
     mailbox: Arc<Mailbox>,
@@ -100,11 +92,6 @@ declare_live_query_tagger!(WatchAvailableLabelsAsActionMarker);
 
 /// Watches label_as actions for conversations.
 /// Any action returned here should reflect the display needs.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 ///
 #[uniffi_export]
 pub async fn watch_available_label_as_actions_for_conversations(
@@ -130,12 +117,7 @@ pub async fn watch_available_label_as_actions_for_conversations(
     .map_err(ActionError::from)
 }
 
-// Returns available move_to actions for conversations.
-/// Any action returned here should reflect the display needs.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
+/// Returns available move_to actions for conversations.
 ///
 #[uniffi_export]
 pub async fn available_move_to_actions_for_conversations(
@@ -242,10 +224,6 @@ pub async fn unsnooze_conversations(
 
 /// Returns available actions for conversation list toolbar.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn all_available_list_actions_for_conversations(
     mailbox: Arc<Mailbox>,
@@ -272,10 +250,6 @@ pub async fn all_available_list_actions_for_conversations(
 ///
 /// Conversation sheet contains context aware set of actions for given conversation.
 /// It is split up into different categories to be easy to display in the UI.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
 ///
 #[uniffi_export]
 pub async fn all_available_conversation_actions_for_action_sheet(
@@ -304,10 +278,6 @@ pub async fn all_available_conversation_actions_for_action_sheet(
 /// Returns all available actions split into visible and hidden categories,
 /// matching the toolbar structure used by the UI.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails or conversation is not found.
-///
 #[uniffi_export]
 pub async fn all_available_conversation_actions_for_conversation(
     mailbox: Arc<Mailbox>,
@@ -334,10 +304,6 @@ pub async fn all_available_conversation_actions_for_conversation(
 ///
 /// This function syncs the conversation's messages from the server at least
 /// once.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails or the server request failed.
 ///
 #[uniffi_export]
 pub async fn conversation(
@@ -409,10 +375,6 @@ impl From<ContextualConversationAndMessages> for ConversationAndMessages {
 
 /// Get conversations for the given label.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn conversations_for_label(
     session: Arc<MailUserSession>,
@@ -435,10 +397,6 @@ pub async fn conversations_for_label(
 ///
 /// Notably, this retrieves a local conversation that has been saved in the
 /// database. It does not use the network.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
 ///
 #[uniffi_export]
 pub async fn load_conversation(
@@ -463,10 +421,6 @@ pub async fn load_conversation(
 
 /// Mark the given conversations as read.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_conversations_as_read(
@@ -490,10 +444,6 @@ pub async fn mark_conversations_as_read(
 }
 
 /// Mark the given conversations as unread.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
 ///
 #[uniffi_export]
 #[returns(VoidActionResult)]
@@ -523,10 +473,6 @@ pub async fn mark_conversations_as_unread(
 /// the label with specified label ID. If the current mailbox is not a folder,
 /// the conversation will not be moved.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn move_conversations(
     mailbox: Arc<Mailbox>,
@@ -552,10 +498,6 @@ pub async fn move_conversations(
 /// allows navigation through the conversations by page/window, and watches for
 /// changes. When the conversations change, the callback will be invoked.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn scroll_conversations_for_label(
     mailbox: Arc<Mailbox>,
@@ -579,10 +521,6 @@ pub async fn scroll_conversations_for_label(
 
 /// Star the given conversations.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn star_conversations(
@@ -602,10 +540,6 @@ pub async fn star_conversations(
 }
 
 /// Unstar the given conversations.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
 ///
 #[uniffi_export]
 #[returns(VoidActionResult)]
@@ -671,6 +605,7 @@ impl From<OpenConversationOrigin> for RealOpenConversationOrigin {
 }
 
 declare_live_query_tagger!(WatchConversationMarker);
+
 /// Watch the given conversation.
 ///
 /// Watches the specified conversation for changes. When the conversation's
@@ -742,10 +677,6 @@ declare_live_query_tagger!(WatchConversationsForLabelMarker);
 /// Watches conversations with the specified label for changes. When the
 /// conversations change, the callback will be invoked.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn watch_conversations_for_label(
     session: Arc<MailUserSession>,
@@ -779,10 +710,6 @@ pub async fn watch_conversations_for_label(
 /// All given conversations will keep the partially selected labels.
 /// All given conversations will lose any other labels.
 ///
-/// # Errors
-///
-/// Returns an error if the action can not be applied.
-///
 #[uniffi_export]
 pub async fn label_conversations_as(
     mailbox: Arc<Mailbox>,
@@ -813,12 +740,9 @@ pub async fn label_conversations_as(
 }
 
 declare_live_query_tagger!(WatchAvailableMoveToActionsMarker);
+
 /// watches available move_to actions for conversations or messages.
 /// Any action returned here should reflect the display needs.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
 ///
 #[uniffi_export]
 pub async fn watch_available_move_to_actions(
@@ -839,10 +763,6 @@ pub async fn watch_available_move_to_actions(
 /// Gets whether or not to display the `AutoDelete` banner.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn get_auto_delete_banner(
     session: Arc<MailUserSession>,
@@ -861,11 +781,6 @@ pub async fn get_auto_delete_banner(
 ///
 /// This function allows updating the actions displayed in the conversation toolbar
 /// when viewing conversations on mobile devices.
-///
-/// # Errors
-///
-/// Returns an error if the action queue operation fails or if the actions
-/// are invalid for the conversation toolbar.
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn update_mobile_conversation_toolbar_actions(

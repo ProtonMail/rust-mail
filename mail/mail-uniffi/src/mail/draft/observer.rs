@@ -194,10 +194,6 @@ impl Drop for DraftSendResultWatcher {
 }
 
 /// Return all unseen send results for drafts.
-///
-/// # Errors
-///
-/// Returns error if the query failed.
 #[uniffi_export]
 pub async fn draft_send_result_unseen(
     session: &MailUserSession,
@@ -215,10 +211,6 @@ pub async fn draft_send_result_unseen(
 }
 
 /// Mark the send results for the `message_ids` as seen.
-///
-/// # Errors
-///
-/// Returns error if the query failed.
 #[uniffi_export]
 #[returns(VoidProtonResult)]
 pub async fn draft_send_result_mark_seen(
@@ -245,10 +237,6 @@ pub async fn draft_send_result_mark_seen(
 }
 
 /// Delete the send results for the `message_ids`.
-///
-/// # Errors
-///
-/// Returns error if the query failed.
 #[uniffi_export]
 #[returns(VoidProtonResult)]
 pub async fn draft_send_result_delete(

@@ -161,10 +161,6 @@ impl MailTestContext {
 
     /// Get the test user context.
     /// Has to be called **AFTER** setting up the API mocks
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if context could not be initialized.
     pub async fn try_mail_user_context(&self) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .mail_context

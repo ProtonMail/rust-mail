@@ -108,10 +108,6 @@ impl Mailbox {
     }
 
     /// Get the number of unread items in this mailbox.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn unread_count(&self, tether: &Tether) -> MailContextResult<u64> {
         Ok(match self.view_mode() {
             ViewMode::Conversations => {
@@ -127,10 +123,6 @@ impl Mailbox {
 
     /// Subscribe for updates to the number of unread items in this mailbox.
     /// Depending on the view mode it either watches conversations or messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     ///
     pub async fn watch_unread_count(&self, stash: &Stash) -> MailContextResult<WatcherHandle> {
         let watcher = match self.view_mode() {
@@ -163,9 +155,6 @@ mod test_utils {
         ///
         /// Depending on the user's mail settings, this function will either sync the conversations
         /// or the messages of the label.
-        ///
-        /// # Errors
-        /// Returns error if API request or database changes failed.
         #[tracing::instrument(skip_all)]
         pub async fn sync(
             &self,

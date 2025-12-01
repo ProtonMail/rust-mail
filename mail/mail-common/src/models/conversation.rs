@@ -216,10 +216,6 @@ impl Conversation {
 
     /// Mark multiple conversations as read.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn action_mark_read(
         queue: &Queue,
         label_id: LocalLabelId,
@@ -230,10 +226,6 @@ impl Conversation {
     }
 
     /// Mark multiple conversations as unread.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn action_mark_unread(
         queue: &Queue,
@@ -246,10 +238,6 @@ impl Conversation {
 
     /// Delete multiple conversations.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn action_delete(
         queue: &Queue,
         label_id: LocalLabelId,
@@ -260,10 +248,6 @@ impl Conversation {
     }
 
     /// Move multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
     ///
     pub async fn action_move(
         tether: &Tether,
@@ -284,10 +268,6 @@ impl Conversation {
     }
 
     /// Soft delete multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn action_mark_deleted(
         queue: &Queue,
@@ -325,10 +305,6 @@ impl Conversation {
     /// All given conversations will get the selected labels.
     /// All given conversations will keep the partially selected labels.
     /// All given conversations will lose any other labels.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the action can not be applied.
     ///
     pub async fn action_label_as(
         tether: &Tether,
@@ -484,10 +460,6 @@ impl Conversation {
 
     /// Find a group of Conversations by their IDs.
     ///
-    /// # Errors
-    ///
-    /// When database request fail.
-    ///
     pub(crate) async fn find_by_ids(
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
         tether: &Tether,
@@ -538,10 +510,6 @@ impl Conversation {
     /// Conversation is updated only if the current open label context state is different. This way
     /// new messages in conversations are visible earlier and we prevent unnecessary updates if not
     /// relevant to the current location.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query failed.
     ///
     #[tracing::instrument(skip(self, rebase_change_set, bond), fields(remote_id = ?self.remote_id))]
     pub async fn create_or_get_local(
@@ -603,10 +571,6 @@ impl Conversation {
 
     /// Label multiple conversations.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
     pub async fn apply_label_async(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -618,10 +582,6 @@ impl Conversation {
     }
 
     /// Label multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn apply_label_to_multiple_remote<PM: ProtonMail>(
         label_id: LabelId,
@@ -641,12 +601,6 @@ impl Conversation {
         Conversation::split_request(ids, request).await
     }
 
-    /// TODO: Document this method.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
     pub async fn create_or_update_conversations(
         conversations: Vec<Conversation>,
         bond: &Bond<'_>,
@@ -671,10 +625,6 @@ impl Conversation {
     /// moreover the conversation will be removed from all labels as well as deleted field will
     /// be set to true.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
     pub async fn mark_deleted(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -696,10 +646,6 @@ impl Conversation {
 
     /// Mark conversations as deleted for `AllMail` label.
     /// More information can be found in [`Conversation::mark_deleted`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
     ///
     async fn mark_deleted_all_mail(
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -747,10 +693,6 @@ impl Conversation {
 
     /// Updates all labels counters after soft delete of conversation in active view `AllMail`.
     ///
-    /// # Errors
-    ///
-    /// Will return an error if the data could not be written to the database.
-    ///
     async fn remove_conversation_from_all_labels(
         &self,
         all_stats: HashMap<LocalLabelId, MessageLabelStats>,
@@ -787,10 +729,6 @@ impl Conversation {
 
     /// Mark conversations as deleted in active label.
     /// More information can be found in [`Conversation::mark_deleted`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
     ///
     async fn mark_deleted_current_label(
         label_id: LocalLabelId,
@@ -845,10 +783,6 @@ impl Conversation {
 
     /// Updates active label counters after soft delete of conversation.
     ///
-    /// # Errors
-    ///
-    /// Will return an error if the data could not be written to the database.
-    ///
     pub async fn remove_conversation_from_label(
         &mut self,
         label_id: LocalLabelId,
@@ -887,10 +821,6 @@ impl Conversation {
     /// moreover the conversation will be assigned to all labels as well as deleted field will
     /// be set to false.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
     pub async fn mark_undeleted(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -912,10 +842,6 @@ impl Conversation {
 
     /// Mark conversations as undeleted for `AllMail` label.
     /// More information can be found in [`Conversation::mark_undeleted`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
     ///
     async fn mark_undeleted_all_mail(
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -976,10 +902,6 @@ impl Conversation {
 
     /// Updates all labels counters after undelete of conversation in active view `AllMail`.
     ///
-    /// # Errors
-    ///
-    /// Will return an error if the data could not be written to the database.
-    ///
     async fn add_conversation_to_all_labels(
         &self,
         all_stats: HashMap<LocalLabelId, MessageLabelStats>,
@@ -1016,10 +938,6 @@ impl Conversation {
 
     /// Mark conversations as undeleted in active label.
     /// More information can be found in [`Conversation::mark_undeleted`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
     ///
     async fn mark_undeleted_current_label(
         label_id: LocalLabelId,
@@ -1085,10 +1003,6 @@ impl Conversation {
 
     /// Updates active label counters after undelete of conversation.
     ///
-    /// # Errors
-    ///
-    /// Will return an error if the data could not be written to the database.
-    ///
     pub async fn add_conversation_to_label(
         &mut self,
         label_id: LocalLabelId,
@@ -1120,11 +1034,8 @@ impl Conversation {
 
         Ok(())
     }
+
     /// Updates conversation counters after delete of conversation.
-    ///
-    /// # Errors
-    ///
-    /// Will return an error if the data could not be written to the database.
     ///
     pub async fn mark_delete_update_stats(
         &mut self,
@@ -1156,10 +1067,6 @@ impl Conversation {
 
     /// Updates conversation counters after undelete of conversation.
     ///
-    /// # Errors
-    ///
-    /// Will return an error if the data could not be written to the database.
-    ///
     pub async fn mark_undelete_update_stats(
         &mut self,
         stats: Option<&MessageLabelStats>,
@@ -1178,10 +1085,6 @@ impl Conversation {
     }
 
     /// Delete multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn delete_multiple_remote<PM: ProtonMail>(
         ids: Vec<ConversationId>,
@@ -1202,10 +1105,6 @@ impl Conversation {
 
     /// Get the conversation counts.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
     ) -> Result<Vec<ConversationLabelsCount>, ApiServiceError> {
@@ -1219,10 +1118,6 @@ impl Conversation {
     ///
     /// The returned message will depend on the `label` where the conversation
     /// is returned.
-    ///
-    /// # Errors
-    ///
-    /// When unable to pick the message for the conversation in the current view.
     ///
     pub fn message_id_to_open(
         local_id: LocalConversationId,
@@ -1304,10 +1199,6 @@ impl Conversation {
 
     /// Load all models::Label for `self` models::ConversationLabel list.
     ///
-    /// # Errors
-    ///
-    /// Database error.
-    ///
     pub fn load_labels(&self, conn: &Connection) -> Result<Vec<Label>, StashError> {
         let ids = self
             .labels
@@ -1329,10 +1220,6 @@ impl Conversation {
 
     /// Mark multiple conversations as read.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn mark_multiple_as_read_remote<PM: ProtonMail>(
         ids: Vec<ConversationId>,
         api: &PM,
@@ -1345,10 +1232,6 @@ impl Conversation {
     }
 
     /// Mark multiple conversations as unread.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn mark_multiple_as_unread_remote(
         ids: Vec<ConversationId>,
@@ -1501,10 +1384,6 @@ impl Conversation {
 
     /// Unlabel multiple conversations.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn remove_label_async(
         label_id: LocalLabelId,
@@ -1517,10 +1396,6 @@ impl Conversation {
     }
 
     /// Unlabel multiple conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
     ///
     pub async fn remove_label_from_multiple_remote<PM: ProtonMail>(
         label_id: LabelId,
@@ -1711,10 +1586,6 @@ impl Conversation {
 
     /// Undelete multiple conversations.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn undelete_multiple_remote<PM: ProtonMail>(
         ids: Vec<ConversationId>,
         label_id: LabelId,
@@ -1754,10 +1625,6 @@ impl Conversation {
 
     /// Get the available `label as` actions for conversations
     ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn available_label_as_actions(
         local_ids: Vec<LocalConversationId>,
@@ -1789,10 +1656,6 @@ impl Conversation {
 
     /// Watches `label as` actions for conversations
     ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn watch_available_label_as_actions(
         local_ids: Vec<LocalConversationId>,
@@ -1806,10 +1669,6 @@ impl Conversation {
     }
 
     /// Get the available move actions for conversations
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
     ///
     #[tracing::instrument(skip_all, fields(label_id=view.id().as_u64()))]
     pub async fn available_move_to_actions(
@@ -2312,16 +2171,6 @@ impl Conversation {
     }
 
     /// Retrieve all the conversation which are in a given label.
-    ///
-    /// # Params
-    ///
-    /// * `local_label_id` - Label where to search in
-    /// * `interface`      - Connection to the database
-    /// * `queue`          - Optional subscriber for changes.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub async fn in_label(
         local_label_id: LocalLabelId,
         tether: &Tether,
@@ -2365,10 +2214,6 @@ impl Conversation {
     ///
     /// Finds the maximum display order value in all conversations and adds 1
     /// to the existing value.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     ///
     pub async fn next_display_order(tether: &Tether) -> Result<u64, StashError> {
         Ok(tether
@@ -3209,9 +3054,6 @@ impl ConversationLabel {
 impl ConversationLabel {
     /// Get all local label ids for a given `conversation_id`.
     ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn labels_ids_for_conversation(
         conversation_id: LocalConversationId,
         tether: &Tether,
@@ -3227,10 +3069,6 @@ impl ConversationLabel {
     }
 
     /// Get all local label with given label IDs.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query failed.
     ///
     pub async fn find_by_label_ids(
         label_ids: impl IntoIterator<Item = LocalLabelId>,
@@ -3262,10 +3100,6 @@ impl ConversationLabel {
 
     /// Adjust the stats of the conversation label when
     /// a message is marked as deleted.
-    ///
-    /// ## Errors
-    ///
-    /// Returns error if the query fails.
     ///
     pub async fn mark_delete_update_stats(
         &mut self,
@@ -3310,10 +3144,6 @@ impl ConversationLabel {
 
     /// Adjust the stats of the conversation label when
     /// a message is marked as undeleted.
-    ///
-    /// ## Errors
-    ///
-    /// Returns error if the query fails.
     ///
     pub async fn mark_undelete_update_stats(
         &mut self,
@@ -3597,10 +3427,6 @@ impl ConversationCounters {
     }
 
     /// Get all conversation counters linked to labels with given kind
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
     pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find(
             "INNER JOIN labels ON labels.local_id = local_label_id WHERE label_type = ? ORDER BY labels.display_order ASC",
@@ -3645,10 +3471,6 @@ impl ConversationCounters {
     /// Watch conversation counter for changes.
     ///
     /// When a change occurs a message is produced in the returned receiver.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed
     ///
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash
@@ -3721,11 +3543,6 @@ impl TableObserver for ConversationCounterWatcher {
 impl Conversation {
     /// Synchronize the first `count` conversations of the label with `label_id`.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database.
-    ///
     pub async fn sync_first_conversation_page<PM: ProtonMail>(
         label_id: LabelId,
         count: usize,
@@ -3776,13 +3593,6 @@ impl Conversation {
     /// based on a particular mailbox; this restriction can be applied via the
     /// options.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database. Can also return an error if a found
-    /// conversation cannot be loaded, although this would indicate a
-    /// significant problem.
-    ///
     pub async fn search(
         options: GetConversationsOptions,
         api: &Session,
@@ -3807,12 +3617,6 @@ impl Conversation {
 
     /// Given a list of conversations check if there are any missing dependencies like undownloaded
     /// labels.
-    ///
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database.
     ///
     async fn sync_dependencies(
         conversations: &[ApiConversation],

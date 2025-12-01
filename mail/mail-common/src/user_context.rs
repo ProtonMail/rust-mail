@@ -325,11 +325,6 @@ impl MailUserContext {
         })
     }
 
-    /// Get a mandatory service - returns error if service is not registered
-    ///
-    /// # Panics
-    /// Panics if the service is not found in the context.
-    /// If there is a need for a service that may not be registered, use `get_service_opt` instead.
     #[must_use]
     pub fn get_service<T: Any + Send + Sync + 'static>(&self) -> &T {
         self.services
@@ -343,7 +338,6 @@ impl MailUserContext {
             })
     }
 
-    /// Get an optional service - returns None if service is not registered
     pub fn get_service_opt<T: Any + Send + Sync + 'static>(&self) -> Option<&T> {
         self.services
             .get(&TypeId::of::<T>())
@@ -565,9 +559,6 @@ impl MailUserContext {
     /// This information is collected from the keys returned by the API, contact vCard data,
     /// sender mail settings, and composer preferences.
     ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] or [`proton_crypto_inbox::keys::EncryptionPreferencesError`] if the operation fails.
-    ///
     pub async fn recipient_send_preferences<P>(
         &self,
         pgp: &P,
@@ -717,11 +708,6 @@ impl MailUserContext {
     ///
     /// There are sevral layers to this function in which most of them
     /// are non failing and retrying in cases where we could fail.
-    ///
-    /// ### Errors
-    ///
-    /// The method may fail to gather users. This will happen if for any
-    /// reason we will be unable to read sessions from account database.
     ///
     /// ### Notes
     ///

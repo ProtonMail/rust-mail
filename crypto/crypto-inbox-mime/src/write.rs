@@ -222,9 +222,6 @@ impl<'x> InboxMimeBuilder<'x> {
     }
 
     /// Writes the multipart MIME message to the provided output writer.
-    ///
-    /// # Errors
-    /// Returns an error if writing to the output fails.
     pub fn write_to(self, output: impl Write) -> Result<(), BuildMimeError> {
         let mut parts = Vec::with_capacity(self.attachments.len() + 1);
 

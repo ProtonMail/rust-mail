@@ -142,9 +142,6 @@ pub trait VersionConverter {
     ///
     /// # Remarks
     /// This function is also called if `old_version` and `new_version` have the samve value.
-    ///
-    /// # Errors
-    /// Return error if the version conversion failed.
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output>;
 }
 
@@ -327,12 +324,6 @@ impl<'t> WriterGuard<'t> {
         }
     }
 
-    /// Create a new transaction.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StashError`] if the transaction failed to be created  and [`WriterGuardError::Expired`]
-    /// if this execution lock has expired.
     pub async fn tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
@@ -398,10 +389,6 @@ pub trait Handler: Send + Sync {
     ///
     /// Changes made to the `action` data at this point will be persisted into the database once
     /// executing has finished successfully.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the operation failed.
     fn apply_local(
         &self,
         this_id: ActionId,
@@ -416,10 +403,6 @@ pub trait Handler: Send + Sync {
     /// This function is only called if:
     /// * Remote operation failed to execute and the resulting errors is not a network error.
     /// * The action is being cancelled.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the operation failed.
     fn revert_local(
         &self,
         this_id: ActionId,
@@ -437,10 +420,6 @@ pub trait Handler: Send + Sync {
     ///
     /// Changes made to the `action` data at this point are accessible to [`Handler::apply_local_post_remote()`]
     /// after this call. They are not serialized to the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the network request failed.
     fn apply_remote(
         &self,
         this_id: ActionId,
@@ -616,10 +595,6 @@ impl MetadataBuilder {
     /// Assign a `resource` to this action.
     ///
     /// The `resource` will be serialized into a byte array.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the serialization failed.
     pub fn with_resource(
         mut self,
         resource: &impl Serialize,

@@ -47,9 +47,6 @@ impl Uri {
     }
 
     /// Try to create a new URI from a str
-    ///
-    /// # Errors
-    ///   * if given value is not a valid URL
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
     }

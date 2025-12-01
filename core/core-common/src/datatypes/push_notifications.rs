@@ -52,10 +52,6 @@ impl StoredDevicePrivateKey {
 
     /// Transforms it to `PGPDeviceKey`
     ///
-    /// # Errors
-    ///
-    /// Returns an error if could not deserialize key from raw bytes
-    ///
     pub fn to_device_key<P>(
         &self,
         pgp: &P,

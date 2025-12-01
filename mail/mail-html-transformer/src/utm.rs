@@ -86,10 +86,6 @@ pub fn strip_from_url(url: &Url) -> (Url, u64) {
 }
 
 /// Removes UTM parameters from an `url` defined as a string.
-///
-/// # Errors
-///
-/// Will return error if `url` cannot be parsed into an [`Url`]
 pub fn strip_from_string(url: &str) -> Result<(Url, u64), url::ParseError> {
     let url = Url::parse(url)?;
     Ok(strip_from_url(&url))

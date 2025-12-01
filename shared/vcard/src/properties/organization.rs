@@ -61,9 +61,6 @@ impl Organization {
     }
 
     /// Try to create a new ORG property
-    ///
-    /// # Errors
-    ///   * if given value is not a valid list-component
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self::new(Self::value_into_components(value)?))
     }

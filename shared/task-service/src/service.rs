@@ -29,10 +29,6 @@ pub struct TaskService {
 
 impl TaskService {
     /// Creates a new task service.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we can't spawn the background thread.
     pub fn new(runtime: runtime::Handle) -> io::Result<Self> {
         let (sender, receiver) = mpsc::channel();
 
@@ -152,11 +148,6 @@ impl TaskService {
     /// If the spawned futures are awaiting on different await points they may not report
     /// the fact that they are paused. It is possible that this function never recovers. A
     /// `timeout` is required to avoid "surprise" blocked forever.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the task service's thread has crashed and is unable to
-    /// service the request.
     pub async fn pause_and_wait(&self, timeout: Duration) -> anyhow::Result<()> {
         info!("Pausing tasks and waiting");
 

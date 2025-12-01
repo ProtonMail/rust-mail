@@ -271,11 +271,6 @@ impl DecryptedMessageBody {
     /// Load or fetch an embedded attachment with `cid` for this message.
     ///
     /// If the attachment is not in the cache it will be downloaded from the server.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the attachments can't be fetched from the server, retrieved
-    /// from the cache or the attachment with `cid` does not exist.
     pub async fn get_embedded_attachment(
         &self,
         ctx: &MailUserContext,
@@ -356,12 +351,6 @@ impl DecryptedMessageBody {
     /// # Parameters
     ///
     /// * `sender` - the email address of the sender. Example: `test@pm.me`
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the network request, the database query, reading/writing
-    /// the body to the cache, or decrypting the body fails,
-    /// or if the message doesn't exist.
     pub async fn transformed(
         &self,
         sender: &str,

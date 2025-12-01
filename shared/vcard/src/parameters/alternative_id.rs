@@ -24,9 +24,6 @@ impl AlternativeId {
     }
 
     /// Try to create a new ALTID parameter
-    ///
-    /// # Errors
-    ///    * if value is not a valid param-value
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Ok(Self {
             value: ParamValue::try_from(value)

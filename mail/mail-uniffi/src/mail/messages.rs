@@ -76,12 +76,6 @@ impl DecryptedMessage {
 impl DecryptedMessage {
     /// Gets the message body as an HTML. This does all of the transformations that are
     /// required based on the options and the user settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the network request, the database query, reading/writing
-    /// the body to the cache, or decrypting the body fails,
-    /// or if the message doesn't exist.
     #[returns(BodyOutputResult)]
     pub async fn body(self: Arc<Self>, opts: TransformOpts) -> Result<BodyOutput, ProtonError> {
         uniffi_async(async move {
@@ -429,10 +423,6 @@ impl From<RealMessageBanner> for MessageBanner {
 
 /// Get a specified message.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn message(
     session: Arc<MailUserSession>,
@@ -467,10 +457,6 @@ declare_live_query_tagger!(WatchMessageMarker);
 ///
 /// Returns `None` if the message could not be found.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn watch_message(
     session: Arc<MailUserSession>,
@@ -498,10 +484,6 @@ pub async fn watch_message(
 
 /// Get all messages for the given conversation.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn messages_for_conversation(
     session: Arc<MailUserSession>,
@@ -526,10 +508,6 @@ pub async fn messages_for_conversation(
 
 /// Get messages for the given label.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn messages_for_label(
     session: Arc<MailUserSession>,
@@ -553,10 +531,6 @@ pub async fn messages_for_label(
 /// Gets a paginator for messages belonging to the specified label, which allows
 /// navigation through the messages by page/window, and watches for changes.
 /// When the messages change, the callback will be invoked.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
 ///
 #[uniffi_export]
 pub async fn scroll_messages_for_label(
@@ -584,10 +558,6 @@ pub async fn scroll_messages_for_label(
 /// navigation through the messages by page/window, and watches for changes.
 /// When the messages change, the callback will be invoked.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn scroller_search(
     mailbox: Arc<Mailbox>,
@@ -612,10 +582,6 @@ pub async fn scroller_search(
 /// Filter or search messages which match the specified options.
 ///
 /// Note that search results are inserted into the database.
-///
-/// # Errors
-///
-/// Returns an error if the network request or database query fails.
 ///
 #[uniffi_export]
 pub async fn search_for_messages(
@@ -645,10 +611,6 @@ pub async fn search_for_messages(
 /// Returns available label_as actions for messages.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn available_label_as_actions_for_messages(
     mailbox: Arc<Mailbox>,
@@ -668,12 +630,9 @@ pub async fn available_label_as_actions_for_messages(
 }
 
 declare_live_query_tagger!(WatchAvailableLabelAsActionsMessageMaker);
+
 /// Watches label_as actions for messages.
 /// Any action returned here should reflect the display needs.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
 ///
 #[uniffi_export]
 pub async fn watch_available_label_as_actions_for_messages(
@@ -706,10 +665,6 @@ pub struct WatchedLabelAs {
 /// Returns available move_to actions for messages.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn available_move_to_actions_for_messages(
     mailbox: Arc<Mailbox>,
@@ -740,10 +695,6 @@ pub async fn available_move_to_actions_for_messages(
 
 /// Returns available actions for messages list toolbar.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn all_available_list_actions_for_messages(
     mailbox: Arc<Mailbox>,
@@ -766,10 +717,6 @@ pub async fn all_available_list_actions_for_messages(
 }
 
 /// Returns available actions for a single message (Phase 2).
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
 ///
 #[uniffi_export]
 pub async fn all_available_message_actions_for_message(
@@ -799,10 +746,6 @@ pub async fn all_available_message_actions_for_message(
 /// Returns available message actions grouped by categories for action sheet display.
 ///
 /// Actions are organized into reply_actions, message_actions, move_actions, and general_actions categories.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
 ///
 #[uniffi_export]
 pub async fn all_available_message_actions_for_action_sheet(
@@ -924,10 +867,6 @@ declare_live_query_tagger!(WatchMessagesForLabelMaker);
 /// Watches messages with the specified label for changes. When the messages
 /// change, the callback will be invoked.
 ///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
 #[uniffi_export]
 pub async fn watch_messages_for_label(
     session: Arc<MailUserSession>,
@@ -952,10 +891,6 @@ pub async fn watch_messages_for_label(
 
 /// Star the given messages.
 ///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn star_messages(
@@ -975,10 +910,6 @@ pub async fn star_messages(
 }
 
 /// Unstar the given messages.
-///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
 #[returns(VoidActionResult)]
@@ -1000,10 +931,6 @@ pub async fn unstar_messages(
 
 /// Mark multiple messages as read.
 ///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_messages_read(
@@ -1024,10 +951,6 @@ pub async fn mark_messages_read(
 
 /// Mark multiple messages as unread.
 ///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_messages_unread(
@@ -1047,10 +970,6 @@ pub async fn mark_messages_unread(
 }
 
 /// Delete multiple messages
-///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
 #[returns(VoidActionResult)]
@@ -1077,10 +996,6 @@ pub async fn delete_messages(
 
 /// Mark multiple messages as ham (not spam) AKA as legitimate
 ///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<(), ActionError> {
@@ -1097,10 +1012,6 @@ pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<
 }
 
 /// Blocks an address.
-///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
 #[returns(VoidActionResult)]
@@ -1123,10 +1034,6 @@ pub async fn block_address(
 /// Unblocks an address.
 /// This should not be used on addresses that aren't blocked.
 ///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(), ActionError> {
@@ -1143,10 +1050,6 @@ pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(),
 }
 
 /// Mark message as phishing
-///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
 ///
 #[allow(unused)]
 #[uniffi_export]
@@ -1182,10 +1085,6 @@ pub struct AttachmentData {
 /// Set Labels from `selected_label_ids` while unsetting all those that are not in
 /// `partially_selected_label_ids`.
 ///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
-///
 #[uniffi_export]
 pub async fn label_messages_as(
     mailbox: Arc<Mailbox>,
@@ -1217,10 +1116,6 @@ pub async fn label_messages_as(
 
 /// Move given messages from a label into another.
 ///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
-///
 #[uniffi_export]
 pub async fn move_messages(
     mailbox: Arc<Mailbox>,
@@ -1251,10 +1146,6 @@ pub async fn move_messages(
 /// It may happen, that the [`RemoteId`] points to the message that does not exist in our
 /// database yet. In that case, Rust SDK will fetch necessary information from API before returning the id.
 ///
-/// # Errors
-///
-/// Returns an error if the network failed or if the database cannot write/read message.
-///
 #[uniffi_export]
 pub async fn resolve_message_id(
     session: Arc<MailUserSession>,
@@ -1279,10 +1170,6 @@ pub async fn resolve_message_id(
 /// - trash
 /// - custom labels
 /// - custom folders
-///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
 #[returns(VoidActionResult)]
@@ -1310,11 +1197,6 @@ pub async fn delete_all_messages_in_label(
 ///
 /// This function allows updating the actions displayed in the list toolbar
 /// when viewing email lists on mobile devices.
-///
-/// # Errors
-///
-/// Returns an error if the action queue operation fails or if the actions
-/// are invalid for the list toolbar.
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn update_mobile_list_toolbar_actions(
@@ -1340,11 +1222,6 @@ pub async fn update_mobile_list_toolbar_actions(
 ///
 /// This function allows updating the actions displayed in the message toolbar
 /// when viewing individual messages on mobile devices.
-///
-/// # Errors
-///
-/// Returns an error if the action queue operation fails or if the actions
-/// are invalid for the message toolbar.
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn update_mobile_message_toolbar_actions(

@@ -34,9 +34,6 @@ pub struct Anniversary {
 
 impl Anniversary {
     /// Try to create a new ANNIVERSARY property
-    ///
-    /// # Errors
-    ///   * if the given value is neither a date-and-or-time nor a text
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self {
             value: value.into(),
@@ -119,9 +116,6 @@ pub enum AnniversaryValue {
 
 impl AnniversaryValue {
     /// Try to create a new value for ANNIVERSARY property
-    ///
-    /// # Errors
-    ///   * if given value is neither a date-and-or-time value nor a text
     pub fn new_validated(value: impl AsRef<str>) -> Self {
         Self::from(value)
     }

@@ -122,10 +122,6 @@ impl Address {
 
     /// Download user addresses. Returns an object that can be stored in DB.
     ///
-    /// # Errors
-    ///
-    /// TODO: Document the errors.
-    ///
     pub async fn sync(api: &impl ProtonCore) -> CoreContextResult<SyncedAddresses> {
         let addresses = api
             .get_addresses()

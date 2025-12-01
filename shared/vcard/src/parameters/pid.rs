@@ -15,9 +15,6 @@ pub struct Pid {
 
 impl Pid {
     /// Try to create a new PID parameter
-    ///
-    /// # Errors
-    ///   *
     pub fn new_validated(values: &[String]) -> VCardParameterResult<Self> {
         Self::try_from(values)
     }

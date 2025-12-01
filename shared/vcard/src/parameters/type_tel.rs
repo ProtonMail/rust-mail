@@ -35,17 +35,11 @@ pub enum TelType {
 
 impl TelType {
     /// Try to create a new TYPE parameter for Telephone property
-    ///
-    /// # Errors
-    ///   * if value is not valid
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Self::try_from(value)
     }
 
     /// Try to create a new `HashSet` of TYPE parameters
-    ///
-    /// # Errors
-    ///   * if at least one of the given values is not valid
     pub fn set_from_values(values: &[String]) -> VCardParameterResult<HashSet<Self>> {
         values.iter().map(|v| Self::try_from(v.as_str())).collect()
     }

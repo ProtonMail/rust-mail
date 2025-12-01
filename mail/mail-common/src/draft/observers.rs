@@ -30,10 +30,6 @@ pub enum DraftSendResultWatcherMode {
 
 impl DraftSendResultWatcher {
     /// Create a new instance with the given `stash` db pool.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the registration or initial db query failed.
     pub async fn new(stash: Stash, mode: DraftSendResultWatcherMode) -> Result<Self, StashError> {
         let conn = stash.connection().await?;
 
@@ -50,11 +46,6 @@ impl DraftSendResultWatcher {
     }
 
     /// Wait on the next new send result.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query failed or the [`StashError::WatcherError`] if the
-    /// connection to the watcher was lost.
     pub async fn next(&mut self) -> Result<Vec<DraftSendResult>, StashError> {
         loop {
             self.watcher_handle
@@ -110,10 +101,6 @@ pub struct DraftAttachmentObserver {
 
 impl DraftAttachmentObserver {
     /// Create new instance for the given `metadata_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn new(metadata_id: MetadataId, stash: Stash) -> Result<Self, StashError> {
         let conn = stash.connection().await?;
 
@@ -134,11 +121,6 @@ impl DraftAttachmentObserver {
         })
     }
 
-    /// Wait on the next update for this watcher
-    ///
-    /// # Errors
-    ///
-    /// Returns error if
     pub async fn next(&mut self) -> Result<(), StashError> {
         loop {
             self.watcher_handle

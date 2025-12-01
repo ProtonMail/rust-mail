@@ -27,9 +27,6 @@ pub trait ProcessMime {
     /// Processes a decrypted mime body to a Proton inbox messages.
     ///
     /// Extracts the message body, extracts/normalizes the attachments, and collects the signatures.
-    ///
-    /// # Errors
-    /// A [`ProcessMimeError`] if parsing error occurs or if no body and attachments are found.
     fn process_mime(message_id: &str, decrypted_body: &[u8]) -> ProcessedMimeResult;
 }
 

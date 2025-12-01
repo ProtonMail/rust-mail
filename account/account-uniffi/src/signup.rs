@@ -190,10 +190,6 @@ pub struct UserAddrId {
 #[uniffi_export]
 impl SignupFlow {
     /// Step the flow back to the previous State.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if there is no state to step back to.
     pub async fn step_back(&self) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 

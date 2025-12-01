@@ -16,9 +16,6 @@ use proton_mail_common::datatypes::labels::custom_labels::CustomLabel as RealCus
 impl MailUserSession {
     /// Return the list of labels of type Folder into which a conversations or
     /// message can be moved.
-    ///
-    /// # Errors
-    /// Returns an error if the list can not be retrieved.
     pub async fn movable_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
@@ -35,9 +32,6 @@ impl MailUserSession {
 
     /// Return the list of labels of type Label that can be applied to conversations or
     /// messages.
-    ///
-    /// # Errors
-    /// Returns an error if the list can not be retrieved.
     pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {

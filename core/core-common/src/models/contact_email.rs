@@ -116,10 +116,6 @@ impl ContactEmail {
     /// Count the number of emails in a contact group with name `group_name`.
     ///
     /// If the group could not be found, this method returns `None`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn count_in_contact_group_by_name(
         group_name: String,
         tether: &Tether,
@@ -143,10 +139,6 @@ impl ContactEmail {
     }
 
     /// Count the number of emails in a contact group with `contact_group_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn count_in_contact_group(
         contact_group_id: LabelId,
         tether: &Tether,

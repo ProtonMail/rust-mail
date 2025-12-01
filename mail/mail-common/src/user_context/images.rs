@@ -21,10 +21,6 @@ impl MailUserContext {
     /// * `size`: Is used to give the x*x size of the returned image (will default to 32 if none provided).
     /// * `mode`: Can be used to select if the "light" or "dark" mode of the image is desired (default is light).
     /// * `format`: Desired image format, if none is specified the default format of the image will be used.
-    ///
-    /// # Errors
-    /// Returns errors if the API call fails, the conversation doesn't exist, or if there's an
-    /// issue with the sender that causes problems when creating the API request on our side.
     #[allow(clippy::too_many_arguments)]
     pub async fn image_for_sender(
         &self,

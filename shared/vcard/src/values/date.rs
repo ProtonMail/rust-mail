@@ -18,9 +18,6 @@ impl DateValue {
     ///  `| "--"     month [day]`
     ///  `| "--"      "-"   day`
     /// with year on 4 char, month 2 and day 2
-    ///
-    /// # Errors
-    ///   * if given value is not valid
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
     }

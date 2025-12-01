@@ -33,9 +33,6 @@ impl CalendarScale {
     }
 
     /// Try to create a new CALSCALE parameter
-    ///
-    /// # Errors
-    ///   * not a valid value : "gregorian" (case-insensitive), an iana-token or an x-name
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Self::try_from(value)
     }

@@ -53,9 +53,6 @@ impl Source {
     }
 
     /// Try to create a new SOURCE property without any parameter or group
-    ///
-    /// # Errors
-    ///   * the value is not a valid uri value
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self {
             value: Uri::new_validated(value)

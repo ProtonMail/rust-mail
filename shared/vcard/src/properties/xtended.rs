@@ -37,9 +37,6 @@ impl Xtended {
     }
 
     /// Try to create a new Extended property (the X- is automatically added)
-    ///
-    /// # Errors
-    ///   * if given name is not valid (only alphanumeric and dash allowed)
     pub fn new_validated(name: &str, value: Option<String>) -> VCardResult<Self> {
         Ok(Self {
             name: XName::new_validated(&format!("X-{name}")).map_err(

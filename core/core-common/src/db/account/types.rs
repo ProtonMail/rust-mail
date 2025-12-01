@@ -277,10 +277,6 @@ pub enum CoreSessionError {
 
 impl CoreSession {
     /// Retrieves all sessions associated with the given account ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we fail to retrieve the sessions from the db.
     pub async fn find_by_user_id(
         user_id: UserId,
         tether: &Tether,
@@ -289,10 +285,6 @@ impl CoreSession {
     }
 
     /// Create a new session for the given account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the encryption fails.
     pub fn new(
         user_id: UserId,
         session_id: SessionId,
@@ -317,10 +309,6 @@ impl CoreSession {
 
     /// Update the auth tokens.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the encryption fails.
-    ///
     pub fn with_tokens(
         self,
         tokens: &Tokens,
@@ -341,10 +329,6 @@ impl CoreSession {
     }
 
     /// Update the key secret.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the secret encryption fails.
     pub fn with_key_secret(
         self,
         key_secret: &UserKeySecret,
@@ -403,9 +387,6 @@ pub struct EncryptedAccessToken(pub(crate) EncryptedData);
 
 impl EncryptedAccessToken {
     /// Encrypt the access token.
-    ///
-    /// # Errors
-    /// Returns error if the encryption failed.
     pub fn new(token: &str, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
         key.encrypt(token.as_bytes()).map(Self)
     }
@@ -441,9 +422,6 @@ pub struct EncryptedRefreshToken(pub(crate) EncryptedData);
 
 impl EncryptedRefreshToken {
     /// Encrypt the refresh token.
-    ///
-    /// # Errors
-    /// Returns error if the encryption failed.
     pub fn new(token: &str, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
         key.encrypt(token.as_bytes()).map(Self)
     }
@@ -500,9 +478,6 @@ pub struct EncryptedKeySecret(pub(crate) EncryptedData);
 
 impl EncryptedKeySecret {
     /// Encrypt the key secret.
-    ///
-    /// # Errors
-    /// Returns error if the encryption failed.
     pub fn new(
         key_secret: &UserKeySecret,
         key: &SessionEncryptionKey,
@@ -533,9 +508,6 @@ pub struct EncryptedPassword(pub(crate) EncryptedData);
 
 impl EncryptedPassword {
     /// Encrypt the password.
-    ///
-    /// # Errors
-    /// Returns error if the encryption failed.
     pub fn new(password: &str, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
         key.encrypt(password.as_bytes()).map(Self)
     }
@@ -603,9 +575,6 @@ impl SessionEncryptionKey {
     }
 
     /// Create a key from a collection of bytes.
-    ///
-    /// # Errors
-    /// Return error if the len of the collection is invalid.
     pub fn with_bytes(mut bytes: Vec<u8>) -> Result<Self, Vec<u8>> {
         if bytes.len() < Aes256Gcm::key_size() {
             return Err(bytes);
@@ -618,9 +587,6 @@ impl SessionEncryptionKey {
     }
 
     /// Encrypt the data.
-    ///
-    /// # Errors
-    /// Returns error if the encryption failed.
     pub fn encrypt(&self, data: &[u8]) -> Result<EncryptedData, aes_gcm::Error> {
         let cipher = Aes256Gcm::new(&self.key);
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
@@ -632,9 +598,6 @@ impl SessionEncryptionKey {
     }
 
     /// Decrypt the data.
-    ///
-    /// # Errors
-    /// Returns errors if the decryption failed.
     pub fn decrypt<D>(&self, data: D) -> Result<Vec<u8>, aes_gcm::Error>
     where
         D: Deref<Target = EncryptedData>,

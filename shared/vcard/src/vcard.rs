@@ -394,56 +394,38 @@ macro_rules! optional_handler {
 macro_rules! set_handler {
     ($name:ident, $plural:ident, $type:ty) => {
         paste::paste! {
-            #[doc = "Add a "]
-            #[doc = stringify!($name)]
-            #[doc = " property to the vCard"]
-            ///
-            /// # Errors
-            ///   * too many property in vCard
             pub fn [<add_ $name>](&mut self, value: $type) -> VCardResult<PropertyUid> {
                 let uid = self.next_uid()?;
                 self.$plural.insert(uid, value);
                 Ok(uid)
             }
 
-            #[doc = "Get "]
-            #[doc = stringify!($name)]
-            #[doc = " property if uid exist for this property"]
             #[must_use]
             pub fn [<get_ $name>](&self, uid: PropertyUid) -> Option<$type> {
                 self.$plural.get(&uid).cloned()
             }
 
-            #[doc = "Get the preferred "]
-            #[doc = stringify!($name)]
-            #[doc = " if any with its uid"]
-            #[must_use] pub fn [<get_preferred_ $name>](&self) -> Option<(PropertyUid, $type)> {
+            #[must_use]
+            pub fn [<get_preferred_ $name>](&self) -> Option<(PropertyUid, $type)> {
                 get_preferred(&self.$plural)
             }
 
-            #[doc = "Get all "]
-            #[doc = stringify!($name)]
-            #[doc = " properties with their uid"]
-            #[must_use] pub fn [<get_all_ $name>](&self) -> Vec<(PropertyUid, $type)> {
+            #[must_use]
+            pub fn [<get_all_ $name>](&self) -> Vec<(PropertyUid, $type)> {
                 self.$plural
                     .iter()
                     .map(|(&k, v)| (k, v.clone()))
                     .collect()
             }
 
-            #[doc = "Get all "]
-            #[doc = stringify!($name)]
-            #[doc = " properties without their uid"]
-            #[must_use] pub fn [<get_all_ $name _plain>](&self) -> Vec<$type> {
+            #[must_use]
+            pub fn [<get_all_ $name _plain>](&self) -> Vec<$type> {
                 self.$plural
                     .iter()
                     .map(|(_, v)| v.clone())
                     .collect()
             }
 
-            #[doc = "Remove the "]
-            #[doc = stringify!($name)]
-            #[doc = " property with uid (return tell if that property existed)"]
             pub fn [<remove_ $name>](&mut self, uid: PropertyUid) -> bool {
                 self.$plural.remove(&uid).is_some()
             }

@@ -31,12 +31,6 @@ impl UserContext {
     ///   desired (default is light).
     /// * `size`          - Is used to give the x*x size of the returned image (will default to 32
     ///   if none provided).
-    /// * `interface`     - The database interface, i.e. [`Stash`] or [`Tether`], to use for finding
-    ///   the records.
-    ///
-    /// # Errors
-    /// Returns errors if the API call fails, the conversation doesn't exist, or if there's an
-    /// issue with the sender that causes problems when creating the API request on our side.
     ///
     pub async fn image_for_sender(
         &self,

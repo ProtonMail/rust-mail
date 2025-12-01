@@ -489,11 +489,6 @@ impl Stash {
     /// managed by it, as there can only be one worker per [`Stash`] instance
     /// and database operations need to be executed sequentially.
     ///
-    /// # Errors
-    ///
-    /// A [`StashError::TetherError`] is returned if there is a problem creating
-    /// the database or connection pool.
-    ///
     pub fn new<'a>(config: impl Into<StashConfiguration<'a>>) -> Result<Self, StashError> {
         let watcher = Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?;
         let pool = Self::make_pool(config.into(), &watcher)?;
@@ -574,19 +569,6 @@ impl Stash {
     /// for needing a persistent connection is when using transactions, and
     /// starting a new transaction returns a new [`Tether`] instance to use.
     ///
-    /// # Errors
-    ///
-    /// Note that this function is infallible. That's because the allocation of
-    /// the [`Tether`] and its internal handle, and the association of that
-    /// handle to an actual connection, do not occur at the same time. The
-    /// connection is only created/obtained when the first query using the
-    /// [`Tether`] is executed. Therefore, the [`Tether`] itself is not
-    /// associated with any connection at the time of creation, and so cannot
-    /// fail. The reason for this design is so that "connections" can be created
-    /// quickly, with no delay, instead of waiting to be processed by the queue.
-    /// As query execution requires handling of errors anyway, this does not
-    /// introduce any additional burden, and streamlines connection handling.
-    ///
     /// # See also
     ///
     /// * [`Stash::transaction()`]
@@ -597,10 +579,6 @@ impl Stash {
     }
 
     /// Subscribes to notifications of changes to a specific table.
-    ///
-    /// # Errors
-    ///
-    /// See [`Stash::subscribe()`].
     pub async fn subscribe_to<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
     where
         F: FnOnce(QueueSender<()>) -> Box<dyn TableObserver> + Send + 'static,
@@ -688,10 +666,6 @@ pub struct Tether {
 
 impl Tether {
     /// Subscribes to notifications of changes to a specific table.
-    ///
-    /// # Errors
-    ///
-    /// See [`Stash::subscribe()`].
     pub fn subscribe_to<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
     where
         F: Fn(QueueSender<()>) -> Box<dyn TableObserver>,
@@ -729,19 +703,6 @@ impl Tether {
     /// decide, and does not result in any difference in handling by this
     /// module. The [`rusqlite`] library will handle the distinction as
     /// necessary.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
     pub async fn execute<Q: Into<String>>(
         &self,
         query: Q,
@@ -773,19 +734,6 @@ impl Tether {
     /// # Parameters
     ///
     /// * `query` - The batch of queries separated by `;`.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
     pub async fn batch<Q: Into<String>>(&self, queries: Q) -> Result<(), StashError> {
         let (sender, receiver) = oneshot::channel();
 
@@ -893,10 +841,6 @@ impl Tether {
     /// This utility function requires all the queries to return only one value
     /// named `value` or the conversion will not be successful.
     ///
-    /// # Errors
-    ///
-    /// See [`Interface::query`] for more information.
-    ///
     /// # Example
     ///
     /// ```
@@ -976,23 +920,6 @@ impl Tether {
     /// It is possible to reuse a connection for multiple transactions, but only
     /// one transaction can be active at a time on a given connection.
     ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted) -
-    ///     A new transaction cannot be started because one is already active on
-    ///     this connection.
-    ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
-    ///     the transaction.
-    ///
-    ///
     pub async fn tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
@@ -1006,10 +933,6 @@ impl Tether {
     ///
     /// This method is used to start a transaction without listening for changes.
     /// It is needed for internal implementation of the watch mechanism and scrollers.
-    ///
-    /// # Errors
-    ///
-    /// see [`Tether::tx()`]
     pub async fn quiet_tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
@@ -1301,13 +1224,6 @@ struct BridgeClosure {
 /// database modification queries to ensure safety of execution. Rust type system ensures that
 /// there is only one transaction per tether.
 ///
-/// # Errors
-/// Any modification query run of the scope of the Transaction may trigger `Database is busy` error.
-///
-/// # See also
-///
-/// * [`Tether`]
-///
 #[derive(Debug)]
 pub struct Bond<'tether> {
     /// The associated [`Tether`] instance.
@@ -1325,10 +1241,6 @@ impl<'tether> Bond<'tether> {
     ///
     /// This method is used to commit a transaction without publishing changes.
     /// It is needed for internal implementation of the watch mechanism and scrollers.
-    ///
-    /// # Errors
-    ///
-    /// see [`Bond::commit()`]
     ///
     async fn commit_(self, policy: TransactionTrackingPolicy) -> Result<(), StashError> {
         // drop() has an auto-rollback code we don't want to run here:
@@ -1357,21 +1269,6 @@ impl<'tether> Bond<'tether> {
     ///
     /// This function rolls back, i.e. abandons, an existing, active
     /// transaction.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`NoActiveTransaction`](StashError::NoActiveTransaction) - No
-    ///     transaction is currently active on this connection.
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
-    ///     the transaction.
     ///
     async fn rollback(self) -> Result<(), StashError> {
         // drop() has an auto-rollback code we don't want to run here:

@@ -354,10 +354,6 @@ impl MailSession {
     /// An account is an entity representing a Proton account known to the system.
     /// When a user first authenticates via the login flow, a new account is created,
     /// and all subsequent sessions are associated with that account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the accounts from the db.
     pub async fn get_accounts(&self) -> Result<Vec<Arc<StoredAccount>>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
@@ -380,10 +376,6 @@ impl MailSession {
     }
 
     /// Watch the accounts for changes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_accounts(
         &self,
         callback: Box<dyn LiveQueryCallback>,
@@ -413,10 +405,6 @@ impl MailSession {
     }
 
     /// Watch the accounts for changes using an async callback.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_accounts_async(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
@@ -446,10 +434,6 @@ impl MailSession {
     }
 
     /// Get all API sessions.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> Result<Vec<Arc<StoredSession>>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
@@ -470,10 +454,6 @@ impl MailSession {
     }
 
     /// Watch all API sessions for changes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions(
         &self,
         callback: Box<dyn LiveQueryCallback>,
@@ -501,10 +481,6 @@ impl MailSession {
     }
 
     /// Watch all API sessions for changes using an async callback.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions_async(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
@@ -532,10 +508,6 @@ impl MailSession {
     }
 
     /// Get all API sessions associated with a given account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_account_sessions(
         &self,
         account: Arc<StoredAccount>,
@@ -561,10 +533,6 @@ impl MailSession {
     }
 
     /// Watch an account's API sessions for changes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_account_sessions(
         &self,
         account: Arc<StoredAccount>,
@@ -593,10 +561,6 @@ impl MailSession {
     }
 
     /// Get a single account by its remote (user) ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_account(
         &self,
         user_id: String,
@@ -620,10 +584,6 @@ impl MailSession {
     }
 
     /// Get a single API session by its associated account and session ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_session(
         &self,
         session_id: String,
@@ -647,10 +607,6 @@ impl MailSession {
     }
 
     /// Get the login state of an account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_account_state(
         &self,
         user_id: String,
@@ -670,10 +626,6 @@ impl MailSession {
     }
 
     /// Get the login state of a session.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_session_state(
         &self,
         session_id: String,
@@ -693,10 +645,6 @@ impl MailSession {
     }
 
     /// Get the account considered to be the primary account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_primary_account(
         &self,
     ) -> Result<Option<Arc<StoredAccount>>, UserSessionError> {
@@ -1070,10 +1018,6 @@ impl MailSession {
 #[uniffi_export]
 impl MailSession {
     /// Set the account considered to be the primary account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the account is not found.
     #[returns(VoidSessionResult)]
     pub async fn set_primary_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let ctx = self.mail_ctx.clone();
@@ -1088,10 +1032,6 @@ impl MailSession {
     }
 
     /// Logs out all sessions of an account and deletes the account's data.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the operation fails.
     #[returns(VoidSessionResult)]
     pub async fn logout_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let mail_ctx = self.mail_ctx.clone();
@@ -1114,10 +1054,6 @@ impl MailSession {
     }
 
     /// Removes an account and all associated sessions and data.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if data can not be removed or the db operation failed.
     #[returns(VoidSessionResult)]
     pub async fn delete_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let mail_ctx = self.mail_ctx.clone();

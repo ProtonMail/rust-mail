@@ -21,9 +21,6 @@ impl ParamValue {
     }
 
     /// Try to create a new param-value
-    ///
-    /// # Errors
-    ///   * if given value contain a double-quote or a control character
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
     }

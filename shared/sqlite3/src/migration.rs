@@ -97,8 +97,8 @@ impl Migrator {
             .await
     }
 
-    /// Verifies that the database is exactly at the newest version; if that's
-    /// not the case, returns an error;
+    /// Verifies that the database is exactly at the newest version - if that's
+    /// not the case, returns an error.
     ///
     /// Note that this function does not run any migrations.
     ///

@@ -17,9 +17,6 @@ impl XName {
     }
 
     /// Try to create a new x-name value
-    ///
-    /// # Errors
-    ///   * if the given value is not a valid x-name (start with x- and alphanumerical char + dash)
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
     }

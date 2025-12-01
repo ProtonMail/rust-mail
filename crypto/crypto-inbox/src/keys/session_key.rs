@@ -98,11 +98,6 @@ pub struct InboxSessionKey {
 impl InboxSessionKey {
     /// Imports an inbox session key from a session key used by an `OpenPGP` provider
     /// (See [`proton_crypto_account::proton_crypto`]).
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`SessionKeyError::InvalidSessionKey`] if the session key is invalid.
-    /// This can happen if no session key algorithm can be retrieved.
     pub fn import_from_pgp_provider<Sk: SessionKey>(
         session_key: &Sk,
     ) -> Result<Self, SessionKeyError> {
@@ -156,10 +151,6 @@ impl InboxSessionKey {
 
     /// Exports the inbox session key to a session key for an `OpenPGP` provider
     /// (See [`proton_crypto_account::proton_crypto`]).
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`CryptoError`] if the `OpenPGP` provider fails to accept the key.
     pub fn export_to_pgp_provider<P>(&self, pgp: &P) -> Result<P::SessionKey, SessionKeyError>
     where
         P: PGPProviderSync,
@@ -184,11 +175,6 @@ impl InboxSessionKey {
     ///
     /// Encrypts the internal symmetric session key with the provided public key
     /// using `OpenPGP`. The output is an `OpenPGP` PKESK packet (referred to as a key packet in the Proton context).
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
-    /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
     pub fn encrypt_to_recipient<P>(
         &self,
         pgp: &P,
@@ -210,11 +196,6 @@ impl InboxSessionKey {
     ///
     /// Encrypts the internal symmetric session key with the password
     /// using `OpenPGP`. The output is an `OpenPGP` SKESK packet (referred to as a key packet in the Proton context).
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
-    /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
     pub fn encrypt_to_password<P>(
         &self,
         pgp: &P,
@@ -237,11 +218,6 @@ impl InboxSessionKey {
     /// Encrypts the internal symmetric session key with the provided public keys
     /// using `OpenPGP`. The output is an `OpenPGP` PKESK packet (referred to as a key packet in the Proton context).
     /// The key packets are returned in the order of the provided recipient public keys.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
-    /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
     pub fn encrypt_to_recipients<P>(
         &self,
         pgp: &P,

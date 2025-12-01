@@ -83,14 +83,6 @@ impl RollbackItem {
     /// do so, but in practice, and especially for alpha release, it is useful
     /// to have a way to recover from malfunctions.
     ///
-    /// ## Errors
-    ///
-    /// This method will return an error if any of the API requests fail.
-    /// It will also return an error if any of the local database operations fail.
-    /// Method cleans up the local database by deleting the records that have
-    /// been synced, so double syncing should never happen.
-    ///
-    ///
     pub async fn sync_all<I>(
         api: &Session,
         tx: &mut impl RunTransaction,
@@ -148,10 +140,6 @@ impl RollbackItem {
 
     /// This helper method is used to find all rollback items of a specific kind.
     ///
-    /// ## Errors
-    ///
-    /// This method will return an error if the database operation fails.
-    ///
     #[cfg(test)]
     async fn find_by_kind(
         kind: RollbackItemType,
@@ -161,10 +149,6 @@ impl RollbackItem {
     }
 
     /// This helper method is used to find all rollback items of a specific kind.
-    ///
-    /// ## Errors
-    ///
-    /// This method will return an error if the database operation fails.
     ///
     async fn find_remote_ids_by_kind(
         kind: RollbackItemType,
@@ -182,10 +166,6 @@ impl RollbackItem {
     }
 
     /// This helper method is used to delete rollback item of a specific kind & remote_id.
-    ///
-    /// ## Errors
-    ///
-    /// This method will return an error if the database operation fails.
     ///
     async fn delete_by_rid_and_kind(
         remote_id: Option<String>,

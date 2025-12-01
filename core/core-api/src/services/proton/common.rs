@@ -54,10 +54,6 @@ pub struct ApiErrorInfo {
 
 impl ApiErrorInfo {
     /// Parse the error from json data.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the format is not valid or expected json.
     pub fn from_json(json: impl AsRef<str>) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json.as_ref())
     }

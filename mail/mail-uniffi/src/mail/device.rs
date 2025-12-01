@@ -69,10 +69,6 @@ impl MailSession {
     /// In order to provide device registration details, this function returns an object [`RegisterDeviceTaskHandle`]
     /// that has a method [`RegisterDeviceTaskHandle::update_device`].
     ///
-    /// # Errors
-    ///
-    /// This method may fail if connection to the account database cannot be reached.
-    ///
     pub fn register_device_task(&self) -> Result<Arc<RegisterDeviceTaskHandle>, ActionError> {
         async_runtime().block_on(async {
             tracing::debug!("Uniffi: Spawning device registration task");

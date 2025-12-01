@@ -23,9 +23,6 @@ impl Label {
     }
 
     /// Try to create a new LABEL parameter
-    ///
-    /// # Errors
-    ///   * given value is not a valid param-value
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Ok(Self {
             value: ParamValue::try_from(value)

@@ -31,11 +31,8 @@ impl<T: Action> ActionFailureObserver<T> {
             p: PhantomData,
         }
     }
+
     /// Await the next failure of action of type `T`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the connection to the queue has been severed.
     pub async fn next(&mut self) -> Result<ActionFailureReason, RecvError> {
         loop {
             match self.receiver.recv().await {
@@ -88,10 +85,6 @@ impl ActionAwaiter {
     /// It's theoretically possible to create a waiter while the action is executing and missing
     /// the broadcast. It's recommended call this method in a select statement with some other
     /// exit condition.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the broadcast channel closes.
     pub async fn wait(&mut self, action_id: ActionId) -> Result<BroadcastMessage, RecvError> {
         loop {
             match self.receiver.recv().await {

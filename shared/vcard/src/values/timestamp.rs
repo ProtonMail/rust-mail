@@ -22,9 +22,6 @@ impl Timestamp {
     }
 
     /// Try to create a new timestamp value
-    ///
-    /// # Errors
-    ///   * if given value do not respect timestamp format (`YYYYMMDDThhmmssZ`)
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
     }

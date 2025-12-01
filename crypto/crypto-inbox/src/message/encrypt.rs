@@ -50,10 +50,6 @@ pub trait EncryptableDraft {
     /// Encrypts and signs the draft body using the provided `address_key`.
     ///
     /// The output is an armored `OpenPGP` message encoding the encrypted draft.
-    ///
-    /// # Errors
-    ///
-    /// The encryption or encoding fails.
     fn encrypt_draft_body<P>(
         &self,
         pgp: &P,
@@ -81,11 +77,6 @@ pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
     /// use, the data packets returned remain encrypted with the session key.
     ///
     /// The data packets returned are not armored and returned as the raw bytes of the PGP message.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `MessageError` if the PGP message may not be imported (if it is malformed), or if decrypting the session key packet
-    /// fails.
     fn extract_session_key_and_data_packets<Provider: PGPProviderSync>(
         &self,
         provider: &Provider,

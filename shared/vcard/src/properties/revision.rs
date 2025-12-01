@@ -34,9 +34,6 @@ impl Revision {
     }
 
     /// Try to create a new REV property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if value is not a valid timestamp value (ex: `19951031T222710Z`)
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self::new(Timestamp::try_from(value).map_err(
             VCardError::from_value_error(PropertyKind::Rev),

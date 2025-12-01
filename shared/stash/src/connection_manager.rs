@@ -118,10 +118,6 @@ impl StashConnectionPool {
     /// to interrupt the exeuction of sql code.
     ///
     /// If connections are available in the pool we use one of those, otherwise we create a new one.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we failed to initialize a connection.
     pub fn acquire(
         self: &Arc<Self>,
         timeout: Option<Duration>,

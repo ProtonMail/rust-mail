@@ -283,11 +283,6 @@ impl AttachmentList {
     }
 
     /// Retry the upload of a failed attachment.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the attachment is not in the error state or the action could not
-    /// be queued.
     pub async fn retry(
         self: Arc<Self>,
         attachment_id: Id,

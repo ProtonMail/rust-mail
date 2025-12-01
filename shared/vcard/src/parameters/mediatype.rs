@@ -35,9 +35,6 @@ impl MediaType {
     }
 
     /// Try to create a new media-type parameter from a str
-    ///
-    /// # Errors
-    ///   * if given value doesn't have the expected format
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Self::try_from(value)
     }

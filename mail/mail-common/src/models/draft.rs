@@ -453,10 +453,6 @@ impl DraftSendResult {
     }
 
     /// Returns all unseen send results.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn unseen(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find("WHERE seen=0 ORDER BY timestamp DESC", vec![], tether).await
     }
@@ -471,10 +467,6 @@ impl DraftSendResult {
     }
 
     /// Returns all unseen send results message ids.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn unseen_ids(tether: &Tether) -> Result<Vec<LocalMessageId>, StashError> {
         tether
             .query_values::<_, LocalMessageId>(
@@ -493,10 +485,6 @@ impl DraftSendResult {
     }
 
     /// Subscribe to changes made to this database table.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the subscription failed.
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(DraftSendResultTableObserver { sender }))
@@ -504,10 +492,6 @@ impl DraftSendResult {
     }
 
     /// Set the send results for the messages with `ids` as seen.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn mark_seen(
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
@@ -534,10 +518,6 @@ impl DraftSendResult {
     }
 
     /// Delete the send results for the messages with `ids`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn delete(
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
@@ -1135,10 +1115,6 @@ impl DraftAttachmentMetadata {
     }
 
     /// Return all [`ActionId`]s for attachments that are still uploading.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn find_attachment_upload_action_ids(
         metadata_id: MetadataId,
         tether: &Tether,
@@ -1172,10 +1148,6 @@ impl DraftAttachmentMetadata {
     }
 
     /// Subscribe to changes made to this database table.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the subscription failed.
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(DraftAttachmentMetadataTableObserver { sender }))
@@ -1183,10 +1155,6 @@ impl DraftAttachmentMetadata {
     }
 
     /// Get all metadata for a given `metadata_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn find_by_metadata_id(
         metadata_id: MetadataId,
         tether: &Tether,
@@ -1195,10 +1163,6 @@ impl DraftAttachmentMetadata {
     }
 
     /// Find all attachments associated with the draft with `metadata_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn attachment_for_draft(
         metadata_id: MetadataId,
         tether: &Tether,
@@ -1232,10 +1196,6 @@ impl DraftAttachmentMetadata {
     }
 
     /// Find the metadata for an attachment with a given `content_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
     pub async fn find_with_content_id(
         metadata_id: MetadataId,
         content_id: ContentId,
@@ -1253,10 +1213,6 @@ impl DraftAttachmentMetadata {
     /// Reset the tracked attachment state after a draft has been synced from the server.
     ///
     /// Reset deletes all existing records and creates new ones that reflect the new state.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn reset_draft_attachments_after_sync(
         metadata_id: MetadataId,
         body_metadata: &MessageBodyMetadata,
@@ -1306,10 +1262,6 @@ impl DraftAttachmentMetadata {
 
     /// Get the attachments id of attachments for a draft with `metadata_id` which
     /// are in the pending state.
-    ///
-    /// # Errors
-    ///
-    /// Returns error on failure
     ///
     pub async fn pending_attachments(
         metadata_id: MetadataId,

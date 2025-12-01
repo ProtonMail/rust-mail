@@ -378,10 +378,6 @@ impl MailContext {
     /// This method initiates a new [`Flow`], used to log in to a Proton account.
     /// The flow is used to guide the user through the login process and persist
     /// the resulting session data.
-    ///
-    /// # Errors
-    ///
-    /// See [`Context::new_login_flow`].
     pub async fn new_login_flow(&self) -> CoreContextResult<LoginFlow> {
         let _ = self.core_context.get_encryption_key()?;
         let session = self.core_context.new_api_session(None).await?;
@@ -420,11 +416,6 @@ impl MailContext {
     /// For instance, if the user has already entered their login credentials,
     /// but the flow was interrupted while waiting for a second factor,
     /// the flow can be resumed by calling this method with the user and session IDs.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if there is no encryption key in the keychain
-    /// or if no session with the given IDs is able to be resumed.
     pub async fn resume_login_flow(
         &self,
         user_id: UserId,
@@ -509,10 +500,6 @@ impl MailContext {
     }
 
     /// Begin a signup flow.
-    ///
-    /// # Errors
-    ///
-    /// See [`Context::new_signup_flow`].
     pub async fn new_signup_flow(&self) -> Result<SignupFlow, CoreContextError> {
         // Ensure we have an encryption key
         let _ = self.core_context.get_encryption_key()?;
@@ -581,10 +568,6 @@ impl MailContext {
     }
 
     /// Create a new context from a login flow.
-    ///
-    /// # Errors
-    /// Returns error if the flow is in an invalid state or there was an issue initializing
-    /// the user database.
     #[tracing::instrument(skip_all)]
     pub async fn user_context_from_login_flow(
         self: &Arc<Self>,
@@ -621,11 +604,6 @@ impl MailContext {
     /// It does **NOT** initialize itself. Instead, it returns `None`
     /// if context exists but is not initialized
     ///
-    /// # Errors
-    ///
-    /// Returns an error if we failed to decrypt the user session
-    /// or access the user database.
-    ///
     pub async fn initialized_user_context_from_session(
         self: &Arc<Self>,
         session: &CoreSession,
@@ -636,9 +614,6 @@ impl MailContext {
     }
 
     /// Create a new context from an existing session.
-    ///
-    /// # Errors
-    /// Returns error if we failed to decrypt the user session or access the user database.
     pub async fn user_context_from_session(
         self: &Arc<Self>,
         session: &CoreSession,
@@ -652,10 +627,6 @@ impl MailContext {
     /// Create all new contexts from all existing sessions.
     ///
     /// It returns `MailUserContext` for each logged in account.
-    ///
-    /// ### Errors
-    ///
-    /// When `user_context_from_session` fails or database fails.
     ///
     pub async fn get_all_logged_in_user_ctx(
         self: &Arc<Self>,
@@ -677,10 +648,6 @@ impl MailContext {
     ///
     /// It returns `MailUserContext` for each logged in account except one which is
     /// tight to the passed `SessionId`.
-    ///
-    /// ### Errors
-    ///
-    /// When `user_context_from_session` fails or database fails.
     ///
     pub async fn get_other_logged_in_user_ctx(
         self: &Arc<Self>,
@@ -704,10 +671,6 @@ impl MailContext {
     /// An account is an entity representing a Proton account known to the system.
     /// When a user first authenticates via the login flow, a new account is created,
     /// and all subsequent sessions are associated with that account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the accounts from the db.
     pub async fn get_accounts(&self) -> MailContextResult<Vec<CoreAccount>> {
         Ok(self.core_context.get_accounts().await?)
     }
@@ -719,10 +682,6 @@ impl MailContext {
     /// Returns a tuple containing the initial list of accounts and a receiver for changes.
     /// The receiver is a channel over which change events are sent, such as when a new account is created,
     /// an existing account is updated, or an account is deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_accounts(&self) -> MailContextResult<(Vec<CoreAccount>, WatcherHandle)> {
         Ok(self.core_context.watch_accounts().await?)
     }
@@ -732,19 +691,11 @@ impl MailContext {
     /// A session represents an authenticated session with the Proton API for a given account,
     /// including the authentication tokens granted by the API, the state of the session,
     /// and the user's key passphrase (once known).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> MailContextResult<Vec<CoreSession>> {
         Ok(self.core_context.get_sessions().await?)
     }
 
     /// Get all authenticated API sessions.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_authenticated_sessions(
         &self,
     ) -> MailContextResult<impl Iterator<Item = CoreSession>> {
@@ -758,10 +709,6 @@ impl MailContext {
     /// Returns a tuple containing the initial list of sessions and a receiver for changes.
     /// The receiver is a channel over which change events are sent, such as when a new session is created,
     /// an existing session is updated, or a session is deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions(&self) -> MailContextResult<(Vec<CoreSession>, WatcherHandle)> {
         Ok(self.core_context.watch_sessions().await?)
     }
@@ -769,10 +716,6 @@ impl MailContext {
     /// Get all API sessions associated with a given account.
     ///
     /// See [`Context::get_sessions`] for more information on API sessions.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_account_sessions(
         &self,
         user_id: UserId,
@@ -783,10 +726,6 @@ impl MailContext {
     /// Watch an account's API sessions for changes.
     ///
     /// See [`Context::watch_sessions`] for more information on watching API sessions.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_account_sessions(
         &self,
         user_id: UserId,
@@ -798,19 +737,11 @@ impl MailContext {
     ///
     /// This is a convenience method that enables retrieving a single account without requiring
     /// the full set of accounts to be loaded first.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_account(&self, user_id: UserId) -> MailContextResult<Option<CoreAccount>> {
         Ok(self.core_context.get_account(user_id).await?)
     }
 
     /// Get the login state of an account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_account_state(
         &self,
         user_id: UserId,
@@ -822,10 +753,6 @@ impl MailContext {
     ///
     /// This is a convenience method that enables retrieving a single session without requiring
     /// the full set of sessions to be loaded first.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_session(
         &self,
         session_id: SessionId,
@@ -834,10 +761,6 @@ impl MailContext {
     }
 
     /// Get the login state of a session.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_session_state(
         &self,
         session_id: SessionId,
@@ -846,28 +769,16 @@ impl MailContext {
     }
 
     /// Get the account considered to be the primary account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn get_primary_account(&self) -> MailContextResult<Option<CoreAccount>> {
         Ok(self.core_context.get_primary_account().await?)
     }
 
     /// Set the account considered to be the primary account.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the account is not found.
     pub async fn set_primary_account(&self, user_id: UserId) -> MailContextResult<()> {
         Ok(self.core_context.set_primary_account(user_id).await?)
     }
 
     /// Logs out all sessions of an account without deleting the account's data.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn logout_account(&self, user_id: UserId) -> MailContextResult<()> {
         tracing::info!("Logout account `{user_id}`");
         self.active_user_contexts.lock().await.remove(&user_id);
@@ -878,8 +789,6 @@ impl MailContext {
     ///
     /// Unlike [`delete_account()`] the account metadata is preserved and is still
     /// listable in the session picker.
-    ///
-    /// Returns an error if the database operation fails.
     pub async fn logout_account_and_delete_user_data(
         &self,
         user_id: UserId,
@@ -897,11 +806,6 @@ impl MailContext {
     ///
     /// This will also remove the user from the session picker.
     /// Use [`logout_account_and_delete_user_data()`] to preserve this entry.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db operation failed. Though it will remove all user data
-    /// first, which is non failing operations.
     ///
     pub async fn delete_account(&self, user_id: UserId) -> MailContextResult<()> {
         tracing::info!("Delete account `{user_id}`");

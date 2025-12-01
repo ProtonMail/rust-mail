@@ -137,10 +137,6 @@ impl DraftAttachmentState {
 impl DraftAttachment {
     /// Merge the list of `attachments` with the attachment data associated with the draft
     /// with `metadata_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub async fn build_list(
         metadata_id: MetadataId,
         tether: &Tether,
@@ -207,10 +203,6 @@ impl DraftStagingAreaCleaner {
     /// Start the cleaner background task.
     ///
     /// We also create the staging area directory if it does not exist yet.
-    ///
-    /// # Errors
-    ///
-    /// If we failed to create the staging area.
     pub fn run(self, context: &Arc<MailUserContext>) -> std::io::Result<()> {
         let staging_area = context.attachment_staging_path();
 

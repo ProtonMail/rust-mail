@@ -24,9 +24,6 @@ impl GeoLocalisation {
     }
 
     /// Try to create a new geo parameter form a str
-    ///
-    /// # Errors
-    ///   * value is not a valid URL
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Ok(Self {
             value: Uri::new_validated(value)

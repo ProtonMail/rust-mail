@@ -328,10 +328,6 @@ pub struct DraftSenderAddressList {
 
 /// Create a new draft with the given `create_mode`.
 ///
-/// # Errors
-///
-/// Return error if action failed.
-///
 #[uniffi_export]
 pub async fn new_draft(
     session: &MailUserSession,
@@ -383,10 +379,6 @@ pub async fn new_draft(
 }
 
 /// Open an existing draft with `message_id`.
-///
-/// # Errors
-///
-/// Returns error if the query failed or the message is not a draft.
 ///
 #[uniffi_export]
 pub async fn open_draft(
@@ -616,10 +608,6 @@ impl Draft {
     /// Save the current draft.
     ///
     /// Schedules an action to create or save the current draft.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     #[returns(VoidDraftSaveResult)]
     pub async fn save(self: Arc<Self>) -> Result<(), DraftSaveError> {
         uniffi_async(async move {
@@ -637,10 +625,6 @@ impl Draft {
     /// Sends the draft.
     ///
     /// Schedules an action which saves and then sends the draft.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     #[returns(VoidDraftSendResult)]
     pub async fn send(self: Arc<Self>) -> Result<(), DraftSendError> {
         uniffi_async(async move {
@@ -695,10 +679,6 @@ impl Draft {
     /// Discard the draft.
     ///
     /// Schedules an action which deletes a draft locally and on the server.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     #[returns(VoidDraftDiscardResult)]
     pub async fn discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
         uniffi_async(async move {

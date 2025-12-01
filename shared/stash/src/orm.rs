@@ -136,11 +136,6 @@ where
     /// SQL types into a Rust record type. It is used to convert the results of
     /// a query into a specific type `T`.
     ///
-    /// # Errors
-    ///
-    /// This function will return a [`ConversionError`] if there is a problem
-    /// converting the row.
-    ///
     fn from_row(row: &Row<'_>) -> Result<Self, ConversionError>;
 
     fn model_find(
@@ -563,10 +558,6 @@ where
     }
 
     /// Gets the next id for the record type for manual id management.
-    ///
-    /// # Errors
-    ///
-    /// When querying the database fails.
     ///
     fn next_id(tether: &Tether) -> impl Future<Output = Result<Self::IdType, StashError>> + Send {
         async move {

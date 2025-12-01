@@ -205,10 +205,6 @@ pub trait DecryptableAttachment {
     ///
     /// [`ExtractedAttachmentInfo`] allows re-encrypting the data for new recipients.
     /// This is useful when converting a draft to a sent message.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`AttachmentDecryptionError`] if decryption fails.
     fn decrypt_attachment_info<P>(
         &self,
         pgp: &P,

@@ -424,10 +424,6 @@ impl ContactsModel {
 
     /// Initializes the Watcher over contact lists
     ///
-    /// # Errors
-    ///
-    /// Might result an error if it was unable to subscribe to the database
-    ///
     fn init_watch(
         ctx: Arc<MailUserContext>,
     ) -> anyhow::Result<(TuiWatchHandle, Command<Messages>)> {

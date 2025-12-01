@@ -186,11 +186,6 @@ impl From<RealNotificationSender> for NotificationSender {
 /// Decrypt and deserialize Push notification.
 /// This function is mail (inbox) specific
 ///
-/// # Errors
-///
-/// This function may return an error if decryption fails, or it the decrypted message is not in the expected
-/// format. It may also fail when saving new message to the database
-///
 #[uniffi_export]
 pub async fn decrypt_push_notification(
     key_chain: Box<dyn OSKeyChain>,

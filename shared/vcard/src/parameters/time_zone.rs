@@ -22,9 +22,6 @@ impl TimeZone {
     }
 
     /// Try to create a new TZ parameter from a str
-    ///
-    /// # Errors
-    ///   * if value is neither a valid URL aor param-value
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Self::try_from(value)
     }

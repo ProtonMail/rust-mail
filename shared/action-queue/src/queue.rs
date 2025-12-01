@@ -303,19 +303,11 @@ impl Queue {
     }
 
     /// Create a new queue with the given `stash`;
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database migration failed.
     pub async fn new(stash: Stash) -> Result<Self> {
         Self::with_factory(stash, Factory::default()).await
     }
 
     /// Create a new queue with the given `stash` and `factory`;
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database migration failed.
     pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
         let mut tether = stash.connection().await?;
 
@@ -379,10 +371,6 @@ impl Queue {
     /// Queue an `action` for execution at a later time.
     ///
     /// A default [`Metadata`] type is assigned to this `action`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action could not be executed locally.
     pub async fn queue_action<T: Action>(&self, action: T) -> LocalOutput<T> {
         self.queue_action_with_metadata::<T>(action, Metadata::default())
             .await
@@ -424,10 +412,6 @@ impl Queue {
     }
 
     /// Queue an `action` for execution at a later time with a custom `metadata`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action could not be executed locally.
     pub async fn queue_action_with_metadata<T: Action>(
         &self,
         action: T,
@@ -445,10 +429,6 @@ impl Queue {
     }
 
     /// Queue an `action` for execution at a later time with a custom `metadata`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action could not be executed locally.
     pub async fn queue_action_with_metadata_in_tx<T: Action>(
         &self,
         mut action: T,
@@ -491,10 +471,6 @@ impl Queue {
     /// exists or the types do not match, a new action will be queued instead.
     ///
     /// A default [`Metadata`] type is assigned to this `action`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action could not be executed locally.
     pub async fn replace_or_queue_action<T: Action>(
         &self,
         existing_id: ActionId,
@@ -506,10 +482,6 @@ impl Queue {
 
     /// Attempt to replace an existing action with an updated version. If the action no longer
     /// exists or the types do not match, a new action will be queued instead.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action could not be executed locally.
     pub async fn replace_or_queue_action_with_metadata<T: Action>(
         &self,
         existing_id: ActionId,
@@ -561,10 +533,6 @@ impl Queue {
     /// Delete an action with `action_id` from the queue *without reverting local state*.
     ///
     /// To revert local state use [`Queue::cancel()`] or [`Queue::cancel_with_dependees()`].
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db operation failed or if the action is currently being executed.
     pub async fn delete_action(&self, action_id: ActionId) -> QueuedResult<()> {
         let mut tether = self.shared.stash.connection().await?;
         let existing_action_type = tether
@@ -588,10 +556,6 @@ impl Queue {
     }
 
     /// Returns the number of actions queued.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query failed.
     pub async fn queued_actions_count(&self) -> Result<u64> {
         let tether = self.shared.stash.connection().await?;
         Ok(StoredAction::pending_count(&tether).await?)
@@ -603,20 +567,12 @@ impl Queue {
     }
 
     /// Check whether the action with `action_id` is present in the queue.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query failed.
     pub async fn contains(&self, action_id: ActionId) -> Result<bool> {
         let tether = self.shared.stash.connection().await?;
         Ok(StoredAction::contains(&tether, action_id).await?)
     }
 
     /// Retrieve the metadata associated `action_id` in the queue.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query failed.
     pub async fn action(&self, action_id: ActionId) -> Result<Option<QueuedMetadata>> {
         let tether = self.shared.stash.connection().await?;
         let stored_action = StoredAction::load(action_id, &tether).await?;
@@ -627,11 +583,6 @@ impl Queue {
     /// actions that depend on this action are also cancelled.
     ///
     /// To remove an action from the queue without reverting state see [`Queue::delete_action()`].
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query failed or the action could not be found or the action
-    /// is currently being executed.
     pub async fn cancel(&self, action_id: ActionId) -> QueuedResult<Vec<ActionId>> {
         let mut tether = self.shared.stash.connection().await?;
         let cancelled_actions = tether
@@ -940,11 +891,6 @@ impl QueueExecutor {
     }
 
     /// Execute one action from the queue.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queued action could not be executed locally or remotely, or if
-    /// another thread is currently invoking this function.
     pub async fn execute_one(&self) -> QueuedResult<Option<QueuedActionState>> {
         let mut tether = self.shared.stash.connection().await?;
         self.execute_impl(&mut tether).await
@@ -953,10 +899,6 @@ impl QueueExecutor {
     /// Execute all available actions from the queue.
     ///
     /// Returns the number of executed actions.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queued action could not be executed locally or remotely, or if
     pub async fn execute_all(&self) -> QueuedResult<usize> {
         let mut tether = self.shared.stash.connection().await?;
         let mut counter = 0;
