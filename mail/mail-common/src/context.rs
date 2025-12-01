@@ -58,17 +58,45 @@ use tokio::task::{JoinError, JoinHandle};
 use tracing::error;
 
 pub const MAIL_ALLOWED_FREE_USER_COUNT: u64 = 2;
-/// Whether we should initialize MailUserContext on creation
+
 #[derive(Debug, Clone, Copy)]
-pub enum ShouldInitializeMailUserContext {
+pub struct NewMailUserContextOptions {
     /// When creating user context, it should be also initialized.
     /// Initialization means calling APIs for the data which might fail.
-    Yes,
-
+    ///
     /// # Caution
+    ///
     /// Used only for tests - we want to postpone initialization but still
-    /// have an access to uninitialized context - in order to setup data for mocks etc.
-    No,
+    /// have access to uninitialized context - in order to setup data for mocks etc.
+    pub initialize: bool,
+    /// When enabled will force resync the [`User`](`proton_core_common::models::User`) from the
+    /// server.
+    pub resync_user: bool,
+}
+
+impl Default for NewMailUserContextOptions {
+    fn default() -> Self {
+        Self {
+            initialize: true,
+            resync_user: false,
+        }
+    }
+}
+
+impl NewMailUserContextOptions {
+    pub fn login() -> Self {
+        Self {
+            initialize: true,
+            resync_user: true,
+        }
+    }
+
+    pub fn skip_init() -> Self {
+        Self {
+            initialize: false,
+            resync_user: false,
+        }
+    }
 }
 
 /// Errors that may occur while interacting with a MailContext.
@@ -595,7 +623,7 @@ impl MailContext {
             .await
             .map_err(MailContextError::from)?;
         Arc::clone(self)
-            .new_user_context(user_ctx, ShouldInitializeMailUserContext::Yes)
+            .new_user_context(user_ctx, NewMailUserContextOptions::login())
             .await
     }
 
@@ -617,11 +645,11 @@ impl MailContext {
     pub async fn user_context_from_session(
         self: &Arc<Self>,
         session: &CoreSession,
-        init: ShouldInitializeMailUserContext,
+        options: NewMailUserContextOptions,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self.core_context.user_context_from_session(session).await?;
 
-        Arc::clone(self).new_user_context(ctx, init).await
+        Arc::clone(self).new_user_context(ctx, options).await
     }
 
     /// Create all new contexts from all existing sessions.
@@ -636,7 +664,7 @@ impl MailContext {
 
         for session in sessions {
             ctxs.push(
-                self.user_context_from_session(&session, ShouldInitializeMailUserContext::No)
+                self.user_context_from_session(&session, NewMailUserContextOptions::skip_init())
                     .await?,
             );
         }
@@ -658,7 +686,7 @@ impl MailContext {
 
         for session in sessions.filter(|s| &s.remote_id != current_session_id) {
             ctxs.push(
-                self.user_context_from_session(&session, ShouldInitializeMailUserContext::No)
+                self.user_context_from_session(&session, NewMailUserContextOptions::skip_init())
                     .await?,
             );
         }
@@ -853,7 +881,7 @@ impl MailContext {
     ) -> Result<Option<Arc<MailUserContext>>, MailContextError> {
         let context = self
             .clone()
-            .new_user_context(core_context, ShouldInitializeMailUserContext::No)
+            .new_user_context(core_context, NewMailUserContextOptions::skip_init())
             .await?;
         if !context.is_initialized().await? {
             tracing::debug!("Existing context is not initialized");
@@ -867,7 +895,7 @@ impl MailContext {
     async fn new_user_context(
         self: Arc<Self>,
         core_context: Arc<UserContext>,
-        init: ShouldInitializeMailUserContext,
+        options: NewMailUserContextOptions,
     ) -> Result<Arc<MailUserContext>, MailContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;
 
@@ -900,8 +928,8 @@ impl MailContext {
             }
             // Initial context creation might have failed, lets re-initialize.
             // In best case scenario it will just check that it was initialized before and then early exit.
-            if matches!(init, ShouldInitializeMailUserContext::Yes) {
-                MailUserContext::initialize_async(upgraded.clone()).await?;
+            if options.initialize {
+                MailUserContext::initialize_async(upgraded.clone(), options).await?;
             }
             return Ok(upgraded);
         }
@@ -910,8 +938,8 @@ impl MailContext {
 
         active_contexts.insert(ctx.user_id().clone(), Arc::downgrade(&ctx));
 
-        if matches!(init, ShouldInitializeMailUserContext::Yes) {
-            MailUserContext::initialize_async(ctx.clone()).await?;
+        if options.initialize {
+            MailUserContext::initialize_async(ctx.clone(), options).await?;
         }
 
         Ok(ctx)

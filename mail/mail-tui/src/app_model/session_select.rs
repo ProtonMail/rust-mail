@@ -11,7 +11,7 @@ use futures::stream::iter;
 use proton_core_common::CoreAccountState;
 use proton_core_common::db::account::CoreAccount;
 
-use proton_mail_common::{MailContext, MailContextError, ShouldInitializeMailUserContext};
+use proton_mail_common::{MailContext, MailContextError, NewMailUserContextOptions};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
@@ -208,7 +208,7 @@ impl AppStateHandler for SessionSelectModel {
                                 let context = ctx
                                     .user_context_from_session(
                                         sess,
-                                        ShouldInitializeMailUserContext::Yes,
+                                        NewMailUserContextOptions::default(),
                                     )
                                     .await
                                     .context("Error creating MailUserContext")?;

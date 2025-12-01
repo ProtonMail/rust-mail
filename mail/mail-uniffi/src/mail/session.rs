@@ -28,11 +28,11 @@ use proton_core_common::pin_code::PinCode;
 use proton_core_common::{CoreContextError, OnSessionDeletedResponse, Origin as RealOrigin};
 use proton_issue_reporter_service_uniffi::{IssueReporter, IssueReporterWrapper};
 use proton_log_service::LogService;
-use proton_mail_common::Unexpected;
 use proton_mail_common::{
     ContextErrorReason, MailErrorReason, ProtonMailError as RealProtonMailError,
 };
-use proton_mail_common::{MailContext, MailContextError, ShouldInitializeMailUserContext};
+use proton_mail_common::{MailContext, MailContextError};
+use proton_mail_common::{NewMailUserContextOptions, Unexpected};
 use proton_network_monitor_service::OsNetworkStatus as RealOsNetworkStatus;
 use stash::orm::Model;
 use stash::stash::{Stash, WatcherHandle};
@@ -338,7 +338,7 @@ impl MailSession {
 
         let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
-            ctx.user_context_from_session(session.session(), ShouldInitializeMailUserContext::Yes)
+            ctx.user_context_from_session(session.session(), NewMailUserContextOptions::default())
                 .map_err(RealProtonMailError::from)
                 .await
                 .map(|ctx| user_ctx.insert(ctx))
