@@ -26,6 +26,7 @@ use proton_mail_common::models::Attachment as RealAttachment;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::task::AbortHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::error;
 use uniffi_common::errors::UserApiServiceError;
 use uniffi_runtime::async_runtime;
@@ -367,6 +368,7 @@ impl AttachmentList {
                 .map_err(RealProtonMailError::from)?;
             Ok(Arc::new(DraftAttachmentListUpdateStream {
                 observer: tokio::sync::Mutex::new(observer),
+                token: ctx.user_context().create_child_cancellation_token(),
             }))
         })
         .await
@@ -389,6 +391,7 @@ impl AttachmentList {
 #[derive(uniffi::Object)]
 pub struct DraftAttachmentListUpdateStream {
     observer: tokio::sync::Mutex<DraftAttachmentObserver>,
+    token: CancellationToken,
 }
 
 #[uniffi_export]
@@ -398,20 +401,20 @@ impl DraftAttachmentListUpdateStream {
         async_runtime()
             .spawn(async move {
                 let mut observer = self.observer.lock().await;
-                observer.next().await
+                let future = observer.next();
+                self.token
+                    .run_until_cancelled(future)
+                    .await
+                    .ok_or_else(|| RealProtonMailError::from(MailContextError::TaskCancelled))?
+                    .map_err(|e| RealProtonMailError::from(MailContextError::from(e)))
             })
             .await
-            .map_err(|e| RealProtonMailError::from(MailContextError::from(e)))?
-            .map_err(RealProtonMailError::from)?;
+            .map_err(RealProtonMailError::from)??;
         Ok(())
     }
 
-    #[returns(VoidProtonResult)]
-    pub fn next_sync(&self) -> Result<(), ProtonError> {
-        async_runtime().block_on(async {
-            let mut observer = self.observer.lock().await;
-            Ok(observer.next().await.map_err(RealProtonMailError::from)?)
-        })
+    pub fn cancel(&self) {
+        self.token.cancel();
     }
 }
 

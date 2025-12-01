@@ -30,6 +30,7 @@ use proton_mail_common::{MailContextError, MailUserContext};
 use proton_observability::PreLoginMetricRecorder;
 use stash::stash::{Stash, WatcherHandle};
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 use tracing::error;
 
 use super::datatypes::AttachmentMetadata;
@@ -213,7 +214,10 @@ impl MailUserSession {
                 .watch_user()
                 .await
                 .map_err(RealProtonMailError::from)?;
-            Ok(Arc::new(WatchUserStream { handle }))
+            Ok(Arc::new(WatchUserStream {
+                handle,
+                token: ctx.user_context().create_child_cancellation_token(),
+            }))
         })
     }
 }
@@ -221,23 +225,28 @@ impl MailUserSession {
 #[derive(uniffi::Object)]
 pub struct WatchUserStream {
     handle: WatcherHandle,
+    token: CancellationToken,
 }
 
 #[uniffi_export]
 impl WatchUserStream {
-    pub fn next_sync(&self) -> Result<(), ProtonError> {
-        self.handle
-            .receiver
-            .recv()
-            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    pub async fn next_async(self: Arc<Self>) -> Result<(), ProtonError> {
+        async_runtime()
+            .spawn(async move {
+                let future = self.handle.receiver.recv_async();
+                self.token
+                    .run_until_cancelled(future)
+                    .await
+                    .ok_or_else(|| RealProtonMailError::from(MailContextError::TaskCancelled))?
+                    .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+            })
+            .await
+            .map_err(RealProtonMailError::from)??;
+        Ok(())
     }
 
-    pub async fn next_async(&self) -> Result<(), ProtonError> {
-        self.handle
-            .receiver
-            .recv_async()
-            .await
-            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    pub fn cancel(&self) {
+        self.token.cancel();
     }
 }
 
@@ -697,7 +706,10 @@ impl MailUserSession {
                 .await
                 .map_err(MailContextError::from)
                 .map_err(RealProtonMailError::from)?;
-            Ok(Arc::new(WatchUserFeatureFlagsStream { handle }))
+            Ok(Arc::new(WatchUserFeatureFlagsStream {
+                handle,
+                token: ctx.user_context().create_child_cancellation_token(),
+            }))
         })
     }
 
@@ -770,22 +782,27 @@ pub trait ExecuteWhenOnlineCallback: Send + Sync {
 #[derive(uniffi::Object)]
 pub struct WatchUserFeatureFlagsStream {
     pub handle: WatcherHandle,
+    token: CancellationToken,
 }
 
 #[uniffi_export]
 impl WatchUserFeatureFlagsStream {
-    pub fn next_sync(&self) -> Result<(), ProtonError> {
-        self.handle
-            .receiver
-            .recv()
-            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    pub async fn next_async(self: Arc<Self>) -> Result<(), ProtonError> {
+        async_runtime()
+            .spawn(async move {
+                let future = self.handle.receiver.recv_async();
+                self.token
+                    .run_until_cancelled(future)
+                    .await
+                    .ok_or_else(|| RealProtonMailError::from(MailContextError::TaskCancelled))?
+                    .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+            })
+            .await
+            .map_err(RealProtonMailError::from)??;
+        Ok(())
     }
 
-    pub async fn next_async(&self) -> Result<(), ProtonError> {
-        self.handle
-            .receiver
-            .recv_async()
-            .await
-            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    pub fn cancel(&self) {
+        self.token.cancel();
     }
 }
