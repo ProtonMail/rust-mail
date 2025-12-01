@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.160.1] - 2025-12-01
+
+### Changed
+
+- Rename HtmlForComposer to ComposerContent
+
+### Features
+
+- Add cancellation method to Stream objects in uniffi
+- [ET-4481] Check if node is html/body
+
+### Fixes
+
+- [ET-5482] do not inject non-color styles into composer
+
+
+## [mail-uniffi-v0.160.0] - 2025-12-01
+
+### Changed
+
+- Rename HtmlForComposer to ComposerContent
+
+### Features
+
+- [ET-5084] Add legacy feature flags fetching to API
+- [ET-5084] Add legacy feature flags source while fetching
+- [ET-5084] User feature flags service
+- [ET-5084] Switch between syncing global and user feature flags 
+- [ET-5465] Enable zeroing allocator
+- [ET-5084] Add option to override legacy user feature flag
+- [ET-5294] Add `DecryptedMessage::attachments`
+
+### Fixes
+
+- [ET-5492] Fetch organizer from `SharedEvents[]`
+- [ET-5294] Attachment Metadata vs Message attachments
+
 ## [mail-uniffi-v0.159.5] - 2025-12-01
 
 ### Fixes
