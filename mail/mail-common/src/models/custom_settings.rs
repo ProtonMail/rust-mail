@@ -254,7 +254,7 @@ pub enum MobileSignatureStatus {
 
 impl MobileSignatureStatus {
     pub fn new(user: &User, settings: &CustomSettings) -> Self {
-        if user.is_paying_for_mail() {
+        if user.has_paid_mail_plan() {
             if settings.mobile_signature_enabled() {
                 Self::Enabled
             } else {
