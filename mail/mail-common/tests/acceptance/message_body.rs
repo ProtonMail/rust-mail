@@ -333,7 +333,8 @@ async fn mailbox_message_retains_pgp_attachments() {
         .unwrap()
         .expect("failed to load message");
 
-    assert_eq!(saved_message_2.attachments_metadata.len(), 3);
+    // PGP attachments are not reported in regular attachment metadata
+    assert_eq!(saved_message_2.attachments_metadata.len(), 0);
 
     let decrypted_message_2 = saved_message
         .fetch_message_body(&user_ctx, &mut tether)

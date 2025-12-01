@@ -430,6 +430,13 @@ async fn fetch_and_answer() {
         mail::PostSendDirectMessageResponse {
             sent: mail::Message {
                 metadata: mail::MessageMetadata {
+                    attachments_metadata: vec![mail::AttachmentMetadata {
+                        id: mail::AttachmentId::new("cHIs3FzX".into()),
+                        disposition: mail::Disposition::Attachment,
+                        mime_type: "text/calendar".into(),
+                        name: "invite.ics".into(),
+                        size: 123,
+                    }],
                     num_attachments: 1,
                     ..msg_fixture.metadata.clone()
                 },
