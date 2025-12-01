@@ -216,7 +216,7 @@ impl MailUserSession {
                 .map_err(RealProtonMailError::from)?;
             Ok(Arc::new(WatchUserStream {
                 handle,
-                token: CancellationToken::new(),
+                token: ctx.user_context().create_child_cancellation_token(),
             }))
         })
     }
@@ -708,7 +708,7 @@ impl MailUserSession {
                 .map_err(RealProtonMailError::from)?;
             Ok(Arc::new(WatchUserFeatureFlagsStream {
                 handle,
-                token: CancellationToken::new(),
+                token: ctx.user_context().create_child_cancellation_token(),
             }))
         })
     }

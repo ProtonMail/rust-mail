@@ -371,6 +371,11 @@ impl UserContext {
     }
 
     #[must_use]
+    pub fn create_child_cancellation_token(&self) -> CancellationToken {
+        self.cancellation_token.child_token()
+    }
+
+    #[must_use]
     pub fn cache_path(&self) -> &PathBuf {
         &self.cache_path
     }
