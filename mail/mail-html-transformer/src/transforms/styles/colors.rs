@@ -2,6 +2,8 @@ use lightningcss::values::color::{CssColor, HSL, RGBA, SRGBLinear, XYZd65};
 
 use crate::transforms::styles::{ColorPurpose, DARK_MODE_BACKGROUND_COLOR};
 
+use super::dark_mode_visitor::ShouldModifyTransparentColors;
+
 pub trait HSLExt {
     /// We want to see if our color is equivalent to `#FF_FF_FF_FF`
     fn is_full_white(&self) -> bool;
@@ -96,8 +98,24 @@ impl HSLExt for HSL {
 
 /// Transform any color for given purpose to the dark mode equivalent
 #[allow(clippy::enum_glob_use)]
-pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
+pub fn hsla_for_dark_mode(
+    purpose: ColorPurpose,
+    mut color: HSL,
+    should_modify_transparent: ShouldModifyTransparentColors,
+) -> RGBA {
     use IsColorAchromatic::*;
+
+    // Special case: For transparent background on body/html we return our Dark Mode background color
+    if purpose == ColorPurpose::Background
+        && color.is_transparent()
+        && should_modify_transparent == ShouldModifyTransparentColors::Yes
+    {
+        return DARK_MODE_BACKGROUND_COLOR;
+    }
+
+    if color.is_transparent() {
+        return color.into();
+    }
 
     // Special case: For full white background we return our Dark Mode background color (#1C1B24)
     if purpose == ColorPurpose::Background && color.is_full_white() {
@@ -176,56 +194,90 @@ mod tests {
     #[test_case(
         "hsla(0, 0%, 50%, 0.8)",
         ColorPurpose::Foreground,
+        ShouldModifyTransparentColors::No,
         "#fffc"; // hsla(0, 0%, 100%, .8)
         "case 1"
     )]
     #[test_case(
         "hsla(0, 0%, 50%, 0.7)",
         ColorPurpose::Background,
+        ShouldModifyTransparentColors::No,
         "#16171db3"; // hsla(230, 12%, 10%, .7)
         "case 2"
     )]
     #[test_case(
         "hsla(20, 50%, 70%, 1.0)",
         ColorPurpose::Foreground,
+        ShouldModifyTransparentColors::No,
         "#f2e1d9"; // hsla(20, 50%, 90%, 1)
         "case 3"
     )]
     #[test_case(
         "hsla(20, 50%, 30%, 1.0)",
         ColorPurpose::Foreground,
+        ShouldModifyTransparentColors::No,
         "#f2e1d9"; // hsla(20, 50%, 90%, 1)
         "case 4"
     )]
     #[test_case(
         "hsla(20, 50%, 3%, 1.0)",
         ColorPurpose::Background,
+        ShouldModifyTransparentColors::No,
         "#0b0604"; // hsla(20, 50%, 3%, 1)
         "case 5"
     )]
     #[test_case(
         "hsla(20, 50%, 93%, 1.0)",
         ColorPurpose::Background,
+        ShouldModifyTransparentColors::No,
         "#734026"; // hsla(20, 50%, 30%, 1)
         "case 6"
     )]
     #[test_case(
         "hsla(0, 0%, 100%, 1.0)",
         ColorPurpose::Background,
+        ShouldModifyTransparentColors::No,
         "#191927"; // Our Dark mode background color. Hardcoded value
         "case 7"
     )]
     #[test_case(
         "#fffffe",
         ColorPurpose::Background,
+        ShouldModifyTransparentColors::No,
         "#16171d";
         "case 8"
     )]
-    fn hsla_for_dark_mode(input: &'static str, purpose: ColorPurpose, expected: &'static str) {
+    #[test_case(
+        "#0000",
+        ColorPurpose::Background,
+        ShouldModifyTransparentColors::No,
+        "#0000";
+        "case 9"
+    )]
+    #[test_case(
+        "#0000",
+        ColorPurpose::Background,
+        ShouldModifyTransparentColors::Yes,
+        "#191927";
+        "case 10"
+    )]
+    #[test_case(
+        "#FFF0",
+        ColorPurpose::Background,
+        ShouldModifyTransparentColors::Yes,
+        "#191927";
+        "case 11"
+    )]
+    fn hsla_for_dark_mode(
+        input: &'static str,
+        purpose: ColorPurpose,
+        should_modify_transparent: ShouldModifyTransparentColors,
+        expected: &'static str,
+    ) {
         let color = CssColor::parse_string(input).unwrap();
         let hsl = HSL::try_from(color).unwrap();
 
-        let new_rgba = super::hsla_for_dark_mode(purpose, hsl);
+        let new_rgba = super::hsla_for_dark_mode(purpose, hsl, should_modify_transparent);
 
         // LightningCSS rightfully converts HSLA format to RGBA.
         // Those two color spaces are equivalent without loss of information

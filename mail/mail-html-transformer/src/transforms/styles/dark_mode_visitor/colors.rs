@@ -7,15 +7,29 @@ use crate::transforms::styles::{
     colors::{HSLExt, css_to_hsla, hsla_for_dark_mode},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ShouldModifyTransparentColors {
+    Yes,
+    #[default]
+    No,
+}
+
 /// This visitor should be created per-property
 pub(crate) struct ColorVisitor {
     /// Is the currently inspected property a background property or not.
     color_purpose: ColorPurpose,
+    should_modify_transparent_colors: ShouldModifyTransparentColors,
 }
 
 impl ColorVisitor {
-    pub(crate) fn new(color_purpose: ColorPurpose) -> Self {
-        Self { color_purpose }
+    pub(crate) fn new(
+        color_purpose: ColorPurpose,
+        should_modify_transparent_colors: ShouldModifyTransparentColors,
+    ) -> Self {
+        Self {
+            color_purpose,
+            should_modify_transparent_colors,
+        }
     }
 }
 
@@ -31,11 +45,20 @@ impl Visitor<'_> for ColorVisitor {
             return Ok(());
         };
 
-        if hsl.is_transparent() {
+        if hsl.is_transparent()
+            && !matches!(
+                self.should_modify_transparent_colors,
+                ShouldModifyTransparentColors::Yes
+            )
+        {
             return Ok(());
         }
 
-        *color = CssColor::RGBA(hsla_for_dark_mode(self.color_purpose, hsl));
+        *color = CssColor::RGBA(hsla_for_dark_mode(
+            self.color_purpose,
+            hsl,
+            self.should_modify_transparent_colors,
+        ));
 
         Ok(())
     }

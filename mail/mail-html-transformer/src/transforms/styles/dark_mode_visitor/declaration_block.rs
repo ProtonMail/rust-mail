@@ -13,6 +13,7 @@ use crate::transforms::styles::{
     colors::{HSLExt, css_to_hsla},
 };
 
+use super::colors::ShouldModifyTransparentColors;
 use super::properties::PropertiesVisitor;
 
 /// Whether to keep serialized overriden props (as in original props before the edit)
@@ -55,6 +56,8 @@ pub(crate) struct DeclarationBlockVisitor {
 
     should_remove_important: ShouldRemoveImportant,
 
+    should_modify_transparent_colors: ShouldModifyTransparentColors,
+
     pub printer_options: PrinterOptions<'static>,
 }
 
@@ -62,11 +65,13 @@ impl DeclarationBlockVisitor {
     pub fn new(
         should_store_overriden_props: ShouldStoreOverridenProps,
         should_remove_important: ShouldRemoveImportant,
+        should_modify_transparent_colors: ShouldModifyTransparentColors,
         printer_options: PrinterOptions<'static>,
     ) -> Self {
         Self {
             should_store_overriden_props,
             should_remove_important,
+            should_modify_transparent_colors,
             printer_options,
             ..Default::default()
         }
@@ -88,7 +93,7 @@ impl Visitor<'_> for DeclarationBlockVisitor {
         &mut self,
         decls: &mut lightningcss::declaration::DeclarationBlock<'_>,
     ) -> Result<(), Self::Error> {
-        let mut visitor = PropertiesVisitor::new();
+        let mut visitor = PropertiesVisitor::new(self.should_modify_transparent_colors);
 
         decls.visit_children(&mut visitor)?;
 

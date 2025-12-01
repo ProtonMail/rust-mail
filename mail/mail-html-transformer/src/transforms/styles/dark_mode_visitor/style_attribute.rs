@@ -10,6 +10,7 @@ use crate::transforms::styles::{
     NewProperty, OldProperty, dark_mode_visitor::declaration_block::ShouldRemoveImportant,
 };
 
+use super::colors::ShouldModifyTransparentColors;
 use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
 
 /// Walks through the style attribute, detects which
@@ -22,9 +23,18 @@ pub(crate) struct StyleAttributeVisitor {
     overriden: Vec<OldProperty>,
     overrides: Vec<NewProperty>,
 
+    should_modify_transparent_colors: ShouldModifyTransparentColors,
+
     pub printer_options: PrinterOptions<'static>,
 }
 impl StyleAttributeVisitor {
+    pub fn new(should_modify_transparent_colors: ShouldModifyTransparentColors) -> Self {
+        Self {
+            should_modify_transparent_colors,
+            ..Default::default()
+        }
+    }
+
     pub fn overrides(self) -> (Vec<OldProperty>, Vec<NewProperty>) {
         (self.overriden, self.overrides)
     }
@@ -44,6 +54,7 @@ impl Visitor<'_> for StyleAttributeVisitor {
         let mut visitor = DeclarationBlockVisitor::new(
             ShouldStoreOverridenProps::Yes,
             ShouldRemoveImportant::Yes,
+            self.should_modify_transparent_colors,
             self.printer_options,
         );
 

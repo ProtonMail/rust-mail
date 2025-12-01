@@ -12,6 +12,7 @@ use crate::transforms::styles::{
     Selector, StylesheetOverrides, dark_mode_visitor::declaration_block::ShouldRemoveImportant,
 };
 
+use super::colors::ShouldModifyTransparentColors;
 use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
 
 /// Walks through the CSS stylesheet, detects which
@@ -26,6 +27,8 @@ pub(crate) struct StylesheetVisitor {
     selector_stack: Vec<Selector>,
 
     root_selector: String,
+
+    current_selector_is_body_or_html: bool,
 
     pub printer_options: PrinterOptions<'static>,
 }
@@ -56,9 +59,16 @@ impl Visitor<'_> for StylesheetVisitor {
         &mut self,
         decls: &mut lightningcss::declaration::DeclarationBlock<'_>,
     ) -> Result<(), Self::Error> {
+        let should_modify_transparent_colors = if self.current_selector_is_body_or_html {
+            ShouldModifyTransparentColors::Yes
+        } else {
+            ShouldModifyTransparentColors::No
+        };
+
         let mut visitor = DeclarationBlockVisitor::new(
             ShouldStoreOverridenProps::No,
             ShouldRemoveImportant::No,
+            should_modify_transparent_colors,
             self.printer_options,
         );
 
@@ -77,7 +87,7 @@ impl Visitor<'_> for StylesheetVisitor {
     }
 
     fn visit_rule(&mut self, rule: &mut CssRule<'_>) -> Result<(), Self::Error> {
-        let Some(selectors) = self.get_selectors(rule) else {
+        let Some((selectors, is_body_or_html)) = self.get_selectors(rule) else {
             // We either are processing non-style rule or a rule that has no printable selector.
             // The best we can do is to continue traversing the tree.
             rule.visit_children(self)?;
@@ -85,17 +95,20 @@ impl Visitor<'_> for StylesheetVisitor {
         };
 
         self.selector_stack.push(selectors);
+        let previous_is_body_or_html = self.current_selector_is_body_or_html;
+        self.current_selector_is_body_or_html = is_body_or_html;
 
         rule.visit_children(self)?;
 
         self.selector_stack.pop();
+        self.current_selector_is_body_or_html = previous_is_body_or_html;
 
         Ok(())
     }
 }
 
 impl StylesheetVisitor {
-    fn get_selectors(&self, rule: &CssRule<'_>) -> Option<String> {
+    fn get_selectors(&self, rule: &CssRule<'_>) -> Option<(String, bool)> {
         let printer_options = self.printer_options;
         match rule {
             CssRule::Style(style) => {
@@ -104,11 +117,13 @@ impl StylesheetVisitor {
                     .to_css_string(printer_options)
                     .ok()
                     .map(|selector| {
-                        if selector == "html" {
+                        let is_body_or_html = selector == "html" || selector == "body";
+                        let formatted_selector = if selector == "html" {
                             format!("html{}", self.root_selector)
                         } else {
                             format!("{} {}", self.root_selector, selector)
-                        }
+                        };
+                        (formatted_selector, is_body_or_html)
                     })
             }
             CssRule::Media(media_rule) => {
@@ -119,7 +134,7 @@ impl StylesheetVisitor {
                     return None;
                 }
 
-                query.map(|q| format!("@media {q}"))
+                query.map(|q| (format!("@media {q}"), false))
             }
             _ => None,
         }

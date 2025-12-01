@@ -1,10 +1,24 @@
 <html>
-  <head>
-  </head>
-  <body style="background-color: #0000">
-    <div style="background-color: #0000">
-      This div should stay transparent
-    </div>
-    <p>Some text content</p>
-  </body>
+    <head>
+        <style>
+            html {
+                background-color: #0000;
+            }
+            body {
+                background-color: rgba(0, 0, 0, 0);
+            }
+            .transparent-div {
+                background-color: transparent;
+            }
+        </style>
+    </head>
+    <body style="background-color: #0000 !important">
+        <div style="background-color: #0000 !important">
+            This div should stay transparent
+        </div>
+        <div class="transparent-div">
+            This div with class should also stay transparent
+        </div>
+        <p>Some text content</p>
+    </body>
 </html>
