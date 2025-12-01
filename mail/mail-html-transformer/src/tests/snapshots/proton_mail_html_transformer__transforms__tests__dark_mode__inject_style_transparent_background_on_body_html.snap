@@ -1,0 +1,14 @@
+---
+source: mail/mail-html-transformer/src/tests/dark_mode.rs
+expression: html.to_string()
+---
+<html data-protonmail-message="true"><head>
+  <style type="text/css">/* <light_and_dark_css> */</style></head>
+  <body style="background-color: #0000">
+    <div style="background-color: #0000">
+      This div should stay transparent
+    </div>
+    <p>Some text content</p>
+  
+
+</body></html>
