@@ -380,7 +380,7 @@ mod signatures {
     }
 
     const TEST_NO_SIGNATURES: TestCase = TestCase {
-        given_user: || user().with_paying_for_mail(),
+        given_user: || user().with_paid_mail_plan(),
         given_address: address,
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -396,7 +396,7 @@ mod signatures {
     // On a fresh setup we want to have the PM signature enabled by default even
     // if user's paying for mail (product decision)
     const TEST_DEFAULT_CUSTOM_SETTINGS: TestCase = TestCase {
-        given_user: || user().with_paying_for_mail(),
+        given_user: || user().with_paid_mail_plan(),
         given_address: address,
         given_mail_settings: mail_settings,
         given_custom_settings: custom_settings,
@@ -406,7 +406,7 @@ mod signatures {
     };
 
     const TEST_ADDRESS_SIGNATURE: TestCase = TestCase {
-        given_user: || user().with_paying_for_mail(),
+        given_user: || user().with_paid_mail_plan(),
         given_address: || address().with_signature("cheers, jerry"),
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -420,7 +420,7 @@ mod signatures {
     };
 
     const TEST_MOBILE_SIGNATURE: TestCase = TestCase {
-        given_user: || user().with_paying_for_mail(),
+        given_user: || user().with_paid_mail_plan(),
         given_address: address,
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -434,7 +434,7 @@ mod signatures {
     };
 
     const TEST_DISABLED_MOBILE_SIGNATURE: TestCase = TestCase {
-        given_user: || user().with_paying_for_mail(),
+        given_user: || user().with_paid_mail_plan(),
         given_custom_settings: || {
             custom_settings()
                 .with_mobile_signature("sent from my iandroid")
@@ -446,7 +446,7 @@ mod signatures {
     };
 
     const TEST_ADDRESS_AND_MOBILE_SIGNATURE: TestCase = TestCase {
-        given_user: || user().with_paying_for_mail(),
+        given_user: || user().with_paid_mail_plan(),
         given_address: || address().with_signature("cheers, jerry"),
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -468,7 +468,7 @@ mod signatures {
     };
 
     const TEST_HTML_SIGNATURES: TestCase = TestCase {
-        given_user: || user().with_paying_for_mail(),
+        given_user: || user().with_paid_mail_plan(),
         given_address: || address().with_signature("cheers, <b>jerry</b>"),
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -483,7 +483,7 @@ mod signatures {
     };
 
     const TEST_HTML_SIGNATURES_TO_TEXT: TestCase = TestCase {
-        given_user: || user().with_paying_for_mail(),
+        given_user: || user().with_paid_mail_plan(),
         given_address: || address().with_signature("cheers, <b>jerry</b>"),
         given_mail_settings: mail_settings,
         given_custom_settings: || {
@@ -499,7 +499,7 @@ mod signatures {
 
     // `MailSettings.signature` is deprecated and should not be accessed
     const TEST_MAIL_SETTINGS_SIGNATURE: TestCase = TestCase {
-        given_user: || user().with_paying_for_mail(),
+        given_user: || user().with_paid_mail_plan(),
         given_address: address,
         given_mail_settings: || mail_settings().with_signature("med vänliga hälsningar"),
         given_custom_settings: || {
@@ -548,7 +548,7 @@ mod signatures {
 #[test]
 fn html_signature_converted_to_plain_text() {
     let signature = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">My Default Signature<br></div>"#;
-    let user = user().with_paying_for_mail();
+    let user = user().with_paid_mail_plan();
     let address = address().with_signature(signature);
     let mail_settings = mail_settings();
     let custom_settings = custom_settings();
@@ -767,7 +767,7 @@ async fn create_reply_with_mime_and_body_and_message(
     source_body_mime_type: MessageMimeType,
     source_message: Message,
 ) -> (Draft, Message, Vec<Attachment>) {
-    let user = user().with_paying_for_mail();
+    let user = user().with_paid_mail_plan();
     let address = address();
 
     let mail_settings = MailSettings {

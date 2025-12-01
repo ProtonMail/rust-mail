@@ -537,7 +537,7 @@ impl MailUserContext {
                 .news
                 .contains(NotificationSettings::IN_APP_NOTIFICATIONS);
 
-            if in_app_notifications_enabled && !user.is_deliquent() {
+            if in_app_notifications_enabled && !user.is_delinquent() {
                 let wave = if black_friday_promo_wave2 {
                     BlackFridayWave::Wave2
                 } else {

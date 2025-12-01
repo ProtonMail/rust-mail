@@ -139,13 +139,13 @@ pub(super) fn get_full_signature(
     let mut signature = String::new();
 
     let show_pm_signature = match platform {
-        Platform::Desktop => !user.is_paying_for_mail() || mail_settings.pm_signature.is_enabled(),
-        Platform::Mobile => !user.is_paying_for_mail(),
+        Platform::Desktop => !user.has_paid_mail_plan() || mail_settings.pm_signature.is_enabled(),
+        Platform::Mobile => !user.has_paid_mail_plan(),
     };
 
     let show_mobile_signature = match platform {
         Platform::Desktop => false,
-        Platform::Mobile => user.is_paying_for_mail() && custom_settings.mobile_signature_enabled(),
+        Platform::Mobile => user.has_paid_mail_plan() && custom_settings.mobile_signature_enabled(),
     };
 
     _ = write!(

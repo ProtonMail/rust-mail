@@ -540,7 +540,7 @@ impl ContextualConversation {
             return Ok(None);
         };
         let settings = MailSettings::get_or_default(tether).await;
-        let state = if user.is_paying_for_mail() {
+        let state = if user.has_paid_mail_plan() {
             match settings.auto_delete_spam_and_trash_days {
                 None | Some(0) => AutoDeleteState::AutoDeleteDisabled,
                 Some(_) => AutoDeleteState::AutoDeleteEnabled,

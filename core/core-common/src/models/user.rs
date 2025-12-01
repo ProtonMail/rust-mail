@@ -162,19 +162,19 @@ impl User {
     }
 
     #[must_use]
-    pub fn is_deliquent(&self) -> bool {
+    pub fn is_delinquent(&self) -> bool {
         self.delinquent != DelinquentState::Paid
     }
 
     #[must_use]
-    pub fn with_paying_for_mail(mut self) -> Self {
+    pub fn with_paid_mail_plan(mut self) -> Self {
         self.subscribed.insert(PaidSubscription::MAIL);
         self
     }
 
     #[must_use]
-    pub fn is_paying_for_mail(&self) -> bool {
-        self.subscribed.contains(PaidSubscription::MAIL) && !self.is_deliquent()
+    pub fn has_paid_mail_plan(&self) -> bool {
+        self.subscribed.contains(PaidSubscription::MAIL) && !self.is_delinquent()
     }
 }
 
