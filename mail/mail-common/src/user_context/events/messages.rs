@@ -51,7 +51,8 @@ pub async fn handle_message_events(
                     tracing::info!("Created with {:?}", ids[0]);
                 }
 
-                data.msg_for_prefetch.extend(ids);
+                data.msg_for_prefetch.extend(ids.iter().copied());
+                rebase_change_set.add_many(ids);
             }
 
             Action::Update | Action::UpdateFlags => {

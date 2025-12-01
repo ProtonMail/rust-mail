@@ -729,6 +729,7 @@ pub async fn handle_label_events(
             Action::Create => {
                 if let Some(mut label) = label_event.label.clone() {
                     label.save(tx).await?;
+                    rebase_change_set.add(label.id());
                 } else {
                     warn!("Received label create without label");
                 }

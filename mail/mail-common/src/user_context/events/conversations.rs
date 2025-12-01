@@ -45,7 +45,8 @@ pub async fn handle_conversation_events(
                 if !ids.is_empty() {
                     tracing::info!("Created with {:?}", ids[0]);
                 }
-                data.cnv_for_prefetch.extend(ids);
+                data.cnv_for_prefetch.extend(ids.iter().copied());
+                rebase_change_set.add_many(ids);
             }
 
             Action::Update | Action::UpdateFlags => {

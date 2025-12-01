@@ -12,6 +12,7 @@ use proton_core_api::services::proton::ProtonCore as _;
 use proton_core_api::services::proton::muon::common::WithTimeout;
 use proton_core_api::session::Session;
 
+use stash::orm::Model;
 use stash::stash::WatcherHandle;
 use stash::watcher::TableWatcher;
 use tracing::error;
@@ -99,6 +100,23 @@ impl FeatureFlagsService {
             FeatureFlag::by_name(key, &tether).await?
         };
         Ok(feature_flag.map(|flag| flag.enabled))
+    }
+
+    #[cfg(feature = "test-utils")]
+    pub async fn test_override(&self, key: &str, value: bool) -> CoreContextResult<()> {
+        let ctx = self.ctx.upgrade().context("Could not upgrade context")?;
+        let mut tether = ctx.account_stash().connection().await?;
+        let mut flag = FeatureFlag::by_name(key, &tether)
+            .await?
+            .unwrap_or(FeatureFlag {
+                name: key.to_owned(),
+                enabled: false,
+                modify_time: UnixTimestamp::now(),
+            });
+        flag.enabled = value;
+        tether.tx(async |tx| flag.save(tx).await).await?;
+
+        Ok(())
     }
 
     pub async fn refresh(&self) -> CoreContextResult<()> {
