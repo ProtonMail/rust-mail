@@ -170,6 +170,12 @@ impl Transformer {
         transforms::styles::revert_dark_mode_in_inline_attributes(&self.document);
     }
 
+    /// This function injects common CSS styles related to margins, widths etc.
+    #[tracing::instrument(skip_all)]
+    pub fn inject_common_css(&mut self) {
+        transforms::styles::inject_common_css(&self.document);
+    }
+
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
     #[tracing::instrument(skip_all)]
     pub fn inject_dark_mode(
