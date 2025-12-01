@@ -296,16 +296,18 @@ fn test_message(conversation: &TestItem) -> ApiMessageMetadata {
     }
 }
 
-#[cfg(feature = "action_rebase")]
 mod rebase {
     use super::*;
     use pretty_assertions::{assert_eq, assert_ne};
     use proton_action_queue::action::ActionGroup;
     use proton_action_queue::rebase::RebaseChangeSet;
-    use proton_core_api::services::proton::AddressId;
+    use proton_core_api::services::proton::{Action, AddressId, EventId};
     use proton_core_common::models::{Address, ModelExtension};
+    use proton_core_common::services::global_feature_flags::MAIL_ET_REBASE_FEATURE_KEY;
     use proton_core_common::test_utils::account::TEST_ADDRESS_ID;
     use proton_mail_api::services::proton::common::ConversationId;
+    use proton_mail_api::services::proton::prelude::{ConversationEvent, MailEvent, MessageEvent};
+    use proton_mail_api::services::proton::response_data::MessageFlags;
     use proton_mail_common::MailUserContext;
     use proton_mail_common::datatypes::ConversationViewOptions;
     use proton_mail_common::models::ConversationLabel;
@@ -495,6 +497,143 @@ mod rebase {
         .unwrap();
 
         assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn create_event_tracked_in_rebase_changeset() {
+        let (_test_ctx, user_ctx, conversations) =
+            setup_with_mocks(vec![vec![true]], async |_, _| {}).await;
+        let tether = user_ctx.user_stash().connection().await.unwrap();
+
+        let original_conversation = conversations.into_iter().next().unwrap();
+        let original_messages = Message::in_conversation(
+            original_conversation.id(),
+            ConversationViewOptions::All,
+            &tether,
+        )
+        .await
+        .unwrap();
+
+        Message::action_mark_read(user_ctx.action_queue(), vec![original_messages[0].id()])
+            .await
+            .unwrap();
+        let updated_conversation = Conversation::find_by_id(original_conversation.id(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+        let updated_messages = Message::in_conversation(
+            original_conversation.id(),
+            ConversationViewOptions::All,
+            &tether,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(updated_messages.iter().filter(|m| m.unread).count(), 0);
+        assert_eq!(updated_conversation.num_unread, 0);
+        assert_eq!(updated_conversation.labels[0].context_num_unread, 0);
+
+        user_ctx
+            .core_context()
+            .feature_flags()
+            .test_override(MAIL_ET_REBASE_FEATURE_KEY, true)
+            .await
+            .unwrap();
+        user_ctx
+            .apply_event(
+                MailEvent {
+                    event_id: EventId::from("MyEvent"),
+                    labels: None,
+                    conversation_counts: None,
+                    conversations: Some(vec![ConversationEvent {
+                        id: original_conversation.remote_id.clone().unwrap(),
+                        action: Action::Update,
+                        conversation: Some(ApiConversation {
+                            id: original_conversation.remote_id.clone().unwrap(),
+                            attachment_info: Default::default(),
+                            attachments_metadata: vec![],
+                            display_snoozed_reminder: false,
+                            expiration_time: original_conversation.expiration_time.as_u64(),
+                            labels: original_conversation
+                                .labels
+                                .iter()
+                                .cloned()
+                                .map(|l| ApiConversationLabel {
+                                    id: l.remote_label_id.unwrap(),
+                                    context_expiration_time: l.context_expiration_time.as_u64(),
+                                    context_num_attachments: l.context_num_attachments,
+                                    context_num_messages: l.context_num_messages,
+                                    context_num_unread: l.context_num_unread,
+                                    context_size: l.context_size,
+                                    context_snooze_time: l.context_snooze_time.as_u64(),
+                                    context_time: l.context_time.as_u64(),
+                                })
+                                .collect(),
+                            num_attachments: original_conversation.num_attachments,
+                            num_messages: original_conversation.num_messages,
+                            num_unread: original_conversation.num_unread,
+                            order: 0,
+                            recipients: vec![],
+                            senders: vec![],
+                            size: 0,
+                            subject: "".to_string(),
+                            context_time: None,
+                        }),
+                    }]),
+                    incoming_defaults: None,
+                    mail_settings: None,
+                    message_counts: None,
+                    messages: Some(vec![MessageEvent {
+                        id: original_messages[0].remote_id.clone().unwrap(),
+                        action: Action::Create,
+                        message: Some(ApiMessageMetadata {
+                            id: original_messages[0].remote_id.clone().unwrap(),
+                            conversation_id: original_conversation.remote_id.clone().unwrap(),
+                            address_id: original_messages[0].remote_address_id.clone(),
+                            attachments_metadata: vec![],
+                            bcc_list: vec![],
+                            cc_list: vec![],
+                            expiration_time: 0,
+                            external_id: None,
+                            flags: MessageFlags::empty(),
+                            is_forwarded: false,
+                            is_replied: false,
+                            is_replied_all: false,
+                            label_ids: original_messages[0].label_ids.clone(),
+                            num_attachments: 0,
+                            order: original_messages[0].display_order,
+                            sender: Default::default(),
+                            size: 0,
+                            snooze_time: 0,
+                            subject: "".to_string(),
+                            time: original_messages[0].time.as_u64(),
+                            to_list: vec![],
+                            unread: original_messages[0].unread,
+                        }),
+                    }]),
+                    refresh: 0,
+                    has_more: false,
+                }
+                .into(),
+            )
+            .await
+            .unwrap();
+
+        let rebased_conversation = Conversation::find_by_id(original_conversation.id(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+        let rebased_messages = Message::in_conversation(
+            original_conversation.id(),
+            ConversationViewOptions::All,
+            &tether,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(rebased_conversation, updated_conversation);
+        assert_ne!(rebased_conversation, original_conversation);
+        assert_eq!(rebased_messages, updated_messages);
     }
 
     #[tokio::test]

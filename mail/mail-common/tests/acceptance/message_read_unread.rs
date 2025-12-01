@@ -264,7 +264,6 @@ fn test_message(params: &Params) -> impl FnMut(&TestItem) -> ApiMessageMetadata 
     }
 }
 
-#[cfg(feature = "action_rebase")]
 mod rebase {
     use super::*;
     use proton_action_queue::action::ActionGroup;

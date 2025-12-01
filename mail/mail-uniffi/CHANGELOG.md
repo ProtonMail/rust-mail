@@ -5,7 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.159.5] - 2025-12-01
+
+### Fixes
+
+- Created items should also be rebased
+
+
+## [mail-uniffi-v0.159.4] - 2025-11-28
+
+### Features
+
+- [ET-5494] Run event loop more often
+
+
+## [mail-uniffi-v0.159.3] - 2025-11-27
+
+### Features
+
+- [ET-5494] Rebase runtime feature flag
+
+
 ## [mail-uniffi-v0.158.4] - 2025-11-26
+
+### Fixes
+
+- [ET-5478] ics: Support email addresses without `mailto:` prefix
+
+
+## [mail-uniffi-v0.158.3] - 2025-11-25
 
 ### Changed
 
@@ -20,7 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Rollback of conversations should also fetch messages
 - Rollback items also sync missing dependencies
-- [ET-5478] ics: Support email addresses without `mailto:` prefix
 
 
 ## [mail-uniffi-v0.158.2] - 2025-11-24
@@ -35,11 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Address validation - dont filter out BYOE
 
 
-## [mail-uniffi-v0.158.1] - 2025-11-21
+## [mail-uniffi-v0.159.0] - 2025-11-21
 
 ### Features
 
-- Validate whether there is a valid sender address
+- [ET-5103] Enable rebasing of actions
 
 
 ## [mail-uniffi-v0.158.0] - 2025-11-21
@@ -69,6 +96,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support proxied-blocked remote content
 - [ET-5183] Always execute on server even if noops are detected
 - [ET-5427] Mark conversation unread should be noop if already unread
+
+
+## [mail-uniffi-v0.158.1] - 2025-11-21
+
+### Features
+
+- Validate whether there is a valid sender address
 
 
 ## [mail-uniffi-v0.157.12] - 2025-11-20

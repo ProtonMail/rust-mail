@@ -9,6 +9,7 @@ pub fn parse_email_address(email: &str) -> Result<EmailAddress, email_address::E
     EmailAddress::parse_with_options(
         email,
         Options::default()
+            .without_domain_literal()
             .without_display_text()
             .with_long_local_parts()
             .with_required_tld(),

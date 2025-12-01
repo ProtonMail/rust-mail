@@ -112,7 +112,14 @@ impl UserContext {
         let (action, priority) = if intent == EventPollIntent::Forced {
             (EventPoll::forced(), Priority::Highest)
         } else {
-            (EventPoll::default(), EventPoll::PRIORITY)
+            (
+                EventPoll::default(),
+                if self.has_rebase_feature().await {
+                    Priority::Normal
+                } else {
+                    EventPoll::PRIORITY
+                },
+            )
         };
         let metadata = Metadata::builder().with_priority_override(priority).build();
         let last_action_id = if intent == EventPollIntent::Forced {

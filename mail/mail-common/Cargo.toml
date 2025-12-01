@@ -26,10 +26,6 @@ sql = [
 ]
 proton_mail_error_log = []
 prefetch = []
-action_rebase = [
-  "proton-core-common/action_rebase",
-  "proton-action-queue/rebase",
-]
 
 [dependencies]
 anyhow = { workspace = true }

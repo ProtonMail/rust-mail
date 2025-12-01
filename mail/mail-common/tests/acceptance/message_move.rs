@@ -1377,7 +1377,6 @@ async fn move_out_of_sent_drafts_with_keep_moved(label_id: LabelId, show_moved: 
     assert_eq!(message.label_ids, vec![destination_label_id.clone()]);
 }
 
-#[cfg(feature = "action_rebase")]
 mod rebase_messages {
     use super::*;
     use pretty_assertions::{assert_eq, assert_ne};
@@ -1865,7 +1864,6 @@ mod rebase_messages {
     }
 }
 
-#[cfg(feature = "action_rebase")]
 mod rebase_conversations {
     use super::*;
     use pretty_assertions::{assert_eq, assert_ne};

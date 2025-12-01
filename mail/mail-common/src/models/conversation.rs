@@ -26,7 +26,6 @@ use chrono::Local;
 use futures::future;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-#[cfg(feature = "action_rebase")]
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::action::MetadataBuilder;
 
@@ -37,6 +36,7 @@ use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
 use proton_core_api::session::Session;
+use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{
     InitializationKey, LabelType, LocalLabelId, SystemLabel, UnixTimestamp, WeekStart,
 };
@@ -1927,13 +1927,12 @@ impl Conversation {
     }
 
     #[tracing::instrument(skip(tx, session, network_monitor_service, queue))]
-    #[cfg_attr(not(feature = "action_rebase"), allow(unused_variables))]
     pub async fn sync_conversation_messages_from_push_notification(
         network_monitor_service: &NetworkMonitorService,
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
         session: &Session,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<Conversation, AppError> {
         let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
@@ -2035,7 +2034,6 @@ impl Conversation {
                 })?;
             rebase_change_set.add_many(ids);
 
-            #[cfg(feature = "action_rebase")]
             if let Err(e) = queue
                 .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                 .await
@@ -2056,7 +2054,7 @@ impl Conversation {
         tx: &mut impl RunTransaction,
         session: &Session,
         extra_sync_allowed: bool,
-        queue: &Queue,
+        queue: RebasableQueue<'_>,
     ) -> Result<(), AppError> {
         let Some(mut conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await?
         else {
@@ -2138,14 +2136,11 @@ impl Conversation {
                     rebase_change_set.add(new_conversation.id());
                 }
 
-                #[cfg(feature = "action_rebase")]
+                if let Err(e) = queue
+                    .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
+                    .await
                 {
-                    if let Err(e) = queue
-                        .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
-                        .await
-                    {
-                        tracing::error!("Failed to rebase changes: {e}");
-                    }
+                    tracing::error!("Failed to rebase changes: {e}");
                 }
 
                 Ok(())

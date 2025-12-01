@@ -391,7 +391,6 @@ async fn label_as_with_archive() {
     );
 }
 
-#[cfg(feature = "action_rebase")]
 mod rebase {
     use super::*;
     use pretty_assertions::{assert_eq, assert_ne};
