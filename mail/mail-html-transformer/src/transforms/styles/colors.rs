@@ -105,15 +105,15 @@ pub fn hsla_for_dark_mode(
 ) -> RGBA {
     use IsColorAchromatic::*;
 
-    // Special case: For transparent background on body/html we return our Dark Mode background color
-    if purpose == ColorPurpose::Background
-        && color.is_transparent()
-        && should_modify_transparent == ShouldModifyTransparentColors::Yes
-    {
-        return DARK_MODE_BACKGROUND_COLOR;
-    }
-
     if color.is_transparent() {
+        // Special case: For transparent background on body/html we return our Dark Mode background color
+        if purpose == ColorPurpose::Background
+            && should_modify_transparent == ShouldModifyTransparentColors::Yes
+        {
+            return DARK_MODE_BACKGROUND_COLOR;
+        }
+
+        // Otherwise keep it as it is.
         return color.into();
     }
 
