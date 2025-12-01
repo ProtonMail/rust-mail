@@ -413,14 +413,6 @@ impl DraftAttachmentListUpdateStream {
         Ok(())
     }
 
-    #[returns(VoidProtonResult)]
-    pub fn next_sync(&self) -> Result<(), ProtonError> {
-        async_runtime().block_on(async {
-            let mut observer = self.observer.lock().await;
-            Ok(observer.next().await.map_err(RealProtonMailError::from)?)
-        })
-    }
-
     pub fn cancel(&self) {
         self.token.cancel();
     }

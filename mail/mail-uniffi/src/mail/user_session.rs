@@ -8,9 +8,7 @@ use crate::core::datatypes::{
     PaymentsStatus, Subscriptions, UpsellEligibility, User, UserSettings,
 };
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{
-    ActionError, OtherErrorReason, ProtonError, UserSessionError, VoidSessionResult,
-};
+use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
 use crate::{
     AsyncLiveQueryCallback, WatchHandle, async_runtime, declare_live_query_tagger, uniffi_async,
@@ -232,22 +230,19 @@ pub struct WatchUserStream {
 
 #[uniffi_export]
 impl WatchUserStream {
-    pub fn next_sync(&self) -> Result<(), ProtonError> {
-        self.handle
-            .receiver
-            .recv()
-            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
-    }
-
-    pub async fn next_async(&self) -> Result<(), ProtonError> {
-        let future = self.handle.receiver.recv_async();
-        self.token
-            .run_until_cancelled(future)
+    pub async fn next_async(self: Arc<Self>) -> Result<(), ProtonError> {
+        async_runtime()
+            .spawn(async move {
+                let future = self.handle.receiver.recv_async();
+                self.token
+                    .run_until_cancelled(future)
+                    .await
+                    .ok_or_else(|| RealProtonMailError::from(MailContextError::TaskCancelled))?
+                    .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+            })
             .await
-            .ok_or_else(|| {
-                ProtonError::OtherReason(OtherErrorReason::Other("Task was cancelled".into()))
-            })?
-            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+            .map_err(RealProtonMailError::from)??;
+        Ok(())
     }
 
     pub fn cancel(&self) {
@@ -792,22 +787,19 @@ pub struct WatchUserFeatureFlagsStream {
 
 #[uniffi_export]
 impl WatchUserFeatureFlagsStream {
-    pub fn next_sync(&self) -> Result<(), ProtonError> {
-        self.handle
-            .receiver
-            .recv()
-            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
-    }
-
-    pub async fn next_async(&self) -> Result<(), ProtonError> {
-        let future = self.handle.receiver.recv_async();
-        self.token
-            .run_until_cancelled(future)
+    pub async fn next_async(self: Arc<Self>) -> Result<(), ProtonError> {
+        async_runtime()
+            .spawn(async move {
+                let future = self.handle.receiver.recv_async();
+                self.token
+                    .run_until_cancelled(future)
+                    .await
+                    .ok_or_else(|| RealProtonMailError::from(MailContextError::TaskCancelled))?
+                    .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+            })
             .await
-            .ok_or_else(|| {
-                ProtonError::OtherReason(OtherErrorReason::Other("Task was cancelled".into()))
-            })?
-            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+            .map_err(RealProtonMailError::from)??;
+        Ok(())
     }
 
     pub fn cancel(&self) {
