@@ -8,7 +8,9 @@ use crate::core::datatypes::{
     PaymentsStatus, Subscriptions, UpsellEligibility, User, UserSettings,
 };
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
+use crate::errors::{
+    ActionError, OtherErrorReason, ProtonError, UserSessionError, VoidSessionResult,
+};
 use crate::mail::state::MailUserContextPtr;
 use crate::{
     AsyncLiveQueryCallback, WatchHandle, async_runtime, declare_live_query_tagger, uniffi_async,
@@ -30,6 +32,7 @@ use proton_mail_common::{MailContextError, MailUserContext};
 use proton_observability::PreLoginMetricRecorder;
 use stash::stash::{Stash, WatcherHandle};
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 use tracing::error;
 
 use super::datatypes::AttachmentMetadata;
@@ -213,7 +216,10 @@ impl MailUserSession {
                 .watch_user()
                 .await
                 .map_err(RealProtonMailError::from)?;
-            Ok(Arc::new(WatchUserStream { handle }))
+            Ok(Arc::new(WatchUserStream {
+                handle,
+                token: CancellationToken::new(),
+            }))
         })
     }
 }
@@ -221,6 +227,7 @@ impl MailUserSession {
 #[derive(uniffi::Object)]
 pub struct WatchUserStream {
     handle: WatcherHandle,
+    token: CancellationToken,
 }
 
 #[uniffi_export]
@@ -233,11 +240,18 @@ impl WatchUserStream {
     }
 
     pub async fn next_async(&self) -> Result<(), ProtonError> {
-        self.handle
-            .receiver
-            .recv_async()
+        let future = self.handle.receiver.recv_async();
+        self.token
+            .run_until_cancelled(future)
             .await
+            .ok_or_else(|| {
+                ProtonError::OtherReason(OtherErrorReason::Other("Task was cancelled".into()))
+            })?
             .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    }
+
+    pub fn cancel(&self) {
+        self.token.cancel();
     }
 }
 
@@ -697,7 +711,10 @@ impl MailUserSession {
                 .await
                 .map_err(MailContextError::from)
                 .map_err(RealProtonMailError::from)?;
-            Ok(Arc::new(WatchUserFeatureFlagsStream { handle }))
+            Ok(Arc::new(WatchUserFeatureFlagsStream {
+                handle,
+                token: CancellationToken::new(),
+            }))
         })
     }
 
@@ -770,6 +787,7 @@ pub trait ExecuteWhenOnlineCallback: Send + Sync {
 #[derive(uniffi::Object)]
 pub struct WatchUserFeatureFlagsStream {
     pub handle: WatcherHandle,
+    token: CancellationToken,
 }
 
 #[uniffi_export]
@@ -782,10 +800,17 @@ impl WatchUserFeatureFlagsStream {
     }
 
     pub async fn next_async(&self) -> Result<(), ProtonError> {
-        self.handle
-            .receiver
-            .recv_async()
+        let future = self.handle.receiver.recv_async();
+        self.token
+            .run_until_cancelled(future)
             .await
+            .ok_or_else(|| {
+                ProtonError::OtherReason(OtherErrorReason::Other("Task was cancelled".into()))
+            })?
             .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
+    }
+
+    pub fn cancel(&self) {
+        self.token.cancel();
     }
 }
