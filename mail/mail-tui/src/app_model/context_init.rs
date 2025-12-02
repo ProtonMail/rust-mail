@@ -3,7 +3,9 @@ use crate::app_model::{AppState, AppStateHandler, mailbox};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
-use proton_mail_common::{MailContext, MailContextError, MailUserContext};
+use proton_mail_common::{
+    MailContext, MailContextError, MailUserContext, NewMailUserContextOptions,
+};
 use ratatui::crossterm::event::Event;
 use ratatui::prelude::*;
 use std::sync::Arc;
@@ -50,7 +52,12 @@ impl AppStateHandler for ContextInitModel {
                 let user_ctx = self.ctx.clone();
                 Command::task(async move {
                     tracing::info!("Initializing user account");
-                    let msg = if let Err(e) = MailUserContext::initialize_async(user_ctx).await {
+                    let msg = if let Err(e) = MailUserContext::initialize_async(
+                        user_ctx,
+                        NewMailUserContextOptions::default(),
+                    )
+                    .await
+                    {
                         tracing::error!("Failed to initialize account {e:?}");
                         Message::InitFailed(e)
                     } else {

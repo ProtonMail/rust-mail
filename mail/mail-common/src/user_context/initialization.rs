@@ -1,7 +1,7 @@
 use crate::models::{
     CustomSettings, IncomingDefault, LabelWithCounters, MailSettings, StoreLabelCounters,
 };
-use crate::{MailContextError, MailContextResult, MailUserContext};
+use crate::{MailContextError, MailContextResult, MailUserContext, NewMailUserContextOptions};
 use futures::try_join;
 use proton_core_common::datatypes::{InitializationKey, InitializedComponentState};
 use proton_core_common::models::{
@@ -13,6 +13,7 @@ use proton_core_common::services::{EventLoopService, InitializationService};
 use proton_event_loop::EventLoopError;
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use proton_task_service::TaskService;
+use stash::params;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
@@ -41,11 +42,14 @@ impl MailUserContext {
     ///
     /// This function probably should not be called explicitly.
     /// It is called automatically during user context session creation
-    pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
+    pub async fn initialize_async(
+        ctx: Arc<Self>,
+        options: NewMailUserContextOptions,
+    ) -> Result<(), MailContextError> {
         let ctx_cloned = Arc::clone(&ctx);
 
         ctx.get_service::<InitializationMediator>()
-            .initialize(ctx_cloned)
+            .initialize(ctx_cloned, options)
             .await
             .inspect_err(|err| {
                 if !err.is_network_failure() {
@@ -173,6 +177,7 @@ async fn initialize_event_loop(
 
 type InitializerMessage = (
     Arc<MailUserContext>,
+    NewMailUserContextOptions,
     tokio::sync::oneshot::Sender<MailContextResult<()>>,
 );
 /// This mediator makes sure that we only ever initialize the context in a serial fashion.
@@ -192,16 +197,25 @@ impl InitializationMediator {
     }
 
     async fn background_loop(receiver: flume::Receiver<InitializerMessage>) {
-        while let Ok((ctx, sender)) = receiver.recv_async().await {
-            let r = Self::initialize_context(ctx).await;
+        while let Ok((ctx, options, sender)) = receiver.recv_async().await {
+            let r = Self::initialize_context(ctx, options).await;
             _ = sender.send(r);
         }
     }
 
     /// Send an initialization request and wait for the result.
-    pub(crate) async fn initialize(&self, ctx: Arc<MailUserContext>) -> MailContextResult<()> {
+    pub(crate) async fn initialize(
+        &self,
+        ctx: Arc<MailUserContext>,
+        options: NewMailUserContextOptions,
+    ) -> MailContextResult<()> {
         let (sender, receiver) = tokio::sync::oneshot::channel();
-        if self.sender.send_async((ctx, sender)).await.is_err() {
+        if self
+            .sender
+            .send_async((ctx, options, sender))
+            .await
+            .is_err()
+        {
             error!("Failed to communicate with initializer mediator");
             return Err(MailContextError::InitMediatorError);
         };
@@ -213,8 +227,28 @@ impl InitializationMediator {
     }
 
     #[tracing::instrument(skip_all, fields(user_id=%ctx.user_id()))]
-    async fn initialize_context(ctx: Arc<MailUserContext>) -> Result<(), MailContextError> {
-        tracing::info!("Initializing mail user context");
+    async fn initialize_context(
+        ctx: Arc<MailUserContext>,
+        options: NewMailUserContextOptions,
+    ) -> Result<(), MailContextError> {
+        tracing::info!(
+            "Initializing mail user context (force resync user={})",
+            options.resync_user
+        );
+
+        if options.resync_user {
+            let mut tether = ctx.user_stash().connection().await?;
+            tether
+                .tx(async |tx| {
+                    tx.execute(
+                        "DELETE FROM initialized_components WHERE key = '?' OR key = '?'",
+                        params![User::INIT_KEY.0, MailUserContext::CONTEXT_INIT_KEY.0],
+                    )
+                    .await
+                })
+                .await?;
+        }
+
         if ctx.is_initialized().await? {
             warn!("Context already initialized");
             return Ok(());

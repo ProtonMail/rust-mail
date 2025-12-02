@@ -1,7 +1,7 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
-use crate::context::{MailUserDatabaseInitializer, ShouldInitializeMailUserContext};
+use crate::context::MailUserDatabaseInitializer;
 use crate::events::MailEvent;
-use crate::{MailContext, MailContextResult, MailUserContext};
+use crate::{MailContext, MailContextResult, MailUserContext, NewMailUserContextOptions};
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
 use proton_core_api::auth::UserKeySecret;
@@ -125,7 +125,7 @@ impl MailTestContext {
     pub async fn uninitialized_mail_user_context(&self) -> Arc<MailUserContext> {
         let ctx = self
             .mail_context
-            .user_context_from_session(&self.core_session, ShouldInitializeMailUserContext::No)
+            .user_context_from_session(&self.core_session, NewMailUserContextOptions::skip_init())
             .await
             .expect("failed to create user context");
 
@@ -139,7 +139,7 @@ impl MailTestContext {
     /// Only use in the pair with [`Self::uninitialized_mail_user_context`].
     ///
     pub async fn initialize_uninitialized_ctx(&self, ctx: &Arc<MailUserContext>) {
-        MailUserContext::initialize_async(ctx.clone())
+        MailUserContext::initialize_async(ctx.clone(), NewMailUserContextOptions::default())
             .await
             .expect("Failed to initialize");
     }
@@ -150,7 +150,7 @@ impl MailTestContext {
     pub async fn mail_user_context(&self) -> Arc<MailUserContext> {
         let ctx = self
             .mail_context
-            .user_context_from_session(&self.core_session, ShouldInitializeMailUserContext::Yes)
+            .user_context_from_session(&self.core_session, NewMailUserContextOptions::default())
             .await
             .expect("failed to create user context");
 
@@ -164,7 +164,7 @@ impl MailTestContext {
     pub async fn try_mail_user_context(&self) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .mail_context
-            .user_context_from_session(&self.core_session, ShouldInitializeMailUserContext::Yes)
+            .user_context_from_session(&self.core_session, NewMailUserContextOptions::default())
             .await?;
 
         // Disable auto queue executor as we don't want these to interfere with our test execution.

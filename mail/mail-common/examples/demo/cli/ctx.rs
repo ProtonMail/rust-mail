@@ -11,7 +11,7 @@ use proton_core_common::os::KeyChain;
 use proton_core_common::{CoreAccountState, Origin};
 use proton_issue_reporter_service::NoopIssueReporter;
 use proton_log_service::{Config as LogConfig, LogService};
-use proton_mail_common::{MailContext, MailUserContext, ShouldInitializeMailUserContext as Init};
+use proton_mail_common::{MailContext, MailUserContext, NewMailUserContextOptions};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::runtime;
@@ -85,7 +85,9 @@ async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<Mail
             continue;
         };
 
-        return Ok(ctx.user_context_from_session(&session, Init::Yes).await?);
+        return Ok(ctx
+            .user_context_from_session(&session, NewMailUserContextOptions::default())
+            .await?);
     }
 
     Err(anyhow!("account not found"))
