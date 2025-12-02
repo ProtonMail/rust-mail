@@ -73,7 +73,6 @@ async fn test_on_refresh_impl_none() {
     let params = TestParams::default_basic();
     ctx.setup_user(params).await;
     let user_ctx = ctx.mail_user_context().await;
-    ctx.catch_all().await;
 
     // Test Refresh::None
     let result = refresh(&user_ctx, Refresh::None).await;
@@ -89,7 +88,6 @@ async fn test_on_refresh_impl_unknown() {
     let params = TestParams::default_basic();
     ctx.setup_user(params).await;
     let user_ctx = ctx.mail_user_context().await;
-    ctx.catch_all().await;
 
     // Test Refresh::Unknown
     let result = refresh(&user_ctx, Refresh::Unknown(42)).await;
@@ -107,7 +105,6 @@ async fn test_on_refresh_impl_mail_success() {
 
     ctx.mock_server().reset().await;
     setup_mail_refresh_mocks(&ctx).await;
-    ctx.catch_all().await;
 
     let result = refresh(&user_ctx, Refresh::Mail).await;
 
@@ -125,7 +122,6 @@ async fn test_on_refresh_impl_contacts_success() {
 
     ctx.mock_server().reset().await;
     setup_contacts_refresh_mocks(&ctx, 1).await;
-    ctx.catch_all().await;
 
     // Test Refresh::Contacts
     let result = refresh(&user_ctx, Refresh::Contacts).await;
@@ -154,8 +150,6 @@ async fn test_on_refresh_impl_contacts_network_error() {
         .with_priority(1)
     })
     .await;
-
-    ctx.catch_all().await;
 
     // Test Refresh::Contacts with network error
     let result = refresh(&user_ctx, Refresh::Contacts).await;
@@ -193,7 +187,6 @@ async fn test_on_refresh_impl_retry_behavior() {
         .await;
 
     ctx.mock_ping_success().await;
-    ctx.catch_all().await;
 
     // Test Refresh::Mail - the internal retry logic will be tested
     let result = refresh(&user_ctx, Refresh::Mail).await;
@@ -213,7 +206,6 @@ async fn test_on_refresh_impl_different_refresh_types() {
     ctx.mock_server().reset().await;
     setup_mail_refresh_mocks(&ctx).await;
     setup_core_refresh_mocks(&ctx).await;
-    ctx.catch_all().await;
 
     // Test different refresh types individually
     let result_none = refresh(&user_ctx, Refresh::None).await;
@@ -233,7 +225,6 @@ async fn test_on_refresh_impl_different_refresh_types() {
 async fn test_on_refresh_impl_mail_success_and_refresh_conversations() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_conversations(&ctx).await;
-    ctx.catch_all().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
     let result = refresh(&user_ctx, Refresh::Mail).await;
     // Should succeed
@@ -258,7 +249,6 @@ async fn test_on_refresh_impl_mail_success_and_refresh_conversations() {
 async fn test_on_refresh_impl_mail_success_and_refresh_messages_after_mail_settings_update() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_messages(&ctx).await;
-    ctx.catch_all().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
     let result = refresh(&user_ctx, Refresh::Mail).await;
     // Should succeed
@@ -285,7 +275,6 @@ async fn test_on_refresh_impl_all_success_and_refresh_messages_after_mail_settin
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_messages(&ctx).await;
     setup_core_refresh_mocks(&ctx).await;
-    ctx.catch_all().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
     refresh(&user_ctx, Refresh::All).await.unwrap();
@@ -309,7 +298,6 @@ async fn test_on_refresh_impl_all_success_and_refresh_messages_after_mail_settin
 async fn test_on_refresh_leaves_messages_without_remote_id_untouched() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_messages(&ctx).await;
-    ctx.catch_all().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Modify one of the local messages to have no remote id
@@ -358,7 +346,6 @@ async fn test_on_refresh_leaves_messages_without_remote_id_untouched() {
 async fn test_on_refresh_leaves_local_draft_messages_untouched() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_messages(&ctx).await;
-    ctx.catch_all().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     // Modify one of the local messages to be a draft
@@ -444,7 +431,6 @@ async fn test_on_refresh_leaves_local_draft_messages_in_converstation_untouched(
         1,
     )
     .await;
-    ctx.catch_all().await;
 
     let result = refresh(&user_ctx, Refresh::Mail).await;
     // Should succeed
@@ -465,7 +451,6 @@ async fn test_on_refresh_leaves_local_draft_messages_in_converstation_untouched(
 async fn test_on_refresh_leaves_conversation_without_remote_id_untouched() {
     let ctx = MailTestContext::new().await;
     let user_ctx = set_up_test_conversations(&ctx).await;
-    ctx.catch_all().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let mut local_conv = Conversation::find_by_remote_id("myconv_1".into(), &tether)
         .await

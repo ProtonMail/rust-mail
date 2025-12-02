@@ -44,7 +44,6 @@ async fn contact_list() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -113,7 +112,6 @@ async fn delete_contacts() {
         .await;
 
     // Initialize Mocking
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 

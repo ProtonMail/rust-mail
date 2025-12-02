@@ -67,7 +67,6 @@ async fn test_update_list_toolbar_actions() {
     ctx.mock_put_mobile_settings(success_response(), expected_put_mobile_settings, 1)
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Get initial mail settings to verify baseline
@@ -171,7 +170,6 @@ async fn test_update_message_toolbar_actions() {
     ctx.mock_put_mobile_settings(success_response(), expected_put_mobile_settings, 1)
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Enqueue and execute the action
@@ -259,7 +257,6 @@ async fn test_update_conversation_toolbar_actions() {
     ctx.mock_put_mobile_settings(success_response(), expected_put_mobile_settings, 1)
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Execute: Update conversation toolbar actions
@@ -338,7 +335,6 @@ async fn test_api_failure_handling() {
     ctx.mock_put_mobile_settings(error_response(), expected_put_mobile_settings, 4)
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let actions = vec![MobileAction::ToggleRead, MobileAction::Archive];

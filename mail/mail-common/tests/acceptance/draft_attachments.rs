@@ -80,8 +80,6 @@ async fn attachment_not_removed_on_error() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -145,7 +143,6 @@ async fn remove_attachment_updates_attachment_list() {
     let params = draft_test_params();
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -192,7 +189,6 @@ async fn remove_attachment_by_cid() {
     let params = draft_test_params();
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -298,8 +294,6 @@ async fn removing_non_uploaded_attachment() {
     )
     .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -398,7 +392,6 @@ async fn removing_uploaded_attachment() {
     .await;
 
     ctx.mock_delete_attachment(new_attachment_id).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -599,8 +592,6 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     )
     .await;
 
-    ctx.catch_all().await;
-
     // Create draft.
     let draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true)
         .await
@@ -681,8 +672,6 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     )
     .await;
 
-    ctx.catch_all().await;
-
     Message::force_sync_message_and_body(
         &user_ctx,
         existing_message.remote_id.clone().unwrap(),
@@ -738,7 +727,6 @@ async fn override_attachment_name() {
     let params = draft_test_params();
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
@@ -788,7 +776,6 @@ async fn total_attachment_size_more_than_limit_local() {
         Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -893,8 +880,6 @@ async fn total_attachment_size_more_than_limit() {
         )),
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1007,8 +992,6 @@ async fn total_attachment_count_exceeds_limit() {
         )),
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1146,8 +1129,6 @@ async fn can_not_send_without_all_uploaded_attachments() {
     )
     .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -1225,7 +1206,6 @@ async fn total_attachment_count_exceeds_limit_local() {
         Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1333,8 +1313,6 @@ async fn catch_storage_quota_exceeded_error() {
         )),
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1462,7 +1440,6 @@ async fn swap_attachment_disposition() {
         Ok(()),
     )
     .await;
-    ctx.catch_all().await;
 
     draft.add_attachment(&local_attachment).await.unwrap();
 
@@ -1569,7 +1546,6 @@ async fn swap_attachment_disposition_retry() {
         }),
     )
     .await;
-    ctx.catch_all().await;
 
     draft.add_attachment(&local_attachment).await.unwrap();
     draft
@@ -1599,7 +1575,6 @@ async fn swap_attachment_disposition_retry() {
         Ok(()),
     )
     .await;
-    ctx.catch_all().await;
 
     draft
         .retry_attachment_action(local_attachment.id())

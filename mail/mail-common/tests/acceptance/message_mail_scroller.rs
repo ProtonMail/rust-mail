@@ -133,7 +133,6 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
 
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -310,7 +309,6 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     let params = setup_api_message_pages(&ctx, page_size, 1..=3).await;
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all messages

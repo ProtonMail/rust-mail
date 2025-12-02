@@ -22,7 +22,6 @@ async fn mailto() {
 
     message.metadata.label_ids.push(LabelId::drafts());
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     // ---
 

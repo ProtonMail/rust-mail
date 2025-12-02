@@ -6,7 +6,7 @@ use crate::events::CoreEvent;
 use crate::models::ModelExtension;
 use crate::services::global_feature_flags::FeatureFlagsBackgroundTask;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
-use crate::test_utils::utils::{catch_all, mock_auth_endpoints};
+use crate::test_utils::utils::mock_auth_endpoints;
 use crate::{
     Context, UserContext, UserDatabaseInitializer,
     db::account::SessionEncryptionKey,
@@ -309,20 +309,6 @@ impl TestContext {
     #[must_use]
     pub fn core_context(&self) -> &Arc<Context> {
         &self.context
-    }
-
-    /// Set up a catch-all mock for the mock server.
-    ///
-    /// Calls to this function need to come at the END of the test setup, AFTER
-    /// all other mocks have been set up. This will ensure that any unconfigured
-    /// calls will cause the test to fail.
-    ///
-    /// It is unfortunately not possible to use the [`Mock::with_priority()`]
-    /// method to set this up by default as a lower-priority expectation and
-    /// establish a catch-all in that way.
-    ///
-    pub async fn catch_all(&self) {
-        catch_all(&self.mock_web_server).await;
     }
 }
 

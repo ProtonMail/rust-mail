@@ -42,7 +42,6 @@ async fn mailbox_message_body_simple() {
         .respond_with(vec![message.metadata.clone()])
         .await;
 
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     // Create a mailbox and sync.
@@ -122,8 +121,6 @@ async fn mailbox_message_body_mime() {
     ctx.mock_get_messages()
         .respond_with(vec![message.metadata.clone()])
         .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -250,8 +247,6 @@ async fn mailbox_message_retains_pgp_attachments() {
         .respond_with(vec![message.metadata.clone()])
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     let mailbox = Mailbox::with_remote_id(
@@ -365,8 +360,6 @@ async fn pgp_mime_attachments_retrievable_via_get_attachments() {
         .respond_with(vec![message.metadata.clone()])
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     let mailbox = Mailbox::with_remote_id(
@@ -445,8 +438,6 @@ async fn message_body_failed_to_decrypt() {
 
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();

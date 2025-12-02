@@ -62,7 +62,6 @@ async fn test_new_mailbox_sync_conversations() {
         .await;
     ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1_u64)
         .await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     // Create a mailbox
@@ -269,7 +268,6 @@ async fn test_new_mailbox_syncs_new_conversation_messages_on_push_notification()
     ctx.mock_server().reset().await;
     ctx.mock_get_conversation_messages(conv_updated, messages_updated, 1_u64)
         .await;
-    ctx.catch_all().await;
     // Get messages again, should have new message
     let result = ContextualConversation::conversation_and_messages_from_push_notification(
         user_ctx.network_monitor_service(),
@@ -365,7 +363,6 @@ async fn test_opening_conversation_with_trashed_message() {
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1_u64)
         .await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     // Create a mailbox
@@ -598,7 +595,6 @@ async fn test_new_mailbox_syncs_new_conversation_if_total_does_not_add_up() {
     ctx.mock_server().reset().await;
     ctx.mock_get_conversation_messages(conv_updated, messages_updated, 1_u64)
         .await;
-    ctx.catch_all().await;
 
     // simulate fetch new bringing in an updated value that modifies the total amount
     let mut conv = Conversation::find_by_id(
@@ -727,7 +723,6 @@ async fn test_new_mailbox_syncs_new_conversation_if_total_does_not_add_up() {
 //             .await;
 //         ctx.mock_get_conversation(conversations[0].clone(), vec![message.metadata.clone()])
 //             .await;
-//         ctx.catch_all().await;
 //         user_context
 //             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
 //             .await

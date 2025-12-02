@@ -11,7 +11,6 @@ async fn load_sending_preferences() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     let pgp = proton_crypto::new_pgp_provider();
@@ -58,7 +57,6 @@ async fn load_sending_preferences_for_self() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     let pgp = proton_crypto::new_pgp_provider();

@@ -153,8 +153,6 @@ async fn basic_send_check() {
         )
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -343,8 +341,6 @@ async fn basic_schedule_send_check() {
         )
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -475,8 +471,6 @@ async fn schedule_send_with_old_delivery_time_fails() {
         Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -649,8 +643,6 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     )
     .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -704,7 +696,6 @@ async fn save_after_send_is_an_error() {
     });
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -799,8 +790,6 @@ async fn already_sent_error_does_not_produce_error() {
         )
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -851,7 +840,6 @@ async fn cancel_schedule_send_on_non_scheduled_message() {
     let params = draft_test_params();
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let message = message_body_test_message_simple();
@@ -916,7 +904,6 @@ async fn cancel_schedule_send_on_queued_send() {
     let delivery_time = Local::now().checked_add_months(Months::new(1)).unwrap();
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -1000,8 +987,6 @@ async fn cancel_schedule_send_after_api_request_succeeded() {
     )
     .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     api_message
@@ -1057,8 +1042,6 @@ async fn cancel_schedule_send_on_already_sent_message() {
         }),
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1139,7 +1122,6 @@ async fn schedule_send_message_limit() {
     let delivery_time = Local::now().checked_sub_days(Days::new(2)).unwrap();
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1192,7 +1174,6 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
     .await;
 
     // Add some other label ids to this message to make sure they are skipped.
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1290,7 +1271,6 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
     ctx.mock_create_draft_no_validation(message1.clone()).await;
     ctx.mock_get_message_with_expected(&message2.metadata.id, message2.clone(), 1)
         .await;
-    ctx.catch_all().await;
 
     // Add some other label ids to this message to make sure they are skipped.
     let user_ctx = ctx.mail_user_context().await;
@@ -1410,8 +1390,6 @@ async fn already_sent_from_even_update() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1565,8 +1543,6 @@ async fn send_external_with_password() {
         )
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -1698,8 +1674,6 @@ async fn send_with_expiration() {
             },
         )
         .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -1904,8 +1878,6 @@ async fn send_external_with_password_even_if_contact_has_pgp_mime_encryption() {
         .mock_get_full_contact(api_contact.clone())
         .await;
 
-    ctx.catch_all().await;
-
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut contact = Contact::from(api_contact.clone());
@@ -2004,8 +1976,6 @@ async fn send_fails_if_recipient_is_not_valid_impl(
             },
         )
         .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 

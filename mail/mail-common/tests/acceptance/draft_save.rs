@@ -71,8 +71,6 @@ async fn create_empty_draft() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -265,8 +263,6 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     ctx.mock_get_message(&updated_message.metadata.id, updated_message.clone())
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -345,8 +341,6 @@ async fn create_draft_reply_without_body_is_error() {
         .await
         .unwrap();
 
-    ctx.catch_all().await;
-
     // Create draft.
     let result = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::Sender, true).await;
 
@@ -391,8 +385,6 @@ async fn create_draft_reply_should_fail_for_drafts() {
         .await
         .unwrap();
 
-    ctx.catch_all().await;
-
     // Create draft.
     let result = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::Sender, true).await;
 
@@ -425,8 +417,6 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
 
     ctx.mock_get_message_with_expected(&message.metadata.id, message.clone(), 2)
         .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -521,8 +511,6 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
         CoreBundle::AppVersionInvalid as u32,
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -683,8 +671,6 @@ async fn create_draft_reply_with_override_impl(
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
 
-    ctx.catch_all().await;
-
     // Get the message body - required to reply to draft.
     Message::force_sync_message_and_body(
         &user_ctx,
@@ -837,8 +823,6 @@ async fn open_draft_sync_status_success() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -900,8 +884,6 @@ async fn open_draft_sync_status_cached() {
     )
     .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -938,7 +920,6 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
 
     message.metadata.label_ids.push(LabelId::drafts());
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -984,7 +965,6 @@ async fn new_draft_conversation_remote_id_updated_externally() {
 
     // Add some other label ids to this message to make sure they are skipped.
     message.metadata.label_ids.push(LabelId::starred());
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1083,8 +1063,6 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
     )
     .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -1152,7 +1130,6 @@ async fn attach_public_key_empty_draft() {
 
     params.mail_settings.as_mut().unwrap().attach_public_key = true;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -1269,8 +1246,6 @@ async fn open_draft_resets_password() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -1347,8 +1322,6 @@ async fn create_draft_reply_with_invalid_address_produces_address_validation_err
     )
     .await;
 
-    ctx.catch_all().await;
-
     // Get the message body - required to reply to draft.
     Message::force_sync_message_and_body(
         &user_ctx,
@@ -1413,8 +1386,6 @@ async fn open_draft_catches_invalid_address() {
     // Draft open always loads message from remote.
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1484,7 +1455,6 @@ async fn open_draft_detects_sender_alias() {
     // Draft open always loads message from remote.
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -1584,7 +1554,6 @@ async fn auto_save_draft() {
     }
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     // Create draft.
@@ -1710,8 +1679,6 @@ async fn prepare_draft_reply_attach_public_key(
             .await;
     }
 
-    ctx.catch_all().await;
-
     // Get the message body - required to reply to draft.
     Message::force_sync_message_and_body(
         &user_ctx,
@@ -1805,8 +1772,6 @@ async fn replying_to_expiring_message_inherits_expiration() {
         remote_existing_message.clone(),
     )
     .await;
-
-    ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
     Message::force_sync_message_and_body(
@@ -1910,8 +1875,6 @@ async fn draft_save_handles_save_with_new_message_if_remote_message_already_exis
         Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
-
-    ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
     Message::force_sync_message_and_body(
@@ -2029,8 +1992,6 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject() {
         Some(DraftAttachmentKeyPackets::new()),
     )
     .await;
-
-    ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
     Message::force_sync_message_and_body(

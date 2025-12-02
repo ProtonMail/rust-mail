@@ -64,8 +64,6 @@ async fn move_between_folders() {
         .respond_with(vec![message.metadata.clone()])
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -165,8 +163,6 @@ async fn move_between_folders_and_undo() {
         vec![message.metadata.id.clone()],
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -305,8 +301,6 @@ async fn move_from_label_does_not_unlabel() {
     )
     .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -404,7 +398,6 @@ async fn move_into_trash_remove_label_and_mark_read() {
     ctx.mock_label_messages(&LabelId::inbox(), vec![message.metadata.id.clone()])
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
@@ -517,7 +510,6 @@ async fn move_into_spam_remove_labels() {
     ctx.mock_label_messages(&spam.remote_id.unwrap(), vec![message.metadata.id.clone()])
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
@@ -605,7 +597,6 @@ async fn move_out_of_spam_set_almost_all_mail() {
     ctx.mock_label_messages(&inbox.remote_id.unwrap(), vec![message.metadata.id.clone()])
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
@@ -701,7 +692,6 @@ async fn move_from_spam_to_trash_do_not_remove_almost_all_mail_label() {
     )
     .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
@@ -788,7 +778,6 @@ async fn move_message_also_moves_conversation() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_label_messages(&LabelId::spam(), vec!["my_message".into()])
         .await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     let tether = &mut user_ctx.user_stash().connection().await.unwrap();
@@ -944,7 +933,6 @@ async fn move_conversation_between_folders_and_undo() {
     .await;
 
     ctx.mock_get_conversations(vec![conversation], 1).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -1114,7 +1102,6 @@ async fn move_conversation_mix_unread() {
 
     ctx.mock_label_conversation(&LabelId::trash(), vec!["my_conv".into()], None, vec![])
         .await;
-    ctx.catch_all().await;
 
     // ---
     let local_inbox = Label::remote_id_counterpart(LabelId::inbox(), tether)
@@ -1263,8 +1250,6 @@ async fn move_from_allmail() {
         .respond_with(vec![message.metadata.clone()])
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -1331,8 +1316,6 @@ async fn move_out_of_sent_drafts_with_keep_moved(label_id: LabelId, show_moved: 
     ctx.mock_get_messages()
         .respond_with(vec![message.metadata.clone()])
         .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -1490,7 +1473,6 @@ mod rebase_messages {
         let message_2 = msg_data.1[0].clone();
 
         mk_mocks(&ctx, &message_1, &message_2).await;
-        ctx.catch_all().await;
 
         (ctx, user_ctx, message_1, message_2)
     }
@@ -2018,7 +2000,6 @@ mod rebase_conversations {
             .unwrap();
 
         mk_mocks(&ctx, &conv1, &conv2).await;
-        ctx.catch_all().await;
         (ctx, user_ctx, conv1, conv2)
     }
 

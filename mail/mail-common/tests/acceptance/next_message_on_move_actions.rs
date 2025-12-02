@@ -63,7 +63,6 @@ async fn test_enable_next_message_on_move() {
     ctx.mock_put_next_message_on_move(success_response_enabled(), expected_request, 1)
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let initial_settings = MailSettings::get_or_default(&tether).await;
@@ -103,7 +102,6 @@ async fn test_disable_next_message_on_move() {
     ctx.mock_put_next_message_on_move(success_response_disabled(), expected_request, 1)
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let initial_settings = MailSettings::get_or_default(&tether).await;
@@ -142,7 +140,6 @@ async fn test_next_message_on_move_api_failure() {
     ctx.mock_put_next_message_on_move(error_response(), expected_request, 4)
         .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     MailSettings::action_update_next_message_on_move(user_ctx.action_queue(), true)

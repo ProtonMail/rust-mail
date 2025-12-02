@@ -124,7 +124,6 @@ async fn event_fetches_missing_dependencies() {
         .mock_get_address(missing_address.clone())
         .await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_context = ctx.mail_user_context().await;
 

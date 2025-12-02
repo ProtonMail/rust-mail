@@ -49,7 +49,7 @@ async fn initial_registration() {
         1,
     )
     .await;
-    ctx.catch_all().await;
+
     let core_ctx = ctx.context();
 
     registered_device_task_step(
@@ -99,8 +99,6 @@ async fn initial_registration_when_device_key_already_exist_in_keychain() {
         1,
     )
     .await;
-
-    ctx.catch_all().await;
 
     let core_ctx = ctx.context();
 
@@ -162,7 +160,7 @@ async fn test_device_token_changed() {
         1,
     )
     .await;
-    ctx.catch_all().await;
+
     let core_ctx = ctx.context();
 
     // Initial registration
@@ -200,7 +198,6 @@ async fn test_device_token_changed() {
         1,
     )
     .await;
-    ctx.catch_all().await;
 
     // Registration token changed
     registered_device_task_step(
@@ -250,7 +247,7 @@ async fn register_more_than_one_session() {
         2,
     )
     .await;
-    ctx.catch_all().await;
+
     let core_ctx = ctx.context();
 
     registered_device_task_step(
@@ -300,7 +297,7 @@ async fn register_new_session() {
         1,
     )
     .await;
-    ctx.catch_all().await;
+
     let core_ctx = ctx.context();
 
     registered_device_task_step(
@@ -332,7 +329,6 @@ async fn register_new_session() {
         1,
     )
     .await;
-    ctx.catch_all().await;
 
     registered_device_task_step(
         core_ctx,

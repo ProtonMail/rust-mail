@@ -177,7 +177,6 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     ctx.mock_get_conversations(conversations, 3..5).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -278,7 +277,6 @@ async fn conversation_scroller_also_fetch_message_metadata() {
     ctx.mock_get_conversations(conversations, 1..=2).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -346,7 +344,6 @@ async fn test_conversation_mail_scroller_try_to_read_one_item_from_api_when_it_d
     ctx.mock_get_conversations(vec![], 3..5).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -462,7 +459,6 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     mock_api_forbidden(&ctx).await;
-    ctx.catch_all().await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
@@ -537,7 +533,6 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
@@ -590,7 +585,6 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     data.save_to_database(&mut tether).await;
 
     mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
@@ -637,7 +631,6 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     data.save_to_database(&mut tether).await;
 
     mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
@@ -764,7 +757,6 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
 
     // Mock offline
     mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
 
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = 150;
@@ -974,7 +966,6 @@ async fn test_conversation_mail_scroller_database_refresh_will_not_triggers_fetc
 
     // Mock offline to use cached data
     mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
 
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = 3; // Less than page_size (10)
@@ -1034,7 +1025,6 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_sma
 
     // Mock offline to use cached data
     mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
 
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = 3; // Less than page_size (10)
@@ -1096,7 +1086,6 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_lar
 
     // Mock offline to use cached data
     mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
 
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = 15;
@@ -1169,8 +1158,6 @@ async fn snoozed_conversations() {
         tether.tx(async |tx| conv.save(tx).await).await.unwrap();
     }
 
-    ctx.catch_all().await;
-
     // ---
 
     let mut scroller = TestScroller::conversations(&user_ctx, label.id(), 2)
@@ -1199,7 +1186,6 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
 
     // Mock offline to use cached data
     mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
@@ -1249,7 +1235,6 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
 
     // Set up mocks
     mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
 
     // Create scroller with SnoozeTime ordering
     let mut test_scroller = TestScroller::conversations(&user_ctx, local_label_id, page_size)
@@ -1355,7 +1340,6 @@ async fn test_conversation_mail_scroller_fetch_new() {
     ctx.mock_get_conversations(conversations, 1).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -1409,7 +1393,6 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
         .respond_with(vec![])
         .await;
     //mock_get_conversations_page(&ctx, vec![], &test_conv_id, 1).await;
-    ctx.catch_all().await;
 
     // Update the inbox label to have all conversations
     let mut counters = ConversationCounters::new(local_label_id);
@@ -1534,7 +1517,6 @@ async fn test_conversation_mail_scroller_reads_non_empty_folder_for_the_first_ti
 
     ctx.mock_get_conversations(api_page, 4..=6).await;
     ctx.mock_ping_success().await;
-    ctx.catch_all().await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
@@ -1624,7 +1606,6 @@ async fn test_conversation_mail_scroller_handles_stale_data_in_inbox_on_next_and
         .await;
 
     ctx.mock_ping_success().await;
-    ctx.catch_all().await;
 
     // we should get an update on the first fetch_more in Inbox despite the data being stale
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
@@ -1687,7 +1668,6 @@ async fn test_conversation_mail_scroller_handles_stale_data_in_trash_on_next_and
         .respond_with(vec![])
         .await;
     ctx.mock_ping_success().await;
-    ctx.catch_all().await;
 
     let local_label_id = SystemLabel::Trash.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
@@ -1736,7 +1716,6 @@ async fn test_conversation_mail_scroller_handles_stale_data_in_trash_on_next_and
     })
     .await;
     ctx.mock_ping_success().await;
-    ctx.catch_all().await;
 
     test_scroller.fetch_more_and_wait().await.unwrap(); // 1st fetch_more
     test_scroller
@@ -1785,7 +1764,6 @@ async fn test_conversation_mail_scroller_change_label() {
         .respond_with(vec![])
         .await;
     ctx.mock_ping_success().await;
-    ctx.catch_all().await;
 
     // we should get an update on the first fetch_more in Inbox despite the data being stale
     let inbox_local_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
@@ -1875,7 +1853,6 @@ async fn test_conversation_mail_scroller_change_include() {
         .respond_with(vec![])
         .await;
     ctx.mock_ping_success().await;
-    ctx.catch_all().await;
 
     // we should get an update on the first fetch_more in Inbox despite the data being stale
     let almost_all_mail_local_id = SystemLabel::AlmostAllMail
@@ -1950,7 +1927,6 @@ async fn test_conversation_mail_scroller_end_cursor_is_not_pointing_to_any_eleme
     setup_api_sync_previous_page(&ctx, "myconv_100", None, &remote_label_id, 0).await;
     // We will only run first page requests
     ctx.mock_get_conversations(vec![], 3).await;
-    ctx.catch_all().await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);

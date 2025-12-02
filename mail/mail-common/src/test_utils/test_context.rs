@@ -15,8 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 use tracing::info;
-use wiremock::matchers::any;
-use wiremock::{Mock, MockServer, Request};
+use wiremock::MockServer;
 
 pub struct MailTestContext {
     pub core_test_context: Arc<TestContext>,
@@ -163,45 +162,6 @@ impl MailTestContext {
         ctx.queues().terminate();
 
         Some(ctx)
-    }
-
-    /// Set up a catch-all mock for the mock server.
-    ///
-    /// Calls to this function need to come at the END of the test setup, AFTER
-    /// all other mocks have been set up. This will ensure that any unconfigured
-    /// calls will cause the test to fail.
-    ///
-    /// It is unfortunately not possible to use the [`Mock::with_priority()`]
-    /// method to set this up by default as a lower-priority expectation and
-    /// establish a catch-all in that way.
-    ///
-    #[function_name::named]
-    pub async fn catch_all(&self) {
-        // If there are any unconfigured calls, we will panic because it's not what
-        // we expect to happen, so the test should fail
-        Mock::given(any())
-            .respond_with(|request: &Request| {
-                panic!(
-                    "Received unexpected {} request\n  Path: {}{}\n  Headers:\n{}\n  Body: {}\n",
-                    request.method,
-                    request.url.path(),
-                    request
-                        .url
-                        .query()
-                        .map(|query| format!("?{query}"))
-                        .unwrap_or_default(),
-                    request
-                        .headers
-                        .iter()
-                        .map(|header| format!("    {}: {:?}", header.0, header.1))
-                        .collect::<Vec<String>>()
-                        .join("\n"),
-                    String::from_utf8_lossy(&request.body)
-                );
-            })
-            .named(function_name!())
-            .mount(self.mock_server())
-            .await;
     }
 }
 

@@ -76,7 +76,6 @@ async fn action_label_as_without_archive() {
         .await;
     ctx.mock_unlabel_conversation(&label3_id, vec![conversation4.id.clone()], vec![])
         .await;
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mailbox = Mailbox::with_remote_id(
@@ -295,8 +294,6 @@ async fn action_label_as_with_archive() {
         ctx.mock_unlabel_conversation(&label3_id, vec![id], vec![])
             .await;
     }
-
-    ctx.catch_all().await;
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -615,7 +612,6 @@ mod rebase {
             .unwrap()
             .unwrap();
         mk_mocks(&ctx, &conv1, &conv2).await;
-        ctx.catch_all().await;
 
         (ctx, user_ctx, conv1, conv2)
     }

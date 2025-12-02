@@ -39,7 +39,6 @@ async fn change_sender_address() {
     params.addresses.push(new_address.clone());
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -137,7 +136,6 @@ async fn change_sender_address_with_alias() {
     let old_address = params.addresses.first().cloned().unwrap();
     params.addresses.push(new_address.clone());
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     // Create message and relevant data

@@ -79,7 +79,6 @@ async fn bulk_unread_status_existing_messages(unread_states: Vec<bool>, expected
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_messages().respond_with(messages).await;
-    ctx.catch_all().await;
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -140,7 +139,6 @@ async fn bulk_unread_status_mixed_existing_and_nonexistent() {
     ctx.mock_get_messages()
         .respond_with(existing_messages)
         .await;
-    ctx.catch_all().await;
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -205,7 +203,6 @@ async fn bulk_unread_status_preserves_order() {
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_messages().respond_with(messages).await;
-    ctx.catch_all().await;
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -271,7 +268,6 @@ async fn bulk_unread_status_with_duplicates() {
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_messages().respond_with(messages).await;
-    ctx.catch_all().await;
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -320,7 +316,6 @@ async fn bulk_unread_status_ignores_deleted_messages() {
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_messages().respond_with(vec![message]).await;
-    ctx.catch_all().await;
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 

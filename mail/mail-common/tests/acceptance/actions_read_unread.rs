@@ -129,7 +129,6 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     for id in expected_to_mark {
         ctx.mock_mark_conversation_read(vec![id], vec![]).await;
     }
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -209,7 +208,6 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
         ctx.mock_mark_conversation_unread(vec![id], LabelId::inbox(), vec![])
             .await;
     }
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -388,7 +386,6 @@ mod rebase {
             .unwrap();
 
         mk_mocks(&ctx, &conversations).await;
-        ctx.catch_all().await;
 
         (ctx, user_ctx, conversations)
     }

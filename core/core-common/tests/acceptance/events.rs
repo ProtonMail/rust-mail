@@ -61,7 +61,6 @@ async fn test_contact_email_events_fetch_missing_contact_dependencies() {
     };
 
     ctx.mock_get_full_contact(missing_contact.clone()).await;
-    ctx.catch_all().await;
 
     let contact_email_events = vec![
         ContactEmailEvent {
@@ -138,8 +137,6 @@ async fn test_contact_email_events_ignore_existing_contacts() {
         last_used_time: 0.into(),
         name: "Existing Contact Email".to_owned(),
     };
-
-    ctx.catch_all().await;
 
     let contact_email_event = ContactEmailEvent {
         remote_id: contact_email.remote_id.clone().unwrap(),

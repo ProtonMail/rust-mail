@@ -61,8 +61,6 @@ async fn sidebar_system_labels(
     ))
     .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     let stash = user_ctx.user_stash();

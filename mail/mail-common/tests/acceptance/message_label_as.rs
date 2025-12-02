@@ -96,7 +96,6 @@ async fn label_as_without_archive() {
         vec![],
     )
     .await;
-    ctx.catch_all().await;
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -280,7 +279,6 @@ async fn label_as_with_archive() {
     )
     .await;
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mailbox = Mailbox::with_remote_id(
@@ -533,7 +531,6 @@ mod rebase {
             .clone();
 
         mk_mocks(&ctx, &message_1, &message_2).await;
-        ctx.catch_all().await;
 
         (ctx, user_ctx, message_1, message_2)
     }

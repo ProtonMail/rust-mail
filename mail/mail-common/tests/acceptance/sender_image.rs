@@ -37,7 +37,6 @@ async fn get_sender_image() {
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_get_image_for_conversation(b"abcdef".to_vec())
         .await;
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     // Create a mailbox
