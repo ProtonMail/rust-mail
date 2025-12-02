@@ -5408,13 +5408,11 @@ dependencies = [
  "async-trait",
  "indexmap 2.11.0",
  "mockall",
- "proton-task-service",
  "serde",
  "serde_json",
  "serde_with",
  "thiserror 1.0.69",
  "tokio",
- "tokio-util",
  "tracing",
 ]
 

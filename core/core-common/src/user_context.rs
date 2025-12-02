@@ -180,8 +180,12 @@ impl UserContext {
                         .with_cyclic_service(move |weak_ref: Weak<UserContext>| {
                             let event_ctx = CoreEventLoopContext::from(weak_ref);
                             let event_loop = EventPoll::new(
-                                context_cloned.task_service().task_service(),
-                                cancellation_token_cloned,
+                                move |fut| {
+                                    context_cloned
+                                        .task_service()
+                                        .task_service()
+                                        .spawn_cancellable(cancellation_token_cloned, fut);
+                                },
                                 event_ctx.boxed(),
                                 event_ctx.boxed(),
                             );

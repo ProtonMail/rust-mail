@@ -4,21 +4,29 @@ use crate::subscriber::{RawSubscriber, TypedSubscribers};
 use crate::{Event, EventId, EventLoopError, Provider, RawEvent, Subscriber};
 use anyhow::{Context, anyhow};
 use indexmap::{IndexMap, map::Entry};
-use proton_task_service::TaskService;
 use std::any::{Any, TypeId};
+use std::pin::Pin;
 use tokio::sync::{mpsc, oneshot};
-use tokio_util::sync::CancellationToken;
 use tracing::{self, Instrument, Level, debug, error, info};
 
 pub struct EventPoll {
     tx: mpsc::Sender<EventPollActorMessage>,
 }
 
+pub trait TaskSpawner {
+    fn spawn(self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>);
+}
+
+impl<T: FnOnce(Pin<Box<dyn Future<Output = ()> + Send + 'static>>)> TaskSpawner for T {
+    fn spawn(self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) {
+        self(task);
+    }
+}
+
 impl EventPoll {
     #[must_use]
     pub fn new(
-        task_service: &TaskService,
-        cancellation_token: CancellationToken,
+        task_spawner: impl TaskSpawner,
         store: Box<dyn Store>,
         provider: Box<dyn Provider>,
     ) -> Self {
@@ -34,9 +42,9 @@ impl EventPoll {
             subscribers: IndexMap::new(),
         };
 
-        task_service.spawn_cancellable(cancellation_token, async move {
+        task_spawner.spawn(Box::pin(async move {
             actor.run().await;
-        });
+        }));
 
         Self { tx }
     }
@@ -669,11 +677,10 @@ mod tests {
             }
         }
 
-        let task_service = TaskService::new(tokio::runtime::Handle::current()).unwrap();
-        let cancel_token = CancellationToken::new();
         let target = EventPoll::new(
-            &task_service,
-            cancel_token.clone(),
+            |task| {
+                tokio::spawn(task);
+            },
             Box::new(InMemoryStore::default()),
             Box::new(MockProvider::new()),
         );
