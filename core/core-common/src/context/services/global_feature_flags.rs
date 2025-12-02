@@ -230,12 +230,12 @@ impl Service for FeatureFlagsService {
                     let last_updated = Instant::now();
                     loop {
                         debug!("Going to sleep");
-                        if let Err(error) = event_stream
+                        if let Ok(Err(error)) = event_stream
                             .next()
                             .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
                             .await
                         {
-                            error!(%error, "Failed to receive event");
+                            error!(?error, "Failed to receive event");
                             return;
                         }
                         debug!(
