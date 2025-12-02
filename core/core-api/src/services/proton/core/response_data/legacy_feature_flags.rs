@@ -1,3 +1,5 @@
+//! Link to API docs: <https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Feature/operation/get_core-v4-features>
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -17,13 +19,19 @@ pub struct LegacyFeatureFlag {
 pub struct LegacyFeatureFlagMetadata {
     pub code: String,
 
+    // Even though Proton API docs (state from 12.2025) say that those
+    // fields are required - in practice we are getting responses without them.
+    #[serde(default)]
     pub global: bool,
 
+    #[serde(default)]
     pub writable: bool,
 
-    pub expiration_time: u64,
+    #[serde(default)]
+    pub expiration_time: Option<u64>,
 
-    pub update_time: u64,
+    #[serde(default)]
+    pub update_time: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

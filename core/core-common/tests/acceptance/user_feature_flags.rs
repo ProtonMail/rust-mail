@@ -955,8 +955,8 @@ fn test_legacy_boolean_flag_with_expiration(
             code: code.to_string(),
             global: false,
             writable,
-            expiration_time: expiration_time.as_u64(),
-            update_time: 0,
+            expiration_time: Some(expiration_time.as_u64()),
+            update_time: None,
         },
         variant: LegacyFeatureFlagVariant::Boolean(Value {
             value: enabled,
@@ -971,8 +971,8 @@ fn test_legacy_string_flag(code: &str, value: &str) -> LegacyFeatureFlag {
             code: code.to_string(),
             global: false,
             writable: false,
-            expiration_time: 0,
-            update_time: 0,
+            expiration_time: None,
+            update_time: None,
         },
         variant: LegacyFeatureFlagVariant::String(Value {
             value: value.to_string(),
@@ -987,8 +987,8 @@ fn test_legacy_integer_flag(code: &str, value: i32) -> LegacyFeatureFlag {
             code: code.to_string(),
             global: false,
             writable: false,
-            expiration_time: 0,
-            update_time: 0,
+            expiration_time: None,
+            update_time: None,
         },
         variant: LegacyFeatureFlagVariant::Integer(RangedValue {
             value,

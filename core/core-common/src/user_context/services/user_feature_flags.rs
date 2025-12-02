@@ -72,7 +72,7 @@ impl UserFeatureFlagsService {
         modify_time: UnixTimestamp,
     ) {
         tracing::debug!(
-            "Fetched {} featured flags from unleash API",
+            "Fetched {} user featured flags from unleash API",
             response.toggles.len()
         );
         for toggle in response.toggles {
@@ -104,7 +104,11 @@ impl UserFeatureFlagsService {
         let boolean_features = api_flags
             .into_iter()
             .filter(|feature| {
-                let expiration_time: UnixTimestamp = feature.metadata.expiration_time.into();
+                let Some(expiration_time) =
+                    feature.metadata.expiration_time.map(UnixTimestamp::from)
+                else {
+                    return true;
+                };
                 expiration_time >= now
             })
             .filter_map(|feature| {
@@ -146,7 +150,6 @@ impl UserFeatureFlagsService {
         modify_time: UnixTimestamp,
     ) -> CoreContextResult<()> {
         let response = api.get_unleash_feature_flags().await?;
-
         let mut tether = stash.connection().await?;
         let mut flags = Self::fetch_from_cache(&tether, UserFeatureFlagSource::Unleash).await;
 
