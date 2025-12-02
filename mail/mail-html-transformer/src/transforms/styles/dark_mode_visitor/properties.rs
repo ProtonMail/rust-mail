@@ -15,6 +15,7 @@ use super::colors::{ColorVisitor, ShouldModifyTransparentColors};
 const BACKGROUND_COLOR_RELATED_PROPERTIES: &[PropertyId] = &[
     PropertyId::Background, // Shorthand
     PropertyId::BackgroundColor,
+    PropertyId::BackgroundImage, // While image should not usually matter, some newsletters are using linear gradients with colors.
     PropertyId::TextShadow,
     PropertyId::BoxShadow(VendorPrefix::all()),
     PropertyId::Border, // Shorthand
