@@ -108,7 +108,7 @@ pub struct TestContext {
     pub tmp_dir: TempDir,
     pub core_account: CoreAccount,
     pub core_session: CoreSession,
-    pub mock_web_server: Arc<MockServer>,
+    pub mock_web_server: MockServer,
     key: SessionEncryptionKey,
 }
 
@@ -131,6 +131,7 @@ pub fn test_network_monitor_service_config() -> proton_network_monitor_service::
         },
     }
 }
+
 impl TestContext {
     #[must_use]
     pub fn context(&self) -> &Context {
@@ -176,7 +177,7 @@ impl TestContext {
                 .with(layer().with_test_writer()),
         );
 
-        let mock_web_server = Arc::new(MockServer::start().await);
+        let mock_web_server = MockServer::start().await;
         mock_auth_endpoints(&mock_web_server).await;
         let tmp_dir = TempDir::new().expect("failed to create temp dir");
         info!("CORE TMP DIR = {:?}", tmp_dir.path());

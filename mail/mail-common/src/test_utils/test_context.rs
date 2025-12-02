@@ -8,44 +8,23 @@ use proton_core_api::auth::UserKeySecret;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::UserId;
 use proton_core_common::UserDatabaseInitializer;
-use proton_core_common::db::account::{CoreAccount, CoreSession};
-
 use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
 use proton_event_loop::subscriber::SubscriberResult;
-pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 use tracing::info;
-use wiremock::MockServer;
 use wiremock::matchers::any;
-use wiremock::{Mock, Request};
+use wiremock::{Mock, MockServer, Request};
 
-/// Test context for mail tests.
-///
-/// This struct provides a test context with a handcrafted new session, so that
-/// we can bypass authentication. It also spins up a mock server.
-///
-/// TODO: Remove more shared code as part of ET-1381. Use `TestContext` instead.
-#[allow(dead_code)]
 pub struct MailTestContext {
     pub core_test_context: Arc<TestContext>,
     pub mail_context: Arc<MailContext>,
-    pub mock_web_server: Arc<MockServer>,
+
+    #[allow(dead_code)]
     tmp_dir: TempDir,
-    core_account: CoreAccount,
-    core_session: CoreSession,
 }
-
-impl Deref for MailTestContext {
-    type Target = TestContext;
-    fn deref(&self) -> &Self::Target {
-        &self.core_test_context
-    }
-}
-
-impl BaseTestContext for MailTestContext {}
 
 impl MailTestContext {
     #[must_use]
@@ -63,12 +42,10 @@ impl MailTestContext {
         &self.mock_web_server
     }
 
-    /// Create and initialize test context.
     pub async fn new() -> Self {
         Self::_new(None, None).await
     }
 
-    /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
     pub async fn with_user_secret_and_user_id(
         user_key_secret: UserKeySecret,
         user_id: UserId,
@@ -76,8 +53,6 @@ impl MailTestContext {
         Self::_new(Some(user_key_secret), Some(user_id)).await
     }
 
-    /// Function to create `MailContext` instance based on parameters provided.
-    /// TODO: ET-1381, decouple Mail database initialization.
     async fn _new(user_key_secret: Option<UserKeySecret>, user_id: Option<UserId>) -> Self {
         let initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>> =
             Some(vec![Box::new(MailUserDatabaseInitializer {})]);
@@ -101,17 +76,10 @@ impl MailTestContext {
         .await
         .expect("failed to create mail context");
 
-        let mock_web_server = core_test_context.mock_web_server.clone();
-        let core_account = core_test_context.core_account.clone();
-        let core_session = core_test_context.core_session.clone();
-
         Self {
             core_test_context,
             mail_context,
-            mock_web_server,
             tmp_dir,
-            core_account,
-            core_session,
         }
     }
 
@@ -125,7 +93,10 @@ impl MailTestContext {
     pub async fn uninitialized_mail_user_context(&self) -> Arc<MailUserContext> {
         let ctx = self
             .mail_context
-            .user_context_from_session(&self.core_session, NewMailUserContextOptions::skip_init())
+            .user_context_from_session(
+                &self.core_test_context.core_session,
+                NewMailUserContextOptions::skip_init(),
+            )
             .await
             .expect("failed to create user context");
 
@@ -150,7 +121,10 @@ impl MailTestContext {
     pub async fn mail_user_context(&self) -> Arc<MailUserContext> {
         let ctx = self
             .mail_context
-            .user_context_from_session(&self.core_session, NewMailUserContextOptions::default())
+            .user_context_from_session(
+                &self.core_test_context.core_session,
+                NewMailUserContextOptions::default(),
+            )
             .await
             .expect("failed to create user context");
 
@@ -164,7 +138,10 @@ impl MailTestContext {
     pub async fn try_mail_user_context(&self) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .mail_context
-            .user_context_from_session(&self.core_session, NewMailUserContextOptions::default())
+            .user_context_from_session(
+                &self.core_test_context.core_session,
+                NewMailUserContextOptions::default(),
+            )
             .await?;
 
         // Disable auto queue executor as we don't want these to interfere with our test execution.
@@ -178,7 +155,7 @@ impl MailTestContext {
     pub async fn initialized_mail_user_context(&self) -> Option<Arc<MailUserContext>> {
         let ctx = self
             .mail_context
-            .initialized_user_context_from_session(&self.core_session)
+            .initialized_user_context_from_session(&self.core_test_context.core_session)
             .await
             .unwrap()?;
 
@@ -225,6 +202,16 @@ impl MailTestContext {
             .named(function_name!())
             .mount(self.mock_server())
             .await;
+    }
+}
+
+impl BaseTestContext for MailTestContext {}
+
+impl Deref for MailTestContext {
+    type Target = TestContext;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core_test_context
     }
 }
 
