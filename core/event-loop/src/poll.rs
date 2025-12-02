@@ -1,10 +1,9 @@
 use crate::provider::ProviderResult;
 use crate::store::Store;
 use crate::subscriber::{RawSubscriber, TypedSubscribers};
-use crate::{Event, EventLoopError, Provider, RawEvent, Subscriber};
+use crate::{Event, EventId, EventLoopError, Provider, RawEvent, Subscriber};
 use anyhow::{Context, anyhow};
 use indexmap::{IndexMap, map::Entry};
-use proton_core_api::services::proton::EventId;
 use proton_task_service::TaskService;
 use std::any::{Any, TypeId};
 use tokio::sync::{mpsc, oneshot};
@@ -193,7 +192,7 @@ impl EventPollInternal {
             };
 
             info!("Received new event");
-            let new_event_id = raw_event.event_id().clone();
+            let new_event_id = raw_event.event_id();
             has_more = raw_event.has_more();
             info!("Applying {:?}", previous_event_id);
             if raw_event.is_refresh() {
@@ -226,7 +225,7 @@ impl EventPollInternal {
         last_event_id: &EventId,
     ) -> ProviderResult<Option<RawEvent>> {
         let event = provider.get_event(last_event_id).await?;
-        let new_event_id = event.event_id().clone();
+        let new_event_id = event.event_id();
 
         // If this is the same event ID, we don't have new events
         if new_event_id == *last_event_id {
@@ -635,8 +634,8 @@ mod tests {
         impl Event for FakeEvent {
             type Response = Self;
 
-            fn event_id(&self) -> &EventId {
-                &self.id
+            fn event_id(&self) -> EventId {
+                self.id.clone()
             }
 
             fn has_more(&self) -> bool {

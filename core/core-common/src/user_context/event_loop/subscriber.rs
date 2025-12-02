@@ -131,7 +131,7 @@ impl From<Weak<UserContext>> for CoreEventLoopContext {
 
 #[async_trait]
 impl Store for CoreEventLoopContext {
-    async fn load(&self) -> anyhow::Result<Option<EventId>> {
+    async fn load(&self) -> anyhow::Result<Option<proton_event_loop::EventId>> {
         let ctx = self.inner()?;
         let tether = ctx.stash().connection().await?;
         match tether
@@ -141,7 +141,7 @@ impl Store for CoreEventLoopContext {
             )
             .await
         {
-            Ok(value) => Ok(Some(value)),
+            Ok(value) => Ok(Some(value.into_inner().into())),
             Err(e) => {
                 if matches!(
                     e,
@@ -156,7 +156,7 @@ impl Store for CoreEventLoopContext {
         }
     }
 
-    async fn store(&self, id: EventId) -> anyhow::Result<()> {
+    async fn store(&self, id: proton_event_loop::EventId) -> anyhow::Result<()> {
         let ctx = self.inner()?;
         ctx.stash()
             .connection()
@@ -164,7 +164,7 @@ impl Store for CoreEventLoopContext {
             .tx(async |tx| {
                 tx.execute(
                     "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
-                    params![CORE_EVENT_TYPE_ID, id],
+                    params![CORE_EVENT_TYPE_ID, id.into_inner()],
                 )
                 .await?;
 
@@ -197,22 +197,29 @@ impl ProviderError for CoreEventProviderError {
 
 #[async_trait]
 impl Provider for CoreEventLoopContext {
-    async fn get_latest_event_id(&self) -> ProviderResult<EventId> {
+    async fn get_latest_event_id(&self) -> ProviderResult<proton_event_loop::EventId> {
         async {
             let ctx = self.inner()?;
-            Ok::<_, CoreEventProviderError>(ctx.session().get_events_latest().await?.event_id)
+            Ok::<_, CoreEventProviderError>(
+                ctx.session()
+                    .get_events_latest()
+                    .await?
+                    .event_id
+                    .into_inner()
+                    .into(),
+            )
         }
         .await
         .map_err(|e| -> Box<dyn ProviderError> { Box::new(e) })
     }
 
-    async fn get_event(&self, event_id: &EventId) -> ProviderResult<RawEvent> {
+    async fn get_event(&self, event_id: &proton_event_loop::EventId) -> ProviderResult<RawEvent> {
         async {
             let ctx = self.inner()?;
             let json_string = ctx
                 .session()
                 .get_event(
-                    event_id.clone(),
+                    event_id.clone().into_inner().into(),
                     proton_core_api::services::proton::GetEventOptions::all(),
                 )
                 .await?;

@@ -66,17 +66,50 @@ pub mod provider;
 pub mod store;
 pub mod subscriber;
 
+use std::fmt;
 // Re-export main types
 pub use poll::EventPoll;
 pub use provider::{Provider, ProviderError};
 pub use subscriber::{Subscriber, SubscriberError};
 
 use anyhow::Error as AnyhowError;
-use proton_core_api::services::proton::EventId;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_with::{BoolFromInt, serde_as};
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use thiserror::Error;
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct EventId(String);
+
+impl EventId {
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<T: Into<String>> From<T> for EventId {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+impl AsRef<str> for EventId {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
+impl fmt::Display for EventId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum EventLoopError {
@@ -108,7 +141,7 @@ pub trait Event: Clone + Debug + Eq + PartialEq + Send + Sync + 'static {
     type Response: Clone + Debug + for<'de> Deserialize<'de> + Eq + PartialEq + Send + Sync;
 
     /// Get the event id of the event.
-    fn event_id(&self) -> &EventId;
+    fn event_id(&self) -> EventId;
 
     /// Check if the event has more data.
     fn has_more(&self) -> bool;
@@ -141,8 +174,8 @@ impl RawEvent {
 impl Event for RawEvent {
     type Response = String;
 
-    fn event_id(&self) -> &EventId {
-        &self.meta.event_id
+    fn event_id(&self) -> EventId {
+        self.meta.event_id.clone().into_inner().into()
     }
 
     fn has_more(&self) -> bool {

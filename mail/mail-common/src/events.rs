@@ -102,8 +102,8 @@ pub struct MailEvent {
 impl Event for MailEvent {
     type Response = ApiMailEvent;
 
-    fn event_id(&self) -> &EventId {
-        &self.event_id
+    fn event_id(&self) -> proton_event_loop::EventId {
+        self.event_id.clone().into_inner().into()
     }
 
     fn has_more(&self) -> bool {

@@ -5408,7 +5408,6 @@ dependencies = [
  "async-trait",
  "indexmap 2.11.0",
  "mockall",
- "proton-core-api",
  "proton-task-service",
  "serde",
  "serde_json",

@@ -2,8 +2,7 @@
 
 use async_trait::async_trait;
 // avoid namespace conflicts
-use crate::RawEvent;
-use proton_core_api::services::proton::EventId;
+use crate::{EventId, RawEvent};
 
 pub trait ProviderError: std::error::Error + Send + Sync + 'static {
     fn is_network_failure(&self) -> bool;
