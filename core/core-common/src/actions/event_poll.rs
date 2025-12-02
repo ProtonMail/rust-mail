@@ -88,9 +88,11 @@ pub enum ActionEventLoopError {
 impl action::Error for ActionEventLoopError {
     fn can_requeue(&self) -> Option<ActionRequeueReason> {
         match self {
+            Self::EventLoop(EventLoopError::Provider(e)) if e.is_network_failure() => {
+                Some(ActionRequeueReason::NetworkFailed)
+            }
             Self::EventLoop(
-                EventLoopError::Provider(e)
-                | EventLoopError::Subscriber(_, SubscriberError::Api(e))
+                EventLoopError::Subscriber(_, SubscriberError::Api(e))
                 | EventLoopError::Refresh(_, SubscriberError::Api(e)),
             )
             | Self::Subscriber(SubscriberError::Api(e))

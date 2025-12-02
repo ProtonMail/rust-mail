@@ -1,9 +1,9 @@
+use crate::provider::ProviderResult;
 use crate::store::Store;
 use crate::subscriber::{RawSubscriber, TypedSubscribers};
 use crate::{Event, EventLoopError, Provider, RawEvent, Subscriber};
 use anyhow::{Context, anyhow};
 use indexmap::{IndexMap, map::Entry};
-use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
 use proton_task_service::TaskService;
 use std::any::{Any, TypeId};
@@ -224,7 +224,7 @@ impl EventPollInternal {
         &self,
         provider: &dyn Provider,
         last_event_id: &EventId,
-    ) -> Result<Option<RawEvent>, ApiServiceError> {
+    ) -> ProviderResult<Option<RawEvent>> {
         let event = provider.get_event(last_event_id).await?;
         let new_event_id = event.event_id().clone();
 

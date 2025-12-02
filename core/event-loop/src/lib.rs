@@ -68,12 +68,11 @@ pub mod subscriber;
 
 // Re-export main types
 pub use poll::EventPoll;
-pub use provider::Provider;
+pub use provider::{Provider, ProviderError};
 pub use subscriber::Subscriber;
 
 use crate::subscriber::SubscriberError;
 use anyhow::Error as AnyhowError;
-use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
 use serde::Deserialize;
 use serde_with::{BoolFromInt, serde_as};
@@ -87,7 +86,7 @@ pub enum EventLoopError {
     #[error("Failed to read/write from/to store: {0}")]
     Store(AnyhowError),
     #[error("Failed to retrieve event: {0}")]
-    Provider(#[from] ApiServiceError),
+    Provider(Box<dyn ProviderError>),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
     #[error("Subscriber with `{0}` name already exists")]
@@ -96,6 +95,12 @@ pub enum EventLoopError {
     Deserialize(AnyhowError),
     #[error("Failed to communicate with actor")]
     Actor,
+}
+
+impl From<Box<dyn ProviderError>> for EventLoopError {
+    fn from(err: Box<dyn ProviderError>) -> Self {
+        EventLoopError::Provider(err)
+    }
 }
 
 /// This represents an event returned by the API.

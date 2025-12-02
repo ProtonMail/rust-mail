@@ -22,8 +22,8 @@ use proton_core_common::ContactError;
 use proton_core_common::device_registration::RegisteredDeviceTaskError;
 use proton_core_common::models::LabelError;
 use proton_core_common::pin_code::PinError;
-use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
+use proton_event_loop::{EventLoopError, ProviderError};
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///
@@ -81,7 +81,7 @@ thread_local! {
 }
 
 #[cfg(feature = "proton_mail_error_log")]
-fn log_error<T: std::error::Error>(value: &T) -> LogStackGuard {
+fn log_error<T: std::error::Error + ?Sized>(value: &T) -> LogStackGuard {
     let guard = LogStackGuard::new();
     if guard.can_log() {
         tracing::error!("ProtonMailError::From: {value:?}");
@@ -90,7 +90,7 @@ fn log_error<T: std::error::Error>(value: &T) -> LogStackGuard {
 }
 
 #[cfg(not(feature = "proton_mail_error_log"))]
-fn log_error<T: std::error::Error>(_: &T) -> LogStackGuard {
+fn log_error<T: std::error::Error + ?Sized>(_: &T) -> LogStackGuard {
     LogStackGuard::new()
 }
 
@@ -660,6 +660,17 @@ impl From<EventLoopError> for ProtonMailError {
             EventLoopError::Register(_) => Self::Unexpected(Unexpected::Internal),
             EventLoopError::Deserialize(anyhow) => Self::from(anyhow),
             EventLoopError::Actor => Self::Unexpected(Unexpected::Internal),
+        }
+    }
+}
+
+impl From<Box<dyn ProviderError>> for ProtonMailError {
+    fn from(error: Box<dyn ProviderError>) -> Self {
+        let _guard = log_error(error.as_ref());
+        if error.is_network_failure() {
+            Self::Network
+        } else {
+            Self::Unexpected(Unexpected::Network)
         }
     }
 }

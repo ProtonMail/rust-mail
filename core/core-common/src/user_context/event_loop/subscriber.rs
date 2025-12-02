@@ -13,7 +13,7 @@ use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use proton_core_api::services::proton::{EventId, ProtonCore, UserId};
 use proton_event_loop::{
-    EventLoopError, RawEvent,
+    EventLoopError, ProviderError, RawEvent,
     provider::Provider,
     store::Store,
     subscriber::{Subscriber, SubscriberError},
@@ -105,6 +105,8 @@ use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::rebase::RebaseChangeSet;
+use proton_core_api::service::ApiServiceError;
+use proton_event_loop::provider::ProviderResult;
 
 const CORE_EVENT_TYPE_ID: &str = "proton-core-event";
 
@@ -181,29 +183,49 @@ impl Store for CoreEventLoopContext {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum CoreEventProviderError {
+    #[error(transparent)]
+    Api(#[from] ApiServiceError),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl ProviderError for CoreEventProviderError {
+    fn is_network_failure(&self) -> bool {
+        match self {
+            CoreEventProviderError::Api(e) => e.is_network_failure(),
+            CoreEventProviderError::Other(_) => false,
+        }
+    }
+}
+
 #[async_trait]
 impl Provider for CoreEventLoopContext {
-    async fn get_latest_event_id(
-        &self,
-    ) -> Result<EventId, proton_core_api::service::ApiServiceError> {
-        let ctx = self.inner()?;
-        Ok(ctx.session().get_events_latest().await?.event_id)
+    async fn get_latest_event_id(&self) -> ProviderResult<EventId> {
+        async {
+            let ctx = self.inner()?;
+            Ok::<_, CoreEventProviderError>(ctx.session().get_events_latest().await?.event_id)
+        }
+        .await
+        .map_err(|e| -> Box<dyn ProviderError> { Box::new(e) })
     }
 
-    async fn get_event(
-        &self,
-        event_id: &EventId,
-    ) -> Result<RawEvent, proton_core_api::service::ApiServiceError> {
-        let ctx = self.inner()?;
-        let json_string = ctx
-            .session()
-            .get_event(
-                event_id.clone(),
-                proton_core_api::services::proton::GetEventOptions::all(),
-            )
-            .await?;
+    async fn get_event(&self, event_id: &EventId) -> ProviderResult<RawEvent> {
+        async {
+            let ctx = self.inner()?;
+            let json_string = ctx
+                .session()
+                .get_event(
+                    event_id.clone(),
+                    proton_core_api::services::proton::GetEventOptions::all(),
+                )
+                .await?;
 
-        Ok(RawEvent::from_json(json_string)?)
+            Ok::<_, CoreEventProviderError>(RawEvent::from_json(json_string)?)
+        }
+        .await
+        .map_err(|e| -> Box<dyn ProviderError> { Box::new(e) })
     }
 }
 
