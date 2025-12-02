@@ -1,7 +1,7 @@
 use crate::store::Store;
 use crate::subscriber::{RawSubscriber, TypedSubscribers};
 use crate::{Event, EventLoopError, Provider, RawEvent, Subscriber};
-use anyhow::anyhow;
+use anyhow::{Context, anyhow};
 use indexmap::{IndexMap, map::Entry};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
@@ -120,7 +120,12 @@ impl EventPollInternal {
         store: &dyn Store,
         provider: &dyn Provider,
     ) -> Result<(), EventLoopError> {
-        if let Some(e) = store.load().await.map_err(EventLoopError::StoreRead)? {
+        if let Some(e) = store
+            .load()
+            .await
+            .context("Failed to load event id (init)")
+            .map_err(EventLoopError::Store)?
+        {
             info!("Last event id = {e}");
         } else {
             debug!("No event id in event store, retrieving latest");
@@ -129,7 +134,8 @@ impl EventPollInternal {
             store
                 .store(event_id)
                 .await
-                .map_err(EventLoopError::StoreWrite)?;
+                .context("Failed to store event id (init)")
+                .map_err(EventLoopError::Store)?;
         }
         Ok(())
     }
@@ -145,10 +151,15 @@ impl EventPollInternal {
         subscribers: &IndexMap<TypeId, Box<dyn RawSubscriber>>,
         max_events: usize,
     ) -> Result<(), EventLoopError> {
-        let Some(last_event_id) = store.load().await.map_err(EventLoopError::StoreRead)? else {
+        let Some(last_event_id) = store
+            .load()
+            .await
+            .context("Failed to load event id (poll)")
+            .map_err(EventLoopError::Store)?
+        else {
             let e = anyhow!("No EventId in store");
             error!("{e:?}");
-            return Err(EventLoopError::StoreRead(e));
+            return Err(EventLoopError::Store(e));
         };
 
         info!("Last Event Id = {last_event_id}");
@@ -193,9 +204,13 @@ impl EventPollInternal {
                     .await?;
             }
 
-            if let Err(e) = store.store(new_event_id.clone()).await {
+            if let Err(e) = store
+                .store(new_event_id.clone())
+                .await
+                .context("Failed to store event id (poll)")
+            {
                 error!("Failed to store new event id: {e}");
-                return Err(EventLoopError::StoreWrite(e));
+                return Err(EventLoopError::Store(e));
             }
             info!("New Event ID = {}", new_event_id);
             previous_event_id = new_event_id;

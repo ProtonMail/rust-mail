@@ -651,9 +651,7 @@ impl From<EventLoopError> for ProtonMailError {
     fn from(error: EventLoopError) -> Self {
         let _guard = log_error(&error);
         match error {
-            EventLoopError::StoreRead(anyhow) | EventLoopError::StoreWrite(anyhow) => {
-                Self::from(anyhow)
-            }
+            EventLoopError::Store(anyhow) => Self::from(anyhow),
             EventLoopError::Provider(api_service_error) => Self::from(api_service_error),
             EventLoopError::Subscriber(_string, subscriber_error) => Self::from(subscriber_error),
             EventLoopError::Refresh(_, _) => {

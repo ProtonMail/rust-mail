@@ -84,10 +84,8 @@ use thiserror::Error;
 pub enum EventLoopError {
     #[error("Subscriber ({0}) failed to apply refresh event: {1}")]
     Refresh(String, SubscriberError),
-    #[error("Failed to read from store: {0}")]
-    StoreRead(AnyhowError),
-    #[error("Failed to write store: {0}")]
-    StoreWrite(AnyhowError),
+    #[error("Failed to read/write from/to store: {0}")]
+    Store(AnyhowError),
     #[error("Failed to retrieve event: {0}")]
     Provider(#[from] ApiServiceError),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
