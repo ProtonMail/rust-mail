@@ -1407,6 +1407,16 @@ async fn already_sent_from_even_update() {
         .await
         .unwrap();
 
+    ctx.mock_send_draft_failure(
+        message.metadata.id.clone(),
+        ApiErrorInfo {
+            code: Mail::MessageAlreadySent as u32,
+            error: None,
+            details: None,
+        },
+    )
+    .await;
+
     draft.save().await.unwrap();
 
     // Save at least once so we can retrieve the message id.

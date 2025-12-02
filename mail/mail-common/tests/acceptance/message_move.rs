@@ -398,6 +398,9 @@ async fn move_into_trash_remove_label_and_mark_read() {
     ctx.mock_label_messages(&LabelId::inbox(), vec![message.metadata.id.clone()])
         .await;
 
+    ctx.mock_put_messages_unread(vec![message.metadata.id.clone()], vec![])
+        .await;
+
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.

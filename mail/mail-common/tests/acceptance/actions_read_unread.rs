@@ -120,7 +120,7 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
         .collect_vec();
     let expected_to_mark = conversations
         .iter()
-        .filter(|m| m.unread && m.to_mark)
+        .filter(|m| m.to_mark)
         .map(|m| m.id.into())
         .collect_vec();
 
