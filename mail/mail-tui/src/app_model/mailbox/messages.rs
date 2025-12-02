@@ -307,7 +307,7 @@ impl MessagesState {
         let index = conv_and_messages
             .messages
             .iter()
-            .position(|m| m.id() == conv_and_messages.message_id_to_open)
+            .position(|m| Some(m.id()) == conv_and_messages.focused_message_id)
             .unwrap_or(0);
 
         Ok((

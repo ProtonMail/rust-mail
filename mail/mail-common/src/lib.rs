@@ -85,8 +85,6 @@ pub enum AppError {
     AttachmentDecryptionIO(String),
     #[error("Conversation with ID {0} is not in given view {1}")]
     ConversationDoesNotHaveLabel(LocalConversationId, String),
-    #[error("Conversation with ID {0} has no messages")]
-    ConversationHasNoMessages(LocalConversationId),
     #[error("Conversation with ID {0} has no remote ID")]
     ConversationHasNoRemoteId(LocalConversationId),
     #[error("Conversation with ID {0} not found")]

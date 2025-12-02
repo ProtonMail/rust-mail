@@ -187,7 +187,6 @@ impl From<AppError> for ProtonMailError {
             AppError::AttachmentMissing(_string) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationDoesNotHaveLabel(_, _) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationNotFound(_) => Self::Unexpected(Unexpected::Database),
-            AppError::ConversationHasNoMessages(_) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationHasNoRemoteId(_local_id) => {
                 Self::Unexpected(Unexpected::Internal)
             }
