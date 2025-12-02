@@ -15,7 +15,7 @@ use proton_core_api::session::Session;
 use stash::orm::Model;
 use stash::stash::WatcherHandle;
 use stash::watcher::TableWatcher;
-use tracing::{debug, error, info, warn};
+use tracing::{Instrument, debug, error, info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FeatureFlagsBackgroundTask {
@@ -164,6 +164,7 @@ const REFRESH_TIMEOUT_SECS: u64 = 600; // 10 minutes
 impl Service for FeatureFlagsService {
     type Error = CoreContextError;
 
+    #[tracing::instrument(skip(self), name = "FeatureFlagsInit")]
     async fn init(&self) -> Result<(), Self::Error> {
         if self.background_task_setting == FeatureFlagsBackgroundTask::Disabled {
             warn!("Feature flags background task is disabled");
@@ -183,62 +184,73 @@ impl Service for FeatureFlagsService {
             error!("Failed to subscribe to OnEnterForegroundEvent");
             return Ok(());
         };
-        task_service.spawn(async move {
-            let Some(ctx) = self_clone.ctx.upgrade() else {
-                debug!("Could not upgrade context");
-                return;
-            };
-            let Ok(session) = ctx.new_api_session(None).await else {
-                error!("Failed to create API session");
-                return;
-            };
-            drop(ctx);
-            loop {
+        task_service.spawn(
+            async move {
                 let Some(ctx) = self_clone.ctx.upgrade() else {
                     debug!("Could not upgrade context");
                     return;
                 };
-                let user_contexts: Vec<_> = ctx
-                    .active_user_contexts
-                    .lock()
-                    .await
-                    .values()
-                    .cloned()
-                    // We clone and collect to release the lock ASAP.
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .filter_map(|ctx| ctx.upgrade())
-                    .collect();
-
+                let Ok(session) = ctx.new_api_session(None).await else {
+                    error!("Failed to create API session");
+                    return;
+                };
                 drop(ctx);
+                loop {
+                    let Some(ctx) = self_clone.ctx.upgrade() else {
+                        debug!("Could not upgrade context");
+                        return;
+                    };
+                    let user_contexts: Vec<_> = ctx
+                        .active_user_contexts
+                        .lock()
+                        .await
+                        .values()
+                        .cloned()
+                        // We clone and collect to release the lock ASAP.
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .filter_map(|ctx| ctx.upgrade())
+                        .collect();
 
-                if user_contexts.is_empty() {
-                    if let Err(error) = self_clone.fetch_and_update(&session).await {
-                        error!(%error, "Failed to refresh global feature flags");
-                    }
-                } else {
-                    for user_ctx in user_contexts {
-                        if let Err(error) = user_ctx.feature_flags().refresh().await {
-                            error!(%error, "Failed to refresh user feature flags");
+                    drop(ctx);
+
+                    if user_contexts.is_empty() {
+                        debug!("Refreshing global feature flags");
+                        if let Err(error) = self_clone.fetch_and_update(&session).await {
+                            error!(%error, "Failed to refresh global feature flags");
+                        }
+                    } else {
+                        for user_ctx in user_contexts {
+                            debug!("Refreshing user feature flags for {:?}", user_ctx.user_id());
+                            if let Err(error) = user_ctx.feature_flags().refresh().await {
+                                error!(%error, "Failed to refresh user feature flags");
+                            }
                         }
                     }
-                }
-                let last_updated = Instant::now();
-                loop {
-                    if let Err(error) = event_stream
-                        .next()
-                        .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
-                        .await
-                    {
-                        error!(%error, "Failed to receive event");
-                        return;
-                    }
-                    if last_updated.elapsed() >= Duration::from_secs(REFRESH_THROTTLE_SECS) {
-                        break;
+                    let last_updated = Instant::now();
+                    loop {
+                        debug!("Going to sleep");
+                        if let Err(error) = event_stream
+                            .next()
+                            .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
+                            .await
+                        {
+                            error!(%error, "Failed to receive event");
+                            return;
+                        }
+                        debug!(
+                            "Woke up after {}/{REFRESH_TIMEOUT_SECS} seconds",
+                            last_updated.elapsed().as_secs()
+                        );
+                        if last_updated.elapsed() >= Duration::from_secs(REFRESH_THROTTLE_SECS) {
+                            break;
+                        }
+                        debug!("Woken up before {REFRESH_THROTTLE_SECS} seconds. Ignoring...");
                     }
                 }
             }
-        });
+            .in_current_span(),
+        );
         Ok(())
     }
 }
