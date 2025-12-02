@@ -8,9 +8,10 @@ use crate::models::{
     DraftSendResultOrigin, Message, MetadataId,
 };
 use crate::{MailContextError, MailUserContext};
+use futures::future;
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, FactoryResult, Handler, Priority, Type, VersionConverter,
-    VersionConverterError, WriterGuard, deserialize,
+    VersionConverterError, WriterGuard, WriterGuardError, deserialize,
 };
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::consts::Mail;
@@ -25,6 +26,8 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Tether};
 use std::sync::Weak;
+use std::time::Duration;
+use tokio::time;
 use tracing::{debug, error, info, warn};
 
 /// Action to upload attachments for a given draft.
@@ -258,6 +261,7 @@ impl Handler for AttachmentUploadHandler {
         mut writer_guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::LostContext)?;
+
         let r = action
             .apply_remote_impl(&ctx, &mut writer_guard)
             .await
@@ -281,8 +285,10 @@ impl Handler for AttachmentUploadHandler {
         {
             error!("Failed to save attachment upload result: {e:?}");
         }
+
         r
     }
+
     async fn rebase_local(
         &self,
         _: ActionId,
@@ -310,7 +316,6 @@ impl AttachmentUpload {
             );
         };
 
-        // Get the attachment.
         let Some(mut attachment) =
             Attachment::find_by_id(self.attachment_id, writer_guard.tether()).await?
         else {
@@ -333,6 +338,7 @@ impl AttachmentUpload {
             self.new_disposition.clone(),
         )
         .await?;
+
         Ok(())
     }
 }
@@ -349,7 +355,6 @@ async fn encrypt_and_upload_attachment(
     writer_guard: &mut WriterGuard<'_>,
     new_disposition: Option<CombinedAttachmentDisposition>,
 ) -> Result<(), MailContextError> {
-    // Early check this requirement.
     let new_attachment_disposition = if let Some(new_disposition) = new_disposition {
         new_disposition
     } else {
@@ -390,8 +395,37 @@ async fn encrypt_and_upload_attachment(
         data_packet: encrypted_attachment.data,
     };
 
-    let response = match ctx.session().post_attachment(new_attachment_params).await {
+    let keep_alive = Box::pin(async {
+        loop {
+            time::sleep(Duration::from_secs(10)).await;
+
+            debug!(
+                "Upload takes a moment - running a no-op transaction to keep \
+                 the action alive",
+            );
+
+            writer_guard
+                .tx::<_, _, WriterGuardError>(async |_| Ok(()))
+                .await
+                .map_err(MailContextError::from)?;
+        }
+    });
+
+    let response = Box::pin(ctx.session().post_attachment(new_attachment_params));
+
+    let response = match future::select(keep_alive, response).await {
+        future::Either::Left((Ok(()), _)) => {
+            unreachable!(); // the task is `loop {}`-ing
+        }
+        future::Either::Left((Err(e), _)) => {
+            return Err(e);
+        }
+        future::Either::Right((response, _)) => response,
+    };
+
+    let response = match response {
         Ok(response) => response,
+
         Err(e) => {
             error!("Failed to upload attachment: {:?}", e);
             let Some(proton_error) = e.to_proton_error() else {
@@ -455,7 +489,6 @@ async fn encrypt_and_upload_attachment(
     debug!("Updating database state");
     writer_guard
         .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
-            // Mark attachment as uploaded.
             let Some(mut draft_attachment_metadata) =
                 DraftAttachmentMetadata::find_by_id(attachment.id(), tx).await?
             else {
@@ -463,18 +496,23 @@ async fn encrypt_and_upload_attachment(
                     AttachmentUploadError::AttachmentMetadataNotFound(attachment.id()).into(),
                 );
             };
+
             draft_attachment_metadata.set_uploaded_state();
+
             draft_attachment_metadata
                 .save(tx)
                 .await
                 .inspect_err(|e| error!("Failed to update draft attachment metadata: {e:?}"))?;
+
             attachment
                 .save(tx)
                 .await
                 .inspect_err(|e| error!("Failed to save attachment: {e:?}"))?;
+
             Ok(())
         })
         .await?;
+
     debug!("Done");
     Ok(())
 }
