@@ -632,6 +632,7 @@ impl Queue {
     ///
     /// Returns error if the db query failed or the action could not be found or the action
     /// is currently being executed.
+    #[tracing::instrument(skip_all, fields(id = ?action_id))]
     pub async fn cancel(&self, action_id: ActionId) -> QueuedResult<Vec<ActionId>> {
         let mut tether = self.shared.stash.connection().await?;
         let cancelled_actions = tether
@@ -859,7 +860,7 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
                 action
                     .set_action_state(&self.action)
                     .map_err(|e| StashError::Custom(anyhow::Error::new(e)))?;
-                action.save(tx).await?;
+                action.update_action_state(tx).await?;
                 Ok(())
             }
             .instrument(span),
