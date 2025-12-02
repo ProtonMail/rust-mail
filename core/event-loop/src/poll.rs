@@ -337,7 +337,7 @@ mod tests {
     use crate::EventMetadata;
     use crate::provider::MockProvider;
     use crate::store::{InMemoryStore, MockStore};
-    use crate::subscriber::{MockRawSubscriber, SubscriberError};
+    use crate::subscriber::{MockRawSubscriber, SubscriberResult};
     use async_trait::async_trait;
     use mockall::predicate;
     use serde::{Deserialize, Serialize};
@@ -657,11 +657,11 @@ mod tests {
                 "FakeSubscriber"
             }
 
-            async fn on_events(&self, _: &mut [FakeEvent]) -> Result<(), SubscriberError> {
+            async fn on_events(&self, _: &mut [FakeEvent]) -> SubscriberResult<()> {
                 todo!();
             }
 
-            async fn on_refresh(&self, _: &FakeEvent) -> Result<(), SubscriberError> {
+            async fn on_refresh(&self, _: &FakeEvent) -> SubscriberResult<()> {
                 todo!();
             }
 

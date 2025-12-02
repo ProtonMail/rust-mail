@@ -1,20 +1,14 @@
 use crate::{Event, EventLoopError, RawEvent};
 use async_trait::async_trait;
-use proton_core_api::service::ApiServiceError;
-use stash::stash::StashError;
 use std::any::Any;
-use thiserror::Error;
+use std::error::Error;
 use tracing::error;
 
-#[derive(Debug, Error)]
-pub enum SubscriberError {
-    #[error("{0:?}")]
-    Api(#[from] ApiServiceError),
-    #[error("{0:?}")]
-    StashError(#[from] StashError),
-    #[error("{0:?}")]
-    Other(#[from] anyhow::Error),
+pub trait SubscriberError: Error + Send + Sync + 'static {
+    fn is_network_failure(&self) -> bool;
 }
+
+pub type SubscriberResult<T> = Result<T, Box<dyn SubscriberError>>;
 
 /// Subscriber traits allow anyone to access the events from the event loop.
 #[async_trait]
@@ -23,10 +17,10 @@ pub trait Subscriber<T: Event>: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Handle incoming events.
-    async fn on_events(&self, event: &mut [T]) -> Result<(), SubscriberError>;
+    async fn on_events(&self, event: &mut [T]) -> SubscriberResult<()>;
 
     /// Handle refresh event
-    async fn on_refresh(&self, event: &T) -> Result<(), SubscriberError>;
+    async fn on_refresh(&self, event: &T) -> SubscriberResult<()>;
 
     /// Whether or not this should be cleaned up
     fn is_alive(&self) -> bool;

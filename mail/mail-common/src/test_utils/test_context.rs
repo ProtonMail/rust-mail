@@ -11,7 +11,7 @@ use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 
 use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
-use proton_event_loop::subscriber::SubscriberError;
+use proton_event_loop::subscriber::SubscriberResult;
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::ops::Deref;
 use std::sync::Arc;
@@ -268,7 +268,7 @@ pub trait MailUserContextTestExtension {
 
     async fn wait_for(&self, timeout: Option<Duration>, fun: impl Fn(ConnectionStatus) -> bool);
 
-    async fn apply_event(&self, event: MailEvent) -> Result<(), SubscriberError>;
+    async fn apply_event(&self, event: MailEvent) -> SubscriberResult<()>;
 }
 
 impl MailUserContextTestExtension for MailUserContext {
@@ -298,7 +298,7 @@ impl MailUserContextTestExtension for MailUserContext {
         }
     }
 
-    async fn apply_event(&self, event: MailEvent) -> Result<(), SubscriberError> {
+    async fn apply_event(&self, event: MailEvent) -> SubscriberResult<()> {
         use proton_event_loop::Subscriber;
         self.event_subscriber().on_events(&mut [event]).await
     }

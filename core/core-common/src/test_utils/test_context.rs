@@ -17,7 +17,7 @@ use proton_core_api::exports::RetryPolicy;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{AppVersion, Env, Server};
 use proton_core_api::session::{Endpoint, EnvId};
-use proton_event_loop::subscriber::SubscriberError;
+use proton_event_loop::subscriber::SubscriberResult;
 use proton_issue_reporter_service::{IssueReporter, NoopIssueReporter};
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
@@ -327,11 +327,11 @@ impl TestContext {
 
 #[allow(async_fn_in_trait)]
 pub trait UserContextTestExtension {
-    async fn apply_event(self: &Arc<Self>, event: CoreEvent) -> Result<(), SubscriberError>;
+    async fn apply_event(self: &Arc<Self>, event: CoreEvent) -> SubscriberResult<()>;
 }
 
 impl UserContextTestExtension for UserContext {
-    async fn apply_event(self: &Arc<Self>, event: CoreEvent) -> Result<(), SubscriberError> {
+    async fn apply_event(self: &Arc<Self>, event: CoreEvent) -> SubscriberResult<()> {
         use proton_event_loop::Subscriber;
         let subscriber = self.event_subscriber();
         subscriber.on_events(&mut [event]).await

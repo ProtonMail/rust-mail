@@ -69,9 +69,8 @@ pub mod subscriber;
 // Re-export main types
 pub use poll::EventPoll;
 pub use provider::{Provider, ProviderError};
-pub use subscriber::Subscriber;
+pub use subscriber::{Subscriber, SubscriberError};
 
-use crate::subscriber::SubscriberError;
 use anyhow::Error as AnyhowError;
 use proton_core_api::services::proton::EventId;
 use serde::Deserialize;
@@ -82,13 +81,13 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum EventLoopError {
     #[error("Subscriber ({0}) failed to apply refresh event: {1}")]
-    Refresh(String, SubscriberError),
+    Refresh(String, Box<dyn SubscriberError>),
     #[error("Failed to read/write from/to store: {0}")]
     Store(AnyhowError),
     #[error("Failed to retrieve event: {0}")]
     Provider(Box<dyn ProviderError>),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
-    Subscriber(String, SubscriberError),
+    Subscriber(String, Box<dyn SubscriberError>),
     #[error("Subscriber with `{0}` name already exists")]
     Register(&'static str),
     #[error("Failed to deserialize event: {0}")]

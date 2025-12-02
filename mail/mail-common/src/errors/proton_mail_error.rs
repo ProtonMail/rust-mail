@@ -675,15 +675,13 @@ impl From<Box<dyn ProviderError>> for ProtonMailError {
     }
 }
 
-impl From<SubscriberError> for ProtonMailError {
-    fn from(error: SubscriberError) -> Self {
-        let _guard = log_error(&error);
-        match error {
-            SubscriberError::Api(api_service_error) => Self::from(api_service_error),
-            SubscriberError::Other(_) => {
-                Self::Reason(MailErrorReason::EventReason(EventErrorReason::Subscriber))
-            }
-            SubscriberError::StashError(stash_error) => Self::from(stash_error),
+impl From<Box<dyn SubscriberError>> for ProtonMailError {
+    fn from(error: Box<dyn SubscriberError>) -> Self {
+        let _guard = log_error(error.as_ref());
+        if error.is_network_failure() {
+            Self::Network
+        } else {
+            Self::Reason(MailErrorReason::EventReason(EventErrorReason::Subscriber))
         }
     }
 }
