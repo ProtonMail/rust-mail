@@ -1,28 +1,21 @@
 use crate::provider::ProviderResult;
 use crate::store::Store;
-use crate::subscriber::RawSubscriber;
+use crate::v6::subscriber::SubscriberList;
 use crate::{EventId, EventLoopError, Provider, RawEvent};
 use anyhow::{Context, anyhow};
-use indexmap::IndexMap;
-use std::any::TypeId;
-use tracing::{self, Level, debug, error, info};
+use tracing::{debug, error, info};
 
-/// Collect events from the Proton Servers in a loop and publish the events to the subscribers.
-///
-/// This version requires the user to call the [`EventLoop::poll`] function each time they wish to
-/// iterate the loop.
 #[derive(Debug, Default)]
-pub(crate) struct EventPollInternal;
+pub(crate) struct EventPoller;
 
 pub(crate) const MAX_EVENTS_PER_POLL: usize = 50;
-impl EventPollInternal {
+impl EventPoller {
     #[must_use]
     pub fn new() -> Self {
         Self
     }
 
     /// Stores one event id if the [`Store`] does not contain an event.
-    #[tracing::instrument(name="event_initialize",level=Level::DEBUG, skip(self, store, provider))]
     pub async fn initialize(
         &self,
         store: &dyn Store,
@@ -51,12 +44,11 @@ impl EventPollInternal {
     /// Perform one iteration of the event loop with `RawSubscribers`, which consists of retrieving the latest events,
     /// publishing raw events to all registered subscribers and storing the event id for the next iteration.
     /// The execution of the loop is aborted on the first error.
-    #[tracing::instrument(name="event_poll_raw", level=Level::DEBUG, skip_all)]
-    pub(crate) async fn poll_raw(
+    pub(crate) async fn poll(
         &self,
         store: &dyn Store,
         provider: &dyn Provider,
-        subscribers: &IndexMap<TypeId, Box<dyn RawSubscriber>>,
+        subscribers: &dyn SubscriberList,
         max_events: usize,
     ) -> Result<(), EventLoopError> {
         let Some(last_event_id) = store
@@ -105,11 +97,9 @@ impl EventPollInternal {
             has_more = raw_event.has_more();
             info!("Applying {:?}", previous_event_id);
             if raw_event.is_refresh() {
-                self.publish_raw_refresh_to_subscribers(&raw_event, subscribers.values())
-                    .await?;
+                subscribers.on_refresh(Some(&raw_event)).await?;
             } else {
-                self.publish_raw_events_to_subscribers(&mut [raw_event], subscribers.values())
-                    .await?;
+                subscribers.on_event(&raw_event).await?;
             }
 
             if let Err(e) = store
@@ -143,38 +133,15 @@ impl EventPollInternal {
             Ok(Some(event))
         }
     }
-
-    async fn publish_raw_events_to_subscribers(
-        &self,
-        events: &mut [RawEvent],
-        subscribers: impl Iterator<Item = &Box<dyn RawSubscriber>>,
-    ) -> Result<(), EventLoopError> {
-        for subscriber in subscribers {
-            subscriber.on_raw_events(events).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn publish_raw_refresh_to_subscribers(
-        &self,
-        event: &RawEvent,
-        subscribers: impl Iterator<Item = &Box<dyn RawSubscriber>>,
-    ) -> Result<(), EventLoopError> {
-        for subscriber in subscribers {
-            subscriber.on_raw_refresh(event).await?;
-        }
-
-        Ok(())
-    }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::EventMetadata;
     use crate::provider::MockProvider;
     use crate::store::MockStore;
-    use crate::subscriber::MockRawSubscriber;
+    use crate::v6::subscriber::MockSubscriberList;
     use mockall::predicate;
 
     #[allow(clippy::too_many_lines)]
@@ -225,7 +192,7 @@ mod tests {
 
         let mut sequence = mockall::Sequence::new();
         let mut provider = MockProvider::new();
-        let mut subscriber = MockRawSubscriber::new();
+        let mut subscriber = MockSubscriberList::new();
         let mut store = MockStore::new();
 
         let event_id = event_id_1.clone();
@@ -246,11 +213,11 @@ mod tests {
         let event = raw_event_2.clone();
         let id = event_id_2.clone();
         subscriber
-            .expect_on_raw_events()
+            .expect_on_event()
             .once()
             .in_sequence(&mut sequence)
-            .with(predicate::function(move |v: &[RawEvent]| {
-                v[0].meta.event_id == id
+            .with(predicate::function(move |v: &RawEvent| {
+                v.meta.event_id == id
             }))
             .returning(|_| Ok(()));
         store
@@ -267,11 +234,11 @@ mod tests {
             .returning(move |_| Ok(event.clone()));
         let id = event_id_3.clone();
         subscriber
-            .expect_on_raw_events()
+            .expect_on_event()
             .once()
             .in_sequence(&mut sequence)
-            .with(predicate::function(move |v: &[RawEvent]| {
-                v[0].meta.event_id == id
+            .with(predicate::function(move |v: &RawEvent| {
+                v.meta.event_id == id
             }))
             .returning(|_| Ok(()));
         store
@@ -291,11 +258,11 @@ mod tests {
             .returning(move |_| Ok(event.clone()));
         let id = event_id_4.clone();
         subscriber
-            .expect_on_raw_events()
+            .expect_on_event()
             .once()
             .in_sequence(&mut sequence)
-            .with(predicate::function(move |v: &[RawEvent]| {
-                v[0].meta.event_id == id
+            .with(predicate::function(move |v: &RawEvent| {
+                v.meta.event_id == id
             }))
             .returning(|_| Ok(()));
         store
@@ -314,12 +281,11 @@ mod tests {
             .with(predicate::eq(event_id_4))
             .returning(move |_| Ok(event.clone()));
 
-        let evt_poll = EventPollInternal::new();
+        let evt_poll = EventPoller::new();
 
-        let mut subscribers: IndexMap<TypeId, Box<dyn RawSubscriber>> = IndexMap::new();
-        subscribers.insert(TypeId::of::<i32>(), Box::new(subscriber));
+        let subscribers: Box<dyn SubscriberList> = Box::new(subscriber);
         evt_poll
-            .poll_raw(&store, &provider, &subscribers, 10)
+            .poll(&store, &provider, subscribers.as_ref(), 10)
             .await
             .unwrap();
     }
@@ -351,7 +317,7 @@ mod tests {
 
         let mut sequence = mockall::Sequence::new();
         let mut provider = MockProvider::new();
-        let mut subscriber = MockRawSubscriber::new();
+        let mut subscriber = MockSubscriberList::new();
         let mut store = MockStore::new();
 
         let event_id = event_id_1.clone();
@@ -372,11 +338,11 @@ mod tests {
         let event = raw_event_2.clone();
         let id = event_id_2.clone();
         subscriber
-            .expect_on_raw_events()
+            .expect_on_event()
             .once()
             .in_sequence(&mut sequence)
-            .with(predicate::function(move |v: &[RawEvent]| {
-                v[0].meta.event_id == id
+            .with(predicate::function(move |v: &RawEvent| {
+                v.meta.event_id == id
             }))
             .returning(|_| Ok(()));
         store
@@ -393,11 +359,11 @@ mod tests {
             .returning(move |_| Ok(event.clone()));
         let id = event_id_3.clone();
         subscriber
-            .expect_on_raw_events()
+            .expect_on_event()
             .once()
             .in_sequence(&mut sequence)
-            .with(predicate::function(move |v: &[RawEvent]| {
-                v[0].meta.event_id == id
+            .with(predicate::function(move |v: &RawEvent| {
+                v.meta.event_id == id
             }))
             .returning(|_| Ok(()));
         store
@@ -407,12 +373,11 @@ mod tests {
             .with(predicate::eq(event_id_3.clone()))
             .returning(|_| Ok(()));
 
-        let evt_poll = EventPollInternal::new();
+        let evt_poll = EventPoller::new();
 
-        let mut subscribers: IndexMap<TypeId, Box<dyn RawSubscriber>> = IndexMap::new();
-        subscribers.insert(TypeId::of::<i32>(), Box::new(subscriber));
+        let subscribers: Box<dyn SubscriberList> = Box::new(subscriber);
         evt_poll
-            .poll_raw(&store, &provider, &subscribers, 1)
+            .poll(&store, &provider, subscribers.as_ref(), 1)
             .await
             .unwrap();
     }
@@ -454,7 +419,7 @@ mod tests {
             .in_sequence(&mut sequence)
             .returning(move || Ok(Some(event_id.clone())));
 
-        let evt_poll = EventPollInternal::new();
+        let evt_poll = EventPoller::new();
 
         evt_poll.initialize(&store, &provider).await.unwrap();
         evt_poll.initialize(&store, &provider).await.unwrap();
