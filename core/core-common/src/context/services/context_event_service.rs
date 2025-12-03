@@ -1,5 +1,7 @@
 use crate::CoreContextError;
-use crate::app_events::{OnEnterForegroundEvent, OnExitForegroundEvent, OnForceEventPollEvent};
+use crate::app_events::{
+    OnEnterForegroundEvent, OnExitForegroundEvent, OnForceEventPollEvent, OnUserContextMapChanged,
+};
 use crate::services::Service;
 use async_trait::async_trait;
 use proton_event_service::EventService;
@@ -34,6 +36,7 @@ impl Service for ContextEventService {
         self.event_service.register::<OnEnterForegroundEvent>();
         self.event_service.register::<OnExitForegroundEvent>();
         self.event_service.register::<OnForceEventPollEvent>();
+        self.event_service.register::<OnUserContextMapChanged>();
         Ok(())
     }
 }

@@ -1,6 +1,7 @@
 use super::CoreContextError;
 use super::registry::ServiceRegistry;
 use super::services::Service;
+
 use crate::datatypes::ApiConfig;
 use crate::os::KeyChain;
 use crate::{Context, Origin, UserDatabaseInitializer};
@@ -8,7 +9,6 @@ use indexmap::IndexMap;
 use proton_task_service::BackgroundAwareTaskService;
 use stash::stash::Stash;
 use std::any::TypeId;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
@@ -84,7 +84,7 @@ impl ContextBuilder {
 
             Context {
                 this: Weak::clone(this),
-                active_user_contexts: Mutex::new(HashMap::new()),
+                active_user_contexts: Mutex::default(),
                 origin,
                 user_db_path,
                 account_db_path,

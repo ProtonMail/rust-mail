@@ -23,3 +23,6 @@ pub struct OnExitForegroundEvent;
 
 #[derive(Debug, Copy, Clone)]
 pub struct OnForceEventPollEvent;
+
+#[derive(Debug, Clone, Copy)]
+pub struct OnUserContextMapChanged;
