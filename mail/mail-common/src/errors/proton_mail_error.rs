@@ -22,8 +22,8 @@ use proton_core_common::ContactError;
 use proton_core_common::device_registration::RegisteredDeviceTaskError;
 use proton_core_common::models::LabelError;
 use proton_core_common::pin_code::PinError;
-use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
+use proton_event_loop::{EventLoopError, ProviderError};
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///
@@ -81,7 +81,7 @@ thread_local! {
 }
 
 #[cfg(feature = "proton_mail_error_log")]
-fn log_error<T: std::error::Error>(value: &T) -> LogStackGuard {
+fn log_error<T: std::error::Error + ?Sized>(value: &T) -> LogStackGuard {
     let guard = LogStackGuard::new();
     if guard.can_log() {
         tracing::error!("ProtonMailError::From: {value:?}");
@@ -90,7 +90,7 @@ fn log_error<T: std::error::Error>(value: &T) -> LogStackGuard {
 }
 
 #[cfg(not(feature = "proton_mail_error_log"))]
-fn log_error<T: std::error::Error>(_: &T) -> LogStackGuard {
+fn log_error<T: std::error::Error + ?Sized>(_: &T) -> LogStackGuard {
     LogStackGuard::new()
 }
 
@@ -651,9 +651,7 @@ impl From<EventLoopError> for ProtonMailError {
     fn from(error: EventLoopError) -> Self {
         let _guard = log_error(&error);
         match error {
-            EventLoopError::StoreRead(anyhow) | EventLoopError::StoreWrite(anyhow) => {
-                Self::from(anyhow)
-            }
+            EventLoopError::Store(anyhow) => Self::from(anyhow),
             EventLoopError::Provider(api_service_error) => Self::from(api_service_error),
             EventLoopError::Subscriber(_string, subscriber_error) => Self::from(subscriber_error),
             EventLoopError::Refresh(_, _) => {
@@ -666,15 +664,24 @@ impl From<EventLoopError> for ProtonMailError {
     }
 }
 
-impl From<SubscriberError> for ProtonMailError {
-    fn from(error: SubscriberError) -> Self {
-        let _guard = log_error(&error);
-        match error {
-            SubscriberError::Api(api_service_error) => Self::from(api_service_error),
-            SubscriberError::Other(_) => {
-                Self::Reason(MailErrorReason::EventReason(EventErrorReason::Subscriber))
-            }
-            SubscriberError::StashError(stash_error) => Self::from(stash_error),
+impl From<Box<dyn ProviderError>> for ProtonMailError {
+    fn from(error: Box<dyn ProviderError>) -> Self {
+        let _guard = log_error(error.as_ref());
+        if error.is_network_failure() {
+            Self::Network
+        } else {
+            Self::Unexpected(Unexpected::Network)
+        }
+    }
+}
+
+impl From<Box<dyn SubscriberError>> for ProtonMailError {
+    fn from(error: Box<dyn SubscriberError>) -> Self {
+        let _guard = log_error(error.as_ref());
+        if error.is_network_failure() {
+            Self::Network
+        } else {
+            Self::Reason(MailErrorReason::EventReason(EventErrorReason::Subscriber))
         }
     }
 }

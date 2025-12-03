@@ -77,23 +77,28 @@ impl VersionConverter for EventPollVersionConverter {
 pub enum ActionEventLoopError {
     #[error(transparent)]
     EventLoop(#[from] EventLoopError),
-    #[error(transparent)]
-    Subscriber(#[from] SubscriberError),
+    #[error("{0}")]
+    Subscriber(Box<dyn SubscriberError>),
     #[error(transparent)]
     WriterGuard(#[from] WriterGuardError),
     #[error("Lost context")]
     LostContext,
 }
 
+impl From<Box<dyn SubscriberError>> for ActionEventLoopError {
+    fn from(e: Box<dyn SubscriberError>) -> Self {
+        ActionEventLoopError::Subscriber(e)
+    }
+}
+
 impl action::Error for ActionEventLoopError {
     fn can_requeue(&self) -> Option<ActionRequeueReason> {
         match self {
-            Self::EventLoop(
-                EventLoopError::Provider(e)
-                | EventLoopError::Subscriber(_, SubscriberError::Api(e))
-                | EventLoopError::Refresh(_, SubscriberError::Api(e)),
-            )
-            | Self::Subscriber(SubscriberError::Api(e))
+            Self::EventLoop(EventLoopError::Provider(e)) if e.is_network_failure() => {
+                Some(ActionRequeueReason::NetworkFailed)
+            }
+            Self::EventLoop(EventLoopError::Subscriber(_, e) | EventLoopError::Refresh(_, e))
+            | Self::Subscriber(e)
                 if e.is_network_failure() =>
             {
                 Some(ActionRequeueReason::NetworkFailed)

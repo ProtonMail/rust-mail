@@ -66,32 +66,61 @@ pub mod provider;
 pub mod store;
 pub mod subscriber;
 
+use std::fmt;
 // Re-export main types
 pub use poll::EventPoll;
-pub use provider::Provider;
-pub use subscriber::Subscriber;
+pub use provider::{Provider, ProviderError};
+pub use subscriber::{Subscriber, SubscriberError};
 
-use crate::subscriber::SubscriberError;
 use anyhow::Error as AnyhowError;
-use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::EventId;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_with::{BoolFromInt, serde_as};
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use thiserror::Error;
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct EventId(String);
+
+impl EventId {
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<T: Into<String>> From<T> for EventId {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+impl AsRef<str> for EventId {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
+impl fmt::Display for EventId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum EventLoopError {
     #[error("Subscriber ({0}) failed to apply refresh event: {1}")]
-    Refresh(String, SubscriberError),
-    #[error("Failed to read from store: {0}")]
-    StoreRead(AnyhowError),
-    #[error("Failed to write store: {0}")]
-    StoreWrite(AnyhowError),
+    Refresh(String, Box<dyn SubscriberError>),
+    #[error("Failed to read/write from/to store: {0}")]
+    Store(AnyhowError),
     #[error("Failed to retrieve event: {0}")]
-    Provider(#[from] ApiServiceError),
+    Provider(Box<dyn ProviderError>),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
-    Subscriber(String, SubscriberError),
+    Subscriber(String, Box<dyn SubscriberError>),
     #[error("Subscriber with `{0}` name already exists")]
     Register(&'static str),
     #[error("Failed to deserialize event: {0}")]
@@ -100,13 +129,19 @@ pub enum EventLoopError {
     Actor,
 }
 
+impl From<Box<dyn ProviderError>> for EventLoopError {
+    fn from(err: Box<dyn ProviderError>) -> Self {
+        EventLoopError::Provider(err)
+    }
+}
+
 /// This represents an event returned by the API.
 pub trait Event: Clone + Debug + Eq + PartialEq + Send + Sync + 'static {
     /// The API response type of the event.
     type Response: Clone + Debug + for<'de> Deserialize<'de> + Eq + PartialEq + Send + Sync;
 
     /// Get the event id of the event.
-    fn event_id(&self) -> &EventId;
+    fn event_id(&self) -> EventId;
 
     /// Check if the event has more data.
     fn has_more(&self) -> bool;
@@ -139,8 +174,8 @@ impl RawEvent {
 impl Event for RawEvent {
     type Response = String;
 
-    fn event_id(&self) -> &EventId {
-        &self.meta.event_id
+    fn event_id(&self) -> EventId {
+        self.meta.event_id.clone().into_inner().into()
     }
 
     fn has_more(&self) -> bool {

@@ -1,7 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
+use crate::EventId;
 use async_trait::async_trait;
-use proton_core_api::services::proton::EventId;
 
 /// This trait allows abstraction over how to store and load events. Note that this only stores the
 /// event `RemoteId`, you will need to ask the `Provider` for the actual event.

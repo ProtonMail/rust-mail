@@ -1,25 +1,32 @@
+use crate::provider::ProviderResult;
 use crate::store::Store;
 use crate::subscriber::{RawSubscriber, TypedSubscribers};
-use crate::{Event, EventLoopError, Provider, RawEvent, Subscriber};
-use anyhow::anyhow;
+use crate::{Event, EventId, EventLoopError, Provider, RawEvent, Subscriber};
+use anyhow::{Context, anyhow};
 use indexmap::{IndexMap, map::Entry};
-use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::EventId;
-use proton_task_service::TaskService;
 use std::any::{Any, TypeId};
+use std::pin::Pin;
 use tokio::sync::{mpsc, oneshot};
-use tokio_util::sync::CancellationToken;
 use tracing::{self, Instrument, Level, debug, error, info};
 
 pub struct EventPoll {
     tx: mpsc::Sender<EventPollActorMessage>,
 }
 
+pub trait TaskSpawner {
+    fn spawn(self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>);
+}
+
+impl<T: FnOnce(Pin<Box<dyn Future<Output = ()> + Send + 'static>>)> TaskSpawner for T {
+    fn spawn(self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) {
+        self(task);
+    }
+}
+
 impl EventPoll {
     #[must_use]
     pub fn new(
-        task_service: &TaskService,
-        cancellation_token: CancellationToken,
+        task_spawner: impl TaskSpawner,
         store: Box<dyn Store>,
         provider: Box<dyn Provider>,
     ) -> Self {
@@ -35,9 +42,9 @@ impl EventPoll {
             subscribers: IndexMap::new(),
         };
 
-        task_service.spawn_cancellable(cancellation_token, async move {
+        task_spawner.spawn(Box::pin(async move {
             actor.run().await;
-        });
+        }));
 
         Self { tx }
     }
@@ -120,7 +127,12 @@ impl EventPollInternal {
         store: &dyn Store,
         provider: &dyn Provider,
     ) -> Result<(), EventLoopError> {
-        if let Some(e) = store.load().await.map_err(EventLoopError::StoreRead)? {
+        if let Some(e) = store
+            .load()
+            .await
+            .context("Failed to load event id (init)")
+            .map_err(EventLoopError::Store)?
+        {
             info!("Last event id = {e}");
         } else {
             debug!("No event id in event store, retrieving latest");
@@ -129,7 +141,8 @@ impl EventPollInternal {
             store
                 .store(event_id)
                 .await
-                .map_err(EventLoopError::StoreWrite)?;
+                .context("Failed to store event id (init)")
+                .map_err(EventLoopError::Store)?;
         }
         Ok(())
     }
@@ -145,10 +158,15 @@ impl EventPollInternal {
         subscribers: &IndexMap<TypeId, Box<dyn RawSubscriber>>,
         max_events: usize,
     ) -> Result<(), EventLoopError> {
-        let Some(last_event_id) = store.load().await.map_err(EventLoopError::StoreRead)? else {
+        let Some(last_event_id) = store
+            .load()
+            .await
+            .context("Failed to load event id (poll)")
+            .map_err(EventLoopError::Store)?
+        else {
             let e = anyhow!("No EventId in store");
             error!("{e:?}");
-            return Err(EventLoopError::StoreRead(e));
+            return Err(EventLoopError::Store(e));
         };
 
         info!("Last Event Id = {last_event_id}");
@@ -182,7 +200,7 @@ impl EventPollInternal {
             };
 
             info!("Received new event");
-            let new_event_id = raw_event.event_id().clone();
+            let new_event_id = raw_event.event_id();
             has_more = raw_event.has_more();
             info!("Applying {:?}", previous_event_id);
             if raw_event.is_refresh() {
@@ -193,9 +211,13 @@ impl EventPollInternal {
                     .await?;
             }
 
-            if let Err(e) = store.store(new_event_id.clone()).await {
+            if let Err(e) = store
+                .store(new_event_id.clone())
+                .await
+                .context("Failed to store event id (poll)")
+            {
                 error!("Failed to store new event id: {e}");
-                return Err(EventLoopError::StoreWrite(e));
+                return Err(EventLoopError::Store(e));
             }
             info!("New Event ID = {}", new_event_id);
             previous_event_id = new_event_id;
@@ -209,9 +231,9 @@ impl EventPollInternal {
         &self,
         provider: &dyn Provider,
         last_event_id: &EventId,
-    ) -> Result<Option<RawEvent>, ApiServiceError> {
+    ) -> ProviderResult<Option<RawEvent>> {
         let event = provider.get_event(last_event_id).await?;
-        let new_event_id = event.event_id().clone();
+        let new_event_id = event.event_id();
 
         // If this is the same event ID, we don't have new events
         if new_event_id == *last_event_id {
@@ -322,7 +344,7 @@ mod tests {
     use crate::EventMetadata;
     use crate::provider::MockProvider;
     use crate::store::{InMemoryStore, MockStore};
-    use crate::subscriber::{MockRawSubscriber, SubscriberError};
+    use crate::subscriber::{MockRawSubscriber, SubscriberResult};
     use async_trait::async_trait;
     use mockall::predicate;
     use serde::{Deserialize, Serialize};
@@ -620,8 +642,8 @@ mod tests {
         impl Event for FakeEvent {
             type Response = Self;
 
-            fn event_id(&self) -> &EventId {
-                &self.id
+            fn event_id(&self) -> EventId {
+                self.id.clone()
             }
 
             fn has_more(&self) -> bool {
@@ -642,11 +664,11 @@ mod tests {
                 "FakeSubscriber"
             }
 
-            async fn on_events(&self, _: &mut [FakeEvent]) -> Result<(), SubscriberError> {
+            async fn on_events(&self, _: &mut [FakeEvent]) -> SubscriberResult<()> {
                 todo!();
             }
 
-            async fn on_refresh(&self, _: &FakeEvent) -> Result<(), SubscriberError> {
+            async fn on_refresh(&self, _: &FakeEvent) -> SubscriberResult<()> {
                 todo!();
             }
 
@@ -655,11 +677,10 @@ mod tests {
             }
         }
 
-        let task_service = TaskService::new(tokio::runtime::Handle::current()).unwrap();
-        let cancel_token = CancellationToken::new();
         let target = EventPoll::new(
-            &task_service,
-            cancel_token.clone(),
+            |task| {
+                tokio::spawn(task);
+            },
             Box::new(InMemoryStore::default()),
             Box::new(MockProvider::new()),
         );

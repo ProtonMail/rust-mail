@@ -220,8 +220,8 @@ pub struct CoreEvent {
 impl Event for CoreEvent {
     type Response = ApiCoreEvent;
 
-    fn event_id(&self) -> &EventId {
-        &self.event_id
+    fn event_id(&self) -> proton_event_loop::EventId {
+        self.event_id.clone().into_inner().into()
     }
 
     fn has_more(&self) -> bool {
