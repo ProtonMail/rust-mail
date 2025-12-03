@@ -61,6 +61,7 @@
 //! - **FIFO Processing**: Subscribers are processed in the order they were registered
 //! - **Single Poll Loop**: One event poll can handle multiple event types efficiently
 //!
+mod actor;
 pub mod poll;
 pub mod provider;
 pub mod store;
@@ -68,7 +69,7 @@ pub mod subscriber;
 
 use std::fmt;
 // Re-export main types
-pub use poll::EventPoll;
+pub use actor::EventPoll;
 pub use provider::{Provider, ProviderError};
 pub use subscriber::{Subscriber, SubscriberError};
 

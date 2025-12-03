@@ -1,119 +1,20 @@
 use crate::provider::ProviderResult;
 use crate::store::Store;
-use crate::subscriber::{RawSubscriber, TypedSubscribers};
-use crate::{Event, EventId, EventLoopError, Provider, RawEvent, Subscriber};
+use crate::subscriber::RawSubscriber;
+use crate::{Event, EventId, EventLoopError, Provider, RawEvent};
 use anyhow::{Context, anyhow};
-use indexmap::{IndexMap, map::Entry};
-use std::any::{Any, TypeId};
-use std::pin::Pin;
-use tokio::sync::{mpsc, oneshot};
-use tracing::{self, Instrument, Level, debug, error, info};
-
-pub struct EventPoll {
-    tx: mpsc::Sender<EventPollActorMessage>,
-}
-
-pub trait TaskSpawner {
-    fn spawn(self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>);
-}
-
-impl<T: FnOnce(Pin<Box<dyn Future<Output = ()> + Send + 'static>>)> TaskSpawner for T {
-    fn spawn(self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) {
-        self(task);
-    }
-}
-
-impl EventPoll {
-    #[must_use]
-    pub fn new(
-        task_spawner: impl TaskSpawner,
-        store: Box<dyn Store>,
-        provider: Box<dyn Provider>,
-    ) -> Self {
-        let epoll = EventPollInternal::new();
-
-        // Allow some capacity for pull to refresh request to buffer up.
-        let (tx, rx) = mpsc::channel(8);
-        let actor = EventPollActor {
-            rx,
-            epoll,
-            store,
-            provider,
-            subscribers: IndexMap::new(),
-        };
-
-        task_spawner.spawn(Box::pin(async move {
-            actor.run().await;
-        }));
-
-        Self { tx }
-    }
-
-    pub async fn initialize(&self) -> Result<&Self, EventLoopError> {
-        self.act(EventPollActorMessage::Initialize).await??;
-        Ok(self)
-    }
-
-    /// Register a typed subscriber by wrapping it in `TypedSubscribers`.
-    ///
-    /// This is used to register a typed subscriber to the event loop.
-    /// The subscriber is wrapped in a `TypedSubscribers` to allow for multiple subscribers
-    /// of the same type.
-    ///
-    pub async fn register<T: Event + From<<T as Event>::Response>>(
-        &self,
-        subscriber: Box<dyn Subscriber<T>>,
-    ) -> Result<&Self, EventLoopError> {
-        self.act(|tx| EventPollActorMessage::Register {
-            register: Box::new(|subscribers| match subscribers.entry(TypeId::of::<T>()) {
-                Entry::Occupied(mut entry) => {
-                    let entry: &mut dyn RawSubscriber = &mut **entry.get_mut();
-
-                    if let Some(typed_subscribers) =
-                        <dyn Any>::downcast_mut::<TypedSubscribers<T>>(entry)
-                    {
-                        typed_subscribers.add_subscriber(subscriber);
-                    } else {
-                        unreachable!();
-                    }
-                }
-
-                Entry::Vacant(entry) => {
-                    entry.insert(TypedSubscribers::<T>::new_raw(subscriber));
-                }
-            }),
-            sender: tx,
-        })
-        .await?;
-
-        Ok(self)
-    }
-
-    pub async fn poll(&self) -> Result<(), EventLoopError> {
-        let span = tracing::Span::current();
-        self.act(|sender| EventPollActorMessage::Poll { span, sender })
-            .await?
-    }
-
-    async fn act<T: Send + 'static>(
-        &self,
-        closure: impl FnOnce(oneshot::Sender<T>) -> EventPollActorMessage,
-    ) -> Result<T, EventLoopError> {
-        let (tx, rx) = oneshot::channel();
-        let msg = closure(tx);
-        self.tx.send(msg).await.map_err(|_| EventLoopError::Actor)?;
-        rx.await.map_err(|_| EventLoopError::Actor)
-    }
-}
+use indexmap::IndexMap;
+use std::any::TypeId;
+use tracing::{self, Level, debug, error, info};
 
 /// Collect events from the Proton Servers in a loop and publish the events to the subscribers.
 ///
 /// This version requires the user to call the [`EventLoop::poll`] function each time they wish to
 /// iterate the loop.
 #[derive(Debug, Default)]
-struct EventPollInternal;
+pub(crate) struct EventPollInternal;
 
-const MAX_EVENTS_PER_POLL: usize = 50;
+pub(crate) const MAX_EVENTS_PER_POLL: usize = 50;
 impl EventPollInternal {
     #[must_use]
     pub fn new() -> Self {
@@ -267,87 +168,14 @@ impl EventPollInternal {
         Ok(())
     }
 }
-
-type RegisterFn =
-    Box<dyn FnOnce(&mut IndexMap<TypeId, Box<dyn RawSubscriber>>) + Send + Sync + 'static>;
-enum EventPollActorMessage {
-    Initialize(oneshot::Sender<Result<(), EventLoopError>>),
-    Register {
-        register: RegisterFn,
-        sender: oneshot::Sender<()>,
-    },
-    Poll {
-        span: tracing::span::Span,
-        sender: oneshot::Sender<Result<(), EventLoopError>>,
-    },
-}
-
-struct EventPollActor {
-    rx: mpsc::Receiver<EventPollActorMessage>,
-    epoll: EventPollInternal,
-    store: Box<dyn Store>,
-    provider: Box<dyn Provider>,
-    /// The subscribers are stored in a indexmap of boxed raw subscribers.
-    /// The indexmap was chosen to preserve the order of the subscribers to run - FIFO.
-    /// The indexmap stores the type id of the subscriber to allow for multiple subscribers
-    /// of the same type to prevent double deserialization of the same event.
-    subscribers: IndexMap<TypeId, Box<dyn RawSubscriber>>,
-}
-
-impl EventPollActor {
-    async fn initialize(&self) -> Result<(), EventLoopError> {
-        self.epoll
-            .initialize(self.store.as_ref(), self.provider.as_ref())
-            .await
-    }
-
-    async fn poll(&mut self) -> Result<(), EventLoopError> {
-        {
-            for s in self.subscribers.values_mut() {
-                s.cleanup();
-            }
-        }
-
-        self.epoll
-            .poll_raw(
-                self.store.as_ref(),
-                self.provider.as_ref(),
-                &self.subscribers,
-                MAX_EVENTS_PER_POLL,
-            )
-            .await
-    }
-
-    async fn run(mut self) {
-        while let Some(message) = self.rx.recv().await {
-            match message {
-                EventPollActorMessage::Initialize(tx) => {
-                    let r = self.initialize().await;
-                    let _ = tx.send(r);
-                }
-                EventPollActorMessage::Register { register, sender } => {
-                    register(&mut self.subscribers);
-                    let _ = sender.send(());
-                }
-                EventPollActorMessage::Poll { span, sender } => {
-                    let r = self.poll().instrument(span).await;
-                    let _ = sender.send(r);
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::EventMetadata;
     use crate::provider::MockProvider;
-    use crate::store::{InMemoryStore, MockStore};
-    use crate::subscriber::{MockRawSubscriber, SubscriberResult};
-    use async_trait::async_trait;
+    use crate::store::MockStore;
+    use crate::subscriber::MockRawSubscriber;
     use mockall::predicate;
-    use serde::{Deserialize, Serialize};
 
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
@@ -630,63 +458,5 @@ mod tests {
 
         evt_poll.initialize(&store, &provider).await.unwrap();
         evt_poll.initialize(&store, &provider).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn register_same_subscriber_multiple_times() {
-        #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-        struct FakeEvent {
-            id: EventId,
-        }
-
-        impl Event for FakeEvent {
-            type Response = Self;
-
-            fn event_id(&self) -> EventId {
-                self.id.clone()
-            }
-
-            fn has_more(&self) -> bool {
-                false
-            }
-
-            fn is_refresh(&self) -> bool {
-                false
-            }
-        }
-
-        #[derive(Clone, Debug)]
-        struct FakeSubscriber;
-
-        #[async_trait]
-        impl Subscriber<FakeEvent> for FakeSubscriber {
-            fn name(&self) -> &'static str {
-                "FakeSubscriber"
-            }
-
-            async fn on_events(&self, _: &mut [FakeEvent]) -> SubscriberResult<()> {
-                todo!();
-            }
-
-            async fn on_refresh(&self, _: &FakeEvent) -> SubscriberResult<()> {
-                todo!();
-            }
-
-            fn is_alive(&self) -> bool {
-                true
-            }
-        }
-
-        let target = EventPoll::new(
-            |task| {
-                tokio::spawn(task);
-            },
-            Box::new(InMemoryStore::default()),
-            Box::new(MockProvider::new()),
-        );
-
-        assert!(target.register(Box::new(FakeSubscriber)).await.is_ok());
-        assert!(target.register(Box::new(FakeSubscriber)).await.is_ok());
-        assert!(target.register(Box::new(FakeSubscriber)).await.is_ok());
     }
 }
