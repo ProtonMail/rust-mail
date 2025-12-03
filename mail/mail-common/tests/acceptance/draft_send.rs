@@ -57,13 +57,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use velcro::hash_map;
 
+// Check:
+// * Draft is saved before sent
+// * Send API endpoint is updated
+// * Draft is moved to sent folder
 #[tokio::test]
 async fn basic_send_check() {
-    // Check :
-    // * Draft is saved before sent
-    // * Send API endpoint is updated
-    // * Draft is moved to sent folder
-    // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -155,8 +154,6 @@ async fn basic_send_check() {
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -234,14 +231,12 @@ async fn basic_send_check() {
     assert!(!send_result.seen);
 }
 
+// Check:
+// * Draft is saved before sent
+// * Send API endpoint is updated
+// * Draft is moved to all_sent folder
 #[tokio::test]
 async fn basic_schedule_send_check() {
-    // Check :
-    // * Draft is saved before sent
-    // * Send API endpoint is updated
-    // * Draft is moved to all_sent folder
-
-    // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -343,8 +338,6 @@ async fn basic_schedule_send_check() {
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -421,11 +414,9 @@ async fn basic_schedule_send_check() {
     assert!(!send_result.seen);
 }
 
+// When schedule sending a message with a time in the past, we should fail.
 #[tokio::test]
 async fn schedule_send_with_old_delivery_time_fails() {
-    // When schedule sending a message with a time in the past, we should fail.
-
-    // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -474,8 +465,6 @@ async fn schedule_send_with_old_delivery_time_fails() {
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -613,12 +602,10 @@ async fn send_fail_puts_message_back_in_drafts() {
     assert!(!draft_message.label_ids.contains(&LabelId::sent()));
 }
 
+// Create a new draft, save once to create, save again to trigger
+// update on server.
 #[tokio::test]
 async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_before_send() {
-    // Create a new draft, save once to create, save again to trigger
-    // update on server.
-
-    // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -644,8 +631,6 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     .await;
 
     let user_ctx = ctx.mail_user_context().await;
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -660,8 +645,6 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
         .unwrap();
 
     draft.send().await.unwrap();
-
-    // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
 
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -676,9 +659,9 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     assert_eq!(send_result.origin, DraftSendResultOrigin::SaveBeforeSend);
 }
 
+// Re-saving a draft after a queued send action is not allowed.
 #[tokio::test]
 async fn save_after_send_is_an_error() {
-    // Re-saving a draft after a queued send action is not allowed.
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -698,8 +681,6 @@ async fn save_after_send_is_an_error() {
     ctx.setup_user(params.clone()).await;
 
     let user_ctx = ctx.mail_user_context().await;
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -714,8 +695,6 @@ async fn save_after_send_is_an_error() {
         .unwrap();
 
     draft.save().await.unwrap();
-
-    // Save at least once so we can retrieve the message id.
     draft.send().await.unwrap();
 
     let result = draft.save().await;
@@ -730,13 +709,12 @@ async fn save_after_send_is_an_error() {
     ));
 }
 
+// Check:
+// * Draft is saved before sent
+// * Send API endpoint is updated
+// * Draft is moved to sent folder
 #[tokio::test]
 async fn already_sent_error_does_not_produce_error() {
-    // Check :
-    // * Draft is saved before sent
-    // * Send API endpoint is updated
-    // * Draft is moved to sent folder
-    // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -791,8 +769,6 @@ async fn already_sent_error_does_not_produce_error() {
         .await;
 
     let user_ctx = ctx.mail_user_context().await;
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -815,7 +791,6 @@ async fn already_sent_error_does_not_produce_error() {
     .await
     .unwrap();
 
-    // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     let result = tokio::time::timeout(Duration::from_secs(1), observer.next())
@@ -825,6 +800,7 @@ async fn already_sent_error_does_not_produce_error() {
 
     assert_eq!(result.len(), 1);
     assert!(result[0].is_success());
+
     // We have no send delivery time so we can't undo this.
     assert!(!result[0].is_send_undoable());
 }
@@ -868,7 +844,6 @@ async fn cancel_schedule_send_on_non_scheduled_message() {
 
 #[tokio::test]
 async fn cancel_schedule_send_on_queued_send() {
-    // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -907,8 +882,6 @@ async fn cancel_schedule_send_on_queued_send() {
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -942,6 +915,7 @@ async fn cancel_schedule_send_on_queued_send() {
     assert!(draft_message.label_ids.contains(&LabelId::drafts()));
     assert!(draft_message.label_ids.contains(&LabelId::all_drafts()));
     assert!(!draft_message.is_scheduled_for_send());
+
     // Time of the message should be changed.
     assert_ne!(draft_message.time, delivery_time.into());
 }
@@ -1075,9 +1049,9 @@ async fn cancel_schedule_send_on_already_sent_message() {
     );
 }
 
+// There can only be up to a 100 scheduled messages
 #[tokio::test]
 async fn schedule_send_message_limit() {
-    // There can only be up to a 100 scheduled messages
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -1124,8 +1098,6 @@ async fn schedule_send_message_limit() {
     ctx.setup_user(params.clone()).await;
 
     let user_ctx = ctx.mail_user_context().await;
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -1151,7 +1123,6 @@ async fn schedule_send_message_limit() {
 
 #[tokio::test]
 async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
-    // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -1173,16 +1144,10 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
     )
     .await;
 
-    // Add some other label ids to this message to make sure they are skipped.
-
     let user_ctx = ctx.mail_user_context().await;
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft.save().await.unwrap();
-
-    // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Simulate event loop update
@@ -1227,7 +1192,6 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
 
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
 
-    // Check the draft has the draft label.
     assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
     assert!(!draft_message.label_ids.contains(&LabelId::all_drafts()));
     assert!(draft_message.label_ids.contains(&LabelId::all_mail()));
@@ -1237,7 +1201,6 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
 
 #[tokio::test]
 async fn message_sent_from_another_session_should_refetch_message() {
-    // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -1275,16 +1238,19 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
     // Add some other label ids to this message to make sure they are skipped.
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
-    // Create draft.
+
     let draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .set_mime_type(MessageMimeType::TextPlain)
         .await
         .unwrap();
+
     draft
         .set_body(String::from("Nobody expects"))
         .await
         .unwrap();
+
     draft.save().await.unwrap();
 
     let draft_message_id = draft.message_id().await.unwrap().unwrap();
@@ -1295,7 +1261,6 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
 
     assert_eq!(body.body, "Nobody expects");
 
-    // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Simulate event loop update
@@ -1329,7 +1294,6 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
         .await
         .unwrap();
 
-    // Load the draft.
     let draft_message = Message::load(draft_message_id, &tether)
         .await
         .unwrap()
@@ -1344,9 +1308,9 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
     assert_eq!(body.body, "Nobody expects the spanish inquisition");
 }
 
+// gracefully handle a message already sent from another session via an event update.
 #[tokio::test]
-async fn already_sent_from_even_update() {
-    // gracefully handle a message already sent from another session via an event update.
+async fn already_sent_from_event_update() {
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -1392,9 +1356,21 @@ async fn already_sent_from_even_update() {
     .await;
 
     let user_ctx = ctx.mail_user_context().await;
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
+
+    ctx.core_test_context()
+        .mock_get_keys_all(
+            "foo@bar.com",
+            GetKeysAllResponse {
+                address_keys: Default::default(),
+                catch_all_keys: None,
+                is_proton: false,
+                proton_mx: false,
+                unverified_keys: None,
+                warnings: vec![],
+            },
+        )
+        .await;
 
     draft
         .add_single_recipient(
@@ -1418,10 +1394,7 @@ async fn already_sent_from_even_update() {
     .await;
 
     draft.save().await.unwrap();
-
-    // Save at least once so we can retrieve the message id.
     user_ctx.execute_all_send_actions().await.unwrap();
-
     draft.send().await.unwrap();
 
     // Simulate Event update
@@ -1448,7 +1421,6 @@ async fn already_sent_from_even_update() {
         .await
         .unwrap();
 
-    //execute should not fail
     user_ctx.execute_all_send_actions().await.unwrap();
 }
 
@@ -1554,8 +1526,6 @@ async fn send_external_with_password() {
         .await;
 
     let user_ctx = ctx.mail_user_context().await;
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -1583,13 +1553,12 @@ async fn send_external_with_password() {
     user_ctx.execute_all_send_actions().await.unwrap();
 }
 
+// Check:
+// * Draft is saved before sent
+// * Send API endpoint is updated
+// * Draft is moved to sent folder
 #[tokio::test]
 async fn send_with_expiration() {
-    // Check :
-    // * Draft is saved before sent
-    // * Send API endpoint is updated
-    // * Draft is moved to sent folder
-    // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -1687,8 +1656,6 @@ async fn send_with_expiration() {
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -1737,10 +1704,10 @@ async fn send_with_expiration() {
     assert_eq!(draft_message.expiration_time, expiration_timestamp);
 }
 
+// We should always use password encryption even if the contact has
+// a pgp mim encryption key.
 #[tokio::test]
 async fn send_external_with_password_even_if_contact_has_pgp_mime_encryption() {
-    // We should always use password encryption even if the contact has
-    // a pgp mim encryption key.
     let modulus = "-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\nK1PSamH/akNYFuWcErjkcbASp3Cot0Y6HfefGGbuHNKNlBTcv+SaLxZOSj8cV0A2N/NsNit7DUBiBGcKVNvk/0zSDWWFWKYcE9EPs4vSTbf/dqW5GYyIo1l8wBzIItivnTD5xQC4smJSYBIFJpVGuvtbDrDZI0xb0P+FVB5iFDTyPRE1J+ugZK+4QZczLJcv2/UG50gu9pi7R+rhYE/Q/4xCNpBZLp8mpFHpIVgj95auS2mILKkQS6xN7DyNLDuJjZF6++Qg1hxi38/d6NiFbMFgKlVHhKAFj5TPfKtVnqmlJmzeVgOCPc52cRfLRTDjEnDsoaa4MmsKC5gT9kNanQ==\n-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\nComment: https://protonmail.com\n\nwl4EARYIABAFAlwB1j4JEDUFhcTpUY8mAACghgEAotYZ/7iVaLKe52tP4CGF\nmdAAq2Dc6a7YLOnr4QLxC/8A/1UdoQQ/8PCueC41KEsrVktWSp1rB4lF4IvT\ntPvUc50G\n=+Zbf\n-----END PGP SIGNATURE-----\n";
 
     let modulus_id =
@@ -1900,7 +1867,6 @@ async fn send_external_with_password_even_if_contact_has_pgp_mime_encryption() {
         .await
         .unwrap();
 
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -1988,8 +1954,6 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         .await;
 
     let user_ctx = ctx.mail_user_context().await;
-
-    // Create draft.
     let draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
@@ -2005,7 +1969,6 @@ async fn send_fails_if_recipient_is_not_valid_impl(
 
     draft.send().await.unwrap();
 
-    // Execute action.
     let err = MailContextError::from(user_ctx.execute_all_send_actions().await.unwrap_err());
 
     let MailContextError::QueuedAction(QueuedError::Action(err, _)) = err else {

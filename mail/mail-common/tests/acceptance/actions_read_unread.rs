@@ -18,79 +18,82 @@ use stash::params;
 use std::sync::LazyLock;
 use test_case::test_case;
 
-struct TestItem {
+struct TestCase {
     id: &'static str,
     to_mark: bool,
     unread: bool,
 }
 
-static EMPTY: LazyLock<Vec<TestItem>> = LazyLock::new(Vec::new);
-static ALL_UNREAD: LazyLock<Vec<TestItem>> = LazyLock::new(|| {
+static EMPTY: LazyLock<Vec<TestCase>> = LazyLock::new(Vec::new);
+
+static ALL_UNREAD: LazyLock<Vec<TestCase>> = LazyLock::new(|| {
     vec![
-        TestItem {
+        TestCase {
             id: "one",
             to_mark: true,
             unread: true,
         },
-        TestItem {
+        TestCase {
             id: "two",
             to_mark: true,
             unread: true,
         },
-        TestItem {
+        TestCase {
             id: "three",
             to_mark: false,
             unread: false,
         },
-        TestItem {
+        TestCase {
             id: "four",
             to_mark: false,
             unread: true,
         },
     ]
 });
-static MIXED_UNREAD: LazyLock<Vec<TestItem>> = LazyLock::new(|| {
+
+static MIXED_UNREAD: LazyLock<Vec<TestCase>> = LazyLock::new(|| {
     vec![
-        TestItem {
+        TestCase {
             id: "one",
             to_mark: true,
             unread: true,
         },
-        TestItem {
+        TestCase {
             id: "two",
             to_mark: true,
             unread: false,
         },
-        TestItem {
+        TestCase {
             id: "three",
             to_mark: false,
             unread: false,
         },
-        TestItem {
+        TestCase {
             id: "four",
             to_mark: false,
             unread: true,
         },
     ]
 });
-static ALL_READ: LazyLock<Vec<TestItem>> = LazyLock::new(|| {
+
+static ALL_READ: LazyLock<Vec<TestCase>> = LazyLock::new(|| {
     vec![
-        TestItem {
+        TestCase {
             id: "one",
             to_mark: true,
             unread: false,
         },
-        TestItem {
+        TestCase {
             id: "two",
             to_mark: true,
             unread: false,
         },
-        TestItem {
+        TestCase {
             id: "three",
             to_mark: false,
             unread: false,
         },
-        TestItem {
+        TestCase {
             id: "four",
             to_mark: false,
             unread: true,
@@ -103,14 +106,17 @@ static ALL_READ: LazyLock<Vec<TestItem>> = LazyLock::new(|| {
 #[test_case(&MIXED_UNREAD, 3; "mixed unread")]
 #[test_case(&ALL_READ, 3; "all read")]
 #[tokio::test]
-async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize) {
-    // Setup
-    // * Create all conversations in stash
+async fn mark_conversation_read(conversations: &[TestCase], expected_read: usize) {
     let ctx = MailTestContext::new().await;
 
-    let mut params = Params::default_basic();
-    params.conversation_count[0].total = conversations.len() as u64;
-    params.conversations = conversations.iter().map(test_conversation).collect_vec();
+    let params = {
+        let mut params = Params::default_basic();
+
+        params.conversation_count[0].total = conversations.len() as u64;
+        params.conversations = conversations.iter().map(test_conversation).collect_vec();
+        params
+    };
+
     let messages = conversations.iter().map(test_message).collect_vec();
 
     let to_mark = conversations
@@ -118,6 +124,7 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
         .filter(|m| m.to_mark)
         .map(|m| m.id.into())
         .collect_vec();
+
     let expected_to_mark = conversations
         .iter()
         .filter(|m| m.to_mark)
@@ -126,6 +133,7 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(params.conversations, 1).await;
+
     for id in expected_to_mark {
         ctx.mock_mark_conversation_read(vec![id], vec![]).await;
     }
@@ -136,26 +144,30 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
         .await
         .unwrap();
+
     mailbox
         .sync(&mut tether, user_ctx.session(), 10)
         .await
         .unwrap();
 
-    // Action
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
+
     let mut counters = ConversationCounters::find_by_id(inbox.id(), &tether)
         .await
         .unwrap()
         .unwrap();
+
     counters.unread = counters.total;
+
     tether
         .tx(async |tx| {
             Message::create_or_update_messages_from_metadata(messages, None, tx)
                 .await
                 .unwrap();
+
             counters.save(tx).await
         })
         .await
@@ -164,15 +176,17 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
+
     Conversation::action_mark_read(user_ctx.action_queue(), inbox.id(), conversation_ids)
         .await
         .unwrap();
+
     user_ctx.execute_single_action().await.unwrap();
 
-    // Validation
     let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether)
         .await
         .unwrap();
+
     assert_eq!(conversations.len(), expected_read);
 }
 
@@ -181,14 +195,17 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
 #[test_case(&MIXED_UNREAD, 1; "mixed unread")]
 #[test_case(&ALL_READ, 1; "all read")]
 #[tokio::test]
-async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usize) {
-    // Setup
-    // * Create all conversations in stash
+async fn mark_conversation_unread(conversations: &[TestCase], expected_read: usize) {
     let ctx = MailTestContext::new().await;
 
-    let mut params = Params::default_basic();
-    params.conversation_count[0].total = conversations.len() as u64;
-    params.conversations = conversations.iter().map(test_conversation).collect_vec();
+    let params = {
+        let mut params = Params::default_basic();
+
+        params.conversation_count[0].total = conversations.len() as u64;
+        params.conversations = conversations.iter().map(test_conversation).collect_vec();
+        params
+    };
+
     let messages = conversations.iter().map(test_message).collect_vec();
 
     let to_mark = conversations
@@ -196,6 +213,7 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
         .filter(|m| m.to_mark)
         .map(|m| m.id.into())
         .collect_vec();
+
     let expected_to_mark = conversations
         .iter()
         .filter(|m| m.to_mark)
@@ -204,6 +222,7 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(params.conversations, 1).await;
+
     for id in expected_to_mark {
         ctx.mock_mark_conversation_unread(vec![id], LabelId::inbox(), vec![])
             .await;
@@ -215,26 +234,30 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
         .await
         .unwrap();
+
     mailbox
         .sync(&mut tether, user_ctx.session(), 10)
         .await
         .unwrap();
 
-    // Action
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
+
     let mut counters = ConversationCounters::find_by_id(inbox.id(), &tether)
         .await
         .unwrap()
         .unwrap();
+
     counters.unread = counters.total;
+
     tether
         .tx(async |tx| {
             Message::create_or_update_messages_from_metadata(messages, None, tx)
                 .await
                 .unwrap();
+
             counters.save(tx).await
         })
         .await
@@ -243,22 +266,25 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
+
     Conversation::action_mark_unread(user_ctx.action_queue(), inbox.id(), conversation_ids)
         .await
         .unwrap();
+
     user_ctx.execute_single_action().await.unwrap();
 
-    // Validation
     let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether)
         .await
         .unwrap();
+
     assert_eq!(conversations.len(), expected_read);
 }
 
-fn test_conversation(conversation: &TestItem) -> ApiConversation {
-    let TestItem {
+fn test_conversation(conversation: &TestCase) -> ApiConversation {
+    let TestCase {
         id: name, unread, ..
     } = conversation;
+
     ApiConversation {
         id: ConversationId::from(name.to_owned()),
         num_messages: 1,
@@ -277,8 +303,8 @@ fn test_conversation(conversation: &TestItem) -> ApiConversation {
     }
 }
 
-fn test_message(conversation: &TestItem) -> ApiMessageMetadata {
-    let TestItem {
+fn test_message(conversation: &TestCase) -> ApiMessageMetadata {
+    let TestCase {
         id: name, unread, ..
     } = conversation;
 
