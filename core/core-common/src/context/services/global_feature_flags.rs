@@ -1,7 +1,3 @@
-use std::collections::BTreeMap;
-use std::sync::Weak;
-use std::time::{Duration, Instant};
-
 use crate::app_events::{OnEnterForegroundEvent, OnUserContextMapChanged};
 use crate::datatypes::UnixTimestamp;
 use crate::models::{FeatureFlag, ModelExtension};
@@ -10,9 +6,11 @@ use crate::{CoreContextError, CoreContextResult, Origin};
 use anyhow::{Context as _, Result};
 use proton_core_api::services::proton::ProtonCore as _;
 use proton_core_api::session::Session;
-
 use stash::stash::WatcherHandle;
 use stash::watcher::TableWatcher;
+use std::collections::BTreeMap;
+use std::sync::Weak;
+use std::time::{Duration, Instant};
 use tracing::{Instrument, debug, error, info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,6 +240,8 @@ impl Service for FeatureFlagsService {
                         }
                     }
                     let last_updated = Instant::now();
+                    let timeout = tokio::time::sleep(Duration::from_secs(REFRESH_TIMEOUT_SECS));
+                    tokio::pin!(timeout);
                     loop {
                         debug!("Going to sleep");
                         tokio::select! { biased;
@@ -259,7 +259,7 @@ impl Service for FeatureFlagsService {
                                     return;
                                 }
                             },
-                            () = tokio::time::sleep(Duration::from_secs(REFRESH_TIMEOUT_SECS)) => {
+                            () = &mut timeout => {
                                 debug!("Timeout of {REFRESH_TIMEOUT_SECS} seconds reached. Waking up");
                                 break;
                             }
