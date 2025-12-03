@@ -238,10 +238,11 @@ impl InitializationMediator {
 
         if options.resync_user {
             let mut tether = ctx.user_stash().connection().await?;
+
             tether
                 .tx(async |tx| {
                     tx.execute(
-                        "DELETE FROM initialized_components WHERE key = '?' OR key = '?'",
+                        "DELETE FROM initialized_components WHERE key = ? OR key = ?",
                         params![User::INIT_KEY.0, MailUserContext::CONTEXT_INIT_KEY.0],
                     )
                     .await
