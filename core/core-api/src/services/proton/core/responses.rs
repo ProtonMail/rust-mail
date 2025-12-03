@@ -320,6 +320,13 @@ impl PaginateResponse<LegacyFeatureFlag> for GetLegacyFeaturesResponse {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutFeatureFlagOverrideResponse {
+    pub feature: LegacyFeatureFlag,
+}
+
 //  TRAITS
 //==============================================================================
 

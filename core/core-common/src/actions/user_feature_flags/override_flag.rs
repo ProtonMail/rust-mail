@@ -1,5 +1,6 @@
 use crate::CoreContextError;
 use crate::actions::dependency_builder::ActionDependencyKeysBuilder;
+use crate::datatypes::{UnixTimestamp, UserFeatureFlagSource};
 use crate::models::UserFeatureFlag;
 use proton_action_queue::action::{
     Action, ActionDependencyKey, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler,
@@ -17,6 +18,7 @@ pub struct OverrideFlag {
     flag_name: String,
     new_value: bool,
     previous_overridden_value: Option<bool>,
+    previous_overridden_at: Option<UnixTimestamp>,
 }
 
 impl OverrideFlag {
@@ -26,6 +28,7 @@ impl OverrideFlag {
             flag_name,
             new_value,
             previous_overridden_value: None,
+            previous_overridden_at: None,
         }
     }
 }
@@ -79,8 +82,10 @@ impl Handler for OverrideFlagHandler {
             )));
         }
 
-        action.previous_overridden_value = flag.overrided_value;
-        flag.overrided_value = Some(action.new_value);
+        action.previous_overridden_value = flag.overriden_to;
+        action.previous_overridden_at = flag.overriden_at;
+        flag.overriden_to = Some(action.new_value);
+        flag.overriden_at = None;
         flag.save(tx).await?;
 
         Ok(())
@@ -101,7 +106,9 @@ impl Handler for OverrideFlagHandler {
                 ))
             })?;
 
-        flag.overrided_value = action.previous_overridden_value;
+        flag.overriden_to = action.previous_overridden_value;
+        flag.overriden_at = action.previous_overridden_at;
+
         flag.save(tx).await?;
 
         Ok(())
@@ -111,10 +118,41 @@ impl Handler for OverrideFlagHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        _guard: WriterGuard<'_>,
+        mut guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        self.api
+        let response = self
+            .api
             .put_feature_flag_override(&action.flag_name, action.new_value)
+            .await?;
+
+        guard
+            .tx(async |tx| {
+                let mut flag = UserFeatureFlag::by_name(&action.flag_name, tx)
+                    .await?
+                    .ok_or_else(|| {
+                        CoreContextError::Other(anyhow::anyhow!(
+                            "Feature flag '{}' not found",
+                            action.flag_name
+                        ))
+                    })?;
+
+                flag.overriden_at = response
+                    .feature
+                    .metadata
+                    .update_time
+                    .map(UnixTimestamp::from);
+
+                if let Some(new_value) = response.feature.variant.into_bool() {
+                    flag.enabled = new_value.value;
+                    flag.source = UserFeatureFlagSource::Legacy;
+                    flag.modify_time = UnixTimestamp::now();
+                    flag.writable = response.feature.metadata.writable;
+                }
+
+                flag.save(tx).await?;
+
+                Ok::<_, CoreContextError>(())
+            })
             .await?;
 
         Ok(())

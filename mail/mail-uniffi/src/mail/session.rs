@@ -1091,10 +1091,9 @@ impl MailSession {
     /// Use [`MailUserSession::is_feature_enabled`] whenever it is possible.
     ///
     /// Currently:
-    /// * Returns None if feature is not found
+    /// * Returns None if feature is was never present
     /// * Returns Some(true) if feature is present
-    ///
-    /// NOTE: It never returns Some(false) as in this stage of the implementation.
+    /// * Returns Some(false) if feature was present and enabled but got disabled
     pub async fn is_feature_enabled(
         &self,
         feature_id: String,

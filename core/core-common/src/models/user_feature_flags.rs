@@ -24,7 +24,10 @@ pub struct UserFeatureFlag {
     pub writable: bool,
 
     #[DbField]
-    pub overrided_value: Option<bool>,
+    pub overriden_to: Option<bool>,
+
+    #[DbField]
+    pub overriden_at: Option<UnixTimestamp>,
 
     #[DbField]
     pub modify_time: UnixTimestamp,
@@ -38,7 +41,8 @@ impl UserFeatureFlag {
             enabled: true,
             source: UserFeatureFlagSource::Unleash,
             writable: false,
-            overrided_value: None,
+            overriden_to: None,
+            overriden_at: None,
             modify_time,
         }
     }
@@ -55,7 +59,8 @@ impl UserFeatureFlag {
             enabled,
             source: UserFeatureFlagSource::Legacy,
             writable,
-            overrided_value: None,
+            overriden_to: None,
+            overriden_at: None,
             modify_time,
         }
     }
@@ -101,6 +106,6 @@ impl UserFeatureFlag {
 
     #[must_use]
     pub fn is_enabled(&self) -> bool {
-        self.overrided_value.unwrap_or(self.enabled)
+        self.overriden_to.unwrap_or(self.enabled)
     }
 }

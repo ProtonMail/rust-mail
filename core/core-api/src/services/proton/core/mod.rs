@@ -149,5 +149,5 @@ pub trait ProtonCore {
         &self,
         flag_name: &str,
         new_value: bool,
-    ) -> ApiServiceResult<()>;
+    ) -> ApiServiceResult<PutFeatureFlagOverrideResponse>;
 }

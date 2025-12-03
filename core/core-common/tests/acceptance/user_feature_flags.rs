@@ -1024,9 +1024,26 @@ async fn test_override_writable_legacy_flag_success() {
         .mount(ctx.mock_server())
         .await;
 
+    let override_time = UnixTimestamp::now();
+    let put_response = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+        feature: LegacyFeatureFlag {
+            metadata: LegacyFeatureFlagMetadata {
+                code: "WritableFlag".to_string(),
+                global: false,
+                writable: true,
+                expiration_time: None,
+                update_time: Some(override_time.as_u64()),
+            },
+            variant: LegacyFeatureFlagVariant::Boolean(Value {
+                value: true,
+                default_value: false,
+            }),
+        },
+    };
+
     Mock::given(method("PUT"))
         .and(path("/api/core/v4/features/WritableFlag/value"))
-        .respond_with(ResponseTemplate::new(200))
+        .respond_with(ResponseTemplate::new(200).set_body_json(put_response))
         .expect(1)
         .named("Override flag API call")
         .mount(ctx.mock_server())
@@ -1055,6 +1072,8 @@ async fn test_override_writable_legacy_flag_success() {
         .unwrap();
     assert_eq!(executed_count, 1);
 
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
     {
         let tether = user_context.stash().connection().await.unwrap();
         let flag = UserFeatureFlag::by_name("WritableFlag", &tether)
@@ -1062,8 +1081,8 @@ async fn test_override_writable_legacy_flag_success() {
             .unwrap()
             .unwrap();
 
-        assert_eq!(flag.overrided_value, Some(true));
-        assert!(!flag.enabled);
+        assert_eq!(flag.overriden_to, Some(true));
+        assert!(flag.enabled);
         assert!(flag.is_enabled());
     }
 }
@@ -1113,7 +1132,7 @@ async fn test_override_non_writable_flag_fails() {
             .unwrap()
             .unwrap();
 
-        assert_eq!(flag.overrided_value, None);
+        assert_eq!(flag.overriden_to, None);
         assert!(flag.enabled);
     }
 }
@@ -1155,6 +1174,7 @@ async fn test_override_non_existent_flag_fails() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn test_override_flag_state_preservation() {
     let ctx = TestContext::new().await;
 
@@ -1179,11 +1199,59 @@ async fn test_override_flag_state_preservation() {
         .mount(ctx.mock_server())
         .await;
 
-    // Mock successful API calls for overrides
+    let override_time_1 = UnixTimestamp::now();
+    let put_response_1 = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+        feature: LegacyFeatureFlag {
+            metadata: LegacyFeatureFlagMetadata {
+                code: "StateTestFlag".to_string(),
+                global: false,
+                writable: true,
+                expiration_time: None,
+                update_time: Some(override_time_1.as_u64()),
+            },
+            variant: LegacyFeatureFlagVariant::Boolean(Value {
+                value: true,
+                default_value: false,
+            }),
+        },
+    };
+
+    let override_time_2 = override_time_1.saturating_add(10);
+    let put_response_2 = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+        feature: LegacyFeatureFlag {
+            metadata: LegacyFeatureFlagMetadata {
+                code: "StateTestFlag".to_string(),
+                global: false,
+                writable: true,
+                expiration_time: None,
+                update_time: Some(override_time_2.as_u64()),
+            },
+            variant: LegacyFeatureFlagVariant::Boolean(Value {
+                value: false,
+                default_value: false,
+            }),
+        },
+    };
+
     Mock::given(method("PUT"))
         .and(path("/api/core/v4/features/StateTestFlag/value"))
-        .respond_with(ResponseTemplate::new(200))
-        .named("Override flag API call")
+        .and(wiremock::matchers::body_json(
+            serde_json::json!({"Value": true}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(put_response_1))
+        .expect(1)
+        .named("Override flag API call - first")
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/StateTestFlag/value"))
+        .and(wiremock::matchers::body_json(
+            serde_json::json!({"Value": false}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(put_response_2))
+        .expect(1)
+        .named("Override flag API call - second")
         .mount(ctx.mock_server())
         .await;
 
@@ -1211,7 +1279,7 @@ async fn test_override_flag_state_preservation() {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(flag.overrided_value, Some(true));
+        assert_eq!(flag.overriden_to, Some(true));
     }
 
     // Second override: Some(true) -> Some(false)
@@ -1232,7 +1300,7 @@ async fn test_override_flag_state_preservation() {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(flag.overrided_value, Some(false));
+        assert_eq!(flag.overriden_to, Some(false));
     }
 }
 
@@ -1296,6 +1364,221 @@ async fn test_override_flag_api_failure_rollback() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn test_override_local_only_not_yet_executed_remotely() {
+    let ctx = TestContext::new().await;
+
+    let initial_legacy_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag("LocalOnlyFlag", false, true)],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(initial_legacy_response.clone()))
+        .named("Initial flag state: disabled")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "LocalOnlyFlag", 4, 250).await;
+
+    assert_eq!(
+        feature_flags.get("LocalOnlyFlag").await.unwrap(),
+        Some(false)
+    );
+
+    let action = OverrideFlag::new("LocalOnlyFlag".to_string(), true);
+    user_context.queue().queue_action(action).await.unwrap();
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("LocalOnlyFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(!flag.enabled);
+        assert_eq!(flag.overriden_to, Some(true));
+        assert_eq!(flag.overriden_at, None);
+        assert!(flag.is_enabled());
+    }
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(initial_legacy_response))
+        .named("Refresh returns same old data")
+        .mount(ctx.mock_server())
+        .await;
+
+    feature_flags.refresh().await.unwrap();
+
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("LocalOnlyFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(!flag.enabled);
+        assert_eq!(flag.overriden_to, Some(true));
+        assert_eq!(flag.overriden_at, None);
+        assert!(flag.is_enabled());
+    }
+
+    assert_eq!(
+        feature_flags.get("LocalOnlyFlag").await.unwrap(),
+        Some(true)
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn test_backend_returns_stale_data_after_override() {
+    let ctx = TestContext::new().await;
+
+    let override_time = UnixTimestamp::now();
+    let initial_legacy_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag("StaleDataFlag", false, true)],
+    };
+    let stale_time = override_time.saturating_sub(100);
+    let stale_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![LegacyFeatureFlag {
+            metadata: LegacyFeatureFlagMetadata {
+                code: "StaleDataFlag".to_string(),
+                global: false,
+                writable: true,
+                expiration_time: None,
+                update_time: Some(stale_time.as_u64()),
+            },
+            variant: LegacyFeatureFlagVariant::Boolean(Value {
+                value: false,
+                default_value: false,
+            }),
+        }],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(RespondNthTime::new(
+            1,
+            ResponseTemplate::new(200).set_body_json(initial_legacy_response),
+            ResponseTemplate::new(200).set_body_json(stale_response),
+        ))
+        .named("Initial flag state: disabled")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    // First refresh, using initial response.
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "StaleDataFlag", 4, 250).await;
+
+    assert_eq!(
+        feature_flags.get("StaleDataFlag").await.unwrap(),
+        Some(false)
+    );
+
+    let put_response = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+        feature: LegacyFeatureFlag {
+            metadata: LegacyFeatureFlagMetadata {
+                code: "StaleDataFlag".to_string(),
+                global: false,
+                writable: true,
+                expiration_time: None,
+                update_time: Some(override_time.as_u64()),
+            },
+            variant: LegacyFeatureFlagVariant::Boolean(Value {
+                value: true,
+                default_value: false,
+            }),
+        },
+    };
+
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/StaleDataFlag/value"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(put_response))
+        .expect(1)
+        .named("User overrides flag to true")
+        .mount(ctx.mock_server())
+        .await;
+
+    let action = OverrideFlag::new("StaleDataFlag".to_string(), true);
+    user_context.queue().queue_action(action).await.unwrap();
+
+    let executed_count = user_context
+        .queue()
+        .new_executor()
+        .execute_all()
+        .await
+        .unwrap();
+    assert_eq!(executed_count, 1);
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("StaleDataFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        tracing::warn!("Flag fetched from DB before stale refresh: {:?}", flag);
+        assert!(flag.enabled);
+        assert_eq!(flag.overriden_to, Some(true));
+        assert_eq!(flag.overriden_at, Some(override_time));
+        assert!(flag.is_enabled());
+    }
+
+    // Second refresh, triggering stale response
+    feature_flags.refresh().await.unwrap();
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("StaleDataFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        tracing::warn!("Flag fetched from DB: {:?}", flag);
+        assert!(flag.enabled);
+        assert_eq!(flag.overriden_to, Some(true));
+        assert_eq!(flag.overriden_at, Some(override_time));
+        assert!(flag.is_enabled());
+    }
+
+    assert_eq!(
+        feature_flags.get("StaleDataFlag").await.unwrap(),
+        Some(true)
+    );
+}
+
+#[tokio::test]
 async fn test_override_flag_proper_api_request_format() {
     let ctx = TestContext::new().await;
 
@@ -1320,6 +1603,23 @@ async fn test_override_flag_proper_api_request_format() {
         .mount(ctx.mock_server())
         .await;
 
+    let override_time = UnixTimestamp::now();
+    let put_response = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+        feature: LegacyFeatureFlag {
+            metadata: LegacyFeatureFlagMetadata {
+                code: "FormatTestFlag".to_string(),
+                global: false,
+                writable: true,
+                expiration_time: None,
+                update_time: Some(override_time.as_u64()),
+            },
+            variant: LegacyFeatureFlagVariant::Boolean(Value {
+                value: true,
+                default_value: false,
+            }),
+        },
+    };
+
     Mock::given(method("PUT"))
         .and(path("/api/core/v4/features/FormatTestFlag/value"))
         .and(wiremock::matchers::header(
@@ -1329,7 +1629,7 @@ async fn test_override_flag_proper_api_request_format() {
         .and(wiremock::matchers::body_json(
             serde_json::json!({"Value": true}),
         ))
-        .respond_with(ResponseTemplate::new(200))
+        .respond_with(ResponseTemplate::new(200).set_body_json(put_response))
         .expect(1)
         .named("Override flag with correct format")
         .mount(ctx.mock_server())
@@ -1368,7 +1668,7 @@ async fn test_override_flag_api_failure_preserves_existing_override() {
         let mut tether = user_context.stash().connection().await.unwrap();
         let mut existing_flag =
             UserFeatureFlag::legacy("ExistingOverrideFlag", true, true, UnixTimestamp::new(10));
-        existing_flag.overrided_value = Some(false);
+        existing_flag.overriden_to = Some(false);
 
         tether
             .tx(async move |tx| existing_flag.save(tx).await)
@@ -1422,7 +1722,141 @@ async fn test_override_flag_api_failure_preserves_existing_override() {
             .unwrap();
 
         assert!(flag.enabled);
-        assert_eq!(flag.overrided_value, Some(false));
+        assert_eq!(flag.overriden_to, Some(false));
+        assert!(!flag.is_enabled());
+    }
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn test_proton_can_override_user_overridden_flag() {
+    let ctx = TestContext::new().await;
+
+    let initial_legacy_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![test_legacy_boolean_flag("RatingBoosterFlag", false, true)],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(initial_legacy_response))
+        .named("Initial flag state: disabled")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+    wait_for_flag(feature_flags, "RatingBoosterFlag", 4, 250).await;
+
+    assert_eq!(
+        feature_flags.get("RatingBoosterFlag").await.unwrap(),
+        Some(false)
+    );
+
+    let override_time = UnixTimestamp::now();
+    let put_response = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+        feature: LegacyFeatureFlag {
+            metadata: LegacyFeatureFlagMetadata {
+                code: "RatingBoosterFlag".to_string(),
+                global: false,
+                writable: true,
+                expiration_time: None,
+                update_time: Some(override_time.as_u64()),
+            },
+            variant: LegacyFeatureFlagVariant::Boolean(Value {
+                value: true,
+                default_value: false,
+            }),
+        },
+    };
+
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/RatingBoosterFlag/value"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(put_response))
+        .expect(1)
+        .named("User overrides flag to true")
+        .mount(ctx.mock_server())
+        .await;
+
+    let action = OverrideFlag::new("RatingBoosterFlag".to_string(), true);
+    user_context.queue().queue_action(action).await.unwrap();
+
+    let executed_count = user_context
+        .queue()
+        .new_executor()
+        .execute_all()
+        .await
+        .unwrap();
+    assert_eq!(executed_count, 1);
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("RatingBoosterFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(flag.enabled);
+        assert_eq!(flag.overriden_to, Some(true));
+        assert_eq!(flag.overriden_at, Some(override_time));
+        assert!(flag.is_enabled());
+    }
+
+    let proton_override_time = override_time.saturating_add(3600);
+    let proton_changes_flag_response = GetLegacyFeaturesResponse {
+        total: 1,
+        features: vec![LegacyFeatureFlag {
+            metadata: LegacyFeatureFlagMetadata {
+                code: "RatingBoosterFlag".to_string(),
+                global: false,
+                writable: true,
+                expiration_time: None,
+                update_time: Some(proton_override_time.as_u64()),
+            },
+            variant: LegacyFeatureFlagVariant::Boolean(Value {
+                value: false,
+                default_value: false,
+            }),
+        }],
+    };
+
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(proton_changes_flag_response))
+        .named("Proton changes flag back to false")
+        .mount(ctx.mock_server())
+        .await;
+
+    feature_flags.refresh().await.unwrap();
+
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    assert_eq!(
+        feature_flags.get("RatingBoosterFlag").await.unwrap(),
+        Some(false)
+    );
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("RatingBoosterFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(!flag.enabled);
+        assert_eq!(flag.overriden_to, None);
+        assert_eq!(flag.overriden_at, None);
         assert!(!flag.is_enabled());
     }
 }
