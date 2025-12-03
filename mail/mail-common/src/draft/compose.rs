@@ -181,7 +181,7 @@ pub(super) fn get_full_signature(
     if signature.is_empty() {
         String::new()
     } else {
-        format!("{line_break}{line_break}{signature}")
+        format!("{line_break}{line_break}{line_break}{signature}")
     }
 }
 

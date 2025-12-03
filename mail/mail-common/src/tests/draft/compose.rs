@@ -402,7 +402,7 @@ mod signatures {
         given_custom_settings: custom_settings,
         given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "",
-        expected_mobile: "\n\nSent from Proton Mail.",
+        expected_mobile: "\n\n\nSent from Proton Mail.",
     };
 
     const TEST_ADDRESS_SIGNATURE: TestCase = TestCase {
@@ -415,8 +415,8 @@ mod signatures {
                 .with_mobile_signature_enabled(false)
         },
         given_mime_type: MessageMimeType::TextPlain,
-        expected_desktop: "\n\ncheers, jerry",
-        expected_mobile: "\n\ncheers, jerry",
+        expected_desktop: "\n\n\ncheers, jerry",
+        expected_mobile: "\n\n\ncheers, jerry",
     };
 
     const TEST_MOBILE_SIGNATURE: TestCase = TestCase {
@@ -430,7 +430,7 @@ mod signatures {
         },
         given_mime_type: MessageMimeType::TextPlain,
         expected_desktop: "",
-        expected_mobile: "\n\nsent from my iandroid",
+        expected_mobile: "\n\n\nsent from my iandroid",
     };
 
     const TEST_DISABLED_MOBILE_SIGNATURE: TestCase = TestCase {
@@ -456,14 +456,14 @@ mod signatures {
                 .with_mobile_signature_enabled(true)
         },
         given_mime_type: MessageMimeType::TextPlain,
-        expected_desktop: "\n\ncheers, jerry",
-        expected_mobile: "\n\ncheers, jerry\n\nsent from my iandroid",
+        expected_desktop: "\n\n\ncheers, jerry",
+        expected_mobile: "\n\n\ncheers, jerry\n\nsent from my iandroid",
     };
 
     const TEST_ADDRESS_AND_MOBILE_SIGNATURE_FREE: TestCase = TestCase {
         given_user: user,
-        expected_desktop: "\n\ncheers, jerry\n\nSent from Proton Mail.",
-        expected_mobile: "\n\ncheers, jerry\n\nSent from Proton Mail.",
+        expected_desktop: "\n\n\ncheers, jerry\n\nSent from Proton Mail.",
+        expected_mobile: "\n\n\ncheers, jerry\n\nSent from Proton Mail.",
         ..TEST_ADDRESS_AND_MOBILE_SIGNATURE
     };
 
@@ -478,8 +478,8 @@ mod signatures {
                 .with_mobile_signature_enabled(true)
         },
         given_mime_type: MessageMimeType::TextHtml,
-        expected_desktop: "<br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div>",
-        expected_mobile: "<br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div><br><br>sent from <i>my</i> iandroid",
+        expected_desktop: "<br><br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div>",
+        expected_mobile: "<br><br><br><div class=\"protonmail_signature_block-user\">cheers, <b>jerry</b></div><br><br>sent from <i>my</i> iandroid",
     };
 
     const TEST_HTML_SIGNATURES_TO_TEXT: TestCase = TestCase {
@@ -493,8 +493,8 @@ mod signatures {
                 .with_mobile_signature_enabled(true)
         },
         given_mime_type: MessageMimeType::TextPlain,
-        expected_desktop: "\n\ncheers, jerry",
-        expected_mobile: "\n\ncheers, jerry\n\nsent from my iandroid",
+        expected_desktop: "\n\n\ncheers, jerry",
+        expected_mobile: "\n\n\ncheers, jerry\n\nsent from my iandroid",
     };
 
     // `MailSettings.signature` is deprecated and should not be accessed
