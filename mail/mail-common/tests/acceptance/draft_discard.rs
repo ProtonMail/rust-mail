@@ -29,7 +29,6 @@ async fn discard_before_save_only_deletes_metadata() {
 
     message.metadata.label_ids.push(LabelId::drafts());
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -66,7 +65,6 @@ async fn discard_by_message_id() {
 
     message.metadata.label_ids.push(LabelId::drafts());
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -132,8 +130,6 @@ async fn discard_draft_after_save_marks_message_deleted() {
         },
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -211,7 +207,6 @@ async fn discard_draft_by_message_id() {
         },
     )
     .await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -275,7 +270,6 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -347,7 +341,6 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -435,8 +428,6 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
         remote_existing_message.clone(),
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -542,8 +533,6 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         ctx.mock_maybe_get_attachment_data(attachment.id.clone(), vec![])
             .await;
     }
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -663,8 +652,6 @@ async fn discard_draft_failure_undeletes_message() {
         },
     )
     .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 

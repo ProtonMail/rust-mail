@@ -52,8 +52,6 @@ async fn label_message() {
     ctx.mock_label_messages(&label_id.clone(), vec![message.metadata.id.clone()])
         .await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
 
@@ -122,8 +120,6 @@ async fn unlabel_message() {
 
     ctx.mock_unlabel_messages(&label_id.clone(), vec![message.metadata.id.clone()], vec![])
         .await;
-
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();
@@ -196,7 +192,6 @@ async fn message_action_read_unread() {
         .await;
 
     ctx.mock_messages_ok().await;
-    ctx.catch_all().await;
 
     let user_context = ctx.mail_user_context().await;
     let tether = user_context.user_stash().connection().await.unwrap();
@@ -264,7 +259,6 @@ async fn message_action_delete() {
         .await;
 
     ctx.mock_messages_ok().await;
-    ctx.catch_all().await;
 
     let user_context = ctx.mail_user_context().await;
     let tether = user_context.user_stash().connection().await.unwrap();
@@ -343,8 +337,6 @@ async fn message_action_ham() {
 
     ctx.mock_put_message_ham(&message.metadata.id).await;
     ctx.mock_empty_label(LabelId::inbox()).await;
-
-    ctx.catch_all().await;
 
     let user_context = ctx.mail_user_context().await;
     let tether = user_context.user_stash().connection().await.unwrap();

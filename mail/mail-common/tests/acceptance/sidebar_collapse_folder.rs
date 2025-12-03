@@ -28,7 +28,6 @@ async fn folder_expansion() {
     assert!(!folder.expanded);
 
     ctx.mock_patch_label(folder.remote_id.unwrap(), true).await;
-    ctx.catch_all().await;
 
     // Action
     Sidebar
@@ -59,7 +58,6 @@ async fn folder_collapse() {
     assert!(folder.expanded);
 
     ctx.mock_patch_label(folder.remote_id.unwrap(), false).await;
-    ctx.catch_all().await;
 
     // Action
     Sidebar

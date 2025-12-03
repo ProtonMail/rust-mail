@@ -36,7 +36,6 @@ async fn test_new_mailbox_sync_conversations() {
     let conversations = params.conversations.clone();
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 2_u64).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -155,7 +154,6 @@ async fn test_new_mailbox_sync_messages() {
         });
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message_metadata(messages, 2_u64).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -277,7 +275,6 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
         });
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message_metadata(messages, 2_u64).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 

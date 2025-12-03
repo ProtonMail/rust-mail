@@ -68,7 +68,6 @@ async fn test_labeling_conversation_with_custom_label() {
         vec![],
     )
     .await;
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     inbox_mailbox
@@ -225,7 +224,6 @@ async fn test_labeling_conversation_with_starred_label() {
         vec![],
     )
     .await;
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     inbox_mailbox
@@ -342,7 +340,6 @@ async fn test_labeling_fails_when_labelling_folders() {
 
     ctx.setup_user(params).await;
     ctx.mock_get_conversations(conversations, 1).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();

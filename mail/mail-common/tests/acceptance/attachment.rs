@@ -33,7 +33,6 @@ async fn setup_common(
         data_mock_count,
     )
     .await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
 
@@ -195,7 +194,6 @@ async fn load_attachment_content_first_time() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data(), 1)
         .await;
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Action:

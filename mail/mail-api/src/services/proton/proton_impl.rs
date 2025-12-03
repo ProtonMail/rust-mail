@@ -580,8 +580,6 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
             .into_body_json()?)
     }
 
-    /// Reports a message as phishing.
-    /// It requires the decrypted message body.
     async fn report_phishing(
         &self,
         message_id: MessageId,
@@ -601,6 +599,7 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
             .ok()?;
         Ok(())
     }
+
     async fn delete_all_messages_in_label(&self, label_id: LabelId) -> ApiServiceResult<()> {
         let query = json! ({
             "LabelID": label_id,

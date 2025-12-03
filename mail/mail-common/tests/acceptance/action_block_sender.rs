@@ -66,7 +66,6 @@ async fn test_basic_block_sender() {
     test_ctx
         .mock_post_incoming_default_n(default_api_incoming_default(email), 1)
         .await;
-    test_ctx.catch_all().await;
 
     assert_eq!(
         count_incoming_defaults_for_email(&tether, email)
@@ -111,7 +110,6 @@ async fn test_basic_unblock_sender() {
     let email = "unblock_me@example.com";
 
     test_ctx.mock_delete_incoming_default().await;
-    test_ctx.catch_all().await;
     tether
         .tx::<_, _, StashError>(async |tx| {
             let mut incoming_default = IncomingDefault {
@@ -160,7 +158,6 @@ async fn test_double_block_idempotent() {
     test_ctx
         .mock_post_incoming_default_n(default_api_incoming_default(email), 1)
         .await;
-    test_ctx.catch_all().await;
     IncomingDefault::action_block(user_ctx.action_queue(), email.into())
         .await
         .unwrap();
@@ -195,7 +192,6 @@ async fn test_double_unblock_idempotent() {
     let email = "double_unblock@example.com";
 
     test_ctx.mock_delete_incoming_default().await;
-    test_ctx.catch_all().await;
 
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -256,7 +252,6 @@ async fn test_block_unblock_cycle() {
         .mock_post_incoming_default_n(default_api_incoming_default(email), 2)
         .await;
     test_ctx.mock_delete_incoming_default().await;
-    test_ctx.catch_all().await;
 
     assert_eq!(
         count_incoming_defaults_for_email(&tether, email)
@@ -319,7 +314,6 @@ async fn test_remote_block_failure_with_local_rollback() {
         .expect(1)
         .mount(test_ctx.mock_server())
         .await;
-    test_ctx.catch_all().await;
 
     assert_eq!(
         count_incoming_defaults_for_email(&tether, email)
@@ -374,7 +368,6 @@ async fn test_remote_unblock_failure_with_proper_error_handling() {
         .expect(1)
         .mount(test_ctx.mock_server())
         .await;
-    test_ctx.catch_all().await;
 
     assert_eq!(
         count_incoming_defaults_for_email(&tether, email)
@@ -417,7 +410,6 @@ async fn test_block_sender_when_inbox_location_exists() {
     test_ctx
         .mock_put_incoming_default(default_api_incoming_default(email))
         .await;
-    test_ctx.catch_all().await;
 
     assert_eq!(
         count_incoming_defaults_for_email(&tether, email)
@@ -480,7 +472,6 @@ async fn test_block_sender_when_spam_location_exists() {
     test_ctx
         .mock_put_incoming_default(default_api_incoming_default(email))
         .await;
-    test_ctx.catch_all().await;
 
     assert_eq!(
         count_incoming_defaults_for_email(&tether, email)
@@ -539,8 +530,6 @@ async fn test_unblock_sender_when_inbox_location_exists_should_not_work() {
         })
         .await
         .unwrap();
-
-    test_ctx.catch_all().await;
 
     assert_eq!(
         count_incoming_defaults_for_email(&tether, email)
@@ -601,8 +590,6 @@ async fn test_unblock_sender_when_spam_location_exists_should_not_work() {
         .await
         .unwrap();
 
-    test_ctx.catch_all().await;
-
     assert_eq!(
         count_incoming_defaults_for_email(&tether, email)
             .await
@@ -655,7 +642,6 @@ async fn test_api_returning_domain() {
     test_ctx
         .mock_post_incoming_default_n(domain_api_incoming_default(domain), 1)
         .await;
-    test_ctx.catch_all().await;
 
     assert_eq!(
         count_incoming_defaults_for_email(&tether, email)

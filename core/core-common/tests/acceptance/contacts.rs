@@ -81,7 +81,6 @@ async fn test_sync_and_load_contacts() {
         .await;
     ctx.mock_get_all_contact_emails_request(test_contacts_email.clone())
         .await;
-    ctx.catch_all().await;
 
     // Sync contacts
     let mut tether = user_ctx.stash().connection().await.unwrap();
@@ -401,7 +400,6 @@ async fn prepare_sync_test_data_contacts(
     ctx.mock_get_all_contact_emails_request(test_remote_contacts_email)
         .await;
     ctx.mock_get_full_contact(test_remote_full_contact).await;
-    ctx.catch_all().await;
 
     // Sync contacts
     let mut tether = user_ctx.stash().connection().await.unwrap();

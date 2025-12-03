@@ -14,74 +14,77 @@ use stash::orm::Model;
 use stash::params;
 use test_case::test_case;
 
-struct TestItem {
+struct TestCase {
     id: &'static str,
     to_mark: bool,
     unread: bool,
 }
 
-static EMPTY: &[TestItem] = &[];
-static ALL_UNREAD: &[TestItem] = &[
-    TestItem {
+static EMPTY: &[TestCase] = &[];
+
+static ALL_UNREAD: &[TestCase] = &[
+    TestCase {
         id: "one",
         to_mark: true,
         unread: true,
     },
-    TestItem {
+    TestCase {
         id: "two",
         to_mark: true,
         unread: true,
     },
-    TestItem {
+    TestCase {
         id: "three",
         to_mark: false,
         unread: false,
     },
-    TestItem {
+    TestCase {
         id: "four",
         to_mark: false,
         unread: true,
     },
 ];
-static MIXED_UNREAD: &[TestItem] = &[
-    TestItem {
+
+static MIXED_UNREAD: &[TestCase] = &[
+    TestCase {
         id: "one",
         to_mark: true,
         unread: true,
     },
-    TestItem {
+    TestCase {
         id: "two",
         to_mark: true,
         unread: false,
     },
-    TestItem {
+    TestCase {
         id: "three",
         to_mark: false,
         unread: false,
     },
-    TestItem {
+    TestCase {
         id: "four",
         to_mark: false,
         unread: true,
     },
 ];
-static ALL_READ: &[TestItem] = &[
-    TestItem {
+
+static ALL_READ: &[TestCase] = &[
+    TestCase {
         id: "one",
         to_mark: true,
         unread: false,
     },
-    TestItem {
+    TestCase {
         id: "two",
         to_mark: true,
         unread: false,
     },
-    TestItem {
+    TestCase {
         id: "three",
         to_mark: false,
         unread: false,
     },
-    TestItem {
+    TestCase {
         id: "four",
         to_mark: false,
         unread: true,
@@ -93,7 +96,7 @@ static ALL_READ: &[TestItem] = &[
 #[test_case(&MIXED_UNREAD, 1; "mixed unread")]
 #[test_case(&ALL_READ, 1; "all read")]
 #[tokio::test]
-async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
+async fn mark_message_read(messages: &[TestCase], expected_unread: usize) {
     // Setup
     // * Create all given messages in stash
     let ctx = MailTestContext::new().await;
@@ -127,7 +130,6 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
         ctx.mock_put_messages_read(expected_to_mark, vec![]).await;
     }
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mailbox = Mailbox::with_remote_id(
@@ -179,7 +181,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
 #[test_case(&MIXED_UNREAD, 3; "mixed unread")]
 #[test_case(&ALL_READ, 3; "all read")]
 #[tokio::test]
-async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
+async fn mark_message_unread(messages: &[TestCase], expected_unread: usize) {
     // Setup
     // * Create all given messages in stash
     let ctx = MailTestContext::new().await;
@@ -212,7 +214,6 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
         ctx.mock_put_messages_unread(expected_to_mark, vec![]).await;
     }
 
-    ctx.catch_all().await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mailbox = Mailbox::with_remote_id(
@@ -247,11 +248,11 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     assert_eq!(messages.len(), expected_unread);
 }
 
-fn test_message(params: &Params) -> impl FnMut(&TestItem) -> ApiMessageMetadata {
+fn test_message(params: &Params) -> impl FnMut(&TestCase) -> ApiMessageMetadata {
     let conversation_id = params.conversations[0].id.clone();
     let address_id = params.addresses[0].id.clone();
     move |message| {
-        let TestItem {
+        let TestCase {
             id: name, unread, ..
         } = message;
         ApiMessageMetadata {
@@ -322,7 +323,6 @@ mod rebase {
             .unwrap();
 
         mk_mocks(&ctx, &messages).await;
-        ctx.catch_all().await;
 
         (ctx, user_ctx, messages)
     }

@@ -19,7 +19,6 @@ async fn get_empty_sender_image() {
     let user_ctx = ctx.user_context().await;
 
     ctx.mock_get_images_logo(vec![]).await;
-    ctx.catch_all().await;
 
     let image_path = user_ctx
         .image_for_sender(
@@ -49,8 +48,6 @@ async fn concurrency() {
         .named("Get images/logo (but allow > 1)")
         .mount(ctx.mock_server())
         .await;
-
-    ctx.catch_all().await;
 
     let requests = (0..30).map(|_| {
         let ctx_clone = user_ctx.clone();
@@ -95,7 +92,6 @@ async fn image_extension(bytes: &[u8], expected: &str) {
     let user_ctx = ctx.user_context().await;
 
     ctx.mock_get_images_logo(bytes.to_vec()).await;
-    ctx.catch_all().await;
 
     let image_path = user_ctx
         .image_for_sender(

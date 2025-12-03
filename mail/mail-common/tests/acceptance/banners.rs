@@ -85,7 +85,6 @@ async fn banners() {
     test_ctx
         .mock_label_messages(&LabelId::inbox(), vec!["normal".into()])
         .await;
-    test_ctx.catch_all().await;
 
     let ctx = test_ctx.mail_user_context().await;
     test_ctx.initialize_uninitialized_ctx(&ctx).await;
@@ -524,8 +523,6 @@ async fn banners_unsubscribe() {
         .expect(1)
         .mount(&mock_server)
         .await;
-
-    test_ctx.catch_all().await;
 
     // --
 

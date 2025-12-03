@@ -34,7 +34,6 @@ async fn reads_one_item_from_online_scroll_data() {
 
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let page_size = 5;
@@ -202,7 +201,6 @@ async fn does_not_refresh_on_new_message_in_database() {
 
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -273,7 +271,6 @@ async fn does_refresh_on_modified_message_in_database() {
 
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -339,7 +336,6 @@ async fn all_mail() {
 
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     // ---
 
@@ -421,7 +417,6 @@ async fn almost_all_mail_with_spam_and_trash() {
 
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     // ---
 
@@ -537,7 +532,6 @@ async fn change_include_multiple_times_in_a_row() {
 
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     // ---
 
@@ -652,7 +646,6 @@ async fn change_keywords_multiple_times_in_a_row() {
 
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     // ---
 

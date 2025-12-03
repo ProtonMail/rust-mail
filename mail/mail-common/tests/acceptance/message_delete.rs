@@ -161,7 +161,6 @@ async fn setup(
         .unwrap();
 
     mk_mocks(&ctx, &messages).await;
-    ctx.catch_all().await;
 
     (ctx, user_ctx, messages)
 }

@@ -60,7 +60,6 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
                 .await;
         }
     };
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     list.add_single(
@@ -137,7 +136,6 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
                 .await;
         }
     };
-    ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
     list.add_group(

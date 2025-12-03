@@ -465,8 +465,6 @@ async fn fetch_and_answer() {
     )
     .await;
 
-    ctx.catch_all().await;
-
     assert!(
         !rsvp
             .attendees

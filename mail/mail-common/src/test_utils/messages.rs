@@ -123,14 +123,9 @@ impl MailTestContext {
 
     #[function_name::named]
     pub async fn mock_empty_label(&self, label_id: LabelId) {
-        #[derive(Serialize)]
-        struct Params {
-            #[serde(rename = "LabelID")]
-            label_id: LabelId,
-        }
         Mock::given(method("DELETE"))
             .and(path("/api/mail/v4/messages/empty"))
-            .and(body_partial_json(Params { label_id }))
+            .and(query_param("LabelID", label_id.to_string()))
             .respond_with(
                 ResponseTemplate::new(200)
                     .set_body_json(PutMessagesDeleteResponse { responses: vec![] }),

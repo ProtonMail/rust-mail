@@ -110,7 +110,6 @@ async fn action_snooze_conversation_from_inbox_to_snoozed() {
         vec![],
     )
     .await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -186,7 +185,6 @@ async fn unsnooze_conversation_from_snoozed_to_inbox() {
     let params = TestParams::default_basic();
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -290,7 +288,6 @@ async fn action_unsnooze_conversation_from_snoozed_to_inbox() {
     // Mock the API call for unsnoozing conversations
     ctx.mock_put_conversations_unsnooze(vec![conv_id!("test_conv").unwrap()], vec![])
         .await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -402,7 +399,6 @@ async fn action_unsnooze_with_empty_input_fails() {
     let params = TestParams::default_basic();
 
     ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection().await.unwrap();

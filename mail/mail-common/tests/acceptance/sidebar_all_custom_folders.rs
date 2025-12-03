@@ -24,8 +24,6 @@ async fn sidebar_all_custom_folders(labels: &[(&str, Option<&str>, &str, u32)], 
     let ctx = MailTestContext::new().await;
     ctx.setup_user(sidebar_test_params(labels)).await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.mail_user_context().await;
 
     let stash = user_ctx.user_stash();

@@ -45,7 +45,6 @@ async fn draft_undo_send() {
         }),
     )
     .await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
@@ -115,7 +114,6 @@ async fn draft_undo_send_failure() {
         }),
     )
     .await;
-    ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
