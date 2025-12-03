@@ -87,17 +87,11 @@ impl MailSession {
 
 #[derive(uniffi::Enum)]
 pub enum BackgroundExecutionStatus {
-    /// Skipped due to the lack of logged in and initialized user contexts.
     SkippedNoActiveContexts,
-    /// Actually executed something.
     Executed,
-    /// Abort request triggered in background
     AbortedInBackground,
-    /// Abort request triggered in foreground
     AbortedInForeground,
-    /// We ran more than the allotted time.
     TimedOut,
-    /// Failed to execute
     Failed(String),
 }
 
@@ -129,21 +123,13 @@ impl From<RealBackgroundExecutionResult> for BackgroundExecutionResult {
         }
     }
 }
-/// Callback to be notified when background execution completes.
+
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
 pub trait BackgroundExecutionCallback: Send + Sync {
-    /// Called when the background execution has terminated.
-    ///
-    /// Check the returned `result` for more details.
     async fn on_execution_completed(&self, result: BackgroundExecutionResult);
 }
 
-/// Handle for background activites execution.
-///
-/// It is meant to be hold by a caller of `start_background_execution` method.
-/// When dropped it will cease the execution.
-///
 #[derive(uniffi::Object)]
 pub struct BackgroundExecutionHandle {
     sender: mpsc::Sender<bool>,
@@ -152,10 +138,6 @@ pub struct BackgroundExecutionHandle {
 
 #[uniffi_export]
 impl BackgroundExecutionHandle {
-    /// Abort background execution.
-    ///
-    /// Allows holder of the `BackgroundExecutionHandle` to finish execution prematurely.
-    ///
     pub async fn abort(&self, in_foreground: bool) {
         let _ = self.sender.send(in_foreground).await;
     }

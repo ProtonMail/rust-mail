@@ -1,13 +1,3 @@
-//! Functions for working with [`Message`]s.
-//!
-//! The functions presented here can operate in one of two scopes: either on a
-//! [`Mailbox`], or on a [`MailSession`]. The difference is that operations that
-//! rely on the context of a mailbox/label view are performed on a mailbox, and
-//! operations that are more global in nature are performed on a session. The
-//! scope of the methods might change over time, but their primary association
-//! of working with messages, and hence their placement in this module, won't.
-//!
-
 use super::datatypes::{
     AllListActions, AllMessageActions, AttachmentMetadata, Message, MessageActionSheet,
     MobileAction,
@@ -246,12 +236,15 @@ pub struct TransformOpts {
     /// Whether should show block quotes or not. Default: true
     #[uniffi(default = true)]
     pub show_block_quote: bool,
+
     /// Whether should hide remote images or not. Default: defined in mail settings
     #[uniffi(default = None)]
     pub hide_remote_images: Option<bool>,
+
     /// Whether should hide embedded images or not. Default: defined in mail settings
     #[uniffi(default = None)]
     pub hide_embedded_images: Option<bool>,
+
     /// Current settings related to the color scheme.
     /// It affects on which CSS style is used in the HTML body of the message
     ///
@@ -292,6 +285,7 @@ pub struct ThemeOpts {
     /// What is the current UI color scheme, provided by the application.
     ///
     pub current_theme: MailTheme,
+
     /// While using the dark mode, some bodies of messages might be hard to read.
     /// User has an option to override the theme inside of the message (without changing the overall theme).
     ///
@@ -353,55 +347,44 @@ impl From<MailTheme> for RealMailTheme {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, uniffi::Enum)]
 pub enum MessageBanner {
-    /// The sender of this message is blocked.
     BlockedSender,
 
-    /// The message might be a phishing attempt.
     PhishingAttempt {
         /// Whether the system or the user marked it as phishing.
         auto: bool,
     },
 
-    /// The message has been marked as spam
     Spam {
         /// Whether the system or the user marked it as phishing.
         auto: bool,
     },
 
-    /// The message has an expiration date.
     Expiry {
         /// The Unix timestamp indicating when the message expires.
         timestamp: UnixTimestamp,
     },
 
-    /// The message is scheduled for automatic deletion at a specific time because it is in spam or trash.
     AutoDelete {
         /// The Unix timestamp indicating when the message will be deleted.
         timestamp: UnixTimestamp,
     },
 
-    /// The message provides an option to unsubscribe from a newsletter.
-    UnsubscribeNewsletter { already_unsubscribed: bool },
+    UnsubscribeNewsletter {
+        already_unsubscribed: bool,
+    },
 
-    /// The message is scheduled to be sent at a future time.
     ScheduledSend {
         /// The Unix timestamp indicating when the message is scheduled to be sent.
         timestamp: UnixTimestamp,
     },
 
-    /// The message has been snoozed and will reappear later.
     Snoozed {
         /// The Unix timestamp indicating when the message will reappear.
         timestamp: UnixTimestamp,
     },
 
-    /// The message contains embedded images.
     EmbeddedImages,
-
-    /// The message contains remote content (e.g., external images or links).
     RemoteContent,
-
-    /// The message could not be decrypted
     UnableToDecrypt,
 }
 
@@ -435,8 +418,6 @@ impl From<RealMessageBanner> for MessageBanner {
     }
 }
 
-/// Get a specified message.
-///
 #[uniffi_export]
 pub async fn message(
     session: Arc<MailUserSession>,
@@ -453,24 +434,14 @@ pub async fn message(
     .map_err(ActionError::from)
 }
 
-/// Data for watched message.
 #[derive(uniffi::Record)]
 pub struct WatchedMessage {
-    /// The message.
     pub message: Message,
-
-    /// The handle to stop watching the messages.
     pub handle: Arc<WatchHandle>,
 }
 
 declare_live_query_tagger!(WatchMessageMarker);
 
-/// Watch message for changes.
-///
-/// When the messages change, the callback will be invoked.
-///
-/// Returns `None` if the message could not be found.
-///
 #[uniffi_export]
 pub async fn watch_message(
     session: Arc<MailUserSession>,
@@ -496,8 +467,6 @@ pub async fn watch_message(
     .map_err(ActionError::from)
 }
 
-/// Get all messages for the given conversation.
-///
 #[uniffi_export]
 pub async fn messages_for_conversation(
     session: Arc<MailUserSession>,
@@ -520,8 +489,6 @@ pub async fn messages_for_conversation(
     .map_err(ActionError::from)
 }
 
-/// Get messages for the given label.
-///
 #[uniffi_export]
 pub async fn messages_for_label(
     session: Arc<MailUserSession>,
@@ -540,12 +507,6 @@ pub async fn messages_for_label(
     .map_err(ActionError::from)
 }
 
-/// Paginate messages for the given label.
-///
-/// Gets a paginator for messages belonging to the specified label, which allows
-/// navigation through the messages by page/window, and watches for changes.
-/// When the messages change, the callback will be invoked.
-///
 #[uniffi_export]
 pub async fn scroll_messages_for_label(
     mailbox: Arc<Mailbox>,
@@ -566,12 +527,6 @@ pub async fn scroll_messages_for_label(
     .map_err(ActionError::from)
 }
 
-/// Search for messages for the given keywords.
-///
-/// Gets a scroller for messages containing keywords, which allows
-/// navigation through the messages by page/window, and watches for changes.
-/// When the messages change, the callback will be invoked.
-///
 #[uniffi_export]
 pub async fn scroller_search(
     mailbox: Arc<Mailbox>,
@@ -593,10 +548,6 @@ pub async fn scroller_search(
     .map_err(ActionError::from)
 }
 
-/// Filter or search messages which match the specified options.
-///
-/// Note that search results are inserted into the database.
-///
 #[uniffi_export]
 pub async fn search_for_messages(
     session: Arc<MailUserSession>,
@@ -622,9 +573,6 @@ pub async fn search_for_messages(
     .map_err(ActionError::from)
 }
 
-/// Returns available label_as actions for messages.
-/// Any action returned here should reflect the display needs.
-///
 #[uniffi_export]
 pub async fn available_label_as_actions_for_messages(
     mailbox: Arc<Mailbox>,
@@ -645,9 +593,6 @@ pub async fn available_label_as_actions_for_messages(
 
 declare_live_query_tagger!(WatchAvailableLabelAsActionsMessageMaker);
 
-/// Watches label_as actions for messages.
-/// Any action returned here should reflect the display needs.
-///
 #[uniffi_export]
 pub async fn watch_available_label_as_actions_for_messages(
     mailbox: Arc<Mailbox>,
@@ -676,9 +621,6 @@ pub struct WatchedLabelAs {
     pub handle: Arc<WatchHandle>,
 }
 
-/// Returns available move_to actions for messages.
-/// Any action returned here should reflect the display needs.
-///
 #[uniffi_export]
 pub async fn available_move_to_actions_for_messages(
     mailbox: Arc<Mailbox>,
@@ -707,8 +649,6 @@ pub async fn available_move_to_actions_for_messages(
     .map_err(ActionError::from)
 }
 
-/// Returns available actions for messages list toolbar.
-///
 #[uniffi_export]
 pub async fn all_available_list_actions_for_messages(
     mailbox: Arc<Mailbox>,
@@ -730,8 +670,6 @@ pub async fn all_available_list_actions_for_messages(
     .map_err(ActionError::from)
 }
 
-/// Returns available actions for a single message (Phase 2).
-///
 #[uniffi_export]
 pub async fn all_available_message_actions_for_message(
     mailbox: Arc<Mailbox>,
@@ -757,10 +695,6 @@ pub async fn all_available_message_actions_for_message(
     .map_err(ActionError::from)
 }
 
-/// Returns available message actions grouped by categories for action sheet display.
-///
-/// Actions are organized into reply_actions, message_actions, move_actions, and general_actions categories.
-///
 #[uniffi_export]
 pub async fn all_available_message_actions_for_action_sheet(
     mailbox: Arc<Mailbox>,
@@ -817,18 +751,13 @@ pub fn test_stub_message_body(
     Ok(msg)
 }
 
-/// Return the decrypted body of the specified message.
-///
-/// If the message body has never been fetched before, it will be retrieved from
-/// the servers.
-/// Obtains a [`DecryptedMessage`] given a message id.
 #[uniffi_export]
 pub async fn get_message_body(
     mbox: &Mailbox,
     id: Id,
 ) -> Result<Arc<DecryptedMessage>, ActionError> {
     let ctx = mbox.ctx_ptr();
-    // We upgrade context to strong reference **temporairly**. The return type of this function is a weak pointer
+    // We upgrade context to strong reference **temporarily**. The return type of this function is a weak pointer
     // to avoid memory leak
     let strong_ctx = mbox.ctx()?;
     uniffi_async(async move {
@@ -845,9 +774,6 @@ pub async fn get_message_body(
 /// When message is not present in database, it will return `None`.
 /// Otherwise, it will return `Some(bool)` where `true` means the sender is blocked
 /// and `false` means the sender is not blocked.
-///
-/// Accepts message id as a parameter.
-///
 #[uniffi_export]
 pub async fn is_message_sender_blocked(
     mbox: &Mailbox,
@@ -864,23 +790,14 @@ pub async fn is_message_sender_blocked(
     .map_err(ActionError::from)
 }
 
-/// Data for watched messages.
 #[derive(uniffi::Record)]
 pub struct WatchedMessages {
-    /// The messages.
     pub messages: Vec<Message>,
-
-    /// The handle to stop watching the messages.
     pub handle: Arc<WatchHandle>,
 }
 
 declare_live_query_tagger!(WatchMessagesForLabelMaker);
 
-/// Watch messages for the given label.
-///
-/// Watches messages with the specified label for changes. When the messages
-/// change, the callback will be invoked.
-///
 #[uniffi_export]
 pub async fn watch_messages_for_label(
     session: Arc<MailUserSession>,
@@ -903,8 +820,6 @@ pub async fn watch_messages_for_label(
     .map_err(ActionError::from)
 }
 
-/// Star the given messages.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn star_messages(
@@ -923,8 +838,6 @@ pub async fn star_messages(
     .into()
 }
 
-/// Unstar the given messages.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn unstar_messages(
@@ -943,8 +856,6 @@ pub async fn unstar_messages(
     .into()
 }
 
-/// Mark multiple messages as read.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_messages_read(
@@ -963,8 +874,6 @@ pub async fn mark_messages_read(
     .into()
 }
 
-/// Mark multiple messages as unread.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_messages_unread(
@@ -983,8 +892,6 @@ pub async fn mark_messages_unread(
     .into()
 }
 
-/// Delete multiple messages
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn delete_messages(
@@ -1008,8 +915,6 @@ pub async fn delete_messages(
     .into()
 }
 
-/// Mark multiple messages as ham (not spam) AKA as legitimate
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<(), ActionError> {
@@ -1025,8 +930,6 @@ pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<
     .into()
 }
 
-/// Blocks an address.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn block_address(
@@ -1045,9 +948,6 @@ pub async fn block_address(
     .into()
 }
 
-/// Unblocks an address.
-/// This should not be used on addresses that aren't blocked.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(), ActionError> {
@@ -1063,8 +963,6 @@ pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(),
     .into()
 }
 
-/// Mark message as phishing
-///
 #[allow(unused)]
 #[uniffi_export]
 #[returns(VoidActionResult)]
@@ -1086,19 +984,12 @@ pub async fn report_phishing(mailbox: Arc<Mailbox>, message_id: Id) -> Result<()
     .into()
 }
 
-/// Struct returned by [`load_image`] representing the data of an image (or attachment!).
 #[derive(Clone, uniffi::Record)]
 pub struct AttachmentData {
-    /// The bytes of the image
     pub data: Vec<u8>,
     pub mime: String,
 }
 
-/// Change Labels of a list of messages and optionally archive them.
-///
-/// Set Labels from `selected_label_ids` while unsetting all those that are not in
-/// `partially_selected_label_ids`.
-///
 #[uniffi_export]
 pub async fn label_messages_as(
     mailbox: Arc<Mailbox>,
@@ -1128,8 +1019,6 @@ pub async fn label_messages_as(
     .map_err(ActionError::from)
 }
 
-/// Move given messages from a label into another.
-///
 #[uniffi_export]
 pub async fn move_messages(
     mailbox: Arc<Mailbox>,
@@ -1207,10 +1096,6 @@ pub async fn delete_all_messages_in_label(
     .into()
 }
 
-/// Updates the mobile list toolbar actions for the user.
-///
-/// This function allows updating the actions displayed in the list toolbar
-/// when viewing email lists on mobile devices.
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn update_mobile_list_toolbar_actions(
@@ -1232,10 +1117,6 @@ pub async fn update_mobile_list_toolbar_actions(
     .map_err(ActionError::from)
 }
 
-/// Updates the mobile message toolbar actions for the user.
-///
-/// This function allows updating the actions displayed in the message toolbar
-/// when viewing individual messages on mobile devices.
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn update_mobile_message_toolbar_actions(
@@ -1257,7 +1138,6 @@ pub async fn update_mobile_message_toolbar_actions(
     .map_err(ActionError::from)
 }
 
-/// Get the currently configured mobile list toolbar actions.
 #[uniffi_export]
 #[returns(MobileActionsResult)]
 pub async fn get_mobile_list_toolbar_actions(
@@ -1279,7 +1159,6 @@ pub async fn get_mobile_list_toolbar_actions(
     .map_err(ActionError::from)
 }
 
-/// Get the currently configured mobile message toolbar actions.
 #[uniffi_export]
 #[returns(MobileActionsResult)]
 pub async fn get_mobile_message_toolbar_actions(
@@ -1301,9 +1180,6 @@ pub async fn get_mobile_message_toolbar_actions(
     .map_err(ActionError::from)
 }
 
-/// Get all available mobile list toolbar actions.
-///
-/// Returns the complete set of actions that can be configured for the list toolbar.
 #[uniffi_export]
 #[must_use]
 pub fn get_all_mobile_list_actions() -> Vec<MobileAction> {
@@ -1314,9 +1190,6 @@ pub fn get_all_mobile_list_actions() -> Vec<MobileAction> {
         .collect_vec()
 }
 
-/// Get all available mobile message toolbar actions.
-///
-/// Returns the complete set of actions that can be configured for the message toolbar.
 #[uniffi_export]
 #[must_use]
 pub fn get_all_mobile_message_actions() -> Vec<MobileAction> {
@@ -1327,9 +1200,6 @@ pub fn get_all_mobile_message_actions() -> Vec<MobileAction> {
         .collect_vec()
 }
 
-/// Set the default mobile list toolbar actions for the user.
-///
-/// This function sets the default actions for the list toolbar when viewing lists on mobile devices.
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn set_default_mobile_list_toolbar_actions(
@@ -1351,9 +1221,6 @@ pub async fn set_default_mobile_list_toolbar_actions(
     .map_err(ActionError::from)
 }
 
-/// Set the default mobile message toolbar actions for the user.
-///
-/// This function sets the default actions for the message toolbar when viewing individual messages on mobile devices.
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn set_default_mobile_message_toolbar_actions(

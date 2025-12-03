@@ -71,12 +71,6 @@ impl From<Origin> for RealOrigin {
     }
 }
 
-/// Mail session is the entry point for the application. It contains important state such as
-/// database connection pools and the async runtime for rust.
-///
-/// # Lifetime
-/// This object needs to be kept alive for the entire duration of the application.
-///
 #[derive(uniffi::Object)]
 #[allow(dead_code)]
 pub struct MailSession {
@@ -85,7 +79,6 @@ pub struct MailSession {
     params: MailSessionParams,
 }
 
-/// Configuration parameters for the [`MailSession`]
 #[derive(uniffi::Record)]
 pub struct MailSessionParams {
     pub origin: Origin,
@@ -102,8 +95,6 @@ pub struct MailSessionParams {
 
 // NOTE: Callbacks can not be stored in record types, which is why they are still in the
 // constructor.
-/// Create a new mail session.
-///
 #[must_use]
 #[uniffi_export]
 pub fn create_mail_session(
@@ -166,23 +157,26 @@ async fn create_mail_session_inner(
     let mail_cache_path = cache_path.join("mail-cache");
     let core_cache_path = cache_path.join("core-cache");
 
-    // create directories.
     debug!("Creating directories");
+
     std::fs::create_dir_all(&session_path)?;
     std::fs::create_dir_all(&user_path)?;
     std::fs::create_dir_all(&mail_cache_path)?;
     std::fs::create_dir_all(&core_cache_path)?;
 
-    // Generate session key;
     debug!("Checking keychain");
+
     let key_chain = FFIKeyChain(key_chain);
+
     if key_chain
         .load::<SessionEncryptionKey>()
         .map_err(|_| Unexpected::Os)?
         .is_none()
     {
         debug!("Key chain has no key, generating");
+
         let key = SessionEncryptionKey::random();
+
         key_chain.store(key).map_err(|_e| {
             tracing::error!("Failed to store key in keychain");
             Unexpected::Os
@@ -230,14 +224,17 @@ async fn create_mail_session_inner(
 
     let user_ctx_map = MailUserContextMap::new();
     let weak_user_ctx_map = Arc::downgrade(&user_ctx_map);
-
     let core_ctx = mail_ctx.core_context();
+
     if let Some(session_service) = core_ctx.get_service_opt::<SessionObserverService>() {
         let event_service = core_ctx.event_service();
+
         session_service.on_session_deleted(event_service, move |_session_id, user_id| {
             let weak_user_ctx_map = weak_user_ctx_map.clone();
+
             async move {
                 tracing::warn!("Session ended. Removing from the map");
+
                 if let Some(ctx) = weak_user_ctx_map.upgrade() {
                     ctx.remove(&user_id);
                     OnSessionDeletedResponse::Continue
@@ -257,7 +254,6 @@ async fn create_mail_session_inner(
 
 #[uniffi_export]
 impl MailSession {
-    /// Start new login flow.
     pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, ProtonError> {
         let mail_ctx = self.mail_ctx.clone();
 
@@ -271,7 +267,6 @@ impl MailSession {
         .map_err(|err| ProtonError::OtherReason(OtherErrorReason::Other(err.to_string())))
     }
 
-    /// Resume an existing login flow.
     pub async fn resume_login_flow(
         &self,
         user_id: String,
@@ -290,7 +285,6 @@ impl MailSession {
         .map_err(ProtonError::from)
     }
 
-    /// Start new signup flow.
     pub async fn new_signup_flow(&self) -> Result<Arc<SignupFlow>, ProtonError> {
         let mail_ctx = self.mail_ctx.clone();
 
@@ -304,10 +298,7 @@ impl MailSession {
         .map_err(|err| ProtonError::OtherReason(OtherErrorReason::Other(err.to_string())))
     }
 
-    /// Get initialized user session from stored session.
-    /// If session exists but it is not initialized yet, it returns `None`.
-    ///
-    /// This method **does NOT** initialize session itself.
+    // This function **does NOT** initialize session itself.
     pub async fn initialized_user_session_from_stored_session(
         self: Arc<Self>,
         session: Arc<StoredSession>,
@@ -328,7 +319,6 @@ impl MailSession {
         Ok(user_ctx)
     }
 
-    /// Create an user session from a stored session.
     pub async fn user_session_from_stored_session(
         &self,
         session: Arc<StoredSession>,
@@ -349,11 +339,6 @@ impl MailSession {
         Ok(user_ctx)
     }
 
-    /// Get all available accounts.
-    ///
-    /// An account is an entity representing a Proton account known to the system.
-    /// When a user first authenticates via the login flow, a new account is created,
-    /// and all subsequent sessions are associated with that account.
     pub async fn get_accounts(&self) -> Result<Vec<Arc<StoredAccount>>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
@@ -375,7 +360,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Watch the accounts for changes.
     pub async fn watch_accounts(
         &self,
         callback: Box<dyn LiveQueryCallback>,
@@ -384,7 +368,6 @@ impl MailSession {
 
         uniffi_async(async move {
             let mut accounts = Vec::new();
-
             let (initial, rx) = ctx.watch_accounts().await?;
 
             // TODO(ET-1431): Compute this on the core side.
@@ -404,7 +387,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Watch the accounts for changes using an async callback.
     pub async fn watch_accounts_async(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
@@ -413,7 +395,6 @@ impl MailSession {
 
         uniffi_async(async move {
             let mut accounts = Vec::new();
-
             let (initial, rx) = ctx.watch_accounts().await?;
 
             // TODO(ET-1431): Compute this on the core side.
@@ -433,7 +414,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get all API sessions.
     pub async fn get_sessions(&self) -> Result<Vec<Arc<StoredSession>>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
@@ -453,7 +433,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Watch all API sessions for changes.
     pub async fn watch_sessions(
         &self,
         callback: Box<dyn LiveQueryCallback>,
@@ -462,7 +441,6 @@ impl MailSession {
 
         uniffi_async(async move {
             let mut sessions = Vec::new();
-
             let (initial, rx) = ctx.watch_sessions().await?;
 
             // TODO(ET-1431): Compute this on the core side.
@@ -480,7 +458,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Watch all API sessions for changes using an async callback.
     pub async fn watch_sessions_async(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
@@ -489,7 +466,6 @@ impl MailSession {
 
         uniffi_async(async move {
             let mut sessions = Vec::new();
-
             let (initial, rx) = ctx.watch_sessions().await?;
 
             // TODO(ET-1431): Compute this on the core side.
@@ -507,7 +483,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get all API sessions associated with a given account.
     pub async fn get_account_sessions(
         &self,
         account: Arc<StoredAccount>,
@@ -516,7 +491,6 @@ impl MailSession {
 
         uniffi_async(async move {
             let account = account.account();
-
             let mut sessions = Vec::new();
 
             // TODO(ET-1431): Compute this on the core side.
@@ -532,7 +506,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Watch an account's API sessions for changes.
     pub async fn watch_account_sessions(
         &self,
         account: Arc<StoredAccount>,
@@ -542,7 +515,6 @@ impl MailSession {
 
         uniffi_async(async move {
             let mut sessions = Vec::new();
-
             let (initial, rx) = ctx.watch_account_sessions(account.user_id().into()).await?;
 
             // TODO(ET-1431): Compute this on the core side.
@@ -560,7 +532,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get a single account by its remote (user) ID.
     pub async fn get_account(
         &self,
         user_id: String,
@@ -583,7 +554,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get a single API session by its associated account and session ID.
     pub async fn get_session(
         &self,
         session_id: String,
@@ -606,7 +576,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get the login state of an account.
     pub async fn get_account_state(
         &self,
         user_id: String,
@@ -625,7 +594,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get the login state of a session.
     pub async fn get_session_state(
         &self,
         session_id: String,
@@ -644,7 +612,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get the account considered to be the primary account.
     pub async fn get_primary_account(
         &self,
     ) -> Result<Option<Arc<StoredAccount>>, UserSessionError> {
@@ -694,8 +661,6 @@ impl MailSession {
         .into()
     }
 
-    /// What aditional protection of the App is configured.
-    ///
     pub async fn app_protection(&self) -> Result<AppProtection, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
@@ -719,7 +684,7 @@ impl MailSession {
         self.mail_ctx.core_context().clock().auto_lock_tick();
     }
 
-    /// Shoul invoke app lock according to app settings.
+    /// Should invoke app lock according to app settings.
     ///
     /// Method will update itself to new access time when returning `true`,
     /// It assumes client will invoke the app protection by themself
@@ -746,11 +711,6 @@ impl MailSession {
         self.mail_ctx.core_context().clock().auto_lock_accessed();
     }
 
-    /// Create a PIN App protection.
-    ///
-    /// The same PIN will be required for authentication of the user
-    /// or when user want to change the way of authentication in the App.
-    ///
     pub async fn set_pin_code(&self, pin: Vec<u32>) -> Result<(), PinSetError> {
         let ctx = self.mail_ctx.core_context().clone();
 
@@ -763,8 +723,6 @@ impl MailSession {
         .map_err(PinSetError::from)
     }
 
-    /// Authenticate stored PIN
-    ///
     pub async fn verify_pin_code(&self, pin: Vec<u32>) -> Result<(), PinAuthError> {
         let mail_ctx = self.mail_ctx.clone();
 
@@ -819,11 +777,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Set App Protection to `Biometrics`
-    ///
-    /// This function will have no effect if the current `AppProtection` is something
-    /// different than None.
-    ///
     pub async fn set_biometrics_app_protection(&self) -> Result<(), UserSessionError> {
         let ctx = self.mail_ctx.core_context().clone();
 
@@ -840,11 +793,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Set App Protection to `None`
-    ///
-    /// This function will have no effect if the current `AppProtection` is something
-    /// different than Biometrics.
-    ///
     pub async fn unset_biometrics_app_protection(&self) -> Result<(), UserSessionError> {
         let ctx = self.mail_ctx.core_context().clone();
 
@@ -861,8 +809,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get current app settings
-    ///
     pub async fn get_app_settings(&self) -> Result<AppSettings, UserSessionError> {
         let ctx = self.mail_ctx.core_context().clone();
 
@@ -876,8 +822,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Change the settings of the application.
-    ///
     pub async fn change_app_settings(
         &self,
         settings: AppSettingsDiff,
@@ -899,7 +843,6 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// When the flow is considered logged in, transform it into a `MailUserSession`.
     pub async fn to_user_session(
         &self,
         ffi_flow: Arc<LoginFlow>,
@@ -1017,7 +960,6 @@ impl MailSession {
 
 #[uniffi_export]
 impl MailSession {
-    /// Set the account considered to be the primary account.
     #[returns(VoidSessionResult)]
     pub async fn set_primary_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let ctx = self.mail_ctx.clone();
@@ -1031,7 +973,6 @@ impl MailSession {
         .into()
     }
 
-    /// Logs out all sessions of an account and deletes the account's data.
     #[returns(VoidSessionResult)]
     pub async fn logout_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let mail_ctx = self.mail_ctx.clone();
@@ -1053,7 +994,6 @@ impl MailSession {
         .into()
     }
 
-    /// Removes an account and all associated sessions and data.
     #[returns(VoidSessionResult)]
     pub async fn delete_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let mail_ctx = self.mail_ctx.clone();
@@ -1078,19 +1018,16 @@ impl MailSession {
 
 #[uniffi_export]
 impl MailSession {
-    /// A blocking form of `get_accounts`.
     #[must_use]
     pub fn get_accounts_blocking(&self) -> MailSessionGetAccountsResult {
         async_runtime().block_on(self.get_accounts())
     }
 
-    /// A blocking form of `get_account`.
     #[must_use]
     pub fn get_account_blocking(&self, user_id: String) -> MailSessionGetAccountResult {
         async_runtime().block_on(self.get_account(user_id))
     }
 
-    /// A blocking form of `get_sessions`.
     #[must_use]
     pub fn get_sessions_blocking(
         &self,
@@ -1099,19 +1036,16 @@ impl MailSession {
         async_runtime().block_on(self.get_account_sessions(account))
     }
 
-    /// A blocking form of `get_session`.
     #[must_use]
     pub fn get_session_blocking(&self, session_id: String) -> MailSessionGetSessionResult {
         async_runtime().block_on(self.get_session(session_id))
     }
 
-    /// A blocking form of `get_account_state`.
     #[must_use]
     pub fn get_account_state_blocking(&self, user_id: String) -> MailSessionGetAccountStateResult {
         async_runtime().block_on(self.get_account_state(user_id))
     }
 
-    /// A blocking form of `get_session_state`.
     #[must_use]
     pub fn get_session_state_blocking(
         &self,
@@ -1120,7 +1054,6 @@ impl MailSession {
         async_runtime().block_on(self.get_session_state(session_id))
     }
 
-    /// A blocking form of `get_primary_account`.
     #[must_use]
     pub fn get_primary_account_blocking(&self) -> MailSessionGetPrimaryAccountResult {
         async_runtime().block_on(self.get_primary_account())
@@ -1231,32 +1164,25 @@ impl MailSession {
 }
 
 impl MailSession {
-    /// Get the mail context.
     #[must_use]
     pub fn ctx(&self) -> &MailContext {
         &self.mail_ctx
     }
 
-    /// Get the mail context wrapped in [`Arc`]
     #[must_use]
     pub fn ctx_arc(&self) -> Arc<MailContext> {
         Arc::clone(&self.mail_ctx)
     }
 
-    /// Get the session database connection.
     #[must_use]
     pub fn session_stash(&self) -> &Stash {
         self.mail_ctx.session_stash()
     }
 }
 
-/// Data for watched sessions.
 #[derive(uniffi::Record)]
 pub struct WatchedAccounts {
-    /// The accounts.
     pub accounts: Vec<Arc<StoredAccount>>,
-
-    /// The handle to stop watching the accounts.
     pub handle: Arc<WatchHandle>,
 }
 
@@ -1307,13 +1233,9 @@ impl From<OsNetworkStatus> for RealOsNetworkStatus {
     }
 }
 
-/// Data for watched sessions.
 #[derive(uniffi::Record)]
 pub struct WatchedSessions {
-    /// The sessions.
     pub sessions: Vec<Arc<StoredSession>>,
-
-    /// The handle to stop watching the sessions.
     pub handle: Arc<WatchHandle>,
 }
 

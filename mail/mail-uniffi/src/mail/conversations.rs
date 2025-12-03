@@ -1,14 +1,3 @@
-//! Functions for working with [`Conversation`]s.
-//!
-//! The functions presented here can operate in one of two scopes: either on a
-//! [`Mailbox`], or on a [`MailSession`]. The difference is that operations that
-//! rely on the context of a mailbox/label view are performed on a mailbox, and
-//! operations that are more global in nature are performed on a session. The
-//! scope of the methods might change over time, but their primary association
-//! of working with conversations, and hence their placement in this module,
-//! won't.
-//!
-
 use super::messages::WatchedLabelAs;
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, MobileActionsResult, SnoozeError, VoidActionResult};
@@ -41,8 +30,6 @@ use proton_mail_common::{
 use stash::orm::Model;
 use std::sync::Arc;
 
-/// Delete the given conversations.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn delete_conversations(
@@ -67,9 +54,6 @@ pub async fn delete_conversations(
     .into()
 }
 
-/// Returns available label_as actions for conversations.
-/// Any action returned here should reflect the display needs.
-///
 #[uniffi_export]
 pub async fn available_label_as_actions_for_conversations(
     mailbox: Arc<Mailbox>,
@@ -90,9 +74,6 @@ pub async fn available_label_as_actions_for_conversations(
 
 declare_live_query_tagger!(WatchAvailableLabelsAsActionMarker);
 
-/// Watches label_as actions for conversations.
-/// Any action returned here should reflect the display needs.
-///
 #[uniffi_export]
 pub async fn watch_available_label_as_actions_for_conversations(
     mailbox: Arc<Mailbox>,
@@ -117,8 +98,6 @@ pub async fn watch_available_label_as_actions_for_conversations(
     .map_err(ActionError::from)
 }
 
-/// Returns available move_to actions for conversations.
-///
 #[uniffi_export]
 pub async fn available_move_to_actions_for_conversations(
     mailbox: Arc<Mailbox>,
@@ -141,11 +120,6 @@ pub async fn available_move_to_actions_for_conversations(
     .map_err(ActionError::from)
 }
 
-/// Returns available snooze actions for conversation.
-///
-/// This function will return options depending on current day of the week.
-/// If the conversation is already snoozed, it will return the unsnooze option.
-///
 #[allow(unused_variables)]
 #[allow(clippy::needless_pass_by_value)]
 #[uniffi_export]
@@ -222,8 +196,6 @@ pub async fn unsnooze_conversations(
     .map_err(SnoozeError::from)
 }
 
-/// Returns available actions for conversation list toolbar.
-///
 #[uniffi_export]
 pub async fn all_available_list_actions_for_conversations(
     mailbox: Arc<Mailbox>,
@@ -246,11 +218,6 @@ pub async fn all_available_list_actions_for_conversations(
     .map_err(ActionError::from)
 }
 
-/// Get the available actions to populate the conversation action sheet.
-///
-/// Conversation sheet contains context aware set of actions for given conversation.
-/// It is split up into different categories to be easy to display in the UI.
-///
 #[uniffi_export]
 pub async fn all_available_conversation_actions_for_action_sheet(
     mailbox: Arc<Mailbox>,
@@ -273,11 +240,6 @@ pub async fn all_available_conversation_actions_for_action_sheet(
     .map_err(ActionError::from)
 }
 
-/// Get the available conversation actions for a single conversation.
-///
-/// Returns all available actions split into visible and hidden categories,
-/// matching the toolbar structure used by the UI.
-///
 #[uniffi_export]
 pub async fn all_available_conversation_actions_for_conversation(
     mailbox: Arc<Mailbox>,
@@ -300,11 +262,6 @@ pub async fn all_available_conversation_actions_for_conversation(
     .map_err(ActionError::from)
 }
 
-/// Get a specified conversation.
-///
-/// This function syncs the conversation's messages from the server at least
-/// once.
-///
 #[uniffi_export]
 pub async fn conversation(
     mailbox: Arc<Mailbox>,
@@ -350,16 +307,10 @@ pub async fn conversation(
     .map_err(Into::into)
 }
 
-/// Results of [`conversation()`]
 #[derive(uniffi::Record)]
 pub struct ConversationAndMessages {
-    /// Conversation.
     pub conversation: Conversation,
-
-    /// ID of the message that should be displayed first.
     pub message_id_to_open: Id,
-
-    /// Messages which belong to the conversation.
     pub messages: Vec<Message>,
 }
 
@@ -373,8 +324,6 @@ impl From<ContextualConversationAndMessages> for ConversationAndMessages {
     }
 }
 
-/// Get conversations for the given label.
-///
 #[uniffi_export]
 pub async fn conversations_for_label(
     session: Arc<MailUserSession>,
@@ -397,7 +346,6 @@ pub async fn conversations_for_label(
 ///
 /// Notably, this retrieves a local conversation that has been saved in the
 /// database. It does not use the network.
-///
 #[uniffi_export]
 pub async fn load_conversation(
     session: Arc<MailUserSession>,
@@ -419,8 +367,6 @@ pub async fn load_conversation(
     .map_err(ActionError::from)
 }
 
-/// Mark the given conversations as read.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_conversations_as_read(
@@ -443,8 +389,6 @@ pub async fn mark_conversations_as_read(
     .into()
 }
 
-/// Mark the given conversations as unread.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_conversations_as_unread(
@@ -467,12 +411,6 @@ pub async fn mark_conversations_as_unread(
     .into()
 }
 
-/// Move the given conversations from the current mailbox.
-///
-/// Move the conversations with the specified IDs from the current mailbox to
-/// the label with specified label ID. If the current mailbox is not a folder,
-/// the conversation will not be moved.
-///
 #[uniffi_export]
 pub async fn move_conversations(
     mailbox: Arc<Mailbox>,
@@ -492,12 +430,6 @@ pub async fn move_conversations(
     .into()
 }
 
-/// Paginate conversations for the given label.
-///
-/// Gets a paginator for conversations belonging to the specified label, which
-/// allows navigation through the conversations by page/window, and watches for
-/// changes. When the conversations change, the callback will be invoked.
-///
 #[uniffi_export]
 pub async fn scroll_conversations_for_label(
     mailbox: Arc<Mailbox>,
@@ -519,8 +451,6 @@ pub async fn scroll_conversations_for_label(
     .map_err(ActionError::from)
 }
 
-/// Star the given conversations.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn star_conversations(
@@ -539,8 +469,6 @@ pub async fn star_conversations(
     .into()
 }
 
-/// Unstar the given conversations.
-///
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn unstar_conversations(
@@ -559,19 +487,11 @@ pub async fn unstar_conversations(
     .into()
 }
 
-/// Data for a watched conversation.
 #[derive(uniffi::Record)]
 pub struct WatchedConversation {
-    /// The conversation.
     pub conversation: Conversation,
-
-    /// The messages in the conversation.
     pub messages: Vec<Message>,
-
-    /// The Id of the message to open.
     pub message_id_to_open: Id,
-
-    /// The handle to stop watching the conversation and messages;
     pub handle: Arc<WatchHandle>,
 }
 
@@ -606,10 +526,6 @@ impl From<OpenConversationOrigin> for RealOpenConversationOrigin {
 
 declare_live_query_tagger!(WatchConversationMarker);
 
-/// Watch the given conversation.
-///
-/// Watches the specified conversation for changes. When the conversation's
-/// messages change, the callback will be invoked.
 #[uniffi_export]
 pub async fn watch_conversation(
     mailbox: Arc<Mailbox>,
@@ -660,23 +576,14 @@ pub async fn watch_conversation(
     .map_err(ActionError::from)
 }
 
-/// Data for watched conversations.
 #[derive(uniffi::Record)]
 pub struct WatchedConversations {
-    /// The conversations.
     pub conversations: Vec<Conversation>,
-
-    /// The handle to stop watching the conversations.
     pub handle: Arc<WatchHandle>,
 }
 
 declare_live_query_tagger!(WatchConversationsForLabelMarker);
 
-/// Watch conversations for the given label.
-///
-/// Watches conversations with the specified label for changes. When the
-/// conversations change, the callback will be invoked.
-///
 #[uniffi_export]
 pub async fn watch_conversations_for_label(
     session: Arc<MailUserSession>,
@@ -704,12 +611,6 @@ pub async fn watch_conversations_for_label(
     .map_err(ActionError::from)
 }
 
-/// Action to change labels on a batch of conversations.
-///
-/// All given conversations will get the selected labels.
-/// All given conversations will keep the partially selected labels.
-/// All given conversations will lose any other labels.
-///
 #[uniffi_export]
 pub async fn label_conversations_as(
     mailbox: Arc<Mailbox>,
@@ -741,9 +642,6 @@ pub async fn label_conversations_as(
 
 declare_live_query_tagger!(WatchAvailableMoveToActionsMarker);
 
-/// watches available move_to actions for conversations or messages.
-/// Any action returned here should reflect the display needs.
-///
 #[uniffi_export]
 pub async fn watch_available_move_to_actions(
     mailbox: Arc<Mailbox>,
@@ -760,9 +658,6 @@ pub async fn watch_available_move_to_actions(
     .map_err(ActionError::from)
 }
 
-/// Gets whether or not to display the `AutoDelete` banner.
-/// Any action returned here should reflect the display needs.
-///
 #[uniffi_export]
 pub async fn get_auto_delete_banner(
     session: Arc<MailUserSession>,
@@ -777,10 +672,6 @@ pub async fn get_auto_delete_banner(
     .map_err(ActionError::from)
 }
 
-/// Updates the mobile conversation toolbar actions for the user.
-///
-/// This function allows updating the actions displayed in the conversation toolbar
-/// when viewing conversations on mobile devices.
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn update_mobile_conversation_toolbar_actions(
@@ -802,7 +693,6 @@ pub async fn update_mobile_conversation_toolbar_actions(
     .map_err(ActionError::from)
 }
 
-/// Get the currently configured mobile conversation toolbar actions.
 #[uniffi_export]
 #[returns(MobileActionsResult)]
 pub async fn get_mobile_conversation_toolbar_actions(
@@ -824,9 +714,6 @@ pub async fn get_mobile_conversation_toolbar_actions(
     .map_err(ActionError::from)
 }
 
-/// Get all available mobile conversation toolbar actions.
-///
-/// Returns the complete set of actions that can be configured for the conversation toolbar.
 #[uniffi_export]
 #[must_use]
 pub fn get_all_mobile_conversation_actions() -> Vec<MobileAction> {
@@ -837,9 +724,6 @@ pub fn get_all_mobile_conversation_actions() -> Vec<MobileAction> {
         .collect_vec()
 }
 
-/// Set the default mobile conversation toolbar actions for the user.
-///
-/// This function sets the default actions for the conversation toolbar when viewing conversation on mobile devices.
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn set_default_mobile_conversation_toolbar_actions(

@@ -104,7 +104,6 @@ pub fn app_tracing_env_filter_trace() -> EnvFilter {
         .expect("bad log directives")
 }
 
-/// Modify the hook on panic so we log the `Backtrace`.
 fn log_backtrace_on_panic() {
     let previous_hook = take_hook();
     set_hook(Box::new(move |info| {
