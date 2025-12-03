@@ -11,13 +11,9 @@ use uniffi_runtime::async_runtime;
 
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct RegisteredDevice {
-    /// Device token
     pub device_token: String,
-    /// Environment to which we register
     pub environment: DeviceEnvironment,
-    /// TODO: Document this field
     pub ping_notification_status: Option<i32>,
-    /// TODO: Document this field
     pub push_notification_status: Option<i32>,
 }
 
@@ -43,8 +39,6 @@ impl Drop for RegisterDeviceTaskHandle {
 
 #[uniffi_export]
 impl RegisterDeviceTaskHandle {
-    /// Call this method whenever device token was received.
-    ///
     #[returns(VoidActionResult)]
     pub fn update_device(&self, device: RegisteredDevice) -> Result<(), ActionError> {
         tracing::debug!("Uniffi: Updating device registration");

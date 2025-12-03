@@ -16,44 +16,8 @@ use proton_mail_common::{
 };
 use std::sync::Arc;
 
-/// A callback interface for live queries.
-///
-/// This interface is used to notify the client when observed data has been
-/// updated.
-///
 #[uniffi::export(callback_interface)]
 pub trait ConversationScrollerLiveQueryCallback: Send + Sync {
-    /// Notify the client that the observed data has been updated.
-    ///
-    /// This method is called when the observed data has been updated. It
-    /// provides the update to the client.
-    ///
-    /// Example of handling updates with the collected items vector (in Rust):
-    ///
-    /// ```ignore
-    /// fn handle_updates(collected_items: &mut Vec<Conversation>, update: ConversationScrollerUpdate) {
-    ///     match update {
-    ///         ConversationScrollerUpdate::None => {
-    ///             tracing::info!("No update has occurred.");
-    ///         }
-    ///         ConversationScrollerUpdate::Append(items) => {
-    ///             collected_items.extend(items);
-    ///         }
-    ///         ConversationScrollerUpdate::ReplaceFrom { idx, items } => {
-    ///             collected_items.splice(idx.., items);
-    ///         }
-    ///         ConversationScrollerUpdate::ReplaceBefore { idx, items } => {
-    ///             collected_items.splice(..idx, items);
-    ///         }
-    ///         ConversationScrollerUpdate::ReplaceRange { from, to, items } => {
-    ///             collected_items.splice(from..to, items);
-    ///         }
-    ///         ConversationScrollerUpdate::Error { error } => {
-    ///             tracing::error!("Error: {}", error);
-    ///         }
-    ///     }
-    /// }
-    /// ```
     fn on_update(&self, update: ConversationScrollerUpdate);
 }
 
@@ -61,10 +25,7 @@ pub trait ConversationScrollerLiveQueryCallback: Send + Sync {
 pub enum ConversationScrollerUpdate {
     List(ConversationScrollerListUpdate),
     Status(ConversationScrollerStatusUpdate),
-    /// An error has occurred.
-    Error {
-        error: MailScrollerError,
-    },
+    Error { error: MailScrollerError },
 }
 
 #[derive(Debug, uniffi::Enum)]
@@ -95,6 +56,7 @@ pub enum ConversationScrollerListUpdate {
     /// Note: This replace includes the index while replacing
     ///
     /// # Examples
+    ///
     /// [0, 1, 2, 3] -> ReplaceFrom { idx: 2, items: [5, 6, 7] } -> [0, 1, 5, 6, 7]
     /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceFrom { idx: 2, items: [5, 6, 7] } -> [0, 1, 5, 6, 7]
     /// [0, 1, 2, 3] -> ReplaceFrom { idx: 0, items: [5, 6, 7] } -> [5, 6, 7]
@@ -105,6 +67,7 @@ pub enum ConversationScrollerListUpdate {
     /// Note: This replace excludes the index while replacing
     ///
     /// # Examples
+    ///
     /// [0, 1, 2, 3] -> ReplaceBefore { idx: 2, items: [5, 6, 7] } -> [5, 6, 7, 3]
     /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceBefore { idx: 2, items: [5, 6, 7] } -> [5, 6, 7, 3, 4, 8, 9]
     /// [0, 1, 2, 3] -> ReplaceBefore { idx: 0, items: [5, 6, 7] } -> [5, 6, 7, 0, 1, 2, 3]
@@ -112,16 +75,19 @@ pub enum ConversationScrollerListUpdate {
 
     /// A page of conversations needs to be replaced at the given index
     /// replacing everything between the given index and the end with the new items.
+    ///
+    /// # Examples
+    ///
     /// [0, 1, 2, 3] -> ReplaceRange { from: 1, to: 3, items: [5, 6, 7] } -> [0, 5, 6, 7]
     /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceRange { from: 1, to: 3, items: [5, 6, 7] } -> [0, 5, 6, 7, 4, 8, 9]
     /// [0, 1, 2, 3] -> ReplaceRange { from: 0, to: 2, items: [5, 6, 7] } -> [5, 6, 7, 3]
     /// [0, 1, 2, 3] -> ReplaceRange { from: 1, to: 1, items: [5, 6, 7] } -> [0, 5, 6, 7, 1, 2, 3]
     ///
-    /// # Integration examples
+    /// # Integration
+    ///
     /// Rust: collected_items.splice(from..to, items)
     /// Swift: collected_items.replaceSubrange(from..<to, with: items)
     /// Kotlin: collected_items.subList(from, to).clear(); collected_items.addAll(from, items)
-    ///
     ReplaceRange {
         from: u64, // inclusive
         to: u64,   // exclusive
@@ -157,6 +123,7 @@ impl From<ScrollerListUpdate<RealContextualConversation>> for ConversationScroll
         }
     }
 }
+
 impl From<ScrollerUpdate<RealContextualConversation>> for ConversationScrollerUpdate {
     fn from(update: ScrollerUpdate<RealContextualConversation>) -> Self {
         match update {
@@ -191,19 +158,8 @@ pub(crate) fn spawn_conversation_scroller_watcher(
     Arc::new(WatchHandle::new(handle, &task))
 }
 
-/// A callback interface for live queries.
-///
-/// This interface is used to notify the client when observed data has been
-/// updated.
-///
-/// See [`ConversationScrollerLiveQueryCallback`] for additional examples.
 #[uniffi::export(callback_interface)]
 pub trait MessageScrollerLiveQueryCallback: Send + Sync {
-    /// Notify the client that the observed data has been updated.
-    ///
-    /// This method is called when the observed data has been updated. It
-    /// provides the update to the client.
-    ///
     fn on_update(&self, update: MessageScrollerUpdate);
 }
 
@@ -222,24 +178,19 @@ impl From<ScrollerStatusUpdate> for MessageScrollerStatusUpdate {
     }
 }
 
+/// Like [`ConversationScrollerListUpdate`], but for messages.
 #[derive(Debug, uniffi::Enum)]
 pub enum MessageScrollerListUpdate {
-    /// No update has occurred. It will be returned only for client-side requests.
     None,
-
-    /// A new page of messages needs to be appended to the end of the list.
     Append(Vec<Message>),
-
-    /// A page of messages needs to be replaced at the given index.
-    /// Note: This replace includes the index while replacing
-    ReplaceFrom { idx: u64, items: Vec<Message> },
-
-    /// A page of messages needs to be replaced before the given index.
-    /// Note: This replace excludes the index while replacing
-    ReplaceBefore { idx: u64, items: Vec<Message> },
-
-    /// A page of messages needs to be replaced at the given index
-    /// replacing everything between the given index and the end with the new items.
+    ReplaceFrom {
+        idx: u64,
+        items: Vec<Message>,
+    },
+    ReplaceBefore {
+        idx: u64,
+        items: Vec<Message>,
+    },
     ReplaceRange {
         from: u64,
         to: u64,
@@ -282,10 +233,7 @@ impl From<ScrollerListUpdate<RealMessage>> for MessageScrollerListUpdate {
 pub enum MessageScrollerUpdate {
     List(MessageScrollerListUpdate),
     Status(MessageScrollerStatusUpdate),
-    /// An error has occurred.
-    Error {
-        error: MailScrollerError,
-    },
+    Error { error: MailScrollerError },
 }
 impl From<ScrollerUpdate<RealMessage>> for MessageScrollerUpdate {
     fn from(value: ScrollerUpdate<RealMessage>) -> Self {

@@ -23,8 +23,6 @@ use std::{
 };
 use tokio::{task, time::interval};
 
-/// Returns grouped contacts by the first grapheme of the name.
-///
 #[uniffi_export]
 pub async fn contact_list(
     session: Arc<MailUserSession>,
@@ -44,7 +42,6 @@ pub async fn contact_list(
     .map_err(ActionError::from)
 }
 
-/// Returns a specific contact group detailed info
 // This is not necessary but android wants this.
 #[uniffi_export]
 pub async fn contact_group_by_id(
@@ -138,19 +135,8 @@ pub async fn delete_contact(
     .into()
 }
 
-/// A callback interface for live queries.
-///
-/// This interface is used to notify the client when observed data has been
-/// updated.
-///
 #[uniffi::export(callback_interface)]
 pub trait ContactsLiveQueryCallback: Send + Sync {
-    /// Notify the client that the observed data has been updated.
-    ///
-    /// This method is called when the observed data has been updated. It does
-    /// not provide any information about the update, but the client can use
-    /// this as a signal to refresh its view of the data.
-    ///
     fn on_update(&self, contacts: Vec<GroupedContacts>);
 }
 

@@ -23,9 +23,7 @@ use proton_mail_common::datatypes::{
 ///
 #[derive(Clone, Debug, UniffiRecord)]
 pub struct AssignedSwipeActions {
-    /// When user swipes left
     pub left: AssignedSwipeAction,
-    /// When user swipes right
     pub right: AssignedSwipeAction,
 }
 
@@ -45,19 +43,10 @@ impl From<RealAssignedSwipeActions> for AssignedSwipeActions {
 ///
 #[derive(Clone, Debug, UniffiEnum)]
 pub enum AssignedSwipeAction {
-    /// Swipe gesture is no-op
     NoAction,
-
-    /// Swipe gesture moves item to another folder
     MoveTo(SwipeActionMoveToTarget),
-
-    /// Swipe gesture labels item - it requires to open an extra popup for user to choose labels
     LabelAs,
-
-    /// Swipe gesture toggles star
     ToggleStar,
-
-    /// Swipe gesture marks item as (un)read
     ToggleRead,
 }
 
@@ -75,19 +64,13 @@ impl From<RealAssignedSwipeAction> for AssignedSwipeAction {
     }
 }
 
-/// When moving item to another folder, mobile app needs to either know where to move or that it has to open a new popup
-///
 #[derive(Clone, Debug, UniffiEnum)]
 pub enum SwipeActionMoveToTarget {
-    /// Swipe action is programmed to move to one of the special folders
-    /// For example Trash, Archive, Spam etc.
     MoveToSystemLabel {
-        /// To show the right icon
         label: SystemLabel,
-        /// To pass as a parameter for `move_to` functions.
-        /// Local ID
         id: Id,
     },
+
     /// Swipe action requires extra popup for user to choose the target
     MoveToUnknownLabel,
 }
@@ -106,8 +89,6 @@ impl From<RealSwipeActionMoveToTarget> for SwipeActionMoveToTarget {
     }
 }
 
-/// Returns assigned swipe actions based on user's mail settings.
-///
 #[uniffi_export]
 pub async fn assigned_swipe_actions(
     current_folder: Id,

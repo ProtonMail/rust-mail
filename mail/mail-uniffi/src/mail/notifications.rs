@@ -20,18 +20,9 @@ use crate::{errors::ActionError, uniffi_async};
 
 use super::MailSession;
 
-/// Encrypted push notification
-///
-/// This notification is completely encrypted so that push servers
-/// cannot know topic/sender/recipient
-///
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct EncryptedPushNotification {
-    /// UID
-    ///
-    pub session_id: String,
-    /// Encrypted payload of the notification
-    ///
+    pub session_id: String, // aka UID (not to be confused with user id!)
     pub encrypted_message: String,
 }
 
@@ -44,16 +35,9 @@ impl From<EncryptedPushNotification> for RealEncryptedPushNotification {
     }
 }
 
-/// Decrypted notification usable only in the context of the Inbox application
-///
 #[derive(Clone, Debug, uniffi::Enum)]
 pub enum DecryptedPushNotification {
-    /// Decrypted notification that is pushed when user receives a new email.
-    ///
     Email(DecryptedEmailPushNotification),
-    /// Decrypted notification that is pushed when user logged in in the separate device.
-    /// We use it to show webpage.
-    ///
     OpenUrl(DecryptedOpenUrlPushNotification),
 }
 
@@ -66,25 +50,11 @@ impl From<RealDecryptedInboxPushNotification> for DecryptedPushNotification {
     }
 }
 
-/// Decrypted notification that is pushed when user receives a new email.
-///
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct DecryptedEmailPushNotification {
-    /// The subject of the email message
-    ///
     pub subject: String,
-
-    /// Information about who sent the message
-    ///
     pub sender: NotificationSender,
-
-    /// Remote message ID
-    ///
     pub message_id: RemoteId,
-
-    /// What kind of action was made for this email
-    /// Note: This field is available only on Android
-    ///
     pub action: Option<DecryptedEmailPushNotificationAction>,
 }
 
@@ -99,21 +69,11 @@ impl From<RealDecryptedEmailPushNotification> for DecryptedEmailPushNotification
     }
 }
 
-/// What kind of action was made for this email
-/// Note: This enum is available only on Android
-///
+// Note: This enum is available only on Android
 #[derive(Clone, Debug, uniffi::Enum)]
 pub enum DecryptedEmailPushNotificationAction {
-    /// Message has been created. It requires a full notification
-    ///
     MessageCreated,
-    /// Message has been touched on another device. We want to hide
-    /// notification
-    ///
     MessageTouched,
-
-    /// Unexpected action
-    ///
     Unexpected(String),
 }
 
@@ -134,13 +94,8 @@ impl From<RealDecryptedEmailPushNotificationAction> for DecryptedEmailPushNotifi
 ///
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct DecryptedOpenUrlPushNotification {
-    /// Content of the notification
     pub content: String,
-
-    /// Information about who sent the notification
     pub sender: NotificationSender,
-
-    /// URL
     pub url: String,
 }
 
@@ -154,22 +109,10 @@ impl From<RealDecryptedOpenUrlPushNotification> for DecryptedOpenUrlPushNotifica
     }
 }
 
-/// Who sent the notification
-///
-/// This data structure is very similar to [`super::datatypes::MessageSender`] but simplified
-///
 #[derive(Clone, Debug, Default, Eq, PartialEq, uniffi::Record)]
 pub struct NotificationSender {
-    /// Name of the sender
-    ///
     pub name: String,
-
-    /// Email address of the sender
-    ///
     pub address: String,
-
-    /// Contact group of the sender
-    ///
     pub group: String,
 }
 
@@ -183,9 +126,6 @@ impl From<RealNotificationSender> for NotificationSender {
     }
 }
 
-/// Decrypt and deserialize Push notification.
-/// This function is mail (inbox) specific
-///
 #[uniffi_export]
 pub async fn decrypt_push_notification(
     key_chain: Box<dyn OSKeyChain>,
@@ -210,25 +150,9 @@ pub async fn decrypt_push_notification(
 ///
 #[derive(Debug, uniffi::Enum)]
 pub enum PushNotificationQuickAction {
-    /// Marks email (being a subject of this notification) as "Read".
-    /// It might be no-op if user managed to mark it on another device
-    /// (It does not act as "toggle").
-    MarkAsRead {
-        /// Remote id of the message.
-        remote_id: RemoteId,
-    },
-
-    /// Moves email (being a subject of this notification) to "Archive" folder.
-    MoveToArchive {
-        /// Remote id of the message.
-        remote_id: RemoteId,
-    },
-
-    /// Moves email (being a subject of this notification) to "Trash" folder.
-    MoveToTrash {
-        /// Remote id of the message.
-        remote_id: RemoteId,
-    },
+    MarkAsRead { remote_id: RemoteId },
+    MoveToArchive { remote_id: RemoteId },
+    MoveToTrash { remote_id: RemoteId },
 }
 
 impl From<PushNotificationQuickAction> for RealPushNotificationQuickAction {
@@ -249,8 +173,6 @@ impl From<PushNotificationQuickAction> for RealPushNotificationQuickAction {
 
 #[uniffi_export]
 impl MailSession {
-    /// Insert the quick action into the queue and execute local part immediately.
-    ///
     #[returns(VoidActionResult)]
     pub async fn execute_notification_quick_action(
         &self,

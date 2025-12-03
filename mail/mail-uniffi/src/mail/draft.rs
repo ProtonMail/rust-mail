@@ -290,21 +290,15 @@ impl Draft {
     }
 }
 
-/// Represent an open draft.
 #[derive(uniffi::Record)]
 pub struct OpenDraft {
-    /// The draft object itself.
     pub draft: Arc<Draft>,
-    /// Whether the draft was synced from the server or we are operating on a cached version.
     pub sync_status: DraftSyncStatus,
 }
 
-/// Indicates whether the draft was synced from the server or we are operating on a cached version.
 #[derive(uniffi::Enum)]
 pub enum DraftSyncStatus {
-    /// Draft was not synced from server and we are operating on a cached version
     Cached,
-    /// Draft was synced from server.
     Synced,
 }
 
@@ -322,12 +316,11 @@ pub struct DraftSenderAddressList {
     /// All available addresses which can be used for sending, also includes the
     /// `active` address.
     pub available: Vec<String>,
+
     /// The current active address.
     pub active: String,
 }
 
-/// Create a new draft with the given `create_mode`.
-///
 #[uniffi_export]
 pub async fn new_draft(
     session: &MailUserSession,
@@ -378,8 +371,6 @@ pub async fn new_draft(
     .into()
 }
 
-/// Open an existing draft with `message_id`.
-///
 #[uniffi_export]
 pub async fn open_draft(
     session: &MailUserSession,
@@ -605,9 +596,6 @@ impl Draft {
 
 #[uniffi_export]
 impl Draft {
-    /// Save the current draft.
-    ///
-    /// Schedules an action to create or save the current draft.
     #[returns(VoidDraftSaveResult)]
     pub async fn save(self: Arc<Self>) -> Result<(), DraftSaveError> {
         uniffi_async(async move {
@@ -622,9 +610,6 @@ impl Draft {
         .into()
     }
 
-    /// Sends the draft.
-    ///
-    /// Schedules an action which saves and then sends the draft.
     #[returns(VoidDraftSendResult)]
     pub async fn send(self: Arc<Self>) -> Result<(), DraftSendError> {
         uniffi_async(async move {
@@ -640,7 +625,6 @@ impl Draft {
         .into()
     }
 
-    /// Schedule the sending of the given draft at the `timestamp`.
     #[returns(VoidDraftSendResult)]
     pub async fn schedule(self: Arc<Self>, timestamp: UnixTimestamp) -> Result<(), DraftSendError> {
         let timestamp = proton_core_common::datatypes::UnixTimestamp::from(timestamp)
@@ -676,9 +660,6 @@ impl Draft {
             .map(Into::into)
     }
 
-    /// Discard the draft.
-    ///
-    /// Schedules an action which deletes a draft locally and on the server.
     #[returns(VoidDraftDiscardResult)]
     pub async fn discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
         uniffi_async(async move {
@@ -831,9 +812,6 @@ impl Draft {
     }
 }
 
-/// Cancel the sending of message with `message_id`.
-///
-/// Note that will only work if the message has been sent with a send delay.
 #[uniffi_export]
 #[returns(VoidDraftUndoSendResult)]
 pub async fn draft_undo_send(
@@ -850,10 +828,6 @@ pub async fn draft_undo_send(
     .into()
 }
 
-/// Discard a Draft by with the given `message_id`.
-///
-/// Note that this requires that the given message interacted with any of the [`Draft`] APIs
-/// in the past.
 #[uniffi_export]
 #[returns(VoidDraftDiscardResult)]
 pub async fn draft_discard(
@@ -877,9 +851,6 @@ pub struct DraftCancelScheduledSendInfo {
     pub last_scheduled_time: UnixTimestamp,
 }
 
-/// Cancel the scheduled send of message with `message_id`.
-///
-/// Note that will only work if the message has been scheduled for sending.
 #[uniffi_export]
 pub async fn draft_cancel_schedule_send(
     session: &MailUserSession,

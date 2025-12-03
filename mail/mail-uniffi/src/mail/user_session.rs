@@ -35,24 +35,6 @@ use tracing::error;
 
 use super::datatypes::AttachmentMetadata;
 
-/// [`MailUserSession`] represents an active user session.
-///
-/// This type contains all the relevant information for an active user session.
-/// You obtain one by completing the [`crate::mail::LoginFlow`] or restoring an existing session
-/// with [`crate::mail::MailSession::user_context_from_session`].
-///
-/// # Initialization
-///
-/// Note, obtaining MailUserSession for the first time calls initialization, which:
-///
-/// * Might take a while (calling API over spotty network)
-/// * Might fail (calling API while no network)
-///
-/// After succesful initialization app will remember the initialization stage and prevent
-/// redundant calls.
-///
-/// # Lifetime
-/// This object needs to be kept alive for the duration of an active user session.
 #[derive(uniffi::Object)]
 pub struct MailUserSession {
     ctx: MailUserContextPtr,
@@ -63,22 +45,18 @@ impl MailUserSession {
         Arc::new(Self { ctx })
     }
 
-    /// Get a clone of the inner weak reference to the user context.
     pub(crate) fn ptr(&self) -> MailUserContextPtr {
         self.ctx.clone()
     }
 
-    /// Get a strong reference to the inner user context.
     pub(crate) fn ctx(&self) -> Result<Arc<MailUserContext>, ProtonError> {
         Ok(self.ctx.upgrade().ok_or(UnexpectedError::Internal)?)
     }
 
-    /// Take ownership of the inner user context.
     pub(crate) fn take_ctx(&self) -> Result<Arc<MailUserContext>, ProtonError> {
         Ok(self.ctx.consume().ok_or(UnexpectedError::Internal)?)
     }
 
-    /// Get the connection to the user database
     pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
         Ok(self.ctx()?.user_stash().to_owned())
     }
@@ -86,13 +64,11 @@ impl MailUserSession {
 
 #[uniffi_export]
 impl MailUserSession {
-    /// Get the User ID of the current user.
     #[must_use]
     pub fn user_id(&self) -> Result<String, ProtonError> {
         Ok(self.ctx()?.user_id().to_owned().into_inner())
     }
 
-    /// Get the Session ID of the current user's session.
     #[must_use]
     pub fn session_id(&self) -> Result<String, ProtonError> {
         Ok(self.ctx()?.session_id().to_owned().into_inner())
@@ -252,7 +228,6 @@ impl WatchUserStream {
 
 #[uniffi_export]
 impl MailUserSession {
-    /// Get the session UUID of the active user session.
     pub async fn session_uuid(&self) -> Result<String, UserSessionError> {
         let ctx = self.ctx()?;
 
@@ -291,7 +266,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Start new password change flow for an authenticated user session.
     pub async fn new_password_change_flow(&self) -> Result<Arc<PasswordFlow>, UserSessionError> {
         let ctx = self.ctx()?;
 
@@ -333,7 +307,6 @@ impl MailUserSession {
         .into()
     }
 
-    /// Returns a password validator service.
     #[must_use]
     pub fn password_validator(&self) -> Option<Arc<PasswordValidatorService>> {
         let ctx = self
@@ -345,7 +318,6 @@ impl MailUserSession {
         )))
     }
 
-    /// Provides a way to get the datatypes::User FFI instance.
     pub async fn user(&self) -> Result<User, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
@@ -356,9 +328,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Retrieves the account details for the current user session.
-    ///
-    /// Returns the user's account details (name, email and avatar information) or an error if the operation fails.
     pub async fn account_details(&self) -> Result<AccountDetails, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
@@ -369,7 +338,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Retrieves the user's settings.
     pub async fn user_settings(&self) -> Result<UserSettings, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
@@ -381,20 +349,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Loads the metadata and file path for the given local [`attachment_id`]
-    /// into a [`DecryptedAttachment`].
-    ///
-    /// If the attachment is not present on the device it is retrieved from
-    /// the server, decrypted and stored in the cache.
-    ///
-    /// Additionally, attempts to verify any attached signatures with the
-    /// sender's keys. The result can be accessed via the [`VerificationResult`]
-    /// result return type.
-    ///
-    /// # Warning
-    ///
-    /// Signature verification is currently always failing since no sender keys
-    /// are fetched yet.
     pub async fn get_attachment(
         &self,
         local_attachment_id: Id,
@@ -411,17 +365,6 @@ impl MailUserSession {
         .map_err(Into::into)
     }
 
-    /// Get the connection status of the current user session.
-    ///
-    /// The method will return the current connection status of the user session.
-    /// Underlying it will ping the Proton server with one second timeout to check
-    /// if the connection can be established.
-    ///
-    /// The connection status can be one of the following:
-    /// - `ConnectionStatus::Online`: The application is online.
-    /// - `ConnectionStatus::Offline`: The application is offline.
-    /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
-    ///
     pub async fn connection_status(&self) -> Result<ConnectionStatus, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
@@ -481,7 +424,6 @@ impl MailUserSession {
         });
     }
 
-    /// Get the status of any vendor (activated or not).
     pub async fn get_payments_status(
         &self,
         vendor: String,
@@ -504,7 +446,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get the payment plans available for the current user.
     pub async fn get_payments_plans(
         &self,
         options: GetPaymentsPlansOptions,
@@ -528,7 +469,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get the icon resource with the given name.
     pub async fn get_payments_resources_icons(
         &self,
         name: String,
@@ -549,7 +489,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Post a payment token to the server.
     pub async fn post_payments_tokens(
         &self,
         amount: u64,
@@ -575,7 +514,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Get the current subscription of the user.
     pub async fn get_payments_subscription(&self) -> Result<Subscriptions, UserSessionError> {
         let ctx = self.ctx()?;
 
@@ -598,7 +536,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Post a payment subscription to the server.
     pub async fn post_payments_subscription(
         &self,
         subscription: NewSubscription,
@@ -645,7 +582,6 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Check if the user has at least one valid sender address.
     pub async fn has_valid_sender_address(&self) -> Result<bool, ProtonError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
@@ -759,12 +695,9 @@ impl TryFrom<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
     }
 }
 
-/// Returned by [`Mailbox::get_attachment`].
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct DecryptedAttachment {
-    /// Metadata of the decrypted attachment.
     pub attachment_metadata: AttachmentMetadata,
-    /// The attachment content.
     pub data_path: String,
 }
 
