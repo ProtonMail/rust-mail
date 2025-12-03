@@ -41,7 +41,7 @@ async fn smoke() {
         .unwrap();
 
     assert_eq!(
-        "Here's a quote:<br>A quote<br><br><div class=\"protonmail_signature_b\
+        "Here's a quote:<br>A quote<br><br><br><div class=\"protonmail_signature_b\
          lock-user\">Sent from rust rest</div>",
         draft.body().await.unwrap()
     );
