@@ -3,10 +3,13 @@
 mod builder;
 mod registry;
 pub mod services;
+mod user_context_map;
 use registry::ServiceRegistry;
 use services::global_feature_flags::FeatureFlagsBackgroundTask;
 use services::logging_service::LoggingService;
 use tokio::runtime;
+use tokio::sync::Mutex;
+use user_context_map::ActiveUserContextMap;
 
 use crate::action_queue::CoreActionError;
 use crate::app_events::{OnEnterForegroundEvent, OnExitForegroundEvent};
@@ -65,14 +68,12 @@ use services::{
 };
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
-use std::collections::HashMap;
 use std::fs;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
@@ -274,7 +275,7 @@ pub type CoreContextResult<T> = Result<T, CoreContextError>;
 #[allow(dead_code)]
 pub struct Context {
     this: Weak<Self>,
-    active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
+    active_user_contexts: Mutex<ActiveUserContextMap>,
     // Data
     origin: Origin,
     user_db_path: PathBuf,
@@ -396,7 +397,6 @@ impl Context {
                     .with_service(DeviceInfoService::new(device_info_provider))
                     .with_service(EventPollConfigService::new(event_poll_mode));
             }
-
             builder
                 .build(
                     origin,
@@ -752,7 +752,10 @@ impl Context {
         }
 
         tracing::info!("Remove user from active_contexts");
-        self.active_user_contexts.lock().await.remove(&user_id);
+        self.active_user_contexts
+            .lock()
+            .await
+            .remove(&user_id, self.event_service());
 
         tracing::info!("Archive & try to remove user database");
         let user_db_location = self.user_db_path(&user_id);
@@ -1048,8 +1051,7 @@ impl Context {
     ) -> Result<Arc<UserContext>, CoreContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;
 
-        // clean up any context that may have been dropped.
-        active_contexts.retain(|_, value| value.strong_count() != 0);
+        let active_contexts_changed = active_contexts.cleanup_dropped();
 
         if let Some(context) = active_contexts.get(&user_id)
             && let Some(upgraded) = context.upgrade()
@@ -1059,6 +1061,9 @@ impl Context {
             // as this is not compatible.
             if session_id != *upgraded.session_id() {
                 return Err(CoreContextError::DuplicateContext(user_id));
+            }
+            if let Some(event) = active_contexts_changed {
+                self.event_service().publish(event);
             }
 
             return Ok(upgraded);
@@ -1084,7 +1089,7 @@ impl Context {
         )
         .await?;
 
-        active_contexts.insert(user_id, Arc::downgrade(&user_context));
+        active_contexts.insert(user_id, Arc::downgrade(&user_context), self.event_service());
 
         Ok(user_context)
     }

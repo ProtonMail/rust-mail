@@ -131,7 +131,10 @@ impl Service for SessionObserverService {
                 let Some(ctx) = ctx_weak.upgrade() else {
                     return OnSessionDeletedResponse::Terminate;
                 };
-                ctx.active_user_contexts.lock().await.remove(&user_id);
+                ctx.active_user_contexts
+                    .lock()
+                    .await
+                    .remove(&user_id, ctx.event_service());
                 OnSessionDeletedResponse::Continue
             }
         });

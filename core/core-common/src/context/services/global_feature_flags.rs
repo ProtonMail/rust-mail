@@ -2,14 +2,13 @@ use std::collections::BTreeMap;
 use std::sync::Weak;
 use std::time::{Duration, Instant};
 
-use crate::app_events::OnEnterForegroundEvent;
+use crate::app_events::{OnEnterForegroundEvent, OnUserContextMapChanged};
 use crate::datatypes::UnixTimestamp;
 use crate::models::{FeatureFlag, ModelExtension};
 use crate::{Context, services::Service};
-use crate::{CoreContextError, CoreContextResult};
+use crate::{CoreContextError, CoreContextResult, Origin};
 use anyhow::{Context as _, Result};
 use proton_core_api::services::proton::ProtonCore as _;
-use proton_core_api::services::proton::muon::common::WithTimeout;
 use proton_core_api::session::Session;
 
 use stash::stash::WatcherHandle;
@@ -177,12 +176,23 @@ impl Service for FeatureFlagsService {
             .context("Could not upgrade context")
             .map_err(CoreContextError::Other)?;
 
+        if ctx.origin() != Origin::App {
+            warn!("Feature flags background task is not allowed for non-app origins");
+            return Ok(());
+        }
+
         let task_service = ctx.task_service();
         let event_service = ctx.event_service();
 
         let self_clone = self.clone();
-        let Some(mut event_stream) = event_service.subscribe::<OnEnterForegroundEvent>() else {
+        let Some(mut foreground_event_stream) = event_service.subscribe::<OnEnterForegroundEvent>()
+        else {
             error!("Failed to subscribe to OnEnterForegroundEvent");
+            return Ok(());
+        };
+        let Some(mut ctx_map_changed_stream) = event_service.subscribe::<OnUserContextMapChanged>()
+        else {
+            error!("Failed to subscribe to OnUserContextMapChangedEvent");
             return Ok(());
         };
         task_service.spawn(
@@ -210,7 +220,10 @@ impl Service for FeatureFlagsService {
                         // We clone and collect to release the lock ASAP.
                         .collect::<Vec<_>>()
                         .into_iter()
-                        .filter_map(|ctx| ctx.upgrade())
+                        .filter_map(|ctx| if let Some(ctx) = ctx.upgrade() { Some(ctx) } else {
+                            debug!("Could not upgrade user context");
+                            None
+                        })
                         .collect();
 
                     drop(ctx);
@@ -231,22 +244,45 @@ impl Service for FeatureFlagsService {
                     let last_updated = Instant::now();
                     loop {
                         debug!("Going to sleep");
-                        if let Ok(Err(error)) = event_stream
-                            .next()
-                            .with_timeout(Duration::from_secs(REFRESH_TIMEOUT_SECS))
-                            .await
-                        {
-                            error!(?error, "Failed to receive event");
-                            return;
+                        tokio::select! { biased;
+                            res = ctx_map_changed_stream.next() => match res {
+                                Ok(_) => {
+                                    debug!("User context map changed. Waking up");
+                                    debug!(
+                                        "Woke up after {}/{REFRESH_TIMEOUT_SECS} seconds",
+                                        last_updated.elapsed().as_secs()
+                                    );
+                                    break;
+                                },
+                                Err(error) => {
+                                    error!(?error, "Failed to receive event");
+                                    return;
+                                }
+                            },
+                            () = tokio::time::sleep(Duration::from_secs(REFRESH_TIMEOUT_SECS)) => {
+                                debug!("Timeout of {REFRESH_TIMEOUT_SECS} seconds reached. Waking up");
+                                break;
+                            }
+                            res = foreground_event_stream.next() => match res {
+                                Ok(_) => {
+                                    debug!("onForeground event received. Waking up");
+
+                                    debug!(
+                                        "Woke up after {}/{REFRESH_TIMEOUT_SECS} seconds",
+                                        last_updated.elapsed().as_secs()
+                                    );
+
+                                    if last_updated.elapsed() >= Duration::from_secs(REFRESH_THROTTLE_SECS) {
+                                        break;
+                                    }
+                                    debug!("Woken up before {REFRESH_THROTTLE_SECS} seconds. Ignoring...");
+                                }
+                                Err(error) => {
+                                    error!(?error, "Failed to receive event");
+                                    return;
+                                }
+                            },
                         }
-                        debug!(
-                            "Woke up after {}/{REFRESH_TIMEOUT_SECS} seconds",
-                            last_updated.elapsed().as_secs()
-                        );
-                        if last_updated.elapsed() >= Duration::from_secs(REFRESH_THROTTLE_SECS) {
-                            break;
-                        }
-                        debug!("Woken up before {REFRESH_THROTTLE_SECS} seconds. Ignoring...");
                     }
                 }
             }
