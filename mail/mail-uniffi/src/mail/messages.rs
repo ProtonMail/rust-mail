@@ -10,7 +10,6 @@ use crate::errors::{
     ActionError, AttachmentDataError, AttachmentDataResult, BodyOutputResult, MobileActionsResult,
     ProtonError, VoidActionResult,
 };
-use crate::mail::datatypes::MessageSearchOptions;
 use crate::mail::datatypes::{LabelAsOutput, Undo};
 use crate::mail::mail_scroller::{
     MessageScroller, MessageScrollerLiveQueryCallback, SearchScroller,
@@ -543,31 +542,6 @@ pub async fn scroller_search(
         let scroller = SearchScroller::new(scroller, handle);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(scroller))
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[uniffi_export]
-pub async fn search_for_messages(
-    session: Arc<MailUserSession>,
-    options: MessageSearchOptions,
-) -> Result<Vec<Message>, ActionError> {
-    let user_context = session.ctx()?;
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let mut tether = stash.connection().await?;
-        let messages = RealMessage::search(
-            options.into_api_options(&tether).await?,
-            user_context.session(),
-            &mut tether,
-        )
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect();
-
-        Result::<_, RealProtonMailError>::Ok(messages)
     })
     .await
     .map_err(ActionError::from)
