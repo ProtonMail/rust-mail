@@ -1,4 +1,3 @@
-use super::messages::WatchedLabelAs;
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, MobileActionsResult, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
@@ -67,32 +66,6 @@ pub async fn available_label_as_actions_for_conversations(
             .map_vec();
 
         Ok::<_, RealProtonMailError>(actions)
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-declare_live_query_tagger!(WatchAvailableLabelsAsActionMarker);
-
-#[uniffi_export]
-pub async fn watch_available_label_as_actions_for_conversations(
-    mailbox: Arc<Mailbox>,
-    ids: Vec<Id>,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedLabelAs, ActionError> {
-    let ctx = mailbox.ctx()?;
-    let stash = mailbox.stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let (actions, handle) = RealConversation::watch_available_label_as_actions(
-            ids.into_iter().map_into().collect(),
-            &tether,
-        )
-        .await?;
-        let actions = actions.into_iter().map_into().collect_vec();
-        let handle = WatchAvailableLabelsAsActionMarker::watch_channel(&*ctx, handle, callback);
-
-        Result::<_, RealProtonMailError>::Ok(WatchedLabelAs { actions, handle })
     })
     .await
     .map_err(ActionError::from)
