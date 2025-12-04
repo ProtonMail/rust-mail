@@ -689,36 +689,6 @@ pub async fn is_message_sender_blocked(
     .map_err(ActionError::from)
 }
 
-#[derive(uniffi::Record)]
-pub struct WatchedMessages {
-    pub messages: Vec<Message>,
-    pub handle: Arc<WatchHandle>,
-}
-
-declare_live_query_tagger!(WatchMessagesForLabelMaker);
-
-#[uniffi_export]
-pub async fn watch_messages_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedMessages, ActionError> {
-    let user_context = session.ctx()?;
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let messages = RealMessage::in_label(label_id.into(), &tether).await?;
-        let handle = RealMessage::watch(&stash).await?;
-        let watcher = WatchMessagesForLabelMaker::watch_channel(&*user_context, handle, callback);
-        Result::<_, RealProtonMailError>::Ok(WatchedMessages {
-            messages: messages.map_vec(),
-            handle: watcher,
-        })
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn star_messages(
