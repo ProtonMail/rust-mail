@@ -1,9 +1,24 @@
 #!/bin/sh
 
-# Usage: $0 rust_target config_path [output_dir]
+# Build iOS XCFramework for UniFFI bindings
+#
+# Usage: $0 rust_target config_path [output_dir] [profile]
+#
+# Arguments:
+#   rust_target  - Name of the Rust crate to build (e.g. proton-mail-uniffi)
+#   config_path  - Path to uniffi.toml configuration file
+#   output_dir   - Optional: Output directory (defaults to current directory)
+#   profile      - Optional: Cargo profile to use (defaults to "ios" for release)
+#
+# Examples:
+#   # Release build (optimized, no debug symbols)
+#   $0 proton-mail-uniffi ./mail/mail-uniffi/uniffi.toml "./tmp/ios-framework"
+#
+#   # Debug build (with debug symbols for LLDB/RustRover debugging)
+#   $0 proton-mail-uniffi ./mail/mail-uniffi/uniffi.toml "./tmp/ios-framework-debug" ios-debug
 
 MIN_IOS_VERSION="17.2"
-PROFILE="ios"
+PROFILE="${4:-ios}" # Use 4th argument if provided, otherwise default to "ios"
 
 export LIBSQLITE3_FLAGS="-DNDEBUG=1 -DSQLITE_THREADSAFE=2\
  -DSQLITE_DEFAULT_FILE_PERMISSIONS=0600 -DSQLITE_SECURE_DELETE"

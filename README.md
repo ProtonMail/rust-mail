@@ -170,6 +170,11 @@ xcrun simctl spawn "$DEVICE_ID" log stream \
       --style syslog
 ```
 
+## Building Platform Frameworks
+
+For building iOS and Android frameworks (XCFramework/AAR), see:
+- [rust-build/README.md](rust-build/README.md) - Build scripts documentation and profile comparisons
+
 ## Vendoring
 
 To regenerate the `3rdparty` directory, use
