@@ -18,22 +18,18 @@ use itertools::Itertools;
 use parking_lot::Mutex;
 use proton_core_common::datatypes::{
     AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
-    LabelType as RealLabelType, LocalAddressId, LocalLabelId,
+    LabelType as RealLabelType,
 };
-use proton_core_common::models::{Address as RealAddress, Label as RealLabel, ModelIdExtension};
 use proton_core_common::utils::MapVec as _;
-use proton_mail_api::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_mail_api::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
-use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_mail_common::ProtonMailError;
 use proton_mail_common::actions::{LabelAsOutput as RealLabelAsOutput, Undo as RealUndo};
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
     CustomLabel as RealCustomLabel, Disposition as RealDisposition,
-    LabelDescription as RealLabelDescription, LocalConversationId, LocalMessageId,
-    MessageButtons as RealMessageButtons, MessageFlags as RealMessageFlags,
-    MessageRecipient as RealMessageRecipient,
+    LabelDescription as RealLabelDescription, MessageButtons as RealMessageButtons,
+    MessageFlags as RealMessageFlags, MessageRecipient as RealMessageRecipient,
     MessageRecipientDisplayMode as RealMessageRecipientDisplayMode,
     MessageSender as RealMessageSender, MimeType as RealMimeType, MobileAction as RealMobileAction,
     MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
@@ -48,13 +44,11 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::models::{
-    Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
-    MessageMimeType, MessageReplyTo as RealMessageReplyTo,
+    MailSettings as RealMailSettings, Message as RealMessage, MessageMimeType,
+    MessageReplyTo as RealMessageReplyTo,
 };
-use smart_default::SmartDefault;
 pub use snooze::*;
 use stash::orm::Model;
-use stash::stash::{StashError, Tether};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 pub use system_label::*;
@@ -801,161 +795,6 @@ impl From<RealHiddenMessagesBanner> for HiddenMessagesBanner {
     }
 }
 
-/// Parameters to filter/search conversations with a given criteria.
-#[derive(Clone, Debug, SmartDefault, UniffiRecord)]
-pub struct ConversationSearchOptions {
-    /// Address ID to filter on.
-    pub address_id: Option<Id>,
-
-    /// If `true`, only return conversations which have attachments. If `false`,
-    /// only return conversations which have no attachments.
-    pub attachments: Option<bool>,
-
-    /// If `true`, automatically convert simple queries to wildcarded versions,
-    /// such as `test` to `*test*`.
-    pub auto_wildcard: Option<bool>,
-
-    /// UNIX timestamp to filter conversations earlier than timestamp.
-    pub begin: Option<UnixTimestamp>,
-
-    /// Return only conversations newer, in creation time (NOT timestamp), than
-    /// the specified conversation ID if timestamp = `begin`.
-    // TODO: Improve the documentation above, as it doesn't make total sense.
-    pub begin_id: Option<Id>,
-
-    /// If `true`, return results in descending order rather than ascending.
-    pub desc: Option<bool>,
-
-    /// UNIX timestamp to filter conversations later than timestamp.
-    pub end: Option<UnixTimestamp>,
-
-    /// Return only conversations older, in creation time (NOT timestamp), than
-    /// the specified conversation ID if timestamp = `end`.
-    // TODO: Improve the documentation above, as it doesn't make total sense.
-    pub end_id: Option<Id>,
-
-    /// Return only conversations with the specified anchor.
-    pub anchor: Option<UnixTimestamp>,
-
-    /// Return only conversations with the specified anchor ID.
-    pub anchor_id: Option<Id>,
-
-    /// Filter on external ID.
-    // TODO: Document this properly.
-    pub external_id: Option<String>,
-
-    /// Keyword search of `From` field.
-    pub from: Option<String>,
-
-    /// Conversation IDs to filter on.
-    pub ids: Option<Vec<Id>>,
-
-    /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
-    pub keyword: Option<String>,
-
-    /// Label ID to filter on.
-    pub label_id: Option<Id>,
-
-    /// The number of conversations to return.
-    pub limit: Option<u64>,
-
-    /// Page index.
-    pub page: u64,
-
-    /// Number of elements per page.
-    #[default(MAX_PAGE_ELEMENT_COUNT_U64)]
-    pub page_size: u64,
-
-    /// Keyword search of `To`, `CC`, and `BCC` fields.
-    pub recipients: Option<Vec<String>>,
-
-    /// Sort the results by one of the sorting modes.
-    pub sort: Option<MessageMetadataSortMode>,
-
-    /// Keyword search of `Subject` field.
-    pub subject: Option<String>,
-
-    /// If `true`, only return conversations which have unread messages. If
-    /// `false`, only return conversations which have all messages read.
-    pub unread: Option<bool>,
-}
-
-impl ConversationSearchOptions {
-    pub async fn into_api_options(
-        self,
-        tether: &Tether,
-    ) -> Result<GetConversationsOptions, StashError> {
-        let ids = match self.ids {
-            Some(local_ids) => {
-                let mut ids = Vec::with_capacity(local_ids.len());
-                for id in &local_ids {
-                    if let Some(resolved_id) = RealConversation::local_id_counterpart(
-                        LocalConversationId::from(*id),
-                        tether,
-                    )
-                    .await?
-                    {
-                        ids.push(resolved_id);
-                    }
-                }
-                if ids.is_empty() { None } else { Some(ids) }
-            }
-            None => None,
-        };
-
-        Ok(GetConversationsOptions {
-            address_id: match self.address_id {
-                Some(id) => {
-                    RealAddress::local_id_counterpart(LocalAddressId::from(id), tether).await?
-                }
-                None => None,
-            },
-            attachments: self.attachments,
-            auto_wildcard: self.auto_wildcard,
-            begin: self.begin.map(|v| v.0),
-            begin_id: match self.begin_id {
-                Some(id) => {
-                    RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
-                        .await?
-                }
-                None => None,
-            },
-            desc: self.desc,
-            end: self.end.map(|v| v.0),
-            end_id: match self.end_id {
-                Some(id) => {
-                    RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
-                        .await?
-                }
-                None => None,
-            },
-            anchor: self.anchor.map(|v| v.0),
-            anchor_id: match self.anchor_id {
-                Some(id) => {
-                    RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
-                        .await?
-                }
-                None => None,
-            },
-            external_id: self.external_id,
-            from: self.from,
-            ids,
-            keyword: self.keyword,
-            label_id: match self.label_id {
-                Some(id) => RealLabel::local_id_counterpart(LocalLabelId::from(id), tether).await?,
-                None => None,
-            },
-            limit: self.limit,
-            page: self.page,
-            page_size: self.page_size,
-            recipients: self.recipients,
-            sort: self.sort.map(Into::into),
-            subject: self.subject,
-            unread: self.unread,
-        })
-    }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
 pub struct InlineCustomLabel {
     pub id: Id,
@@ -1284,184 +1123,6 @@ impl From<RealMessageFlags> for MessageFlags {
         MessageFlags {
             value: value.bits(),
         }
-    }
-}
-
-/// Parameters to filter/search messages with a given criteria.
-#[derive(Clone, Debug, SmartDefault, UniffiRecord)]
-pub struct MessageSearchOptions {
-    /// Filter on address ID.
-    pub address_id: Option<Id>,
-
-    /// If `true`, return only messages which have attachments. If `false`,
-    /// return only messages which have no attachments.
-    pub attachments: Option<bool>,
-
-    /// If `true`, automatically convert simple queries to wildcarded versions,
-    /// such as `test` to `*test*`.
-    pub auto_wildcard: Option<bool>,
-
-    /// Keyword search of `BCC` field.
-    pub bcc: Option<String>,
-
-    /// UNIX timestamp to filter messages at or later than timestamp.
-    pub begin: Option<UnixTimestamp>,
-
-    /// Return only messages newer, in creation time (NOT timestamp), than
-    /// the specified message ID.
-    pub begin_id: Option<Id>,
-
-    /// Keyword search of CC field.
-    pub cc: Option<String>,
-
-    /// Filter messages by conversation ID.
-    pub conversation_id: Option<Id>,
-
-    /// If `true`, sort results descending. If `false`, sort ascending.
-    pub desc: Option<bool>,
-
-    /// UNIX timestamp to filter messages at or earlier than timestamp.
-    pub end: Option<UnixTimestamp>,
-
-    /// Return only messages older, in creation time (NOT timestamp), than the
-    /// specified message ID.
-    pub end_id: Option<Id>,
-
-    /// Return only messages with the specified anchor.
-    pub anchor: Option<UnixTimestamp>,
-
-    /// Return only messages with the specified anchor ID.
-    pub anchor_id: Option<Id>,
-
-    /// Filter on external ID.
-    // TODO: Document this properly.
-    pub external_id: Option<String>,
-
-    /// Keyword search `From` field.
-    pub from: Option<String>,
-
-    /// Filter on the given message IDs.
-    pub ids: Option<Vec<Id>>,
-
-    /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
-    pub keyword: Option<String>,
-
-    /// Label IDs to filter on.
-    pub label_ids: Option<Vec<Id>>,
-
-    /// The number of messages to return.
-    pub limit: Option<u64>,
-
-    /// Page index.
-    pub page: u64,
-
-    /// Number of elements per page.
-    #[default(MAX_PAGE_ELEMENT_COUNT_U64)]
-    pub page_size: u64,
-
-    /// Keyword search of `To`, `CC`, and `BCC` fields.
-    pub recipients: Option<Vec<String>>,
-
-    /// Result sort mode.
-    pub sort: Option<MessageMetadataSortMode>,
-
-    /// Keyword search `Subject` field.
-    pub subject: Option<String>,
-
-    /// Keyword search of `To` field.
-    pub to: Option<String>,
-
-    /// If `true`, return only messages which are unread. If `false`, return
-    /// only messages which are read.
-    pub unread: Option<bool>,
-}
-
-impl MessageSearchOptions {
-    pub async fn into_api_options(self, tether: &Tether) -> Result<GetMessagesOptions, StashError> {
-        let ids = match self.ids {
-            Some(local_ids) => {
-                let mut ids = Vec::with_capacity(local_ids.len());
-                for id in &local_ids {
-                    if let Some(resolved_id) =
-                        RealMessage::local_id_counterpart(LocalMessageId::from(*id), tether).await?
-                    {
-                        ids.push(resolved_id);
-                    }
-                }
-                if ids.is_empty() { None } else { Some(ids) }
-            }
-            None => None,
-        };
-        let label_ids = match self.label_ids {
-            Some(local_ids) => {
-                let mut ids = Vec::with_capacity(local_ids.len());
-                for id in &local_ids {
-                    if let Some(resolved_id) =
-                        RealLabel::local_id_counterpart(LocalLabelId::from(*id), tether).await?
-                    {
-                        ids.push(resolved_id);
-                    }
-                }
-                if ids.is_empty() { None } else { Some(ids) }
-            }
-            None => None,
-        };
-
-        Ok(GetMessagesOptions {
-            address_id: match self.address_id {
-                Some(id) => {
-                    RealAddress::local_id_counterpart(LocalAddressId::from(id), tether).await?
-                }
-                None => None,
-            },
-            attachments: self.attachments,
-            auto_wildcard: self.auto_wildcard,
-            bcc: self.bcc,
-            begin: self.begin.map(|v| v.0),
-            begin_id: match self.begin_id {
-                Some(id) => {
-                    RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?
-                }
-                None => None,
-            },
-            cc: self.cc,
-            conversation_id: match self.conversation_id {
-                Some(id) => {
-                    RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
-                        .await?
-                        .map(|v| vec![v])
-                }
-                None => None,
-            },
-            desc: self.desc,
-            end: self.end.map(|v| v.0),
-            end_id: match self.end_id {
-                Some(id) => {
-                    RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?
-                }
-                None => None,
-            },
-            anchor: self.anchor.map(|v| v.0),
-            anchor_id: match self.anchor_id {
-                Some(id) => {
-                    RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?
-                }
-                None => None,
-            },
-            external_id: self.external_id,
-            from: self.from,
-            ids,
-            keyword: self.keyword,
-            label_id: label_ids,
-            limit: self.limit,
-            page: self.page,
-            page_size: self.page_size,
-            recipients: self.recipients,
-            sort: self.sort.map(Into::into),
-            subject: self.subject,
-            to: self.to,
-            unread: self.unread,
-        })
     }
 }
 

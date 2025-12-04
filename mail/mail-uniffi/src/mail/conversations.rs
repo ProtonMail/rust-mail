@@ -1,4 +1,3 @@
-use super::messages::WatchedLabelAs;
 use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, MobileActionsResult, SnoozeError, VoidActionResult};
 use crate::mail::datatypes::{
@@ -67,32 +66,6 @@ pub async fn available_label_as_actions_for_conversations(
             .map_vec();
 
         Ok::<_, RealProtonMailError>(actions)
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-declare_live_query_tagger!(WatchAvailableLabelsAsActionMarker);
-
-#[uniffi_export]
-pub async fn watch_available_label_as_actions_for_conversations(
-    mailbox: Arc<Mailbox>,
-    ids: Vec<Id>,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedLabelAs, ActionError> {
-    let ctx = mailbox.ctx()?;
-    let stash = mailbox.stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let (actions, handle) = RealConversation::watch_available_label_as_actions(
-            ids.into_iter().map_into().collect(),
-            &tether,
-        )
-        .await?;
-        let actions = actions.into_iter().map_into().collect_vec();
-        let handle = WatchAvailableLabelsAsActionMarker::watch_channel(&*ctx, handle, callback);
-
-        Result::<_, RealProtonMailError>::Ok(WatchedLabelAs { actions, handle })
     })
     .await
     .map_err(ActionError::from)
@@ -325,49 +298,6 @@ impl From<ContextualConversationAndMessages> for ConversationAndMessages {
 }
 
 #[uniffi_export]
-pub async fn conversations_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-) -> Result<Vec<Conversation>, ActionError> {
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        Result::<_, RealProtonMailError>::Ok(
-            ContextualConversation::in_label(label_id.into(), &tether)
-                .await?
-                .map_vec(),
-        )
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-/// Retrieve a conversation by local ID.
-///
-/// Notably, this retrieves a local conversation that has been saved in the
-/// database. It does not use the network.
-#[uniffi_export]
-pub async fn load_conversation(
-    session: Arc<MailUserSession>,
-    id: Id,
-    label_id: Id,
-) -> Result<Option<Conversation>, ActionError> {
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let Some(conversation) = RealConversation::load(id.into(), &tether).await? else {
-            return Ok(None);
-        };
-
-        Result::<_, RealProtonMailError>::Ok(
-            ContextualConversation::new(conversation, label_id.into()).map(Into::into),
-        )
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_conversations_as_read(
     mailbox: Arc<Mailbox>,
@@ -582,35 +512,6 @@ pub struct WatchedConversations {
     pub handle: Arc<WatchHandle>,
 }
 
-declare_live_query_tagger!(WatchConversationsForLabelMarker);
-
-#[uniffi_export]
-pub async fn watch_conversations_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedConversations, ActionError> {
-    let user_context = session.ctx()?;
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let conversations = RealConversation::in_label(label_id.into(), &tether).await?;
-        let receiver = ContextualConversation::watch(&stash).await?;
-        let watcher =
-            WatchConversationsForLabelMarker::watch_channel(&*user_context, receiver, callback);
-        Result::<_, RealProtonMailError>::Ok(WatchedConversations {
-            conversations: conversations
-                .into_iter()
-                .filter_map(|c| ContextualConversation::new(c, label_id.into()))
-                .map(Into::into)
-                .collect(),
-            handle: watcher,
-        })
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
 #[uniffi_export]
 pub async fn label_conversations_as(
     mailbox: Arc<Mailbox>,
@@ -635,24 +536,6 @@ pub async fn label_conversations_as(
             .await?
             .into(),
         )
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-declare_live_query_tagger!(WatchAvailableMoveToActionsMarker);
-
-#[uniffi_export]
-pub async fn watch_available_move_to_actions(
-    mailbox: Arc<Mailbox>,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<Arc<WatchHandle>, ActionError> {
-    let ctx = mailbox.ctx()?;
-    let stash = mailbox.stash()?;
-    uniffi_async(async move {
-        let handle = RealLabel::watch(&stash).await?;
-        let handle = WatchAvailableMoveToActionsMarker::watch_channel(&*ctx, handle, callback);
-        Result::<_, RealProtonMailError>::Ok(handle)
     })
     .await
     .map_err(ActionError::from)
@@ -722,25 +605,4 @@ pub fn get_all_mobile_conversation_actions() -> Vec<MobileAction> {
         .iter()
         .filter_map(MobileAction::from_real)
         .collect_vec()
-}
-
-#[uniffi_export]
-#[returns(VoidActionResult)]
-pub async fn set_default_mobile_conversation_toolbar_actions(
-    session: Arc<MailUserSession>,
-) -> Result<(), ActionError> {
-    let ctx = session.ctx()?;
-    let actions = RealMobileAction::default_chosen_actions();
-
-    uniffi_async(async move {
-        proton_mail_common::models::MailSettings::action_update_conversation_toolbar(
-            ctx.action_queue(),
-            actions.map_vec(),
-            true,
-        )
-        .await
-        .map_err(RealProtonMailError::from)
-    })
-    .await
-    .map_err(ActionError::from)
 }

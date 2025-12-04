@@ -93,7 +93,6 @@ impl MailUserSession {
 declare_live_query_tagger!(WatchAddressesMarker);
 declare_live_query_tagger!(WatchUserMarker);
 declare_live_query_tagger!(WatchUserSettingsMarker);
-declare_live_query_tagger!(WatchLabelsMarker);
 declare_live_query_tagger!(WatchUpsellEligibilityMarker);
 
 #[uniffi_export]
@@ -145,23 +144,6 @@ impl MailUserSession {
                 ctx,
                 callback,
                 UserContext::watch_user_settings
-            )
-        })
-    }
-
-    pub fn watch_labels(
-        &self,
-        callback: Arc<dyn AsyncLiveQueryCallback>,
-    ) -> Result<Arc<WatchHandle>, ProtonError> {
-        let ctx = self.ctx()?;
-        let uctx = ctx.user_context();
-        async_runtime().block_on(async {
-            watch_table!(
-                WatchLabelsMarker,
-                uctx,
-                ctx,
-                callback,
-                UserContext::watch_labels
             )
         })
     }

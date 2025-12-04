@@ -10,7 +10,6 @@ use crate::errors::{
     ActionError, AttachmentDataError, AttachmentDataResult, BodyOutputResult, MobileActionsResult,
     ProtonError, VoidActionResult,
 };
-use crate::mail::datatypes::MessageSearchOptions;
 use crate::mail::datatypes::{LabelAsOutput, Undo};
 use crate::mail::mail_scroller::{
     MessageScroller, MessageScrollerLiveQueryCallback, SearchScroller,
@@ -19,9 +18,7 @@ use crate::mail::mail_scroller::{
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async};
 use crate::{PaginatorSearchOptions, declare_live_query_tagger};
 use itertools::Itertools as _;
-use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::PrivateEmail;
-use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_api::services::proton::common::MessageId;
@@ -31,16 +28,14 @@ use proton_mail_common::Unexpected;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{
-    AttachmentMetadata as RealAttachmentMetadata, ConversationViewOptions, LocalConversationId,
-    MobileAction as RealMobileAction, ParsedHeaderValue,
+    AttachmentMetadata as RealAttachmentMetadata, MobileAction as RealMobileAction,
+    ParsedHeaderValue,
 };
 use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
     TransformOpts as RealTransformOpts,
 };
-use proton_mail_common::models::{
-    self, IncomingDefault, Message as RealMessage, MessageBodyMetadata, MessageMimeType,
-};
+use proton_mail_common::models::{self, IncomingDefault, Message as RealMessage};
 use proton_mail_common::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
@@ -468,46 +463,6 @@ pub async fn watch_message(
 }
 
 #[uniffi_export]
-pub async fn messages_for_conversation(
-    session: Arc<MailUserSession>,
-    conversation_id: Id,
-) -> Result<Vec<Message>, ActionError> {
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_conversation(
-                LocalConversationId::from(conversation_id),
-                ConversationViewOptions::All.into(),
-                &tether,
-            )
-            .await?
-            .map_vec(),
-        )
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[uniffi_export]
-pub async fn messages_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-) -> Result<Vec<Message>, ActionError> {
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        Ok::<_, RealProtonMailError>(
-            RealMessage::in_label(LocalLabelId::from(label_id), &tether)
-                .await?
-                .map_vec(),
-        )
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[uniffi_export]
 pub async fn scroll_messages_for_label(
     mailbox: Arc<Mailbox>,
     callback: Box<dyn MessageScrollerLiveQueryCallback>,
@@ -549,31 +504,6 @@ pub async fn scroller_search(
 }
 
 #[uniffi_export]
-pub async fn search_for_messages(
-    session: Arc<MailUserSession>,
-    options: MessageSearchOptions,
-) -> Result<Vec<Message>, ActionError> {
-    let user_context = session.ctx()?;
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let mut tether = stash.connection().await?;
-        let messages = RealMessage::search(
-            options.into_api_options(&tether).await?,
-            user_context.session(),
-            &mut tether,
-        )
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect();
-
-        Result::<_, RealProtonMailError>::Ok(messages)
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[uniffi_export]
 pub async fn available_label_as_actions_for_messages(
     mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
@@ -589,36 +519,6 @@ pub async fn available_label_as_actions_for_messages(
     })
     .await
     .map_err(ActionError::from)
-}
-
-declare_live_query_tagger!(WatchAvailableLabelAsActionsMessageMaker);
-
-#[uniffi_export]
-pub async fn watch_available_label_as_actions_for_messages(
-    mailbox: Arc<Mailbox>,
-    ids: Vec<Id>,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedLabelAs, ActionError> {
-    let ctx = mailbox.ctx()?;
-    let stash = mailbox.stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let (actions, handle) =
-            RealMessage::watch_available_label_as_actions(ids.map_vec(), &tether).await?;
-        let actions = actions.map_vec();
-        let handle =
-            WatchAvailableLabelAsActionsMessageMaker::watch_channel(&*ctx, handle, callback);
-
-        Ok::<_, RealProtonMailError>(WatchedLabelAs { actions, handle })
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[derive(Clone, uniffi::Record)]
-pub struct WatchedLabelAs {
-    pub actions: Vec<LabelAsAction>,
-    pub handle: Arc<WatchHandle>,
 }
 
 #[uniffi_export]
@@ -720,37 +620,6 @@ pub async fn all_available_message_actions_for_action_sheet(
     .map_err(ActionError::from)
 }
 
-/// This function should **NEVER** be used in the production.
-/// We provide it only for the sake of snapshot testing of our HTML transformer.
-/// It returns a decrypted message as if it was a new draft.
-///
-#[uniffi_export]
-pub fn test_stub_message_body(
-    session: &MailUserSession,
-    sender: String,
-    content: String,
-) -> Result<Arc<DecryptedMessage>, ActionError> {
-    let ctx = session.ptr();
-    let msg = Arc::new(DecryptedMessage {
-        ctx,
-        body: DecryptedMessageBody {
-            body: content,
-            metadata: MessageBodyMetadata {
-                mime_type: proton_mail_common::datatypes::MimeType::TextHtml,
-                ..Default::default()
-            },
-            mime_type: MessageMimeType::TextHtml,
-            pgp_subject: None,
-            address_id: AddressId::from("Unknown"),
-            in_flight: parking_lot::Mutex::default(),
-            decryption_error: None,
-        },
-        sender: sender.into(),
-    });
-
-    Ok(msg)
-}
-
 #[uniffi_export]
 pub async fn get_message_body(
     mbox: &Mailbox,
@@ -785,36 +654,6 @@ pub async fn is_message_sender_blocked(
         Ok::<_, RealProtonMailError>(
             models::Message::is_sender_blocked(message_id.into(), &tether).await?,
         )
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[derive(uniffi::Record)]
-pub struct WatchedMessages {
-    pub messages: Vec<Message>,
-    pub handle: Arc<WatchHandle>,
-}
-
-declare_live_query_tagger!(WatchMessagesForLabelMaker);
-
-#[uniffi_export]
-pub async fn watch_messages_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedMessages, ActionError> {
-    let user_context = session.ctx()?;
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let messages = RealMessage::in_label(label_id.into(), &tether).await?;
-        let handle = RealMessage::watch(&stash).await?;
-        let watcher = WatchMessagesForLabelMaker::watch_channel(&*user_context, handle, callback);
-        Result::<_, RealProtonMailError>::Ok(WatchedMessages {
-            messages: messages.map_vec(),
-            handle: watcher,
-        })
     })
     .await
     .map_err(ActionError::from)
@@ -1198,48 +1037,6 @@ pub fn get_all_mobile_message_actions() -> Vec<MobileAction> {
         .iter()
         .filter_map(MobileAction::from_real)
         .collect_vec()
-}
-
-#[uniffi_export]
-#[returns(VoidActionResult)]
-pub async fn set_default_mobile_list_toolbar_actions(
-    session: Arc<MailUserSession>,
-) -> Result<(), ActionError> {
-    let ctx = session.ctx()?;
-    let actions = RealMobileAction::default_chosen_actions();
-
-    uniffi_async(async move {
-        proton_mail_common::models::MailSettings::action_update_list_toolbar(
-            ctx.action_queue(),
-            actions.map_vec(),
-            true,
-        )
-        .await
-        .map_err(RealProtonMailError::from)
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[uniffi_export]
-#[returns(VoidActionResult)]
-pub async fn set_default_mobile_message_toolbar_actions(
-    session: Arc<MailUserSession>,
-) -> Result<(), ActionError> {
-    let ctx = session.ctx()?;
-    let actions = RealMobileAction::default_chosen_actions();
-
-    uniffi_async(async move {
-        proton_mail_common::models::MailSettings::action_update_message_toolbar(
-            ctx.action_queue(),
-            actions.map_vec(),
-            true,
-        )
-        .await
-        .map_err(RealProtonMailError::from)
-    })
-    .await
-    .map_err(ActionError::from)
 }
 
 /// Bulk check unread status for messages by remote IDs.
