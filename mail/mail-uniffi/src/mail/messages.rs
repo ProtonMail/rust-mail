@@ -1090,27 +1090,6 @@ pub async fn set_default_mobile_list_toolbar_actions(
     .map_err(ActionError::from)
 }
 
-#[uniffi_export]
-#[returns(VoidActionResult)]
-pub async fn set_default_mobile_message_toolbar_actions(
-    session: Arc<MailUserSession>,
-) -> Result<(), ActionError> {
-    let ctx = session.ctx()?;
-    let actions = RealMobileAction::default_chosen_actions();
-
-    uniffi_async(async move {
-        proton_mail_common::models::MailSettings::action_update_message_toolbar(
-            ctx.action_queue(),
-            actions.map_vec(),
-            true,
-        )
-        .await
-        .map_err(RealProtonMailError::from)
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
 /// Bulk check unread status for messages by remote IDs.
 ///
 /// Takes a list of remote message IDs and returns a list of booleans indicating
