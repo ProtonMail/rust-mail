@@ -167,6 +167,10 @@ impl UserFeatureFlagsService {
         let mut tether = stash.connection().await?;
         let mut flags = Self::fetch_from_cache(&tether, UserFeatureFlagSource::Unleash).await;
         for flag in flags.values_mut() {
+            // Unleash returns only enabled flags. We don't want to remove them from cache or keep stale data.
+            // But instead, we are marking them with false.
+            // The easiest way to do so is to mark everything as disabled and then in `set_flags_from_unleash` mark
+            // every present flag as enabled.
             flag.enabled = false;
         }
 
