@@ -19,7 +19,6 @@ use crate::{LiveQueryCallback, WatchHandle, uniffi_async};
 use crate::{PaginatorSearchOptions, declare_live_query_tagger};
 use itertools::Itertools as _;
 use proton_core_api::services::proton::PrivateEmail;
-use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_api::services::proton::common::MessageId;
@@ -479,24 +478,6 @@ pub async fn messages_for_conversation(
             )
             .await?
             .map_vec(),
-        )
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[uniffi_export]
-pub async fn messages_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-) -> Result<Vec<Message>, ActionError> {
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        Ok::<_, RealProtonMailError>(
-            RealMessage::in_label(LocalLabelId::from(label_id), &tether)
-                .await?
-                .map_vec(),
         )
     })
     .await
