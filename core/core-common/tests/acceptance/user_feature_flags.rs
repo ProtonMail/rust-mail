@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use proton_core_api::services::proton::{
     GetLegacyFeaturesResponse, GetUnleashFeaturesResponse, LegacyFeatureFlag,
     LegacyFeatureFlagMetadata, LegacyFeatureFlagVariant, RangedValue, UnleashToggle,
@@ -8,7 +6,6 @@ use proton_core_api::services::proton::{
 use proton_core_common::actions::user_feature_flags::OverrideFlag;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::UserFeatureFlag;
-use proton_core_common::services::UserFeatureFlagsService;
 use proton_core_common::test_utils::test_context::TestContext;
 use proton_core_common::test_utils::utils::RespondNthTime;
 use serde_json::json;
@@ -65,8 +62,6 @@ async fn test_user_feature_flags_cold_start_background_fetch() {
     assert_eq!(feature_flags.get("TestFeatureB").await.unwrap(), None);
 
     feature_flags.refresh().await.unwrap();
-
-    wait_for_flag(feature_flags, "TestFeatureA", 4, 250).await;
 
     assert_eq!(feature_flags.get("TestFeatureA").await.unwrap(), Some(true));
     assert_eq!(feature_flags.get("TestFeatureB").await.unwrap(), Some(true));
@@ -208,7 +203,6 @@ async fn test_user_feature_flags_warm_start_background_refresh() {
     );
 
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "NewFeatureFromRefresh", 10, 250).await;
 
     assert_eq!(
         feature_flags.get("ExistingFeature").await.unwrap(),
@@ -312,8 +306,6 @@ async fn test_legacy_feature_flags_basic() {
 
     feature_flags.refresh().await.unwrap();
 
-    wait_for_flag(feature_flags, "LegacyEnabledFlag", 4, 250).await;
-
     assert_eq!(
         feature_flags.get("LegacyEnabledFlag").await.unwrap(),
         Some(true)
@@ -364,8 +356,6 @@ async fn test_legacy_feature_flags_boolean_only_filtering() {
 
     feature_flags.refresh().await.unwrap();
 
-    wait_for_flag(feature_flags, "BooleanFlag", 4, 250).await;
-
     assert_eq!(feature_flags.get("BooleanFlag").await.unwrap(), Some(true));
     assert_eq!(
         feature_flags.get("AnotherBooleanFlag").await.unwrap(),
@@ -408,8 +398,6 @@ async fn test_legacy_feature_flags_writable_property() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-
-    wait_for_flag(feature_flags, "WritableFlag", 4, 250).await;
 
     assert_eq!(feature_flags.get("WritableFlag").await.unwrap(), Some(true));
     assert_eq!(feature_flags.get("ReadOnlyFlag").await.unwrap(), Some(true));
@@ -536,8 +524,6 @@ async fn test_unleash_vs_legacy_collision_unleash_wins() {
 
     feature_flags.refresh().await.unwrap();
 
-    wait_for_flag(feature_flags, "CollidingFlag", 4, 250).await;
-
     assert_eq!(
         feature_flags.get("CollidingFlag").await.unwrap(),
         Some(true)
@@ -592,8 +578,6 @@ async fn test_legacy_feature_flags_expired_filtering() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-
-    wait_for_flag(feature_flags, "ValidFlag", 4, 250).await;
 
     assert_eq!(feature_flags.get("ExpiredFlag").await.unwrap(), None);
     assert_eq!(feature_flags.get("ValidFlag").await.unwrap(), Some(true));
@@ -735,8 +719,6 @@ async fn test_mixed_unleash_and_legacy_sources() {
 
     feature_flags.refresh().await.unwrap();
 
-    wait_for_flag(feature_flags, "UnleashOnlyFlag", 4, 250).await;
-
     assert_eq!(
         feature_flags.get("UnleashOnlyFlag").await.unwrap(),
         Some(true)
@@ -829,8 +811,6 @@ async fn test_legacy_feature_flags_pagination() {
 
     feature_flags.refresh().await.unwrap();
 
-    wait_for_flag(feature_flags, "LegacyFlag0", 4, 250).await;
-
     assert_eq!(feature_flags.get("LegacyFlag0").await.unwrap(), Some(true));
     assert_eq!(feature_flags.get("LegacyFlag1").await.unwrap(), Some(false));
     assert_eq!(
@@ -904,31 +884,11 @@ async fn test_user_feature_flags_handle_network_failure() {
     let feature_flags = user_context.feature_flags();
     _ = feature_flags.refresh().await;
 
-    wait_for_flag(feature_flags, "TestFeatureRetry", 10, 1000).await;
-
     assert_eq!(
         feature_flags.get("TestFeatureRetry").await.unwrap(),
         Some(true)
     );
     assert_eq!(feature_flags.get("NonExistentFeature").await.unwrap(), None);
-}
-
-async fn wait_for_flag(
-    service: &UserFeatureFlagsService,
-    key: &str,
-    mut attempts: usize,
-    sleep_ms: u64,
-) {
-    let initial = attempts;
-    while attempts > 0 {
-        if service.get(key).await.unwrap().is_some() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
-        attempts -= 1;
-    }
-
-    panic!("Flag {key} not found after {initial} attempts");
 }
 
 fn test_unleash_variant() -> UnleashToggleVariant {
@@ -1053,7 +1013,6 @@ async fn test_override_writable_legacy_flag_success() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "WritableFlag", 4, 250).await;
 
     assert_eq!(
         feature_flags.get("WritableFlag").await.unwrap(),
@@ -1071,8 +1030,6 @@ async fn test_override_writable_legacy_flag_success() {
         .await
         .unwrap();
     assert_eq!(executed_count, 1);
-
-    tokio::time::sleep(Duration::from_millis(100)).await;
 
     {
         let tether = user_context.stash().connection().await.unwrap();
@@ -1116,7 +1073,6 @@ async fn test_override_non_writable_flag_fails() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "ReadOnlyFlag", 4, 250).await;
 
     assert_eq!(feature_flags.get("ReadOnlyFlag").await.unwrap(), Some(true));
 
@@ -1259,7 +1215,6 @@ async fn test_override_flag_state_preservation() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "StateTestFlag", 4, 250).await;
 
     // First override: None -> Some(true)
     let action1 = OverrideFlag::new("StateTestFlag".to_string(), true);
@@ -1343,7 +1298,6 @@ async fn test_override_flag_api_failure_rollback() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "APIFailFlag", 4, 250).await;
 
     let action = OverrideFlag::new("APIFailFlag".to_string(), true);
 
@@ -1393,7 +1347,6 @@ async fn test_override_local_only_not_yet_executed_remotely() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "LocalOnlyFlag", 4, 250).await;
 
     assert_eq!(
         feature_flags.get("LocalOnlyFlag").await.unwrap(),
@@ -1424,8 +1377,6 @@ async fn test_override_local_only_not_yet_executed_remotely() {
         .await;
 
     feature_flags.refresh().await.unwrap();
-
-    tokio::time::sleep(Duration::from_millis(250)).await;
 
     {
         let tether = user_context.stash().connection().await.unwrap();
@@ -1499,7 +1450,6 @@ async fn test_backend_returns_stale_data_after_override() {
 
     // First refresh, using initial response.
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "StaleDataFlag", 4, 250).await;
 
     assert_eq!(
         feature_flags.get("StaleDataFlag").await.unwrap(),
@@ -1639,7 +1589,6 @@ async fn test_override_flag_proper_api_request_format() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "FormatTestFlag", 4, 250).await;
 
     let action = OverrideFlag::new("FormatTestFlag".to_string(), true);
 
@@ -1706,7 +1655,6 @@ async fn test_override_flag_api_failure_preserves_existing_override() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "ExistingOverrideFlag", 4, 250).await;
 
     let action = OverrideFlag::new("ExistingOverrideFlag".to_string(), true);
 
@@ -1757,7 +1705,6 @@ async fn test_proton_can_override_user_overridden_flag() {
     let feature_flags = user_context.feature_flags();
 
     feature_flags.refresh().await.unwrap();
-    wait_for_flag(feature_flags, "RatingBoosterFlag", 4, 250).await;
 
     assert_eq!(
         feature_flags.get("RatingBoosterFlag").await.unwrap(),
@@ -1839,8 +1786,6 @@ async fn test_proton_can_override_user_overridden_flag() {
         .await;
 
     feature_flags.refresh().await.unwrap();
-
-    tokio::time::sleep(Duration::from_millis(250)).await;
 
     assert_eq!(
         feature_flags.get("RatingBoosterFlag").await.unwrap(),
