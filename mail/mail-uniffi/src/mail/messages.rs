@@ -18,7 +18,6 @@ use crate::mail::mail_scroller::{
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async};
 use crate::{PaginatorSearchOptions, declare_live_query_tagger};
 use itertools::Itertools as _;
-use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::PrivateEmail;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
@@ -37,9 +36,7 @@ use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
     TransformOpts as RealTransformOpts,
 };
-use proton_mail_common::models::{
-    self, IncomingDefault, Message as RealMessage, MessageBodyMetadata, MessageMimeType,
-};
+use proton_mail_common::models::{self, IncomingDefault, Message as RealMessage};
 use proton_mail_common::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
@@ -692,37 +689,6 @@ pub async fn all_available_message_actions_for_action_sheet(
     })
     .await
     .map_err(ActionError::from)
-}
-
-/// This function should **NEVER** be used in the production.
-/// We provide it only for the sake of snapshot testing of our HTML transformer.
-/// It returns a decrypted message as if it was a new draft.
-///
-#[uniffi_export]
-pub fn test_stub_message_body(
-    session: &MailUserSession,
-    sender: String,
-    content: String,
-) -> Result<Arc<DecryptedMessage>, ActionError> {
-    let ctx = session.ptr();
-    let msg = Arc::new(DecryptedMessage {
-        ctx,
-        body: DecryptedMessageBody {
-            body: content,
-            metadata: MessageBodyMetadata {
-                mime_type: proton_mail_common::datatypes::MimeType::TextHtml,
-                ..Default::default()
-            },
-            mime_type: MessageMimeType::TextHtml,
-            pgp_subject: None,
-            address_id: AddressId::from("Unknown"),
-            in_flight: parking_lot::Mutex::default(),
-            decryption_error: None,
-        },
-        sender: sender.into(),
-    });
-
-    Ok(msg)
 }
 
 #[uniffi_export]
