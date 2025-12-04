@@ -28,8 +28,8 @@ use proton_mail_common::Unexpected;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{
-    AttachmentMetadata as RealAttachmentMetadata, ConversationViewOptions, LocalConversationId,
-    MobileAction as RealMobileAction, ParsedHeaderValue,
+    AttachmentMetadata as RealAttachmentMetadata, MobileAction as RealMobileAction,
+    ParsedHeaderValue,
 };
 use proton_mail_common::decrypted_message::{
     BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
@@ -457,28 +457,6 @@ pub async fn watch_message(
             message: message.into(),
             handle,
         }))
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[uniffi_export]
-pub async fn messages_for_conversation(
-    session: Arc<MailUserSession>,
-    conversation_id: Id,
-) -> Result<Vec<Message>, ActionError> {
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_conversation(
-                LocalConversationId::from(conversation_id),
-                ConversationViewOptions::All.into(),
-                &tether,
-            )
-            .await?
-            .map_vec(),
-        )
     })
     .await
     .map_err(ActionError::from)
