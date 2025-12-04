@@ -566,24 +566,6 @@ pub async fn label_conversations_as(
     .map_err(ActionError::from)
 }
 
-declare_live_query_tagger!(WatchAvailableMoveToActionsMarker);
-
-#[uniffi_export]
-pub async fn watch_available_move_to_actions(
-    mailbox: Arc<Mailbox>,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<Arc<WatchHandle>, ActionError> {
-    let ctx = mailbox.ctx()?;
-    let stash = mailbox.stash()?;
-    uniffi_async(async move {
-        let handle = RealLabel::watch(&stash).await?;
-        let handle = WatchAvailableMoveToActionsMarker::watch_channel(&*ctx, handle, callback);
-        Result::<_, RealProtonMailError>::Ok(handle)
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
 #[uniffi_export]
 pub async fn get_auto_delete_banner(
     session: Arc<MailUserSession>,
