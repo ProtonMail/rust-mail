@@ -28,7 +28,7 @@ use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use std::collections::BTreeSet;
 use std::time::Instant;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum OpenConversationOrigin {
@@ -228,9 +228,11 @@ impl ContextualConversation {
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection().await?;
+
         let label = Label::find_by_id(local_label_id, &conn)
             .await?
-            .ok_or(AppError::LabelNotFound(local_label_id))?;
+            .ok_or_else(|| AppError::LabelNotFound(local_label_id))?;
+
         let conversation = match Conversation::sync_conversation_messages_from_push_notification(
             network_monitor_service,
             local_conversation_id,
@@ -261,9 +263,13 @@ impl ContextualConversation {
         })?;
 
         let messages = Message::in_conversation(local_conversation_id, view_options, &conn).await?;
-        tracing::info!("Conversation has {:02} messages", messages.len());
-        let id_to_open =
-            Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
+        let focused_message_id = Conversation::focused_message(&label, &messages);
+
+        info!(
+            ?focused_message_id,
+            "Conversation has {} message(s)",
+            messages.len()
+        );
 
         debug!(
             "Obtained messages and conversations for {local_conversation_id} in {:?}",
@@ -273,7 +279,7 @@ impl ContextualConversation {
         Ok(Some(ContextualConversationAndMessages {
             conversation,
             messages,
-            message_id_to_open: id_to_open,
+            focused_message_id,
         }))
     }
 
@@ -342,9 +348,11 @@ impl ContextualConversation {
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection().await?;
+
         let label = Label::find_by_id(local_label_id, &conn)
             .await?
-            .ok_or(AppError::LabelNotFound(local_label_id))?;
+            .ok_or_else(|| AppError::LabelNotFound(local_label_id))?;
+
         match Conversation::sync_conversation_messages(
             network_monitor_service,
             local_conversation_id,
@@ -365,15 +373,22 @@ impl ContextualConversation {
             }
             Err(e) => return Err(e),
         };
+
         let Some(conversation) = Self::load(local_conversation_id, local_label_id, &conn).await?
         else {
             warn!("Conversation could not be contextualized to label");
             return Ok(None);
         };
+
         let messages = Message::in_conversation(local_conversation_id, view_options, &conn).await?;
-        tracing::info!("Conversation has {:02} messages", messages.len());
-        let id_to_open =
-            Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
+        let focused_message_id = Conversation::focused_message(&label, &messages);
+
+        info!(
+            ?focused_message_id,
+            "Conversation has {} message(s)",
+            messages.len()
+        );
+
         debug!(
             "Obtained messages and conversations for {local_conversation_id} in {:?}",
             t.elapsed()
@@ -382,7 +397,7 @@ impl ContextualConversation {
         Ok(Some(ContextualConversationAndMessages {
             conversation,
             messages,
-            message_id_to_open: id_to_open,
+            focused_message_id,
         }))
     }
 
@@ -591,9 +606,7 @@ impl ContextualConversation {
 pub struct ContextualConversationAndMessages {
     pub conversation: ContextualConversation,
     pub messages: Vec<Message>,
-
-    /// The id of message to display first.
-    pub message_id_to_open: LocalMessageId,
+    pub focused_message_id: Option<LocalMessageId>,
 }
 
 pub struct ContextualConversationWatcher {

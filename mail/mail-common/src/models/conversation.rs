@@ -1103,8 +1103,6 @@ impl Conversation {
         Conversation::split_request(ids, request).await
     }
 
-    /// Get the conversation counts.
-    ///
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
     ) -> Result<Vec<ConversationLabelsCount>, ApiServiceError> {
@@ -1113,35 +1111,13 @@ impl Conversation {
             .map(|r| r.counts.map_vec())
     }
 
-    /// Retrieve in the first order the first unread message that should be displayed to the user
-    /// from the conversation's `messages`. If none was found it will pick last message in the view.
-    ///
-    /// The returned message will depend on the `label` where the conversation
-    /// is returned.
-    ///
-    pub fn message_id_to_open(
-        local_id: LocalConversationId,
-        label: &Label,
-        messages: &[Message],
-    ) -> Result<LocalMessageId, AppError> {
-        if messages.is_empty() {
-            return Err(AppError::ConversationHasNoMessages(local_id));
-        }
-        // If we fail to find any message, return the last message in the list.
-        Ok(Self::first_unread_message(label, messages).unwrap_or(messages.last().unwrap().id()))
+    /// Returns the message which the view should navigate to when user opens
+    /// the conversation.
+    pub fn focused_message(label: &Label, messages: &[Message]) -> Option<LocalMessageId> {
+        Self::first_unread_message(label, messages).or_else(|| messages.last().map(|msg| msg.id()))
     }
 
-    /// Retrieve in the first order the first unread message that should be displayed to the user
-    /// from the conversation's `messages`. If none was found it will pick last message in the view.
-    ///
-    /// The returned message will depend on the `label` where the conversation
-    /// is returned.
-    ///
     pub fn first_unread_message(label: &Label, messages: &[Message]) -> Option<LocalMessageId> {
-        if messages.is_empty() {
-            return None;
-        }
-
         fn first_consecutive_unread_msg(
             label_id: Option<&LabelId>,
             messages: &[Message],
@@ -1171,6 +1147,7 @@ impl Conversation {
         let view_is_starred_label_or_folder = label.label_type == LabelType::Label
             || label.label_type == LabelType::Folder
             || label.remote_id == Some(LabelId::starred());
+
         // If this is not a custom label or a folder we don't want to match against
         // label id.
         let label_id = if label.label_type != LabelType::System {

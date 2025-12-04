@@ -118,9 +118,7 @@ impl Handler for PrefetchHandler {
             return Ok(());
         };
 
-        let Ok(message_id_to_open) =
-            Conversation::message_id_to_open(action.local_id, &label, &messages)
-        else {
+        let Some(message_id) = Conversation::focused_message(&label, &messages) else {
             error!(
                 "Message id to open was not found for prefetch action, conversation_id: `{}`",
                 action.local_id
@@ -129,11 +127,11 @@ impl Handler for PrefetchHandler {
         };
 
         tracing::trace!(
-            "Prefetching message {message_id_to_open} body for conversation `{local_id}`",
+            "Prefetching message {message_id} body for conversation `{local_id}`",
             local_id = action.local_id
         );
 
-        let Some(local_message) = Message::load(message_id_to_open, guard.tether()).await? else {
+        let Some(local_message) = Message::load(message_id, guard.tether()).await? else {
             error!(
                 "Message not found for prefetch action, conversation_id: `{}`",
                 action.local_id

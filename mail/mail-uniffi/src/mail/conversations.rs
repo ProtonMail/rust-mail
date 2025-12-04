@@ -310,16 +310,16 @@ pub async fn conversation(
 #[derive(uniffi::Record)]
 pub struct ConversationAndMessages {
     pub conversation: Conversation,
-    pub message_id_to_open: Id,
     pub messages: Vec<Message>,
+    pub focused_message_id: Option<Id>,
 }
 
 impl From<ContextualConversationAndMessages> for ConversationAndMessages {
     fn from(value: ContextualConversationAndMessages) -> Self {
         Self {
             conversation: value.conversation.into(),
-            message_id_to_open: value.message_id_to_open.into(),
             messages: value.messages.map_vec(),
+            focused_message_id: value.focused_message_id.map(Into::into),
         }
     }
 }
@@ -491,7 +491,7 @@ pub async fn unstar_conversations(
 pub struct WatchedConversation {
     pub conversation: Conversation,
     pub messages: Vec<Message>,
-    pub message_id_to_open: Id,
+    pub focused_message_id: Option<Id>,
     pub handle: Arc<WatchHandle>,
 }
 
@@ -568,7 +568,7 @@ pub async fn watch_conversation(
         Result::<_, RealProtonMailError>::Ok(Some(WatchedConversation {
             conversation: conv_and_msgs.conversation.into(),
             messages: conv_and_msgs.messages.map_vec(),
-            message_id_to_open: conv_and_msgs.message_id_to_open.into(),
+            focused_message_id: conv_and_msgs.focused_message_id.map(Into::into),
             handle: watcher,
         }))
     })
