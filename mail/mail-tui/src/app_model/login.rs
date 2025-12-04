@@ -24,6 +24,7 @@ pub enum Message {
     QRLogin,
     LoginSuccess(LoginFlow),
     LoginFailed(LoginError),
+    OpenGlobalFeatureFlags,
 }
 
 pub struct LoginModel {
@@ -145,6 +146,9 @@ impl AppStateHandler for LoginModel {
             KeyCode::Char('q') if k.modifiers.contains(KeyModifiers::CONTROL) => {
                 Command::message(Message::QRLogin)
             }
+            KeyCode::F(12) if k.modifiers.contains(KeyModifiers::SHIFT) => {
+                Command::message(Message::OpenGlobalFeatureFlags)
+            }
             _ => {
                 self.active_text_input_state_mut().handle_event(&event);
                 Command::none()
@@ -232,6 +236,11 @@ impl AppStateHandler for LoginModel {
             }
             Message::LoginFailed(err) => {
                 Command::message(Messages::DisplayError(None, anyhow!("{err}")))
+            }
+            Message::OpenGlobalFeatureFlags => {
+                crate::app_model::global_feature_flags_popup::GlobalFeatureFlagsPopup::open(
+                    Arc::clone(ctx),
+                )
             }
         }
     }

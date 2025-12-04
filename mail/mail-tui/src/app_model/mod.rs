@@ -1,11 +1,13 @@
 pub mod background;
 pub mod contacts;
 pub mod context_init;
+pub mod global_feature_flags_popup;
 pub mod login;
 pub mod mailbox;
 pub mod path_select_popup;
 pub mod session_select;
 pub mod twofa;
+pub mod user_feature_flags_popup;
 mod watcher;
 
 use crate::CLI_ARGS;
