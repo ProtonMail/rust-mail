@@ -6,7 +6,7 @@ use stash::{
     utils::{IterMapToSql, placeholders_n},
 };
 
-use crate::datatypes::{UnixTimestamp, UserFeatureFlagSource};
+use crate::datatypes::{FlagMutability, UnixTimestamp, UserFeatureFlagSource};
 
 #[derive(Debug, Clone, PartialEq, Model)]
 #[TableName("user_feature_flags")]
@@ -51,14 +51,14 @@ impl UserFeatureFlag {
     pub fn legacy(
         name: impl Into<String>,
         enabled: bool,
-        writable: bool,
+        mutability: FlagMutability,
         modify_time: UnixTimestamp,
     ) -> Self {
         Self {
             name: name.into(),
             enabled,
             source: UserFeatureFlagSource::Legacy,
-            writable,
+            writable: mutability.to_writable(),
             overridden_to: None,
             overridden_at: None,
             modify_time,

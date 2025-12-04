@@ -1,7 +1,7 @@
 use crate::CoreContextError;
 use crate::actions::dependency_builder::ActionDependencyKeysBuilder;
-use crate::datatypes::{UnixTimestamp, UserFeatureFlagSource};
-use crate::models::UserFeatureFlag;
+use crate::datatypes::{FlagMutability, UnixTimestamp, UserFeatureFlagSource};
+use crate::models::{ModelExtension, UserFeatureFlag};
 use proton_action_queue::action::{
     Action, ActionDependencyKey, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler,
     Type, WriterGuard,
@@ -17,8 +17,13 @@ use stash::stash::{Bond, RunTransaction};
 pub struct OverrideFlag {
     flag_name: String,
     new_value: bool,
-    previous_overridden_value: Option<bool>,
-    previous_overridden_at: Option<UnixTimestamp>,
+    previous_state: Option<PreviousFlagState>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+struct PreviousFlagState {
+    overridden_to: Option<bool>,
+    overridden_at: Option<UnixTimestamp>,
 }
 
 impl OverrideFlag {
@@ -27,8 +32,7 @@ impl OverrideFlag {
         Self {
             flag_name,
             new_value,
-            previous_overridden_value: None,
-            previous_overridden_at: None,
+            previous_state: None,
         }
     }
 }
@@ -68,12 +72,24 @@ impl Handler for OverrideFlagHandler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         let mut flag = UserFeatureFlag::by_name(&action.flag_name, tx.tether())
             .await?
-            .ok_or_else(|| {
-                CoreContextError::Other(anyhow::anyhow!(
-                    "Feature flag '{}' not found",
-                    action.flag_name
-                ))
-            })?;
+            .inspect(|flag| {
+                action.previous_state = Some(PreviousFlagState {
+                    overridden_to: flag.overridden_to,
+                    overridden_at: flag.overridden_at,
+                });
+            })
+            .unwrap_or_else(|| {
+                // Only legacy flags can be overridden
+                // If the flag was not found in our local cache,
+                // we still want to allow user to override it.
+                // Worst case: Backend will reject the PUT request.
+                UserFeatureFlag::legacy(
+                    action.flag_name.clone(),
+                    action.new_value,
+                    FlagMutability::Mutable,
+                    UnixTimestamp::now(),
+                )
+            });
 
         if !flag.writable {
             return Err(CoreContextError::Other(anyhow::anyhow!(
@@ -82,8 +98,6 @@ impl Handler for OverrideFlagHandler {
             )));
         }
 
-        action.previous_overridden_value = flag.overridden_to;
-        action.previous_overridden_at = flag.overridden_at;
         flag.overridden_to = Some(action.new_value);
         flag.overridden_at = None;
         flag.save(tx).await?;
@@ -106,10 +120,16 @@ impl Handler for OverrideFlagHandler {
                 ))
             })?;
 
-        flag.overridden_to = action.previous_overridden_value;
-        flag.overridden_at = action.previous_overridden_at;
-
-        flag.save(tx).await?;
+        match action.previous_state {
+            Some(previous) => {
+                flag.overridden_at = previous.overridden_at;
+                flag.overridden_to = previous.overridden_to;
+                flag.save(tx).await?;
+            }
+            None => {
+                flag.delete(tx).await?;
+            }
+        }
 
         Ok(())
     }
