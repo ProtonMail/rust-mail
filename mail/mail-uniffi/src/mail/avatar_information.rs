@@ -6,16 +6,6 @@ use proton_mail_common::datatypes::MessageRecipient as RealMessageRecipient;
 use proton_mail_common::datatypes::MessageSender as RealMessageSender;
 
 #[uniffi_export]
-pub fn avatar_information_from_name_and_email(
-    display_name: &str,
-    email: &str,
-) -> AvatarInformation {
-    RealAvatarInformation::from(display_name)
-        .or_else(email)
-        .into()
-}
-
-#[uniffi_export]
 pub fn avatar_information_from_message_senders(
     address_list: Vec<MessageSender>,
 ) -> AvatarInformation {
