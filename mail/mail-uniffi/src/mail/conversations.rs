@@ -297,31 +297,6 @@ impl From<ContextualConversationAndMessages> for ConversationAndMessages {
     }
 }
 
-/// Retrieve a conversation by local ID.
-///
-/// Notably, this retrieves a local conversation that has been saved in the
-/// database. It does not use the network.
-#[uniffi_export]
-pub async fn load_conversation(
-    session: Arc<MailUserSession>,
-    id: Id,
-    label_id: Id,
-) -> Result<Option<Conversation>, ActionError> {
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let Some(conversation) = RealConversation::load(id.into(), &tether).await? else {
-            return Ok(None);
-        };
-
-        Result::<_, RealProtonMailError>::Ok(
-            ContextualConversation::new(conversation, label_id.into()).map(Into::into),
-        )
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn mark_conversations_as_read(
