@@ -11,7 +11,7 @@ use crate::transforms::styles::{
 };
 
 use super::colors::ShouldModifyTransparentColors;
-use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
+use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverriddenProps};
 
 /// Walks through the style attribute, detects which
 /// color needs to be adjusted to dark theme.
@@ -20,7 +20,7 @@ use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProp
 ///
 #[derive(Default, Clone, Debug)]
 pub(crate) struct StyleAttributeVisitor {
-    overriden: Vec<OldProperty>,
+    overridden: Vec<OldProperty>,
     overrides: Vec<NewProperty>,
 
     should_modify_transparent_colors: ShouldModifyTransparentColors,
@@ -36,7 +36,7 @@ impl StyleAttributeVisitor {
     }
 
     pub fn overrides(self) -> (Vec<OldProperty>, Vec<NewProperty>) {
-        (self.overriden, self.overrides)
+        (self.overridden, self.overrides)
     }
 }
 
@@ -52,7 +52,7 @@ impl Visitor<'_> for StyleAttributeVisitor {
         decls: &mut lightningcss::declaration::DeclarationBlock<'_>,
     ) -> Result<(), Self::Error> {
         let mut visitor = DeclarationBlockVisitor::new(
-            ShouldStoreOverridenProps::Yes,
+            ShouldStoreOverriddenProps::Yes,
             ShouldRemoveImportant::Yes,
             self.should_modify_transparent_colors,
             self.printer_options,
@@ -60,10 +60,10 @@ impl Visitor<'_> for StyleAttributeVisitor {
 
         decls.visit(&mut visitor)?;
 
-        let (overriden_properties, properties_overrides) = visitor.overrides();
+        let (overridden_properties, properties_overrides) = visitor.overrides();
         if !properties_overrides.is_empty() {
             self.overrides.extend(properties_overrides);
-            self.overriden.extend(overriden_properties);
+            self.overridden.extend(overridden_properties);
         }
 
         Ok(())

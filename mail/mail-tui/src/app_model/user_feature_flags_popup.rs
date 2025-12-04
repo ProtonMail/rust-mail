@@ -71,7 +71,7 @@ impl UserFeatureFlagsPopup {
                     enabled: flag.is_enabled(),
                     writable: flag.writable,
                     source: format!("{:?}", flag.source),
-                    overridden: flag.overriden_to.is_some(),
+                    overridden: flag.overridden_to.is_some(),
                 })
                 .collect();
 

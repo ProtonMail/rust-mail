@@ -16,11 +16,11 @@ use crate::transforms::styles::{
 use super::colors::ShouldModifyTransparentColors;
 use super::properties::PropertiesVisitor;
 
-/// Whether to keep serialized overriden props (as in original props before the edit)
+/// Whether to keep serialized overridden props (as in original props before the edit)
 /// in the visitor result.
 /// Useful while parsing style attributes but useless when parsing stylesheets
 #[derive(Default, Clone, Debug)]
-pub enum ShouldStoreOverridenProps {
+pub enum ShouldStoreOverriddenProps {
     Yes,
     #[default]
     No,
@@ -48,11 +48,11 @@ pub enum ShouldRemoveImportant {
 ///
 #[derive(Default, Clone, Debug)]
 pub(crate) struct DeclarationBlockVisitor {
-    overriden: Vec<OldProperty>,
+    overridden: Vec<OldProperty>,
 
     overrides: Vec<NewProperty>,
 
-    should_store_overriden_props: ShouldStoreOverridenProps,
+    should_store_overridden_props: ShouldStoreOverriddenProps,
 
     should_remove_important: ShouldRemoveImportant,
 
@@ -63,13 +63,13 @@ pub(crate) struct DeclarationBlockVisitor {
 
 impl DeclarationBlockVisitor {
     pub fn new(
-        should_store_overriden_props: ShouldStoreOverridenProps,
+        should_store_overridden_props: ShouldStoreOverriddenProps,
         should_remove_important: ShouldRemoveImportant,
         should_modify_transparent_colors: ShouldModifyTransparentColors,
         printer_options: PrinterOptions<'static>,
     ) -> Self {
         Self {
-            should_store_overriden_props,
+            should_store_overridden_props,
             should_remove_important,
             should_modify_transparent_colors,
             printer_options,
@@ -78,7 +78,7 @@ impl DeclarationBlockVisitor {
     }
 
     pub fn overrides(self) -> (Vec<OldProperty>, Vec<NewProperty>) {
-        (self.overriden, self.overrides)
+        (self.overridden, self.overrides)
     }
 }
 
@@ -147,12 +147,12 @@ impl Visitor<'_> for DeclarationBlockVisitor {
             for prop in visitor.modified {
                 // to_css_string is potentially expensive operation
                 if matches!(
-                    self.should_store_overriden_props,
-                    ShouldStoreOverridenProps::Yes
+                    self.should_store_overridden_props,
+                    ShouldStoreOverriddenProps::Yes
                 ) {
                     match prop.to_css_string(false, self.printer_options) {
-                        Ok(overriden_prop) => {
-                            self.overriden.push(overriden_prop);
+                        Ok(overridden_prop) => {
+                            self.overridden.push(overridden_prop);
                         }
                         _ => {
                             tracing::error!("Could not print original CSS to string. Skipping it.");

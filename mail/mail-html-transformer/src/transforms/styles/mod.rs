@@ -621,7 +621,7 @@ fn sanitize_dark_mode_in_inline_attribute(
 
     _ = style_attribute.visit(&mut visitor);
 
-    let (overriden_properties, property_overrides) = visitor.overrides();
+    let (overridden_properties, property_overrides) = visitor.overrides();
     if property_overrides.is_empty() {
         return;
     }
@@ -642,7 +642,7 @@ fn sanitize_dark_mode_in_inline_attribute(
     // It doesn't matter which style is first, nor if there is another property set in the CSS.
     //
     // [style *= "foo"] means "find every style that contains 'foo'".
-    for prop in overriden_properties {
+    for prop in overridden_properties {
         write!(tag_selector, r#"[style*="{prop}"]"#).expect("Write to string");
     }
 

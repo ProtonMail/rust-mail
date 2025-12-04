@@ -1038,7 +1038,7 @@ async fn test_override_writable_legacy_flag_success() {
             .unwrap()
             .unwrap();
 
-        assert_eq!(flag.overriden_to, Some(true));
+        assert_eq!(flag.overridden_to, Some(true));
         assert!(flag.enabled);
         assert!(flag.is_enabled());
     }
@@ -1088,7 +1088,7 @@ async fn test_override_non_writable_flag_fails() {
             .unwrap()
             .unwrap();
 
-        assert_eq!(flag.overriden_to, None);
+        assert_eq!(flag.overridden_to, None);
         assert!(flag.enabled);
     }
 }
@@ -1234,7 +1234,7 @@ async fn test_override_flag_state_preservation() {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(flag.overriden_to, Some(true));
+        assert_eq!(flag.overridden_to, Some(true));
     }
 
     // Second override: Some(true) -> Some(false)
@@ -1255,7 +1255,7 @@ async fn test_override_flag_state_preservation() {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(flag.overriden_to, Some(false));
+        assert_eq!(flag.overridden_to, Some(false));
     }
 }
 
@@ -1364,8 +1364,8 @@ async fn test_override_local_only_not_yet_executed_remotely() {
             .unwrap();
 
         assert!(!flag.enabled);
-        assert_eq!(flag.overriden_to, Some(true));
-        assert_eq!(flag.overriden_at, None);
+        assert_eq!(flag.overridden_to, Some(true));
+        assert_eq!(flag.overridden_at, None);
         assert!(flag.is_enabled());
     }
 
@@ -1386,8 +1386,8 @@ async fn test_override_local_only_not_yet_executed_remotely() {
             .unwrap();
 
         assert!(!flag.enabled);
-        assert_eq!(flag.overriden_to, Some(true));
-        assert_eq!(flag.overriden_at, None);
+        assert_eq!(flag.overridden_to, Some(true));
+        assert_eq!(flag.overridden_at, None);
         assert!(flag.is_enabled());
     }
 
@@ -1500,8 +1500,8 @@ async fn test_backend_returns_stale_data_after_override() {
 
         tracing::warn!("Flag fetched from DB before stale refresh: {:?}", flag);
         assert!(flag.enabled);
-        assert_eq!(flag.overriden_to, Some(true));
-        assert_eq!(flag.overriden_at, Some(override_time));
+        assert_eq!(flag.overridden_to, Some(true));
+        assert_eq!(flag.overridden_at, Some(override_time));
         assert!(flag.is_enabled());
     }
 
@@ -1517,8 +1517,8 @@ async fn test_backend_returns_stale_data_after_override() {
 
         tracing::warn!("Flag fetched from DB: {:?}", flag);
         assert!(flag.enabled);
-        assert_eq!(flag.overriden_to, Some(true));
-        assert_eq!(flag.overriden_at, Some(override_time));
+        assert_eq!(flag.overridden_to, Some(true));
+        assert_eq!(flag.overridden_at, Some(override_time));
         assert!(flag.is_enabled());
     }
 
@@ -1617,7 +1617,7 @@ async fn test_override_flag_api_failure_preserves_existing_override() {
         let mut tether = user_context.stash().connection().await.unwrap();
         let mut existing_flag =
             UserFeatureFlag::legacy("ExistingOverrideFlag", true, true, UnixTimestamp::new(10));
-        existing_flag.overriden_to = Some(false);
+        existing_flag.overridden_to = Some(false);
 
         tether
             .tx(async move |tx| existing_flag.save(tx).await)
@@ -1670,7 +1670,7 @@ async fn test_override_flag_api_failure_preserves_existing_override() {
             .unwrap();
 
         assert!(flag.enabled);
-        assert_eq!(flag.overriden_to, Some(false));
+        assert_eq!(flag.overridden_to, Some(false));
         assert!(!flag.is_enabled());
     }
 }
@@ -1755,8 +1755,8 @@ async fn test_proton_can_override_user_overridden_flag() {
             .unwrap();
 
         assert!(flag.enabled);
-        assert_eq!(flag.overriden_to, Some(true));
-        assert_eq!(flag.overriden_at, Some(override_time));
+        assert_eq!(flag.overridden_to, Some(true));
+        assert_eq!(flag.overridden_at, Some(override_time));
         assert!(flag.is_enabled());
     }
 
@@ -1800,8 +1800,8 @@ async fn test_proton_can_override_user_overridden_flag() {
             .unwrap();
 
         assert!(!flag.enabled);
-        assert_eq!(flag.overriden_to, None);
-        assert_eq!(flag.overriden_at, None);
+        assert_eq!(flag.overridden_to, None);
+        assert_eq!(flag.overridden_at, None);
         assert!(!flag.is_enabled());
     }
 }

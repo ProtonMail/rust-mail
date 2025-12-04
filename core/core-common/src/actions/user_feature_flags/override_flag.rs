@@ -82,10 +82,10 @@ impl Handler for OverrideFlagHandler {
             )));
         }
 
-        action.previous_overridden_value = flag.overriden_to;
-        action.previous_overridden_at = flag.overriden_at;
-        flag.overriden_to = Some(action.new_value);
-        flag.overriden_at = None;
+        action.previous_overridden_value = flag.overridden_to;
+        action.previous_overridden_at = flag.overridden_at;
+        flag.overridden_to = Some(action.new_value);
+        flag.overridden_at = None;
         flag.save(tx).await?;
 
         Ok(())
@@ -106,8 +106,8 @@ impl Handler for OverrideFlagHandler {
                 ))
             })?;
 
-        flag.overriden_to = action.previous_overridden_value;
-        flag.overriden_at = action.previous_overridden_at;
+        flag.overridden_to = action.previous_overridden_value;
+        flag.overridden_at = action.previous_overridden_at;
 
         flag.save(tx).await?;
 
@@ -136,7 +136,7 @@ impl Handler for OverrideFlagHandler {
                         ))
                     })?;
 
-                flag.overriden_at = response
+                flag.overridden_at = response
                     .feature
                     .metadata
                     .update_time
