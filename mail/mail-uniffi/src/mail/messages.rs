@@ -521,36 +521,6 @@ pub async fn available_label_as_actions_for_messages(
     .map_err(ActionError::from)
 }
 
-declare_live_query_tagger!(WatchAvailableLabelAsActionsMessageMaker);
-
-#[uniffi_export]
-pub async fn watch_available_label_as_actions_for_messages(
-    mailbox: Arc<Mailbox>,
-    ids: Vec<Id>,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedLabelAs, ActionError> {
-    let ctx = mailbox.ctx()?;
-    let stash = mailbox.stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let (actions, handle) =
-            RealMessage::watch_available_label_as_actions(ids.map_vec(), &tether).await?;
-        let actions = actions.map_vec();
-        let handle =
-            WatchAvailableLabelAsActionsMessageMaker::watch_channel(&*ctx, handle, callback);
-
-        Ok::<_, RealProtonMailError>(WatchedLabelAs { actions, handle })
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-#[derive(Clone, uniffi::Record)]
-pub struct WatchedLabelAs {
-    pub actions: Vec<LabelAsAction>,
-    pub handle: Arc<WatchHandle>,
-}
-
 #[uniffi_export]
 pub async fn available_move_to_actions_for_messages(
     mailbox: Arc<Mailbox>,
