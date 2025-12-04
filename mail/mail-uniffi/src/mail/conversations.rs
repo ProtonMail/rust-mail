@@ -631,24 +631,3 @@ pub fn get_all_mobile_conversation_actions() -> Vec<MobileAction> {
         .filter_map(MobileAction::from_real)
         .collect_vec()
 }
-
-#[uniffi_export]
-#[returns(VoidActionResult)]
-pub async fn set_default_mobile_conversation_toolbar_actions(
-    session: Arc<MailUserSession>,
-) -> Result<(), ActionError> {
-    let ctx = session.ctx()?;
-    let actions = RealMobileAction::default_chosen_actions();
-
-    uniffi_async(async move {
-        proton_mail_common::models::MailSettings::action_update_conversation_toolbar(
-            ctx.action_queue(),
-            actions.map_vec(),
-            true,
-        )
-        .await
-        .map_err(RealProtonMailError::from)
-    })
-    .await
-    .map_err(ActionError::from)
-}
