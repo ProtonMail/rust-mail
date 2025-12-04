@@ -297,24 +297,6 @@ impl From<ContextualConversationAndMessages> for ConversationAndMessages {
     }
 }
 
-#[uniffi_export]
-pub async fn conversations_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-) -> Result<Vec<Conversation>, ActionError> {
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        Result::<_, RealProtonMailError>::Ok(
-            ContextualConversation::in_label(label_id.into(), &tether)
-                .await?
-                .map_vec(),
-        )
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
 /// Retrieve a conversation by local ID.
 ///
 /// Notably, this retrieves a local conversation that has been saved in the
