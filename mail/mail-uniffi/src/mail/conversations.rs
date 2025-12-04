@@ -537,35 +537,6 @@ pub struct WatchedConversations {
     pub handle: Arc<WatchHandle>,
 }
 
-declare_live_query_tagger!(WatchConversationsForLabelMarker);
-
-#[uniffi_export]
-pub async fn watch_conversations_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedConversations, ActionError> {
-    let user_context = session.ctx()?;
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection().await?;
-        let conversations = RealConversation::in_label(label_id.into(), &tether).await?;
-        let receiver = ContextualConversation::watch(&stash).await?;
-        let watcher =
-            WatchConversationsForLabelMarker::watch_channel(&*user_context, receiver, callback);
-        Result::<_, RealProtonMailError>::Ok(WatchedConversations {
-            conversations: conversations
-                .into_iter()
-                .filter_map(|c| ContextualConversation::new(c, label_id.into()))
-                .map(Into::into)
-                .collect(),
-            handle: watcher,
-        })
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
 #[uniffi_export]
 pub async fn label_conversations_as(
     mailbox: Arc<Mailbox>,
