@@ -942,9 +942,6 @@ impl ModelHooks for Attachment {
     }
 }
 
-// TODO: The use of the "Real" wrappers is because the source types don't
-// TODO: implement the traits we need. At a later date we should implement those
-// TODO: traits directly on the source types, and remove these wrappers.
 impl DecryptableAttachment for Attachment {
     fn attachment_key_packets(&self) -> &RealKeyPackets {
         self.key_packets
