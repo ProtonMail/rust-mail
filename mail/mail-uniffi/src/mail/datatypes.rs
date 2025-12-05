@@ -44,8 +44,8 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::models::{
-    MailSettings as RealMailSettings, Message as RealMessage, MessageMimeType,
-    MessageReplyTo as RealMessageReplyTo,
+    MailSettings as RealMailSettings, Message as RealMessage,
+    MessageMimeType as RealMessageMimeType, MessageReplyTo as RealMessageReplyTo,
 };
 pub use snooze::*;
 use stash::orm::Model;
@@ -370,9 +370,25 @@ impl From<RealMimeType> for MimeType {
     }
 }
 
-impl From<MessageMimeType> for MimeType {
-    fn from(value: MessageMimeType) -> Self {
+impl From<RealMessageMimeType> for MimeType {
+    fn from(value: RealMessageMimeType) -> Self {
         RealMimeType::from(value).into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
+#[repr(u8)]
+pub enum MessageMimeType {
+    #[default]
+    TextHtml,
+    TextPlain,
+}
+impl From<MessageMimeType> for RealMessageMimeType {
+    fn from(mime: MessageMimeType) -> Self {
+        match mime {
+            MessageMimeType::TextHtml => Self::TextHtml,
+            MessageMimeType::TextPlain => Self::TextPlain,
+        }
     }
 }
 

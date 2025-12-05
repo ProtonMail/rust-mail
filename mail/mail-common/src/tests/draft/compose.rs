@@ -1166,7 +1166,7 @@ impl RecipientListTestExt for RecipientList {
 }
 
 #[test]
-fn test_sanitize_pasted_content() {
+fn test_sanitize_pasted_rich_content() {
     let html_with_styles = r##"<html>
             <head><style>.test {color: red;}</style></head>
             <body>
@@ -1176,7 +1176,35 @@ fn test_sanitize_pasted_content() {
             </body>
         </html>"##;
 
-    let result = crate::draft::compose::sanitize_pasted_content(html_with_styles);
+    let result =
+        crate::draft::compose::sanitize_pasted_content(html_with_styles, MessageMimeType::TextHtml);
+
+    insta::assert_snapshot!(result);
+}
+
+#[test]
+fn test_sanitize_pasted_plain_content() {
+    let html_with_styles = r"Foo <b>bar</b>";
+
+    let result = crate::draft::compose::sanitize_pasted_content(
+        html_with_styles,
+        MessageMimeType::TextPlain,
+    );
+
+    insta::assert_snapshot!(result);
+}
+
+#[test]
+fn test_sanitize_pasted_plain_content_with_newlines() {
+    let html_with_styles = r#"Foo
+    Bar
+
+    Baz"#;
+
+    let result = crate::draft::compose::sanitize_pasted_content(
+        html_with_styles,
+        MessageMimeType::TextPlain,
+    );
 
     insta::assert_snapshot!(result);
 }

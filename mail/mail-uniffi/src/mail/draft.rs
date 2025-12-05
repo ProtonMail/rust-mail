@@ -31,7 +31,7 @@ use proton_mail_common::draft::{
     compose::DraftAddressValidationResult as RealDraftAddressValidationResult,
 };
 use proton_mail_common::models::DraftSendResult as RealDraftSendResult;
-use proton_mail_common::models::{DraftMetadata, MessageMimeType};
+use proton_mail_common::models::{DraftMetadata, MessageMimeType as RealMessageMimeType};
 use proton_mail_common::{MailContextError, MailUserContext};
 use proton_mailto::Mailto;
 use recipients::ComposerRecipientList;
@@ -41,6 +41,8 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{RwLock, broadcast};
 use tracing::warn;
+
+use super::datatypes::MessageMimeType;
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum DraftCreateMode {
@@ -138,7 +140,7 @@ impl From<EoData> for DraftPassword {
 struct CachedDraftData {
     subject: String,
     body: String,
-    mime_type: MessageMimeType,
+    mime_type: RealMessageMimeType,
     send_result: Option<RealDraftSendResult>,
     to_list: Vec<ComposerRecipient>,
     to_list_cb: Option<Arc<dyn ComposerRecipientValidationCallback>>,
@@ -950,6 +952,6 @@ fn draft_options() -> DraftActorOptions {
 }
 
 #[uniffi::export]
-pub fn sanitize_pasted_html(content: &str) -> String {
-    proton_mail_common::draft::compose::sanitize_pasted_content(content)
+pub fn sanitize_pasted_content(content: &str, mime_type: MessageMimeType) -> String {
+    proton_mail_common::draft::compose::sanitize_pasted_content(content, mime_type.into())
 }

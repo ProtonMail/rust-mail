@@ -53,6 +53,7 @@ pub mod transforms;
 pub mod utm;
 
 mod html2text;
+mod text2html;
 
 use crate::replace_inner::InvalidSelectorError;
 use crate::transforms::styles::{IncludeFullStaticCss, InjectDarkModeOptions};
@@ -93,6 +94,14 @@ impl Transformer {
     pub fn new_text_plain(plain_text: &str) -> Self {
         let document = keep_spaces_and_escape_gt_and_lt(plain_text);
         let document = kuchikiki::parse_html().one(document.as_str());
+        Self { document }
+    }
+
+    /// Transforms plaintext to rich html. Comparing to [`Transformer::new_text_plain`], this function
+    /// does not wrap the text in `<pre>` and uses different strategy for handling line breaks.
+    #[must_use]
+    pub fn new_text2html(plain_text: &str) -> Self {
+        let document = text2html::text2html(plain_text);
         Self { document }
     }
 

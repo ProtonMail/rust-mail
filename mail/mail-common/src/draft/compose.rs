@@ -409,10 +409,13 @@ pub fn sanitize_html_content(transformer: &mut Transformer, strip_style_sheets: 
     transformer.revert_dark_mode_in_inline_attributes();
 }
 
-pub fn sanitize_pasted_content(body: &str) -> String {
-    let mut transformer = Transformer::new(body);
+pub fn sanitize_pasted_content(body: &str, mime_type: MessageMimeType) -> String {
+    let mut transformer = match mime_type {
+        MessageMimeType::TextHtml => Transformer::new(body),
+        MessageMimeType::TextPlain => Transformer::new_text2html(body),
+    };
     sanitize_html_content(&mut transformer, StripStyleSheets::Yes);
-    transformer.to_string()
+    transformer.extract_body()
 }
 
 pub fn maybe_sanitize(mime_type: MessageMimeType, body: &str) -> String {
