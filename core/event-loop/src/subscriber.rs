@@ -6,6 +6,10 @@ use tracing::error;
 
 pub trait SubscriberError: Error + Send + Sync + 'static {
     fn is_network_failure(&self) -> bool;
+
+    fn is_retryable(&self) -> bool {
+        self.is_network_failure()
+    }
 }
 
 pub type SubscriberResult<T> = Result<T, Box<dyn SubscriberError>>;

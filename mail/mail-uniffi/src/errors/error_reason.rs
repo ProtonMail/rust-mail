@@ -411,6 +411,7 @@ impl From<RealDraftAttachmentDispositionSwapErrorReason>
 pub enum EventErrorReason {
     Refresh,
     Subscriber,
+    CyclicDependency,
 }
 
 impl From<RealEventErrorReason> for EventErrorReason {
@@ -418,6 +419,7 @@ impl From<RealEventErrorReason> for EventErrorReason {
         match reason {
             RealEventErrorReason::Subscriber => EventErrorReason::Subscriber,
             RealEventErrorReason::Refresh => EventErrorReason::Refresh,
+            RealEventErrorReason::CyclicDependency => EventErrorReason::CyclicDependency,
         }
     }
 }

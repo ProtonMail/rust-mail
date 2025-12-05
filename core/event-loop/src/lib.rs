@@ -61,16 +61,18 @@
 //! - **FIFO Processing**: Subscribers are processed in the order they were registered
 //! - **Single Poll Loop**: One event poll can handle multiple event types efficiently
 //!
+mod actor;
 pub mod poll;
 pub mod provider;
 pub mod store;
 pub mod subscriber;
+pub mod v6;
 
 use std::fmt;
 // Re-export main types
-pub use poll::EventPoll;
-pub use provider::{Provider, ProviderError};
-pub use subscriber::{Subscriber, SubscriberError};
+pub use actor::EventPoll;
+pub use provider::{Provider, ProviderError, ProviderResult};
+pub use subscriber::{Subscriber, SubscriberError, SubscriberResult};
 
 use anyhow::Error as AnyhowError;
 use serde::{Deserialize, Serialize};
@@ -125,6 +127,10 @@ pub enum EventLoopError {
     Register(&'static str),
     #[error("Failed to deserialize event: {0}")]
     Deserialize(AnyhowError),
+    #[error("Cyclic dependency detected between event sources")]
+    CyclicDependency,
+    #[error("Event source {0} already registered")]
+    DuplicateEventSource(&'static str),
     #[error("Failed to communicate with actor")]
     Actor,
 }
@@ -168,6 +174,23 @@ impl RawEvent {
         let event = T::from(serde_json::from_str(&self.raw)?);
 
         Ok(event)
+    }
+
+    pub fn deserialize_generic<'a, T: Deserialize<'a>>(&'a self) -> Result<T, serde_json::Error> {
+        serde_json::from_str(&self.raw)
+    }
+}
+impl RawEvent {
+    fn event_id(&self) -> EventId {
+        self.meta.event_id.clone().into_inner().into()
+    }
+
+    fn has_more(&self) -> bool {
+        self.meta.has_more
+    }
+
+    fn is_refresh(&self) -> bool {
+        self.meta.refresh != 0
     }
 }
 

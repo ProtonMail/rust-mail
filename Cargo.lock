@@ -5411,8 +5411,10 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+ "slotmap",
  "thiserror 1.0.69",
  "tokio",
+ "topological-sort",
  "tracing",
 ]
 

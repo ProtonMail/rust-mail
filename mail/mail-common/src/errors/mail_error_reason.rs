@@ -275,6 +275,7 @@ pub enum DraftAttachmentDispositionSwapErrorReason {
 pub enum EventErrorReason {
     Refresh,
     Subscriber,
+    CyclicDependency,
 }
 
 /// Specific Reason for error occurrence while creating user's PIN
