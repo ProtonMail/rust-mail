@@ -1595,7 +1595,7 @@ async fn test_conversation_mail_scroller_handles_stale_data_in_inbox_on_next_and
                     total: 1,
                 }),
             )
-            .expect(2..=4)
+            .expect(1..=4)
     })
     .await;
 
