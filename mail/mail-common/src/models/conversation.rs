@@ -214,8 +214,6 @@ impl Conversation {
         Self::action_remove_label(queue, label_id, ids).await
     }
 
-    /// Mark multiple conversations as read.
-    ///
     pub async fn action_mark_read(
         queue: &Queue,
         label_id: LocalLabelId,
@@ -225,8 +223,6 @@ impl Conversation {
         queue.queue_action(action).await
     }
 
-    /// Mark multiple conversations as unread.
-    ///
     pub async fn action_mark_unread(
         queue: &Queue,
         label_id: LocalLabelId,
@@ -236,8 +232,6 @@ impl Conversation {
         queue.queue_action(action).await
     }
 
-    /// Delete multiple conversations.
-    ///
     pub async fn action_delete(
         queue: &Queue,
         label_id: LocalLabelId,
@@ -247,8 +241,6 @@ impl Conversation {
         queue.queue_action(action).await
     }
 
-    /// Move multiple conversations.
-    ///
     pub async fn action_move(
         tether: &Tether,
         queue: &Queue,
@@ -267,8 +259,6 @@ impl Conversation {
         }
     }
 
-    /// Soft delete multiple conversations.
-    ///
     pub async fn action_mark_deleted(
         queue: &Queue,
         label_id: LocalLabelId,
@@ -300,12 +290,6 @@ impl Conversation {
         queue.queue_action(action).await
     }
 
-    /// Action to change labels on a batch of conversations.
-    ///
-    /// All given conversations will get the selected labels.
-    /// All given conversations will keep the partially selected labels.
-    /// All given conversations will lose any other labels.
-    ///
     pub async fn action_label_as(
         tether: &Tether,
         queue: &Queue,
@@ -458,8 +442,6 @@ impl Conversation {
         queue.queue_action(action).await
     }
 
-    /// Find a group of Conversations by their IDs.
-    ///
     pub(crate) async fn find_by_ids(
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
         tether: &Tether,
@@ -569,8 +551,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Label multiple conversations.
-    ///
     pub async fn apply_label_async(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -581,8 +561,6 @@ impl Conversation {
             .await
     }
 
-    /// Label multiple conversations.
-    ///
     pub async fn apply_label_to_multiple_remote<PM: ProtonMail>(
         label_id: LabelId,
         ids: Vec<ConversationId>,
@@ -615,16 +593,8 @@ impl Conversation {
         Ok(ids)
     }
 
-    /// Mark conversations as deleted.
-    ///
-    /// Note that this is a soft delete. Conversations are only
-    /// really deleted when the event loop sends the delete event.
-    ///
-    /// Finally, only the messages in the active label will be marked as deleted
-    /// unless the label is AllMail which will mark all messages in all labels as deleted.
-    /// moreover the conversation will be removed from all labels as well as deleted field will
-    /// be set to true.
-    ///
+    // Note that this is only a soft delete - conversations are only really
+    // deleted when the event loop sends the delete event.
     pub async fn mark_deleted(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -644,9 +614,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Mark conversations as deleted for `AllMail` label.
-    /// More information can be found in [`Conversation::mark_deleted`].
-    ///
     async fn mark_deleted_all_mail(
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
@@ -691,8 +658,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Updates all labels counters after soft delete of conversation in active view `AllMail`.
-    ///
     async fn remove_conversation_from_all_labels(
         &self,
         all_stats: HashMap<LocalLabelId, MessageLabelStats>,
@@ -727,9 +692,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Mark conversations as deleted in active label.
-    /// More information can be found in [`Conversation::mark_deleted`].
-    ///
     async fn mark_deleted_current_label(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -781,8 +743,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Updates active label counters after soft delete of conversation.
-    ///
     pub async fn remove_conversation_from_label(
         &mut self,
         label_id: LocalLabelId,
@@ -814,13 +774,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Mark conversations as undeleted.
-    ///
-    /// Only the messages in the active label will be marked as undeleted
-    /// unless the label is AllMail which will mark all messages in all labels as undeleted.
-    /// moreover the conversation will be assigned to all labels as well as deleted field will
-    /// be set to false.
-    ///
     pub async fn mark_undeleted(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -840,9 +793,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Mark conversations as undeleted for `AllMail` label.
-    /// More information can be found in [`Conversation::mark_undeleted`].
-    ///
     async fn mark_undeleted_all_mail(
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
@@ -900,8 +850,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Updates all labels counters after undelete of conversation in active view `AllMail`.
-    ///
     async fn add_conversation_to_all_labels(
         &self,
         all_stats: HashMap<LocalLabelId, MessageLabelStats>,
@@ -936,9 +884,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Mark conversations as undeleted in active label.
-    /// More information can be found in [`Conversation::mark_undeleted`].
-    ///
     async fn mark_undeleted_current_label(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -1001,8 +946,6 @@ impl Conversation {
             .unwrap_or(true))
     }
 
-    /// Updates active label counters after undelete of conversation.
-    ///
     pub async fn add_conversation_to_label(
         &mut self,
         label_id: LocalLabelId,
@@ -1035,8 +978,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Updates conversation counters after delete of conversation.
-    ///
     pub async fn mark_delete_update_stats(
         &mut self,
         stats: Option<&MessageLabelStats>,
@@ -1065,8 +1006,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Updates conversation counters after undelete of conversation.
-    ///
     pub async fn mark_undelete_update_stats(
         &mut self,
         stats: Option<&MessageLabelStats>,
@@ -1084,8 +1023,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Delete multiple conversations.
-    ///
     pub async fn delete_multiple_remote<PM: ProtonMail>(
         ids: Vec<ConversationId>,
         label_id: LabelId,
@@ -1165,7 +1102,6 @@ impl Conversation {
         }
     }
 
-    /// TODO: Document this method.
     #[inline]
     #[must_use]
     pub fn is_starred(&self) -> bool {
@@ -1174,8 +1110,6 @@ impl Conversation {
             .any(|l| l.remote_label_id == Some(LabelId::starred()))
     }
 
-    /// Load all models::Label for `self` models::ConversationLabel list.
-    ///
     pub fn load_labels(&self, conn: &Connection) -> Result<Vec<Label>, StashError> {
         let ids = self
             .labels
@@ -1195,8 +1129,6 @@ impl Conversation {
         Ok(labels)
     }
 
-    /// Mark multiple conversations as read.
-    ///
     pub async fn mark_multiple_as_read_remote<PM: ProtonMail>(
         ids: Vec<ConversationId>,
         api: &PM,
@@ -1208,8 +1140,6 @@ impl Conversation {
         Conversation::split_request(ids, request).await
     }
 
-    /// Mark multiple conversations as unread.
-    ///
     pub async fn mark_multiple_as_unread_remote(
         ids: Vec<ConversationId>,
         label_id: LabelId,
@@ -1224,8 +1154,6 @@ impl Conversation {
         Conversation::split_request(ids, request).await
     }
 
-    /// Mark multiple conversations as unread.
-    /// For each conversation only the last read message gets marked as unread
     pub fn mark_unread(
         local_label_id: LocalLabelId,
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
@@ -1305,7 +1233,6 @@ impl Conversation {
             modified.push(message.id());
 
             // Update the label counts
-
             let label_ids = tx.query_rows_col::<LocalLabelId>(
                 "
                 SELECT local_label_id
@@ -1359,8 +1286,6 @@ impl Conversation {
             .await
     }
 
-    /// Unlabel multiple conversations.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn remove_label_async(
         label_id: LocalLabelId,
@@ -1372,8 +1297,6 @@ impl Conversation {
             .await
     }
 
-    /// Unlabel multiple conversations.
-    ///
     pub async fn remove_label_from_multiple_remote<PM: ProtonMail>(
         label_id: LabelId,
         ids: Vec<ConversationId>,
@@ -1532,8 +1455,6 @@ impl Conversation {
         Ok(snooze_time)
     }
 
-    /// Sync only conversations metadata
-    ///
     pub async fn sync_metadata<PM: ProtonMail>(
         ids: Vec<ConversationId>,
         api: &PM,
@@ -1561,8 +1482,6 @@ impl Conversation {
         Ok(local_convs)
     }
 
-    /// Undelete multiple conversations.
-    ///
     pub async fn undelete_multiple_remote<PM: ProtonMail>(
         ids: Vec<ConversationId>,
         label_id: LabelId,
@@ -1600,8 +1519,6 @@ impl Conversation {
         Ok(snooze_options)
     }
 
-    /// Get the available `label as` actions for conversations
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn available_label_as_actions(
         local_ids: Vec<LocalConversationId>,
@@ -1631,8 +1548,6 @@ impl Conversation {
         Ok(res)
     }
 
-    /// Watches `label as` actions for conversations
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn watch_available_label_as_actions(
         local_ids: Vec<LocalConversationId>,
@@ -1645,8 +1560,6 @@ impl Conversation {
         Ok((res, handle))
     }
 
-    /// Get the available move actions for conversations
-    ///
     #[tracing::instrument(skip_all, fields(label_id=view.id().as_u64()))]
     pub async fn available_move_to_actions(
         view: Label,
@@ -1702,7 +1615,6 @@ impl Conversation {
         Ok(res)
     }
 
-    /// Count all local messages from this conversation
     pub async fn message_count(
         local_id: LocalConversationId,
         tether: &Tether,
@@ -1727,7 +1639,6 @@ impl Conversation {
         .await
     }
 
-    /// Finds all the messages from this conversation
     pub async fn load_messages(&self, tether: &Tether) -> Result<Vec<Message>, StashError> {
         Message::find(
             "WHERE local_conversation_id == ? ORDER BY time ASC, display_order ASC",
@@ -1737,8 +1648,6 @@ impl Conversation {
         .await
     }
 
-    /// Finds all the conversations that have expired and deletes them and all of its
-    /// messages.
     pub async fn delete_expired(tether: &mut Tether) -> Result<usize, AppError> {
         let ids = Self::find_ids(
             r"
@@ -1768,11 +1677,6 @@ impl Conversation {
     }
 
     #[cfg(test)]
-    // TODO: Figure out how we want to do this in the future.
-    ///
-    /// Intended for testing only
-    /// (local_attachment_id, local_message_id)
-    /// Sets a conversation to be deleted in `expire_in` ms
     pub async fn set_expiration_time_in(
         id: LocalConversationId,
         expire_in: i64,
@@ -1801,16 +1705,6 @@ impl Conversation {
         }
     }
 
-    /// Shared implementation to apply a label for messages and conversation.
-    ///
-    /// # Params
-    ///
-    /// * `local_label_id`         - Local label id of the [`Label`].
-    /// * `local_conversation_id`  - Local conversation id to which the label
-    ///   should be applied.
-    /// * `local_message_ids`      - Local ids of the messages which belong to
-    ///   `local_conversation_id` where the label
-    ///   should be applied.
     pub fn label_impl(
         label_id: LocalLabelId,
         conversation_id: LocalConversationId,
@@ -2142,7 +2036,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Retrieve all the conversation which are in a given label.
     pub async fn in_label(
         local_label_id: LocalLabelId,
         tether: &Tether,
@@ -2167,8 +2060,6 @@ impl Conversation {
         .await
     }
 
-    /// This fn should be called for conversation endpoints.
-    /// Repeatedly calls `endpoint` in batches of 1 in parallel.
     async fn split_request<F, Fut, T>(
         ids: impl IntoIterator<Item = T>,
         endpoint: F,
@@ -2182,11 +2073,6 @@ impl Conversation {
         split_request(ids, 1, endpoint).await
     }
 
-    /// Get the possible next display order.
-    ///
-    /// Finds the maximum display order value in all conversations and adds 1
-    /// to the existing value.
-    ///
     pub async fn next_display_order(tether: &Tether) -> Result<u64, StashError> {
         Ok(tether
             .query_value::<_, u64>(
@@ -2200,7 +2086,6 @@ impl Conversation {
             .saturating_add(1))
     }
 
-    /// Only get Disposition::Attachment attachments
     pub fn get_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
         self.attachments_metadata
             .iter()
@@ -2209,17 +2094,6 @@ impl Conversation {
             .collect()
     }
 
-    /// Only get Disposition::Inline attachments
-    #[allow(dead_code)] // Will get used later on
-    fn get_inline_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
-        self.attachments_metadata
-            .iter()
-            .filter(|mdata| matches!(mdata.disposition, Disposition::Inline))
-            .cloned()
-            .collect()
-    }
-
-    /// Queries `ConversationLabel` database and finds if there is a label with given `LocalId` in it.
     pub async fn has_label(
         &self,
         label_local_id: LocalLabelId,
@@ -2238,11 +2112,6 @@ impl Conversation {
         Ok(label.is_some())
     }
 
-    /// Update a conversation with `local_conversation_id`'s remote id.
-    ///
-    /// # Error
-    ///
-    /// Return error if the query failed.
     pub(crate) async fn update_remote_id(
         local_conversation_id: LocalConversationId,
         conversation_id: ConversationId,
@@ -3024,39 +2893,6 @@ impl ConversationLabel {
 }
 
 impl ConversationLabel {
-    /// Get all local label ids for a given `conversation_id`.
-    ///
-    pub async fn labels_ids_for_conversation(
-        conversation_id: LocalConversationId,
-        tether: &Tether,
-    ) -> Result<Vec<LocalLabelId>, StashError> {
-        let query = format!(
-            "SELECT local_label_id FROM {} WHERE local_conversation_id = ?",
-            Self::table_name()
-        );
-
-        tether
-            .query_values::<_, LocalLabelId>(&query, params![conversation_id])
-            .await
-    }
-
-    /// Get all local label with given label IDs.
-    ///
-    pub async fn find_by_label_ids(
-        label_ids: impl IntoIterator<Item = LocalLabelId>,
-        tether: &Tether,
-    ) -> Result<Vec<Self>, StashError> {
-        ConversationLabel::find(
-            format!(
-                "WHERE local_label_id IN ({})",
-                label_ids.into_iter().join(", ")
-            ),
-            vec![],
-            tether,
-        )
-        .await
-    }
-
     pub async fn find_by_conversation_and_label_id(
         conversation_id: LocalConversationId,
         label_id: LocalLabelId,
@@ -3070,9 +2906,6 @@ impl ConversationLabel {
         .await
     }
 
-    /// Adjust the stats of the conversation label when
-    /// a message is marked as deleted.
-    ///
     pub async fn mark_delete_update_stats(
         &mut self,
         stats: Option<&MessageLabelStats>,
@@ -3114,9 +2947,6 @@ impl ConversationLabel {
         Ok(())
     }
 
-    /// Adjust the stats of the conversation label when
-    /// a message is marked as undeleted.
-    ///
     pub async fn mark_undelete_update_stats(
         &mut self,
         stats: Option<&MessageLabelStats>,
@@ -3279,7 +3109,6 @@ pub struct ConversationMessageLabelStats {
     pub size: u64,
     pub time: UnixTimestamp,
     pub expiration_time: ContextExpirationTime,
-    // How many messages exist
     pub count: u64,
     pub unread: u64,
     pub num_attachments: u32,
@@ -3371,9 +3200,6 @@ impl AddAssign<&ApiMessageMetadata> for ConversationMessageLabelStats {
     }
 }
 
-/// Conversation counters that are related to particular label
-/// Allow the user to see how many conversations there are assigned to the label,
-/// both unread count and total count.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversation_counters")]
 pub struct ConversationCounters {
@@ -3388,8 +3214,6 @@ pub struct ConversationCounters {
 }
 
 impl ConversationCounters {
-    /// Constructor - note: [`ConversationCounters`] does not implement [`Default`] trait
-    ///
     pub fn new(local_label_id: LocalLabelId) -> Self {
         Self {
             local_label_id,
@@ -3398,25 +3222,10 @@ impl ConversationCounters {
         }
     }
 
-    /// Get all conversation counters linked to labels with given kind
-    pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
-        Self::find(
-            "INNER JOIN labels ON labels.local_id = local_label_id WHERE label_type = ? ORDER BY labels.display_order ASC",
-            params![kind],
-            tether,
-        ).await
-    }
-
-    /// Returns counters, first unread then total
     pub fn counters(&self) -> (u64, u64) {
         (self.unread, self.total)
     }
 
-    /// Returns number of conversations based on the filter.
-    /// Can be either:
-    /// * Total number
-    /// * Unread number
-    /// * Read number
     pub fn total(&self, unread: ReadFilter) -> u64 {
         match unread {
             ReadFilter::All => self.total,
@@ -3425,8 +3234,6 @@ impl ConversationCounters {
         }
     }
 
-    /// Returns [`ConversationCounts`] datastructure that contains label's Remote ID
-    /// instead of the Local ID.
     pub async fn conversation_count(
         &self,
         tether: &Tether,
@@ -3440,10 +3247,6 @@ impl ConversationCounters {
         })
     }
 
-    /// Watch conversation counter for changes.
-    ///
-    /// When a change occurs a message is produced in the returned receiver.
-    ///
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(ConversationCounterWatcher { sender }))
@@ -3513,8 +3316,6 @@ impl TableObserver for ConversationCounterWatcher {
 
 #[cfg(any(test, feature = "test-utils"))]
 impl Conversation {
-    /// Synchronize the first `count` conversations of the label with `label_id`.
-    ///
     pub async fn sync_first_conversation_page<PM: ProtonMail>(
         label_id: LabelId,
         count: usize,
@@ -3555,56 +3356,6 @@ impl Conversation {
                 .await
             })
             .await?;
-        Ok(())
-    }
-
-    /// Search for conversations.
-    ///
-    /// This function accepts search options and calls the API to find any
-    /// conversations that fit the criteria. It operates globally and is not
-    /// based on a particular mailbox; this restriction can be applied via the
-    /// options.
-    ///
-    pub async fn search(
-        options: GetConversationsOptions,
-        api: &Session,
-        tether: &mut Tether,
-    ) -> Result<Vec<Conversation>, MailContextError> {
-        // Fetch all the conversations from the API
-        let conversations = api.get_conversations(options).await?.conversations;
-
-        Self::sync_dependencies(&conversations, api, tether).await?;
-
-        let mut conversations = conversations
-            .into_iter()
-            .map(Conversation::from)
-            .collect_vec();
-        tether
-            .tx(async |tx| Self::create_or_update_conversations(conversations.clone(), tx).await)
-            .await?;
-        conversations.sort_unstable_by(|x, y| x.display_order.cmp(&y.display_order).reverse());
-
-        Ok(conversations)
-    }
-
-    /// Given a list of conversations check if there are any missing dependencies like undownloaded
-    /// labels.
-    ///
-    async fn sync_dependencies(
-        conversations: &[ApiConversation],
-        api: &Session,
-        tether: &mut Tether,
-    ) -> Result<(), MailContextError> {
-        use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
-
-        let mut fetcher = MessageOrConversationDependencyFetcher::new();
-
-        for conversation in conversations {
-            fetcher.check_api_conversation(conversation, tether).await?
-        }
-
-        fetcher.fetch_and_store(api, tether).await?;
-
         Ok(())
     }
 }

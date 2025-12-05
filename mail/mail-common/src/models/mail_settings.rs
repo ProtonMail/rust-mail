@@ -239,10 +239,6 @@ impl MailSettings {
         }
     }
 
-    /// Update mobile settings via API
-    ///
-    /// This method calls the API to sync mobile settings changes.
-    /// It follows the same pattern as Message and Conversation API methods.
     pub async fn update_mobile_settings<PM: ProtonMail>(
         api: &PM,
         mobile_settings: MobileSettings,
@@ -254,7 +250,6 @@ impl MailSettings {
         Ok(())
     }
 
-    /// Update list toolbar actions
     pub async fn action_update_list_toolbar(
         queue: &Queue,
         actions: Vec<MobileAction>,
@@ -268,7 +263,6 @@ impl MailSettings {
         Ok(())
     }
 
-    /// Update message toolbar actions
     pub async fn action_update_message_toolbar(
         queue: &Queue,
         actions: Vec<MobileAction>,
@@ -282,7 +276,6 @@ impl MailSettings {
         Ok(())
     }
 
-    /// Update conversation toolbar actions
     pub async fn action_update_conversation_toolbar(
         queue: &Queue,
         actions: Vec<MobileAction>,
