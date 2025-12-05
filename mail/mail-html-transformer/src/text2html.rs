@@ -1,0 +1,75 @@
+use html5ever::{QualName, namespace_url, ns};
+use kuchikiki::NodeRef;
+use std::iter::empty;
+
+pub fn text2html(text: &str) -> NodeRef {
+    let document = NodeRef::new_document();
+    let body = new_element("body");
+    document.append(body.clone());
+
+    for line in text.lines() {
+        let line = line.trim();
+
+        // Matching behaviour of ProtonMail Web
+        let node = if line.is_empty() {
+            let div = new_element("div");
+            div.append(new_element("br"));
+            div
+        } else {
+            let p = new_element("span");
+            p.append(NodeRef::new_text(line));
+            p
+        };
+        body.append(node);
+    }
+
+    document
+}
+
+fn new_element(name: &str) -> NodeRef {
+    NodeRef::new_element(QualName::new(None, ns!(html), name.into()), empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plaintext_to_html() {
+        // Generated with: https://www.blindtextgenerator.com/lorem-ipsum
+        let input = "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu.
+
+        In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus.
+
+        Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante. Etiam sit amet orci eget eros faucibus tincidunt. Duis leo. Sed fringilla mauris sit amet nibh. Donec sodales sagittis magna. Sed consequat, leo eget bibendum sodales, augue velit cursus nunc,";
+
+        let document = text2html(input);
+
+        let output = document.to_string();
+
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn plaintext_with_html_in_it() {
+        let input = "<b>Hallo</b>";
+        let document = text2html(input);
+
+        let output = document.to_string();
+
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn plaintext_with_extra_spaces_in_it() {
+        // Note this is a difference between text2html and
+        // keep_spaces_and_escape_gt_and_lt.
+        // The latter would replace space just before `d` with `&nbsp;`
+        let input = "Hallo  double spaces";
+        let document = text2html(input);
+
+        let output = document.to_string();
+
+        insta::assert_snapshot!(output);
+    }
+}

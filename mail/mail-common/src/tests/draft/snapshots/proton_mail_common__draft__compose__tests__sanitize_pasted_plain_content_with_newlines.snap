@@ -1,0 +1,5 @@
+---
+source: mail/mail-common/src/draft/../tests/draft/compose.rs
+expression: result
+---
+<span>Foo</span><span>Bar</span><div><br></div><span>Baz</span>
