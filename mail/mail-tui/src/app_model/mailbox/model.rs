@@ -398,6 +398,9 @@ impl AppStateHandler for MailboxModel {
                 KeyCode::Char('c') => {
                     return Command::message(Message::OpenContacts);
                 }
+                KeyCode::F(12) if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                    return Command::message(Message::OpenUserFeatureFlags);
+                }
                 KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.change_filter(ReadFilter::Unread);
                     return Command::None;
@@ -547,6 +550,11 @@ impl AppStateHandler for MailboxModel {
             Message::ForcePollEventFinish => {
                 self.force_event_loop_poll_running = false;
                 Command::None
+            }
+            Message::OpenUserFeatureFlags => {
+                crate::app_model::user_feature_flags_popup::UserFeatureFlagsPopup::open(Arc::clone(
+                    &self.ctx,
+                ))
             }
         }
     }

@@ -79,7 +79,7 @@ impl ThemeOpts {
             MailTheme::DarkMode => ColorMode::DarkMode,
         }
     }
-    /// Theme, either provided by the system or overriden by the user
+    /// Theme, either provided by the system or overridden by the user
     pub fn theme(&self) -> MailTheme {
         self.theme_override.unwrap_or(self.current_theme)
     }

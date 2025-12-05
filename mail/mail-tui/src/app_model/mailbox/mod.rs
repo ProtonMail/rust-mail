@@ -58,6 +58,7 @@ pub enum Message {
     OpenContacts,
     ForcePollEventStart,
     ForcePollEventFinish,
+    OpenUserFeatureFlags,
 }
 
 pub struct LabelAs<T: LocalIdMarker> {

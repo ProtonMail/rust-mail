@@ -13,7 +13,7 @@ use crate::transforms::styles::{
 };
 
 use super::colors::ShouldModifyTransparentColors;
-use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
+use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverriddenProps};
 
 /// Walks through the CSS stylesheet, detects which
 /// color needs to be adjusted to dark theme.
@@ -66,7 +66,7 @@ impl Visitor<'_> for StylesheetVisitor {
         };
 
         let mut visitor = DeclarationBlockVisitor::new(
-            ShouldStoreOverridenProps::No,
+            ShouldStoreOverriddenProps::No,
             ShouldRemoveImportant::No,
             should_modify_transparent_colors,
             self.printer_options,

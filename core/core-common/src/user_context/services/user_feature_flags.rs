@@ -52,17 +52,7 @@ impl UserFeatureFlagsService {
             .inspect_err(|err| tracing::warn!("Failed to fetch feature flags: {}", err))
             .unwrap_or_default()
             .into_iter()
-            .map(|flag| {
-                (
-                    flag.name.clone(),
-                    UserFeatureFlag {
-                        // If the flag is not fetched from API but exists in the database,
-                        // we mark it as disabled.
-                        enabled: false,
-                        ..flag
-                    },
-                )
-            })
+            .map(|flag| (flag.name.clone(), flag))
             .collect::<BTreeMap<String, UserFeatureFlag>>()
     }
 
@@ -83,7 +73,8 @@ impl UserFeatureFlagsService {
                     enabled: false,
                     source: UserFeatureFlagSource::Unleash,
                     writable: false,
-                    overrided_value: None,
+                    overridden_to: None,
+                    overridden_at: None,
                     modify_time,
                 });
 
@@ -128,7 +119,8 @@ impl UserFeatureFlagsService {
                         enabled,
                         source: UserFeatureFlagSource::Legacy,
                         writable: metadata.writable,
-                        overrided_value: None,
+                        overridden_to: None,
+                        overridden_at: None,
                         modify_time: now,
                     },
                     FlagPersistence::Persist,
@@ -136,10 +128,32 @@ impl UserFeatureFlagsService {
             });
 
             *persistence = FlagPersistence::Persist;
+            if let Some(overridden_at) = flag.overridden_at
+                && let Some(remote_update_at) = metadata.update_time
+            {
+                // Both dates come from the same source - the backend.
+                // We never update those fields with device clock.
+                // Therefore it is safe to compare those two timestamps.
+                let remote_updated_at = UnixTimestamp::from(remote_update_at);
+                if overridden_at > remote_updated_at {
+                    // This is stale data.
+                    tracing::warn!("Stale data for feature flag {}", flag.name);
+                    tracing::warn!("Overridden at: {}", overridden_at);
+                    tracing::warn!("Remote update at: {}", remote_update_at);
+                    tracing::warn!("Flag stays as: {}", flag.enabled);
+                    continue;
+                }
+            }
             flag.enabled = enabled;
             flag.source = UserFeatureFlagSource::Legacy;
             flag.writable = metadata.writable;
             flag.modify_time = now;
+
+            // Overridden at is set only AFTER remote successfully
+            if flag.overridden_to.is_some() && flag.overridden_at.is_some() {
+                flag.overridden_at = None;
+                flag.overridden_to = None;
+            }
         }
     }
 
@@ -152,6 +166,13 @@ impl UserFeatureFlagsService {
         let response = api.get_unleash_feature_flags().await?;
         let mut tether = stash.connection().await?;
         let mut flags = Self::fetch_from_cache(&tether, UserFeatureFlagSource::Unleash).await;
+        for flag in flags.values_mut() {
+            // Unleash returns only enabled flags. We don't want to remove them from cache or keep stale data.
+            // But instead, we are marking them with false.
+            // The easiest way to do so is to mark everything as disabled and then in `set_flags_from_unleash` mark
+            // every present flag as enabled.
+            flag.enabled = false;
+        }
 
         Self::set_flags_from_unleash(&mut flags, response, modify_time);
 

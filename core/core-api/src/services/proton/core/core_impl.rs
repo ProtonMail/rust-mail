@@ -313,15 +313,16 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
         &self,
         flag_name: &str,
         new_value: bool,
-    ) -> ApiServiceResult<()> {
+    ) -> ApiServiceResult<PutFeatureFlagOverrideResponse> {
         let request = PutFeatureFlagOverride { value: new_value };
 
-        PUT!("{CORE_V4}/features/{flag_name}/value")
+        let response = PUT!("{CORE_V4}/features/{flag_name}/value")
             .body_json(request)?
             .send_with(self)
             .await?
-            .ok()?;
+            .ok()?
+            .into_body_json()?;
 
-        Ok(())
+        Ok(response)
     }
 }
