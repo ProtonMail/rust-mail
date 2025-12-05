@@ -403,6 +403,10 @@ panic = "abort"
 opt-level = "s"
 codegen-units = 1
 
+[profile.ios-debug]
+inherits = "dev"
+debug = true
+
 # This profile gets about a 50% reduction in size compared to the default release profile.
 [profile.small]
 inherits = "release"
