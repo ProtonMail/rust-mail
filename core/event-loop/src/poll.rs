@@ -1,7 +1,7 @@
-use crate::provider::ProviderResult;
-use crate::store::Store;
+use crate::provider::EventProviderResult;
+use crate::store::EventStore;
 use crate::subscriber::RawSubscriber;
-use crate::{EventId, EventLoopError, Provider, RawEvent};
+use crate::{EventId, EventLoopError, EventProvider, RawEvent};
 use anyhow::{Context, anyhow};
 use indexmap::IndexMap;
 use std::any::TypeId;
@@ -21,12 +21,12 @@ impl EventPollInternal {
         Self
     }
 
-    /// Stores one event id if the [`Store`] does not contain an event.
+    /// Stores one event id if the [`EventStore`] does not contain an event.
     #[tracing::instrument(name="event_initialize",level=Level::DEBUG, skip(self, store, provider))]
     pub async fn initialize(
         &self,
-        store: &dyn Store,
-        provider: &dyn Provider,
+        store: &dyn EventStore,
+        provider: &dyn EventProvider,
     ) -> Result<(), EventLoopError> {
         if let Some(e) = store
             .load()
@@ -54,8 +54,8 @@ impl EventPollInternal {
     #[tracing::instrument(name="event_poll_raw", level=Level::DEBUG, skip_all)]
     pub(crate) async fn poll_raw(
         &self,
-        store: &dyn Store,
-        provider: &dyn Provider,
+        store: &dyn EventStore,
+        provider: &dyn EventProvider,
         subscribers: &IndexMap<TypeId, Box<dyn RawSubscriber>>,
         max_events: usize,
     ) -> Result<(), EventLoopError> {
@@ -130,9 +130,9 @@ impl EventPollInternal {
 
     async fn fetch_event(
         &self,
-        provider: &dyn Provider,
+        provider: &dyn EventProvider,
         last_event_id: &EventId,
-    ) -> ProviderResult<Option<RawEvent>> {
+    ) -> EventProviderResult<Option<RawEvent>> {
         let event = provider.get_event(last_event_id).await?;
         let new_event_id = event.event_id();
 
@@ -172,8 +172,8 @@ impl EventPollInternal {
 mod tests {
     use super::*;
     use crate::EventMetadata;
-    use crate::provider::MockProvider;
-    use crate::store::MockStore;
+    use crate::provider::MockEventProvider;
+    use crate::store::MockEventStore;
     use crate::subscriber::MockRawSubscriber;
     use mockall::predicate;
 
@@ -224,9 +224,9 @@ mod tests {
         };
 
         let mut sequence = mockall::Sequence::new();
-        let mut provider = MockProvider::new();
+        let mut provider = MockEventProvider::new();
         let mut subscriber = MockRawSubscriber::new();
-        let mut store = MockStore::new();
+        let mut store = MockEventStore::new();
 
         let event_id = event_id_1.clone();
         store
@@ -350,9 +350,9 @@ mod tests {
         };
 
         let mut sequence = mockall::Sequence::new();
-        let mut provider = MockProvider::new();
+        let mut provider = MockEventProvider::new();
         let mut subscriber = MockRawSubscriber::new();
-        let mut store = MockStore::new();
+        let mut store = MockEventStore::new();
 
         let event_id = event_id_1.clone();
         store
@@ -422,8 +422,8 @@ mod tests {
         let event_id_1 = EventId::from("1");
 
         let mut sequence = mockall::Sequence::new();
-        let mut provider = MockProvider::new();
-        let mut store = MockStore::new();
+        let mut provider = MockEventProvider::new();
+        let mut store = MockEventStore::new();
 
         let event_id = event_id_1.clone();
         store

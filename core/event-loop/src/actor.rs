@@ -1,6 +1,6 @@
-use crate::store::Store;
+use crate::store::EventStore;
 use crate::subscriber::{RawSubscriber, TypedSubscribers};
-use crate::{Event, EventLoopError, Provider, Subscriber};
+use crate::{Event, EventLoopError, EventProvider, Subscriber};
 use indexmap::IndexMap;
 use indexmap::map::Entry;
 use std::any::{Any, TypeId};
@@ -26,8 +26,8 @@ impl EventPoll {
     #[must_use]
     pub fn new(
         task_spawner: impl TaskSpawner,
-        store: Box<dyn Store>,
-        provider: Box<dyn Provider>,
+        store: Box<dyn EventStore>,
+        provider: Box<dyn EventProvider>,
     ) -> Self {
         let epoll = crate::poll::EventPollInternal::new();
 
@@ -120,8 +120,8 @@ enum EventPollActorMessage {
 struct EventPollActor {
     rx: mpsc::Receiver<EventPollActorMessage>,
     epoll: crate::poll::EventPollInternal,
-    store: Box<dyn Store>,
-    provider: Box<dyn Provider>,
+    store: Box<dyn EventStore>,
+    provider: Box<dyn EventProvider>,
     /// The subscribers are stored in a indexmap of boxed raw subscribers.
     /// The indexmap was chosen to preserve the order of the subscribers to run - FIFO.
     /// The indexmap stores the type id of the subscriber to allow for multiple subscribers
@@ -179,8 +179,8 @@ type RegisterFn =
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::MockProvider;
-    use crate::store::InMemoryStore;
+    use crate::provider::MockEventProvider;
+    use crate::store::InMemoryEventStore;
     use crate::subscriber::SubscriberResult;
     use crate::{Event, EventId, Subscriber};
     use async_trait::async_trait;
@@ -235,8 +235,8 @@ mod tests {
             |task| {
                 tokio::spawn(task);
             },
-            Box::new(InMemoryStore::default()),
-            Box::new(MockProvider::new()),
+            Box::new(InMemoryEventStore::default()),
+            Box::new(MockEventProvider::new()),
         );
 
         assert!(target.register(Box::new(FakeSubscriber)).await.is_ok());

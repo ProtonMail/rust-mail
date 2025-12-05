@@ -71,7 +71,7 @@ pub mod v6;
 use std::fmt;
 // Re-export main types
 pub use actor::EventPoll;
-pub use provider::{Provider, ProviderError, ProviderResult};
+pub use provider::{EventProvider, EventProviderError, EventProviderResult};
 pub use subscriber::{Subscriber, SubscriberError, SubscriberResult};
 
 use anyhow::Error as AnyhowError;
@@ -120,7 +120,7 @@ pub enum EventLoopError {
     #[error("Failed to read/write from/to store: {0}")]
     Store(AnyhowError),
     #[error("Failed to retrieve event: {0}")]
-    Provider(Box<dyn ProviderError>),
+    Provider(Box<dyn EventProviderError>),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, Box<dyn SubscriberError>),
     #[error("Subscriber with `{0}` name already exists")]
@@ -135,8 +135,8 @@ pub enum EventLoopError {
     Actor,
 }
 
-impl From<Box<dyn ProviderError>> for EventLoopError {
-    fn from(err: Box<dyn ProviderError>) -> Self {
+impl From<Box<dyn EventProviderError>> for EventLoopError {
+    fn from(err: Box<dyn EventProviderError>) -> Self {
         EventLoopError::Provider(err)
     }
 }

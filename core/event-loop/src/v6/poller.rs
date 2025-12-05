@@ -1,7 +1,7 @@
-use crate::provider::ProviderResult;
-use crate::store::Store;
+use crate::provider::EventProviderResult;
+use crate::store::EventStore;
 use crate::v6::subscriber::SubscriberList;
-use crate::{EventId, EventLoopError, Provider, RawEvent};
+use crate::{EventId, EventLoopError, EventProvider, RawEvent};
 use anyhow::{Context, anyhow};
 use tracing::{debug, error, info};
 
@@ -15,11 +15,11 @@ impl EventPoller {
         Self
     }
 
-    /// Stores one event id if the [`Store`] does not contain an event.
+    /// Stores one event id if the [`EventStore`] does not contain an event.
     pub async fn initialize(
         &self,
-        store: &dyn Store,
-        provider: &dyn Provider,
+        store: &dyn EventStore,
+        provider: &dyn EventProvider,
     ) -> Result<(), EventLoopError> {
         if let Some(e) = store
             .load()
@@ -46,8 +46,8 @@ impl EventPoller {
     /// The execution of the loop is aborted on the first error.
     pub(crate) async fn poll(
         &self,
-        store: &dyn Store,
-        provider: &dyn Provider,
+        store: &dyn EventStore,
+        provider: &dyn EventProvider,
         subscribers: &dyn SubscriberList,
         max_events: usize,
     ) -> Result<(), EventLoopError> {
@@ -120,9 +120,9 @@ impl EventPoller {
 
     async fn fetch_event(
         &self,
-        provider: &dyn Provider,
+        provider: &dyn EventProvider,
         last_event_id: &EventId,
-    ) -> ProviderResult<Option<RawEvent>> {
+    ) -> EventProviderResult<Option<RawEvent>> {
         let event = provider.get_event(last_event_id).await?;
         let new_event_id = event.event_id();
 
@@ -139,8 +139,8 @@ impl EventPoller {
 mod tests {
     use super::*;
     use crate::EventMetadata;
-    use crate::provider::MockProvider;
-    use crate::store::MockStore;
+    use crate::provider::MockEventProvider;
+    use crate::store::MockEventStore;
     use crate::v6::subscriber::MockSubscriberList;
     use mockall::predicate;
 
@@ -191,9 +191,9 @@ mod tests {
         };
 
         let mut sequence = mockall::Sequence::new();
-        let mut provider = MockProvider::new();
+        let mut provider = MockEventProvider::new();
         let mut subscriber = MockSubscriberList::new();
-        let mut store = MockStore::new();
+        let mut store = MockEventStore::new();
 
         let event_id = event_id_1.clone();
         store
@@ -316,9 +316,9 @@ mod tests {
         };
 
         let mut sequence = mockall::Sequence::new();
-        let mut provider = MockProvider::new();
+        let mut provider = MockEventProvider::new();
         let mut subscriber = MockSubscriberList::new();
-        let mut store = MockStore::new();
+        let mut store = MockEventStore::new();
 
         let event_id = event_id_1.clone();
         store
@@ -387,8 +387,8 @@ mod tests {
         let event_id_1 = EventId::from("1");
 
         let mut sequence = mockall::Sequence::new();
-        let mut provider = MockProvider::new();
-        let mut store = MockStore::new();
+        let mut provider = MockEventProvider::new();
+        let mut store = MockEventStore::new();
 
         let event_id = event_id_1.clone();
         store

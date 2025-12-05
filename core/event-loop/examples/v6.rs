@@ -1,8 +1,8 @@
 #![allow(unused_variables)]
 
-use proton_event_loop::v6::{EventSource, EventSourceDependencyList, Subscriber};
+use proton_event_loop::v6::{EventSource, EventSourceDependencyList, EventSubscriber};
 use proton_event_loop::{
-    EventId, Provider, ProviderResult, RawEvent, SubscriberResult, store::Store,
+    EventId, EventProvider, EventProviderResult, RawEvent, SubscriberResult, store::EventStore,
 };
 use serde::Deserialize;
 struct CoreEventSource;
@@ -41,11 +41,11 @@ impl EventSource for MailEventSource {
 struct DummyEventProvider;
 
 #[async_trait::async_trait]
-impl Provider for DummyEventProvider {
-    async fn get_latest_event_id(&self) -> ProviderResult<EventId> {
+impl EventProvider for DummyEventProvider {
+    async fn get_latest_event_id(&self) -> EventProviderResult<EventId> {
         todo!()
     }
-    async fn get_event(&self, event_id: &EventId) -> ProviderResult<RawEvent> {
+    async fn get_event(&self, event_id: &EventId) -> EventProviderResult<RawEvent> {
         todo!()
     }
 }
@@ -55,7 +55,7 @@ struct DummyEventStore;
 struct MailSubscriber;
 
 #[async_trait::async_trait]
-impl Subscriber<MailEventSource> for MailSubscriber {
+impl EventSubscriber<MailEventSource> for MailSubscriber {
     fn name(&self) -> &'static str {
         "mail_subscriber"
     }
@@ -69,7 +69,7 @@ impl Subscriber<MailEventSource> for MailSubscriber {
 }
 
 #[async_trait::async_trait]
-impl Store for DummyEventStore {
+impl EventStore for DummyEventStore {
     async fn load(&self) -> anyhow::Result<Option<EventId>> {
         todo!()
     }
