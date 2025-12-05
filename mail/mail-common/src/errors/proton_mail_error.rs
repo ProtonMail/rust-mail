@@ -23,7 +23,7 @@ use proton_core_common::device_registration::RegisteredDeviceTaskError;
 use proton_core_common::models::LabelError;
 use proton_core_common::pin_code::PinError;
 use proton_event_loop::subscriber::SubscriberError;
-use proton_event_loop::{EventLoopError, ProviderError};
+use proton_event_loop::{EventLoopError, EventProviderError};
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///
@@ -667,8 +667,8 @@ impl From<EventLoopError> for ProtonMailError {
     }
 }
 
-impl From<Box<dyn ProviderError>> for ProtonMailError {
-    fn from(error: Box<dyn ProviderError>) -> Self {
+impl From<Box<dyn EventProviderError>> for ProtonMailError {
+    fn from(error: Box<dyn EventProviderError>) -> Self {
         let _guard = log_error(error.as_ref());
         if error.is_network_failure() {
             Self::Network

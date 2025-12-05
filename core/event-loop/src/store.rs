@@ -7,18 +7,18 @@ use async_trait::async_trait;
 /// event `RemoteId`, you will need to ask the `Provider` for the actual event.
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
-pub trait Store: Send + Sync {
+pub trait EventStore: Send + Sync {
     async fn load(&self) -> anyhow::Result<Option<EventId>>;
     async fn store(&self, id: EventId) -> anyhow::Result<()>;
 }
 
 #[derive(Debug, Default)]
-pub struct InMemoryStore {
+pub struct InMemoryEventStore {
     id: std::sync::RwLock<Option<EventId>>,
 }
 
 #[async_trait]
-impl Store for InMemoryStore {
+impl EventStore for InMemoryEventStore {
     async fn load(&self) -> anyhow::Result<Option<EventId>> {
         let accessor = self.id.read().expect("lock poison");
         Ok(accessor.clone())

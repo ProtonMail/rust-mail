@@ -13,9 +13,9 @@ use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use proton_core_api::services::proton::{EventId, ProtonCore, UserId};
 use proton_event_loop::{
-    EventLoopError, ProviderError, RawEvent,
-    provider::Provider,
-    store::Store,
+    EventLoopError, EventProviderError, RawEvent,
+    provider::EventProvider,
+    store::EventStore,
     subscriber::{Subscriber, SubscriberError},
 };
 use stash::{
@@ -100,7 +100,7 @@ use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
-use proton_event_loop::provider::ProviderResult;
+use proton_event_loop::provider::EventProviderResult;
 use proton_event_loop::subscriber::SubscriberResult;
 
 const CORE_EVENT_TYPE_ID: &str = "proton-core-event";
@@ -130,7 +130,7 @@ impl From<Weak<UserContext>> for CoreEventLoopContext {
 }
 
 #[async_trait]
-impl Store for CoreEventLoopContext {
+impl EventStore for CoreEventLoopContext {
     async fn load(&self) -> anyhow::Result<Option<proton_event_loop::EventId>> {
         let ctx = self.inner()?;
         let tether = ctx.stash().connection().await?;
@@ -186,7 +186,7 @@ pub enum CoreEventProviderError {
     Other(#[from] anyhow::Error),
 }
 
-impl ProviderError for CoreEventProviderError {
+impl EventProviderError for CoreEventProviderError {
     fn is_network_failure(&self) -> bool {
         match self {
             CoreEventProviderError::Api(e) => e.is_network_failure(),
@@ -196,8 +196,8 @@ impl ProviderError for CoreEventProviderError {
 }
 
 #[async_trait]
-impl Provider for CoreEventLoopContext {
-    async fn get_latest_event_id(&self) -> ProviderResult<proton_event_loop::EventId> {
+impl EventProvider for CoreEventLoopContext {
+    async fn get_latest_event_id(&self) -> EventProviderResult<proton_event_loop::EventId> {
         async {
             let ctx = self.inner()?;
             Ok::<_, CoreEventProviderError>(
@@ -210,10 +210,13 @@ impl Provider for CoreEventLoopContext {
             )
         }
         .await
-        .map_err(|e| -> Box<dyn ProviderError> { Box::new(e) })
+        .map_err(|e| -> Box<dyn EventProviderError> { Box::new(e) })
     }
 
-    async fn get_event(&self, event_id: &proton_event_loop::EventId) -> ProviderResult<RawEvent> {
+    async fn get_event(
+        &self,
+        event_id: &proton_event_loop::EventId,
+    ) -> EventProviderResult<RawEvent> {
         async {
             let ctx = self.inner()?;
             let json_string = ctx
@@ -227,7 +230,7 @@ impl Provider for CoreEventLoopContext {
             Ok::<_, CoreEventProviderError>(RawEvent::from_json(json_string)?)
         }
         .await
-        .map_err(|e| -> Box<dyn ProviderError> { Box::new(e) })
+        .map_err(|e| -> Box<dyn EventProviderError> { Box::new(e) })
     }
 }
 

@@ -1,8 +1,10 @@
-use crate::store::Store;
+use crate::store::EventStore;
 use crate::v6::poller::{EventPoller, MAX_EVENTS_PER_POLL};
 use crate::v6::source::EventSource;
-use crate::v6::subscriber::{EventSubscriberId, Subscriber, SubscriberList, TypedSubscriberList};
-use crate::{EventLoopError, Provider};
+use crate::v6::subscriber::{
+    EventSubscriber, EventSubscriberId, SubscriberList, TypedSubscriberList,
+};
+use crate::{EventLoopError, EventProvider};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -29,7 +31,7 @@ use tracing::{Instrument, instrument};
 ///
 /// # Error Handling
 ///
-/// Every event will be attempted 3 times if the error returned from the [`Subscriber`] is retryable.
+/// Every event will be attempted 3 times if the error returned from the [`EventSubscriber`] is retryable.
 /// After 3 attempts, the process is interrupted and the error bubbles up to the [`poll()`] site.
 ///
 /// It's up to integrators to decide how to best handle this failure case.
@@ -52,8 +54,8 @@ impl EventManager {
 
     pub fn add<E: EventSource>(
         &mut self,
-        provider: Box<dyn Provider>,
-        store: Box<dyn Store>,
+        provider: Box<dyn EventProvider>,
+        store: Box<dyn EventStore>,
     ) -> Result<(), EventLoopError> {
         match self.sources.entry(TypeId::of::<E>()) {
             Entry::Occupied(_) => return Err(EventLoopError::DuplicateEventSource(E::name())),
@@ -105,7 +107,7 @@ impl EventManager {
 
     pub fn subscribe<E: EventSource>(
         &mut self,
-        subscriber: impl Subscriber<E>,
+        subscriber: impl EventSubscriber<E>,
     ) -> Option<EventSubscriberId<E>> {
         let source = self.sources.get_mut(&TypeId::of::<E>())?;
         let type_list =
@@ -116,7 +118,7 @@ impl EventManager {
     pub fn unsubscribe<E: EventSource>(
         &mut self,
         id: EventSubscriberId<E>,
-    ) -> Option<Box<dyn Subscriber<E>>> {
+    ) -> Option<Box<dyn EventSubscriber<E>>> {
         let source = self.sources.get_mut(&TypeId::of::<E>())?;
         let type_list =
             <dyn Any>::downcast_mut::<TypedSubscriberList<E>>(source.subscribers.as_mut())?;
@@ -209,14 +211,14 @@ impl EventManager {
 
 struct EventSourceData {
     name: &'static str,
-    provider: Box<dyn Provider>,
-    store: Box<dyn Store>,
+    provider: Box<dyn EventProvider>,
+    store: Box<dyn EventStore>,
     subscribers: Box<dyn SubscriberList>,
     dependencies: Vec<TypeId>,
 }
 
 impl EventSourceData {
-    fn new<E: EventSource>(provider: Box<dyn Provider>, store: Box<dyn Store>) -> Self {
+    fn new<E: EventSource>(provider: Box<dyn EventProvider>, store: Box<dyn EventStore>) -> Self {
         Self {
             name: E::name(),
             provider,
@@ -230,10 +232,10 @@ impl EventSourceData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::MockProvider;
-    use crate::store::MockStore;
+    use crate::provider::MockEventProvider;
+    use crate::store::MockEventStore;
     use crate::v6::source::EventSourceDependencyList;
-    use crate::v6::subscriber::MockSubscriber;
+    use crate::v6::subscriber::MockEventSubscriber;
     use crate::{EventId, EventMetadata, RawEvent, SubscriberError};
     use mockall::Sequence;
     use serde_with::serde_derive::Deserialize;
@@ -345,7 +347,7 @@ mod tests {
 
         let mut sequence = Sequence::new();
 
-        let mut mk_sequence = |id: EventId| -> (Box<dyn Provider>, Box<dyn Store>) {
+        let mut mk_sequence = |id: EventId| -> (Box<dyn EventProvider>, Box<dyn EventStore>) {
             make_success_sequence(&id.clone(), id, &mut sequence)
         };
 
@@ -373,10 +375,16 @@ mod tests {
         let mut manager = EventManager::new();
 
         manager
-            .add::<TestEventSourceD>(Box::new(MockProvider::new()), Box::new(MockStore::new()))
+            .add::<TestEventSourceD>(
+                Box::new(MockEventProvider::new()),
+                Box::new(MockEventStore::new()),
+            )
             .unwrap();
         let err = manager
-            .add::<TestEventSourceE>(Box::new(MockProvider::new()), Box::new(MockStore::new()))
+            .add::<TestEventSourceE>(
+                Box::new(MockEventProvider::new()),
+                Box::new(MockEventStore::new()),
+            )
             .unwrap_err();
         assert!(matches!(err, EventLoopError::CyclicDependency));
     }
@@ -390,8 +398,8 @@ mod tests {
 
         manager.add::<TestEventSourceA>(provider, store).unwrap();
 
-        let mut subscriber_success = MockSubscriber::<TestEventSourceA>::new();
-        let mut subscriber_failure = MockSubscriber::<TestEventSourceA>::new();
+        let mut subscriber_success = MockEventSubscriber::<TestEventSourceA>::new();
+        let mut subscriber_failure = MockEventSubscriber::<TestEventSourceA>::new();
 
         subscriber_success.expect_name().return_const("A");
         subscriber_success
@@ -428,8 +436,8 @@ mod tests {
 
         manager.add::<TestEventSourceA>(provider, store).unwrap();
 
-        let mut subscriber_success = MockSubscriber::<TestEventSourceA>::new();
-        let mut subscriber_failure = MockSubscriber::<TestEventSourceA>::new();
+        let mut subscriber_success = MockEventSubscriber::<TestEventSourceA>::new();
+        let mut subscriber_failure = MockEventSubscriber::<TestEventSourceA>::new();
 
         subscriber_success.expect_name().return_const("A");
         subscriber_success
@@ -458,18 +466,24 @@ mod tests {
         let mut manager = EventManager::new();
 
         manager
-            .add::<TestEventSourceA>(Box::new(MockProvider::new()), Box::new(MockStore::new()))
+            .add::<TestEventSourceA>(
+                Box::new(MockEventProvider::new()),
+                Box::new(MockEventStore::new()),
+            )
             .unwrap();
         let err = manager
-            .add::<TestEventSourceA>(Box::new(MockProvider::new()), Box::new(MockStore::new()))
+            .add::<TestEventSourceA>(
+                Box::new(MockEventProvider::new()),
+                Box::new(MockEventStore::new()),
+            )
             .unwrap_err();
         assert!(matches!(err, EventLoopError::DuplicateEventSource(_)));
 
-        let mut subscriber = MockSubscriber::<TestEventSourceA>::new();
+        let mut subscriber = MockEventSubscriber::<TestEventSourceA>::new();
         subscriber.expect_name().return_const("A");
         manager.subscribe(subscriber).unwrap();
 
-        let mut subscriber = MockSubscriber::<TestEventSourceA>::new();
+        let mut subscriber = MockEventSubscriber::<TestEventSourceA>::new();
         subscriber.expect_name().return_const("A");
         assert!(manager.subscribe(subscriber).is_none());
     }
@@ -478,7 +492,7 @@ mod tests {
         id: &EventId,
         next_event_id: EventId,
         sequence: &mut Sequence,
-    ) -> (Box<dyn Provider>, Box<dyn Store>) {
+    ) -> (Box<dyn EventProvider>, Box<dyn EventStore>) {
         make_success_sequence_with_refresh(id, next_event_id, sequence, 0)
     }
 
@@ -487,9 +501,9 @@ mod tests {
         next_event_id: EventId,
         sequence: &mut Sequence,
         refresh: u8,
-    ) -> (Box<dyn Provider>, Box<dyn Store>) {
-        let mut store = MockStore::new();
-        let mut provider = MockProvider::new();
+    ) -> (Box<dyn EventProvider>, Box<dyn EventStore>) {
+        let mut store = MockEventStore::new();
+        let mut provider = MockEventProvider::new();
         let event_id = id.clone();
         store
             .expect_load()

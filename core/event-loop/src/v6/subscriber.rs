@@ -53,7 +53,7 @@ impl<E: EventSource> Hash for EventSubscriberId<E> {
 #[cfg_attr(test, allow(clippy::ref_option_ref))]
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
-pub trait Subscriber<E: EventSource>: Send + Sync + 'static {
+pub trait EventSubscriber<E: EventSource>: Send + Sync + 'static {
     fn name(&self) -> &'static str;
     /// Invoked when an event has been fetched from the server.
     async fn on_event(&self, event: &E::Event, cache: &mut E::Cache) -> SubscriberResult<()>;
@@ -77,7 +77,7 @@ pub(crate) trait SubscriberList: Any + Send + Sync {
 
 /// A collection of subscribers that handle events of a specific type.
 pub(crate) struct TypedSubscriberList<E: EventSource> {
-    subscribers: SlotMap<DefaultKey, Box<dyn Subscriber<E>>>,
+    subscribers: SlotMap<DefaultKey, Box<dyn EventSubscriber<E>>>,
     subscriber_names: HashSet<String>,
 }
 
@@ -91,7 +91,7 @@ impl<E: EventSource> Default for TypedSubscriberList<E> {
 }
 
 impl<E: EventSource> TypedSubscriberList<E> {
-    pub fn add(&mut self, subscriber: Box<dyn Subscriber<E>>) -> Option<EventSubscriberId<E>> {
+    pub fn add(&mut self, subscriber: Box<dyn EventSubscriber<E>>) -> Option<EventSubscriberId<E>> {
         if !self.subscriber_names.insert(subscriber.name().to_owned()) {
             return None;
         }
@@ -103,7 +103,7 @@ impl<E: EventSource> TypedSubscriberList<E> {
         })
     }
 
-    pub fn remove(&mut self, key: EventSubscriberId<E>) -> Option<Box<dyn Subscriber<E>>> {
+    pub fn remove(&mut self, key: EventSubscriberId<E>) -> Option<Box<dyn EventSubscriber<E>>> {
         self.subscribers.remove(key.handle).inspect(|previous| {
             tracing::info!("Removing event subscriber {}", previous.name());
             self.subscriber_names.remove(previous.name());
