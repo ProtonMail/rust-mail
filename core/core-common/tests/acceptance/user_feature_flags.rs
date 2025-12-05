@@ -1,10 +1,10 @@
 use proton_core_api::services::proton::{
     GetLegacyFeaturesResponse, GetUnleashFeaturesResponse, LegacyFeatureFlag,
-    LegacyFeatureFlagMetadata, LegacyFeatureFlagVariant, RangedValue, UnleashToggle,
-    UnleashToggleVariant, Value,
+    LegacyFeatureFlagMetadata, LegacyFeatureFlagVariant, PutFeatureFlagOverrideResponse,
+    RangedValue, UnleashToggle, UnleashToggleVariant, Value,
 };
 use proton_core_common::actions::user_feature_flags::OverrideFlag;
-use proton_core_common::datatypes::UnixTimestamp;
+use proton_core_common::datatypes::{FlagMutability, UnixTimestamp};
 use proton_core_common::models::UserFeatureFlag;
 use proton_core_common::test_utils::test_context::TestContext;
 use proton_core_common::test_utils::utils::RespondNthTime;
@@ -42,18 +42,7 @@ async fn test_user_feature_flags_cold_start_background_fetch() {
         .mount(ctx.mock_server())
         .await;
 
-    Mock::given(method("GET"))
-        .and(path("/api/core/v4/features"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(GetLegacyFeaturesResponse {
-                total: 0,
-                features: vec![],
-            }),
-        )
-        .expect(1)
-        .named("Empty Legacy fetch")
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_legacy(&ctx).await;
 
     let user_context = ctx.user_context().await;
     let feature_flags = user_context.feature_flags();
@@ -109,6 +98,7 @@ async fn test_user_feature_flags_warm_start_immediate_return() {
         .and(path("/api/feature/v2/frontend"))
         .respond_with(ResponseTemplate::new(200).set_body_json(updated_response))
         .named("Background refresh")
+        .expect(0)
         .mount(ctx.mock_server())
         .await;
 
@@ -120,6 +110,7 @@ async fn test_user_feature_flags_warm_start_immediate_return() {
                 features: vec![],
             }),
         )
+        .expect(0)
         .named("Empty Legacy fetch")
         .mount(ctx.mock_server())
         .await;
@@ -178,17 +169,7 @@ async fn test_user_feature_flags_warm_start_background_refresh() {
         .mount(ctx.mock_server())
         .await;
 
-    Mock::given(method("GET"))
-        .and(path("/api/core/v4/features"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(GetLegacyFeaturesResponse {
-                total: 0,
-                features: vec![],
-            }),
-        )
-        .named("Empty Legacy fetch")
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_legacy(&ctx).await;
 
     let user_context = ctx.user_context().await;
     let feature_flags = user_context.feature_flags();
@@ -285,14 +266,7 @@ async fn test_legacy_feature_flags_basic() {
         ],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -335,14 +309,7 @@ async fn test_legacy_feature_flags_boolean_only_filtering() {
         ],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -378,14 +345,7 @@ async fn test_legacy_feature_flags_writable_property() {
         ],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -426,7 +386,8 @@ async fn test_legacy_feature_flags_disappearing_gets_removed() {
         let past = UnixTimestamp::new(10);
         let user_context = ctx.user_context().await;
         let mut tether = user_context.stash().connection().await.unwrap();
-        let mut existing_flag = UserFeatureFlag::legacy("DisappearingFlag", true, true, past);
+        let mut existing_flag =
+            UserFeatureFlag::legacy("DisappearingFlag", true, FlagMutability::Mutable, past);
 
         tether
             .tx(async move |tx| existing_flag.save(tx).await)
@@ -447,14 +408,7 @@ async fn test_legacy_feature_flags_disappearing_gets_removed() {
         features: vec![],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -558,14 +512,7 @@ async fn test_legacy_feature_flags_expired_filtering() {
         ],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -609,7 +556,8 @@ async fn test_legacy_feature_flag_becomes_expired_disabled() {
         let past = UnixTimestamp::new(10);
         let user_context = ctx.user_context().await;
         let mut tether = user_context.stash().connection().await.unwrap();
-        let mut existing_flag = UserFeatureFlag::legacy("BecomingExpiredFlag", true, true, past);
+        let mut existing_flag =
+            UserFeatureFlag::legacy("BecomingExpiredFlag", true, FlagMutability::Mutable, past);
 
         tether
             .tx(async move |tx| existing_flag.save(tx).await)
@@ -630,14 +578,7 @@ async fn test_legacy_feature_flag_becomes_expired_disabled() {
         )],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -775,14 +716,7 @@ async fn test_legacy_feature_flags_pagination() {
         features: features[150..155].to_vec(),
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -891,74 +825,6 @@ async fn test_user_feature_flags_handle_network_failure() {
     assert_eq!(feature_flags.get("NonExistentFeature").await.unwrap(), None);
 }
 
-fn test_unleash_variant() -> UnleashToggleVariant {
-    UnleashToggleVariant {
-        name: "enabled".to_string(),
-        feature_enabled: true,
-        payload: None,
-    }
-}
-
-fn test_legacy_boolean_flag(code: &str, enabled: bool, writable: bool) -> LegacyFeatureFlag {
-    let year_2100 = UnixTimestamp::new(4_102_444_800);
-    test_legacy_boolean_flag_with_expiration(code, enabled, writable, year_2100)
-}
-
-fn test_legacy_boolean_flag_with_expiration(
-    code: &str,
-    enabled: bool,
-    writable: bool,
-    expiration_time: UnixTimestamp,
-) -> LegacyFeatureFlag {
-    LegacyFeatureFlag {
-        metadata: LegacyFeatureFlagMetadata {
-            code: code.to_string(),
-            global: false,
-            writable,
-            expiration_time: Some(expiration_time.as_u64()),
-            update_time: None,
-        },
-        variant: LegacyFeatureFlagVariant::Boolean(Value {
-            value: enabled,
-            default_value: false,
-        }),
-    }
-}
-
-fn test_legacy_string_flag(code: &str, value: &str) -> LegacyFeatureFlag {
-    LegacyFeatureFlag {
-        metadata: LegacyFeatureFlagMetadata {
-            code: code.to_string(),
-            global: false,
-            writable: false,
-            expiration_time: None,
-            update_time: None,
-        },
-        variant: LegacyFeatureFlagVariant::String(Value {
-            value: value.to_string(),
-            default_value: "default".to_string(),
-        }),
-    }
-}
-
-fn test_legacy_integer_flag(code: &str, value: i32) -> LegacyFeatureFlag {
-    LegacyFeatureFlag {
-        metadata: LegacyFeatureFlagMetadata {
-            code: code.to_string(),
-            global: false,
-            writable: false,
-            expiration_time: None,
-            update_time: None,
-        },
-        variant: LegacyFeatureFlagVariant::Integer(RangedValue {
-            value,
-            default_value: 0,
-            minimum: 0,
-            maximum: 100,
-        }),
-    }
-}
-
 #[tokio::test]
 async fn test_override_writable_legacy_flag_success() {
     let ctx = TestContext::new().await;
@@ -968,14 +834,7 @@ async fn test_override_writable_legacy_flag_success() {
         features: vec![test_legacy_boolean_flag("WritableFlag", false, true)],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -985,7 +844,7 @@ async fn test_override_writable_legacy_flag_success() {
         .await;
 
     let override_time = UnixTimestamp::now();
-    let put_response = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+    let put_response = PutFeatureFlagOverrideResponse {
         feature: LegacyFeatureFlag {
             metadata: LegacyFeatureFlagMetadata {
                 code: "WritableFlag".to_string(),
@@ -1053,14 +912,7 @@ async fn test_override_non_writable_flag_fails() {
         features: vec![test_legacy_boolean_flag("ReadOnlyFlag", true, false)],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -1094,26 +946,63 @@ async fn test_override_non_writable_flag_fails() {
 }
 
 #[tokio::test]
-async fn test_override_non_existent_flag_fails() {
+async fn test_override_locally_non_existent_flag_works_offline() {
     let ctx = TestContext::new().await;
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
+    mock_empty_legacy(&ctx).await;
 
-    Mock::given(method("GET"))
-        .and(path("/api/core/v4/features"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(GetLegacyFeaturesResponse {
-                total: 0,
-                features: vec![],
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+
+    let action = OverrideFlag::new("NonExistentFlag".to_string(), true);
+
+    user_context.queue().queue_action(action).await.unwrap();
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("NonExistentFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(flag.overridden_to, Some(true));
+        assert!(flag.enabled);
+    }
+}
+
+#[tokio::test]
+async fn test_override_locally_non_existent_flag_works_if_backend_knows_it() {
+    let ctx = TestContext::new().await;
+
+    mock_empty_unleash(&ctx).await;
+    mock_empty_legacy(&ctx).await;
+
+    let response = PutFeatureFlagOverrideResponse {
+        feature: LegacyFeatureFlag {
+            metadata: LegacyFeatureFlagMetadata {
+                code: "NonExistentFlag".to_string(),
+                global: false,
+                writable: true,
+                expiration_time: None,
+                update_time: Some(UnixTimestamp::now().as_u64()),
+            },
+            variant: LegacyFeatureFlagVariant::Boolean(Value {
+                value: true,
+                default_value: false,
             }),
-        )
+        },
+    };
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/NonExistentFlag/value"))
+        .and(wiremock::matchers::body_json(
+            serde_json::json!({"Value": true}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .expect(1)
+        .named("Override flag API call")
         .mount(ctx.mock_server())
         .await;
 
@@ -1124,9 +1013,76 @@ async fn test_override_non_existent_flag_fails() {
 
     let action = OverrideFlag::new("NonExistentFlag".to_string(), true);
 
-    let result = user_context.queue().queue_action(action).await;
+    user_context.queue().queue_action(action).await.unwrap();
+    let executed_count = user_context
+        .queue()
+        .new_executor()
+        .execute_all()
+        .await
+        .unwrap();
+    assert_eq!(executed_count, 1);
 
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("NonExistentFlag", &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(flag.overridden_to, Some(true));
+        assert!(flag.enabled);
+    }
+}
+
+#[tokio::test]
+async fn test_override_locally_non_existent_flag_fails_if_backend_does_not_know_it() {
+    let ctx = TestContext::new().await;
+
+    mock_empty_unleash(&ctx).await;
+    mock_empty_legacy(&ctx).await;
+
+    Mock::given(method("PUT"))
+        .and(path("/api/core/v4/features/NonExistentFlag/value"))
+        .and(wiremock::matchers::body_json(
+            serde_json::json!({"Value": true}),
+        ))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .named("Override flag API call")
+        .mount(ctx.mock_server())
+        .await;
+
+    let user_context = ctx.user_context().await;
+    let feature_flags = user_context.feature_flags();
+
+    feature_flags.refresh().await.unwrap();
+
+    let action = OverrideFlag::new("NonExistentFlag".to_string(), true);
+
+    user_context.queue().queue_action(action).await.unwrap();
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("NonExistentFlag", &tether)
+            .await
+            .unwrap();
+
+        // Flag exists until remote part of the action is executed.
+        assert!(flag.is_some());
+    }
+
+    let result = user_context.queue().new_executor().execute_all().await;
     assert!(result.is_err());
+
+    {
+        let tether = user_context.stash().connection().await.unwrap();
+        let flag = UserFeatureFlag::by_name("NonExistentFlag", &tether)
+            .await
+            .unwrap();
+
+        // Flag did not exist before, so during a revert we remove it again.
+        assert!(flag.is_none());
+    }
 }
 
 #[tokio::test]
@@ -1139,14 +1095,7 @@ async fn test_override_flag_state_preservation() {
         features: vec![test_legacy_boolean_flag("StateTestFlag", false, true)],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -1156,7 +1105,7 @@ async fn test_override_flag_state_preservation() {
         .await;
 
     let override_time_1 = UnixTimestamp::now();
-    let put_response_1 = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+    let put_response_1 = PutFeatureFlagOverrideResponse {
         feature: LegacyFeatureFlag {
             metadata: LegacyFeatureFlagMetadata {
                 code: "StateTestFlag".to_string(),
@@ -1173,7 +1122,7 @@ async fn test_override_flag_state_preservation() {
     };
 
     let override_time_2 = override_time_1.saturating_add(10);
-    let put_response_2 = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+    let put_response_2 = PutFeatureFlagOverrideResponse {
         feature: LegacyFeatureFlag {
             metadata: LegacyFeatureFlagMetadata {
                 code: "StateTestFlag".to_string(),
@@ -1268,14 +1217,7 @@ async fn test_override_flag_api_failure_rollback() {
         features: vec![test_legacy_boolean_flag("APIFailFlag", false, true)],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -1327,14 +1269,7 @@ async fn test_override_local_only_not_yet_executed_remotely() {
         features: vec![test_legacy_boolean_flag("LocalOnlyFlag", false, true)],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -1425,14 +1360,7 @@ async fn test_backend_returns_stale_data_after_override() {
         }],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -1456,7 +1384,7 @@ async fn test_backend_returns_stale_data_after_override() {
         Some(false)
     );
 
-    let put_response = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+    let put_response = PutFeatureFlagOverrideResponse {
         feature: LegacyFeatureFlag {
             metadata: LegacyFeatureFlagMetadata {
                 code: "StaleDataFlag".to_string(),
@@ -1537,14 +1465,7 @@ async fn test_override_flag_proper_api_request_format() {
         features: vec![test_legacy_boolean_flag("FormatTestFlag", false, true)],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -1554,7 +1475,7 @@ async fn test_override_flag_proper_api_request_format() {
         .await;
 
     let override_time = UnixTimestamp::now();
-    let put_response = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+    let put_response = PutFeatureFlagOverrideResponse {
         feature: LegacyFeatureFlag {
             metadata: LegacyFeatureFlagMetadata {
                 code: "FormatTestFlag".to_string(),
@@ -1615,8 +1536,12 @@ async fn test_override_flag_api_failure_preserves_existing_override() {
     {
         let user_context = ctx.user_context().await;
         let mut tether = user_context.stash().connection().await.unwrap();
-        let mut existing_flag =
-            UserFeatureFlag::legacy("ExistingOverrideFlag", true, true, UnixTimestamp::new(10));
+        let mut existing_flag = UserFeatureFlag::legacy(
+            "ExistingOverrideFlag",
+            true,
+            FlagMutability::Mutable,
+            UnixTimestamp::new(10),
+        );
         existing_flag.overridden_to = Some(false);
 
         tether
@@ -1625,14 +1550,7 @@ async fn test_override_flag_api_failure_preserves_existing_override() {
             .unwrap();
     }
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -1685,14 +1603,7 @@ async fn test_proton_can_override_user_overridden_flag() {
         features: vec![test_legacy_boolean_flag("RatingBoosterFlag", false, true)],
     };
 
-    Mock::given(method("GET"))
-        .and(path("/api/feature/v2/frontend"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
-        )
-        .mount(ctx.mock_server())
-        .await;
+    mock_empty_unleash(&ctx).await;
 
     Mock::given(method("GET"))
         .and(path("/api/core/v4/features"))
@@ -1712,7 +1623,7 @@ async fn test_proton_can_override_user_overridden_flag() {
     );
 
     let override_time = UnixTimestamp::now();
-    let put_response = proton_core_api::services::proton::PutFeatureFlagOverrideResponse {
+    let put_response = PutFeatureFlagOverrideResponse {
         feature: LegacyFeatureFlag {
             metadata: LegacyFeatureFlagMetadata {
                 code: "RatingBoosterFlag".to_string(),
@@ -1803,5 +1714,101 @@ async fn test_proton_can_override_user_overridden_flag() {
         assert_eq!(flag.overridden_to, None);
         assert_eq!(flag.overridden_at, None);
         assert!(!flag.is_enabled());
+    }
+}
+
+// --- Fixture tools ---
+
+async fn mock_empty_unleash(ctx: &TestContext) {
+    Mock::given(method("GET"))
+        .and(path("/api/feature/v2/frontend"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(GetUnleashFeaturesResponse { toggles: vec![] }),
+        )
+        .mount(ctx.mock_server())
+        .await;
+}
+
+async fn mock_empty_legacy(ctx: &TestContext) {
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/features"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetLegacyFeaturesResponse {
+                total: 0,
+                features: vec![],
+            }),
+        )
+        .expect(1)
+        .named("Empty Legacy fetch")
+        .mount(ctx.mock_server())
+        .await;
+}
+
+fn test_unleash_variant() -> UnleashToggleVariant {
+    UnleashToggleVariant {
+        name: "enabled".to_string(),
+        feature_enabled: true,
+        payload: None,
+    }
+}
+
+fn test_legacy_boolean_flag(code: &str, enabled: bool, writable: bool) -> LegacyFeatureFlag {
+    let year_2100 = UnixTimestamp::new(4_102_444_800);
+    test_legacy_boolean_flag_with_expiration(code, enabled, writable, year_2100)
+}
+
+fn test_legacy_boolean_flag_with_expiration(
+    code: &str,
+    enabled: bool,
+    writable: bool,
+    expiration_time: UnixTimestamp,
+) -> LegacyFeatureFlag {
+    LegacyFeatureFlag {
+        metadata: LegacyFeatureFlagMetadata {
+            code: code.to_string(),
+            global: false,
+            writable,
+            expiration_time: Some(expiration_time.as_u64()),
+            update_time: None,
+        },
+        variant: LegacyFeatureFlagVariant::Boolean(Value {
+            value: enabled,
+            default_value: false,
+        }),
+    }
+}
+
+fn test_legacy_string_flag(code: &str, value: &str) -> LegacyFeatureFlag {
+    LegacyFeatureFlag {
+        metadata: LegacyFeatureFlagMetadata {
+            code: code.to_string(),
+            global: false,
+            writable: false,
+            expiration_time: None,
+            update_time: None,
+        },
+        variant: LegacyFeatureFlagVariant::String(Value {
+            value: value.to_string(),
+            default_value: "default".to_string(),
+        }),
+    }
+}
+
+fn test_legacy_integer_flag(code: &str, value: i32) -> LegacyFeatureFlag {
+    LegacyFeatureFlag {
+        metadata: LegacyFeatureFlagMetadata {
+            code: code.to_string(),
+            global: false,
+            writable: false,
+            expiration_time: None,
+            update_time: None,
+        },
+        variant: LegacyFeatureFlagVariant::Integer(RangedValue {
+            value,
+            default_value: 0,
+            minimum: 0,
+            maximum: 100,
+        }),
     }
 }

@@ -25,3 +25,18 @@ impl ToSql for UserFeatureFlagSource {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FlagMutability {
+    /// In the Proton API known as `writable: true`
+    Mutable,
+
+    Immutable,
+}
+
+impl FlagMutability {
+    #[must_use]
+    pub fn to_writable(self) -> bool {
+        matches!(self, FlagMutability::Mutable)
+    }
+}
