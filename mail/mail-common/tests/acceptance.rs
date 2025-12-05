@@ -31,13 +31,11 @@ mod acceptance {
     mod message_move;
     mod message_read_unread;
     mod mobile_settings_actions;
-    mod next_message_on_move_actions;
-
     mod mock;
+    mod next_message_on_move_actions;
     mod pin_code;
     mod refresh;
     mod rsvp;
-    mod search;
     mod search_mail_scroller;
     mod send_preferences;
     mod sender_image;

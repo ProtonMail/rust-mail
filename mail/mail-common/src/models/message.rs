@@ -43,7 +43,6 @@ use crate::MailContextResult;
 use crate::actions::{
     ConversationOrMessage, LabelAsAction, MessageActionSheet, MoveAction, filter_responses,
 };
-use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
     LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageSender,
@@ -73,7 +72,7 @@ use proton_mail_api::services::proton::prelude::MessageReplyTo as ApiMessageRepl
 use proton_mail_api::services::proton::requests::GetMessagesOptions;
 use proton_mail_api::services::proton::response_data::{
     Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
-    MessageMetadata, OperationResult,
+    OperationResult,
 };
 use proton_mail_api::services::proton::responses::GetMessagesResponse;
 use proton_mail_common_derive::ScrollerEq;
@@ -258,8 +257,6 @@ impl Message {
         queue.queue_action(action).await
     }
 
-    /// Mark multiple messages as read.
-    ///
     pub async fn action_mark_read(
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
@@ -268,8 +265,6 @@ impl Message {
         queue.queue_action(action).await
     }
 
-    /// Mark multiple messages as unread.
-    ///
     pub async fn action_mark_unread(
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
@@ -278,8 +273,6 @@ impl Message {
         queue.queue_action(action).await
     }
 
-    /// Mark multiple messages as read.
-    ///
     pub async fn action_delete(
         queue: &Queue,
         label_id: LocalLabelId,
@@ -289,8 +282,6 @@ impl Message {
         queue.queue_action(action).await
     }
 
-    /// Move multiple messages.
-    ///
     pub async fn action_move(
         tether: &Tether,
         queue: &Queue,
@@ -309,8 +300,6 @@ impl Message {
         }
     }
 
-    /// Mark multiple messages as read.
-    ///
     pub async fn mark_multiple_as_read(
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
@@ -324,8 +313,6 @@ impl Message {
         Ok(())
     }
 
-    /// Mark multiple messages as ham (not spam).
-    ///
     pub async fn action_ham(
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
@@ -344,8 +331,6 @@ impl Message {
         Ok(())
     }
 
-    /// Mark multiple messages as ham (not spam).
-    ///
     pub async fn action_report_phishing(
         queue: &Queue,
         message_id: LocalMessageId,
@@ -361,8 +346,6 @@ impl Message {
         Ok(())
     }
 
-    /// Action to change labels of a group of messages and optionally archive them.
-    ///
     pub async fn action_label_as(
         tether: &Tether,
         queue: &Queue,
@@ -490,8 +473,6 @@ impl Message {
         Ok(output)
     }
 
-    /// Find a group of Messages by their IDs.
-    ///
     pub(crate) async fn find_by_ids(
         message_ids: impl IntoIterator<Item = LocalMessageId>,
         tether: &Tether,
@@ -500,8 +481,6 @@ impl Message {
         Message::find(query, params, tether).await
     }
 
-    /// Get the available actions from bottom bar for given messages
-    ///
     #[tracing::instrument(skip_all, fields(label_id=current_label_id.as_u64()))]
     pub async fn all_available_list_actions_for_messages(
         current_label_id: LocalLabelId,
@@ -510,7 +489,6 @@ impl Message {
     ) -> Result<AllListActions, AppError> {
         debug!("{message_ids:?}");
 
-        // Load the system folder actions and the list toolbar actions
         let inbox = MovableSystemFolderAction::inbox(tether).await?;
         let archive = MovableSystemFolderAction::archive(tether).await?;
         let trash = MovableSystemFolderAction::trash(tether).await?;
@@ -519,13 +497,11 @@ impl Message {
         let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
         let messages = Self::find_by_ids(message_ids.to_vec(), tether).await?;
 
-        // Calculate state flags for the mobile actions builder
         let any_unread = messages.iter().any(|m| m.unread);
         let any_read = messages.iter().any(|m| !m.unread);
         let any_starred = messages.iter().any(|m| m.is_starred());
         let all_starred = messages.iter().all(|m| m.is_starred());
 
-        // Use the unified from_context approach
         let actions = AllListActions::from_context(
             false, // is_conversation = false for messages
             current_label,
@@ -545,8 +521,6 @@ impl Message {
         Ok(actions)
     }
 
-    /// Get the available message actions for a single message (Phase 2)
-    ///
     #[tracing::instrument(skip_all, fields(message_id=message_id.as_u64()))]
     pub async fn all_available_message_actions_for_message(
         current_label_id: LocalLabelId,
@@ -556,11 +530,11 @@ impl Message {
     ) -> Result<AllMessageActions, AppError> {
         debug!("Getting message actions for message: {message_id:?}");
 
-        // Load the message to get its state
         let message = Self::load(message_id, tether).await?;
+
         if message.is_none() {
             warn!("Message not found: {message_id:?}");
-            // Return empty actions for missing message
+
             return Ok(AllMessageActions {
                 visible_message_actions: vec![],
                 hidden_message_actions: vec![],
@@ -577,7 +551,6 @@ impl Message {
         )?;
         let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
 
-        // Use the unified builder-based approach
         let actions = AllMessageActions::from_context(
             current_label,
             message.unread,
@@ -596,10 +569,6 @@ impl Message {
         Ok(actions)
     }
 
-    /// Get the sender address of the message.
-    ///
-    /// Helper method for getting just the sender information of the message.
-    ///
     pub async fn get_sender_address(
         id: LocalMessageId,
         tether: &Tether,
@@ -672,8 +641,6 @@ impl Message {
         Ok(())
     }
 
-    /// Set convarsation ids before saving
-    ///
     fn set_coversation_before_save(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
         if self.local_conversation_id.is_none()
             && let Some(remote_conversation_id) = &self.remote_conversation_id
@@ -693,8 +660,6 @@ impl Message {
         Ok(())
     }
 
-    /// Given a vec of message metadatas tries to create them in the database
-    ///
     pub async fn create_or_update_messages_from_metadata_vec(
         metadata: Vec<ApiMessageMetadata>,
         event_action: Option<Action>,
@@ -716,8 +681,6 @@ impl Message {
         Ok(messages)
     }
 
-    /// Given a message metadata tries to create it in the database
-    ///
     pub async fn create_or_update_messages_from_metadata(
         metadata: Vec<ApiMessageMetadata>,
         event_action: Option<Action>,
@@ -732,31 +695,6 @@ impl Message {
         )
     }
 
-    /// Delete multiple messages.
-    ///
-    pub async fn delete_multiple_remote<PM: ProtonMail>(
-        ids: Vec<MessageId>,
-        label_id: LabelId,
-        api: &PM,
-    ) -> Result<Vec<OperationResult<MessageId>>, ApiServiceError> {
-        let request = |ids: Vec<MessageId>| {
-            let label_id = label_id.clone();
-            async {
-                api.put_messages_delete(ids, Some(label_id))
-                    .await
-                    .map(|r| r.responses)
-            }
-        };
-        Message::split_request(ids, request).await
-    }
-
-    /// Mark messages as deleted.
-    ///
-    /// This is soft delete of messages. It will assign deleted flag to true,
-    /// Adjust labels, conversations and conversation labels stats.
-    /// Morover if all messages within a conversation were deleted, the conversation
-    /// will be deleted as well.
-    ///
     pub async fn mark_deleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
         info!("Marking {ids:?} as deleted");
         let (query, params) = find_in_query!("WHERE deleted = 0 AND local_id IN ({})", ids);
@@ -812,12 +750,6 @@ impl Message {
         Ok(())
     }
 
-    /// Mark messages as undeleted.
-    ///
-    /// This is soft undelete of messages. It will assign deleted flag to false,
-    /// Adjust labels, conversations and conversation labels stats.
-    /// Morover if conversation was deleted it will be restored.
-    ///
     pub async fn mark_undeleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
         info!("Unmarking {ids:?} as deleted");
         let (query, params) = find_in_query!("WHERE deleted = 1 AND local_id IN ({})", ids);
@@ -879,16 +811,12 @@ impl Message {
         Ok(())
     }
 
-    /// Get the message counts.
-    ///
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
     ) -> Result<Vec<MessageLabelsCount>, ApiServiceError> {
         api.get_messages_count().await.map(|r| r.counts.map_vec())
     }
 
-    /// Get message metadata.
-    ///
     pub async fn fetch_metadata<PM: ProtonMail>(
         filter: GetMessagesOptions,
         api: &PM,
@@ -896,8 +824,6 @@ impl Message {
         api.get_messages(filter).await
     }
 
-    /// Get all labels for the message.
-    ///
     pub fn all_message_labels(&self, conn: &Connection) -> Result<Vec<Label>, StashError> {
         let labels = Label::find_sync(
             r#"
@@ -912,71 +838,12 @@ impl Message {
         Ok(labels)
     }
 
-    /// TODO: Document this method.
     #[inline]
     #[must_use]
     pub fn is_starred(&self) -> bool {
         self.label_ids.iter().any(|l| *l == LabelId::starred())
     }
 
-    /// Given a list of message metadata check if there are any missing dependencies like
-    /// undownloaded labels or addresses.
-    ///
-    async fn sync_dependencies_from_metadata(
-        messages: &[MessageMetadata],
-        api: &Session,
-        tether: &mut Tether,
-    ) -> Result<(), MailContextError> {
-        let mut fetcher = MessageOrConversationDependencyFetcher::new();
-
-        for message in messages {
-            fetcher.check_api_message_metadata(message, tether).await?
-        }
-
-        fetcher.fetch_and_store(api, tether).await?;
-
-        Ok(())
-    }
-
-    /// Search for messages.
-    ///
-    /// This function accepts search options and calls the API to find any
-    /// messages that fit the criteria. It operates globally and is not based on
-    /// a particular mailbox; this restriction can be applied via the options.
-    ///
-    pub async fn search(
-        options: GetMessagesOptions,
-        api: &Session,
-        tether: &mut Tether,
-    ) -> Result<Vec<Message>, MailContextError> {
-        let messages = api
-            .get_messages(options)
-            .await?
-            .messages
-            .into_iter()
-            .collect_vec();
-
-        // First we load the addresses because the addresses need to exist before the messages get
-        // loaded.
-        Self::sync_dependencies_from_metadata(&messages, api, tether).await?;
-
-        let mut messages = tether
-            .tx(async |tx| {
-                Self::create_or_update_messages_from_metadata_vec(messages, None, tx).await
-            })
-            .await?;
-
-        messages.sort_unstable_by(|x, y| {
-            x.time
-                .cmp(&y.time)
-                .then(x.display_order.cmp(&y.display_order).reverse())
-        });
-
-        Ok(messages)
-    }
-
-    /// Synchronize the first `count` messages of the label with `label_id`.
-    ///
     pub async fn sync_first_message_page<PM: ProtonMail>(
         label_id: LabelId,
         count: usize,
@@ -1007,11 +874,6 @@ impl Message {
         Ok(())
     }
 
-    /// Get the available actions to populate the message action sheet.
-    ///
-    /// Message sheet contains context aware set of actions for given message.
-    /// It is split up into different categories to be easy to display in the UI.
-    ///
     #[tracing::instrument(skip_all, fields(label_id=%current_label_id, message_id=message_id.as_u64()))]
     pub async fn all_available_message_actions_for_action_sheet(
         current_label_id: LocalLabelId,
@@ -1030,8 +892,6 @@ impl Message {
         Ok(actions.into())
     }
 
-    /// Get the available `label as` actions for conversations
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn available_label_as_actions(
         message_ids: Vec<LocalMessageId>,
@@ -1075,8 +935,6 @@ impl Message {
             .await
     }
 
-    /// Watches available `label as` actions for messages
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn watch_available_label_as_actions(
         message_ids: Vec<LocalMessageId>,
@@ -1107,8 +965,6 @@ impl Message {
         Ok((res, handle))
     }
 
-    /// Get the available move actions for messages.
-    ///
     #[tracing::instrument(skip_all, fields(label_id=view.id().as_u64()))]
     pub async fn available_move_to_actions(
         view: Label,
@@ -1256,7 +1112,6 @@ impl Message {
         Ok(decrypted)
     }
 
-    /// Finds all messages that have expired and deletes them.
     pub async fn delete_expired(tether: &mut Tether) -> Result<(), AppError> {
         let ids = Self::find_ids(
             r"
@@ -1417,13 +1272,6 @@ impl Message {
         Ok(updated.into_iter().map(|x| x.local_message_id).collect())
     }
 
-    /// Converts an [`ApiMessage`] into its components.
-    ///
-    /// Returns, in order:
-    /// * [`Message`]: Message metadata
-    /// * [`MessageBodyMetadata`]: Messge body metadata
-    /// * Message body
-    ///
     pub async fn from_api_data(
         value: ApiMessage,
         tether: &Tether,
@@ -1442,8 +1290,6 @@ impl Message {
         Ok((metadata, body_metadata, body))
     }
 
-    /// Converts an [`ApiMessageMetadata`] into a [`Message`].
-    ///
     pub async fn from_api_metadata(
         value: ApiMessageMetadata,
         tether: &Tether,
@@ -1500,7 +1346,6 @@ impl Message {
         })
     }
 
-    /// Retrieve all the messages which are in a given label.
     pub async fn in_label(
         local_label_id: LocalLabelId,
         tether: &Tether,
@@ -1522,7 +1367,6 @@ impl Message {
         .await
     }
 
-    /// Retrieve all the message ids which are in a given label.
     pub async fn ids_in_label(
         local_label_id: LocalLabelId,
         tether: &Tether,
@@ -1563,8 +1407,6 @@ impl Message {
             .await
     }
 
-    /// Get all messages which belong to the conversation with
-    /// `local_conversation_id`.
     pub async fn in_conversation(
         local_conversation_id: LocalConversationId,
         view_options: ConversationViewOptions,
@@ -1602,30 +1444,6 @@ impl Message {
         .await
     }
 
-    pub async fn ids_in_conversation_unordered(
-        local_conversation_id: LocalConversationId,
-        tether: &Tether,
-    ) -> Result<Vec<LocalMessageId>, StashError> {
-        tether.query_values::<_, LocalMessageId>(
-            "SELECT local_id FROM messages WHERE local_conversation_id = ? AND messages.deleted = 0",
-            params![local_conversation_id],
-        )
-            .await
-    }
-
-    pub async fn remote_ids_in_conversation_unordered(
-        local_conversation_id: LocalConversationId,
-        tether: &Tether,
-    ) -> Result<Vec<MessageId>, StashError> {
-        tether.query_values::<_, MessageId>(
-            "SELECT remote_id FROM messages WHERE remote_id IS NOT NULL AND local_conversation_id = ? AND messages.deleted = 0",
-            params![local_conversation_id],
-        )
-            .await
-    }
-
-    /// This fn should be called for message endpoints.
-    /// Repeatedly calls `endpoint` in batches of 150 in parallel.
     async fn split_request<F, Fut>(
         ids: impl IntoIterator<Item = MessageId>,
         endpoint: F,
@@ -1661,27 +1479,6 @@ impl Message {
         .await
     }
 
-    pub async fn update_snooze_time(
-        ids: Vec<LocalMessageId>,
-        snooze_time: UnixTimestamp,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        let placeholders = placeholders(&ids);
-        let mut params = params![snooze_time];
-        params.extend(ids.to_sql());
-
-        bond.execute(
-            format!(
-                "UPDATE messages SET snooze_time = MAX(time, ?) WHERE local_id IN ({placeholders})"
-            ),
-            params,
-        )
-        .await?;
-
-        Ok(())
-    }
-
-    /// Update message counters for `messages` after being marked as deleted.
     pub async fn update_message_counters_after_soft_delete(
         messages: impl IntoIterator<Item = Message>,
         bond: &Bond<'_>,
@@ -1698,7 +1495,6 @@ impl Message {
         Ok(label_stats)
     }
 
-    /// Update message counters for `messages` after being unmarked as deleted.
     pub async fn update_message_counters_after_soft_undelete(
         messages: impl IntoIterator<Item = Message>,
         bond: &Bond<'_>,
@@ -1715,11 +1511,6 @@ impl Message {
         Ok(label_stats)
     }
 
-    /// Get the possible next display order.
-    ///
-    /// Finds the maximum display order value in all messages and adds 1
-    /// to the existing value.
-    ///
     pub async fn next_display_order(tether: &Tether) -> Result<u64, StashError> {
         Ok(tether
             .query_value::<_, u64>(
@@ -1733,7 +1524,6 @@ impl Message {
             .saturating_add(1))
     }
 
-    /// Only get Disposition::Attachment attachments
     pub fn get_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
         self.attachments_metadata
             .iter()
@@ -1742,8 +1532,6 @@ impl Message {
             .collect()
     }
 
-    /// Sync only messages metadata
-    ///
     pub async fn sync_metadata<PM: ProtonMail>(
         ids: Vec<MessageId>,
         api: &PM,
@@ -1776,9 +1564,6 @@ impl Message {
         Ok(local_msgs)
     }
 
-    /// Sync the contents of the message and the body from the server for the given `message_id`.
-    ///
-    /// Note that this function always overrides the data that was previously available.
     #[tracing::instrument(skip(ctx, tether, with_attachment_prefetch))]
     pub async fn force_sync_message_and_body(
         ctx: &MailUserContext,
@@ -1820,7 +1605,6 @@ impl Message {
         Ok((message, decrypted))
     }
 
-    /// Sync message and body for mesasge with `message_id`.
     #[tracing::instrument(skip(api, tx, queue))]
     async fn sync_message_and_body(
         message_id: MessageId,
@@ -1870,10 +1654,6 @@ impl Message {
         ))
     }
 
-    /// Decrypt an `encrypted_message_body` with a given `address_id` keys.
-    ///
-    /// If `attachment_prefetch` is set to `true`, all the attachments will start prefetching
-    /// the moment the object is created.
     async fn decrypt_message_body(
         ctx: &MailUserContext,
         address_id: &AddressId,
@@ -1889,7 +1669,6 @@ impl Message {
             .await
     }
 
-    /// Load a [`DecryptedMessageBody`] for message with `local_id` from the database.
     #[tracing::instrument(skip(tether))]
     pub(crate) async fn load_decrypted_message_from_cache(
         local_id: LocalMessageId,
@@ -1920,9 +1699,6 @@ impl Message {
         )))
     }
 
-    /// Whether this message is a draft.
-    ///
-    /// A message is considered a draft when it has the AllDrafts label assigned.
     #[must_use]
     pub fn is_draft(&self) -> bool {
         self.flags.is_draft()
@@ -1933,7 +1709,6 @@ impl Message {
     }
 
     /// Whether this message is a draft and has been modified locally.
-    ///
     pub async fn is_local_draft(&self, tether: &Tether) -> Result<bool, AppError> {
         let local_id = match self.local_id {
             Some(local_id) => local_id,
@@ -1955,12 +1730,6 @@ impl Message {
             .is_some())
     }
 
-    /// [`RemoteId`] on its own is useless, because all our UniFFI endpoints operate on
-    /// local ids. This method translates remote id into local [`Id`].
-    ///
-    /// It may happen, that the [`RemoteId`] points to the message that does not exist in our
-    /// database yet. In that case, Rust SDK will fetch necessary information from API before returning the id.
-    ///
     #[tracing::instrument(skip(ctx))]
     pub async fn find_or_fetch_by_remote_id(
         ctx: &MailUserContext,
@@ -2033,7 +1802,6 @@ impl Message {
         Ok(results)
     }
 
-    /// Set the flags without loading the whole model
     pub async fn set_flags(
         local_id: LocalMessageId,
         flags: MessageFlags,
@@ -2049,7 +1817,6 @@ impl Message {
         Ok(())
     }
 
-    /// Unset the flags without loading the whole model
     pub async fn unset_flags(
         local_id: LocalMessageId,
         flags: MessageFlags,
@@ -2065,16 +1832,6 @@ impl Message {
         Ok(())
     }
 
-    /// Delete all messages from a label
-    ///
-    /// Limited to:
-    ///
-    /// - drafts
-    /// - spam
-    /// - trash
-    /// - custom labels
-    /// - custom folders
-    ///
     pub async fn action_delete_all_in_label(
         queue: &Queue,
         label_id: LocalLabelId,
@@ -2174,7 +1931,6 @@ impl Message {
     }
 
     pub fn snoozed_until(&self) -> Option<UnixTimestamp> {
-        // This should only be returned if the message is in the snooze label.
         self.label_ids
             .iter()
             .find(|&label_id| *label_id == LabelId::snoozed())
@@ -2830,7 +2586,6 @@ pub struct MessageBodyMetadata {
 }
 
 impl MessageBodyMetadata {
-    /// Load a message for the message with `local_message_id`.
     pub async fn for_message(
         local_message_id: LocalMessageId,
         tether: &Tether,
@@ -2885,8 +2640,6 @@ impl MessageBodyMetadata {
         )
     }
 
-    /// Update the `header`, `parsed_headers` and `remote_message_id` fields after the
-    /// draft has been created or updated on the server.
     pub async fn update_fields_after_draft_create_or_update(
         &self,
         bond: &Bond<'_>,
@@ -3059,9 +2812,6 @@ impl MessageLabelStats {
     }
 }
 
-/// Message counters that are related to particular label
-/// Allow the user to see how many message there are assigned to the label,
-/// both unread count and total count.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("message_counters")]
 pub struct MessageCounters {
@@ -3076,8 +2826,6 @@ pub struct MessageCounters {
 }
 
 impl MessageCounters {
-    /// Constructor - note: [`MessageCounters`] does not implement [`Default`] trait
-    ///
     pub fn new(local_label_id: LocalLabelId) -> Self {
         Self {
             local_label_id,
@@ -3086,16 +2834,6 @@ impl MessageCounters {
         }
     }
 
-    /// Get all message counters linked to labels with given kind
-    pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
-        Self::find(
-            "INNER JOIN labels ON labels.local_id = local_label_id WHERE label_type = ? ORDER BY labels.display_order ASC",
-            params![kind],
-            tether,
-        ).await
-    }
-
-    /// Returns counters, first unread then total
     pub fn counters(&self) -> (u64, u64) {
         (self.unread, self.total)
     }
@@ -3108,8 +2846,6 @@ impl MessageCounters {
         }
     }
 
-    /// Returns [`MessageCounts`] datastructure that contains label's Remote ID
-    /// instead of the Local ID.
     pub async fn message_count(&self, tether: &Tether) -> Result<MessageLabelsCount, AppError> {
         let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
 
@@ -3120,10 +2856,6 @@ impl MessageCounters {
         })
     }
 
-    /// Watch message counter for changes.
-    ///
-    /// When a change occurs a message is produced in the returned receiver.
-    ///
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(MessageCounterWatcher { sender }))
@@ -3155,26 +2887,21 @@ impl TableObserver for MessageCounterWatcher {
 // Model marcro.
 #[derive(Clone, Default, Debug, DbRecord, Eq, PartialEq)]
 pub struct MessageReplyTo {
-    /// Email of the recipient
     #[DbField]
     pub address: PrivateEmail,
 
-    /// Display name of the recipient,empty if none.
     #[DbField]
     pub name: PrivateString,
 
     #[DbField]
     pub bimi_selector: Option<String>,
 
-    /// Whether to display the sender image.
     #[DbField]
     pub display_sender_image: bool,
 
-    /// Whether the address is a proton address.
     #[DbField]
     pub is_proton: bool,
 
-    /// Whether address originated from simple login alias.
     #[DbField]
     pub is_simple_login: bool,
 }
@@ -3195,6 +2922,7 @@ impl MessageReplyTo {
     ) -> Result<usize, StashError> {
         self.store_impl(message_id, "message_reply_tos", tx)
     }
+
     fn store_impl(
         &self,
         message_id: LocalMessageId,

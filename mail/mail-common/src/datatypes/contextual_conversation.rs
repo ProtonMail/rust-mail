@@ -139,18 +139,6 @@ impl ContextualConversation {
         }
     }
 
-    /// Retrieve all the conversations which are the label with `local_label_id`.
-    pub async fn in_label(
-        local_label_id: LocalLabelId,
-        tether: &Tether,
-    ) -> Result<Vec<Self>, StashError> {
-        Ok(Conversation::in_label(local_label_id, tether)
-            .await?
-            .into_iter()
-            .filter_map(|c| Self::new(c, local_label_id))
-            .collect())
-    }
-
     /// Open a conversation in the context of a label.
     ///
     /// It acts as a wrapper around [`Self::conversation_and_messages`] and
