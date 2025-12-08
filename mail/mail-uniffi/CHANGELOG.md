@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.160.6] - 2025-12-08
+
+### Features
+
+- [ET-5182] Event Loop V6 Setup
+- [ET-5488] text2html used for sanitizing pasted context
+- [ET-5558] Add ios-debug profile and build documentation
+
+
 ## [mail-uniffi-v0.160.5] - 2025-12-05
 
 ### Changed
