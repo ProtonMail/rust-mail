@@ -74,6 +74,35 @@ pub enum LegacyFeatureFlagType {
     Mixed,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LegacyFeatureFlagId {
+    RatingBoosterAndroid,
+    RatingBoosterIOS,
+}
+
+impl std::fmt::Display for LegacyFeatureFlagId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RatingBoosterAndroid => write!(f, "RatingAndroidMail"),
+            Self::RatingBoosterIOS => write!(f, "RatingIOSMail"),
+        }
+    }
+}
+
+impl LegacyFeatureFlagId {
+    #[must_use]
+    pub fn default_filter() -> Vec<Self> {
+        #[cfg(target_os = "android")]
+        return vec![Self::RatingBoosterAndroid];
+
+        #[cfg(target_os = "ios")]
+        return vec![Self::RatingBoosterIOS];
+
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        vec![]
+    }
+}
+
 impl LegacyFeatureFlagVariant {
     #[must_use]
     pub fn into_bool(self) -> Option<Value<bool>> {
