@@ -7,23 +7,31 @@ pub fn text2html(text: &str) -> NodeRef {
     let body = new_element("body");
     document.append(body.clone());
 
-    for line in text.lines() {
-        let line = line.trim();
+    let mut lines = text.lines().map(str::trim);
 
-        // Matching behaviour of ProtonMail Web
-        let node = if line.is_empty() {
-            let div = new_element("div");
-            div.append(new_element("br"));
-            div
-        } else {
-            let p = new_element("span");
-            p.append(NodeRef::new_text(line));
-            p
-        };
-        body.append(node);
+    if let Some(first_line) = lines.next() {
+        // We do not wrap first line in a div because user may paste
+        // text in the middle of the line.
+        body.append(process_line(first_line));
+    }
+    for line in lines {
+        let div = new_element("div");
+        div.append(process_line(line));
+        body.append(div);
     }
 
     document
+}
+
+// Matching behaviour of ProtonMail Web
+fn process_line(line: &str) -> NodeRef {
+    if line.is_empty() {
+        return new_element("br");
+    }
+
+    let span = new_element("span");
+    span.append(NodeRef::new_text(line));
+    span
 }
 
 fn new_element(name: &str) -> NodeRef {
@@ -66,6 +74,16 @@ mod tests {
         // keep_spaces_and_escape_gt_and_lt.
         // The latter would replace space just before `d` with `&nbsp;`
         let input = "Hallo  double spaces";
+        let document = text2html(input);
+
+        let output = document.to_string();
+
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn plaintext_newlines_in_the_same_paragraph() {
+        let input = "Hallo\nWorld\n\nToday";
         let document = text2html(input);
 
         let output = document.to_string();

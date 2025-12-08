@@ -2,4 +2,4 @@
 source: mail/mail-common/src/draft/../tests/draft/compose.rs
 expression: result
 ---
-<span>Foo</span><span>Bar</span><div><br></div><span>Baz</span>
+<span>Foo</span><div><span>Bar</span></div><div><br></div><div><span>Baz</span></div>
