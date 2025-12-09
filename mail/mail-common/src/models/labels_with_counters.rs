@@ -8,81 +8,32 @@ use super::{ConversationCounters, MessageCounters};
 use crate::models::MailSettings;
 use indoc::formatdoc;
 use proton_core_api::services::proton::{LabelId, ProtonCore};
-use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
+use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent, Label, LabelError,
     ModelIdExtension,
 };
 use sqlite_watcher::watcher::TableObserver;
+use stash::exports::Row;
+use stash::orm::{ConversionError, DbRecord};
 use stash::stash::{Stash, WatcherHandle};
 use stash::utils::{IterMapToSql, placeholders};
 use stash::{
     exports::ToSql,
-    macros::DbRecord,
     orm::Model,
     params,
     stash::{StashError, Tether},
 };
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::sync::Arc;
 
-/// Helper data structure until we move from Stash to existing, mature ORM.
-///
-/// It loads both [`Label`] and [`MessageCounters`] with a single call. It is not only faster (because of the inner join)
-/// but also easier to work with than separately with [`Label`] and [`MessageCounters`]
-///
-/// Note: It duplicates fields from [`Label`] since Stash does not support nested structures.
-#[derive(DbRecord, PartialEq, Debug, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LabelWithCounters {
-    #[DbField]
-    pub local_id: Option<LocalLabelId>,
-
-    #[DbField]
-    pub remote_id: Option<LabelId>,
-
-    #[DbField]
-    pub local_parent_id: Option<LocalLabelId>,
-
-    #[DbField]
-    pub remote_parent_id: Option<LabelId>,
-
-    #[DbField]
-    pub color: LabelColor,
-
-    #[DbField]
-    pub display: bool,
-
-    #[DbField]
-    pub expanded: bool,
-
-    #[DbField]
-    pub label_type: LabelType,
-
-    #[DbField]
-    pub name: String,
-
-    #[DbField]
-    pub notify: bool,
-
-    #[DbField]
-    pub display_order: u32,
-
-    #[DbField]
-    pub path: Option<String>,
-
-    #[DbField]
-    pub sticky: bool,
-
-    #[DbField]
+    pub label: Label,
     pub total_msg: u64,
-
-    #[DbField]
     pub unread_msg: u64,
-
-    #[DbField]
     pub total_conv: u64,
-
-    #[DbField]
     pub unread_conv: u64,
 }
 
@@ -241,48 +192,37 @@ impl LabelWithCounters {
         Ok(values)
     }
 
-    pub fn label(&self) -> Label {
-        let Self {
-            local_id,
-            remote_id,
-            local_parent_id,
-            remote_parent_id,
-            color,
-            display,
-            expanded,
-            label_type,
-            name,
-            notify,
-            display_order,
-            path,
-            sticky,
-            total_msg: _,
-            unread_msg: _,
-            total_conv: _,
-            unread_conv: _,
-        } = self.clone();
-
-        Label {
-            local_id,
-            remote_id,
-            local_parent_id,
-            remote_parent_id,
-            color,
-            display,
-            expanded,
-            label_type,
-            name,
-            notify,
-            display_order,
-            path,
-            sticky,
-        }
-    }
-
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(LabelWithCountersWatcher { sender }))
             .await
+    }
+}
+
+impl DbRecord for LabelWithCounters {
+    fn field_values(&self) -> impl Iterator<Item = &dyn ToSql> + '_ {
+        unimplemented!("this model is read-only");
+
+        #[allow(unused, reason = "false-positive")]
+        [].into_iter()
+    }
+
+    fn from_row(row: &Row<'_>) -> Result<Self, ConversionError> {
+        Ok(Self {
+            label: Label::from_row(row)?,
+            total_msg: row.get("total_msg")?,
+            unread_msg: row.get("unread_msg")?,
+            total_conv: row.get("total_conv")?,
+            unread_conv: row.get("unread_conv")?,
+        })
+    }
+}
+
+impl Deref for LabelWithCounters {
+    type Target = Label;
+
+    fn deref(&self) -> &Self::Target {
+        &self.label
     }
 }
 
