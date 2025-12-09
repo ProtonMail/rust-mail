@@ -34,7 +34,7 @@
 //! types used for events. These are not saved in the database, and so do not
 //! have a related model, and their data types are not placed into this module
 //! as they are not related to modelling of persistent data against storage.
-//! Hence event data types are placed into the [`events`](crate::events) module.
+//! Hence event data types are placed into the [`events`](crate::user_context::event_loop::events) module.
 //!
 
 mod account_details;

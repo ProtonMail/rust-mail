@@ -5,6 +5,9 @@ use proton_action_queue::action::{
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::actions::event_poll::ActionEventLoopError;
 use proton_core_common::datatypes::Refresh;
+use proton_core_common::event_loop::event_source::CoreEventSource;
+use proton_event_loop::MAX_ERROR_RETRIES;
+use proton_event_loop::v6::EventSource;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use std::sync::Weak;
@@ -70,8 +73,31 @@ impl Handler for ActionRefreshHandler {
             .upgrade()
             .ok_or(ActionEventLoopError::LostContext)?;
 
-        ctx.user_context().on_refresh_impl(action.refresh).await?;
-        ctx.on_refresh_impl(action.refresh).await?;
+        let mut cache = <CoreEventSource as EventSource>::Cache::default();
+
+        let mut num_attempts = 0;
+        tracing::info!("Refreshing core");
+        while let Err(e) = ctx
+            .user_context()
+            .on_refresh_impl(action.refresh, &mut cache)
+            .await
+        {
+            num_attempts += 1;
+            tracing::error!("Error refreshing core (attempt={num_attempts}): {e}");
+            if !e.is_retryable() || num_attempts == MAX_ERROR_RETRIES {
+                return Err(e.into());
+            }
+        }
+
+        tracing::info!("Refreshing mail");
+        let mut num_attempts = 0;
+        while let Err(e) = ctx.on_refresh_impl(action.refresh).await {
+            num_attempts += 1;
+            tracing::error!("Error refreshing mail (attempt={num_attempts}): {e}");
+            if !e.is_retryable() || num_attempts == MAX_ERROR_RETRIES {
+                return Err(e.into());
+            }
+        }
 
         Ok(())
     }

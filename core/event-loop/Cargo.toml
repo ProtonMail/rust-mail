@@ -12,13 +12,12 @@ serde_json = { workspace = true }
 serde_with = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-indexmap = { workspace = true }
-tokio = { workspace = true }
 slotmap = { workspace = true }
 topological-sort = { workspace = true }
 
 [dev-dependencies]
 mockall = { workspace = true }
+tokio = { workspace = true }
 
 [features]
 default = []

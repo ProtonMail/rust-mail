@@ -340,41 +340,6 @@ CoreEvent {
             },
         ],
     ),
-    contact_emails: Some(
-        [
-            ContactEmailEvent {
-                id: ContactEmailId(
-                    "sadfaACXDmTaBub14w==",
-                ),
-                action: Create,
-                contact_email: Some(
-                    ContactEmail {
-                        id: ContactEmailId(
-                            "aefew4323jFv0BhSMw==",
-                        ),
-                        contact_id: ContactId(
-                            "a29olIjFv0rnXxBhSMw==",
-                        ),
-                        canonical_email: fXXXXXXX@XXXXXXXXXXXXXXXX,
-                        contact_type: [
-                            "work",
-                        ],
-                        defaults: Default,
-                        email: fXXXXXXX@XXXXXXXXXXXXXXXX,
-                        is_proton: true,
-                        label_ids: [
-                            LabelId(
-                                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
-                            ),
-                        ],
-                        last_used_time: 0,
-                        name: "test1",
-                        order: 1,
-                    },
-                ),
-            },
-        ],
-    ),
     refresh: 0,
     has_more: false,
 }

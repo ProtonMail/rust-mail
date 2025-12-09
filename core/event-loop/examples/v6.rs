@@ -1,9 +1,9 @@
 #![allow(unused_variables)]
 
-use proton_event_loop::v6::{EventSource, EventSourceDependencyList, EventSubscriber};
-use proton_event_loop::{
-    EventId, EventProvider, EventProviderResult, RawEvent, SubscriberResult, store::EventStore,
+use proton_event_loop::v6::{
+    EventSource, EventSourceDependencyList, EventSubscriber, EventSubscriberResult,
 };
+use proton_event_loop::{EventId, EventProvider, EventProviderResult, RawEvent, store::EventStore};
 use serde::Deserialize;
 struct CoreEventSource;
 
@@ -60,10 +60,14 @@ impl EventSubscriber<MailEventSource> for MailSubscriber {
         "mail_subscriber"
     }
 
-    async fn on_event(&self, event: &MailEvent, cache: &mut ()) -> SubscriberResult<()> {
+    async fn on_event(&self, event: &MailEvent, cache: &mut ()) -> EventSubscriberResult<()> {
         todo!()
     }
-    async fn on_refresh<'a>(&self, _: Option<&'a MailEvent>, (): &mut ()) -> SubscriberResult<()> {
+    async fn on_refresh<'a>(
+        &self,
+        _: Option<&'a MailEvent>,
+        (): &mut (),
+    ) -> EventSubscriberResult<()> {
         todo!()
     }
 }

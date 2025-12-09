@@ -148,7 +148,7 @@ async fn event_fetches_missing_dependencies() {
         has_more: false,
     };
 
-    user_context.apply_event(event.into()).await.unwrap();
+    user_context.apply_event(event).await.unwrap();
     let tether = user_context.user_stash().connection().await.unwrap();
 
     // Address, labels and label counters should have been created.

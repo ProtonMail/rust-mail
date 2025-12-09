@@ -4,7 +4,10 @@ use crate::{
     CoreContextError,
     models::{Contact, ContactEmail},
 };
-use proton_core_api::{services::proton::ContactId, session::Session};
+use proton_core_api::{
+    services::proton::{ContactEmail as ApiContactEmail, ContactId},
+    session::Session,
+};
 use stash::stash::{RunTransaction, Tether};
 use stash::{orm::Model, params};
 
@@ -42,6 +45,15 @@ impl ContactsDependencyFetcher {
             self.check_contact_id(contact_id, tether).await?;
         }
         Ok(())
+    }
+
+    pub async fn check_api_contact_email(
+        &mut self,
+        contact_email: &ApiContactEmail,
+        tether: &Tether,
+    ) -> Result<(), CoreContextError> {
+        self.check_contact_id(&contact_email.contact_id, tether)
+            .await
     }
 
     async fn check_contact_id(

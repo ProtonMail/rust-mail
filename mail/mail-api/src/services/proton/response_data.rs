@@ -25,7 +25,9 @@
 
 use crate::services::proton::common::{AttachmentId, ConversationId, ExternalId, MessageId};
 use proton_core_api::services::proton::common::ApiErrorInfo;
-use proton_core_api::services::proton::{Action, EventId, LabelEvent, PrivateEmail, PrivateString};
+use proton_core_api::services::proton::{
+    Action, CoreEvent, EventId, LabelEvent, PrivateEmail, PrivateString,
+};
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
@@ -584,6 +586,54 @@ pub struct MailEvent {
     #[serde(rename = "More")]
     #[serde_as(as = "BoolFromInt")]
     pub has_more: bool,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct MailEventV5 {
+    #[serde(flatten)]
+    pub core: CoreEvent,
+    pub labels: Option<Vec<LabelEvent>>,
+
+    pub conversation_counts: Option<Vec<ConversationCount>>,
+
+    pub conversations: Option<Vec<ConversationEvent>>,
+
+    pub incoming_defaults: Option<Vec<IncomingDefaultEvent>>,
+
+    pub mail_settings: Option<MailSettings>,
+
+    pub message_counts: Option<Vec<MessageCount>>,
+
+    pub messages: Option<Vec<MessageEvent>>,
+}
+
+impl From<MailEvent> for MailEventV5 {
+    fn from(m: MailEvent) -> Self {
+        Self {
+            core: CoreEvent {
+                event_id: m.event_id,
+                addresses: None,
+                labels: None,
+                product_used_space: None,
+                used_space: None,
+                user: None,
+                user_settings: None,
+                contacts: None,
+                refresh: m.refresh,
+                has_more: m.has_more,
+            },
+            labels: m.labels,
+            conversation_counts: m.conversation_counts,
+            conversations: m.conversations,
+            incoming_defaults: m.incoming_defaults,
+            mail_settings: m.mail_settings,
+            message_counts: m.message_counts,
+            messages: m.messages,
+        }
+    }
 }
 
 /// TODO: Document this struct.

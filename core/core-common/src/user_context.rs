@@ -9,11 +9,10 @@ use crate::db::migrations::{migrate_core_db, verify_core_db};
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
 use crate::services::{AddressService, FeatureFlagsService};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
-pub use event_loop::subscriber::CoreEventLoopContext;
+pub use event_loop::CoreEventLoopContext;
 use proton_action_queue::queue::{self, Queue, QueuedResult};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Session;
-use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use services::{PaymentsService, UserFeatureFlagsService};
@@ -29,6 +28,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
+use crate::services::event_loop_service::EventManager;
 use crate::services::global_feature_flags::MAIL_ET_REBASE_FEATURE_KEY;
 use crate::services::user_issue_reporter_service::UserIssueReporterService;
 use anyhow::anyhow;
@@ -177,17 +177,10 @@ impl UserContext {
                     builder = builder
                         .with_cyclic_service(UserFeatureFlagsService::new)
                         .with_cyclic_service(PaymentsService::new)
-                        .with_cyclic_service(move |weak_ref: Weak<UserContext>| {
-                            let event_ctx = CoreEventLoopContext::from(weak_ref);
-                            let event_loop = EventPoll::new(
-                                move |fut| {
-                                    context_cloned
-                                        .task_service()
-                                        .task_service()
-                                        .spawn_cancellable(cancellation_token_cloned, fut);
-                                },
-                                event_ctx.boxed(),
-                                event_ctx.boxed(),
+                        .with_cyclic_service(move |_| {
+                            let event_loop = EventManager::new(
+                                context_cloned.task_service().task_service(),
+                                cancellation_token_cloned,
                             );
                             EventLoopService::new(event_loop)
                         })

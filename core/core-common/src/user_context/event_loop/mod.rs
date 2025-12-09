@@ -1,19 +1,25 @@
 use crate::UserContext;
+use anyhow::Context;
 use proton_action_queue::action::{Action, Metadata, Priority};
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::QueuedError;
 use proton_action_queue::{action::ActionId, queue::ActionError};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tracing::error;
 
-pub mod account_subscriber;
-pub mod subscriber;
+pub mod account_event_subscriber;
+pub mod event_provider;
+pub mod event_source;
+pub mod event_store;
+pub mod event_subscriber;
+pub mod events;
 
 // Re-export common macros for easier access
 use super::services::EventLoopService;
 use crate::actions::event_poll::EventPoll;
 use crate::app_events::OnForceEventPollEvent;
-pub use subscriber::macros::*;
+pub use event_subscriber::macros::*;
 
 /// Defines how the event loop should be polled
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -149,5 +155,26 @@ impl UserContext {
             .await?;
         *last_action_id = Some(output.id);
         Ok(output.id)
+    }
+}
+
+/// Event loop context for core events
+#[derive(Clone)]
+pub struct CoreEventLoopContext(Weak<UserContext>);
+
+impl CoreEventLoopContext {
+    pub fn inner(&self) -> Result<Arc<UserContext>, anyhow::Error> {
+        self.0.upgrade().context("UserContext no longer alive")
+    }
+
+    #[must_use]
+    pub fn boxed(&self) -> Box<Self> {
+        Box::new(self.clone())
+    }
+}
+
+impl From<Weak<UserContext>> for CoreEventLoopContext {
+    fn from(value: Weak<UserContext>) -> Self {
+        Self(value)
     }
 }

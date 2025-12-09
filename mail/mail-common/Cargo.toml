@@ -24,6 +24,7 @@ sql = [
   "proton-mail-api/mocks",
 ]
 proton_mail_error_log = []
+events-v6 = ["proton-core-common/events-v6"]
 
 [dependencies]
 anyhow = { workspace = true }

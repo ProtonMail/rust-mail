@@ -1133,8 +1133,6 @@ pub struct CoreEvent {
 
     pub contacts: Option<Vec<ContactEvent>>,
 
-    pub contact_emails: Option<Vec<ContactEmailEvent>>,
-
     /// Indicates whether to refresh.
     pub refresh: u8,
 

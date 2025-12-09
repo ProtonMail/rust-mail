@@ -2,7 +2,7 @@ use crate::Origin;
 use crate::datatypes::ApiConfig;
 use crate::db::account::{CoreAccount, CoreSession};
 use crate::event_loop::EventPollMode;
-use crate::events::CoreEvent;
+use crate::event_loop::event_source::CoreEventSource;
 use crate::models::ModelExtension;
 use crate::services::global_feature_flags::FeatureFlagsBackgroundTask;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
@@ -17,7 +17,7 @@ use proton_core_api::exports::RetryPolicy;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{AppVersion, Env, Server};
 use proton_core_api::session::{Endpoint, EnvId};
-use proton_event_loop::subscriber::SubscriberResult;
+use proton_event_loop::v6::{EventSource, EventSubscriberResult};
 use proton_issue_reporter_service::{IssueReporter, NoopIssueReporter};
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
@@ -314,14 +314,21 @@ impl TestContext {
 
 #[allow(async_fn_in_trait)]
 pub trait UserContextTestExtension {
-    async fn apply_event(self: &Arc<Self>, event: CoreEvent) -> SubscriberResult<()>;
+    async fn apply_event(
+        self: &Arc<Self>,
+        event: &<CoreEventSource as EventSource>::Event,
+    ) -> EventSubscriberResult<()>;
 }
 
 impl UserContextTestExtension for UserContext {
-    async fn apply_event(self: &Arc<Self>, event: CoreEvent) -> SubscriberResult<()> {
-        use proton_event_loop::Subscriber;
+    async fn apply_event(
+        self: &Arc<Self>,
+        event: &<CoreEventSource as EventSource>::Event,
+    ) -> EventSubscriberResult<()> {
+        use proton_event_loop::v6::EventSubscriber;
         let subscriber = self.event_subscriber();
-        subscriber.on_events(&mut [event]).await
+        let mut cache = <CoreEventSource as EventSource>::Cache::default();
+        subscriber.on_event(event, &mut cache).await
     }
 }
 

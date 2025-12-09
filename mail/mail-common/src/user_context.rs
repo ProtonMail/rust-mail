@@ -3,7 +3,7 @@
 mod action_queue;
 mod attachment_cache;
 mod builder;
-mod events;
+pub mod events;
 mod images;
 mod initialization;
 
@@ -11,17 +11,18 @@ use crate::actions::PREFETCH_ROLLBACK_ACTION_GROUP;
 use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
 use crate::db::online_migrations;
 use crate::draft::attachments::DraftStagingAreaCleaner;
-use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchService};
 use crate::rsvp::RsvpService;
 use crate::upsell_eligibility_watcher::UpsellEligibilityWatcher;
+use crate::user_context::events::event_source::MailEventSourceV5;
 use crate::{AppError, ImageLoader, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use attachment_cache::AttachmentCacheState;
 use builder::MailUserContextBuilder;
-use events::subscriber::MailEventSubscriber;
+use events::event_subscriber::MailEventV5Subscriber;
 use initialization::InitializationMediator;
+use parking_lot::Mutex;
 use proton_account_api::password::PasswordFlow;
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
@@ -37,17 +38,18 @@ use proton_core_common::datatypes::{
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, PaidSubscription, Role, User, UserSettings};
 use proton_core_common::services::{
-    EventPollConfigService, NetworkMonitorService, UserIssueReporterService,
+    EventLoopService, EventPollConfigService, NetworkMonitorService, UserIssueReporterService,
 };
 use proton_core_common::{
-    ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin,
-    RebasableQueue, UserContext, services::UserMetricService,
+    ContactError, Context as CoreContext, CoreContextError, CoreEventLoopContext, KeyHandlingError,
+    Origin, RebasableQueue, UserContext, services::UserMetricService,
 };
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
-use proton_event_loop::Subscriber;
+use proton_event_loop::EventLoopError;
+use proton_event_loop::v6::{EventSubscriber, EventSubscriberId};
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use proton_task_service::Spawner;
 use stash::orm::Model;
@@ -171,6 +173,88 @@ impl QueuesService {
     }
 }
 
+#[derive(Default)]
+struct EventSubscriberList {
+    subscribers: Mutex<Vec<EventSubscriberId<MailEventSourceV5>>>,
+}
+
+impl EventSubscriberList {
+    pub async fn register(&self, ctx: &MailUserContext) -> Result<(), MailContextError> {
+        //TODO: unsubscribe
+        let event_service = ctx.user_context().get_service::<EventLoopService>();
+        let mail_subscriber = ctx.event_subscriber();
+        let event_poll = event_service.event_poll();
+
+        let mut subscriber_list = Vec::new();
+        #[cfg(not(feature = "events-v6"))]
+        {
+            use crate::user_context::events::event_subscribers_compat::*;
+            let even_ctx: CoreEventLoopContext = Arc::downgrade(&ctx.user_context).into();
+            match event_poll
+                .add::<MailEventSourceV5>(Box::new(even_ctx.clone()), Box::new(even_ctx))
+                .await
+            {
+                // Due to current context management, it's possible this can be registered
+                // more than once.
+                Ok(()) | Err(EventLoopError::DuplicateEventSource(_)) => {}
+                Err(e) => return Err(e.into()),
+            }
+            let core_subscriber = event_poll
+                .subscribe(MailEventV5SubscriberCompat(
+                    ctx.user_context.event_subscriber(),
+                ))
+                .await?
+                .ok_or_else(|| {
+                    MailContextError::Other(anyhow!("Failed to register core subscriber"))
+                })?;
+            let account_subscriber = event_poll
+                .subscribe(MailEventV5SubscriberCompat(
+                    ctx.user_context.account_event_subscriber(),
+                ))
+                .await?
+                .ok_or_else(|| {
+                    MailContextError::Other(anyhow!("Failed to register account subscriber"))
+                })?;
+            subscriber_list.push(core_subscriber);
+            subscriber_list.push(account_subscriber);
+        }
+
+        #[cfg(feature = "events-v6")]
+        {
+            todo!("Setup v6")
+        }
+        let mail_subscriber = event_poll
+            .subscribe(mail_subscriber)
+            .await?
+            .ok_or_else(|| {
+                MailContextError::Other(anyhow!("Failed to register mail subscriber"))
+            })?;
+
+        subscriber_list.push(mail_subscriber);
+
+        let mut subscribers = self.subscribers.lock();
+        *subscribers = subscriber_list;
+        Ok(())
+    }
+
+    fn clear_subscribers(&self, ctx: &MailUserContext) {
+        let mut subscribers = self.subscribers.lock();
+        let subscriber_ids = std::mem::take(&mut *subscribers);
+        drop(subscribers);
+
+        let core_ctx = ctx.user_context.clone();
+        ctx.spawn(async move {
+            let event_service = core_ctx.event_loop_service();
+            let event_poll = event_service.event_poll();
+            for id in subscriber_ids {
+                // It's safe to ignore errors here since the only failure possible
+                // for unsubscribe is that the actor is dead.
+                let _ = event_poll.unsubscribe(id).await;
+            }
+        });
+    }
+}
+
 pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
@@ -198,6 +282,7 @@ impl MailUserContext {
             let mut builder =
                 MailUserContextBuilder::new()
                     .with_service(AttachmentCacheState::new())
+                    .with_service(EventSubscriberList::default())
                     .with_cyclic_service(ImageLoader::new);
 
             builder = match origin {
@@ -761,8 +846,8 @@ impl MailUserContext {
         self.user_context.connection_status()
     }
 
-    pub fn event_subscriber(&self) -> impl Subscriber<MailEvent> + 'static {
-        MailEventSubscriber::new(Weak::clone(&self.this))
+    pub fn event_subscriber(&self) -> impl EventSubscriber<MailEventSourceV5> + 'static {
+        MailEventV5Subscriber::new(Weak::clone(&self.this))
     }
 
     pub async fn queue_prefetch_jobs(
@@ -868,6 +953,8 @@ impl Drop for MailUserContext {
         let user_id = self.user_id();
         let session_id = self.session_id();
         tracing::info!(?user_id, ?session_id, "Dropping MailUserContext");
+        self.get_service::<EventSubscriberList>()
+            .clear_subscribers(self);
     }
 }
 

@@ -4,22 +4,15 @@ use std::{
 };
 
 use crate::{
-    UserContext,
+    CoreContextError, UserContext,
     datatypes::Refresh,
-    events::{Action, AddressEvent, ContactEvent, CoreEvent},
     models::{Address, Contact, Label, ModelExtension, User},
 };
-use anyhow::{Context, anyhow, bail};
+use anyhow::Context;
 use async_trait::async_trait;
-use proton_core_api::services::proton::{EventId, ProtonCore, UserId};
-use proton_event_loop::{
-    EventLoopError, EventProviderError, RawEvent,
-    provider::EventProvider,
-    store::EventStore,
-    subscriber::{Subscriber, SubscriberError},
-};
+use proton_core_api::services::proton::UserId;
+use proton_event_loop::EventLoopError;
 use stash::{
-    exports::SqliteError,
     orm::Model,
     params,
     stash::{Bond, StashError},
@@ -33,13 +26,7 @@ pub mod macros {
             match $name.await {
                 Ok(Ok(value)) => value,
 
-                Ok(Err(err)) => {
-                    return Err(anyhow::anyhow!(
-                        "Failed to download remote {}: `{err}`",
-                        $description
-                    )
-                    .into());
-                }
+                Ok(Err(err)) => return Err(err.into()),
 
                 Err(err) => {
                     return if err.is_cancelled() {
@@ -49,190 +36,35 @@ pub mod macros {
                         )
                         .into())
                     } else {
-                        Err(
-                            anyhow::anyhow!("Failed to download remote {}: `{err}`", $description)
-                                .into(),
+                        Err(anyhow::anyhow!(
+                            "Failed to join download remote {}: `{err}`",
+                            $description
                         )
+                        .into())
                     };
                 }
             }
         }};
     }
 
-    #[macro_export]
-    macro_rules! try_refresh {
-        ($fn_name:tt, $ctx:expr) => {{
-            let max_attempts = 2;
-            let mut attempts = 0;
-
-            while let Err(e) = $fn_name($ctx).await.inspect_err(|e| {
-                if e.is_network_failure() {
-                    return;
-                }
-
-                $ctx.issue_reporter_service().report(
-                    IssueLevel::Critical,
-                    format!("Failed to apply refresh event in {}", stringify!($fn_name)),
-                    issue_report_keys_from_error(e.as_ref()),
-                );
-            }) {
-                if attempts >= max_attempts {
-                    return Err(e);
-                }
-                attempts += 1;
-                tracing::warn!("Refresh event attempt {attempts} failed: `{e}`");
-            }
-        }};
-    }
-
     pub use join_task;
-    pub use try_refresh;
 }
 
 // Re-export macros for easier access
-use crate::event_loop::account_subscriber::AccountEventSubscriber;
-use crate::events::LabelEvent;
-use crate::models::ModelIdExtension;
+use crate::models::{LabelError, ModelIdExtension};
 pub use macros::*;
 
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 
+use crate::event_loop::account_event_subscriber::AccountEventSubscriber;
+use crate::event_loop::event_source::{CoreEventCache, CoreEventSource};
+use crate::event_loop::events::LabelEvent;
+use crate::user_context::event_loop::events::{Action, AddressEvent, ContactEvent, CoreEvent};
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
-use proton_event_loop::provider::EventProviderResult;
-use proton_event_loop::subscriber::SubscriberResult;
-
-const CORE_EVENT_TYPE_ID: &str = "proton-core-event";
-
-/// Event loop context for core events
-#[derive(Clone)]
-pub struct CoreEventLoopContext(Weak<UserContext>);
-
-impl CoreEventLoopContext {
-    pub fn inner(&self) -> Result<Arc<UserContext>, anyhow::Error> {
-        match self.0.upgrade() {
-            Some(ctx) => Ok(ctx),
-            None => bail!("UserContext no longer alive"),
-        }
-    }
-
-    #[must_use]
-    pub fn boxed(&self) -> Box<Self> {
-        Box::new(self.clone())
-    }
-}
-
-impl From<Weak<UserContext>> for CoreEventLoopContext {
-    fn from(value: Weak<UserContext>) -> Self {
-        Self(value)
-    }
-}
-
-#[async_trait]
-impl EventStore for CoreEventLoopContext {
-    async fn load(&self) -> anyhow::Result<Option<proton_event_loop::EventId>> {
-        let ctx = self.inner()?;
-        let tether = ctx.stash().connection().await?;
-        match tether
-            .query_value::<_, EventId>(
-                "SELECT value FROM event_id_store WHERE id = ?1",
-                params![CORE_EVENT_TYPE_ID],
-            )
-            .await
-        {
-            Ok(value) => Ok(Some(value.into_inner().into())),
-            Err(e) => {
-                if matches!(
-                    e,
-                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                ) {
-                    Ok(None)
-                } else {
-                    error!("Failed to load core event id from db:{e:?}");
-                    Err(anyhow!("Failed to load core event id {e}"))
-                }
-            }
-        }
-    }
-
-    async fn store(&self, id: proton_event_loop::EventId) -> anyhow::Result<()> {
-        let ctx = self.inner()?;
-        ctx.stash()
-            .connection()
-            .await?
-            .tx(async |tx| {
-                tx.execute(
-                    "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
-                    params![CORE_EVENT_TYPE_ID, id.into_inner()],
-                )
-                .await?;
-
-                Ok(())
-            })
-            .await
-            .map_err(|e: StashError| {
-                error!("Failed to store core event id in db:{e:?}");
-                anyhow!("Failed to store core event id {e}")
-            })
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum CoreEventProviderError {
-    #[error(transparent)]
-    Api(#[from] ApiServiceError),
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
-}
-
-impl EventProviderError for CoreEventProviderError {
-    fn is_network_failure(&self) -> bool {
-        match self {
-            CoreEventProviderError::Api(e) => e.is_network_failure(),
-            CoreEventProviderError::Other(_) => false,
-        }
-    }
-}
-
-#[async_trait]
-impl EventProvider for CoreEventLoopContext {
-    async fn get_latest_event_id(&self) -> EventProviderResult<proton_event_loop::EventId> {
-        async {
-            let ctx = self.inner()?;
-            Ok::<_, CoreEventProviderError>(
-                ctx.session()
-                    .get_events_latest()
-                    .await?
-                    .event_id
-                    .into_inner()
-                    .into(),
-            )
-        }
-        .await
-        .map_err(|e| -> Box<dyn EventProviderError> { Box::new(e) })
-    }
-
-    async fn get_event(
-        &self,
-        event_id: &proton_event_loop::EventId,
-    ) -> EventProviderResult<RawEvent> {
-        async {
-            let ctx = self.inner()?;
-            let json_string = ctx
-                .session()
-                .get_event(
-                    event_id.clone().into_inner().into(),
-                    proton_core_api::services::proton::GetEventOptions::all(),
-                )
-                .await?;
-
-            Ok::<_, CoreEventProviderError>(RawEvent::from_json(json_string)?)
-        }
-        .await
-        .map_err(|e| -> Box<dyn EventProviderError> { Box::new(e) })
-    }
-}
+use proton_event_loop::v6::{EventSource, EventSubscriberResult};
+use proton_event_loop::v6::{EventSubscriber, EventSubscriberError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreEventSubscriberError {
@@ -244,11 +76,38 @@ pub enum CoreEventSubscriberError {
     Other(#[from] anyhow::Error),
 }
 
-impl SubscriberError for CoreEventSubscriberError {
+impl From<CoreContextError> for CoreEventSubscriberError {
+    fn from(err: CoreContextError) -> Self {
+        match err {
+            CoreContextError::Api(e) => Self::Api(e),
+            CoreContextError::Stash(e) => Self::Stash(e),
+            e => CoreEventSubscriberError::Other(e.into()),
+        }
+    }
+}
+
+impl From<LabelError> for CoreEventSubscriberError {
+    fn from(err: LabelError) -> Self {
+        match err {
+            LabelError::API(e) => Self::Api(e),
+            LabelError::Stash(e) => Self::Stash(e),
+            err => CoreEventSubscriberError::Other(err.into()),
+        }
+    }
+}
+
+impl EventSubscriberError for CoreEventSubscriberError {
     fn is_network_failure(&self) -> bool {
         match self {
             CoreEventSubscriberError::Api(e) => e.is_network_failure(),
-            _ => false,
+            CoreEventSubscriberError::Stash(_) | CoreEventSubscriberError::Other(_) => false,
+        }
+    }
+
+    fn is_retryable(&self) -> bool {
+        match self {
+            CoreEventSubscriberError::Api(e) => e.is_network_failure() || e.is_server_failure(),
+            CoreEventSubscriberError::Stash(_) | CoreEventSubscriberError::Other(_) => false,
         }
     }
 }
@@ -271,20 +130,22 @@ impl From<Weak<UserContext>> for CoreEventSubscriber {
 }
 
 #[async_trait]
-impl Subscriber<CoreEvent> for CoreEventSubscriber {
+impl EventSubscriber<CoreEventSource> for CoreEventSubscriber {
     fn name(&self) -> &'static str {
-        "proton-core-event-subscriber"
+        "core-event-subscriber"
     }
 
-    #[tracing::instrument(skip(self, events))]
-    async fn on_events(&self, events: &mut [CoreEvent]) -> SubscriberResult<()> {
+    #[tracing::instrument(skip_all)]
+    async fn on_event(
+        &self,
+        event: &<CoreEventSource as EventSource>::Event,
+        _: &mut CoreEventCache,
+    ) -> EventSubscriberResult<()> {
         async {
             let Some(ctx) = self.0.upgrade() else {
                 warn!("User context is no longer alive");
                 return Ok(());
             };
-            debug!("Handling {} events", events.len());
-
             let user_id = ctx.user_id().clone();
             let stash = ctx.stash().clone();
             let mut conn = stash.connection().await?;
@@ -292,9 +153,7 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
             let mut rebase_change_set = RebaseChangeSet::default();
 
             conn.tx::<_, _, StashError>(async |tx| {
-                for event in events.iter_mut() {
-                    handle_event(event, tx, &user_id, &mut rebase_change_set).await?;
-                }
+                handle_event(event, tx, &user_id, &mut rebase_change_set).await?;
 
                 ctx.rebaseable_queue()
                     .await
@@ -316,29 +175,36 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
             .map_err(CoreEventSubscriberError::Other)
         }
         .await
-        .map_err(|e| -> Box<dyn SubscriberError> { Box::new(e) })
+        .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
     }
 
-    async fn on_refresh(&self, event: &CoreEvent) -> SubscriberResult<()> {
+    async fn on_refresh<'a>(
+        &self,
+        event: Option<&'a <CoreEventSource as EventSource>::Event>,
+        cache: &mut CoreEventCache,
+    ) -> EventSubscriberResult<()> {
         let Some(ctx) = self.0.upgrade() else {
             warn!("User context is no longer alive");
             return Ok(());
         };
 
-        ctx.on_refresh_impl(event.refresh).await
-    }
-
-    fn is_alive(&self) -> bool {
-        self.0.strong_count() > 0
+        ctx.on_refresh_impl(
+            event.map_or(Refresh::All, |event| event.refresh.into()),
+            cache,
+        )
+        .await
     }
 }
 
 async fn handle_event(
-    event: &mut CoreEvent,
+    event: &<CoreEventSource as EventSource>::Event,
     tx: &Bond<'_>,
     user_id: &UserId,
     rebase_change_set: &mut RebaseChangeSet,
 ) -> Result<(), StashError> {
+    // To support current v5 model, we make a clone of the data here and cast it back to the
+    // crate's data type. In v6 this can be performed after the data is fetched from the server.
+    let mut event: CoreEvent = event.clone().into();
     if let Some(user) = event.user.as_mut() {
         debug!("Handling user event");
         // Update user:
@@ -394,7 +260,11 @@ async fn handle_event(
 }
 
 impl UserContext {
-    pub async fn on_refresh_impl(&self, refresh: Refresh) -> SubscriberResult<()> {
+    pub async fn on_refresh_impl(
+        &self,
+        refresh: Refresh,
+        cache: &mut CoreEventCache,
+    ) -> EventSubscriberResult<()> {
         info!("Handling refresh event: {refresh:?}");
 
         match refresh {
@@ -402,13 +272,31 @@ impl UserContext {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
             }
             Refresh::Contacts => {
-                try_refresh!(refresh_contacts, self);
+                if let Err(e) = refresh_contacts(self).await {
+                    if !e.is_retryable() {
+                        self.issue_reporter_service().report(
+                            IssueLevel::Critical,
+                            "Failed to apply refresh contacts".into(),
+                            issue_report_keys_from_error(e.as_ref()),
+                        );
+                    }
+                    return Err(e);
+                }
             }
             Refresh::Mail => {
                 // Mail refresh is handled by the mail context
             }
             Refresh::All => {
-                try_refresh!(refresh_core, self);
+                if let Err(e) = refresh_core(self, cache).await {
+                    if !e.is_retryable() {
+                        self.issue_reporter_service().report(
+                            IssueLevel::Critical,
+                            "Failed to apply refresh".into(),
+                            issue_report_keys_from_error(e.as_ref()),
+                        );
+                    }
+                    return Err(e);
+                }
             }
             Refresh::Unknown(other) => {
                 warn!("Unknown refresh event type: {other}");
@@ -432,16 +320,23 @@ impl UserContext {
     /// self.event_loop.register(core_subscribers).await?;
     /// ```
     ///
+    ///
+    #[cfg_attr(
+        not(feature = "events-v6"),
+        allow(clippy::unused_async, reason = "Temporary progression")
+    )]
     pub(crate) async fn register_subscribers(self: &Arc<Self>) -> Result<(), EventLoopError> {
-        let event_loop_service = self.event_loop_service();
+        #[cfg(feature = "events-v6")]
+        {
+            todo!("Setup v6 event source and subscriber");
+            let event_loop_service = self.event_loop_service();
 
-        let event_poll = event_loop_service.event_poll();
-        event_poll
-            .register(Box::new(self.event_subscriber()))
-            .await?;
-        event_poll
-            .register(Box::new(self.account_event_subscriber()))
-            .await?;
+            let event_poll = event_loop_service.event_poll();
+            event_poll.subscribe(self.event_subscriber()).await?;
+            event_poll
+                .subscribe(self.account_event_subscriber())
+                .await?;
+        }
 
         Ok(())
     }
@@ -459,18 +354,20 @@ impl UserContext {
     }
 
     #[must_use]
-    pub fn event_subscriber(self: &Arc<Self>) -> impl Subscriber<CoreEvent> + 'static {
+    pub fn event_subscriber(self: &Arc<Self>) -> impl EventSubscriber<CoreEventSource> + 'static {
         CoreEventSubscriber::from(Arc::downgrade(self))
     }
 
     #[must_use]
-    pub fn account_event_subscriber(self: &Arc<Self>) -> impl Subscriber<CoreEvent> + 'static {
+    pub fn account_event_subscriber(
+        self: &Arc<Self>,
+    ) -> impl EventSubscriber<CoreEventSource> + 'static {
         AccountEventSubscriber::from(Arc::downgrade(self))
     }
 }
 
 #[tracing::instrument(skip_all)]
-async fn refresh_core(ctx: &UserContext) -> SubscriberResult<()> {
+async fn refresh_core(ctx: &UserContext, _: &mut CoreEventCache) -> EventSubscriberResult<()> {
     async {
         let api = ctx.session().clone();
         let contacts = ctx.spawn(async move { Contact::sync(&api).await });
@@ -565,11 +462,11 @@ async fn refresh_core(ctx: &UserContext) -> SubscriberResult<()> {
         Ok::<_, CoreEventSubscriberError>(())
     }
     .await
-    .map_err(|e| -> Box<dyn SubscriberError> { Box::new(e) })
+    .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
 }
 
 #[tracing::instrument(skip_all)]
-async fn refresh_contacts(ctx: &UserContext) -> SubscriberResult<()> {
+async fn refresh_contacts(ctx: &UserContext) -> EventSubscriberResult<()> {
     async {
         let api = ctx.session().clone();
         let contacts = ctx.spawn(async move { Contact::sync(&api).await });
@@ -619,7 +516,7 @@ async fn refresh_contacts(ctx: &UserContext) -> SubscriberResult<()> {
         Ok::<_, CoreEventSubscriberError>(())
     }
     .await
-    .map_err(|e| -> Box<dyn SubscriberError> { Box::new(e) })
+    .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
 }
 
 async fn handle_address_event(

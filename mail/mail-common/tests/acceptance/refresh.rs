@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
-use proton_action_queue::queue::QueuedError;
+use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::services::proton::common::ApiErrorInfo;
+use proton_core_common::actions::event_poll::ActionEventLoopError;
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_core_common::test_utils::account::test_api_address;
 use proton_core_common::test_utils::addresses::MY_ADDRESS_ID;
 use proton_mail_api::services::proton::prelude::ViewMode;
+use proton_mail_common::actions::refresh::ActionRefresh;
 use proton_mail_common::models::{Conversation, DraftMetadata, Message};
 use proton_mail_common::test_utils::init::{DEFAULT_MAIL_SETTINGS, Params as TestParams};
 use proton_mail_common::test_utils::scroller::{
@@ -19,13 +21,13 @@ use velcro::hash_map;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate, Times};
 
-async fn refresh(ctx: &MailUserContext, refresh: Refresh) -> Result<(), anyhow::Error> {
+async fn refresh(ctx: &MailUserContext, refresh: Refresh) -> Result<(), Arc<anyhow::Error>> {
     ctx.refresh_action(refresh).await.unwrap();
     let result = ctx.execute_all_actions().await;
 
     match result {
         Ok(_) => Ok(()),
-        Err(QueuedError::Action(error, _id)) => Err(anyhow::anyhow!(error)),
+        Err(QueuedError::Action(error, _id)) => Err(error),
         _ => panic!("Unexpected message: {result:?}"),
     }
 }
@@ -152,15 +154,13 @@ async fn test_on_refresh_impl_contacts_network_error() {
     .await;
 
     // Test Refresh::Contacts with network error
-    let result = refresh(&user_ctx, Refresh::Contacts).await;
+    let error = refresh(&user_ctx, Refresh::Contacts).await.unwrap_err();
+    let err = error.as_action_error::<ActionRefresh>().unwrap();
 
-    // Should fail with SubscriberError
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .starts_with("Failed to download remote contacts")
-    );
+    assert!(matches!(
+        err,
+        ActionError::Action(ActionEventLoopError::Subscriber(_))
+    ));
 }
 
 #[tokio::test]

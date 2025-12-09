@@ -61,24 +61,21 @@
 //! - **FIFO Processing**: Subscribers are processed in the order they were registered
 //! - **Single Poll Loop**: One event poll can handle multiple event types efficiently
 //!
-mod actor;
-pub mod poll;
 pub mod provider;
 pub mod store;
-pub mod subscriber;
 pub mod v6;
 
 use std::fmt;
 // Re-export main types
-pub use actor::EventPoll;
 pub use provider::{EventProvider, EventProviderError, EventProviderResult};
-pub use subscriber::{Subscriber, SubscriberError, SubscriberResult};
 
 use anyhow::Error as AnyhowError;
 use serde::{Deserialize, Serialize};
 use serde_with::{BoolFromInt, serde_as};
 use std::fmt::{Debug, Formatter};
 use thiserror::Error;
+pub use v6::EventSubscriberError;
+pub use v6::EventSubscriberResult;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct EventId(String);
@@ -116,13 +113,13 @@ impl fmt::Display for EventId {
 #[derive(Debug, Error)]
 pub enum EventLoopError {
     #[error("Subscriber ({0}) failed to apply refresh event: {1}")]
-    Refresh(String, Box<dyn SubscriberError>),
+    Refresh(String, Box<dyn EventSubscriberError>),
     #[error("Failed to read/write from/to store: {0}")]
     Store(AnyhowError),
     #[error("Failed to retrieve event: {0}")]
     Provider(Box<dyn EventProviderError>),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
-    Subscriber(String, Box<dyn SubscriberError>),
+    Subscriber(String, Box<dyn EventSubscriberError>),
     #[error("Subscriber with `{0}` name already exists")]
     Register(&'static str),
     #[error("Failed to deserialize event: {0}")]
@@ -141,21 +138,6 @@ impl From<Box<dyn EventProviderError>> for EventLoopError {
     }
 }
 
-/// This represents an event returned by the API.
-pub trait Event: Clone + Debug + Eq + PartialEq + Send + Sync + 'static {
-    /// The API response type of the event.
-    type Response: Clone + Debug + for<'de> Deserialize<'de> + Eq + PartialEq + Send + Sync;
-
-    /// Get the event id of the event.
-    fn event_id(&self) -> EventId;
-
-    /// Check if the event has more data.
-    fn has_more(&self) -> bool;
-
-    /// Whether this was a refresh event.
-    fn is_refresh(&self) -> bool;
-}
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct RawEvent {
     meta: EventMetadata,
@@ -170,33 +152,11 @@ impl RawEvent {
         })
     }
 
-    pub fn deserialize<T: Event + From<<T as Event>::Response>>(&self) -> Result<T, AnyhowError> {
-        let event = T::from(serde_json::from_str(&self.raw)?);
-
-        Ok(event)
-    }
-
     pub fn deserialize_generic<'a, T: Deserialize<'a>>(&'a self) -> Result<T, serde_json::Error> {
         serde_json::from_str(&self.raw)
     }
 }
 impl RawEvent {
-    fn event_id(&self) -> EventId {
-        self.meta.event_id.clone().into_inner().into()
-    }
-
-    fn has_more(&self) -> bool {
-        self.meta.has_more
-    }
-
-    fn is_refresh(&self) -> bool {
-        self.meta.refresh != 0
-    }
-}
-
-impl Event for RawEvent {
-    type Response = String;
-
     fn event_id(&self) -> EventId {
         self.meta.event_id.clone().into_inner().into()
     }
@@ -221,3 +181,5 @@ struct EventMetadata {
     has_more: bool,
     refresh: u8,
 }
+
+pub const MAX_ERROR_RETRIES: usize = 3;
