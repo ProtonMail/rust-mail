@@ -114,6 +114,16 @@ impl DecryptedMessage {
     pub fn failed_to_decrypt(&self) -> bool {
         self.body.failed_to_decrypt()
     }
+
+    #[must_use]
+    pub fn raw_body(&self) -> String {
+        self.body.body.clone()
+    }
+
+    #[must_use]
+    pub fn raw_headers(&self) -> String {
+        self.body.metadata.header.clone()
+    }
 }
 
 #[uniffi_export]
