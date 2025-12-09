@@ -1,22 +1,18 @@
-use std::future::Future;
+mod conversations;
+mod messages;
+mod search;
 
-use proton_core_api::services::proton::LabelId;
-use proton_core_common::datatypes::LocalLabelId;
-
+pub use self::search::*;
+use super::MailPaginatorJoinHandle;
+use crate::datatypes::labels::ScrollOrderDir;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, labels::ScrollOrderField},
     models::ScrollData,
 };
-
-use super::MailPaginatorJoinHandle;
-
-mod remote_conversation_scroller_source;
-mod remote_messace_scroller_source;
-mod search_scroller_source;
-
-use crate::datatypes::labels::ScrollOrderDir;
-pub use search_scroller_source::SearchScrollerSource;
+use proton_core_api::services::proton::LabelId;
+use proton_core_common::datatypes::LocalLabelId;
+use std::future::Future;
 
 pub trait RemoteSource: ScrollData + Send + Sync {
     #[allow(clippy::too_many_arguments)]

@@ -1,10 +1,10 @@
 mod alternative_labels;
-mod mail_scroller_source;
-mod mail_scroller_watcher;
+mod source;
+mod watcher;
 
-pub use self::alternative_labels::AlternativeLabels;
-pub use self::mail_scroller_source::*;
-pub use self::mail_scroller_watcher::*;
+pub use self::alternative_labels::*;
+pub use self::source::*;
+pub use self::watcher::*;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::datatypes::{ContextualConversation, IncludeSwitch, ReadFilter, SearchOptions};
 use crate::mail_cursor::MailCursor;
