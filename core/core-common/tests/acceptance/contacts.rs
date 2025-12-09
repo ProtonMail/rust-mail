@@ -9,7 +9,7 @@ use proton_core_api::services::proton::{ContactEmailId, ContactId, ContactUID, L
 use proton_core_common::UserContext;
 use proton_core_common::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
 use proton_core_common::event_loop::subscriber::CoreEventSubscriber;
-use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent, CoreEvent};
+use proton_core_common::events::{Action, ContactEvent, CoreEvent};
 use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelIdExtension};
 use proton_core_common::test_utils::account::unlocked_user_key;
 use proton_core_common::test_utils::test_context::TestContext;
@@ -182,21 +182,14 @@ async fn test_sync_and_delete_event_contact() {
     )
     .await;
 
-    let email_to_remove = test_contacts_email.first().unwrap().clone();
     let contact_to_remove = test_contacts.last().unwrap();
 
-    let delete_event = ContactEmailEvent {
-        remote_id: email_to_remove.id.clone(),
-        action: Action::Delete,
-        contact_email: None,
-    };
     let delete_contact_event = ContactEvent {
         remote_id: contact_to_remove.id.clone(),
         action: Action::Delete,
         contact: None,
     };
     let events = CoreEvent {
-        contact_emails: Some(vec![delete_event]),
         contacts: Some(vec![delete_contact_event]),
         ..Default::default()
     };
@@ -208,14 +201,6 @@ async fn test_sync_and_delete_event_contact() {
 
     // Were the  deletions successful?
     let conn = user_ctx.stash().connection().await.unwrap();
-    let queried_contact_emails = ContactEmail::find(
-        "WHERE email = ?",
-        params![email_to_remove.canonical_email],
-        &conn,
-    )
-    .await
-    .expect("Failed to get contact emails");
-    assert!(queried_contact_emails.is_empty());
 
     let contacts = Contact::find("LIMIT 100", vec![], &conn)
         .await
@@ -241,7 +226,7 @@ async fn test_sync_and_modify_event_contact() {
     )
     .await;
 
-    let (modified_contact, removed_email, added_email) = create_test_local_full_modified_contact();
+    let (modified_contact, _, _) = create_test_local_full_modified_contact();
 
     let remote_id = modified_contact.remote_id.clone().unwrap();
     let modify_contact_event = ContactEvent {
@@ -249,19 +234,8 @@ async fn test_sync_and_modify_event_contact() {
         action: Action::Update,
         contact: Some(modified_contact.clone()),
     };
-    let delete_email_event = ContactEmailEvent {
-        remote_id: removed_email.remote_id.clone().unwrap(),
-        action: Action::Delete,
-        contact_email: None,
-    };
-    let add_email_event = ContactEmailEvent {
-        remote_id: added_email.remote_id.clone().unwrap(),
-        action: Action::Create,
-        contact_email: Some(added_email.clone()),
-    };
     let event = CoreEvent {
         contacts: Some(vec![modify_contact_event]),
-        contact_emails: Some(vec![delete_email_event, add_email_event]),
         ..Default::default()
     };
     // Fire event:
@@ -271,14 +245,6 @@ async fn test_sync_and_modify_event_contact() {
         .expect("failed to execute event");
 
     let conn = user_ctx.stash().connection().await.unwrap();
-    let queried_contact_emails = ContactEmail::find(
-        "WHERE email = ?",
-        params![removed_email.canonical_email],
-        &conn,
-    )
-    .await
-    .expect("Failed to get contact emails");
-    assert!(queried_contact_emails.is_empty());
 
     let mut contact = Contact::find_by_remote_id(remote_id, &conn)
         .await

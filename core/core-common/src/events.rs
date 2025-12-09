@@ -208,9 +208,6 @@ pub struct CoreEvent {
     /// The contacts events.
     pub contacts: Option<Vec<ContactEvent>>,
 
-    /// The contact emails events.
-    pub contact_emails: Option<Vec<ContactEmailEvent>>,
-
     pub labels: Option<Vec<LabelEvent>>,
 
     /// Indicates whether we should refresh our data.
@@ -244,7 +241,6 @@ impl From<ApiCoreEvent> for CoreEvent {
             user: value.user.map(User::from),
             user_settings: value.user_settings.map(UserSettings::from),
             contacts: value.contacts.map(MapVec::map_vec),
-            contact_emails: value.contact_emails.map(MapVec::map_vec),
             refresh: value.refresh.into(),
             labels: value.labels.map(MapVec::map_vec),
         }
@@ -263,7 +259,6 @@ impl Default for CoreEvent {
             user: None,
             user_settings: None,
             contacts: None,
-            contact_emails: None,
             refresh: Refresh::None,
             labels: None,
         }

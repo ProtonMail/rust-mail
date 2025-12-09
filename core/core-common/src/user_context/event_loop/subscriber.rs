@@ -4,9 +4,9 @@ use std::{
 };
 
 use crate::{
-    CoreContextError, UserContext,
-    datatypes::{ContactsDependencyFetcher, Refresh},
-    events::{Action, AddressEvent, ContactEmailEvent, ContactEvent, CoreEvent},
+    UserContext,
+    datatypes::Refresh,
+    events::{Action, AddressEvent, ContactEvent, CoreEvent},
     models::{Address, Contact, Label, ModelExtension, User},
 };
 use anyhow::{Context, anyhow, bail};
@@ -22,7 +22,7 @@ use stash::{
     exports::SqliteError,
     orm::Model,
     params,
-    stash::{Bond, StashError, Tether},
+    stash::{Bond, StashError},
 };
 use tracing::{debug, error, info, warn};
 
@@ -92,7 +92,7 @@ pub mod macros {
 // Re-export macros for easier access
 use crate::event_loop::account_subscriber::AccountEventSubscriber;
 use crate::events::LabelEvent;
-use crate::models::{ContactEmail, ModelIdExtension};
+use crate::models::ModelIdExtension;
 pub use macros::*;
 
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
@@ -291,13 +291,6 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
 
             let mut rebase_change_set = RebaseChangeSet::default();
 
-            calculate_missing_dependencies(events, &conn)
-                .await
-                .context("Failed to calculate missing dependencies")?
-                .fetch_and_store(ctx.session(), &mut conn)
-                .await
-                .context("Failed to fetch or store dependencies")?;
-
             conn.tx::<_, _, StashError>(async |tx| {
                 for event in events.iter_mut() {
                     handle_event(event, tx, &user_id, &mut rebase_change_set).await?;
@@ -390,14 +383,13 @@ async fn handle_event(
         handle_label_events(tx, labels, rebase_change_set).await?;
     }
 
+    // We don't need to handle contact email events as teh contact event includes
+    // the full state with vcards and the emails.
     if let Some(contacts) = event.contacts.as_mut() {
         debug!("Handling contact events");
         handle_contact_event(tx, contacts, rebase_change_set).await?;
     }
-    if let Some(contact_emails) = event.contact_emails.as_mut() {
-        debug!("Handling contact email events");
-        handle_contact_email_event(tx, contact_emails, rebase_change_set).await?;
-    }
+
     Ok(())
 }
 
@@ -708,48 +700,6 @@ async fn handle_contact_event(
     Ok(())
 }
 
-async fn handle_contact_email_event(
-    tx: &Bond<'_>,
-    contact_email_events: &mut [ContactEmailEvent],
-    rebase_change_set: &mut RebaseChangeSet,
-) -> Result<(), StashError> {
-    for event in contact_email_events {
-        event
-            .action
-            .log_entry(&event.remote_id, async |remote_id| {
-                ContactEmail::remote_id_counterpart(remote_id.clone(), tx)
-                    .await
-                    .unwrap_or_default()
-                    .map(|v| v.as_u64())
-            })
-            .await;
-        match event.action {
-            Action::Delete => tx
-                .execute(
-                    "DELETE FROM contact_emails WHERE remote_id = ?",
-                    params![event.remote_id.clone()],
-                )
-                .await
-                .map(|_| ())
-                .map_err(|e| {
-                    error!("Failed to delete contact mail: {e:?}");
-                    e
-                })?,
-            Action::Create | Action::Update => {
-                if let Some(ref mut contact_email) = event.contact_email {
-                    contact_email.save(tx).await.map_err(|e| {
-                        error!("Failed to create or update contact mail: {e:?}");
-                        e
-                    })?;
-                    rebase_change_set.add(contact_email.id());
-                }
-            }
-            Action::UpdateFlags => (),
-        }
-    }
-    Ok(())
-}
-
 pub async fn handle_label_events(
     tx: &Bond<'_>,
     label_events: &[LabelEvent],
@@ -792,22 +742,4 @@ pub async fn handle_label_events(
         }
     }
     Ok(())
-}
-
-async fn calculate_missing_dependencies(
-    events: &[CoreEvent],
-    tether: &Tether,
-) -> Result<ContactsDependencyFetcher, CoreContextError> {
-    let mut fetcher = ContactsDependencyFetcher::new();
-    for event in events {
-        if let Some(contact_emails) = event.contact_emails.as_ref() {
-            for contact_email in contact_emails {
-                if let Some(contact_email) = contact_email.contact_email.as_ref() {
-                    fetcher.check_contact_email(contact_email, tether).await?;
-                }
-            }
-        }
-    }
-
-    Ok(fetcher)
 }
