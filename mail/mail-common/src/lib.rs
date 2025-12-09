@@ -15,7 +15,6 @@ mod mail_scroller;
 mod mailbox;
 mod migration_snooper;
 pub mod models;
-#[cfg(feature = "prefetch")]
 mod prefetch;
 mod rsvp;
 mod send_queries;

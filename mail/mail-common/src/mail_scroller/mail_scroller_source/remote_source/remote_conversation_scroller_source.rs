@@ -4,7 +4,6 @@ use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
 use crate::models::Message;
-#[cfg(feature = "prefetch")]
 use crate::prefetch::PrefetchJob;
 use crate::{
     MailContextError, MailUserContext,
@@ -45,12 +44,7 @@ impl RemoteSource for ConversationScrollData {
         let session = ctx.session().clone();
         let stash = ctx.user_stash().clone();
 
-        #[cfg(feature = "prefetch")]
-        let arc_ctx = ctx.as_arc();
-
-        let ctx_cloned = ctx.as_arc();
-        let handle = ctx.spawn(async move {
-            #[allow(unused_variables)]
+        let handle = ctx.spawn_ex(async move |ctx| {
             let items = RemoteConversationScrollerSource::sync_first_page(
                 &session,
                 stash,
@@ -60,7 +54,7 @@ impl RemoteSource for ConversationScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -74,17 +68,14 @@ impl RemoteSource for ConversationScrollData {
                 })?;
             }
 
-            #[cfg(feature = "prefetch")]
-            {
-                let prefetch_jobs = items
-                    .into_iter()
-                    .filter(|item| !item.has_messages)
-                    .filter(|item| !item.deleted)
-                    .map(|item| PrefetchJob::Conversation(item.local_id, local_label_id))
-                    .collect();
+            let prefetch_jobs = items
+                .into_iter()
+                .filter(|item| !item.has_messages)
+                .filter(|item| !item.deleted)
+                .map(|item| PrefetchJob::Conversation(item.local_id, local_label_id))
+                .collect();
 
-                arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
-            }
+            ctx.queue_prefetch_jobs(prefetch_jobs).await?;
 
             Ok(())
         });

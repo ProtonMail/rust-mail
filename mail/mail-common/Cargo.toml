@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["sql", "prefetch"]
+default = ["sql"]
 gtk = []
 test-utils = [
   "dep:wiremock",
@@ -24,7 +24,6 @@ sql = [
   "proton-mail-api/mocks",
 ]
 proton_mail_error_log = []
-prefetch = []
 
 [dependencies]
 anyhow = { workspace = true }
