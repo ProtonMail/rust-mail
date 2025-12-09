@@ -573,6 +573,7 @@ impl Attachment {
 
         // TODO: Possibly run this in a background task instead of once-per.
         pub struct G(Arc<AtomicBool>);
+
         impl Drop for G {
             fn drop(&mut self) {
                 self.0.store(false, Ordering::Release);
@@ -580,14 +581,16 @@ impl Attachment {
         }
 
         let is_executing = state.is_cleanup_running().clone();
+
         if is_executing.swap(true, Ordering::Acquire) {
             debug!("Cleanup routine already running");
             return;
         }
-        let ctx_2 = ctx.as_arc();
-        ctx.spawn(async move {
+
+        ctx.spawn_ex(async move |ctx| {
             let _g = G(is_executing);
-            if let Err(e) = Self::do_cleanup_cache(&ctx_2).await {
+
+            if let Err(e) = Self::do_cleanup_cache(&ctx).await {
                 error!("Error cleaning up attachments: {e}");
             }
         });

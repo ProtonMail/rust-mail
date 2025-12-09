@@ -136,8 +136,7 @@ impl RemoteSource for ConversationScrollData {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
-        let ctx_cloned = ctx.as_arc();
-        let task = Some(ctx.spawn(async move {
+        let task = Some(ctx.spawn_ex(async move |ctx| {
             let items = RemoteConversationScrollerSource::sync_previous_page(
                 &session,
                 stash,
@@ -149,7 +148,7 @@ impl RemoteSource for ConversationScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -187,8 +186,7 @@ impl RemoteConversationScrollerSource {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
-        let ctx_cloned = ctx.as_arc();
-        let task = Some(ctx.spawn(async move {
+        let task = Some(ctx.spawn_ex(async move |ctx| {
             Self::sync_next_page(
                 &session,
                 stash,
@@ -200,7 +198,7 @@ impl RemoteConversationScrollerSource {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 

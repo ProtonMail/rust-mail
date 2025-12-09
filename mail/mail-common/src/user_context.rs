@@ -829,6 +829,15 @@ impl MailUserContext {
         self.user_context.spawn(task)
     }
 
+    /// See [`Self::spawn()`].
+    pub fn spawn_ex<Fn, Fut>(&self, task: Fn) -> JoinHandle<Fut::Output>
+    where
+        Fn: FnOnce(Arc<Self>) -> Fut,
+        Fut: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(task(self.as_arc()))
+    }
+
     pub async fn has_unsent_messages(&self) -> Result<bool, MailContextError> {
         Ok(self
             .action_queue()

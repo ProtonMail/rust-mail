@@ -148,9 +148,10 @@ const EVENT_INIT_KEY: InitializationKey = InitializationKey::new("events");
 
 async fn initialize_event_loop(
     watcher: Arc<InitializationWatcher>,
-    ctx_clone: &MailUserContext,
+    ctx: &MailUserContext,
 ) -> Result<(), InitializationError<EventLoopError>> {
-    let stash = ctx_clone.user_stash();
+    let stash = ctx.user_stash();
+
     InitializedComponent::initialize(
         watcher,
         EVENT_INIT_KEY,
@@ -162,12 +163,12 @@ async fn initialize_event_loop(
             // there is no way of initializing it with already having transaction.
             // We want to avoid the deadlock, and we do not depend on any dependencies.
             // So initializing it here is not really harmful, just weird.
-            ctx_clone
-                .user_context()
+            ctx.user_context()
                 .get_service::<EventLoopService>()
                 .event_poll()
                 .initialize()
                 .await?;
+
             Ok(())
         },
         |_tx, ()| Ok(()),
