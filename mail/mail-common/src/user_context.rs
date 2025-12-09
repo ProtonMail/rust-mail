@@ -13,7 +13,6 @@ use crate::db::online_migrations;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
-#[cfg(feature = "prefetch")]
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchService};
 use crate::rsvp::RsvpService;
 use crate::upsell_eligibility_watcher::UpsellEligibilityWatcher;
@@ -70,7 +69,6 @@ const DEFAULT_DEFAULT_QUEUE_POOL_SIZE: usize = 1;
 const DEFAULT_PREFETCH_ROLLBACK_QUEUE_POOL_SIZE: usize = 1;
 const DEFAULT_SHARE_EXT_QUEUE_POOL_SIZE: usize = 2;
 
-#[cfg(feature = "prefetch")]
 const DEFAULT_PREFETCH_BOUND: usize = 10;
 
 // Feature flags
@@ -204,7 +202,7 @@ impl MailUserContext {
 
             builder = match origin {
                 Origin::App => {
-                    let builder = builder
+                    builder
                         .with_service(SendQueueExecutorPool {
                             pool: QueueAutoExecutorPool::new(
                                 user_context.queue(),
@@ -241,12 +239,8 @@ impl MailUserContext {
                         .with_service(InitializationMediator::new(
                             mail_context.core_context().task_service().task_service(),
                         ))
-                        .with_service(RsvpService::new(user_context.stash()));
-
-                    #[cfg(feature = "prefetch")]
-                    let builder = { builder.with_service(PrefetchService::new()) };
-
-                    builder
+                        .with_service(RsvpService::new(user_context.stash()))
+                        .with_service(PrefetchService::new())
                 }
 
                 Origin::ShareExt => builder
@@ -771,13 +765,11 @@ impl MailUserContext {
         MailEventSubscriber::new(Weak::clone(&self.this))
     }
 
-    #[cfg(feature = "prefetch")]
     pub async fn queue_prefetch_jobs(
         self: &Arc<Self>,
         jobs: Vec<PrefetchJob>,
     ) -> MailContextResult<()> {
         if jobs.is_empty() {
-            tracing::trace!("No prefetch jobs to queue");
             return Ok(());
         }
 
@@ -795,12 +787,12 @@ impl MailUserContext {
             prefetch_service.notify.set(sender).map_err(|e| {
                 MailContextError::Other(anyhow!("Failed to set prefetch sender: {e:?}"))
             })?;
+
             Prefetch::initialize(self.clone(), receiver).await;
-            // unwrap safety: `prefetch_service.notify` is set just above, it cannot be `None`.
+
             prefetch_service
                 .notify
-                .get()
-                .unwrap()
+                .wait()
                 .send_async(jobs)
                 .await
                 .map_err(|_| {
@@ -827,6 +819,15 @@ impl MailUserContext {
         F: Future<Output: Send> + Send + 'static,
     {
         self.user_context.spawn(task)
+    }
+
+    /// See [`Self::spawn()`].
+    pub fn spawn_ex<Fn, Fut>(&self, task: Fn) -> JoinHandle<Fut::Output>
+    where
+        Fn: FnOnce(Arc<Self>) -> Fut,
+        Fut: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(task(self.as_arc()))
     }
 
     pub async fn has_unsent_messages(&self) -> Result<bool, MailContextError> {

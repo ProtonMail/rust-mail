@@ -1834,10 +1834,9 @@ impl DraftActor {
                     sender,
                 } => {
                     // We don't wait to wait for this to finish so we can run in parallel
-                    let ctx_cloned = ctx.clone();
                     let id = draft.metadata_id;
 
-                    ctx_cloned.spawn(async move {
+                    ctx.spawn_ex(async move |ctx| {
                         let r = draft_v1::Draft::load_image(id, &ctx, &url, policy).await;
                         let _ = sender.send(r);
                     });

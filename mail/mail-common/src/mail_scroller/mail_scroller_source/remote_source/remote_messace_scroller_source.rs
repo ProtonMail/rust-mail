@@ -3,7 +3,6 @@ use crate::datatypes::SystemLabelId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
-#[cfg(feature = "prefetch")]
 use crate::prefetch::PrefetchJob;
 use crate::{
     MailContextError, MailUserContext,
@@ -23,11 +22,6 @@ use proton_mail_api::services::proton::{
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 
-/// Mail scroller implementation for [`Message`] on in a [`Label`].
-///
-/// The scroller keeps track of the last element returned by the server for the
-/// selected label and read filter. This element is then used to fetch
-/// new data from the server.
 #[derive(Debug)]
 pub(super) struct RemoteMessageScrollerSource;
 
@@ -44,11 +38,8 @@ impl RemoteSource for MessageScrollData {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let stash = ctx.user_stash().clone();
-        #[cfg(feature = "prefetch")]
-        let arc_ctx = ctx.as_arc();
-        let ctx_cloned = ctx.as_arc();
-        let handle = ctx.spawn(async move {
-            #[allow(unused_variables)]
+
+        let handle = ctx.spawn_ex(async move |ctx| {
             let items = RemoteMessageScrollerSource::sync_first_page(
                 &session,
                 stash,
@@ -58,7 +49,7 @@ impl RemoteSource for MessageScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -72,16 +63,13 @@ impl RemoteSource for MessageScrollData {
                 })?;
             }
 
-            #[cfg(feature = "prefetch")]
-            {
-                let prefetch_jobs = items
-                    .into_iter()
-                    .filter(|item| !item.deleted)
-                    .filter_map(|item| Some(PrefetchJob::Message(item.local_id?)))
-                    .collect();
+            let prefetch_jobs = items
+                .into_iter()
+                .filter(|item| !item.deleted)
+                .filter_map(|item| Some(PrefetchJob::Message(item.local_id?)))
+                .collect();
 
-                arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
-            }
+            ctx.queue_prefetch_jobs(prefetch_jobs).await?;
 
             Ok(())
         });
@@ -128,8 +116,7 @@ impl RemoteSource for MessageScrollData {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
-        let ctx_cloned = ctx.as_arc();
-        let task = Some(ctx.spawn(async move {
+        let task = Some(ctx.spawn_ex(async move |ctx| {
             let items = RemoteMessageScrollerSource::sync_previous_page(
                 &session,
                 stash,
@@ -141,7 +128,7 @@ impl RemoteSource for MessageScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -179,8 +166,7 @@ impl RemoteMessageScrollerSource {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
-        let ctx_cloned = ctx.as_arc();
-        let task = Some(ctx.spawn(async move {
+        let task = Some(ctx.spawn_ex(async move |ctx| {
             Self::sync_next_page(
                 &session,
                 stash,
@@ -192,7 +178,7 @@ impl RemoteMessageScrollerSource {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 

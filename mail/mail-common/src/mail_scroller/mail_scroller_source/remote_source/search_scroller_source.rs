@@ -25,11 +25,6 @@ use std::{cmp, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::debug;
 
-/// Mail scroller implementation for Server search.
-///
-/// The scroller keeps track of the last element returned by the server for the
-/// selected search query. This element is then used to fetch next pages
-///
 #[derive(Debug)]
 pub struct SearchScrollerSource {
     local_label_id: LocalLabelId,
@@ -105,8 +100,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
-        let ctx_cloned = ctx.as_arc();
-        let task = Some(ctx.spawn(async move {
+        let task = Some(ctx.spawn_ex(async move |ctx| {
             let mut tether = stash.connection().await?;
 
             Self::sync_first_page(
@@ -116,7 +110,7 @@ impl SearchScrollerSource {
                 remote_label_id,
                 search,
                 page_size,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -135,8 +129,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
-        let ctx_cloned = ctx.as_arc();
-        let task = Some(ctx.spawn(async move {
+        let task = Some(ctx.spawn_ex(async move |ctx| {
             let tether = stash.connection().await?;
 
             if let Some((remote_id, time)) =
@@ -150,7 +143,7 @@ impl SearchScrollerSource {
                     time,
                     search,
                     page_size,
-                    ctx_cloned.rebaseable_queue().await,
+                    ctx.rebaseable_queue().await,
                 )
                 .await?;
             }

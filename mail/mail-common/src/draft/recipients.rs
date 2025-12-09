@@ -801,15 +801,18 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
         if to_validate.is_empty() {
             return;
         }
+
         let cb = self.cb.clone();
         let ctx = ctx.as_arc();
         let ctx_cloned = Arc::clone(&ctx);
+
         ctx_cloned
             .mail_context()
             .core_context()
             .task_service()
             .spawn_cancellable(self.cancellation_token.clone(), async move {
                 let mut update_statuses = Vec::with_capacity(to_validate.len());
+
                 for email in to_validate {
                     let status = validate_address(&ctx, email.clone()).await;
                     update_statuses.push((email, status));

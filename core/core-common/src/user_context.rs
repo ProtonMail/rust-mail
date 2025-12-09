@@ -404,6 +404,15 @@ impl UserContext {
         self.context.task_service().spawn_cancellable(token, task)
     }
 
+    /// See [`Self::spawn()`].
+    pub fn spawn_ex<Fn, Fut>(&self, task: Fn) -> JoinHandle<Fut::Output>
+    where
+        Fn: FnOnce(Arc<Self>) -> Fut,
+        Fut: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(task(self.as_arc()))
+    }
+
     #[must_use]
     pub fn did_receive_task_cancellation_request(&self) -> bool {
         self.cancellation_token.is_cancelled()

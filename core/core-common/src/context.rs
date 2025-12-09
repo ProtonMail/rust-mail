@@ -1125,6 +1125,15 @@ impl Context {
         self.task_service.spawn_cancellable(token, task)
     }
 
+    /// See [`Self::spawn()`].
+    pub fn spawn_ex<Fn, Fut>(&self, task: Fn) -> JoinHandle<Fut::Output>
+    where
+        Fn: FnOnce(Arc<Self>) -> Fut,
+        Fut: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn(task(self.as_arc()))
+    }
+
     /// Returns a cancellation token that is a child of the the one owned by the context.
     pub fn new_child_cancellation_token(&self) -> CancellationToken {
         self.cancellation_token.child_token()

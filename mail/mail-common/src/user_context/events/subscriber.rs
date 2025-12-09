@@ -6,7 +6,6 @@ use crate::models::{
     CachedScrollData, ConversationScrollData, IncomingDefault, MailLabel, MailSettings,
     MessageScrollData, RollbackItem, StoreLabelCounters,
 };
-#[cfg(feature = "prefetch")]
 use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
@@ -174,33 +173,33 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 })
                 .context("Failed to apply changes")?;
 
-            #[cfg(feature = "prefetch")]
-            {
-                let label_id = SystemLabel::AllMail.local_id(&tether).await?.unwrap();
-                let conversation_jobs = data
-                    .cnv_for_prefetch
-                    .into_iter()
-                    .map(|id| PrefetchJob::Conversation(id, label_id))
-                    .collect();
-                let message_jobs = data
-                    .msg_for_prefetch
-                    .into_iter()
-                    .map(PrefetchJob::Message)
-                    .collect();
+            let label_id = SystemLabel::AllMail.local_id(&tether).await?.unwrap();
 
-                let _ = ctx
-                    .queue_prefetch_jobs(conversation_jobs)
-                    .await
-                    .inspect_err(|e| {
-                        error!("Failed to queue cnv jobs for prefetch: {e}");
-                    });
-                let _ = ctx
-                    .queue_prefetch_jobs(message_jobs)
-                    .await
-                    .inspect_err(|e| {
-                        error!("Failed to queue msg jobs for prefetch: {e}");
-                    });
-            }
+            let conversation_jobs = data
+                .cnv_for_prefetch
+                .into_iter()
+                .map(|id| PrefetchJob::Conversation(id, label_id))
+                .collect();
+
+            let message_jobs = data
+                .msg_for_prefetch
+                .into_iter()
+                .map(PrefetchJob::Message)
+                .collect();
+
+            let _ = ctx
+                .queue_prefetch_jobs(conversation_jobs)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to queue cnv jobs for prefetch: {e}");
+                });
+
+            let _ = ctx
+                .queue_prefetch_jobs(message_jobs)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to queue msg jobs for prefetch: {e}");
+                });
 
             if data.queue_incoming_default {
                 IncomingDefault::action_resync(ctx.action_queue()).await;

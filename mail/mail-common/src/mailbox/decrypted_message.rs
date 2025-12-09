@@ -205,11 +205,12 @@ impl DecryptedMessageBody {
             .cloned()
             .map(|att| {
                 let id = att.id();
-                let ctx_clone = ctx.clone();
-                let fut = ctx.spawn(async move {
-                    let tether = &mut ctx_clone.user_stash().connection().await?;
-                    att.content_data(&ctx_clone, tether).await
+
+                let fut = ctx.spawn_ex(async move |ctx| {
+                    let tether = &mut ctx.user_stash().connection().await?;
+                    att.content_data(&ctx, tether).await
                 });
+
                 (id, fut)
             })
             .collect();

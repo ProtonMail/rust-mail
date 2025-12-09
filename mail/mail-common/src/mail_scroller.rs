@@ -1041,24 +1041,25 @@ where
         if items.is_empty() && has_more_in_label {
             if self.execute_on_online.is_none() {
                 debug!("No items to return, requesting additional fetch more");
-                let ctx_clone = ctx.clone();
+
                 let channel = self.ordered_command_send.clone();
-                let handle = ctx.spawn(async move {
-                    ctx_clone
-                        .network_monitor_service()
+
+                let handle = ctx.spawn_ex(async move |ctx| {
+                    ctx.network_monitor_service()
                         .network_status_observer()
                         .wait_until_online()
                         .await;
+
                     Self::schedule_fetch_more(&channel, call_src).await;
                 });
+
                 self.execute_on_online = Some(handle.abort_handle());
             }
 
-            let is_offline = ctx.network_monitor_service().is_os_offline();
-
             if self.task.is_none() {
-                if is_offline {
+                if ctx.network_monitor_service().is_os_offline() {
                     tracing::warn!("Scroller is offline, will not progress any further");
+
                     // We will not progress any further without task,
                     // and task will be spawned only when we are online,
                     // lets wait for another call.

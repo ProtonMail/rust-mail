@@ -4,7 +4,6 @@ use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
 use crate::models::Message;
-#[cfg(feature = "prefetch")]
 use crate::prefetch::PrefetchJob;
 use crate::{
     MailContextError, MailUserContext,
@@ -28,11 +27,6 @@ use proton_mail_api::services::proton::{
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 
-/// Mail scroller implementation for [`Conversation`] on in a [`Label`].
-///
-/// The scroller keeps track of the last element returned by the server for the
-/// selected label and read filter. This element is then used to fetch
-/// new data from the server.
 #[derive(Debug)]
 pub(super) struct RemoteConversationScrollerSource;
 
@@ -50,12 +44,7 @@ impl RemoteSource for ConversationScrollData {
         let session = ctx.session().clone();
         let stash = ctx.user_stash().clone();
 
-        #[cfg(feature = "prefetch")]
-        let arc_ctx = ctx.as_arc();
-
-        let ctx_cloned = ctx.as_arc();
-        let handle = ctx.spawn(async move {
-            #[allow(unused_variables)]
+        let handle = ctx.spawn_ex(async move |ctx| {
             let items = RemoteConversationScrollerSource::sync_first_page(
                 &session,
                 stash,
@@ -65,7 +54,7 @@ impl RemoteSource for ConversationScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -79,17 +68,14 @@ impl RemoteSource for ConversationScrollData {
                 })?;
             }
 
-            #[cfg(feature = "prefetch")]
-            {
-                let prefetch_jobs = items
-                    .into_iter()
-                    .filter(|item| !item.has_messages)
-                    .filter(|item| !item.deleted)
-                    .map(|item| PrefetchJob::Conversation(item.local_id, local_label_id))
-                    .collect();
+            let prefetch_jobs = items
+                .into_iter()
+                .filter(|item| !item.has_messages)
+                .filter(|item| !item.deleted)
+                .map(|item| PrefetchJob::Conversation(item.local_id, local_label_id))
+                .collect();
 
-                arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
-            }
+            ctx.queue_prefetch_jobs(prefetch_jobs).await?;
 
             Ok(())
         });
@@ -136,8 +122,7 @@ impl RemoteSource for ConversationScrollData {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
-        let ctx_cloned = ctx.as_arc();
-        let task = Some(ctx.spawn(async move {
+        let task = Some(ctx.spawn_ex(async move |ctx| {
             let items = RemoteConversationScrollerSource::sync_previous_page(
                 &session,
                 stash,
@@ -149,7 +134,7 @@ impl RemoteSource for ConversationScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -187,8 +172,7 @@ impl RemoteConversationScrollerSource {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
-        let ctx_cloned = ctx.as_arc();
-        let task = Some(ctx.spawn(async move {
+        let task = Some(ctx.spawn_ex(async move |ctx| {
             Self::sync_next_page(
                 &session,
                 stash,
@@ -200,7 +184,7 @@ impl RemoteConversationScrollerSource {
                 page_size,
                 order_dir,
                 order_field,
-                ctx_cloned.rebaseable_queue().await,
+                ctx.rebaseable_queue().await,
             )
             .await?;
 

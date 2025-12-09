@@ -369,13 +369,12 @@ impl MailUserSession {
             return;
         };
 
-        let ctx_cloned = ctx.clone();
-        ctx.spawn(async move {
-            ctx_cloned
-                .network_monitor_service()
+        ctx.spawn_ex(async move |ctx| {
+            ctx.network_monitor_service()
                 .network_status_observer()
                 .wait_until_online()
                 .await;
+
             _ = async_runtime()
                 .spawn_blocking(move || {
                     callback.on_online();
@@ -395,13 +394,12 @@ impl MailUserSession {
             return;
         };
 
-        let ctx_cloned = ctx.clone();
-        ctx.spawn(async move {
-            ctx_cloned
-                .network_monitor_service()
+        ctx.spawn_ex(async move |ctx| {
+            ctx.network_monitor_service()
                 .network_status_observer()
                 .wait_until_online()
                 .await;
+
             callback.on_online().await;
         });
     }

@@ -130,6 +130,7 @@ impl PinCode {
             // We have no guarantees that hashing function will not block whole runtime
             // Better be safe than sorry.
             let ctx_clone = ctx.clone();
+
             let success = task::spawn_blocking(move || {
                 let Some(secret) = ctx_clone.load_secret::<PinHash>()? else {
                     return Err(PinError::MissingPinHash);

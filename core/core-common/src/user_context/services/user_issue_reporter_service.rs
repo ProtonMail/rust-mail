@@ -22,9 +22,9 @@ impl UserIssueReporterService {
             return;
         };
 
-        let ctx_cloned = ctx.clone();
         let reporter = self.reporter.clone();
-        ctx_cloned.spawn(async move {
+
+        ctx.spawn_ex(async move |ctx| {
             Self::do_report(ctx, reporter, level, message, keys).await;
         });
     }
