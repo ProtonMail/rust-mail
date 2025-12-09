@@ -85,3 +85,4 @@ test-utils = [
   "dep:rand",
   "proton-core-api/mocks",
 ]
+events-v6 = []

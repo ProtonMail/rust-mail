@@ -1,11 +1,11 @@
-use crate::subscriber::SubscriberResult;
 use crate::v6::source::EventSource;
-use crate::{EventLoopError, RawEvent};
+use crate::{EventLoopError, MAX_ERROR_RETRIES, RawEvent};
 use async_trait::async_trait;
 use slotmap::{DefaultKey, SlotMap};
 use std::any::Any;
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use tracing::error;
@@ -56,7 +56,7 @@ impl<E: EventSource> Hash for EventSubscriberId<E> {
 pub trait EventSubscriber<E: EventSource>: Send + Sync + 'static {
     fn name(&self) -> &'static str;
     /// Invoked when an event has been fetched from the server.
-    async fn on_event(&self, event: &E::Event, cache: &mut E::Cache) -> SubscriberResult<()>;
+    async fn on_event(&self, event: &E::Event, cache: &mut E::Cache) -> EventSubscriberResult<()>;
 
     /// Invoked either when a refresh event was retrieved from the server or if manually requested.
     /// In the latter case, there is no `event` object.
@@ -64,7 +64,7 @@ pub trait EventSubscriber<E: EventSource>: Send + Sync + 'static {
         &self,
         event: Option<&'a E::Event>,
         cache: &mut E::Cache,
-    ) -> SubscriberResult<()>;
+    ) -> EventSubscriberResult<()>;
 }
 
 #[cfg_attr(test, allow(clippy::ref_option_ref))]
@@ -116,8 +116,6 @@ impl<E: EventSource> TypedSubscriberList<E> {
     }
 }
 
-const MAX_PROCESSING_RETRIES: usize = 3;
-
 #[async_trait]
 impl<E> SubscriberList for TypedSubscriberList<E>
 where
@@ -136,7 +134,7 @@ where
                     subscriber.name()
                 );
                 num_attempts += 1;
-                if num_attempts == MAX_PROCESSING_RETRIES || !e.is_retryable() {
+                if num_attempts == MAX_ERROR_RETRIES || !e.is_retryable() {
                     return Err(EventLoopError::Subscriber(subscriber.name().into(), e));
                 }
             }
@@ -162,7 +160,7 @@ where
                     subscriber.name()
                 );
                 num_attempts += 1;
-                if num_attempts == MAX_PROCESSING_RETRIES || !e.is_retryable() {
+                if num_attempts == MAX_ERROR_RETRIES || !e.is_retryable() {
                     return Err(EventLoopError::Refresh(subscriber.name().into(), e));
                 }
             }
@@ -171,3 +169,13 @@ where
         Ok(())
     }
 }
+
+pub trait EventSubscriberError: Error + Send + Sync + 'static {
+    fn is_network_failure(&self) -> bool;
+
+    fn is_retryable(&self) -> bool {
+        self.is_network_failure()
+    }
+}
+
+pub type EventSubscriberResult<T> = Result<T, Box<dyn EventSubscriberError>>;

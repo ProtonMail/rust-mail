@@ -1,6 +1,5 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::context::MailUserDatabaseInitializer;
-use crate::events::MailEvent;
 use crate::{MailContext, MailContextResult, MailUserContext, NewMailUserContextOptions};
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
@@ -8,8 +7,11 @@ use proton_core_api::auth::UserKeySecret;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::UserId;
 use proton_core_common::UserDatabaseInitializer;
+use proton_core_common::event_loop::event_source::CoreEventCache;
 use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
-use proton_event_loop::subscriber::SubscriberResult;
+use proton_event_loop::v6::EventSubscriberResult;
+use proton_mail_api::services::proton::prelude::MailEvent;
+use proton_mail_api::services::proton::response_data::MailEventV5;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
@@ -215,7 +217,7 @@ pub trait MailUserContextTestExtension {
 
     async fn wait_for(&self, timeout: Option<Duration>, fun: impl Fn(ConnectionStatus) -> bool);
 
-    async fn apply_event(&self, event: MailEvent) -> SubscriberResult<()>;
+    async fn apply_event(&self, event: MailEvent) -> EventSubscriberResult<()>;
 }
 
 impl MailUserContextTestExtension for MailUserContext {
@@ -245,9 +247,13 @@ impl MailUserContextTestExtension for MailUserContext {
         }
     }
 
-    async fn apply_event(&self, event: MailEvent) -> SubscriberResult<()> {
-        use proton_event_loop::Subscriber;
-        self.event_subscriber().on_events(&mut [event]).await
+    async fn apply_event(&self, event: MailEvent) -> EventSubscriberResult<()> {
+        use proton_event_loop::v6::EventSubscriber;
+        let combined_event: MailEventV5 = event.into();
+        let mut cache = CoreEventCache::default();
+        self.event_subscriber()
+            .on_event(&combined_event, &mut cache)
+            .await
     }
 }
 

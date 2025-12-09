@@ -10,7 +10,7 @@ use proton_action_queue::{
     queue::ActionRequeueReason,
 };
 use proton_event_loop::EventLoopError;
-use proton_event_loop::subscriber::SubscriberError;
+use proton_event_loop::v6::EventSubscriberError;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use std::sync::Weak;
@@ -78,15 +78,15 @@ pub enum ActionEventLoopError {
     #[error(transparent)]
     EventLoop(#[from] EventLoopError),
     #[error("{0}")]
-    Subscriber(Box<dyn SubscriberError>),
+    Subscriber(Box<dyn EventSubscriberError>),
     #[error(transparent)]
     WriterGuard(#[from] WriterGuardError),
     #[error("Lost context")]
     LostContext,
 }
 
-impl From<Box<dyn SubscriberError>> for ActionEventLoopError {
-    fn from(e: Box<dyn SubscriberError>) -> Self {
+impl From<Box<dyn EventSubscriberError>> for ActionEventLoopError {
+    fn from(e: Box<dyn EventSubscriberError>) -> Self {
         ActionEventLoopError::Subscriber(e)
     }
 }

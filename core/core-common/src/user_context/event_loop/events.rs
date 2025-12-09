@@ -1,35 +1,3 @@
-//! Event data types for the Proton Core common library.
-//!
-//! This module contains various data types used by the Proton Core common
-//! library in association to events. Notably, they are NOT used by the models
-//! in the [`models`](crate::models) module, i.e. they do not represent child
-//! data structures for the models' fields, and are entirely separate from the
-//! persistent data structures.
-//!
-//! The data types used by events therefore do NOT need to be convertible to and
-//! from database-compatible format using [`ToSql`](stash::exports::ToSql) and
-//! [`FromSql`](stash::exports::FromSql). If anything in this module implements
-//! those traits, it is a sign that a mistake has been made. Additionally, they
-//! do not generally need to be serializable or deserializable, as they are not
-//! used for network communication or any other interchange purpose as a general
-//! requirement, and so implementation of [`Serialize`](serde::Serialize) and
-//! [`Deserialize`](serde::Deserialize) is not necessary and may also be a sign
-//! of a mistake.
-//!
-//! Generally speaking, [`From`] conversions to convert from the Proton API
-//! types to the internal types are provided, but not vice versa unless there is
-//! a specific need. Such conversions are usually very simple and indeed in many
-//! cases can be done without altering any data in memory.
-//!
-//! This separation does cause some duplication, but the overlap is not total.
-//! The various implementations for the types differ in each place; any logic
-//! for the application is in the application types and not the API types; and
-//! the distinction allows customisation of how the application deals with its
-//! related data. Additionally, it promotes wider usability, as each application
-//! that depends upon the API types can interpret and managed them in its own
-//! way.
-//!
-
 use crate::datatypes::{ProductUsedSpace, Refresh};
 use crate::models::{Address, Contact, ContactEmail, Label, User, UserSettings};
 use crate::utils::MapVec;
@@ -39,7 +7,6 @@ use proton_core_api::services::proton::{
     CoreEvent as ApiCoreEvent, EventId, LabelEvent as ApiLabelEvent, LabelId, ProtonIdMarker,
 };
 use proton_core_api::services::proton::{AddressId, ContactEmailId, ContactId};
-use proton_event_loop::Event;
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -183,7 +150,7 @@ impl From<ApiLabelEvent> for LabelEvent {
 /// Core event data structure that contains only the core fields from events.
 /// This is identical to `MailEvent` but contains only the core-related fields.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CoreEvent {
+pub(super) struct CoreEvent {
     /// The event unique ID.
     pub event_id: EventId,
 
@@ -212,22 +179,6 @@ pub struct CoreEvent {
 
     /// Indicates whether we should refresh our data.
     pub refresh: Refresh,
-}
-
-impl Event for CoreEvent {
-    type Response = ApiCoreEvent;
-
-    fn event_id(&self) -> proton_event_loop::EventId {
-        self.event_id.clone().into_inner().into()
-    }
-
-    fn has_more(&self) -> bool {
-        self.has_more
-    }
-
-    fn is_refresh(&self) -> bool {
-        self.refresh.is_refresh()
-    }
 }
 
 impl From<ApiCoreEvent> for CoreEvent {

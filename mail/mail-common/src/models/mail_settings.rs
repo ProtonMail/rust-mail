@@ -1,13 +1,13 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use crate::AppError;
 use crate::actions::mail_settings::{ToolbarType, UpdateMobileActions, UpdateNextMessageOnMove};
 use crate::datatypes::{
     AlmostAllMail, ComposerDirection, ComposerMode, MailSettingsId, MessageButtons, MimeType,
     MobileAction, MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved,
     SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
 };
+use crate::{AppError, MailContextError};
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{ImageProxy, InitializationKey};
@@ -190,13 +190,13 @@ impl MailSettings {
         watcher: Arc<InitializationWatcher>,
         api: &PM,
         stash: &Stash,
-    ) -> Result<(), InitializationError<AppError>> {
+    ) -> Result<(), InitializationError<MailContextError>> {
         InitializedComponent::initialize(
             watcher,
             Self::INIT_KEY,
             &[],
             stash.connection().await?,
-            async move || Self::sync_mail_settings(api).await,
+            async move || Self::fetch_mail_settings(api).await,
             |tx, res| {
                 res.store(tx)?;
                 Ok(())
@@ -205,9 +205,9 @@ impl MailSettings {
         .await
     }
 
-    pub async fn sync_mail_settings<PM: ProtonMail>(
+    pub async fn fetch_mail_settings<PM: ProtonMail>(
         api: &PM,
-    ) -> Result<SyncedMailSettings, AppError> {
+    ) -> Result<SyncedMailSettings, MailContextError> {
         let settings = MailSettings::from(api.get_mail_settings().await?.mail_settings);
 
         Ok(SyncedMailSettings { settings })

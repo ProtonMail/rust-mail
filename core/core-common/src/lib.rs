@@ -6,7 +6,6 @@ pub mod core_clock;
 pub mod datatypes;
 pub mod db;
 pub mod device_registration;
-pub mod events;
 pub mod migration_snooper;
 pub mod models;
 pub mod observability;

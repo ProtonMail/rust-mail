@@ -1159,25 +1159,22 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
     sent_message.metadata.flags = MessageFlags::SENT;
 
     user_ctx
-        .apply_event(
-            MailEvent {
-                event_id: EventId::from("My Event ID"),
-                labels: None,
-                conversation_counts: None,
-                conversations: None,
-                incoming_defaults: None,
-                mail_settings: None,
-                message_counts: None,
-                messages: Some(vec![MessageEvent {
-                    id: message.metadata.id.clone(),
-                    action: Action::Update,
-                    message: Some(sent_message.metadata),
-                }]),
-                refresh: 0,
-                has_more: false,
-            }
-            .into(),
-        )
+        .apply_event(MailEvent {
+            event_id: EventId::from("My Event ID"),
+            labels: None,
+            conversation_counts: None,
+            conversations: None,
+            incoming_defaults: None,
+            mail_settings: None,
+            message_counts: None,
+            messages: Some(vec![MessageEvent {
+                id: message.metadata.id.clone(),
+                action: Action::Update,
+                message: Some(sent_message.metadata),
+            }]),
+            refresh: 0,
+            has_more: false,
+        })
         .await
         .unwrap();
 
@@ -1272,25 +1269,22 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
     sent_message.metadata.flags = MessageFlags::SENT;
 
     user_ctx
-        .apply_event(
-            MailEvent {
-                event_id: EventId::from("My Event ID"),
-                labels: None,
-                conversation_counts: None,
-                conversations: None,
-                incoming_defaults: None,
-                mail_settings: None,
-                message_counts: None,
-                messages: Some(vec![MessageEvent {
-                    id: message1.metadata.id.clone(),
-                    action: Action::Update,
-                    message: Some(sent_message.metadata),
-                }]),
-                refresh: 0,
-                has_more: false,
-            }
-            .into(),
-        )
+        .apply_event(MailEvent {
+            event_id: EventId::from("My Event ID"),
+            labels: None,
+            conversation_counts: None,
+            conversations: None,
+            incoming_defaults: None,
+            mail_settings: None,
+            message_counts: None,
+            messages: Some(vec![MessageEvent {
+                id: message1.metadata.id.clone(),
+                action: Action::Update,
+                message: Some(sent_message.metadata),
+            }]),
+            refresh: 0,
+            has_more: false,
+        })
         .await
         .unwrap();
 
@@ -1399,25 +1393,22 @@ async fn already_sent_from_event_update() {
 
     // Simulate Event update
     user_ctx
-        .apply_event(
-            MailEvent {
-                event_id: EventId::from("Event"),
-                labels: None,
-                conversation_counts: None,
-                conversations: None,
-                incoming_defaults: None,
-                mail_settings: None,
-                message_counts: None,
-                messages: Some(vec![MessageEvent {
-                    id: sent_message.metadata.id.clone(),
-                    action: Action::Update,
-                    message: Some(sent_message.metadata),
-                }]),
-                refresh: 0,
-                has_more: false,
-            }
-            .into(),
-        )
+        .apply_event(MailEvent {
+            event_id: EventId::from("Event"),
+            labels: None,
+            conversation_counts: None,
+            conversations: None,
+            incoming_defaults: None,
+            mail_settings: None,
+            message_counts: None,
+            messages: Some(vec![MessageEvent {
+                id: sent_message.metadata.id.clone(),
+                action: Action::Update,
+                message: Some(sent_message.metadata),
+            }]),
+            refresh: 0,
+            has_more: false,
+        })
         .await
         .unwrap();
 

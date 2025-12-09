@@ -563,82 +563,79 @@ mod rebase {
             .await
             .unwrap();
         user_ctx
-            .apply_event(
-                MailEvent {
-                    event_id: EventId::from("MyEvent"),
-                    labels: None,
-                    conversation_counts: None,
-                    conversations: Some(vec![ConversationEvent {
+            .apply_event(MailEvent {
+                event_id: EventId::from("MyEvent"),
+                labels: None,
+                conversation_counts: None,
+                conversations: Some(vec![ConversationEvent {
+                    id: original_conversation.remote_id.clone().unwrap(),
+                    action: Action::Update,
+                    conversation: Some(ApiConversation {
                         id: original_conversation.remote_id.clone().unwrap(),
-                        action: Action::Update,
-                        conversation: Some(ApiConversation {
-                            id: original_conversation.remote_id.clone().unwrap(),
-                            attachment_info: Default::default(),
-                            attachments_metadata: vec![],
-                            display_snoozed_reminder: false,
-                            expiration_time: original_conversation.expiration_time.as_u64(),
-                            labels: original_conversation
-                                .labels
-                                .iter()
-                                .cloned()
-                                .map(|l| ApiConversationLabel {
-                                    id: l.remote_label_id.unwrap(),
-                                    context_expiration_time: l.context_expiration_time.as_u64(),
-                                    context_num_attachments: l.context_num_attachments,
-                                    context_num_messages: l.context_num_messages,
-                                    context_num_unread: l.context_num_unread,
-                                    context_size: l.context_size,
-                                    context_snooze_time: l.context_snooze_time.as_u64(),
-                                    context_time: l.context_time.as_u64(),
-                                })
-                                .collect(),
-                            num_attachments: original_conversation.num_attachments,
-                            num_messages: original_conversation.num_messages,
-                            num_unread: original_conversation.num_unread,
-                            order: 0,
-                            recipients: vec![],
-                            senders: vec![],
-                            size: 0,
-                            subject: "".to_string(),
-                            context_time: None,
-                        }),
-                    }]),
-                    incoming_defaults: None,
-                    mail_settings: None,
-                    message_counts: None,
-                    messages: Some(vec![MessageEvent {
+                        attachment_info: Default::default(),
+                        attachments_metadata: vec![],
+                        display_snoozed_reminder: false,
+                        expiration_time: original_conversation.expiration_time.as_u64(),
+                        labels: original_conversation
+                            .labels
+                            .iter()
+                            .cloned()
+                            .map(|l| ApiConversationLabel {
+                                id: l.remote_label_id.unwrap(),
+                                context_expiration_time: l.context_expiration_time.as_u64(),
+                                context_num_attachments: l.context_num_attachments,
+                                context_num_messages: l.context_num_messages,
+                                context_num_unread: l.context_num_unread,
+                                context_size: l.context_size,
+                                context_snooze_time: l.context_snooze_time.as_u64(),
+                                context_time: l.context_time.as_u64(),
+                            })
+                            .collect(),
+                        num_attachments: original_conversation.num_attachments,
+                        num_messages: original_conversation.num_messages,
+                        num_unread: original_conversation.num_unread,
+                        order: 0,
+                        recipients: vec![],
+                        senders: vec![],
+                        size: 0,
+                        subject: "".to_string(),
+                        context_time: None,
+                    }),
+                }]),
+                incoming_defaults: None,
+                mail_settings: None,
+                message_counts: None,
+                messages: Some(vec![MessageEvent {
+                    id: original_messages[0].remote_id.clone().unwrap(),
+                    action: Action::Create,
+                    message: Some(ApiMessageMetadata {
                         id: original_messages[0].remote_id.clone().unwrap(),
-                        action: Action::Create,
-                        message: Some(ApiMessageMetadata {
-                            id: original_messages[0].remote_id.clone().unwrap(),
-                            conversation_id: original_conversation.remote_id.clone().unwrap(),
-                            address_id: original_messages[0].remote_address_id.clone(),
-                            attachments_metadata: vec![],
-                            bcc_list: vec![],
-                            cc_list: vec![],
-                            expiration_time: 0,
-                            external_id: None,
-                            flags: MessageFlags::empty(),
-                            is_forwarded: false,
-                            is_replied: false,
-                            is_replied_all: false,
-                            label_ids: original_messages[0].label_ids.clone(),
-                            num_attachments: 0,
-                            order: original_messages[0].display_order,
-                            sender: Default::default(),
-                            size: 0,
-                            snooze_time: 0,
-                            subject: "".to_string(),
-                            time: original_messages[0].time.as_u64(),
-                            to_list: vec![],
-                            unread: original_messages[0].unread,
-                        }),
-                    }]),
-                    refresh: 0,
-                    has_more: false,
-                }
-                .into(),
-            )
+                        conversation_id: original_conversation.remote_id.clone().unwrap(),
+                        address_id: original_messages[0].remote_address_id.clone(),
+                        attachments_metadata: vec![],
+                        bcc_list: vec![],
+                        cc_list: vec![],
+                        expiration_time: 0,
+                        external_id: None,
+                        flags: MessageFlags::empty(),
+                        is_forwarded: false,
+                        is_replied: false,
+                        is_replied_all: false,
+                        label_ids: original_messages[0].label_ids.clone(),
+                        num_attachments: 0,
+                        order: original_messages[0].display_order,
+                        sender: Default::default(),
+                        size: 0,
+                        snooze_time: 0,
+                        subject: "".to_string(),
+                        time: original_messages[0].time.as_u64(),
+                        to_list: vec![],
+                        unread: original_messages[0].unread,
+                    }),
+                }]),
+                refresh: 0,
+                has_more: false,
+            })
             .await
             .unwrap();
 

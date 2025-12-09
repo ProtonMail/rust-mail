@@ -34,13 +34,12 @@ use crate::datatypes::{ConversationLabelsCount, MessageLabelsCount};
 use crate::models::{Conversation, IncomingDefaultEvent, MailSettings};
 use proton_core_api::services::proton::EventId;
 use proton_core_common::datatypes::Refresh;
-use proton_core_common::events::{Action, LabelEvent};
+use proton_core_common::event_loop::events::{Action, LabelEvent};
 use proton_core_common::utils::MapVec as _;
-use proton_event_loop::Event;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, MailEvent as ApiMailEvent,
-    MessageEvent as ApiMessageEvent, MessageMetadata,
+    MailEventV5 as ApiCombinedMailEvent, MessageEvent as ApiMessageEvent, MessageMetadata,
 };
 
 /// TODO: Document this struct.
@@ -68,7 +67,7 @@ impl From<ApiConversationEvent> for ConversationEvent {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MailEvent {
+pub(crate) struct MailEvent {
     /// TODO: Document this field.
     pub event_id: EventId,
 
@@ -99,22 +98,6 @@ pub struct MailEvent {
     pub refresh: Refresh,
 }
 
-impl Event for MailEvent {
-    type Response = ApiMailEvent;
-
-    fn event_id(&self) -> proton_event_loop::EventId {
-        self.event_id.clone().into_inner().into()
-    }
-
-    fn has_more(&self) -> bool {
-        self.has_more
-    }
-
-    fn is_refresh(&self) -> bool {
-        self.refresh.is_refresh()
-    }
-}
-
 impl From<ApiMailEvent> for MailEvent {
     fn from(value: ApiMailEvent) -> Self {
         Self {
@@ -142,6 +125,39 @@ impl From<ApiMailEvent> for MailEvent {
             messages: value.messages.map(|messages| messages.map_vec()),
             refresh: value.refresh.into(),
             has_more: value.has_more,
+            incoming_defaults: value
+                .incoming_defaults
+                .map(|i| i.into_iter().map(Into::into).collect()),
+        }
+    }
+}
+impl From<ApiCombinedMailEvent> for MailEvent {
+    fn from(value: ApiCombinedMailEvent) -> Self {
+        Self {
+            event_id: value.core.event_id,
+            conversation_counts: value.conversation_counts.map(|conversation_counts| {
+                conversation_counts
+                    .into_iter()
+                    .map(ConversationLabelsCount::from)
+                    .collect()
+            }),
+            conversations: value.conversations.map(|conversations| {
+                conversations
+                    .into_iter()
+                    .map(ConversationEvent::from)
+                    .collect()
+            }),
+            labels: value.labels.map(|labels| labels.map_vec()),
+            mail_settings: value.mail_settings.map(MailSettings::from),
+            message_counts: value.message_counts.map(|message_counts| {
+                message_counts
+                    .into_iter()
+                    .map(MessageLabelsCount::from)
+                    .collect()
+            }),
+            messages: value.messages.map(|messages| messages.map_vec()),
+            refresh: value.core.refresh.into(),
+            has_more: value.core.has_more,
             incoming_defaults: value
                 .incoming_defaults
                 .map(|i| i.into_iter().map(Into::into).collect()),

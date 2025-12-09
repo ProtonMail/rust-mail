@@ -1,8 +1,8 @@
-use crate::events::MessageEvent;
 use crate::models::Message;
-use crate::{AppError, user_context::events::subscriber::PostEventSyncData};
+use crate::user_context::events::event_model::MessageEvent;
+use crate::{AppError, user_context::events::event_subscriber::PostEventSyncData};
 use proton_action_queue::rebase::RebaseChangeSet;
-use proton_core_common::events::Action;
+use proton_core_common::event_loop::events::Action;
 use proton_core_common::models::ModelIdExtension;
 use stash::params;
 use stash::stash::Bond;

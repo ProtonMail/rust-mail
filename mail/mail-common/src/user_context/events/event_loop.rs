@@ -1,14 +1,13 @@
 use crate::actions::rollback::RollbackAction;
 use crate::models::RollbackItem;
+use crate::user_context::EventSubscriberList;
 use crate::{MailContextError, MailUserContext};
 use anyhow::anyhow;
 use proton_action_queue::action::{Action, ActionGroup};
 use proton_action_queue::queue::{ActionError, BroadcastMessage};
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::app_events::OnEnterForegroundEvent;
-use proton_core_common::services::EventLoopService;
 use proton_core_common::services::InitializationService;
-use proton_event_loop::EventLoopError;
 use stash::orm::Model;
 use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
@@ -199,15 +198,9 @@ impl MailUserContext {
     /// It can be done now at any point, but since they were already in one place,
     /// it does not hurt to leave them here as for now.
     ///
-    pub(crate) async fn register_subscribers(&self) -> Result<(), EventLoopError> {
-        let mail_subscriber = self.event_subscriber();
-
-        self.user_context()
-            .get_service::<EventLoopService>()
-            .event_poll()
-            .register(Box::new(mail_subscriber))
-            .await?;
-
-        Ok(())
+    pub(crate) async fn register_subscribers(&self) -> Result<(), MailContextError> {
+        self.get_service::<EventSubscriberList>()
+            .register(self)
+            .await
     }
 }

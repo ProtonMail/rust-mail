@@ -1,22 +1,22 @@
 #![allow(clippy::needless_pass_by_value)]
 use pretty_assertions::assert_eq;
 use proton_core_api::services::proton::{
-    ContactBasic as ApiContactBasic, ContactCard as ApiContactCard,
-    ContactEmail as ApiContactEmail, ContactFull as ApiContactFull,
-    ContactSendingPreferences as ApiContactSendingPreferences,
+    Action, ContactBasic as ApiContactBasic, ContactCard as ApiContactCard,
+    ContactEmail as ApiContactEmail, ContactEvent, ContactFull as ApiContactFull,
+    ContactSendingPreferences as ApiContactSendingPreferences, CoreEvent, EventId,
 };
 use proton_core_api::services::proton::{ContactEmailId, ContactId, ContactUID, LabelId};
 use proton_core_common::UserContext;
 use proton_core_common::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
-use proton_core_common::event_loop::subscriber::CoreEventSubscriber;
-use proton_core_common::events::{Action, ContactEvent, CoreEvent};
+use proton_core_common::event_loop::event_source::CoreEventCache;
+use proton_core_common::event_loop::event_subscriber::CoreEventSubscriber;
 use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelIdExtension};
 use proton_core_common::test_utils::account::unlocked_user_key;
 use proton_core_common::test_utils::test_context::TestContext;
 use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::proton_crypto::crypto::AccessKeyInfo;
 use proton_crypto_account::proton_crypto::new_pgp_provider;
-use proton_event_loop::subscriber::Subscriber;
+use proton_event_loop::v6::EventSubscriber;
 use stash::orm::Model;
 use stash::params;
 use std::sync::Arc;
@@ -185,17 +185,27 @@ async fn test_sync_and_delete_event_contact() {
     let contact_to_remove = test_contacts.last().unwrap();
 
     let delete_contact_event = ContactEvent {
-        remote_id: contact_to_remove.id.clone(),
+        id: contact_to_remove.id.clone(),
         action: Action::Delete,
         contact: None,
     };
-    let events = CoreEvent {
+    let event = CoreEvent {
+        event_id: EventId::from("Foo"),
+        addresses: None,
+        labels: None,
+        product_used_space: None,
+        used_space: None,
+        user: None,
+        user_settings: None,
         contacts: Some(vec![delete_contact_event]),
-        ..Default::default()
+        refresh: 0,
+        has_more: false,
     };
+
+    let mut cache = CoreEventCache::default();
     // Fire event:
     test_event_subscriber
-        .on_events(&mut [events])
+        .on_event(&event, &mut cache)
         .await
         .expect("failed to execute event");
 
@@ -226,21 +236,30 @@ async fn test_sync_and_modify_event_contact() {
     )
     .await;
 
-    let (modified_contact, _, _) = create_test_local_full_modified_contact();
+    let (modified_contact, _, _) = create_test_remote_full_modified_contact();
 
-    let remote_id = modified_contact.remote_id.clone().unwrap();
+    let remote_id = modified_contact.id.clone();
     let modify_contact_event = ContactEvent {
-        remote_id: remote_id.clone(),
+        id: remote_id.clone(),
         action: Action::Update,
         contact: Some(modified_contact.clone()),
     };
     let event = CoreEvent {
+        event_id: EventId::from("foo"),
+        addresses: None,
+        labels: None,
+        product_used_space: None,
+        used_space: None,
+        user: None,
+        user_settings: None,
         contacts: Some(vec![modify_contact_event]),
-        ..Default::default()
+        refresh: 0,
+        has_more: false,
     };
     // Fire event:
+    let mut cache = CoreEventCache::default();
     test_event_subscriber
-        .on_events(&mut [event])
+        .on_event(&event, &mut cache)
         .await
         .expect("failed to execute event");
 
@@ -261,7 +280,17 @@ async fn test_sync_and_modify_event_contact() {
         contact.contact_emails.len(),
         modified_contact.contact_emails.len()
     );
-    let expected_cards: Vec<ContactCard> = modified_contact.cards.clone();
+
+    let expected_cards: Vec<ContactCard> = modified_contact
+        .cards
+        .clone()
+        .into_iter()
+        .map(|c| {
+            let mut c: ContactCard = c.into();
+            c.remote_contact_id = Some(modified_contact.id.clone());
+            c
+        })
+        .collect();
     contact.cards(&conn).await.expect("Failed to query cards");
     prune_cards!(contact.cards);
     assert_eq!(contact.cards, expected_cards);
@@ -659,42 +688,35 @@ fn create_test_remote_full_contact() -> ApiContactFull {
     }
 }
 
-fn create_test_local_full_modified_contact() -> (Contact, ContactEmail, ContactEmail) {
-    let mut contact = create_test_local_full_contact();
+fn create_test_remote_full_modified_contact() -> (ApiContactFull, ApiContactEmail, ApiContactEmail)
+{
+    let mut contact = create_test_remote_full_contact();
     let removed_mail = contact.contact_emails.pop().unwrap();
-    let new_email = ContactEmail {
-        local_id: None,
-        remote_id: Some(ContactEmailId::from("aefew4323jFv0BhScc==".to_owned())),
-        local_contact_id: None,
-        remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==".to_owned())),
+    let new_email = ApiContactEmail {
+        id: ContactEmailId::from("aefew4323jFv0BhScc==".to_owned()),
+        contact_id: ContactId::from("a29olIjFv0rnXxBhSMw==".to_owned()),
         canonical_email: "contact_email_mod@contact.test".into(),
-        contact_type: ContactTypes::new(vec!["work".to_owned()]),
-        defaults: ContactSendingPreferences::Default,
-        display_order: 1,
+        contact_type: vec!["work".to_owned()],
+        defaults: ApiContactSendingPreferences::Default,
+        order: 1,
         email: "contact_email_mod@contact.test".into(),
         is_proton: true,
-        label_ids: Labels::new(vec![LabelId::from(
+        label_ids: vec![LabelId::from(
             "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==".to_owned(),
-        )]),
-        last_used_time: 0.into(),
+        )],
+        last_used_time: 0,
         name: "contact_email_name_mod".to_owned(),
     };
     contact.modify_time += 1;
     contact.size += 1;
     contact.contact_emails.push(new_email.clone());
     contact.cards = vec![
-        ContactCard {
-            local_id: None,
-            local_contact_id: None,
-            remote_contact_id: contact.remote_id.clone(),
+        ApiContactCard {
             card_type: ContactCardType::Signed,
             data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-129892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:sdfsdf@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
         },
-        ContactCard {
-            local_id: None,
-            local_contact_id: None,
-            remote_contact_id: contact.remote_id.clone(),
+        ApiContactCard {
             card_type: ContactCardType::EncryptedAndSigned,
             data: "-----BEGIN PGP MESSAGE-----modified.*-----END PGP MESSAGE-----".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----modified.*-----END PGP SIGNATURE-----".to_owned()),

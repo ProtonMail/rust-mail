@@ -235,8 +235,8 @@ mod tests {
     use crate::provider::MockEventProvider;
     use crate::store::MockEventStore;
     use crate::v6::source::EventSourceDependencyList;
-    use crate::v6::subscriber::MockEventSubscriber;
-    use crate::{EventId, EventMetadata, RawEvent, SubscriberError};
+    use crate::v6::subscriber::{EventSubscriberError, MockEventSubscriber};
+    use crate::{EventId, EventMetadata, RawEvent};
     use mockall::Sequence;
     use serde_with::serde_derive::Deserialize;
 
@@ -329,7 +329,7 @@ mod tests {
         is_retryable: bool,
     }
 
-    impl SubscriberError for TestSubscriberError {
+    impl EventSubscriberError for TestSubscriberError {
         fn is_network_failure(&self) -> bool {
             self.is_network
         }

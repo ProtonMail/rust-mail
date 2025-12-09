@@ -1458,7 +1458,7 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
         has_more: false,
     };
 
-    user_ctx.apply_event(event.into()).await.unwrap();
+    user_ctx.apply_event(event).await.unwrap();
     // Sanity check expected state
     let conversations = Conversation::in_label(local_label_id, &tether)
         .await

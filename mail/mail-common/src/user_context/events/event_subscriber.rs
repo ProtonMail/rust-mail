@@ -1,5 +1,6 @@
 use crate::actions::refresh::ActionRefresh;
 use crate::actions::{conversations, messages};
+use crate::datatypes::ConversationLabelsCount;
 use crate::datatypes::{LocalConversationId, LocalMessageId};
 use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
 use crate::models::{
@@ -10,8 +11,7 @@ use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
-use crate::{MailContextError, MailUserContext};
-use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
+use crate::{AppError, MailContextError, MailUserContext};
 use anyhow::Context;
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -21,8 +21,7 @@ use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOu
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_common::datatypes::{Refresh, SystemLabel};
-use proton_core_common::models::Label;
-use proton_event_loop::subscriber::{Subscriber, SubscriberError, SubscriberResult};
+use proton_core_common::models::{Label, LabelError};
 use stash::orm::Model;
 use std::collections::HashMap;
 use std::sync::Weak;
@@ -30,13 +29,19 @@ use tracing::{debug, error, info, warn};
 // Import common macros from core
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
-use proton_core_common::event_loop::{join_task, try_refresh};
+use crate::user_context::events::event_model::MailEvent;
+use crate::user_context::events::event_source::MailEventSourceV5;
+use proton_core_common::event_loop::join_task;
+use proton_event_loop::v6::{
+    EventSource, EventSubscriber, EventSubscriberError, EventSubscriberResult,
+};
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
+use proton_mail_api::services::proton::prelude::MailEventV5;
 use stash::stash::{StashError, Tether};
 
-pub struct MailEventSubscriber(Weak<MailUserContext>);
+pub struct MailEventV5Subscriber(Weak<MailUserContext>);
 
-impl MailEventSubscriber {
+impl MailEventV5Subscriber {
     pub fn new(ctx: Weak<MailUserContext>) -> Self {
         Self(ctx)
     }
@@ -60,29 +65,67 @@ pub enum MailEventSubscriberError {
     Other(#[from] anyhow::Error),
 }
 
-impl SubscriberError for MailEventSubscriberError {
+impl From<LabelError> for MailEventSubscriberError {
+    fn from(e: LabelError) -> Self {
+        match e {
+            LabelError::API(e) => Self::Api(e),
+            LabelError::Stash(e) => Self::Stash(e),
+            e => Self::Other(e.into()),
+        }
+    }
+}
+
+impl From<MailContextError> for MailEventSubscriberError {
+    fn from(e: MailContextError) -> Self {
+        match e {
+            MailContextError::Label(e) => e.into(),
+            MailContextError::App(e) => match e {
+                AppError::API(e) => Self::Api(e),
+                AppError::Stash(e) => Self::Stash(e),
+                AppError::Label(e) => e.into(),
+                e => Self::Other(e.into()),
+            },
+            MailContextError::Stash(e) => Self::Stash(e),
+            MailContextError::Api(e) => Self::Api(e),
+            _ => Self::Other(e.into()),
+        }
+    }
+}
+
+impl EventSubscriberError for MailEventSubscriberError {
     fn is_network_failure(&self) -> bool {
         match self {
             MailEventSubscriberError::Api(e) => e.is_network_failure(),
             MailEventSubscriberError::Stash(_) | MailEventSubscriberError::Other(_) => false,
         }
     }
+    fn is_retryable(&self) -> bool {
+        match self {
+            MailEventSubscriberError::Api(e) => e.is_network_failure() || e.is_server_failure(),
+            MailEventSubscriberError::Stash(_) | MailEventSubscriberError::Other(_) => false,
+        }
+    }
 }
 
 #[async_trait]
-impl Subscriber<MailEvent> for MailEventSubscriber {
+impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
     fn name(&self) -> &'static str {
         "proton-mail-event-subscriber"
     }
 
-    async fn on_events(&self, events: &mut [MailEvent]) -> SubscriberResult<()> {
+    async fn on_event(
+        &self,
+        event: &MailEventV5,
+        _: &mut <MailEventSourceV5 as EventSource>::Cache,
+    ) -> EventSubscriberResult<()> {
         async {
             let Some(ctx) = self.0.upgrade() else {
                 warn!("Mail user context is no longer alive");
                 return Ok(());
             };
 
-            debug!("Handling {} mail events", events.len());
+            // TODO: to be replaced with fetching of elements from API.
+            let mut event: MailEvent = event.clone().into();
 
             let mut tether = ctx.user_context.stash().connection().await?;
             let mut data = PostEventSyncData::default();
@@ -90,7 +133,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
             // Check for missing dependencies. Sometimes when lot of messages/conversations get moved
             // to newly created label the items can have the new label before the label create event.
 
-            calculate_missing_dependencies(events, &tether)
+            calculate_missing_dependencies(&event, &tether)
                 .await
                 .context("Failed to calculate dependencies")?
                 .fetch_and_store(ctx.session(), &mut tether)
@@ -101,66 +144,64 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 .tx::<_, _, MailEventSubscriberError>(async |tx| {
                     let mut rebase_change_set = RebaseChangeSet::default();
 
-                    for event in events {
-                        if let Some(labels) = &event.labels {
-                            debug!("Handling label events");
-                            handle_label_events(tx, labels)
-                                .await
-                                .context("Error handling label events")?;
-                        }
-
-                        if let Some(conversations) = &event.conversations {
-                            debug!("Handling conversation events");
-                            handle_conversation_events(
-                                tx,
-                                conversations,
-                                &mut rebase_change_set,
-                                &mut data,
-                            )
+                    if let Some(labels) = &event.labels {
+                        debug!("Handling label events");
+                        handle_label_events(tx, labels)
                             .await
-                            .context("Error handling conversation events")?;
-                        }
-
-                        if let Some(messages) = &event.messages {
-                            debug!("Handling message events");
-                            handle_message_events(tx, messages, &mut rebase_change_set, &mut data)
-                                .await
-                                .context("Error handling message events")?;
-                        }
-
-                        if let Some(conversation_counts) = &event.conversation_counts {
-                            debug!("Handling conversation counts");
-                            ConversationLabelsCount::create_or_update_conversation_counts(
-                                conversation_counts.clone(),
-                                tx,
-                            )
-                            .await?;
-                        }
-
-                        if let Some(message_counts) = &event.message_counts {
-                            debug!("Handling message counts");
-                            MessageLabelsCount::create_or_update_message_counts(
-                                message_counts.clone(),
-                                tx,
-                            )
-                            .await?;
-                        }
-
-                        if let Some(mail_settings) = event.mail_settings.as_mut() {
-                            debug!("Handling mail settings");
-                            mail_settings.save(tx).await?;
-                        }
-
-                        // It so happens that the API only returns the IDs of what changed, not the
-                        // actual data, so we better reload all.
-                        data.queue_incoming_default |= event.incoming_defaults.is_some();
-
-                        ctx.rebaseable_queue()
-                            .await
-                            .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
-                            .await
-                            .context("Failed to rebase")?;
+                            .context("Error handling label events")?;
                     }
+
+                    if let Some(conversations) = &event.conversations {
+                        debug!("Handling conversation events");
+                        handle_conversation_events(
+                            tx,
+                            conversations,
+                            &mut rebase_change_set,
+                            &mut data,
+                        )
+                        .await
+                        .context("Error handling conversation events")?;
+                    }
+
+                    if let Some(messages) = &event.messages {
+                        debug!("Handling message events");
+                        handle_message_events(tx, messages, &mut rebase_change_set, &mut data)
+                            .await
+                            .context("Error handling message events")?;
+                    }
+
+                    if let Some(conversation_counts) = &event.conversation_counts {
+                        debug!("Handling conversation counts");
+                        ConversationLabelsCount::create_or_update_conversation_counts(
+                            conversation_counts.clone(),
+                            tx,
+                        )
+                        .await?;
+                    }
+
+                    if let Some(message_counts) = &event.message_counts {
+                        debug!("Handling message counts");
+                        MessageLabelsCount::create_or_update_message_counts(
+                            message_counts.clone(),
+                            tx,
+                        )
+                        .await?;
+                    }
+
+                    if let Some(mail_settings) = event.mail_settings.as_mut() {
+                        debug!("Handling mail settings");
+                        mail_settings.save(tx).await?;
+                    }
+
+                    // It so happens that the API only returns the IDs of what changed, not the
+                    // actual data, so we better reload all.
+                    data.queue_incoming_default |= event.incoming_defaults.is_some();
+
+                    ctx.rebaseable_queue()
+                        .await
+                        .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
+                        .await
+                        .context("Failed to rebase")?;
                     Ok(())
                 })
                 .await
@@ -208,19 +249,20 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
             Ok::<_, MailEventSubscriberError>(())
         }
         .await
-        .map_err(|e| -> Box<dyn SubscriberError> { Box::new(e) })
+        .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
     }
 
-    async fn on_refresh(&self, event: &MailEvent) -> SubscriberResult<()> {
+    async fn on_refresh<'a>(
+        &self,
+        event: Option<&'a MailEventV5>,
+        _: &mut <MailEventSourceV5 as EventSource>::Cache,
+    ) -> EventSubscriberResult<()> {
         let Some(ctx) = self.0.upgrade() else {
             warn!("Mail user context is no longer alive");
             return Ok(());
         };
-        ctx.on_refresh_impl(event.refresh).await
-    }
-
-    fn is_alive(&self) -> bool {
-        self.0.strong_count() > 0
+        ctx.on_refresh_impl(event.map_or(Refresh::All, |event| Refresh::from(event.core.refresh)))
+            .await
     }
 }
 
@@ -234,14 +276,14 @@ impl MailUserContext {
             .await
     }
 
-    pub async fn on_refresh_impl(&self, refresh: Refresh) -> SubscriberResult<()> {
+    pub async fn on_refresh_impl(&self, refresh: Refresh) -> EventSubscriberResult<()> {
         info!("Handling refresh event: {refresh:?}");
 
         match refresh {
             Refresh::None => {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
             }
-            Refresh::Mail | Refresh::All => try_refresh!(refresh_mail, self),
+            Refresh::Mail | Refresh::All => refresh_mail(self).await?,
             Refresh::Contacts => {
                 // Contacts refresh is handled by the core event subscriber
             }
@@ -255,14 +297,14 @@ impl MailUserContext {
 }
 
 #[tracing::instrument(skip_all)]
-async fn refresh_mail(ctx: &MailUserContext) -> SubscriberResult<()> {
+async fn refresh_mail(ctx: &MailUserContext) -> EventSubscriberResult<()> {
     async {
         let api = ctx.session().clone();
         let all_remote_labels = ctx.spawn(async move { Label::fetch_mail_labels(&api).await });
         let api = ctx.session().clone();
         let counters = ctx.spawn(async move { StoreLabelCounters::fetch(&api).await });
         let api = ctx.session().clone();
-        let mail_settings = ctx.spawn(async move { MailSettings::sync_mail_settings(&api).await });
+        let mail_settings = ctx.spawn(async move { MailSettings::fetch_mail_settings(&api).await });
 
         let mut tether = ctx.user_context.stash().connection().await?;
         let mut all_local_labels: HashMap<_, _> = Label::all_mail(&tether)
@@ -386,28 +428,26 @@ async fn refresh_mail(ctx: &MailUserContext) -> SubscriberResult<()> {
         Ok::<_, MailEventSubscriberError>(())
     }
     .await
-    .map_err(|e| -> Box<dyn SubscriberError> { Box::new(e) })
+    .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
 }
 
 async fn calculate_missing_dependencies(
-    events: &[MailEvent],
+    event: &MailEvent,
     tether: &Tether,
 ) -> Result<MessageOrConversationDependencyFetcher, MailContextError> {
     let mut fetcher = MessageOrConversationDependencyFetcher::new();
-    for event in events {
-        if let Some(conversation_events) = &event.conversations {
-            for conversation_event in conversation_events {
-                if let Some(conversation) = conversation_event.conversation.as_ref() {
-                    fetcher.check_conversation(conversation, tether).await?
-                }
+    if let Some(conversation_events) = &event.conversations {
+        for conversation_event in conversation_events {
+            if let Some(conversation) = conversation_event.conversation.as_ref() {
+                fetcher.check_conversation(conversation, tether).await?
             }
         }
+    }
 
-        if let Some(message_events) = &event.messages {
-            for message_event in message_events {
-                if let Some(message) = message_event.message.as_ref() {
-                    fetcher.check_api_message_metadata(message, tether).await?
-                }
+    if let Some(message_events) = &event.messages {
+        for message_event in message_events {
+            if let Some(message) = message_event.message.as_ref() {
+                fetcher.check_api_message_metadata(message, tether).await?
             }
         }
     }

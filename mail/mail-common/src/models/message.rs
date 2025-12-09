@@ -62,7 +62,7 @@ use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{
     LabelType, LocalAddressId, LocalLabelId, SystemLabel, UnixTimestamp,
 };
-use proton_core_common::events::Action;
+use proton_core_common::event_loop::events::Action;
 use proton_core_common::models::{Address, Label, LabelError, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::proton_crypto;
 use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;

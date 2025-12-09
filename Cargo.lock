@@ -5406,7 +5406,6 @@ version = "0.7.29"
 dependencies = [
  "anyhow",
  "async-trait",
- "indexmap 2.11.0",
  "mockall",
  "serde",
  "serde_json",

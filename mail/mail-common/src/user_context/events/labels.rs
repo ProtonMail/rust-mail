@@ -1,6 +1,6 @@
 use crate::AppError;
 use crate::models::{ConversationCounters, MessageCounters};
-use proton_core_common::events::{Action, LabelEvent};
+use proton_core_common::event_loop::events::{Action, LabelEvent};
 use proton_core_common::models::{Label, ModelIdExtension};
 use stash::orm::Model;
 use stash::stash::Bond;
