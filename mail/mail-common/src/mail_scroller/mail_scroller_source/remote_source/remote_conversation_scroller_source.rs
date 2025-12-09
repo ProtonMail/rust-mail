@@ -28,11 +28,6 @@ use proton_mail_api::services::proton::{
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 
-/// Mail scroller implementation for [`Conversation`] on in a [`Label`].
-///
-/// The scroller keeps track of the last element returned by the server for the
-/// selected label and read filter. This element is then used to fetch
-/// new data from the server.
 #[derive(Debug)]
 pub(super) struct RemoteConversationScrollerSource;
 

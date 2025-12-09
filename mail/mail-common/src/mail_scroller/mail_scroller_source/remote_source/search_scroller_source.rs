@@ -25,11 +25,6 @@ use std::{cmp, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::debug;
 
-/// Mail scroller implementation for Server search.
-///
-/// The scroller keeps track of the last element returned by the server for the
-/// selected search query. This element is then used to fetch next pages
-///
 #[derive(Debug)]
 pub struct SearchScrollerSource {
     local_label_id: LocalLabelId,
