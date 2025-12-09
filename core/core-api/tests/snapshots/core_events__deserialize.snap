@@ -1,6 +1,7 @@
 ---
 source: core/core-api/tests/core_events.rs
 expression: mail_event
+snapshot_kind: text
 ---
 CoreEvent {
     event_id: EventId(
@@ -284,10 +285,44 @@ CoreEvent {
                 ),
                 action: Create,
                 contact: Some(
-                    ContactBasic {
+                    ContactFull {
                         id: ContactId(
                             "a29olIjFv0rnXxBhSMw==",
                         ),
+                        cards: [
+                            ContactCard {
+                                card_type: Signed,
+                                data: "    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-139892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:features@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD",
+                                signature: Some(
+                                    "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----",
+                                ),
+                            },
+                        ],
+                        contact_emails: [
+                            ContactEmail {
+                                id: ContactEmailId(
+                                    "aefew4323jFv0BhSMw==",
+                                ),
+                                contact_id: ContactId(
+                                    "a29olIjFv0rnXxBhSMw==",
+                                ),
+                                canonical_email: fXXXXXXX@XXXXXXXXXXXXXXXX,
+                                contact_type: [
+                                    "work",
+                                ],
+                                defaults: Default,
+                                email: fXXXXXXX@XXXXXXXXXXXXXXXX,
+                                is_proton: true,
+                                label_ids: [
+                                    LabelId(
+                                        "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
+                                    ),
+                                ],
+                                last_used_time: 0,
+                                name: "test1",
+                                order: 1,
+                            },
+                        ],
                         create_time: 1503815366,
                         label_ids: [
                             LabelId(

@@ -571,7 +571,7 @@ pub struct ContactEvent {
     pub action: Action,
 
     /// TODO: Document this field.
-    pub contact: Option<ContactBasic>,
+    pub contact: Option<ContactFull>,
 }
 
 /// A complete contact returned by the API.
