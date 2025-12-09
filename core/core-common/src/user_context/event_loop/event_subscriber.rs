@@ -1,12 +1,9 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Weak},
-};
+use std::sync::{Arc, Weak};
 
 use crate::{
     CoreContextError, UserContext,
     datatypes::Refresh,
-    models::{Address, Contact, Label, ModelExtension, User},
+    models::{Address, Contact, Label, User},
 };
 use anyhow::Context;
 use async_trait::async_trait;
@@ -14,7 +11,6 @@ use proton_core_api::services::proton::UserId;
 use proton_event_loop::EventLoopError;
 use stash::{
     orm::Model,
-    params,
     stash::{Bond, StashError},
 };
 use tracing::{debug, error, info, warn};
@@ -51,15 +47,17 @@ pub mod macros {
 }
 
 // Re-export macros for easier access
-use crate::models::{LabelError, ModelIdExtension};
+use crate::models::LabelError;
 pub use macros::*;
 
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 
 use crate::event_loop::account_event_subscriber::AccountEventSubscriber;
-use crate::event_loop::event_source::{CoreEventCache, CoreEventSource};
+use crate::event_loop::event_source::CoreEventSource;
 use crate::event_loop::events::LabelEvent;
-use crate::user_context::event_loop::events::{Action, AddressEvent, ContactEvent, CoreEvent};
+use crate::event_loop::v6;
+use crate::event_loop::v6::CoreEventCache;
+use crate::user_context::event_loop::events::{AddressEvent, ContactEvent, CoreEvent};
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
@@ -181,18 +179,15 @@ impl EventSubscriber<CoreEventSource> for CoreEventSubscriber {
     async fn on_refresh<'a>(
         &self,
         event: Option<&'a <CoreEventSource as EventSource>::Event>,
-        cache: &mut CoreEventCache,
+        _: &mut CoreEventCache,
     ) -> EventSubscriberResult<()> {
         let Some(ctx) = self.0.upgrade() else {
             warn!("User context is no longer alive");
             return Ok(());
         };
 
-        ctx.on_refresh_impl(
-            event.map_or(Refresh::All, |event| event.refresh.into()),
-            cache,
-        )
-        .await
+        ctx.on_refresh_impl(event.map_or(Refresh::All, |event| event.refresh.into()))
+            .await
     }
 }
 
@@ -260,11 +255,7 @@ async fn handle_event(
 }
 
 impl UserContext {
-    pub async fn on_refresh_impl(
-        &self,
-        refresh: Refresh,
-        cache: &mut CoreEventCache,
-    ) -> EventSubscriberResult<()> {
+    pub async fn on_refresh_impl(&self, refresh: Refresh) -> EventSubscriberResult<()> {
         info!("Handling refresh event: {refresh:?}");
 
         match refresh {
@@ -272,11 +263,11 @@ impl UserContext {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
             }
             Refresh::Contacts => {
-                if let Err(e) = refresh_contacts(self).await {
+                if let Err(e) = v6::refresh_contacts(self).await {
                     if !e.is_retryable() {
                         self.issue_reporter_service().report(
                             IssueLevel::Critical,
-                            "Failed to apply refresh contacts".into(),
+                            "Failed to apply refresh contacts (v5)".into(),
                             issue_report_keys_from_error(e.as_ref()),
                         );
                     }
@@ -287,11 +278,11 @@ impl UserContext {
                 // Mail refresh is handled by the mail context
             }
             Refresh::All => {
-                if let Err(e) = refresh_core(self, cache).await {
+                if let Err(e) = v6::refresh_core(self).await {
                     if !e.is_retryable() {
                         self.issue_reporter_service().report(
                             IssueLevel::Critical,
-                            "Failed to apply refresh".into(),
+                            "Failed to apply refresh (v5)".into(),
                             issue_report_keys_from_error(e.as_ref()),
                         );
                     }
@@ -325,17 +316,46 @@ impl UserContext {
         not(feature = "events-v6"),
         allow(clippy::unused_async, reason = "Temporary progression")
     )]
-    pub(crate) async fn register_subscribers(self: &Arc<Self>) -> Result<(), EventLoopError> {
+    pub(crate) async fn register_subscribers(self: &Arc<Self>) -> Result<(), CoreContextError> {
         #[cfg(feature = "events-v6")]
         {
-            todo!("Setup v6 event source and subscriber");
+            use anyhow::anyhow;
             let event_loop_service = self.event_loop_service();
-
             let event_poll = event_loop_service.event_poll();
-            event_poll.subscribe(self.event_subscriber()).await?;
+
+            let core_event_ctx = v6::CoreEventLoopV6Context::from(Arc::downgrade(self));
+            let contact_event_ctx = v6::ContactEventLoopV6Context::from(Arc::downgrade(self));
             event_poll
-                .subscribe(self.account_event_subscriber())
+                .add::<v6::CoreEventSourceV6>(
+                    core_event_ctx.clone().boxed(),
+                    core_event_ctx.boxed(),
+                )
                 .await?;
+            event_poll
+                .add::<v6::ContactEventSourceV6>(
+                    contact_event_ctx.clone().boxed(),
+                    contact_event_ctx.boxed(),
+                )
+                .await?;
+
+            event_poll
+                .subscribe(self.core_event_subscriber_v6())
+                .await?
+                .ok_or(CoreContextError::Other(anyhow!(
+                    "Failed to register core v6 subscriber"
+                )))?;
+            event_poll
+                .subscribe(self.account_event_subscriber_v6())
+                .await?
+                .ok_or(CoreContextError::Other(anyhow!(
+                    "Failed register account v6 subscriber"
+                )))?;
+            event_poll
+                .subscribe(self.contact_event_subscriber_v6())
+                .await?
+                .ok_or(CoreContextError::Other(anyhow!(
+                    "Failed register contact v6 subscriber"
+                )))?;
         }
 
         Ok(())
@@ -359,6 +379,27 @@ impl UserContext {
     }
 
     #[must_use]
+    pub fn core_event_subscriber_v6(
+        self: &Arc<Self>,
+    ) -> impl EventSubscriber<v6::CoreEventSourceV6> + 'static {
+        v6::CoreEventV6Subscriber::from(Arc::downgrade(self))
+    }
+
+    #[must_use]
+    pub fn contact_event_subscriber_v6(
+        self: &Arc<Self>,
+    ) -> impl EventSubscriber<v6::ContactEventSourceV6> + 'static {
+        v6::ContactEventV6Subscriber::from(Arc::downgrade(self))
+    }
+
+    #[must_use]
+    pub fn account_event_subscriber_v6(
+        self: &Arc<Self>,
+    ) -> impl EventSubscriber<v6::CoreEventSourceV6> + 'static {
+        v6::AccountEventV6Subscriber::from(Arc::downgrade(self))
+    }
+
+    #[must_use]
     pub fn account_event_subscriber(
         self: &Arc<Self>,
     ) -> impl EventSubscriber<CoreEventSource> + 'static {
@@ -366,190 +407,20 @@ impl UserContext {
     }
 }
 
-#[tracing::instrument(skip_all)]
-async fn refresh_core(ctx: &UserContext, _: &mut CoreEventCache) -> EventSubscriberResult<()> {
-    async {
-        let api = ctx.session().clone();
-        let contacts = ctx.spawn(async move { Contact::sync(&api).await });
-        let api = ctx.session().clone();
-        let all_remote_addresses = ctx.spawn(async move { Address::sync(&api).await });
-        let api = ctx.session().clone();
-        let user_and_settings = ctx.spawn(async move { User::sync_user_and_settings(&api).await });
-        let api = ctx.session().clone();
-        let all_remote_labels = ctx.spawn(async move { Label::fetch_contact_labels(&api).await });
-
-        let mut tether = ctx.stash().connection().await?;
-        let mut all_local_addresses: HashMap<_, _> = Address::all(&tether)
-            .await?
-            .into_iter()
-            .map(|addr| (addr.remote_id.clone(), addr))
-            .collect();
-        let mut all_local_labels: HashMap<_, _> = Label::all_contact_groups(&tether)
-            .await?
-            .into_iter()
-            .map(|label| (label.remote_id.clone(), label))
-            .collect();
-        debug!(
-            "Number of labels available localy: {}",
-            all_local_labels.len()
-        );
-
-        debug!(
-            "Number of addresses available localy: {}",
-            all_local_addresses.len()
-        );
-
-        let all_remote_addresses = join_task!(all_remote_addresses, "addresses").inner();
-        let user_and_settings = join_task!(user_and_settings, "user and settings");
-        let all_remote_labels = join_task!(all_remote_labels, "labels");
-
-        debug!(
-            "Number of addresses available remotely: {}",
-            all_remote_addresses.len()
-        );
-        for remote_label in &all_remote_addresses {
-            all_local_addresses.remove(&remote_label.remote_id);
-        }
-        debug!(
-            "Number of labels available remotely: {}",
-            all_remote_labels.len()
-        );
-        for remote_label in &all_remote_labels {
-            all_local_labels.remove(&remote_label.remote_id);
-        }
-
-        let contacts = join_task!(contacts, "contacts");
-
-        tether
-            .tx::<_, _, CoreEventSubscriberError>(async |tx| {
-                for local_address_to_remove in all_local_addresses.into_values() {
-                    debug!(
-                        "Removing address with remote_id {:?}",
-                        local_address_to_remove.remote_id
-                    );
-                    local_address_to_remove.delete(tx).await?;
-                }
-                for mut remote_address in all_remote_addresses {
-                    remote_address.save(tx).await?;
-                }
-
-                Label::store_labels_async(tx, all_remote_labels)
-                    .await
-                    .map_err(|e| anyhow::Error::new(e).context("Failed to store labels"))?;
-
-                for local_label_to_remove in all_local_labels.into_values() {
-                    debug!(
-                        "Removing label with remote_id {:?}",
-                        local_label_to_remove.remote_id
-                    );
-                    local_label_to_remove.delete(tx).await?;
-                }
-
-                tx.sync_bridge(move |tx| {
-                    user_and_settings.store(tx)?;
-                    contacts.store(tx)?;
-                    Ok(())
-                })
-                .await?;
-
-                Ok(())
-            })
-            .await
-            .inspect_err(|e| {
-                error!("Failed to update database entries while refreshing core: {e}");
-            })?;
-
-        Ok::<_, CoreEventSubscriberError>(())
-    }
-    .await
-    .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
-}
-
-#[tracing::instrument(skip_all)]
-async fn refresh_contacts(ctx: &UserContext) -> EventSubscriberResult<()> {
-    async {
-        let api = ctx.session().clone();
-        let contacts = ctx.spawn(async move { Contact::sync(&api).await });
-        let api = ctx.session().clone();
-        let all_remote_labels = ctx.spawn(async move { Label::fetch_contact_labels(&api).await });
-        let mut tether = ctx.stash().connection().await?;
-        let mut all_local_labels: HashMap<_, _> = Label::all_contact_groups(&tether)
-            .await?
-            .into_iter()
-            .map(|label| (label.remote_id.clone(), label))
-            .collect();
-        debug!(
-            "Number of labels available localy: {}",
-            all_local_labels.len()
-        );
-        let all_remote_labels = join_task!(all_remote_labels, "labels");
-        debug!(
-            "Number of labels available remotely: {}",
-            all_remote_labels.len()
-        );
-        for remote_label in &all_remote_labels {
-            all_local_labels.remove(&remote_label.remote_id);
-        }
-
-        let contacts = join_task!(contacts, "contacts");
-
-        tether
-            .sync_tx(move |tx| {
-                Label::store_labels(tx, all_remote_labels).context("Failed to sync labels")?;
-
-                for local_label_to_remove in all_local_labels.into_values() {
-                    debug!(
-                        "Removing label with remote_id {:?}",
-                        local_label_to_remove.remote_id
-                    );
-                    local_label_to_remove.delete_sync(tx)?;
-                }
-                contacts.store(tx)?;
-
-                Ok(())
-            })
-            .await
-            .inspect_err(|e| {
-                error!("Failed to update database entries while refreshing core: {e}");
-            })?;
-
-        Ok::<_, CoreEventSubscriberError>(())
-    }
-    .await
-    .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
-}
-
 async fn handle_address_event(
     tx: &Bond<'_>,
     address_events: &mut [AddressEvent],
-    rebase_change_set: &mut RebaseChangeSet,
+    changeset: &mut RebaseChangeSet,
 ) -> Result<(), StashError> {
     for event in address_events {
-        event
-            .action
-            .log_entry(&event.remote_id, async |remote_id| {
-                Address::remote_id_counterpart(remote_id.clone(), tx)
-                    .await
-                    .unwrap_or_default()
-                    .map(|v| v.as_u64())
-            })
-            .await;
-        match event.action {
-            Action::Delete => {
-                warn!("[ET-1461] Delete action not implemented for address event");
-            }
-
-            Action::Create | Action::Update => {
-                if let Some(ref mut address) = event.address {
-                    address.save(tx).await?;
-                    rebase_change_set.add(address.id());
-                }
-            }
-
-            Action::UpdateFlags => {
-                warn!("[ET-1461] UpdateFlags action not implemented for address event");
-            }
-        }
+        Address::handle_event(
+            tx,
+            &event.remote_id,
+            event.action,
+            event.address.as_mut(),
+            changeset,
+        )
+        .await?;
     }
 
     Ok(())
@@ -558,85 +429,35 @@ async fn handle_address_event(
 async fn handle_contact_event(
     tx: &Bond<'_>,
     contact_events: &mut [ContactEvent],
-    rebase_change_set: &mut RebaseChangeSet,
+    changeset: &mut RebaseChangeSet,
 ) -> Result<(), StashError> {
     for event in contact_events {
-        event
-            .action
-            .log_entry(&event.remote_id, async |remote_id| {
-                Contact::remote_id_counterpart(remote_id.clone(), tx)
-                    .await
-                    .unwrap_or_default()
-                    .map(|v| v.as_u64())
-            })
-            .await;
-        match event.action {
-            Action::Delete => tx
-                .execute(
-                    "DELETE FROM contacts WHERE remote_id = ?",
-                    params![event.remote_id.clone()],
-                )
-                .await
-                .map(|_| ())
-                .map_err(|e| {
-                    error!("Failed to delete contact: {e:?}");
-                    e
-                })?,
-            Action::Create | Action::Update => {
-                if let Some(ref mut contact) = event.contact {
-                    contact.save(tx).await.map_err(|e| {
-                        error!("Failed to create or update contact: {e:?}");
-                        e
-                    })?;
-                    rebase_change_set.add(contact.id());
-                }
-            }
-            Action::UpdateFlags => (),
-        }
+        Contact::handle_event(
+            tx,
+            &event.remote_id,
+            event.action,
+            event.contact.as_mut(),
+            changeset,
+        )
+        .await?;
     }
     Ok(())
 }
 
 pub async fn handle_label_events(
     tx: &Bond<'_>,
-    label_events: &[LabelEvent],
-    rebase_change_set: &mut RebaseChangeSet,
+    label_events: &mut [LabelEvent],
+    changeset: &mut RebaseChangeSet,
 ) -> Result<(), StashError> {
     for label_event in label_events {
-        label_event
-            .action
-            .log_entry(&label_event.remote_id, async |remote_id| {
-                Label::remote_id_counterpart(remote_id.clone(), tx)
-                    .await
-                    .unwrap_or_default()
-                    .map(|v| v.as_u64())
-            })
-            .await;
-        match label_event.action {
-            Action::Delete => {
-                tx.execute(
-                    "DELETE FROM labels WHERE remote_id = ?",
-                    params![label_event.remote_id.clone()],
-                )
-                .await?;
-            }
-            Action::Create => {
-                if let Some(mut label) = label_event.label.clone() {
-                    label.save(tx).await?;
-                    rebase_change_set.add(label.id());
-                } else {
-                    warn!("Received label create without label");
-                }
-            }
-            Action::Update | Action::UpdateFlags => {
-                if let Some(mut label) = label_event.label.clone() {
-                    label.save(tx).await?;
-                    rebase_change_set.add(label.id());
-                } else {
-                    warn!("Received label update without label");
-                }
-            }
-        }
+        Label::handle_event(
+            tx,
+            &label_event.remote_id,
+            label_event.action,
+            label_event.label.as_mut(),
+            changeset,
+        )
+        .await?;
     }
     Ok(())
 }
