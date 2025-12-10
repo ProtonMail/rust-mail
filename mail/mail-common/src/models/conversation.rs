@@ -40,6 +40,7 @@ use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{
     InitializationKey, LabelType, LocalLabelId, SystemLabel, UnixTimestamp, WeekStart,
 };
+use proton_core_common::event_loop::events::Action;
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent, Label, ModelExtension,
     ModelIdExtension, User,
@@ -2179,6 +2180,57 @@ impl Conversation {
     pub fn sort_labels(&mut self) {
         self.labels
             .sort_by(|l1, l2| l1.local_label_id.cmp(&l2.local_label_id));
+    }
+
+    pub async fn handle_event(
+        tx: &Bond<'_>,
+        id: &ConversationId,
+        action: Action,
+        conversation: Option<&mut Conversation>,
+        changeset: &mut RebaseChangeSet,
+    ) -> Result<Option<LocalConversationId>, AppError> {
+        action
+            .log_entry(id, async |remote_id| {
+                Conversation::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
+
+        match action {
+            Action::Delete => {
+                tx.execute(
+                    "DELETE FROM conversations WHERE remote_id = ?",
+                    params![id.clone()],
+                )
+                .await?;
+                Ok(None)
+            }
+
+            Action::Create => {
+                let Some(cnv) = conversation else {
+                    warn!("Got a conversation-event without any conversation, skipping it");
+                    return Ok(None);
+                };
+
+                cnv.save(tx).await?;
+                tracing::info!("Created with {:?}", cnv.id());
+                changeset.add(cnv.id());
+                Ok(Some(cnv.id()))
+            }
+
+            Action::Update | Action::UpdateFlags => {
+                let Some(cnv) = conversation else {
+                    warn!("Got a conversation-event without any conversation, skipping it");
+                    return Ok(None);
+                };
+
+                cnv.save(tx).await?;
+                changeset.add(cnv.id());
+                Ok(None)
+            }
+        }
     }
 }
 
