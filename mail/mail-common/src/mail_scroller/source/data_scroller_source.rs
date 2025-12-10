@@ -291,11 +291,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         &self,
         ctx: &MailUserContext,
     ) -> Result<Vec<Self::Item>, MailContextError> {
-        // If cache is empty we have either
-        // * an empty label
-        // * a label that has not been initialized
-        // The latter case is handled in the `Self::sync_more` method.
-        // Here we simply assume empty label.
         if let Some(scroller) = self.state.not_synced() {
             let tether = ctx.user_stash().connection().await?;
             Ok(scroller.visible_elements(&tether).await?)
@@ -308,11 +303,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     }
 
     async fn seen_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        // If cache is empty we have either
-        // * an empty label
-        // * a label that has not been initialized
-        // The latter case is handled in the `Self::sync_more` method.
-        // Here we simply assume empty label.
         if let Some(scroller) = self.state.not_synced() {
             let tether = ctx.user_stash().connection().await?;
             Ok(scroller.seen_count(&tether).await?)
