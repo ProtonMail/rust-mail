@@ -1124,7 +1124,6 @@ where
             update
         };
 
-        // Make sure we can see the first page.
         self.try_fetch_first_page(src).await?;
 
         Ok(update)
@@ -1245,7 +1244,6 @@ where
         source.read().await.seen_total(&ctx).await
     }
 
-    /// Return the number of elements that have been synced.
     async fn synced(
         source: &RwLock<S>,
         ctx: &Weak<MailUserContext>,
@@ -1577,7 +1575,6 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    // Helper function to create a test ScrollerSource
     fn test_source() -> ScrollerSource {
         ScrollerSource::ScrollEvent(Uuid::new_v4())
     }
@@ -1588,7 +1585,6 @@ mod tests {
         }
     }
 
-    // Test cases for calculate_scroller_update function
     #[test_case(vec![], vec![] => matches ScrollerUpdate::List(ScrollerListUpdate::None(_)); "Test 1: empty to empty")]
     #[test_case(vec![], vec![1] => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![1]; "Test 2: empty to single item")]
     #[test_case(vec![], vec![1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![1, 2, 3]; "Test 3: empty to multiple items")]

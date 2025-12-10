@@ -66,7 +66,6 @@ impl<T: RemoteSource> DataScrollerSource<T> {
 
         self.sync_scroller(&tether).await?;
 
-        // Check if we have a data suggesting we have synced this label before
         if let Some(scroller) = self.state.online() {
             debug!(
                 "We have paginated here before, try to sync data, status: {}",
@@ -111,13 +110,11 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             };
         }
 
-        // No entry exist, which means we have not synced this label yet.
         debug!(
             "Paginating for the first time, getting first page while being {}.",
             if is_offline { "offline" } else { "online" }
         );
 
-        // Clear the state if we had cursor pointing to empty scroll data
         if self.state.is_online() {
             self.clear_state();
         }
@@ -150,7 +147,6 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(task)
     }
 
-    /// Send a message to notify user that the scrolling data order have chagned.
     async fn notify_scroller_order_invalid(
         invalidate: &Option<flume::Sender<()>>,
     ) -> Result<(), MailContextError> {
@@ -165,10 +161,6 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(())
     }
 
-    /// Update ordered scroller end cursor to the newest value.
-    ///
-    /// Method will set it to Online if there is data to show
-    /// Otherwise it will leave state unmodified.
     async fn sync_scroller(&mut self, tether: &Tether) -> Result<(), MailContextError> {
         let old_state = self.state.to_string();
 
@@ -184,7 +176,6 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(())
     }
 
-    /// Get label from the database for which scroller is created.
     async fn get_label(&self, tether: &Tether) -> Result<Label, MailContextError> {
         let Some(label) = Label::find_by_id(self.local_label_id, tether).await? else {
             return Err(AppError::LabelNotFound(self.local_label_id).into());
@@ -459,7 +450,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
         self.sync_scroller(&tether).await?;
 
-        // Check if we have a data suggesting we have synced this label before
         if let Some(scroller) = self.state.online() {
             debug!(
                 "We have paginated here before, try to sync data, status: {}",
@@ -483,7 +473,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             };
         }
 
-        // No entry exist, which means we have not synced this label yet.
         debug!(
             "Paginating for the first time, getting first page while being {}.",
             if is_offline { "offline" } else { "online" }

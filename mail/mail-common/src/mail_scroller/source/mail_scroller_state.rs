@@ -8,19 +8,11 @@ use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{StashError, Tether};
 use tracing::{debug, error, info, instrument};
 
-/// Keeps track of the state of the CachedScrollData.
-///
-/// This is used to differentiate between online and not-synced states.
-/// Which can dynamically change based on the remote availability of the data.
-///
 #[derive(Debug, Display)]
 pub enum MailScrollerState<T: ScrollData> {
-    /// The data is source is ordered and synced with the server.
     #[display("Online")]
     Online(CachedScrollData<T>),
 
-    /// The data is not synced with the server. This is used when the server is not available.
-    /// And we have to rely on the unordered data.
     #[display("NotSynced")]
     NotSynced(CachedScrollData<T>),
 }
