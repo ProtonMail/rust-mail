@@ -85,8 +85,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                     &beggining_element,
                     remote_label_id.clone(),
                     self.invalidate.clone(),
-                )
-                .await?;
+                )?;
 
                 let task = if is_online
                     && !scroller.has_next_page(&tether).await?
@@ -94,8 +93,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 {
                     debug!("Syncing next page in a task");
 
-                    self.sync_next_page(ctx, &ending_element, remote_label_id)
-                        .await?
+                    self.sync_next_page(ctx, &ending_element, remote_label_id)?
                 } else {
                     None
                 };
@@ -133,15 +131,13 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 self.order_dir,
                 self.order_field,
                 self.invalidate.clone(),
-            )
-            .await?;
+            )?;
 
             None
         } else {
             debug!("We have no local data, running first page sync in a task");
 
-            self.sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
-                .await?
+            self.sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)?
         };
 
         Ok(task)
@@ -176,6 +172,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn get_label(&self, tether: &Tether) -> Result<Label, MailContextError> {
         let Some(label) = Label::find_by_id(self.local_label_id, tether).await? else {
             return Err(AppError::LabelNotFound(self.local_label_id).into());
@@ -188,8 +185,8 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(label)
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=remote_label_id.as_str(), unread=?self.unread) )]
-    async fn sync_first_page(
+    #[instrument(skip_all)]
+    fn sync_first_page(
         &self,
         ctx: &MailUserContext,
         remote_label_id: LabelId,
@@ -197,6 +194,13 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         order_field: ScrollOrderField,
         invalidate: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        debug!(
+            ?remote_label_id,
+            ?order_dir,
+            ?order_field,
+            "Syncing first page (async)"
+        );
+
         let local_label_id = self.local_label_id;
         let unread = self.unread;
         let page_size = self.page_size;
@@ -211,15 +215,17 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             order_field,
             invalidate,
         )
-        .await
     }
 
-    async fn sync_next_page(
+    #[instrument(skip_all)]
+    fn sync_next_page(
         &self,
         ctx: &MailUserContext,
         scroller: &T,
         remote_label_id: LabelId,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        debug!("Syncing next page (async)");
+
         let local_label_id = self.local_label_id;
         let unread = self.unread;
         let page_size = self.page_size;
@@ -234,20 +240,23 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             self.order_dir,
             self.order_field,
         )
-        .await
     }
 
-    async fn sync_previous_page(
+    #[instrument(skip_all)]
+    fn sync_previous_page(
         &self,
         ctx: &MailUserContext,
         scroller: &T,
         remote_label_id: LabelId,
         invalidate: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        debug!("Syncing previous page (async)");
+
         let local_label_id = self.local_label_id;
         let unread = self.unread;
         let page_size = self.page_size;
-        let task = T::sync_previous_page(
+
+        T::sync_previous_page(
             ctx,
             local_label_id,
             scroller,
@@ -258,9 +267,6 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             self.order_field,
             invalidate,
         )
-        .await?;
-
-        Ok(task)
     }
 
     fn clear_state(&mut self) {
@@ -401,8 +407,8 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
                 let task = if should_load_more_from_remote {
                     let cp = scroller.load_end_cursor(&tether).await?;
-                    self.sync_next_page(ctx, &cp, label.remote_id.clone().unwrap())
-                        .await?
+
+                    self.sync_next_page(ctx, &cp, label.remote_id.clone().unwrap())?
                 } else {
                     None
                 };
@@ -445,8 +451,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                     &scroll_data,
                     remote_label_id.clone(),
                     self.invalidate.clone(),
-                )
-                .await?;
+                )?;
 
                 return Ok(None);
             } else {
@@ -460,11 +465,8 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         );
 
         let remote_label_id = label.remote_id.clone().unwrap();
-        let task = self
-            .sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
-            .await?;
 
-        Ok(task)
+        self.sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
     }
 
     async fn change_state(

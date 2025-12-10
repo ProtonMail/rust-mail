@@ -31,7 +31,7 @@ use tracing::{debug, error, info, instrument};
 pub(super) struct RemoteConversationScrollerSource;
 
 impl RemoteSource for ConversationScrollData {
-    async fn sync_first_page(
+    fn sync_first_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
@@ -83,7 +83,7 @@ impl RemoteSource for ConversationScrollData {
         Ok(Some(handle))
     }
 
-    async fn sync_next_page(
+    fn sync_next_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         scroller: &Self,
@@ -103,10 +103,9 @@ impl RemoteSource for ConversationScrollData {
             order_dir,
             order_field,
         )
-        .await
     }
 
-    async fn sync_previous_page(
+    fn sync_previous_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         scroller: &Self,
@@ -157,7 +156,7 @@ impl RemoteSource for ConversationScrollData {
 
 impl RemoteConversationScrollerSource {
     #[allow(clippy::too_many_arguments)]
-    pub(super) async fn spawn_background_sync(
+    pub(super) fn spawn_background_sync(
         ctx: &MailUserContext,
         scroller: &ConversationScrollData,
         label_local_id: LocalLabelId,
