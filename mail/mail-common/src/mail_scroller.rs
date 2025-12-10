@@ -267,7 +267,7 @@ where
         let id = Uuid::new_v4();
         let ctx_weak = Arc::downgrade(&ctx);
 
-        debug!(?id, "Creating MailScroller");
+        info!(?id, "Creating MailScroller");
 
         let ScrollerWorkerHandle {
             command,
@@ -600,10 +600,7 @@ where
 {
     #[instrument(skip_all, fields(id = ?self.id))]
     fn drop(&mut self) {
-        debug!(
-            "Dropping MailScroller, got {} task(s) to abort",
-            self.aborts.len()
-        );
+        info!("Dropping MailScroller");
 
         self.terminate()
     }
