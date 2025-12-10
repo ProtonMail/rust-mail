@@ -171,9 +171,9 @@ impl Contact {
     fn vcards_from_bytes(bytes: &[u8]) -> anyhow::Result<Vec<VCard>> {
         let text = String::from_utf8_lossy(bytes).into_owned();
         let mut vcards = Vec::new();
-        let mut parser = VcardParser::new(Cursor::new(text.as_bytes()));
+        let parser = VcardParser::new(Cursor::new(text.as_bytes()));
 
-        while let Some(card_res) = parser.next() {
+        for card_res in parser {
             let vcard_contact = card_res.context("Can't parse vCard with ical")?;
             let vcard: VCard = vcard_contact
                 .try_into()

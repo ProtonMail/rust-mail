@@ -128,16 +128,15 @@ impl InspectableContactDetails {
             .filter_map(|group| group.remote_id.as_deref().map(|id| (id, group)))
             .collect();
         let unique_label_ids: IndexSet<&LabelId> = contact_email.label_ids.iter().collect();
-        let matching_groups = unique_label_ids
+
+        unique_label_ids
             .iter()
             .filter_map(|label_id| groups_map.get(label_id.as_str()))
             .map(|group| ContactGroup {
                 name: group.name.clone(),
                 color: group.color.clone(),
             })
-            .collect();
-
-        matching_groups
+            .collect()
     }
 
     async fn get_from_contact_full(
