@@ -45,12 +45,6 @@ mod conversation_scroller;
 
 const MIN_STATUS_UPDATE_DURATION: Duration = Duration::from_millis(1500);
 
-#[derive(Debug, thiserror::Error)]
-pub enum MailScrollerError {
-    #[error("MailScroller cannot serve more data, counters seems not to be fulfillable")]
-    NotSynced,
-}
-
 #[derive(Debug)]
 pub enum ScrollerStatusUpdate {
     FetchNewStart(ScrollerSource),
