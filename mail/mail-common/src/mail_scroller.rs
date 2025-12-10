@@ -24,15 +24,13 @@ use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
+use std::iter;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::AbortHandle;
 use tokio::time;
-use tracing::debug;
-use tracing::info;
-use tracing::instrument;
-use tracing::trace;
+use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -144,7 +142,7 @@ pub enum ScrollerSource {
     Invalidation,
 }
 
-/// We need to implement PartialEq to deduplicate commands in the ordered command queue.
+/// We need to implement PartialEq to deduplicate commands in the queue.
 /// This also means we cannot/should not use `Eq` for the enum.
 /// If its needed then deduplication should be done in other way. This is because
 /// we want to deduplicate commands that are not related to each other.
@@ -174,8 +172,8 @@ where
     T: MailScrollerItem,
 {
     id: Uuid,
-    command: flume::Sender<ScrollerCommand<T>>,
-    ordered_command: flume::Sender<ScrollerOrderedCommand>,
+    queries: flume::Sender<ScrollerQuery<T>>,
+    commands: flume::Sender<ScrollerCommand>,
     aborts: Vec<AbortHandle>,
 }
 
@@ -264,44 +262,45 @@ where
         info!(?id, "Creating MailScroller");
 
         let ScrollerWorkerHandle {
-            command,
-            ordered_command,
+            queries,
+            commands,
             updates,
             handle,
             aborts,
         } = ScrollerWorker::run(ctx_weak.clone(), source, page_size, label).await?;
 
-        let event_service = ctx.core_context().event_service();
-        let ordered_command_cloned = ordered_command.clone();
+        let events = ctx.core_context().event_service();
 
-        if let Some(mut event_subscriber) = event_service.subscribe::<OnEnterForegroundEvent>() {
+        if let Some(mut events) = events.subscribe::<OnEnterForegroundEvent>() {
+            let commands = commands.clone();
+
             ctx.spawn(async move {
                 loop {
-                    if event_subscriber.next().await.is_err() {
+                    if events.next().await.is_err() {
                         return;
                     }
 
                     debug!("Scroller {id} fetch new after enter foreground");
 
-                    if Self::do_fetch_new(&ordered_command_cloned, true).is_err() {
+                    if Self::do_fetch_new(&commands, true).is_err() {
                         return;
                     }
                 }
             });
         }
 
-        let ordered_command_cloned = ordered_command.clone();
+        if let Some(mut events) = events.subscribe::<OnForceEventPollEvent>() {
+            let commands = commands.clone();
 
-        if let Some(mut event_subscriber) = event_service.subscribe::<OnForceEventPollEvent>() {
             ctx.spawn(async move {
                 loop {
-                    if event_subscriber.next().await.is_err() {
+                    if events.next().await.is_err() {
                         return;
                     }
 
                     debug!("Scroller {id} fetch new after force refresh event");
 
-                    if Self::do_fetch_new(&ordered_command_cloned, false).is_err() {
+                    if Self::do_fetch_new(&commands, false).is_err() {
                         return;
                     }
                 }
@@ -311,8 +310,8 @@ where
         Ok((
             Self {
                 id,
-                command,
-                ordered_command,
+                queries,
+                commands,
                 aborts,
             },
             MailScrollerHandle { updates, handle },
@@ -323,10 +322,10 @@ where
     pub async fn has_more(&self) -> Result<bool, MailContextError> {
         let (sender, receiver) = oneshot::channel();
 
-        debug!("Sending `HasMore` command");
+        debug!("Sending `HasMore` query");
 
-        self.command
-            .send(ScrollerCommand::HasMore(sender))
+        self.queries
+            .send(ScrollerQuery::HasMore(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send has more command")))?;
 
         receiver
@@ -340,10 +339,10 @@ where
     ) -> Result<MailCursor<T>, MailContextError> {
         let (sender, receiver) = oneshot::channel();
 
-        debug!("Sending `Cursor` command");
+        debug!("Sending `Cursor` query");
 
-        self.command
-            .send(ScrollerCommand::Cursor(self.clone(), looking_at, sender))
+        self.queries
+            .send(ScrollerQuery::Cursor(self.clone(), looking_at, sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send `cursor` command")))?;
 
         receiver
@@ -357,8 +356,8 @@ where
 
         debug!(?uuid, "Sending `FetchMore` command");
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::FetchMore {
+        self.commands
+            .send(ScrollerCommand::FetchMore {
                 src: ScrollerSource::ScrollEvent(uuid),
                 tx,
             })
@@ -369,13 +368,13 @@ where
 
     #[instrument(skip_all, fields(id = ?self.id))]
     pub fn fetch_new(&self) -> Result<(), MailContextError> {
-        Self::do_fetch_new(&self.ordered_command, true)?;
+        Self::do_fetch_new(&self.commands, true)?;
 
         Ok(())
     }
 
     fn do_fetch_new(
-        sender: &flume::Sender<ScrollerOrderedCommand>,
+        sender: &flume::Sender<ScrollerCommand>,
         propagate_status_updates: bool,
     ) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
@@ -383,7 +382,7 @@ where
         debug!(?uuid, "Sending `FetchNew` command");
 
         sender
-            .send(ScrollerOrderedCommand::FetchNew {
+            .send(ScrollerCommand::FetchNew {
                 src: ScrollerSource::ScrollEvent(uuid),
                 propagate_status_updates,
             })
@@ -396,10 +395,8 @@ where
 
         debug!(?uuid, "Sending `Refresh` command");
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::Refresh(
-                ScrollerSource::ScrollEvent(uuid),
-            ))
+        self.commands
+            .send(ScrollerCommand::Refresh(ScrollerSource::ScrollEvent(uuid)))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send refresh command")))?;
 
         Ok(())
@@ -411,10 +408,10 @@ where
 
         debug!(?uuid, "Sending `ForceRefresh` command");
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::ForceRefresh(
-                ScrollerSource::ScrollEvent(uuid),
-            ))
+        self.commands
+            .send(ScrollerCommand::ForceRefresh(ScrollerSource::ScrollEvent(
+                uuid,
+            )))
             .map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send force refresh command"))
             })?;
@@ -426,12 +423,10 @@ where
     pub fn get_items(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
 
-        debug!(?uuid, "Sending `GetItems` command");
+        debug!(?uuid, "Sending `GetItems` query");
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::GetItems(
-                ScrollerSource::ScrollEvent(uuid),
-            ))
+        self.commands
+            .send(ScrollerCommand::GetItems(ScrollerSource::ScrollEvent(uuid)))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get items command")))?;
 
         Ok(())
@@ -443,8 +438,8 @@ where
 
         debug!(?uuid, "Sending `ChangeFilter` command");
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::ChangeFilter {
+        self.commands
+            .send(ScrollerCommand::ChangeFilter {
                 src: ScrollerSource::ScrollEvent(uuid),
                 unread,
             })
@@ -460,8 +455,8 @@ where
 
         debug!(?uuid, "Sending `ChangeLabel` command");
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::ChangeLabel {
+        self.commands
+            .send(ScrollerCommand::ChangeLabel {
                 src: ScrollerSource::ScrollEvent(uuid),
                 label,
             })
@@ -475,8 +470,8 @@ where
         let uuid = Uuid::new_v4();
         debug!(?uuid, "Sending `ChangeInclude` command");
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::ChangeInclude {
+        self.commands
+            .send(ScrollerCommand::ChangeInclude {
                 src: ScrollerSource::ScrollEvent(uuid),
                 include,
             })
@@ -492,8 +487,8 @@ where
 
         debug!(?uuid, "Sending `ChangeKeywords` command");
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::ChangeKeywords {
+        self.commands
+            .send(ScrollerCommand::ChangeKeywords {
                 src: ScrollerSource::ScrollEvent(uuid),
                 keywords,
             })
@@ -509,10 +504,8 @@ where
 
         debug!(?uuid, "Sending `Clear` command");
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::Clear(ScrollerSource::ScrollEvent(
-                uuid,
-            )))
+        self.commands
+            .send(ScrollerCommand::Clear(ScrollerSource::ScrollEvent(uuid)))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send clear command")))?;
 
         Ok(())
@@ -524,8 +517,8 @@ where
 
         debug!("Sending `GetTotal` query");
 
-        self.command
-            .send(ScrollerCommand::GetTotal(sender))
+        self.queries
+            .send(ScrollerQuery::GetTotal(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get total command")))?;
 
         receiver
@@ -539,8 +532,8 @@ where
 
         debug!("Sending `GetSeen` query");
 
-        self.command
-            .send(ScrollerCommand::GetSeen(sender))
+        self.queries
+            .send(ScrollerQuery::GetSeen(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get seen command")))?;
 
         receiver
@@ -554,8 +547,8 @@ where
 
         debug!("Sending `GetSynced` query");
 
-        self.command
-            .send(ScrollerCommand::GetSynced(sender))
+        self.queries
+            .send(ScrollerQuery::GetSynced(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get synced command")))?;
 
         receiver
@@ -566,8 +559,8 @@ where
     pub async fn supports_include_filter(&self) -> Result<bool, MailContextError> {
         let (tx, rx) = oneshot::channel();
 
-        self.ordered_command
-            .send(ScrollerOrderedCommand::AlternativeLabels(tx))
+        self.commands
+            .send(ScrollerCommand::AlternativeLabels(tx))
             .map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send supports include filter command"))
             })?;
@@ -617,8 +610,8 @@ where
     page_size: usize,
     alternative_labels: AlternativeLabels,
     update: flume::Sender<ScrollerUpdate<S::Item>>,
-    ordered_command_recv: flume::Receiver<ScrollerOrderedCommand>,
-    ordered_command_send: flume::Sender<ScrollerOrderedCommand>,
+    command_rx: flume::Receiver<ScrollerCommand>,
+    command_tx: flume::Sender<ScrollerCommand>,
 }
 
 impl<S> Drop for ScrollerWorker<S>
@@ -643,8 +636,8 @@ where
         label: LocalLabelId,
     ) -> Result<ScrollerWorkerHandle<S>, MailContextError> {
         let (update_sender, update_receiver) = flume::unbounded();
-        let (command_sender, command_receiver) = flume::unbounded();
-        let (ordered_command_sender, ordered_command_receiver) = flume::unbounded();
+        let (query_tx, query_rx) = flume::unbounded();
+        let (command_tx, command_rx) = flume::unbounded();
         let (invalidation_sender, invalidation_receiver) = flume::unbounded();
         let arc_ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let task = source.initialize(&arc_ctx, invalidation_sender).await?;
@@ -671,20 +664,20 @@ where
             items,
             alternative_labels,
             update: update_sender,
-            ordered_command_recv: ordered_command_receiver,
-            ordered_command_send: ordered_command_sender.clone(),
+            command_rx,
+            command_tx: command_tx.clone(),
         };
 
         let aborts = this.spawn(
-            command_receiver,
-            ordered_command_sender.clone(),
+            query_rx,
+            command_tx.clone(),
             receiver,
             invalidation_receiver,
         )?;
 
         Ok(ScrollerWorkerHandle {
-            command: command_sender,
-            ordered_command: ordered_command_sender,
+            queries: query_tx,
+            commands: command_tx,
             updates: update_receiver,
             handle,
             aborts,
@@ -693,83 +686,80 @@ where
 
     fn spawn(
         mut self,
-        command_receiver: flume::Receiver<ScrollerCommand<S::Item>>,
-        ordered_command_sender: flume::Sender<ScrollerOrderedCommand>,
+        queries: flume::Receiver<ScrollerQuery<S::Item>>,
+        commands: flume::Sender<ScrollerCommand>,
         db_receiver: flume::Receiver<()>,
         invalidation_receiver: flume::Receiver<()>,
     ) -> Result<Vec<AbortHandle>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let mut aborts = vec![];
         let source_clone = self.source.clone();
         let items_clone = Arc::clone(&self.items);
         let weak_ctx = self.ctx.clone();
 
-        // Ordered operations, these needs to be streamlined and not blocking other operations
-        // thats why we are going to dedicate a separate task for them.
-        let handle = ctx.spawn(async move {
-            while let Ok(command) = self.ordered_command_recv.recv_async().await {
+        let cmd_handler = ctx.spawn(async move {
+            while let Ok(command) = self.command_rx.recv_async().await {
                 // This prevents abusing the scroller by sending multiple commands
                 // in a row. We do not want and need to handle all of them one by one.
-                let commands = self.ordered_command_recv.drain().collect_vec();
-                trace!("Handling ordered commands: {:?}", commands);
-                let mut processed = 0;
-                for command in Some(command).into_iter().chain(commands).dedup() {
-                    trace!("Processing ordered command: {:?}", command);
-                    if let Err(e) = self.handle_ordered_command(command).await {
-                        tracing::error!("Failed to handle ordered command: {e:?}");
+                let commands = self.command_rx.drain().collect_vec();
+
+                for command in iter::once(command).chain(commands).dedup() {
+                    trace!("Processing command: {:?}", command);
+
+                    if let Err(e) = self.handle_command(command).await {
+                        error!("Failed to handle command: {e:?}");
                     }
-                    processed += 1;
                 }
-                trace!("Processed {} ordered commands", processed);
             }
         });
-        aborts.push(handle.abort_handle());
 
-        // Unordered operations, database updates and data source invalidations
-        let handle = ctx.spawn(async move {
+        let query_handler = ctx.spawn(async move {
             loop {
                 select! {
                     r = invalidation_receiver.recv_async() => {
                         if let Err(e) = r {
-                            tracing::error!("Failed to receive invalidation: {e:?}");
+                            error!("Failed to receive invalidation: {e:?}");
                             return;
                         }
-                        let _ = ordered_command_sender
-                            .send_async(ScrollerOrderedCommand::Refresh(ScrollerSource::Invalidation)).await
-                            .inspect_err(|e| tracing::error!("Failed to send refresh command: {e:?}"));
+
+                        let _ = commands
+                            .send_async(ScrollerCommand::Refresh(ScrollerSource::Invalidation)).await
+                            .inspect_err(|e| error!("Failed to send refresh command: {e:?}"));
                     }
+
                     r = db_receiver.recv_async() => {
                         if let Err(e) = r {
-                            tracing::error!("Failed to receive db update: {e:?}");
+                            error!("Failed to receive db update: {e:?}");
                             return;
                         }
-                        let _ = ordered_command_sender
-                            .send_async(ScrollerOrderedCommand::Refresh(ScrollerSource::Database)).await
-                            .inspect_err(|e| tracing::error!("Failed to send refresh command: {e:?}"));
+
+                        let _ = commands
+                            .send_async(ScrollerCommand::Refresh(ScrollerSource::Database)).await
+                            .inspect_err(|e| error!("Failed to send refresh command: {e:?}"));
                     }
-                    r = command_receiver.recv_async() => {
+
+                    r = queries.recv_async() => {
                         if let Err(e) = r {
-                            tracing::error!("Failed to receive command: {e:?}");
+                            error!("Failed to receive query: {e:?}");
                             return;
                         }
-                        if let Err(e) = Self::handle_command(r.unwrap(), &source_clone, items_clone.clone(), &weak_ctx).await {
-                            tracing::error!("Failed to handle command: {e:?}");
+
+                        if let Err(e) = Self::handle_query(r.unwrap(), &source_clone, items_clone.clone(), &weak_ctx).await {
+                            error!("Failed to handle query: {e:?}");
                         }
                     }
                 }
             }
         });
-        aborts.push(handle.abort_handle());
 
-        Ok(aborts)
+        Ok(vec![
+            cmd_handler.abort_handle(),
+            query_handler.abort_handle(),
+        ])
     }
 
-    async fn handle_ordered_command(
-        &mut self,
-        command: ScrollerOrderedCommand,
-    ) -> Result<(), MailContextError> {
+    async fn handle_command(&mut self, command: ScrollerCommand) -> Result<(), MailContextError> {
         match command {
-            ScrollerOrderedCommand::FetchMore { src, tx } => {
+            ScrollerCommand::FetchMore { src, tx } => {
                 let result = self
                     .fetch_more(src)
                     .await
@@ -786,7 +776,7 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::Refresh(source) => {
+            ScrollerCommand::Refresh(source) => {
                 let result =
                     self.refresh(false, source)
                         .await
@@ -803,7 +793,7 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::ForceRefresh(source) => {
+            ScrollerCommand::ForceRefresh(source) => {
                 let result =
                     self.refresh(true, source)
                         .await
@@ -820,7 +810,7 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::GetItems(src) => {
+            ScrollerCommand::GetItems(src) => {
                 let items_update = self.get_items(src);
 
                 self.update
@@ -829,7 +819,7 @@ where
                     .map_err(|e| anyhow!("Failed to send get items update: {e:?}"))?;
             }
 
-            ScrollerOrderedCommand::FetchNew {
+            ScrollerCommand::FetchNew {
                 src,
                 propagate_status_updates,
             } => {
@@ -868,7 +858,7 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::ChangeFilter { src, unread } => {
+            ScrollerCommand::ChangeFilter { src, unread } => {
                 let result = self
                     .change_filter(src, unread)
                     .await
@@ -882,7 +872,7 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::ChangeLabel { src, label } => {
+            ScrollerCommand::ChangeLabel { src, label } => {
                 let result = self
                     .change_label(src, label, Some(ReadFilter::All))
                     .await
@@ -894,7 +884,7 @@ where
                     self.recalculate_alternative_labels(label)
                         .await
                         .unwrap_or_else(|e| {
-                            tracing::error!("Failed to recalculate alternative labels: {e:?}");
+                            error!("Failed to recalculate alternative labels: {e:?}");
                         });
                 }
 
@@ -906,7 +896,7 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::ChangeInclude { src, include } => {
+            ScrollerCommand::ChangeInclude { src, include } => {
                 let result = self
                     .change_include(src, include)
                     .await
@@ -920,7 +910,7 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::ChangeKeywords { src, keywords } => {
+            ScrollerCommand::ChangeKeywords { src, keywords } => {
                 let result = self
                     .change_keywords(src, keywords)
                     .await
@@ -934,7 +924,7 @@ where
                 }
             }
 
-            ScrollerOrderedCommand::Clear(src) => {
+            ScrollerCommand::Clear(src) => {
                 let result = self
                     .clear(src)
                     .await
@@ -946,7 +936,7 @@ where
                     .map_err(|e| anyhow!("Failed to send clear cursor update: {e:?}"))?;
             }
 
-            ScrollerOrderedCommand::AlternativeLabels(tx) => {
+            ScrollerCommand::AlternativeLabels(tx) => {
                 tx.send(self.alternative_labels)
                     .map_err(|e| anyhow!("Failed to send alternative label update: {e:?}"))?;
             }
@@ -955,14 +945,14 @@ where
         Ok(())
     }
 
-    async fn handle_command(
-        command: ScrollerCommand<S::Item>,
+    async fn handle_query(
+        command: ScrollerQuery<S::Item>,
         source: &RwLock<S>,
         items: Arc<SyncRwLock<Vec<S::Item>>>,
         ctx: &Weak<MailUserContext>,
     ) -> Result<(), MailContextError> {
         match command {
-            ScrollerCommand::GetTotal(sender) => {
+            ScrollerQuery::GetTotal(sender) => {
                 let total = Self::total(source, ctx).await;
 
                 sender
@@ -970,7 +960,7 @@ where
                     .map_err(|e| anyhow!("Failed to send total: {e:?}"))?;
             }
 
-            ScrollerCommand::GetSeen(sender) => {
+            ScrollerQuery::GetSeen(sender) => {
                 let seen = Self::seen(source, ctx).await;
 
                 sender
@@ -978,7 +968,7 @@ where
                     .map_err(|e| anyhow!("Failed to send seen: {e:?}"))?;
             }
 
-            ScrollerCommand::GetSynced(sender) => {
+            ScrollerQuery::GetSynced(sender) => {
                 let synced = Self::synced(source, ctx).await;
 
                 sender
@@ -986,7 +976,7 @@ where
                     .map_err(|e| anyhow!("Failed to send synced: {e:?}"))?;
             }
 
-            ScrollerCommand::HasMore(sender) => {
+            ScrollerQuery::HasMore(sender) => {
                 let (total, seen) = (
                     Self::total(source, ctx).await,
                     Self::seen(source, ctx).await,
@@ -1001,7 +991,8 @@ where
                     .send(has_more)
                     .map_err(|e| anyhow!("Failed to send has more: {e:?}"))?;
             }
-            ScrollerCommand::Cursor(scroller, looking_at, sender) => {
+
+            ScrollerQuery::Cursor(scroller, looking_at, sender) => {
                 let cursor = MailCursor::new(looking_at, items.clone(), scroller);
 
                 sender
@@ -1013,7 +1004,7 @@ where
         Ok(())
     }
 
-    #[tracing::instrument(skip_all, fields(src=%call_src))]
+    #[instrument(skip_all, fields(src=%call_src))]
     async fn fetch_more(
         &mut self,
         call_src: ScrollerSource,
@@ -1038,7 +1029,7 @@ where
             if self.execute_on_online.is_none() {
                 debug!("No items to return, requesting additional fetch more");
 
-                let channel = self.ordered_command_send.clone();
+                let channel = self.command_tx.clone();
 
                 let handle = ctx.spawn_ex(async move |ctx| {
                     ctx.network_monitor_service()
@@ -1054,14 +1045,14 @@ where
 
             if self.task.is_none() {
                 if ctx.network_monitor_service().is_os_offline() {
-                    tracing::warn!("Scroller is offline, will not progress any further");
+                    warn!("Scroller is offline, will not progress any further");
 
                     // We will not progress any further without task,
                     // and task will be spawned only when we are online,
                     // lets wait for another call.
                     return Err(MailContextError::no_connection());
                 } else {
-                    tracing::warn!("We couldn't sync new items");
+                    warn!("We couldn't sync new items");
                 }
             }
         }
@@ -1087,7 +1078,7 @@ where
         }
     }
 
-    #[tracing::instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(src=%src))]
     async fn fetch_new(
         &mut self,
         src: ScrollerSource,
@@ -1099,7 +1090,7 @@ where
         self.refresh(false, src).await
     }
 
-    #[tracing::instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(src=%src))]
     async fn refresh(
         &mut self,
         force: bool,
@@ -1145,7 +1136,7 @@ where
         ScrollerListUpdate::ReplaceFrom { src, idx: 0, items }.into()
     }
 
-    #[tracing::instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(src=%src))]
     async fn change_filter(
         &mut self,
         src: ScrollerSource,
@@ -1163,15 +1154,16 @@ where
         self.reset(src).await
     }
 
-    #[tracing::instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(src=%src))]
     async fn change_label(
         &mut self,
         src: ScrollerSource,
         label: LocalLabelId,
         with_filter: Option<ReadFilter>,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
+        debug!("Changing label to `{label}`");
+
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        tracing::debug!("Changing label to `{label}`");
         let _ = self.task.take();
 
         self.task = self
@@ -1184,14 +1176,15 @@ where
         self.reset(src).await
     }
 
-    #[tracing::instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(src=%src))]
     async fn change_keywords(
         &mut self,
         src: ScrollerSource,
         keywords: SearchOptions,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
+        debug!("Changing search keywords");
+
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        tracing::debug!("Changing search keywords");
 
         Self::abort_task(&mut self.task);
 
@@ -1205,12 +1198,13 @@ where
         self.reset(src).await
     }
 
-    #[tracing::instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(src=%src))]
     async fn clear(
         &mut self,
         src: ScrollerSource,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
-        tracing::info!("Clearing cursor for current label");
+        info!("Clearing cursor for current label");
+
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let _ = self.task.take();
         self.task = self.source.write().await.clear(&ctx).await?;
@@ -1218,7 +1212,7 @@ where
         self.reset(src).await
     }
 
-    #[tracing::instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(src=%src))]
     async fn change_include(
         &mut self,
         src: ScrollerSource,
@@ -1269,7 +1263,7 @@ where
 
         if cant_see_first_page {
             info!("We do not see the first page, requesting fetch more");
-            Self::schedule_fetch_more(&self.ordered_command_send, src).await;
+            Self::schedule_fetch_more(&self.command_tx, src).await;
         }
 
         Ok(())
@@ -1280,7 +1274,7 @@ where
         let result = self.wait_for_request().await;
 
         if let Err(e) = &result {
-            tracing::error!("Error occurred while waiting for previous request: {e}");
+            error!("Error occurred while waiting for previous request: {e}");
         }
 
         let (items, task) = {
@@ -1288,7 +1282,7 @@ where
             source
                 .sync_next(&ctx)
                 .await
-                .inspect_err(|e| tracing::error!("Failed to fetch next page: {e:?}"))?
+                .inspect_err(|e| error!("Failed to fetch next page: {e:?}"))?
         };
 
         debug!("Fetched next page, items number: {}", items.len());
@@ -1296,7 +1290,7 @@ where
 
         if items.is_empty() && self.task.is_none() {
             let status = ctx.network_monitor_service().combined_status();
-            tracing::warn!(
+            warn!(
                 "No items and no task to return - status: {status:?}, previous fetch result: {result:?}"
             );
             result?;
@@ -1339,14 +1333,11 @@ where
         }
     }
 
-    async fn schedule_fetch_more(
-        channel: &flume::Sender<ScrollerOrderedCommand>,
-        src: ScrollerSource,
-    ) {
+    async fn schedule_fetch_more(channel: &flume::Sender<ScrollerCommand>, src: ScrollerSource) {
         let _ = channel
-            .send_async(ScrollerOrderedCommand::FetchMore { src, tx: None })
+            .send_async(ScrollerCommand::FetchMore { src, tx: None })
             .await
-            .inspect_err(|e| tracing::error!("Failed to schedule fetch more command: {e:?}"));
+            .inspect_err(|e| error!("Failed to schedule fetch more command: {e:?}"));
     }
 
     async fn recalculate_alternative_labels(
@@ -1386,14 +1377,17 @@ struct ScrollerWorkerHandle<S>
 where
     S: MailScrollerSource,
 {
-    command: flume::Sender<ScrollerCommand<S::Item>>,
-    ordered_command: flume::Sender<ScrollerOrderedCommand>,
+    queries: flume::Sender<ScrollerQuery<S::Item>>,
+    commands: flume::Sender<ScrollerCommand>,
     updates: flume::Receiver<ScrollerUpdate<S::Item>>,
     handle: DropRemoveTableObserverHandle,
     aborts: Vec<AbortHandle>,
 }
 
-enum ScrollerCommand<T: MailScrollerItem> {
+enum ScrollerQuery<T>
+where
+    T: MailScrollerItem,
+{
     GetTotal(oneshot::Sender<Result<u64, MailContextError>>),
     GetSeen(oneshot::Sender<Result<u64, MailContextError>>),
     GetSynced(oneshot::Sender<Result<u64, MailContextError>>),
@@ -1403,7 +1397,7 @@ enum ScrollerCommand<T: MailScrollerItem> {
 
 #[derive(Debug, Derivative)]
 #[derivative(PartialEq)]
-enum ScrollerOrderedCommand {
+enum ScrollerCommand {
     FetchMore {
         src: ScrollerSource,
         #[derivative(PartialEq = "ignore")]
