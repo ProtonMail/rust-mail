@@ -50,6 +50,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         }
     }
 
+    #[instrument(skip_all)]
     async fn initialize_impl(
         &mut self,
         ctx: &MailUserContext,
@@ -157,6 +158,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn sync_scroller(&mut self, tether: &Tether) -> Result<(), MailContextError> {
         let old_state = self.state.to_string();
 
@@ -164,10 +166,14 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             .sync(self.local_label_id, self.unread, self.page_size, tether)
             .await?;
 
-        debug!(
-            "Sync scroller state, old: {}, new: {}",
-            old_state, self.state
-        );
+        let new_state = self.state.to_string();
+
+        if old_state != new_state {
+            debug!(
+                "Changing scroller's state from {} to {}",
+                old_state, new_state,
+            );
+        }
 
         Ok(())
     }
@@ -269,7 +275,10 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         )
     }
 
+    #[instrument(skip_all)]
     fn clear_state(&mut self) {
+        debug!("Clearing state");
+
         self.state = MailScrollerState::new_not_synced(
             self.local_label_id,
             self.unread,

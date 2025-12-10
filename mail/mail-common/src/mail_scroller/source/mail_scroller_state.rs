@@ -18,12 +18,15 @@ pub enum MailScrollerState<T: ScrollData> {
 }
 
 impl<T: ScrollData> MailScrollerState<T> {
+    #[instrument(skip(tether))]
     pub async fn new_online(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
         tether: &Tether,
     ) -> Result<Self, StashError> {
+        info!("Creating new synced state");
+
         let ordered = CachedScrollData::new(local_label_id, unread, page_size, tether).await?;
 
         match ordered {
@@ -43,6 +46,7 @@ impl<T: ScrollData> MailScrollerState<T> {
         }
     }
 
+    #[instrument]
     pub fn new_not_synced(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -50,6 +54,8 @@ impl<T: ScrollData> MailScrollerState<T> {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Self {
+        info!("Creating new unsynced state");
+
         let unordered =
             CachedScrollData::all(local_label_id, unread, page_size, order_dir, order_field);
 
@@ -85,6 +91,8 @@ impl<T: ScrollData> MailScrollerState<T> {
         page_size: usize,
         tether: &Tether,
     ) -> Result<(), StashError> {
+        debug!("Synchronizing state");
+
         if let MailScrollerState::Online(ordered) = self {
             if !ordered.has_next_page(tether).await?
                 && let Err(e) = ordered.update(tether).await
