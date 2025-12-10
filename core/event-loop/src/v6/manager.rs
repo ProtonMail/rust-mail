@@ -518,8 +518,8 @@ mod tests {
                 Ok(RawEvent {
                     meta: EventMetadata {
                         event_id: next_event_id.clone(),
-                        has_more: false,
-                        refresh,
+                        has_more: 0.into(),
+                        refresh: refresh.into(),
                     },
                     raw: "{}".into(),
                 })
