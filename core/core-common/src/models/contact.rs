@@ -1,5 +1,6 @@
 use crate::utils::{MapVec as _, Paginatable};
 use std::collections::{BTreeSet, HashMap};
+use std::io::Cursor;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -32,7 +33,7 @@ use proton_core_api::services::proton::{ContactUID, GetContactsEmailsResponse};
 use proton_core_api::services::proton::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_core_api::session::Session;
 use proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard as _};
+use proton_crypto_account::contacts::DecryptableVerifiableCard as _;
 use proton_crypto_account::keys::UnlockedUserKeys;
 use proton_vcard::vcard::VCard;
 use sqlite_watcher::watcher::TableObserver;
@@ -154,28 +155,108 @@ impl Contact {
         )
         .await?;
 
-        let card = cards
+        let blobs = cards
             .into_iter()
-            .find(|c| {
-                matches!(
-                    c.card_type,
-                    ContactCardType::Encrypted | ContactCardType::EncryptedAndSigned
-                )
+            .map(|contact_card| {
+                contact_card
+                    .decrypt_and_verify_sync(provider, keys, keys)
+                    .context("Error decrypting vCard")
             })
-            .context("No card details")?;
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
-        let card = card
-            .decrypt_and_verify_sync(provider, keys, keys)
-            .context("Error decrypting vCard")?;
-        let mut cards = VcardParser::new(card.reader());
-        let card = cards
-            .next()
-            .context("Not vCard in card?")?
-            .context("Can't parse vCard with ical")?;
-        let card = card
-            .try_into()
-            .context("Error parsing vCard with proton-vcard")?;
-        Ok(card)
+        Self::merged_vcards_from_decrypted_blobs(blobs)
+    }
+
+    /// Parses one decrypted blob (which may contain multiple vCards) into `Vec<VCard>`
+    fn vcards_from_bytes(bytes: &[u8]) -> anyhow::Result<Vec<VCard>> {
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        let mut vcards = Vec::new();
+        let mut parser = VcardParser::new(Cursor::new(text.as_bytes()));
+
+        while let Some(card_res) = parser.next() {
+            let vcard_contact = card_res.context("Can't parse vCard with ical")?;
+            let vcard: VCard = vcard_contact
+                .try_into()
+                .context("Error parsing vCard with proton-vcard")?;
+            vcards.push(vcard);
+        }
+        Ok(vcards)
+    }
+
+    /// Merges one or more decrypted vCard blobs into a single `VCard`
+    fn merged_vcards_from_decrypted_blobs(blobs: Vec<Vec<u8>>) -> anyhow::Result<VCard> {
+        let mut merged: Option<VCard> = None;
+
+        for bytes in blobs {
+            let vcards = Self::vcards_from_bytes(&bytes)?;
+            for vcard in vcards {
+                if let Some(ref mut acc) = merged {
+                    Self::merge_in_place(acc, vcard);
+                } else {
+                    merged = Some(vcard);
+                }
+            }
+        }
+
+        merged.context("No VCARD data in provided blobs")
+    }
+
+    fn merge_in_place(acc: &mut VCard, mut other: VCard) {
+        acc.addresses.extend(other.addresses.drain());
+        acc.calendar_addresses
+            .extend(other.calendar_addresses.drain());
+        acc.calendar_user_addresses
+            .extend(other.calendar_user_addresses.drain());
+        acc.categories.extend(other.categories.drain());
+        acc.client_pid_map.extend(other.client_pid_map.drain());
+        acc.emails.extend(other.emails.drain());
+        acc.fburls.extend(other.fburls.drain());
+        acc.formatted_names.extend(other.formatted_names.drain());
+        acc.geos.extend(other.geos.drain());
+        acc.impps.extend(other.impps.drain());
+        acc.keys.extend(other.keys.drain());
+        acc.languages.extend(other.languages.drain());
+        acc.logos.extend(other.logos.drain());
+        acc.members.extend(other.members.drain());
+        acc.nicknames.extend(other.nicknames.drain());
+        acc.notes.extend(other.notes.drain());
+        acc.organizations.extend(other.organizations.drain());
+        acc.photos.extend(other.photos.drain());
+        acc.related.extend(other.related.drain());
+        acc.roles.extend(other.roles.drain());
+        acc.sounds.extend(other.sounds.drain());
+        acc.sources.extend(other.sources.drain());
+        acc.telephones.extend(other.telephones.drain());
+        acc.time_zones.extend(other.time_zones.drain());
+        acc.titles.extend(other.titles.drain());
+        acc.urls.extend(other.urls.drain());
+        acc.xmls.extend(other.xmls.drain());
+        acc.xtendeds.extend(other.xtendeds.drain());
+
+        if other.anniversary.is_some() {
+            acc.anniversary = other.anniversary.take();
+        }
+        if other.birthday.is_some() {
+            acc.birthday = other.birthday.take();
+        }
+        if other.gender.is_some() {
+            acc.gender = other.gender.take();
+        }
+        if other.kind.is_some() {
+            acc.kind = other.kind.take();
+        }
+        if other.name.is_some() {
+            acc.name = other.name.take();
+        }
+        if other.product_id.is_some() {
+            acc.product_id = other.product_id.take();
+        }
+        if other.revision.is_some() {
+            acc.revision = other.revision.take();
+        }
+        if other.uid.is_some() {
+            acc.uid = other.uid.take();
+        }
     }
 
     /// Returns the associated emails for a contact.
@@ -772,5 +853,90 @@ impl Paginatable for PaginateEmails {
         options: Self::PaginateOptions,
     ) -> Result<Self::Response, Self::Error> {
         api.get_contacts_emails(options).await
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vcard_details_parses_and_merges_three_split_blobs() {
+        let blob1 = "BEGIN:VCARD
+VERSION:4.0
+N:;11111111123232323;;;
+TEL;PREF=1:2345678
+ADR;PREF=1:;;vb ;n;m;n;nj
+ADR;PREF=2:;;jk;j;j;jm;k
+NOTE:fgchvbjnkm\\nfcgvhbjnkml\\n\\\\ghjknml\\nvhbkm\\nnbm\\nnbm\\,\\.\\nbnmkl\\,\\n mn\\,\\nnbm\\,\\n\\\\
+END:VCARD"
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let blob2 = "BEGIN:VCARD
+VERSION:4.0
+PRODID;TYPE=text;VALUE=TEXT:pm-ez-vcard 0.0.1
+UID:protonmail-ios-autoimport-E233D520-6965-4442-8C54-8F627E77399C
+FN;PREF=1:11111111123232323
+ITEM1.EMAIL;PREF=1:fkjhkdfgjhdghjdgkjhdgkfjhdjkhkdjfhg@pm.me
+ITEM2.EMAIL;PREF=2:proton.domelike477@passmail.net
+ITEM3.EMAIL;PREF=3:proton.rectangle212@passmail.net
+ITEM4.EMAIL;PREF=4:proton.splotchy980@passmail.net
+END:VCARD"
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let blob3 = "BEGIN:VCARD
+VERSION:4.0
+PRODID:-//ProtonMail//ProtonMail vCard 1.0.0//EN
+ITEM1.CATEGORIES:New test group #1 [Mateusz],New test group #2 [Mateusz]
+END:VCARD"
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let merged = Contact::merged_vcards_from_decrypted_blobs(vec![blob1, blob2, blob3])
+            .expect("should merge into a single VCard");
+        let merged_debug = format!("{merged:#?}");
+
+        assert!(
+            merged_debug.contains("protonmail-ios-autoimport-E233D520-6965-4442-8C54-8F627E77399C"),
+            "UID should be present"
+        );
+        assert!(
+            merged_debug.contains("11111111123232323"),
+            "Formatted/given name should be present"
+        );
+        for email in [
+            "fkjhkdfgjhdghjdgkjhdgkfjhdjkhkdjfhg@pm.me",
+            "proton.domelike477@passmail.net",
+            "proton.rectangle212@passmail.net",
+            "proton.splotchy980@passmail.net",
+        ] {
+            assert!(merged_debug.contains(email), "Missing email: {email}");
+        }
+        assert!(
+            merged_debug.contains("New test group #1 [Mateusz]"),
+            "Missing category 1"
+        );
+        assert!(
+            merged_debug.contains("New test group #2 [Mateusz]"),
+            "Missing category 2"
+        );
+        assert!(merged_debug.contains("2345678"), "Missing telephone number");
+        assert!(
+            merged_debug.contains("vb "),
+            "First address (street 'vb ') missing"
+        );
+        assert!(
+            merged_debug.contains("jk"),
+            "Second address (street 'jk') missing"
+        );
+        assert!(
+            merged_debug.contains("fgchvbjnkm"),
+            "NOTE content should be present"
+        );
+        assert!(
+            merged_debug.contains("ProtonMail vCard 1.0.0"),
+            "Product ID from blob3 should be chosen (last wins)"
+        );
     }
 }
