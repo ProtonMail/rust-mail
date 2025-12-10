@@ -1309,7 +1309,7 @@ where
     }
 
     async fn await_task(task: &mut MailPaginatorJoinHandle) -> Result<(), MailContextError> {
-        debug!("Awaiting for previous task");
+        debug!("Awaiting task");
 
         if let Some(task) = task.take() {
             match task.await {
