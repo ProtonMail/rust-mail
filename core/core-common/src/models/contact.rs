@@ -296,7 +296,7 @@ impl Contact {
 
     pub const INIT_KEY: InitializationKey = InitializationKey::new("contacts");
 
-    /// It initializes contats by syncing with the Backend.
+    /// It initializes contacts by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
     /// This function is idempotent. If successfully initialized in the past.
@@ -530,7 +530,7 @@ impl Contact {
 
     /// Marks a contact as undeleted.
     /// This method serves as the reverse of [`Contact::mark_delete()`].
-    /// which can revert the deletion of a contact in case of something unpredictable happend.
+    /// which can revert the deletion of a contact in case of something unpredictable happened.
     ///
     pub async fn mark_undelete(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         self.deleted = false;
@@ -610,7 +610,7 @@ impl Contact {
 
 impl ModelHooks for Contact {
     fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
-        // WARN: For perfomance reasons this will NOT be called in the initial sync. See `SyncedContacts::store`
+        // WARN: For performance reasons this will NOT be called in the initial sync. See `SyncedContacts::store`
         // Any extra logic here should be copied there.
         if let Some(remote_id) = &self.remote_id {
             if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
@@ -760,7 +760,7 @@ impl SyncedContacts {
         )?;
 
         // We will use this to map the contact_emails to the contacts without having to
-        // query the db each time we instert one.
+        // query the db each time we insert one.
         // We require this to happen since the contact_emails need the local id of its contact.
         let mut id_map = HashMap::new();
 

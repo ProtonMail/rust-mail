@@ -17,13 +17,14 @@ use crate::datatypes::{AvatarInformation, LabelColor, LabelType, LocalContactId}
 use crate::models::{Contact, ContactEmail, Label};
 use crate::utils::{MapVec as _, proton_color};
 use core::fmt;
+use indexmap::IndexSet;
 use proton_core_api::services::proton::{ContactId, LabelId, PrivateEmail};
 use proton_crypto::new_pgp_provider;
 use proton_vcard::categories::Category;
 use proton_vcard::email::Email;
 use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 use proton_vcard::values::uri::MaybeUri;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Display;
 use url::Url;
 
@@ -122,25 +123,21 @@ impl InspectableContactDetails {
         contact_groups: &[Label],
         contact_email: &ContactEmail,
     ) -> Vec<ContactGroup> {
-        let id_set: HashSet<&str> = contact_email
-            .label_ids
+        let groups_map: HashMap<&str, &Label> = contact_groups
             .iter()
-            .map(LabelId::as_str)
+            .filter_map(|group| group.remote_id.as_deref().map(|id| (id, group)))
             .collect();
-        let groups: Vec<ContactGroup> = contact_groups
+        let unique_label_ids: IndexSet<&LabelId> = contact_email.label_ids.iter().collect();
+        let matching_groups = unique_label_ids
             .iter()
-            .filter(|group| {
-                group
-                    .remote_id
-                    .as_deref()
-                    .is_some_and(|id| id_set.contains(id))
-            })
+            .filter_map(|label_id| groups_map.get(label_id.as_str()))
             .map(|group| ContactGroup {
                 name: group.name.clone(),
                 color: group.color.clone(),
             })
             .collect();
-        groups
+
+        matching_groups
     }
 
     async fn get_from_contact_full(
