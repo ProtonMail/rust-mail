@@ -54,7 +54,7 @@ struct CliArgs {
     product: String,
 
     /// Used to identify the app in the API
-    #[arg(long, default_value = "7.1.0")]
+    #[arg(long, default_value = "7.5.0")]
     version: String,
 
     /// Open messages in a browser window. Specify to choose an app or leave empty to use the
