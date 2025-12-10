@@ -171,7 +171,9 @@ impl InspectableContactDetails {
         let fields = &mut result.fields;
 
         match &mut fields[0] {
-            ContactField::Emails(emails) => Self::emails(vcard.emails, &vcard.categories, emails),
+            ContactField::Emails(emails) => {
+                *emails = Self::emails(vcard.emails, &vcard.categories);
+            }
             _ => unreachable!("The first and only field should always be the emails field"),
         }
 
@@ -280,13 +282,14 @@ impl InspectableContactDetails {
     fn emails(
         vcard_emails: HashMap<PropertyUid, Email>,
         vcard_categories: &HashMap<PropertyUid, Category>,
-        emails: &mut Vec<ContactDetailsEmail>,
-    ) {
-        emails.extend(vcard_emails.to_sorted_iter(|email| ContactDetailsEmail {
-            email_type: email.r#type.iter().cloned().map_vec(),
-            email: email.value.value.clone().into(),
-            groups: Self::groups(vcard_categories, &email),
-        }));
+    ) -> Vec<ContactDetailsEmail> {
+        vcard_emails
+            .to_sorted_iter(|email| ContactDetailsEmail {
+                email_type: email.r#type.iter().cloned().map_vec(),
+                email: email.value.value.clone().into(),
+                groups: Self::groups(vcard_categories, &email),
+            })
+            .collect()
     }
 
     fn groups(
