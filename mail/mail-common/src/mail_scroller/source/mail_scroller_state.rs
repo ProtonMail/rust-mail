@@ -10,16 +10,16 @@ use tracing::{debug, error, info, instrument};
 
 #[derive(Debug, Display)]
 pub enum MailScrollerState<T: ScrollData> {
-    #[display("Online")]
-    Online(CachedScrollData<T>),
+    #[display("Synced")]
+    Synced(CachedScrollData<T>),
 
-    #[display("NotSynced")]
-    NotSynced(CachedScrollData<T>),
+    #[display("Unsynced")]
+    Unsynced(CachedScrollData<T>),
 }
 
 impl<T: ScrollData> MailScrollerState<T> {
     #[instrument(skip(tether))]
-    pub async fn new_online(
+    pub async fn synced(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
@@ -27,15 +27,16 @@ impl<T: ScrollData> MailScrollerState<T> {
     ) -> Result<Self, StashError> {
         info!("Creating new synced state");
 
-        let ordered = CachedScrollData::new(local_label_id, unread, page_size, tether).await?;
+        let state = CachedScrollData::new(local_label_id, unread, page_size, tether).await?;
 
-        match ordered {
-            Some(ordered) => Ok(MailScrollerState::Online(ordered)),
+        match state {
+            Some(state) => Ok(MailScrollerState::Synced(state)),
+
             None => {
                 let order_dir = ScrollOrderDir::for_local_label(local_label_id, tether).await?;
                 let order_field = ScrollOrderField::for_local_label(local_label_id, tether).await?;
 
-                Ok(MailScrollerState::new_not_synced(
+                Ok(MailScrollerState::unsynced(
                     local_label_id,
                     unread,
                     page_size,
@@ -47,7 +48,7 @@ impl<T: ScrollData> MailScrollerState<T> {
     }
 
     #[instrument]
-    pub fn new_not_synced(
+    pub fn unsynced(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
@@ -56,34 +57,28 @@ impl<T: ScrollData> MailScrollerState<T> {
     ) -> Self {
         info!("Creating new unsynced state");
 
-        let unordered =
+        let state =
             CachedScrollData::all(local_label_id, unread, page_size, order_dir, order_field);
 
-        MailScrollerState::NotSynced(unordered)
+        MailScrollerState::Unsynced(state)
     }
 
-    pub fn online(&self) -> Option<&CachedScrollData<T>> {
+    pub fn as_synced(&self) -> Option<&CachedScrollData<T>> {
         match self {
-            MailScrollerState::Online(ordered) => Some(ordered),
+            MailScrollerState::Synced(ordered) => Some(ordered),
             _ => None,
         }
     }
 
-    pub fn not_synced(&self) -> Option<&CachedScrollData<T>> {
-        match self {
-            MailScrollerState::NotSynced(unordered) => Some(unordered),
-            _ => None,
-        }
+    pub fn is_synced(&self) -> bool {
+        matches!(self, MailScrollerState::Synced { .. })
     }
 
-    pub fn is_online(&self) -> bool {
-        matches!(self, MailScrollerState::Online { .. })
+    pub fn is_unsynced(&self) -> bool {
+        matches!(self, MailScrollerState::Unsynced { .. })
     }
 
-    pub fn is_not_synced(&self) -> bool {
-        matches!(self, MailScrollerState::NotSynced { .. })
-    }
-
+    #[instrument(skip_all)]
     pub async fn sync(
         &mut self,
         local_label_id: LocalLabelId,
@@ -93,45 +88,45 @@ impl<T: ScrollData> MailScrollerState<T> {
     ) -> Result<(), StashError> {
         debug!("Synchronizing state");
 
-        if let MailScrollerState::Online(ordered) = self {
+        if let MailScrollerState::Synced(ordered) = self {
             if !ordered.has_next_page(tether).await?
                 && let Err(e) = ordered.update(tether).await
             {
-                *self = MailScrollerState::NotSynced(ordered.clone());
                 error!("Could not update scroller end cursor, it has been removed: `{e}`");
+                *self = MailScrollerState::Unsynced(ordered.clone());
             }
 
             return Ok(());
         }
 
         let new_state =
-            MailScrollerState::new_online(local_label_id, unread, page_size, tether).await?;
+            MailScrollerState::synced(local_label_id, unread, page_size, tether).await?;
 
-        if new_state.is_online() {
+        if new_state.is_synced() {
             *self = new_state;
         }
 
         Ok(())
     }
 
-    pub async fn has_more_in_order(&self, tether: &Tether) -> Result<bool, StashError> {
+    pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
         match self {
-            MailScrollerState::Online(ordered) => ordered.has_more(tether).await,
-            _ => Ok(false),
+            MailScrollerState::Synced(state) => state.has_more(tether).await,
+            MailScrollerState::Unsynced(state) => state.has_more(tether).await,
         }
     }
 
-    pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
+    pub async fn has_more_synced(&self, tether: &Tether) -> Result<bool, StashError> {
         match self {
-            MailScrollerState::Online(ordered) => ordered.has_more(tether).await,
-            MailScrollerState::NotSynced(unordered) => unordered.has_more(tether).await,
+            MailScrollerState::Synced(state) => state.has_more(tether).await,
+            _ => Ok(false),
         }
     }
 
     pub async fn seen_count(&self, tether: &Tether) -> Result<u64, StashError> {
         match self {
-            MailScrollerState::Online(ordered) => ordered.seen_count(tether).await,
-            MailScrollerState::NotSynced(unordered) => unordered.seen_count(tether).await,
+            MailScrollerState::Synced(state) => state.seen_count(tether).await,
+            MailScrollerState::Unsynced(state) => state.seen_count(tether).await,
         }
     }
 }

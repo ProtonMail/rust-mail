@@ -642,7 +642,7 @@ pub struct ScrollCursor<T: ScrollData> {
 }
 
 impl<T: ScrollData> ScrollCursor<T> {
-    pub fn absolute_beginning(
+    pub fn beginning(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         order_dir: ScrollOrderDir,
@@ -655,7 +655,7 @@ impl<T: ScrollData> ScrollCursor<T> {
         }
     }
 
-    pub fn absolute_end(
+    pub fn ending(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         order_dir: ScrollOrderDir,
@@ -709,10 +709,10 @@ impl<T: ScrollData> ScrollCursor<T> {
     }
 
     pub async fn visible_elements(&self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
-        self.visible_elements_limit(None, None, false, tether).await
+        self.visible_elements_ex(None, None, false, tether).await
     }
 
-    async fn visible_elements_limit(
+    async fn visible_elements_ex(
         &self,
         limit: Option<usize>,
         offset: Option<u64>,
@@ -745,26 +745,18 @@ impl<T: ScrollData> CachedScrollData<T> {
         let order_dir = ScrollOrderDir::for_local_label(local_label_id, tether).await?;
         let order_field = ScrollOrderField::for_local_label(local_label_id, tether).await?;
 
-        let data = T::find_with_key(local_label_id, unread, order_dir, tether).await?;
+        let Some(end) = T::find_with_key(local_label_id, unread, order_dir, tether).await? else {
+            return Ok(None);
+        };
 
-        Ok(match data {
-            Some(data) => {
-                let end = data.into();
-                let cursor = ScrollCursor::absolute_beginning(
-                    local_label_id,
-                    unread,
-                    order_dir,
-                    order_field,
-                );
+        let end = end.into();
+        let cursor = ScrollCursor::beginning(local_label_id, unread, order_dir, order_field);
 
-                Some(Self {
-                    page_size,
-                    end,
-                    cursor,
-                })
-            }
-            None => None,
-        })
+        Ok(Some(Self {
+            page_size,
+            end,
+            cursor,
+        }))
     }
 
     pub fn all(
@@ -774,10 +766,8 @@ impl<T: ScrollData> CachedScrollData<T> {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Self {
-        let end = ScrollCursor::absolute_end(local_label_id, unread, order_dir, order_field);
-
-        let cursor =
-            ScrollCursor::absolute_beginning(local_label_id, unread, order_dir, order_field);
+        let end = ScrollCursor::ending(local_label_id, unread, order_dir, order_field);
+        let cursor = ScrollCursor::beginning(local_label_id, unread, order_dir, order_field);
 
         Self {
             page_size,
@@ -787,7 +777,7 @@ impl<T: ScrollData> CachedScrollData<T> {
     }
 
     pub fn set_absolute_end(mut self) -> Self {
-        self.end = ScrollCursor::absolute_end(
+        self.end = ScrollCursor::ending(
             self.cursor.local_label_id,
             self.cursor.unread,
             self.end.order_dir,
@@ -860,7 +850,7 @@ impl<T: ScrollData> CachedScrollData<T> {
     ) -> Result<Vec<T::Item>, StashError> {
         let items = self
             .end
-            .visible_elements_limit(limit, offset, false, tether)
+            .visible_elements_ex(limit, offset, false, tether)
             .await?;
 
         let cursor = match items.last() {
@@ -912,7 +902,7 @@ impl<T: ScrollData> CachedScrollData<T> {
     pub async fn scroll_data_begin(&self, tether: &Tether) -> Result<Option<T>, StashError> {
         let first = self
             .end
-            .visible_elements_limit(Some(1), None, true, tether)
+            .visible_elements_ex(Some(1), None, true, tether)
             .await?
             .pop();
 
@@ -933,7 +923,7 @@ impl<T: ScrollData> CachedScrollData<T> {
 
         let last = self
             .end
-            .visible_elements_limit(Some(1), Some(cursor_count), true, tether)
+            .visible_elements_ex(Some(1), Some(cursor_count), true, tether)
             .await?
             .pop();
 
