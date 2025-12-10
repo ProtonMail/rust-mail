@@ -37,7 +37,7 @@ where
     /// Return the items that fall into range of the synced data.
     ///
     /// If some item is outside that range and known to us, it should not be included.
-    fn visible_items(
+    fn visible_elements(
         &self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<Vec<Self::Item>, MailContextError>> + Send;
@@ -45,7 +45,7 @@ where
     /// Return the total number of items that fall into range of the synced data.
     ///
     /// If some item is outside that range and known to us, it should not be included.
-    fn seen_total(
+    fn seen_count(
         &self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<u64, MailContextError>> + Send;

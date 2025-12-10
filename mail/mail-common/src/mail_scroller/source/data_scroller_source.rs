@@ -287,42 +287,33 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         self.initialize_impl(ctx, false).await
     }
 
-    async fn visible_items(
+    async fn visible_elements(
         &self,
         ctx: &MailUserContext,
     ) -> Result<Vec<Self::Item>, MailContextError> {
-        if let Some(scroller) = self.state.not_synced() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.visible_elements(&tether).await?)
-        } else if let Some(scroller) = self.state.online() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.visible_elements(&tether).await?)
-        } else {
-            Ok(vec![])
+        let tether = ctx.user_stash().connection().await?;
+
+        match &self.state {
+            MailScrollerState::Synced(state) => Ok(state.visible_elements(&tether).await?),
+            MailScrollerState::Unsynced(state) => Ok(state.visible_elements(&tether).await?),
         }
     }
 
-    async fn seen_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        if let Some(scroller) = self.state.not_synced() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.seen_count(&tether).await?)
-        } else if let Some(scroller) = self.state.online() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.seen_count(&tether).await?)
-        } else {
-            Ok(0)
+    async fn seen_count(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
+        let tether = ctx.user_stash().connection().await?;
+
+        match &self.state {
+            MailScrollerState::Synced(state) => Ok(state.seen_count(&tether).await?),
+            MailScrollerState::Unsynced(state) => Ok(state.seen_count(&tether).await?),
         }
     }
 
     async fn synced_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        if let Some(scroller) = self.state.not_synced() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.synced_count(&tether).await?)
-        } else if let Some(scroller) = self.state.online() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.synced_count(&tether).await?)
-        } else {
-            Ok(0)
+        let tether = ctx.user_stash().connection().await?;
+
+        match &self.state {
+            MailScrollerState::Synced(state) => Ok(state.synced_count(&tether).await?),
+            MailScrollerState::Unsynced(state) => Ok(state.synced_count(&tether).await?),
         }
     }
 

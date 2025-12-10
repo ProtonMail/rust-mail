@@ -336,7 +336,7 @@ impl MailScrollerSource for SearchScrollerSource {
         self.initialize_impl(ctx).await
     }
 
-    async fn visible_items(
+    async fn visible_elements(
         &self,
         ctx: &MailUserContext,
     ) -> Result<Vec<Self::Item>, MailContextError> {
@@ -351,7 +351,7 @@ impl MailScrollerSource for SearchScrollerSource {
         }
     }
 
-    async fn seen_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
+    async fn seen_count(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
         let tether = ctx.user_stash().connection().await?;
 
         if !self.initialized {
@@ -364,7 +364,7 @@ impl MailScrollerSource for SearchScrollerSource {
     }
 
     async fn synced_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        self.seen_total(ctx).await
+        self.seen_count(ctx).await
     }
 
     async fn all_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {

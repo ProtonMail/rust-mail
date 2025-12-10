@@ -1013,7 +1013,7 @@ where
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let (seen, synced, total, has_more_in_source) = {
             let source = self.source.read().await;
-            let seen = source.seen_total(&ctx).await?;
+            let seen = source.seen_count(&ctx).await?;
             let synced = source.synced_total(&ctx).await?;
             let total = source.all_total(&ctx).await?;
             let has_more = source.has_more(&ctx).await?;
@@ -1097,7 +1097,7 @@ where
         src: ScrollerSource,
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let visible_items = { self.source.read().await.visible_items(&ctx).await? };
+        let visible_items = self.source.read().await.visible_elements(&ctx).await?;
 
         info!(
             "Refresh stats - new count: {}, current count: {}",
@@ -1241,7 +1241,7 @@ where
     ) -> Result<u64, MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
 
-        source.read().await.seen_total(&ctx).await
+        source.read().await.seen_count(&ctx).await
     }
 
     async fn synced(
