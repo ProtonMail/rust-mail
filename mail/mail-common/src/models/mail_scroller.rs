@@ -864,6 +864,7 @@ impl<T: ScrollData> CachedScrollData<T> {
             let offset = Some(cursor_count);
             let remaining = all - cursor_count;
             let double_page = self.page_size as u64 * 2;
+
             let limit = if remaining < double_page {
                 // Progress two pages at a time if there are less than two pages left.
                 usize::try_from(all - cursor_count)
@@ -1001,11 +1002,13 @@ impl<T: ScrollData> CachedScrollData<T> {
 
     pub async fn scroll_data_end(&self, tether: &Tether) -> Result<Option<T>, StashError> {
         let cursor_count = self.synced_count(tether).await?.saturating_sub(1);
+
         let last = self
             .end
             .visible_elements_limit(Some(1), Some(cursor_count), true, tether)
             .await?
             .pop();
+
         match last {
             Some(last) => Ok(T::into_scroll_data(
                 self.local_label_id,

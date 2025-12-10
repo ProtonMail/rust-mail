@@ -352,8 +352,8 @@ async fn refresh_mail(ctx: &MailUserContext) -> SubscriberResult<()> {
 
                 while let Some(page) = conv_scroll_cursor.while_fetch_more(&tether).await? {
                     let local_conv_ids = page.into_iter().map(|conv| conv.local_id).collect();
-
                     let action = conversations::RefreshMetadata::new(local_conv_ids);
+
                     if let Err(error) = ctx.action_queue().queue_action(action).await {
                         error!("Failed to refresh conversation metadata: `{error}`",);
                     }

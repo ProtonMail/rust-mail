@@ -1,12 +1,12 @@
-use derive_more::Display;
-use proton_core_common::datatypes::LocalLabelId;
-use stash::stash::{StashError, Tether};
-
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::{
     datatypes::ReadFilter,
     models::{CachedScrollData, ScrollData},
 };
+use derive_more::Display;
+use proton_core_common::datatypes::LocalLabelId;
+use stash::stash::{StashError, Tether};
+use tracing::{debug, error, info, instrument};
 
 /// Keeps track of the state of the CachedScrollData.
 ///
@@ -97,8 +97,8 @@ impl<T: ScrollData> MailScrollerState<T> {
             if !ordered.has_next_page(tether).await?
                 && let Err(e) = ordered.update(tether).await
             {
-                tracing::error!("Could not update scroller end cursor, it has been removed: `{e}`");
                 *self = MailScrollerState::NotSynced(ordered.clone());
+                error!("Could not update scroller end cursor, it has been removed: `{e}`");
             }
 
             return Ok(());

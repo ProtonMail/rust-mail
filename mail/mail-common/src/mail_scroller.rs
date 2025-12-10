@@ -196,6 +196,7 @@ impl MailScroller<ContextualConversation> {
         let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
         let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
         let unread = ReadFilter::All;
+
         let source = DataScrollerSource::<ConversationScrollData>::new(
             label,
             unread,
@@ -219,6 +220,7 @@ impl MailScroller<Message> {
         let order_dir = ScrollOrderDir::for_local_label(label, &tether).await?;
         let order_field = ScrollOrderField::for_local_label(label, &tether).await?;
         let unread = ReadFilter::All;
+
         let source = DataScrollerSource::<MessageScrollData>::new(
             label,
             unread,
@@ -238,9 +240,11 @@ impl MailScroller<Message> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let tether = ctx.user_stash().connection().await?;
         let label = MailSettings::get_or_default(&tether).await.all_mail();
+
         let label = Label::remote_id_counterpart(label, &tether)
             .await?
             .expect("System labels should always have a local counterpart");
+
         let source = SearchScrollerSource::new(label, options, page_size);
 
         Self::new(ctx, source, page_size, label).await
@@ -1008,6 +1012,7 @@ where
             }
             ScrollerCommand::Cursor(scroller, looking_at, sender) => {
                 let cursor = MailCursor::new(looking_at, items.clone(), scroller);
+
                 sender
                     .send(cursor)
                     .map_err(|_| anyhow!("Fail to send `cursor`"))?;
@@ -1177,12 +1182,14 @@ where
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing label to `{label}`");
         let _ = self.task.take();
+
         self.task = self
             .source
             .write()
             .await
             .change_state(&ctx, with_filter, Some(label), None)
             .await?;
+
         self.reset(src).await
     }
 
@@ -1194,13 +1201,16 @@ where
     ) -> Result<ScrollerUpdate<S::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing search keywords");
+
         Self::abort_task(&mut self.task);
+
         self.task = self
             .source
             .write()
             .await
             .change_state(&ctx, None, None, Some(keywords))
             .await?;
+
         self.reset(src).await
     }
 
@@ -1213,6 +1223,7 @@ where
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let _ = self.task.take();
         self.task = self.source.write().await.clear(&ctx).await?;
+
         self.reset(src).await
     }
 

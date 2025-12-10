@@ -25,7 +25,7 @@ use proton_mail_api::services::proton::{
     response_data::MessageMetadata as ApiMessageMetadata,
 };
 use stash::stash::{Bond, Stash, Tether};
-use tracing::debug;
+use tracing::{debug, error, info, instrument};
 
 #[derive(Debug)]
 pub(super) struct RemoteConversationScrollerSource;
@@ -122,7 +122,7 @@ impl RemoteSource for ConversationScrollData {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
-        let task = Some(ctx.spawn_ex(async move |ctx| {
+        let task = ctx.spawn_ex(async move |ctx| {
             let items = RemoteConversationScrollerSource::sync_previous_page(
                 &session,
                 stash,
@@ -149,9 +149,9 @@ impl RemoteSource for ConversationScrollData {
             }
 
             Ok(())
-        }));
+        });
 
-        Ok(task)
+        Ok(Some(task))
     }
 }
 
@@ -172,7 +172,7 @@ impl RemoteConversationScrollerSource {
         let context_time = scroller.context_time(order_field);
         let session = ctx.session().clone();
 
-        let task = Some(ctx.spawn_ex(async move |ctx| {
+        let task = ctx.spawn_ex(async move |ctx| {
             Self::sync_next_page(
                 &session,
                 stash,
@@ -189,12 +189,12 @@ impl RemoteConversationScrollerSource {
             .await?;
 
             Ok(())
-        }));
+        });
 
-        Ok(task)
+        Ok(Some(task))
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_first_page(
         session: &Session,
@@ -207,7 +207,7 @@ impl RemoteConversationScrollerSource {
         order_field: ScrollOrderField,
         queue: RebasableQueue<'_>,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
-        tracing::info!("Syncing first page in {remote_label_id:?}");
+        info!("Syncing first page in {remote_label_id:?}");
 
         let (response, message_metadata) = fetch_conversations_and_messages(
             session,
@@ -263,7 +263,7 @@ impl RemoteConversationScrollerSource {
         ))
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_previous_page(
         session: &Session,
@@ -278,7 +278,7 @@ impl RemoteConversationScrollerSource {
         order_field: ScrollOrderField,
         queue: RebasableQueue<'_>,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
-        tracing::info!(
+        info!(
             "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
         );
 
@@ -338,7 +338,7 @@ impl RemoteConversationScrollerSource {
         ))
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_next_page(
         session: &Session,
@@ -353,7 +353,7 @@ impl RemoteConversationScrollerSource {
         order_field: ScrollOrderField,
         queue: RebasableQueue<'_>,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
-        tracing::info!(
+        info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
         );
 
@@ -515,7 +515,7 @@ impl RemoteConversationScrollerSource {
                     .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                     .await
                 {
-                    tracing::error!("Failed to rebase changes: {e}")
+                    error!("Failed to rebase changes: {e}")
                 }
 
                 let Some((last, label)) = conversations
@@ -572,9 +572,10 @@ impl RemoteConversationScrollerSource {
         order_field: ScrollOrderField,
         bond: &Bond<'_>,
     ) -> Result<ConversationScrollData, MailContextError> {
-        tracing::debug!(
+        debug!(
             "New conversation cursor {remote_conv_id} at time={context_time}, snooze_time={snooze_time}, order={display_order}"
         );
+
         let mut conv_paginator = ConversationScrollData::builder()
             .local_label_id(local_label_id)
             .unread(unread)
