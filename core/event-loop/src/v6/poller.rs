@@ -158,16 +158,16 @@ mod tests {
         let raw_event_1 = RawEvent {
             meta: EventMetadata {
                 event_id: event_id_2.clone(),
-                has_more: true,
-                refresh: 0,
+                has_more: 1.into(),
+                refresh: 0.into(),
             },
             raw: String::new(),
         };
         let raw_event_2 = RawEvent {
             meta: EventMetadata {
                 event_id: event_id_3.clone(),
-                has_more: false,
-                refresh: 0,
+                has_more: 0.into(),
+                refresh: 0.into(),
             },
             raw: String::new(),
         };
@@ -175,8 +175,8 @@ mod tests {
         let raw_event_3 = RawEvent {
             meta: EventMetadata {
                 event_id: event_id_4.clone(),
-                has_more: false,
-                refresh: 0,
+                has_more: 0.into(),
+                refresh: 0.into(),
             },
             raw: String::new(),
         };
@@ -184,8 +184,8 @@ mod tests {
         let raw_event_4 = RawEvent {
             meta: EventMetadata {
                 event_id: event_id_4.clone(),
-                has_more: false,
-                refresh: 0,
+                has_more: 0.into(),
+                refresh: 0.into(),
             },
             raw: String::new(),
         };
@@ -301,16 +301,16 @@ mod tests {
         let raw_event_1 = RawEvent {
             meta: EventMetadata {
                 event_id: event_id_2.clone(),
-                has_more: true,
-                refresh: 0,
+                has_more: 1.into(),
+                refresh: 0.into(),
             },
             raw: String::new(),
         };
         let raw_event_2 = RawEvent {
             meta: EventMetadata {
                 event_id: event_id_3.clone(),
-                has_more: false,
-                refresh: 0,
+                has_more: 0.into(),
+                refresh: 0.into(),
             },
             raw: String::new(),
         };

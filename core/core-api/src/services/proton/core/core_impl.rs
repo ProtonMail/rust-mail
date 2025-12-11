@@ -325,4 +325,36 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
 
         Ok(response)
     }
+
+    async fn get_contact_event_v6(&self, event_id: EventId) -> ApiServiceResult<String> {
+        Ok(GET!("{CONTACTS_V6}/events/{event_id}")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_string()?)
+    }
+
+    async fn get_contact_event_latest_v6(&self) -> ApiServiceResult<GetEventsLatestResponse> {
+        Ok(GET!("{CONTACTS_V6}/events/latest")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn get_core_event_v6(&self, event_id: EventId) -> ApiServiceResult<String> {
+        Ok(GET!("{CORE_V6}/events/{event_id}")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_string()?)
+    }
+
+    async fn get_core_event_latest_v6(&self) -> ApiServiceResult<GetEventsLatestResponse> {
+        Ok(GET!("{CORE_V6}/events/latest")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
 }

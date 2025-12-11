@@ -3,16 +3,19 @@ use crate::datatypes::{
     AddressFlags, AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, InitializationKey,
     LocalAddressId,
 };
+use crate::event_loop::events::Action;
 use crate::models::ModelIdExtension;
 use crate::{CoreContextError, CoreContextResult};
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::services::proton::{Address as ApiAddress, AddressId, ProtonCore};
 use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::{DbRecord, Model, ModelHooks};
 use stash::params;
 use stash::rusqlite::params_from_iter;
-use stash::stash::{Stash, StashError, StashResult, Tether};
+use stash::stash::{Bond, Stash, StashError, StashResult, Tether};
 use std::sync::Arc;
+use tracing::warn;
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("addresses")]
@@ -151,6 +154,40 @@ impl Address {
     pub fn with_signature(mut self, signature: impl Into<String>) -> Self {
         self.signature = signature.into();
         self
+    }
+
+    pub async fn handle_event(
+        tx: &Bond<'_>,
+        id: &AddressId,
+        action: Action,
+        address: Option<&mut Address>,
+        changeset: &mut RebaseChangeSet,
+    ) -> Result<(), StashError> {
+        action
+            .log_entry(id, async |remote_id| {
+                Address::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
+        match action {
+            Action::Delete => {
+                warn!("[ET-1461] Delete action not implemented for address event");
+            }
+
+            Action::Create | Action::Update => {
+                if let Some(address) = address {
+                    address.save(tx).await?;
+                    changeset.add(address.id());
+                }
+            }
+
+            Action::UpdateFlags => {
+                warn!("[ET-1461] UpdateFlags action not implemented for address event");
+            }
+        }
+        Ok(())
     }
 }
 

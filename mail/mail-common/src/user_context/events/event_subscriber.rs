@@ -1,37 +1,29 @@
 use crate::actions::refresh::ActionRefresh;
-use crate::actions::{conversations, messages};
 use crate::datatypes::ConversationLabelsCount;
+use crate::datatypes::MessageLabelsCount;
 use crate::datatypes::{LocalConversationId, LocalMessageId};
-use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
-use crate::models::{
-    CachedScrollData, ConversationScrollData, IncomingDefault, MailLabel, MailSettings,
-    MessageScrollData, RollbackItem, StoreLabelCounters,
-};
+use crate::models::IncomingDefault;
 use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
-use crate::user_context::events::labels::handle_label_events;
+use crate::user_context::events::labels::handle_counters_label_events;
 use crate::user_context::events::messages::handle_message_events;
 use crate::{AppError, MailContextError, MailUserContext};
 use anyhow::Context;
-use anyhow::anyhow;
 use async_trait::async_trait;
-use indoc::formatdoc;
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_common::datatypes::{Refresh, SystemLabel};
-use proton_core_common::models::{Label, LabelError};
+use proton_core_common::models::LabelError;
 use stash::orm::Model;
-use std::collections::HashMap;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 use tracing::{debug, error, info, warn};
 // Import common macros from core
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
-use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
+use crate::events::v6;
 use crate::user_context::events::event_model::MailEvent;
 use crate::user_context::events::event_source::MailEventSourceV5;
-use proton_core_common::event_loop::join_task;
 use proton_event_loop::v6::{
     EventSource, EventSubscriber, EventSubscriberError, EventSubscriberResult,
 };
@@ -53,6 +45,51 @@ pub struct PostEventSyncData {
     pub msg_for_prefetch: Vec<LocalMessageId>,
     pub cnv_for_prefetch: Vec<LocalConversationId>,
     queue_incoming_default: bool,
+}
+
+impl PostEventSyncData {
+    pub fn update_incoming_default(&mut self) {
+        self.queue_incoming_default = true;
+    }
+    pub async fn apply(
+        self,
+        ctx: &Arc<MailUserContext>,
+        tether: &Tether,
+    ) -> Result<(), MailContextError> {
+        let label_id = SystemLabel::AllMail.local_id(tether).await?.unwrap();
+
+        let conversation_jobs = self
+            .cnv_for_prefetch
+            .into_iter()
+            .map(|id| PrefetchJob::Conversation(id, label_id))
+            .collect();
+
+        let message_jobs = self
+            .msg_for_prefetch
+            .into_iter()
+            .map(PrefetchJob::Message)
+            .collect();
+
+        let _ = ctx
+            .queue_prefetch_jobs(conversation_jobs)
+            .await
+            .inspect_err(|e| {
+                error!("Failed to queue cnv jobs for prefetch: {e}");
+            });
+
+        let _ = ctx
+            .queue_prefetch_jobs(message_jobs)
+            .await
+            .inspect_err(|e| {
+                error!("Failed to queue msg jobs for prefetch: {e}");
+            });
+
+        if self.queue_incoming_default {
+            IncomingDefault::action_resync(ctx.action_queue()).await;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -79,15 +116,21 @@ impl From<MailContextError> for MailEventSubscriberError {
     fn from(e: MailContextError) -> Self {
         match e {
             MailContextError::Label(e) => e.into(),
-            MailContextError::App(e) => match e {
-                AppError::API(e) => Self::Api(e),
-                AppError::Stash(e) => Self::Stash(e),
-                AppError::Label(e) => e.into(),
-                e => Self::Other(e.into()),
-            },
+            MailContextError::App(e) => e.into(),
             MailContextError::Stash(e) => Self::Stash(e),
             MailContextError::Api(e) => Self::Api(e),
             _ => Self::Other(e.into()),
+        }
+    }
+}
+
+impl From<AppError> for MailEventSubscriberError {
+    fn from(e: AppError) -> Self {
+        match e {
+            AppError::API(e) => Self::Api(e),
+            AppError::Stash(e) => Self::Stash(e),
+            AppError::Label(e) => e.into(),
+            e => Self::Other(e.into()),
         }
     }
 }
@@ -146,12 +189,12 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
 
                     if let Some(labels) = &event.labels {
                         debug!("Handling label events");
-                        handle_label_events(tx, labels)
+                        handle_counters_label_events(tx, labels)
                             .await
                             .context("Error handling label events")?;
                     }
 
-                    if let Some(conversations) = &event.conversations {
+                    if let Some(ref mut conversations) = event.conversations {
                         debug!("Handling conversation events");
                         handle_conversation_events(
                             tx,
@@ -163,7 +206,7 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
                         .context("Error handling conversation events")?;
                     }
 
-                    if let Some(messages) = &event.messages {
+                    if let Some(ref mut messages) = event.messages {
                         debug!("Handling message events");
                         handle_message_events(tx, messages, &mut rebase_change_set, &mut data)
                             .await
@@ -195,7 +238,9 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
 
                     // It so happens that the API only returns the IDs of what changed, not the
                     // actual data, so we better reload all.
-                    data.queue_incoming_default |= event.incoming_defaults.is_some();
+                    if event.incoming_defaults.is_some() {
+                        data.update_incoming_default()
+                    }
 
                     ctx.rebaseable_queue()
                         .await
@@ -214,37 +259,7 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
                 })
                 .context("Failed to apply changes")?;
 
-            let label_id = SystemLabel::AllMail.local_id(&tether).await?.unwrap();
-
-            let conversation_jobs = data
-                .cnv_for_prefetch
-                .into_iter()
-                .map(|id| PrefetchJob::Conversation(id, label_id))
-                .collect();
-
-            let message_jobs = data
-                .msg_for_prefetch
-                .into_iter()
-                .map(PrefetchJob::Message)
-                .collect();
-
-            let _ = ctx
-                .queue_prefetch_jobs(conversation_jobs)
-                .await
-                .inspect_err(|e| {
-                    error!("Failed to queue cnv jobs for prefetch: {e}");
-                });
-
-            let _ = ctx
-                .queue_prefetch_jobs(message_jobs)
-                .await
-                .inspect_err(|e| {
-                    error!("Failed to queue msg jobs for prefetch: {e}");
-                });
-
-            if data.queue_incoming_default {
-                IncomingDefault::action_resync(ctx.action_queue()).await;
-            }
+            data.apply(&ctx, &tether).await?;
 
             Ok::<_, MailEventSubscriberError>(())
         }
@@ -283,7 +298,9 @@ impl MailUserContext {
             Refresh::None => {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
             }
-            Refresh::Mail | Refresh::All => refresh_mail(self).await?,
+            Refresh::Mail | Refresh::All => v6::refresh_mail(self)
+                .await
+                .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })?,
             Refresh::Contacts => {
                 // Contacts refresh is handled by the core event subscriber
             }
@@ -294,141 +311,6 @@ impl MailUserContext {
 
         Ok(())
     }
-}
-
-#[tracing::instrument(skip_all)]
-async fn refresh_mail(ctx: &MailUserContext) -> EventSubscriberResult<()> {
-    async {
-        let api = ctx.session().clone();
-        let all_remote_labels = ctx.spawn(async move { Label::fetch_mail_labels(&api).await });
-        let api = ctx.session().clone();
-        let counters = ctx.spawn(async move { StoreLabelCounters::fetch(&api).await });
-        let api = ctx.session().clone();
-        let mail_settings = ctx.spawn(async move { MailSettings::fetch_mail_settings(&api).await });
-
-        let mut tether = ctx.user_context.stash().connection().await?;
-        let mut all_local_labels: HashMap<_, _> = Label::all_mail(&tether)
-            .await?
-            .into_iter()
-            .map(|label| (label.remote_id.clone(), label))
-            .collect();
-        debug!(
-            "Number of labels available localy: {}",
-            all_local_labels.len()
-        );
-
-        let all_remote_labels = join_task!(all_remote_labels, "labels");
-        let counters = join_task!(counters, "label counters");
-        let mail_settings = join_task!(mail_settings, "mail settings");
-
-        debug!(
-            "Number of labels available remotely: {}",
-            all_remote_labels.len()
-        );
-        for remote_label in all_remote_labels.iter() {
-            all_local_labels.remove(&remote_label.remote_id);
-        }
-
-        tether
-            .sync_tx(move |tx| {
-                tx.execute_batch(&formatdoc! {"
-                DELETE from {};
-                DELETE from {};
-                DELETE from {};
-                ",
-                    RollbackItem::table_name(),
-                    ConversationScrollData::table_name(),
-                    MessageScrollData::table_name(),
-                })?;
-
-                Label::store_labels(tx, all_remote_labels).context("Failed to sync labels")?;
-
-                let mut ids = vec![];
-                for local_label_to_remove in all_local_labels.into_values() {
-                    if let Some(_system_label) =
-                        SystemLabel::from_opt_rid(local_label_to_remove.remote_id.as_ref())
-                    {
-                        // For some reason API does not return all system labels
-                        // we have to make sure to not delete those
-                        continue;
-                    }
-
-                    debug!(
-                        "Removing label with remote_id {:?}",
-                        local_label_to_remove.remote_id
-                    );
-                    ids.push(local_label_to_remove.id());
-                }
-                counters.store(tx)?;
-                mail_settings.store(tx)?;
-
-                Ok(())
-            })
-            .await
-            .inspect_err(|e| {
-                error!("Failed to clear database entries, while refreshing mail: {e}");
-            })?;
-
-        IncomingDefault::action_resync(ctx.action_queue()).await;
-
-        let all_mail = SystemLabel::AllMail
-            .load(&tether)
-            .await?
-            .ok_or_else(|| anyhow!("All mail label is missing!"))?;
-        let page_size = 50; // 80 exceeds HTTP URI limit, 50 seems to be safe softspot
-
-        match all_mail.view_mode(&tether).await? {
-            ViewMode::Conversations => {
-                let mut conv_scroll_cursor = CachedScrollData::<ConversationScrollData>::all(
-                    all_mail.id(),
-                    ReadFilter::All,
-                    page_size,
-                    ScrollOrderDir::default(),
-                    ScrollOrderField::default(),
-                );
-
-                info!(
-                    "Queue conversations to refresh, count: {}",
-                    conv_scroll_cursor.synced_count(&tether).await?
-                );
-
-                while let Some(page) = conv_scroll_cursor.while_fetch_more(&tether).await? {
-                    let local_conv_ids = page.into_iter().map(|conv| conv.local_id).collect();
-
-                    let action = conversations::RefreshMetadata::new(local_conv_ids);
-                    if let Err(error) = ctx.action_queue().queue_action(action).await {
-                        error!("Failed to refresh conversation metadata: `{error}`",);
-                    }
-                }
-            }
-            ViewMode::Messages => {
-                let mut msg_scroll_cursor = CachedScrollData::<MessageScrollData>::all(
-                    all_mail.id(),
-                    ReadFilter::All,
-                    page_size,
-                    ScrollOrderDir::default(),
-                    ScrollOrderField::default(),
-                );
-
-                info!(
-                    "Queue messages to refresh, count: {}",
-                    msg_scroll_cursor.synced_count(&tether).await?
-                );
-
-                while let Some(page) = msg_scroll_cursor.while_fetch_more(&tether).await? {
-                    let local_msg_ids = page.into_iter().filter_map(|msg| msg.local_id).collect();
-                    let action = messages::RefreshMetadata::new(local_msg_ids);
-
-                    if let Err(error) = ctx.action_queue().queue_action(action).await {
-                        error!("Failed to refresh message metadata: `{error}`",);
-                    }
-                }
-            }
-        };
-        Ok::<_, MailEventSubscriberError>(())
-    }
-    .await
-    .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
 }
 
 async fn calculate_missing_dependencies(

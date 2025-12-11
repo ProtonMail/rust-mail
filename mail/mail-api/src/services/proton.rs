@@ -17,7 +17,9 @@ use crate::services::proton::prelude::*;
 use bytes::Bytes;
 use muon::common::RetryPolicy;
 use proton_core_api::service::ApiServiceResult;
-use proton_core_api::services::proton::{IncomingDefaultId, LabelId};
+use proton_core_api::services::proton::{
+    EventId, GetEventsLatestResponse, IncomingDefaultId, LabelId,
+};
 use std::time::Duration;
 
 pub mod common;
@@ -31,6 +33,8 @@ mod proton_impl;
 
 /// The Proton Mail API base path (v4).
 pub const MAIL_V4: &str = "/mail/v4";
+
+pub const MAIL_V6: &str = "/mail/v6";
 
 pub trait ProtonMail {
     /// GETs a single attachment.
@@ -119,6 +123,10 @@ pub trait ProtonMail {
 
     async fn get_conversations_count(&self) -> ApiServiceResult<GetConversationsCountResponse>;
 
+    async fn get_conversations_count_for_labels(
+        &self,
+        label_ids: Vec<LabelId>,
+    ) -> ApiServiceResult<GetConversationsCountResponse>;
     async fn get_message(&self, message_id: MessageId) -> ApiServiceResult<GetMessageResponse>;
 
     async fn get_messages(
@@ -127,6 +135,11 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<GetMessagesResponse>;
 
     async fn get_messages_count(&self) -> ApiServiceResult<GetMessagesCountResponse>;
+
+    async fn get_messages_count_for_labels(
+        &self,
+        labels: Vec<LabelId>,
+    ) -> ApiServiceResult<GetMessagesCountResponse>;
 
     async fn get_mail_settings(&self) -> ApiServiceResult<GetMailSettingsResponse>;
 
@@ -314,4 +327,8 @@ pub trait ProtonMail {
     async fn delete_all_messages_in_label(&self, label_id: LabelId) -> ApiServiceResult<()>;
 
     async fn mark_unsubscribed(&self, id: Vec<MessageId>) -> ApiServiceResult<()>;
+
+    async fn get_mail_event_v6(&self, event_id: EventId) -> ApiServiceResult<String>;
+
+    async fn get_mail_event_latest_v6(&self) -> ApiServiceResult<GetEventsLatestResponse>;
 }

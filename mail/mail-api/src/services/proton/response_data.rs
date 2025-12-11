@@ -26,7 +26,7 @@
 use crate::services::proton::common::{AttachmentId, ConversationId, ExternalId, MessageId};
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_api::services::proton::{
-    Action, CoreEvent, EventId, LabelEvent, PrivateEmail, PrivateString,
+    Action, CoreEvent, EventId, LabelEvent, PrivateEmail, PrivateString, UserId,
 };
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_crypto_inbox::attachment::{
@@ -634,6 +634,67 @@ impl From<MailEvent> for MailEventV5 {
             messages: m.messages,
         }
     }
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct MailEventV6 {
+    #[serde(rename = "EventID")]
+    pub event_id: EventId,
+
+    pub labels: Option<Vec<MailLabelEventV6>>,
+
+    pub conversations: Option<Vec<MailConversationEventV6>>,
+
+    pub incoming_defaults: Option<Vec<IncomingDefaultEvent>>,
+
+    pub mail_settings: Option<Vec<MailSettingsEventV6>>,
+
+    pub messages: Option<Vec<MailMessageEventV6>>,
+
+    pub refresh: bool,
+
+    /// Whether we need to request more events after this.
+    #[serde(rename = "More")]
+    pub has_more: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct MailLabelEventV6 {
+    #[serde(rename = "ID")]
+    pub id: LabelId,
+    pub action: Action,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct MailConversationEventV6 {
+    #[serde(rename = "ID")]
+    pub id: ConversationId,
+    pub action: Action,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct MailMessageEventV6 {
+    #[serde(rename = "ID")]
+    pub id: MessageId,
+    pub action: Action,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct MailSettingsEventV6 {
+    #[serde(rename = "ID")]
+    pub id: UserId,
+    pub action: Action,
 }
 
 /// TODO: Document this struct.

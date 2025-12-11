@@ -1,3 +1,7 @@
+use crate::services::proton::prelude::*;
+use crate::services::proton::{MAIL_V4, MAIL_V6, Package, PostSendRequest};
+use crate::services::proton::{PostSendMessageResponse, ProtonMail};
+use crate::{INCOMING_DEFAULTS_PAGE_SIZE, MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 use bytes::Bytes;
 use muon::common::{RetryPolicy, Sender};
 use muon::util::DurationExt;
@@ -5,16 +9,14 @@ use muon::{DELETE, ProtonRequest, ProtonResponse};
 use proton_core_api::service::ApiServiceResult;
 use proton_core_api::services::proton::muon::util::ProtonRequestExt;
 use proton_core_api::services::proton::muon::{GET, POST, PUT, serde_to_query};
-use proton_core_api::services::proton::{CORE_V4, IncomingDefaultId, LabelId};
+use proton_core_api::services::proton::{
+    CORE_V4, EventId, GetEventsLatestResponse, IncomingDefaultId, LabelId,
+};
 use proton_core_api::utils::HttpReqExt as _;
+use serde::Serialize;
 use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;
-
-use crate::services::proton::prelude::*;
-use crate::services::proton::{MAIL_V4, Package, PostSendRequest};
-use crate::services::proton::{PostSendMessageResponse, ProtonMail};
-use crate::{INCOMING_DEFAULTS_PAGE_SIZE, MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 
 impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
     async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes> {
@@ -202,6 +204,23 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
             .into_body_json()?)
     }
 
+    async fn get_conversations_count_for_labels(
+        &self,
+        label_ids: Vec<LabelId>,
+    ) -> ApiServiceResult<GetConversationsCountResponse> {
+        #[derive(Serialize)]
+        struct Options {
+            #[serde(rename = "LabelIDs")]
+            label_ids: Vec<LabelId>,
+        }
+        Ok(GET!("{MAIL_V4}/conversations/count")
+            .query(serde_to_query(Options { label_ids })?)
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn get_message(&self, message_id: MessageId) -> ApiServiceResult<GetMessageResponse> {
         Ok(GET!("{MAIL_V4}/messages/{message_id}")
             .allowed_time(2.m())
@@ -233,6 +252,22 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
 
     async fn get_messages_count(&self) -> ApiServiceResult<GetMessagesCountResponse> {
         Ok(GET!("{MAIL_V4}/messages/count")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+    async fn get_messages_count_for_labels(
+        &self,
+        label_ids: Vec<LabelId>,
+    ) -> ApiServiceResult<GetMessagesCountResponse> {
+        #[derive(Serialize)]
+        struct Options {
+            #[serde(rename = "LabelIDs")]
+            label_ids: Vec<LabelId>,
+        }
+        Ok(GET!("{MAIL_V4}/messages/count")
+            .query(serde_to_query(Options { label_ids })?)
             .send_with(self)
             .await?
             .ok()?
@@ -624,5 +659,21 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
             .await?
             .ok()?;
         Ok(())
+    }
+
+    async fn get_mail_event_v6(&self, event_id: EventId) -> ApiServiceResult<String> {
+        Ok(GET!("{MAIL_V6}/events/{event_id}")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_string()?)
+    }
+
+    async fn get_mail_event_latest_v6(&self) -> ApiServiceResult<GetEventsLatestResponse> {
+        Ok(GET!("{MAIL_V6}/events/latest")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
     }
 }

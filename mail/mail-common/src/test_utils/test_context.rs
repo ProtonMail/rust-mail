@@ -7,7 +7,7 @@ use proton_core_api::auth::UserKeySecret;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::UserId;
 use proton_core_common::UserDatabaseInitializer;
-use proton_core_common::event_loop::event_source::CoreEventCache;
+use proton_core_common::event_loop::v6::CoreEventCache;
 use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
 use proton_event_loop::v6::EventSubscriberResult;
 use proton_mail_api::services::proton::prelude::MailEvent;

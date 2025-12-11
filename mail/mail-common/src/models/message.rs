@@ -68,7 +68,9 @@ use proton_crypto_inbox::proton_crypto;
 use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::{ConversationId, ExternalId, MessageId};
-use proton_mail_api::services::proton::prelude::MessageReplyTo as ApiMessageReplyTo;
+use proton_mail_api::services::proton::prelude::{
+    MessageMetadata, MessageReplyTo as ApiMessageReplyTo,
+};
 use proton_mail_api::services::proton::requests::GetMessagesOptions;
 use proton_mail_api::services::proton::response_data::{
     Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
@@ -2028,6 +2030,72 @@ impl Message {
         }
 
         Ok(MessageSyncDecision::Apply)
+    }
+
+    pub async fn handle_event(
+        tx: &Bond<'_>,
+        id: &MessageId,
+        action: Action,
+        message: Option<&MessageMetadata>,
+        changeset: &mut RebaseChangeSet,
+    ) -> Result<Option<LocalMessageId>, AppError> {
+        action
+            .log_entry(id, async |remote_id| {
+                Message::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
+
+        match action {
+            Action::Delete => {
+                tx.execute(
+                    "DELETE FROM messages WHERE remote_id = ?",
+                    params![id.clone()],
+                )
+                .await?;
+                Ok(None)
+            }
+
+            Action::Create => {
+                let Some(message_metadata) = message else {
+                    warn!("Got a message-event without any message, skipping it");
+                    return Ok(None);
+                };
+
+                if Message::sync_decision(message_metadata, Some(action), tx).await?
+                    == MessageSyncDecision::Skip
+                {
+                    tracing::debug!("Create skipped for {id:?}");
+                    return Ok(None);
+                }
+                let mut message = Message::from_api_metadata(message_metadata.clone(), tx).await?;
+                Message::save(&mut message, tx).await?;
+
+                tracing::info!("Created with {:?}", message.id());
+                changeset.add(message.id());
+                Ok(Some(message.id()))
+            }
+
+            Action::Update | Action::UpdateFlags => {
+                let Some(message_metadata) = message else {
+                    warn!("Got a message-event without any message, skipping it");
+                    return Ok(None);
+                };
+
+                if Message::sync_decision(message_metadata, Some(action), tx).await?
+                    == MessageSyncDecision::Skip
+                {
+                    tracing::debug!("Update skipped for {id:?}");
+                    return Ok(None);
+                }
+                let mut message = Message::from_api_metadata(message_metadata.clone(), tx).await?;
+                Message::save(&mut message, tx).await?;
+                changeset.add(message.id());
+                Ok(None)
+            }
+        }
     }
 }
 

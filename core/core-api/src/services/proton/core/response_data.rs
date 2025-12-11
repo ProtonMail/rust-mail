@@ -1141,3 +1141,75 @@ pub struct CoreEvent {
     #[serde_as(as = "BoolFromInt")]
     pub has_more: bool,
 }
+
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct CoreEventV6 {
+    pub users: Option<Vec<UserEventV6>>,
+    pub addresses: Option<Vec<AddressEventV6>>,
+    pub user_settings: Option<Vec<UserSettingsEventV6>>,
+    pub refresh: bool,
+    /// Whether we need to request more events after this.
+    #[serde(rename = "More")]
+    pub has_more: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct UserEventV6 {
+    #[serde(rename = "ID")]
+    pub id: UserId,
+    pub action: Action,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct AddressEventV6 {
+    #[serde(rename = "ID")]
+    pub id: AddressId,
+    pub action: Action,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct UserSettingsEventV6 {
+    #[serde(rename = "ID")]
+    pub id: AddressId,
+    pub action: Action,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ContactRootEventV6 {
+    pub contacts: Option<Vec<ContactEventV6>>,
+    pub labels: Option<Vec<ContactLabelEventV6>>,
+    pub refresh: bool,
+    /// Whether we need to request more events after this.
+    #[serde(rename = "More")]
+    pub has_more: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ContactEventV6 {
+    #[serde(rename = "ID")]
+    pub id: ContactId,
+    pub action: Action,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ContactLabelEventV6 {
+    #[serde(rename = "ID")]
+    pub id: LabelId,
+    pub action: Action,
+}

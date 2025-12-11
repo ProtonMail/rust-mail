@@ -71,7 +71,6 @@ pub use provider::{EventProvider, EventProviderError, EventProviderResult};
 
 use anyhow::Error as AnyhowError;
 use serde::{Deserialize, Serialize};
-use serde_with::{BoolFromInt, serde_as};
 use std::fmt::{Debug, Formatter};
 use thiserror::Error;
 pub use v6::EventSubscriberError;
@@ -162,24 +161,81 @@ impl RawEvent {
     }
 
     fn has_more(&self) -> bool {
-        self.meta.has_more
+        self.meta.has_more.as_bool()
     }
 
     fn is_refresh(&self) -> bool {
-        self.meta.refresh != 0
+        self.meta.refresh.as_bool()
     }
 }
 
-#[serde_as]
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 struct EventMetadata {
     #[serde(rename = "EventID")]
     event_id: EventId,
     #[serde(rename = "More")]
-    #[serde_as(as = "BoolFromInt")]
-    has_more: bool,
-    refresh: u8,
+    has_more: BoolOrInteger,
+    refresh: BoolOrInteger,
+}
+
+#[derive(Debug, Copy, Clone, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+#[serde(untagged)]
+enum BoolOrInteger {
+    Bool(bool),
+    Integer(u8),
+}
+
+impl BoolOrInteger {
+    fn as_bool(self) -> bool {
+        match self {
+            BoolOrInteger::Bool(v) => v,
+            BoolOrInteger::Integer(v) => v != 0,
+        }
+    }
+}
+
+impl From<bool> for BoolOrInteger {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
+    }
+}
+
+impl From<u8> for BoolOrInteger {
+    fn from(value: u8) -> Self {
+        Self::Integer(value)
+    }
 }
 
 pub const MAX_ERROR_RETRIES: usize = 3;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_control_data_deserialize() {
+        let event_data_v5 = r#"{"EventID":"foo", "More":1, "Refresh":255}"#;
+        let event_data_v6 = r#"{"EventID":"foo", "More":true, "Refresh":true}"#;
+
+        let event_data_v5 = RawEvent::from_json(event_data_v5.into()).unwrap();
+        let event_data_v6 = RawEvent::from_json(event_data_v6.into()).unwrap();
+
+        assert!(event_data_v5.is_refresh());
+        assert!(event_data_v5.has_more());
+        assert!(event_data_v6.is_refresh());
+        assert!(event_data_v6.has_more());
+
+        let event_data_v5 = r#"{"EventID":"foo", "More":0, "Refresh":0}"#;
+        let event_data_v6 = r#"{"EventID":"foo", "More":false, "Refresh":false}"#;
+
+        let event_data_v5 = RawEvent::from_json(event_data_v5.into()).unwrap();
+        let event_data_v6 = RawEvent::from_json(event_data_v6.into()).unwrap();
+
+        assert!(!event_data_v5.is_refresh());
+        assert!(!event_data_v5.has_more());
+        assert!(!event_data_v6.is_refresh());
+        assert!(!event_data_v6.has_more());
+    }
+}

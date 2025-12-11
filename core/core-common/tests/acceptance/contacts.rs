@@ -8,8 +8,8 @@ use proton_core_api::services::proton::{
 use proton_core_api::services::proton::{ContactEmailId, ContactId, ContactUID, LabelId};
 use proton_core_common::UserContext;
 use proton_core_common::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
-use proton_core_common::event_loop::event_source::CoreEventCache;
 use proton_core_common::event_loop::event_subscriber::CoreEventSubscriber;
+use proton_core_common::event_loop::v6::CoreEventCache;
 use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelIdExtension};
 use proton_core_common::test_utils::account::unlocked_user_key;
 use proton_core_common::test_utils::test_context::TestContext;

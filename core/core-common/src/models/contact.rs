@@ -3,11 +3,13 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::time::Instant;
 
+use super::{InitializationError, InitializationWatcher, InitializedComponent, Label};
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{
     ContactGroupItem, ContactSuggestions, DeviceContact, GroupedContacts, InitializationKey,
     LabelType, Labels, LocalContactId, LocalLabelId,
 };
+use crate::event_loop::events::Action;
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use anyhow::Context;
@@ -17,6 +19,7 @@ use futures::try_join;
 use ical::VcardParser;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::SYNC_CONTACT_PAGE_SIZE;
 use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
@@ -40,8 +43,6 @@ use stash::params;
 use stash::rusqlite::params_from_iter;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use tracing::{debug, error, info};
-
-use super::{InitializationError, InitializationWatcher, InitializedComponent, Label};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
@@ -481,6 +482,48 @@ impl Contact {
             .subscribe_to(|sender| Box::new(ContactListWatcher { sender }))
             .await?;
         Ok((contacts, handle))
+    }
+
+    pub async fn handle_event(
+        tx: &Bond<'_>,
+        id: &ContactId,
+        action: Action,
+        contact: Option<&mut Contact>,
+        changeset: &mut RebaseChangeSet,
+    ) -> Result<(), StashError> {
+        action
+            .log_entry(id, async |remote_id| {
+                Contact::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
+
+        match action {
+            Action::Delete => tx
+                .execute(
+                    "DELETE FROM contacts WHERE remote_id = ?",
+                    params![id.clone()],
+                )
+                .await
+                .map(|_| ())
+                .map_err(|e| {
+                    error!("Failed to delete contact: {e:?}");
+                    e
+                })?,
+            Action::Create | Action::Update => {
+                if let Some(contact) = contact {
+                    contact.save(tx).await.map_err(|e| {
+                        error!("Failed to create or update contact: {e:?}");
+                        e
+                    })?;
+                    changeset.add(contact.id());
+                }
+            }
+            Action::UpdateFlags => (),
+        }
+        Ok(())
     }
 }
 

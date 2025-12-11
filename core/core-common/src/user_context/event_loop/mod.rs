@@ -14,6 +14,7 @@ pub mod event_source;
 pub mod event_store;
 pub mod event_subscriber;
 pub mod events;
+pub mod v6;
 
 // Re-export common macros for easier access
 use super::services::EventLoopService;

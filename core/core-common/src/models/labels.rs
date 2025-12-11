@@ -9,8 +9,10 @@ use crate::datatypes::{
     ALL_LABEL_TYPES, CONTACT_LABEL_TYPES, InitializationKey, LabelColor, LabelType, LocalLabelId,
     MAIL_LABEL_TYPES,
 };
+use crate::event_loop::events::Action;
 use crate::models::ModelIdExtension;
 use itertools::Itertools;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::Label as ApiLabel;
 use proton_core_api::services::proton::LabelId;
@@ -26,7 +28,7 @@ use stash::utils::{MapToSql as _, placeholders};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use topological_sort::TopologicalSort;
-use tracing::error;
+use tracing::{error, warn};
 
 #[derive(Debug, Error)]
 pub enum LabelError {
@@ -306,6 +308,49 @@ impl Label {
             return Err(LabelError::CouldNotResolveLocalLabel(label_id));
         };
         Ok(label_id)
+    }
+
+    pub async fn handle_event(
+        tx: &Bond<'_>,
+        id: &LabelId,
+        action: Action,
+        label: Option<&mut Label>,
+        changeset: &mut RebaseChangeSet,
+    ) -> Result<(), StashError> {
+        action
+            .log_entry(id, async |remote_id| {
+                Label::remote_id_counterpart(remote_id.clone(), tx)
+                    .await
+                    .unwrap_or_default()
+                    .map(|v| v.as_u64())
+            })
+            .await;
+        match action {
+            Action::Delete => {
+                tx.execute(
+                    "DELETE FROM labels WHERE remote_id = ?",
+                    params![id.clone()],
+                )
+                .await?;
+            }
+            Action::Create => {
+                if let Some(label) = label {
+                    label.save(tx).await?;
+                    changeset.add(label.id());
+                } else {
+                    warn!("Received label create without label");
+                }
+            }
+            Action::Update | Action::UpdateFlags => {
+                if let Some(label) = label {
+                    label.save(tx).await?;
+                    changeset.add(label.id());
+                } else {
+                    warn!("Received label update without label");
+                }
+            }
+        }
+        Ok(())
     }
 }
 

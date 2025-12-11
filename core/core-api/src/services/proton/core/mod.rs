@@ -23,6 +23,9 @@ pub const CORE_V4: &str = "/core/v4";
 /// The Proton Core API base path (v5).
 pub const CORE_V5: &str = "/core/v5";
 
+pub const CORE_V6: &str = "/core/v6";
+pub const CONTACTS_V6: &str = "/contacts/v6";
+
 /// The Unleash API base path (v2).
 pub const UNLEASH_V2: &str = "/feature/v2";
 
@@ -150,4 +153,12 @@ pub trait ProtonCore {
         flag_name: &str,
         new_value: bool,
     ) -> ApiServiceResult<PutFeatureFlagOverrideResponse>;
+
+    async fn get_contact_event_v6(&self, event_id: EventId) -> ApiServiceResult<String>;
+
+    async fn get_contact_event_latest_v6(&self) -> ApiServiceResult<GetEventsLatestResponse>;
+
+    async fn get_core_event_v6(&self, event_id: EventId) -> ApiServiceResult<String>;
+
+    async fn get_core_event_latest_v6(&self) -> ApiServiceResult<GetEventsLatestResponse>;
 }

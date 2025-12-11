@@ -11,6 +11,8 @@ use crate::actions::PREFETCH_ROLLBACK_ACTION_GROUP;
 use crate::actions::draft::{SEND_ACTION_GROUP, SHARE_EXT_ACTION_GROUP};
 use crate::db::online_migrations;
 use crate::draft::attachments::DraftStagingAreaCleaner;
+#[cfg(feature = "events-v6")]
+use crate::events::v6;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchService};
 use crate::rsvp::RsvpService;
@@ -31,6 +33,8 @@ use proton_core_api::crypto_clock;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
 use proton_core_api::session::Session;
+#[cfg(not(feature = "events-v6"))]
+use proton_core_common::CoreEventLoopContext;
 use proton_core_common::datatypes::{
     AccountDetails, AddressStatus, BlackFridayWave, LocalAddressId, NotificationSettings,
     UpsellEligibility, UpsellType,
@@ -41,8 +45,8 @@ use proton_core_common::services::{
     EventLoopService, EventPollConfigService, NetworkMonitorService, UserIssueReporterService,
 };
 use proton_core_common::{
-    ContactError, Context as CoreContext, CoreContextError, CoreEventLoopContext, KeyHandlingError,
-    Origin, RebasableQueue, UserContext, services::UserMetricService,
+    ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin,
+    RebasableQueue, UserContext, services::UserMetricService,
 };
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
@@ -175,17 +179,19 @@ impl QueuesService {
 
 #[derive(Default)]
 struct EventSubscriberList {
+    #[cfg(feature = "events-v6")]
+    subscribers: Mutex<Vec<EventSubscriberId<v6::MailEventSourceV6>>>,
+    #[cfg(not(feature = "events-v6"))]
     subscribers: Mutex<Vec<EventSubscriberId<MailEventSourceV5>>>,
 }
 
 impl EventSubscriberList {
     pub async fn register(&self, ctx: &MailUserContext) -> Result<(), MailContextError> {
-        //TODO: unsubscribe
         let event_service = ctx.user_context().get_service::<EventLoopService>();
-        let mail_subscriber = ctx.event_subscriber();
         let event_poll = event_service.event_poll();
 
         let mut subscriber_list = Vec::new();
+
         #[cfg(not(feature = "events-v6"))]
         {
             use crate::user_context::events::event_subscribers_compat::*;
@@ -221,16 +227,40 @@ impl EventSubscriberList {
 
         #[cfg(feature = "events-v6")]
         {
-            todo!("Setup v6")
-        }
-        let mail_subscriber = event_poll
-            .subscribe(mail_subscriber)
-            .await?
-            .ok_or_else(|| {
-                MailContextError::Other(anyhow!("Failed to register mail subscriber"))
-            })?;
+            let event_ctx = v6::MailEventLoopV6Context::from(ctx.this.clone());
+            match event_poll
+                .add::<v6::MailEventSourceV6>(Box::new(event_ctx.clone()), Box::new(event_ctx))
+                .await
+            {
+                // Due to current context management, it's possible this can be registered
+                // more than once.
+                Ok(()) | Err(EventLoopError::DuplicateEventSource(_)) => {}
+                Err(e) => return Err(e.into()),
+            }
 
-        subscriber_list.push(mail_subscriber);
+            let mail_subscriber = event_poll
+                .subscribe(v6::MailEventV6Subscriber::from(ctx.this.clone()))
+                .await?
+                .ok_or_else(|| {
+                    MailContextError::Other(anyhow!("Failed to register mail v6 subscriber"))
+                })?;
+
+            subscriber_list.push(mail_subscriber);
+        }
+
+        #[cfg(not(feature = "events-v6"))]
+        {
+            let mail_subscriber = ctx.event_subscriber();
+            let mail_subscriber =
+                event_poll
+                    .subscribe(mail_subscriber)
+                    .await?
+                    .ok_or_else(|| {
+                        MailContextError::Other(anyhow!("Failed to register mail subscriber"))
+                    })?;
+
+            subscriber_list.push(mail_subscriber);
+        }
 
         let mut subscribers = self.subscribers.lock();
         *subscribers = subscriber_list;
