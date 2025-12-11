@@ -119,7 +119,16 @@ pub trait ProtonMail {
 
     async fn get_conversations_count(&self) -> ApiServiceResult<GetConversationsCountResponse>;
 
+    async fn get_conversations_count_for_labels(
+        &self,
+        label_ids: Vec<LabelId>,
+    ) -> ApiServiceResult<GetConversationsCountResponse>;
+
     async fn get_message(&self, message_id: MessageId) -> ApiServiceResult<GetMessageResponse>;
+    async fn get_messages_count_for_labels(
+        &self,
+        label_ids: Vec<LabelId>,
+    ) -> ApiServiceResult<GetMessagesCountResponse>;
 
     async fn get_messages(
         &self,
