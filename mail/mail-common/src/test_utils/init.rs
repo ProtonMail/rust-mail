@@ -262,7 +262,7 @@ impl MailTestContext {
     pub async fn mock_get_conversations_and(
         &self,
         conversations: Vec<ApiConversation>,
-        and: impl Fn(Mock) -> Mock,
+        and: impl FnOnce(Mock) -> Mock,
         expect: impl Into<Times>,
     ) {
         and(Mock::given(method("GET"))
@@ -281,7 +281,7 @@ impl MailTestContext {
     }
 
     #[function_name::named]
-    pub async fn mock_get_conversations_with(&self, with: impl Fn(MockBuilder) -> Mock) {
+    pub async fn mock_get_conversations_with(&self, with: impl FnOnce(MockBuilder) -> Mock) {
         with(Mock::given(method("GET")).and(path("/api/mail/v4/conversations")))
             .named(function_name!())
             .mount(self.mock_server())
@@ -354,7 +354,7 @@ impl MailTestContext {
     pub async fn mock_get_message_metadata_and(
         &self,
         metadata: Vec<MessageMetadata>,
-        and: impl Fn(Mock) -> Mock,
+        and: impl FnOnce(Mock) -> Mock,
         expect: impl Into<Times>,
     ) {
         and(Mock::given(method("GET"))

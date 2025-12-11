@@ -7,7 +7,6 @@ use crate::draft::{
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
-use crate::mail_scroller::MailScrollerError;
 use crate::{
     AppError, MailContextError, SidebarError, draft::DiscardError as DraftDiscardError,
     draft::Error as DraftError, draft::ExpirationError as DraftExpirationError,
@@ -267,20 +266,10 @@ impl From<MailContextError> for ProtonMailError {
             ),
             MailContextError::LostContext => Self::Unexpected(Unexpected::Internal),
             MailContextError::Rsvp(_) => Self::Unexpected(Unexpected::Unknown),
-            MailContextError::MailScroller(mail_scroller_error) => Self::from(mail_scroller_error),
             MailContextError::UrlParseError(_) => Self::Unexpected(Unexpected::Internal),
             MailContextError::NonProcessableActions(_) => Self::NonProcessableActions,
             MailContextError::NetworkMonitorService(_) => Self::Unexpected(Unexpected::Internal),
             MailContextError::ImageProxyFailed => Self::Unexpected(Unexpected::Network),
-        }
-    }
-}
-
-impl From<MailScrollerError> for ProtonMailError {
-    fn from(error: MailScrollerError) -> Self {
-        let _guard = log_error(&error);
-        match error {
-            MailScrollerError::NotSynced => Self::reason(MailScrollerErrorReason::NotSynced),
         }
     }
 }

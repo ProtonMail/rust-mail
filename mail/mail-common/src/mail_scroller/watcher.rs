@@ -1,6 +1,6 @@
-use std::collections::BTreeSet;
-
 use sqlite_watcher::watcher::TableObserver;
+use std::collections::BTreeSet;
+use tracing::error;
 
 pub struct MailScrollerWatcher {
     pub(super) sender: flume::Sender<()>,
@@ -16,7 +16,7 @@ impl TableObserver for MailScrollerWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!(
+                error!(
                     "Failed to send notification for MailScrollerWatcher: {:?}",
                     e
                 );

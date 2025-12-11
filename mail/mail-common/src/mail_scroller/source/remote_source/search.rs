@@ -23,7 +23,7 @@ use stash::{
 };
 use std::{cmp, sync::Arc};
 use tokio::sync::Mutex;
-use tracing::debug;
+use tracing::{debug, error, info, instrument};
 
 #[derive(Debug)]
 pub struct SearchScrollerSource {
@@ -100,7 +100,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
-        let task = Some(ctx.spawn_ex(async move |ctx| {
+        let task = ctx.spawn_ex(async move |ctx| {
             let mut tether = stash.connection().await?;
 
             Self::sync_first_page(
@@ -115,9 +115,9 @@ impl SearchScrollerSource {
             .await?;
 
             Ok(())
-        }));
+        });
 
-        Ok(task)
+        Ok(Some(task))
     }
 
     async fn spawn_background_sync(
@@ -129,7 +129,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
-        let task = Some(ctx.spawn_ex(async move |ctx| {
+        let task = ctx.spawn_ex(async move |ctx| {
             let tether = stash.connection().await?;
 
             if let Some((remote_id, time)) =
@@ -149,12 +149,12 @@ impl SearchScrollerSource {
             }
 
             Ok(())
-        }));
+        });
 
-        Ok(task)
+        Ok(Some(task))
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=?remote_label_id) )]
+    #[instrument(skip_all, fields(label_id=?remote_label_id) )]
     async fn sync_first_page(
         session: &Session,
         total: &Mutex<u64>,
@@ -164,7 +164,7 @@ impl SearchScrollerSource {
         page_size: usize,
         queue: RebasableQueue<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
-        tracing::info!("Syncing first page in {remote_label_id:?}");
+        info!("Syncing first page in {remote_label_id:?}");
 
         let order_field = ScrollOrderField::for_label(&remote_label_id);
 
@@ -196,7 +196,7 @@ impl SearchScrollerSource {
         Self::save_messages(response.messages, session, tether, queue).await
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=?remote_label_id) )]
+    #[instrument(skip_all, fields(label_id=?remote_label_id) )]
     #[allow(clippy::too_many_arguments)]
     async fn sync_next_page(
         session: &Session,
@@ -208,9 +208,10 @@ impl SearchScrollerSource {
         page_size: usize,
         queue: RebasableQueue<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
-        tracing::info!(
+        info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_time}"
         );
+
         let mut response = session
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
@@ -302,7 +303,7 @@ impl SearchScrollerSource {
                     )
                     .await
                 {
-                    tracing::error!("Failed to rebase: {e}");
+                    error!("Failed to rebase: {e}");
                 }
 
                 let last = messages.last().unwrap();
@@ -325,7 +326,7 @@ impl SearchScrollerSource {
 impl MailScrollerSource for SearchScrollerSource {
     type Item = Message;
 
-    #[tracing::instrument(skip_all)]
+    #[instrument(skip_all)]
     async fn initialize(
         &mut self,
         ctx: &MailUserContext,
@@ -335,7 +336,7 @@ impl MailScrollerSource for SearchScrollerSource {
         self.initialize_impl(ctx).await
     }
 
-    async fn visible_items(
+    async fn visible_elements(
         &self,
         ctx: &MailUserContext,
     ) -> Result<Vec<Self::Item>, MailContextError> {
@@ -350,7 +351,7 @@ impl MailScrollerSource for SearchScrollerSource {
         }
     }
 
-    async fn seen_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
+    async fn seen_count(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
         let tether = ctx.user_stash().connection().await?;
 
         if !self.initialized {
@@ -363,7 +364,7 @@ impl MailScrollerSource for SearchScrollerSource {
     }
 
     async fn synced_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        self.seen_total(ctx).await
+        self.seen_count(ctx).await
     }
 
     async fn all_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
@@ -382,7 +383,7 @@ impl MailScrollerSource for SearchScrollerSource {
         Ok(has_more)
     }
 
-    #[tracing::instrument(skip(ctx))]
+    #[instrument(skip(ctx))]
     async fn sync_next(
         &mut self,
         ctx: &MailUserContext,
@@ -455,17 +456,18 @@ impl MailScrollerSource for SearchScrollerSource {
         keywords: Option<SearchOptions>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         if let Some(label) = label {
-            tracing::info!(
+            info!(
                 "Changing label from {current:?} to {label:?}",
                 current = self.local_label_id
             );
             self.local_label_id = label;
         }
+
         if let Some(keywords) = keywords {
-            tracing::info!("Changing search parameters");
+            info!("Changing search parameters");
             self.options = keywords;
         }
-        // Reset the scroller to its initial state.
+
         self.initialized = false;
         self.last = None;
         let task = self.initialize_impl(ctx).await?;
