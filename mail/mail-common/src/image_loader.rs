@@ -123,13 +123,13 @@ impl ImageLoader {
 
     #[instrument(skip_all)]
     async fn fetch_proxied(ctx: &MailUserContext, url: Url) -> ApiServiceResult<Option<Vec<u8>>> {
-        let data = ctx.session().proxy_img(&url).await?;
+        let data = ctx.session().proxy_img(&url, false).await?;
 
         // Yes, proxy returns an empty response if the image failed to be loaded
-        if data.is_empty() {
+        if data.image.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(data))
+            Ok(Some(data.image))
         }
     }
 
