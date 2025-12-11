@@ -21,6 +21,7 @@ use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
 use proton_crypto_inbox::message::MessageError;
 use proton_mail_api::services::proton::request_data::DraftAction;
 use proton_mail_api::services::proton::response_data::Message as ApiMessage;
+use proton_mail_html_transformer::Transformer;
 use proton_mailto::Mailto;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
@@ -632,25 +633,7 @@ impl DraftActor {
         info!("Creating draft from a mailto link");
 
         let draft = Self::empty_ex(context, options).await?;
-
-        let recipients = {
-            let tos = mailto
-                .to
-                .into_iter()
-                .map(|email| (RecipientGroupId::To, email));
-
-            let ccs = mailto
-                .cc
-                .into_iter()
-                .map(|email| (RecipientGroupId::Cc, email));
-
-            let bccs = mailto
-                .bcc
-                .into_iter()
-                .map(|email| (RecipientGroupId::Bcc, email));
-
-            tos.chain(ccs).chain(bccs)
-        };
+        let recipients = RecipientGroupId::gather(mailto.to, mailto.cc, mailto.bcc);
 
         for (group, email) in recipients {
             let result = draft
@@ -677,7 +660,25 @@ impl DraftActor {
         }
 
         if let Some(body) = mailto.body {
-            let result = draft.set_body(body).await;
+            let result = async {
+                // According to RFC 2368, mailto's body carries a text/plain
+                // payload:
+                //
+                // > The special hname "body" indicates that the associated
+                // > hvalue is the body of the message. The "body" hname should
+                // > contain the content for the first text/plain body part of
+                // > the message.
+                //
+                // ... so before we're able to paste it into a text/html draft,
+                // we have to run the text2html pass on it.
+                let body = match draft.mime_type().await? {
+                    MessageMimeType::TextHtml => Transformer::new_text2html(&body).extract_body(),
+                    MessageMimeType::TextPlain => body,
+                };
+
+                draft.set_body(body).await
+            }
+            .await;
 
             if let Err(err) = result {
                 warn!(?err, "Couldn't set body, continuing without it");
@@ -1207,6 +1208,7 @@ impl DraftActor {
         })
         .await
     }
+
     pub async fn bcc_list(&self) -> Result<RecipientList, MailContextError> {
         self.act(|sender| DraftActorMessage::GetRecipientList {
             group: RecipientGroupId::Bcc,
@@ -1603,6 +1605,24 @@ pub enum RecipientGroupId {
     To,
     Cc,
     Bcc,
+}
+
+impl RecipientGroupId {
+    pub fn all() -> [Self; 3] {
+        [Self::To, Self::Cc, Self::Bcc]
+    }
+
+    pub fn gather(
+        tos: impl IntoIterator<Item = String>,
+        ccs: impl IntoIterator<Item = String>,
+        bccs: impl IntoIterator<Item = String>,
+    ) -> impl Iterator<Item = (Self, String)> {
+        let tos = tos.into_iter().map(|to| (Self::To, to));
+        let ccs = ccs.into_iter().map(|cc| (Self::Cc, cc));
+        let bccs = bccs.into_iter().map(|bcc| (Self::Bcc, bcc));
+
+        tos.chain(ccs).chain(bccs)
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -2051,11 +2071,7 @@ impl DraftActor {
                     draft.bcc_list = bcc;
 
                     if options.address_validation_enabled {
-                        for id in [
-                            RecipientGroupId::To,
-                            RecipientGroupId::Cc,
-                            RecipientGroupId::Bcc,
-                        ] {
+                        for id in RecipientGroupId::all() {
                             let list = recipient_group_from_draft(&mut draft, id);
                             DraftOnRecipientValidation::new_list(
                                 id,
@@ -2222,11 +2238,7 @@ impl DraftActor {
 
                 DraftActorMessage::RevalidateAllRecipients => {
                     if options.address_validation_enabled {
-                        for id in [
-                            RecipientGroupId::To,
-                            RecipientGroupId::Cc,
-                            RecipientGroupId::Bcc,
-                        ] {
+                        for id in RecipientGroupId::all() {
                             let list = recipient_group_from_draft(&mut draft, id);
                             DraftOnRecipientValidation::new_list(
                                 id,
