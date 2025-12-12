@@ -310,14 +310,14 @@ mod tests {
             Ok(None)
         }
 
-        async fn visible_items(
+        async fn visible_elements(
             &self,
             _: &MailUserContext,
         ) -> Result<Vec<Self::Item>, MailContextError> {
             Ok(self.items.read().clone())
         }
 
-        async fn seen_total(&self, _: &MailUserContext) -> Result<u64, MailContextError> {
+        async fn seen_count(&self, _: &MailUserContext) -> Result<u64, MailContextError> {
             Ok(self.items.read().len() as u64)
         }
 

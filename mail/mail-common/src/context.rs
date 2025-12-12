@@ -1,5 +1,4 @@
 use crate::actions::MailActionError;
-use crate::mail_scroller::MailScrollerError;
 use crate::migration_snooper::MailMigrationSnooper;
 use crate::{AppError, ImageLoaderError, MailUserContext, draft};
 use anyhow::anyhow;
@@ -152,8 +151,6 @@ pub enum MailContextError {
     DuplicateContext(UserId),
     #[error("The context instance is missing")]
     MissingContext,
-    #[error("MailScroller: {0}")]
-    MailScroller(#[from] MailScrollerError),
     #[error("The user context for {0} is not initialized")]
     UserContextNotInitialized(UserId),
     #[error("A task was cancelled")]

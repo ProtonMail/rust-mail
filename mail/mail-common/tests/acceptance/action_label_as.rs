@@ -1107,7 +1107,7 @@ fn label_eq<'a>(conv: &Conversation, comp: impl IntoIterator<Item = &'a LabelWit
     let mut other_labels = comp.into_iter().collect::<Vec<_>>();
     other_labels.sort_by(|l1, l2| l1.local_id.unwrap().cmp(&l2.local_id.unwrap()));
     for (conv, label) in labels.zip(other_labels.into_iter()) {
-        assert_eq!(conv, label.label().id());
+        assert_eq!(conv, label.id());
     }
 }
 

@@ -12,7 +12,6 @@ use crate::{
 };
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
-use std::future::Future;
 
 pub trait RemoteSource: ScrollData + Send + Sync {
     #[allow(clippy::too_many_arguments)]
@@ -25,7 +24,7 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
         invalidate: Option<flume::Sender<()>>,
-    ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
+    ) -> Result<MailPaginatorJoinHandle, MailContextError>;
 
     #[allow(clippy::too_many_arguments)]
     fn sync_next_page(
@@ -37,7 +36,7 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-    ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
+    ) -> Result<MailPaginatorJoinHandle, MailContextError>;
 
     #[allow(clippy::too_many_arguments)]
     fn sync_previous_page(
@@ -50,5 +49,5 @@ pub trait RemoteSource: ScrollData + Send + Sync {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
         callback: Option<flume::Sender<()>>,
-    ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
+    ) -> Result<MailPaginatorJoinHandle, MailContextError>;
 }

@@ -445,29 +445,32 @@ impl LabelSelectPopup {
         view_mode: ViewMode,
     ) -> anyhow::Result<Self> {
         let tether = ctx.user_stash().connection().await?;
-        let sidebar = Sidebar;
-        let system = sidebar.system_labels(&tether).await?;
-        let labels = sidebar.custom_labels(&tether).await?;
-        let folders = sidebar.custom_folders(&tether).await?;
+        let system = Sidebar.system_labels(&tether).await?;
+        let labels = Sidebar.custom_labels(&tether).await?;
+        let folders = Sidebar.custom_folders(&tether).await?;
 
         let system =
             LabelWithCounters::from_ids(&tether, system.iter().map(|x| x.local_id)).await?;
+
         let labels =
             LabelWithCounters::from_ids(&tether, labels.iter().map(|x| x.local_id)).await?;
+
         let folders =
             LabelWithCounters::from_ids(&tether, folders.iter().map(|x| x.local_id)).await?;
 
         let system_index = system
             .iter()
-            .position(|label| current_label.local_id.unwrap() == label.label().local_id.unwrap())
+            .position(|label| current_label.local_id == label.local_id)
             .unwrap_or_default();
+
         let folder_index = folders
             .iter()
-            .position(|label| current_label.local_id.unwrap() == label.label().local_id.unwrap())
+            .position(|label| current_label.local_id == label.local_id)
             .unwrap_or_default();
+
         let labels_index = labels
             .iter()
-            .position(|label| current_label.local_id.unwrap() == label.label().local_id.unwrap())
+            .position(|label| current_label.local_id == label.local_id)
             .unwrap_or_default();
 
         Ok(Self {
@@ -537,20 +540,24 @@ impl crate::app_model::Popup for LabelSelectPopup {
                 } else {
                     self.switch_to_next_tab();
                 }
+
                 Command::None
             }
+
             KeyCode::Enter => {
                 let (labels, list_state) = self.selected_label_list();
+
                 let Some(index) = list_state.selected() else {
                     return Command::None;
                 };
+
                 let Some(label) = labels.get(index) else {
                     return Command::None;
                 };
 
                 Command::batch([
                     Command::message(Messages::DismissPopup),
-                    Command::message(Message::SelectLabel(label.label().id())),
+                    Command::message(Message::SelectLabel(label.id())),
                 ])
             }
 
@@ -574,21 +581,16 @@ impl crate::app_model::Popup for LabelSelectPopup {
 
         let items = labels
             .iter()
-            .map(|label_with_counters| {
-                let label = label_with_counters.label();
+            .map(|label| {
                 let (unread_count, total_count) = if view_mode == ViewMode::Conversations {
-                    (
-                        label_with_counters.unread_conv,
-                        label_with_counters.total_conv,
-                    )
+                    (label.unread_conv, label.total_conv)
                 } else {
-                    (
-                        label_with_counters.unread_msg,
-                        label_with_counters.total_msg,
-                    )
+                    (label.unread_msg, label.total_msg)
                 };
+
                 let name = label.path.as_deref().unwrap_or(label.name.as_str());
                 let text = format!("[{unread_count:04}|{total_count:04}] {name}");
+
                 ListItem::from(text)
             })
             .collect::<Vec<_>>();

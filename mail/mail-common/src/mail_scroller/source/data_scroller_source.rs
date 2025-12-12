@@ -12,7 +12,7 @@ use proton_core_common::{
     models::{Label, ModelExtension},
 };
 use stash::stash::Tether;
-use tracing::{debug, warn};
+use tracing::{debug, info, instrument, warn};
 
 #[derive(Debug)]
 pub struct DataScrollerSource<T: RemoteSource> {
@@ -38,7 +38,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             unread,
             page_size,
             invalidate: None,
-            state: MailScrollerState::new_not_synced(
+            state: MailScrollerState::unsynced(
                 local_label_id,
                 unread,
                 page_size,
@@ -50,12 +50,13 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         }
     }
 
+    #[instrument(skip_all)]
     async fn initialize_impl(
         &mut self,
         ctx: &MailUserContext,
         check_for_total: bool,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        tracing::info!("Initializing MailScroller Source");
+        info!("Initializing MailScroller Source");
 
         let mut tether = ctx.user_stash().connection().await?;
         let label = self.get_label(&tether).await?;
@@ -66,8 +67,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
 
         self.sync_scroller(&tether).await?;
 
-        // Check if we have a data suggesting we have synced this label before
-        if let Some(scroller) = self.state.online() {
+        if let Some(scroller) = self.state.as_synced() {
             debug!(
                 "We have paginated here before, try to sync data, status: {}",
                 if is_online { "online" } else { "offline" }
@@ -86,8 +86,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                     &beggining_element,
                     remote_label_id.clone(),
                     self.invalidate.clone(),
-                )
-                .await?;
+                )?;
 
                 let task = if is_online
                     && !scroller.has_next_page(&tether).await?
@@ -95,8 +94,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 {
                     debug!("Syncing next page in a task");
 
-                    self.sync_next_page(ctx, &ending_element, remote_label_id)
-                        .await?
+                    self.sync_next_page(ctx, &ending_element, remote_label_id)?
                 } else {
                     None
                 };
@@ -111,14 +109,12 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             };
         }
 
-        // No entry exist, which means we have not synced this label yet.
         debug!(
             "Paginating for the first time, getting first page while being {}.",
             if is_offline { "offline" } else { "online" }
         );
 
-        // Clear the state if we had cursor pointing to empty scroll data
-        if self.state.is_online() {
+        if self.state.is_synced() {
             self.clear_state();
         }
 
@@ -136,28 +132,25 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                 self.order_dir,
                 self.order_field,
                 self.invalidate.clone(),
-            )
-            .await?;
+            )?;
 
             None
         } else {
             debug!("We have no local data, running first page sync in a task");
 
-            self.sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
-                .await?
+            self.sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)?
         };
 
         Ok(task)
     }
 
-    /// Send a message to notify user that the scrolling data order have chagned.
-    async fn notify_scroller_order_invalid(
+    async fn notify_invalidated(
         invalidate: &Option<flume::Sender<()>>,
     ) -> Result<(), MailContextError> {
         if let Some(sender) = invalidate.as_ref() {
             sender.send_async(()).await.map_err(|e| {
                 MailContextError::Other(anyhow!(
-                    "Could not notify about invalid scroller state: {e}"
+                    "Could not notify about invalidated scroller state: {e}"
                 ))
             })?;
         }
@@ -165,25 +158,27 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(())
     }
 
-    /// Update ordered scroller end cursor to the newest value.
-    ///
-    /// Method will set it to Online if there is data to show
-    /// Otherwise it will leave state unmodified.
+    #[instrument(skip_all)]
     async fn sync_scroller(&mut self, tether: &Tether) -> Result<(), MailContextError> {
         let old_state = self.state.to_string();
+
         self.state
             .sync(self.local_label_id, self.unread, self.page_size, tether)
             .await?;
 
-        debug!(
-            "Sync scroller state, old: {}, new: {}",
-            old_state, self.state
-        );
+        let new_state = self.state.to_string();
+
+        if old_state != new_state {
+            debug!(
+                "Changing scroller's state from {} to {}",
+                old_state, new_state,
+            );
+        }
 
         Ok(())
     }
 
-    /// Get label from the database for which scroller is created.
+    #[instrument(skip_all)]
     async fn get_label(&self, tether: &Tether) -> Result<Label, MailContextError> {
         let Some(label) = Label::find_by_id(self.local_label_id, tether).await? else {
             return Err(AppError::LabelNotFound(self.local_label_id).into());
@@ -196,8 +191,8 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(label)
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=remote_label_id.as_str(), unread=?self.unread) )]
-    async fn sync_first_page(
+    #[instrument(skip_all)]
+    fn sync_first_page(
         &self,
         ctx: &MailUserContext,
         remote_label_id: LabelId,
@@ -205,6 +200,13 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         order_field: ScrollOrderField,
         invalidate: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        debug!(
+            ?remote_label_id,
+            ?order_dir,
+            ?order_field,
+            "Syncing first page (async)"
+        );
+
         let local_label_id = self.local_label_id;
         let unread = self.unread;
         let page_size = self.page_size;
@@ -219,15 +221,17 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             order_field,
             invalidate,
         )
-        .await
     }
 
-    async fn sync_next_page(
+    #[instrument(skip_all)]
+    fn sync_next_page(
         &self,
         ctx: &MailUserContext,
         scroller: &T,
         remote_label_id: LabelId,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        debug!("Syncing next page (async)");
+
         let local_label_id = self.local_label_id;
         let unread = self.unread;
         let page_size = self.page_size;
@@ -242,20 +246,23 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             self.order_dir,
             self.order_field,
         )
-        .await
     }
 
-    async fn sync_previous_page(
+    #[instrument(skip_all)]
+    fn sync_previous_page(
         &self,
         ctx: &MailUserContext,
         scroller: &T,
         remote_label_id: LabelId,
         invalidate: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        debug!("Syncing previous page (async)");
+
         let local_label_id = self.local_label_id;
         let unread = self.unread;
         let page_size = self.page_size;
-        let task = T::sync_previous_page(
+
+        T::sync_previous_page(
             ctx,
             local_label_id,
             scroller,
@@ -266,13 +273,13 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             self.order_field,
             invalidate,
         )
-        .await?;
-
-        Ok(task)
     }
 
+    #[instrument(skip_all)]
     fn clear_state(&mut self) {
-        self.state = MailScrollerState::new_not_synced(
+        debug!("Clearing state");
+
+        self.state = MailScrollerState::unsynced(
             self.local_label_id,
             self.unread,
             self.page_size,
@@ -285,7 +292,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
 impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     type Item = T::Item;
 
-    #[tracing::instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
+    #[instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
     async fn initialize(
         &mut self,
         ctx: &MailUserContext,
@@ -295,52 +302,33 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         self.initialize_impl(ctx, false).await
     }
 
-    async fn visible_items(
+    async fn visible_elements(
         &self,
         ctx: &MailUserContext,
     ) -> Result<Vec<Self::Item>, MailContextError> {
-        // If cache is empty we have either
-        // * an empty label
-        // * a label that has not been initialized
-        // The latter case is handled in the `Self::sync_more` method.
-        // Here we simply assume empty label.
-        if let Some(scroller) = self.state.not_synced() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.visible_elements(&tether).await?)
-        } else if let Some(scroller) = self.state.online() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.visible_elements(&tether).await?)
-        } else {
-            Ok(vec![])
+        let tether = ctx.user_stash().connection().await?;
+
+        match &self.state {
+            MailScrollerState::Synced(state) => Ok(state.visible_elements(&tether).await?),
+            MailScrollerState::Unsynced(state) => Ok(state.visible_elements(&tether).await?),
         }
     }
 
-    async fn seen_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        // If cache is empty we have either
-        // * an empty label
-        // * a label that has not been initialized
-        // The latter case is handled in the `Self::sync_more` method.
-        // Here we simply assume empty label.
-        if let Some(scroller) = self.state.not_synced() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.seen_count(&tether).await?)
-        } else if let Some(scroller) = self.state.online() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.seen_count(&tether).await?)
-        } else {
-            Ok(0)
+    async fn seen_count(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
+        let tether = ctx.user_stash().connection().await?;
+
+        match &self.state {
+            MailScrollerState::Synced(state) => Ok(state.seen_count(&tether).await?),
+            MailScrollerState::Unsynced(state) => Ok(state.seen_count(&tether).await?),
         }
     }
 
     async fn synced_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
-        if let Some(scroller) = self.state.not_synced() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.synced_count(&tether).await?)
-        } else if let Some(scroller) = self.state.online() {
-            let tether = ctx.user_stash().connection().await?;
-            Ok(scroller.synced_count(&tether).await?)
-        } else {
-            Ok(0)
+        let tether = ctx.user_stash().connection().await?;
+
+        match &self.state {
+            MailScrollerState::Synced(state) => Ok(state.synced_count(&tether).await?),
+            MailScrollerState::Unsynced(state) => Ok(state.synced_count(&tether).await?),
         }
     }
 
@@ -353,12 +341,12 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
     async fn has_more(&self, ctx: &MailUserContext) -> Result<bool, MailContextError> {
         let tether = ctx.user_stash().connection().await?;
-        let has_more = self.state.has_more_in_order(&tether).await?;
+        let has_more = self.state.has_more_synced(&tether).await?;
 
         Ok(has_more)
     }
 
-    #[tracing::instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
+    #[instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
     async fn sync_next(
         &mut self,
         ctx: &MailUserContext,
@@ -371,7 +359,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
         // If we have loaded first or previous page in background
         // and we have seen some data already, we need to replace
-        let mut replace = self.state.is_not_synced() && self.state.seen_count(&tether).await? > 0;
+        let mut replace = self.state.is_unsynced() && self.state.seen_count(&tether).await? > 0;
 
         // Always sync the cache as there might be new data.
         // The sync has to be done after determining the previous
@@ -380,7 +368,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
         // If we never synced this label before due to network issues now is the time to do it.
         if is_online
-            && self.state.is_not_synced()
+            && self.state.is_unsynced()
             && let Some(task) = self.initialize_impl(ctx, true).await?
         {
             match task.await {
@@ -398,7 +386,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         }
 
         let (items, task) = match &mut self.state {
-            MailScrollerState::Online(scroller) => {
+            MailScrollerState::Synced(scroller) => {
                 // This is the only place where cache progresses,
                 // There might be a case in which someone will try to fetch more
                 // for the label which has no more data.
@@ -411,7 +399,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                     debug!(
                         "Items displayed on the screen are not synced, notifying client to reload"
                     );
-                    Self::notify_scroller_order_invalid(&self.invalidate).await?;
+                    Self::notify_invalidated(&self.invalidate).await?;
                     vec![]
                 } else {
                     items
@@ -419,7 +407,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
                 let has_next_page = scroller.has_next_page(&tether).await?;
                 let is_small_label = total > 0 && total < self.page_size as u64;
-
                 let should_load_more_from_remote = !has_next_page || is_small_label;
 
                 debug!(
@@ -429,27 +416,27 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
                 let task = if should_load_more_from_remote {
                     let cp = scroller.load_end_cursor(&tether).await?;
-                    self.sync_next_page(ctx, &cp, label.remote_id.clone().unwrap())
-                        .await?
+
+                    self.sync_next_page(ctx, &cp, label.remote_id.clone().unwrap())?
                 } else {
                     None
                 };
 
                 (items, task)
             }
-            MailScrollerState::NotSynced(unordered) => (unordered.fetch_more(&tether).await?, None),
+            MailScrollerState::Unsynced(unordered) => (unordered.fetch_more(&tether).await?, None),
         };
 
         Ok((items, task))
     }
 
-    /// TODO: Try to merge it with initialize past 0.142.xyz release
-    #[tracing::instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
+    #[instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
     async fn sync_new(
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        tracing::info!("Syncing newest items");
+        info!("Syncing newest items");
+
         let tether = ctx.user_stash().connection().await?;
         let label = self.get_label(&tether).await?;
         let remote_label_id = label.remote_id.clone().unwrap();
@@ -458,12 +445,12 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
         self.sync_scroller(&tether).await?;
 
-        // Check if we have a data suggesting we have synced this label before
-        if let Some(scroller) = self.state.online() {
+        if let Some(scroller) = self.state.as_synced() {
             debug!(
                 "We have paginated here before, try to sync data, status: {}",
                 if is_online { "online" } else { "offline" }
             );
+
             if let Some(scroll_data) = scroller.scroll_data_begin(&tether).await? {
                 debug!("Syncing previous page in background");
 
@@ -472,8 +459,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                     &scroll_data,
                     remote_label_id.clone(),
                     self.invalidate.clone(),
-                )
-                .await?;
+                )?;
 
                 return Ok(None);
             } else {
@@ -481,18 +467,14 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             };
         }
 
-        // No entry exist, which means we have not synced this label yet.
         debug!(
             "Paginating for the first time, getting first page while being {}.",
             if is_offline { "offline" } else { "online" }
         );
 
         let remote_label_id = label.remote_id.clone().unwrap();
-        let task = self
-            .sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
-            .await?;
 
-        Ok(task)
+        self.sync_first_page(ctx, remote_label_id, self.order_dir, self.order_field, None)
     }
 
     async fn change_state(
@@ -503,28 +485,27 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         _keywords: Option<SearchOptions>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let tether = ctx.user_stash().connection().await?;
+
         if let Some(unread) = unread {
-            tracing::info!(
+            info!(
                 "Changing unread filter from {current:?} to {unread:?}",
                 current = self.unread,
             );
             self.unread = unread;
         }
+
         if let Some(label) = label {
-            tracing::info!(
+            info!(
                 "Changing label from {current} to {label}",
                 current = self.local_label_id
             );
             self.local_label_id = label;
         }
 
-        self.state = MailScrollerState::new_online(
-            self.local_label_id,
-            self.unread,
-            self.page_size,
-            &tether,
-        )
-        .await?;
+        self.state =
+            MailScrollerState::synced(self.local_label_id, self.unread, self.page_size, &tether)
+                .await?;
+
         debug!("Changed state, new state: {}, initializing...", self.state);
 
         let task = self.initialize_impl(ctx, false).await?;
@@ -536,13 +517,17 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        if let Some(scroller) = self.state.online() {
-            tracing::info!("Clearing cache for label {}", self.local_label_id);
+        if let Some(scroller) = self.state.as_synced() {
+            info!("Clearing cache for label {}", self.local_label_id);
+
             let mut tether = ctx.user_stash().connection().await?;
             let cursor = scroller.load_end_cursor(&tether).await?;
+
             tether.tx(async |tx| cursor.delete(tx).await).await?;
         }
+
         self.clear_state();
+
         let task = self.initialize_impl(ctx, false).await?;
 
         Ok(task)

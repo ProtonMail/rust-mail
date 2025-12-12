@@ -34,7 +34,7 @@ impl Sidebar {
             .await?;
 
         if all_scheduled.total_msg != 0 || all_scheduled.total_conv != 0 {
-            labels.push(all_scheduled.label());
+            labels.push(all_scheduled.label);
         }
 
         let outbox = self
@@ -42,7 +42,7 @@ impl Sidebar {
             .await?;
 
         if outbox.total_conv != 0 || outbox.total_msg != 0 {
-            labels.push(outbox.label());
+            labels.push(outbox.label);
         }
 
         let snoozed = self
@@ -50,7 +50,7 @@ impl Sidebar {
             .await?;
 
         if snoozed.total_conv != 0 || snoozed.total_msg != 0 {
-            labels.push(snoozed.label());
+            labels.push(snoozed.label);
         }
 
         labels.push(self.get_label(tether, LabelId::starred()).await?);

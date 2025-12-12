@@ -24,7 +24,7 @@ use crate::MAX_PAGE_ELEMENT_COUNT;
 use crate::services::proton::prelude::*;
 use proton_api_utils::PaginateOptions;
 use serde::Serialize;
-use serde_with::{BoolFromInt, serde_as};
+use serde_with::{BoolFromInt, StringWithSeparator, formats::CommaSeparator, serde_as};
 use smart_default::SmartDefault;
 
 use super::{DeviceEnvironment, LabelType};
@@ -322,6 +322,7 @@ pub struct PostReportBug {
 /// Maximum page size supported by the API.
 pub const MAX_LEGACY_FEATURES_PER_PAGE: u64 = 150;
 
+#[serde_as]
 #[derive(Clone, Debug, Serialize, SmartDefault)]
 #[serde(rename_all = "PascalCase")]
 pub struct GetLegacyFeatureFlagsOptions {
@@ -334,6 +335,11 @@ pub struct GetLegacyFeatureFlagsOptions {
 
     #[serde(rename = "Type", skip_serializing_if = "Option::is_none")]
     pub feature_type: Option<LegacyFeatureFlagType>,
+
+    #[serde(rename = "Code", skip_serializing_if = "Vec::is_empty")]
+    #[serde_as(as = "StringWithSeparator::<CommaSeparator, LegacyFeatureFlagId>")]
+    #[default(LegacyFeatureFlagId::default_filter())]
+    pub codes: Vec<LegacyFeatureFlagId>,
 }
 
 impl PaginateOptions for GetLegacyFeatureFlagsOptions {

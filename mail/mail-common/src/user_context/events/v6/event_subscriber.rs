@@ -59,7 +59,7 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
                 .await?
                 .fetch_and_store(ctx.session(), &mut tether)
                 .await
-                .context("Failed to fetch or store dependencies")?;
+                .inspect_err(|e| error!("Failed to fetch or store dependencies: {e}"))?;
 
             let mut changeset = RebaseChangeSet::default();
             let mut post_event_data = PostEventSyncData::default();

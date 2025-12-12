@@ -642,7 +642,7 @@ pub struct ScrollCursor<T: ScrollData> {
 }
 
 impl<T: ScrollData> ScrollCursor<T> {
-    pub fn absolute_beginning(
+    pub fn beginning(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         order_dir: ScrollOrderDir,
@@ -655,7 +655,7 @@ impl<T: ScrollData> ScrollCursor<T> {
         }
     }
 
-    pub fn absolute_end(
+    pub fn ending(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         order_dir: ScrollOrderDir,
@@ -704,29 +704,15 @@ impl<T: ScrollData> ScrollCursor<T> {
         }
     }
 
-    /// Same as [`visible_elements`] but returns only the number of items that match.
-    ///
     pub async fn seen_count(&self, tether: &Tether) -> Result<u64, StashError> {
         ScrollQuery::new(self.clone()).count(tether).await
     }
 
-    /// Return all elements that are in the range of data we have synced from the server.
-    ///
-    /// This means all elements that a newer than the time and display order of the
-    /// last synced element from the server. Elements that are older should not be
-    /// displayed.
-    ///
-    /// It is possible those old elements become available due to interactions of actions
-    /// and the event loop, but those should not be displayed until the user scrolls
-    /// far enough.
-    ///
     pub async fn visible_elements(&self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
-        self.visible_elements_limit(None, None, false, tether).await
+        self.visible_elements_ex(None, None, false, tether).await
     }
 
-    /// Internal function to get the visible elements with limit and offset.
-    ///
-    async fn visible_elements_limit(
+    async fn visible_elements_ex(
         &self,
         limit: Option<usize>,
         offset: Option<u64>,
@@ -742,12 +728,6 @@ impl<T: ScrollData> ScrollCursor<T> {
     }
 }
 
-/// In memory cache for buffered read of the ScrollData.
-///
-/// This is useful for offline mode and for performance reasons as it buffers loading
-/// of data from the database. This comes crucial whene switching between views
-/// and in order to not load all available items everytime we do utilize this cache.
-///
 #[derive(Debug, Clone)]
 pub struct CachedScrollData<T: ScrollData> {
     page_size: usize,
@@ -756,22 +736,6 @@ pub struct CachedScrollData<T: ScrollData> {
 }
 
 impl<T: ScrollData> CachedScrollData<T> {
-    /// Create a new cache for generic ScrollData.
-    ///
-    /// This will load the data from the database and create a cursor for the
-    /// generic ScrollData in the place where first page should end.
-    ///
-    /// # Returns
-    ///
-    /// A cursor when the data is found, otherwise `None` as the view was never displayed before.
-    ///
-    /// # Arguments
-    ///
-    /// `local_label_id` - The local label id of the label in which the scroll is performed.
-    /// `unread` - The read filter used in the scroll.
-    /// `page_size` - The size of the page to load.
-    /// `tether` - The tether to use for the database access.
-    ///
     pub async fn new(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -781,44 +745,20 @@ impl<T: ScrollData> CachedScrollData<T> {
         let order_dir = ScrollOrderDir::for_local_label(local_label_id, tether).await?;
         let order_field = ScrollOrderField::for_local_label(local_label_id, tether).await?;
 
-        let data = T::find_with_key(local_label_id, unread, order_dir, tether).await?;
+        let Some(end) = T::find_with_key(local_label_id, unread, order_dir, tether).await? else {
+            return Ok(None);
+        };
 
-        Ok(match data {
-            Some(data) => {
-                let end = data.into();
-                let cursor = ScrollCursor::absolute_beginning(
-                    local_label_id,
-                    unread,
-                    order_dir,
-                    order_field,
-                );
+        let end = end.into();
+        let cursor = ScrollCursor::beginning(local_label_id, unread, order_dir, order_field);
 
-                Some(Self {
-                    page_size,
-                    end,
-                    cursor,
-                })
-            }
-            None => None,
-        })
+        Ok(Some(Self {
+            page_size,
+            end,
+            cursor,
+        }))
     }
 
-    /// Create a new cache for generic ScrollData.
-    ///
-    /// This will load all available data from the database and create a cursor for the
-    /// generic ScrollData in the place where first page should end.
-    ///
-    /// # Returns
-    ///
-    /// A cursor when the data is found, otherwise `None` as the view was never displayed before.
-    ///
-    /// # Arguments
-    ///
-    /// `local_label_id` - The local label id of the label in which the scroll is performed.
-    /// `unread` - The read filter used in the scroll.
-    /// `page_size` - The size of the page to load.
-    /// `tether` - The tether to use for the database access.
-    ///
     pub fn all(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -826,10 +766,8 @@ impl<T: ScrollData> CachedScrollData<T> {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Self {
-        let end = ScrollCursor::absolute_end(local_label_id, unread, order_dir, order_field);
-
-        let cursor =
-            ScrollCursor::absolute_beginning(local_label_id, unread, order_dir, order_field);
+        let end = ScrollCursor::ending(local_label_id, unread, order_dir, order_field);
+        let cursor = ScrollCursor::beginning(local_label_id, unread, order_dir, order_field);
 
         Self {
             page_size,
@@ -838,9 +776,8 @@ impl<T: ScrollData> CachedScrollData<T> {
         }
     }
 
-    /// Transform the cursor to read absolutly all items from the database.
     pub fn set_absolute_end(mut self) -> Self {
-        self.end = ScrollCursor::absolute_end(
+        self.end = ScrollCursor::ending(
             self.cursor.local_label_id,
             self.cursor.unread,
             self.end.order_dir,
@@ -849,13 +786,6 @@ impl<T: ScrollData> CachedScrollData<T> {
         self
     }
 
-    /// Fetch more items from the database.
-    ///
-    /// This will load the next page of items from the database and update the cursor.
-    /// If there are no more items to load, an empty vector is returned.
-    /// In case the cursor is at the one before the last page.
-    /// It will load two pages instead of one if the last page is not completly filled.
-    ///
     pub async fn fetch_more(&mut self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
         let all = self.end.seen_count(tether).await?;
         let cursor_count = self.cursor.seen_count(tether).await?;
@@ -864,6 +794,7 @@ impl<T: ScrollData> CachedScrollData<T> {
             let offset = Some(cursor_count);
             let remaining = all - cursor_count;
             let double_page = self.page_size as u64 * 2;
+
             let limit = if remaining < double_page {
                 // Progress two pages at a time if there are less than two pages left.
                 usize::try_from(all - cursor_count)
@@ -919,7 +850,7 @@ impl<T: ScrollData> CachedScrollData<T> {
     ) -> Result<Vec<T::Item>, StashError> {
         let items = self
             .end
-            .visible_elements_limit(limit, offset, false, tether)
+            .visible_elements_ex(limit, offset, false, tether)
             .await?;
 
         let cursor = match items.last() {
@@ -940,14 +871,10 @@ impl<T: ScrollData> CachedScrollData<T> {
         Ok(items)
     }
 
-    /// Available elements count to fetch with this cursor
-    ///
     pub async fn synced_count(&self, tether: &Tether) -> Result<u64, StashError> {
         self.end.seen_count(tether).await
     }
 
-    /// Check if there are more items to fetch for in memory cursor.
-    ///
     pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
         let all = self.end.seen_count(tether).await?;
         let cursor_count = self.cursor.seen_count(tether).await?;
@@ -955,8 +882,6 @@ impl<T: ScrollData> CachedScrollData<T> {
         Ok(cursor_count < all)
     }
 
-    /// Check if there is a next page to fetch for in memory cursor.
-    ///
     pub async fn has_next_page(&self, tether: &Tether) -> Result<bool, StashError> {
         let all = self.end.seen_count(tether).await?;
         let cursor_count = self.cursor.seen_count(tether).await?;
@@ -968,12 +893,6 @@ impl<T: ScrollData> CachedScrollData<T> {
         }
     }
 
-    /// Update the cache with the latest data from the database.
-    ///
-    /// It is very handy for ever-changing environment where the data in the database
-    /// is downloaded in another thread. We may want to move the "end_cursor" - `data`
-    /// further to the end of the downloaded list of elements.
-    ///
     pub async fn update(&mut self, tether: &Tether) -> Result<(), StashError> {
         self.end = self.load_end_cursor(tether).await?.into();
 
@@ -983,7 +902,7 @@ impl<T: ScrollData> CachedScrollData<T> {
     pub async fn scroll_data_begin(&self, tether: &Tether) -> Result<Option<T>, StashError> {
         let first = self
             .end
-            .visible_elements_limit(Some(1), None, true, tether)
+            .visible_elements_ex(Some(1), None, true, tether)
             .await?
             .pop();
 
@@ -1001,11 +920,13 @@ impl<T: ScrollData> CachedScrollData<T> {
 
     pub async fn scroll_data_end(&self, tether: &Tether) -> Result<Option<T>, StashError> {
         let cursor_count = self.synced_count(tether).await?.saturating_sub(1);
+
         let last = self
             .end
-            .visible_elements_limit(Some(1), Some(cursor_count), true, tether)
+            .visible_elements_ex(Some(1), Some(cursor_count), true, tether)
             .await?
             .pop();
+
         match last {
             Some(last) => Ok(T::into_scroll_data(
                 self.local_label_id,
@@ -1018,8 +939,6 @@ impl<T: ScrollData> CachedScrollData<T> {
         }
     }
 
-    /// Get the underlying "data" to which the end cursor points to.
-    ///
     pub async fn load_end_cursor(&self, tether: &Tether) -> Result<T, StashError> {
         // Due to nature of primary key of the underlying table
         // It does not really matter if we take end or cursor as

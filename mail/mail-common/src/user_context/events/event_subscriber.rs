@@ -181,7 +181,7 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
                 .context("Failed to calculate dependencies")?
                 .fetch_and_store(ctx.session(), &mut tether)
                 .await
-                .context("Failed to fetch or store dependencies")?;
+                .inspect_err(|e| error!("Failed to fetch or store dependencies: {e}"))?;
 
             tether
                 .tx::<_, _, MailEventSubscriberError>(async |tx| {

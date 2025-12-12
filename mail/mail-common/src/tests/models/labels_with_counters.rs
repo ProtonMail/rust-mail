@@ -11,7 +11,7 @@ use stash::orm::Model;
 use stash::stash::StashError;
 
 #[tokio::test]
-async fn label_with_counts() {
+async fn label_with_counters() {
     let mut tether = new_test_connection().await.connection().await.unwrap();
     let label = ApiLabel {
         id: LabelId::from("label"),
@@ -33,6 +33,7 @@ async fn label_with_counts() {
     let unread_msg = 600_u64;
 
     let mut local_label = Label::from(label.clone());
+
     let local_id = tether
         .tx::<_, _, StashError>(async |tx| {
             local_label.save(tx).await.unwrap();
@@ -58,6 +59,7 @@ async fn label_with_counts() {
             )
             .await
             .unwrap();
+
             Ok(local_label.id())
         })
         .await
@@ -67,6 +69,7 @@ async fn label_with_counts() {
         .await
         .expect("failed to load counter")
         .expect("should have a value");
+
     assert_eq!(counters.unread_conv, unread_conv);
     assert_eq!(counters.total_conv, total_conv);
     assert_eq!(counters.unread_msg, unread_msg);
