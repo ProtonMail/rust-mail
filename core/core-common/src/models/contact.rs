@@ -1,8 +1,10 @@
 use crate::utils::{MapVec as _, Paginatable};
 use std::collections::{BTreeSet, HashMap};
+use std::default::Default;
 use std::io::Cursor;
 use std::sync::Arc;
 use std::time::Instant;
+use thiserror::Error;
 
 use super::{InitializationError, InitializationWatcher, InitializedComponent, Label};
 use crate::actions::contacts::Delete as ContactsDelete;
@@ -35,7 +37,7 @@ use proton_core_api::session::Session;
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::contacts::DecryptableVerifiableCard as _;
 use proton_crypto_account::keys::UnlockedUserKeys;
-use proton_vcard::vcard::VCard;
+use proton_vcard::vcard::{PropertyUid, VCard};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::Transaction;
 use stash::macros::Model;
@@ -90,6 +92,10 @@ impl ModelIdExtension for Contact {
         self.remote_id.as_ref()
     }
 }
+
+#[derive(Debug, Error)]
+#[error("Cannot merge vCards: duplicate property found")]
+pub struct DuplicatedVCardProperty;
 
 impl Contact {
     /// Returns the associated cards for a contact.
@@ -190,73 +196,71 @@ impl Contact {
         for bytes in blobs {
             let vcards = Self::vcards_from_bytes(&bytes)?;
             for vcard in vcards {
-                if let Some(ref mut acc) = merged {
-                    Self::merge_in_place(acc, vcard);
-                } else {
-                    merged = Some(vcard);
-                }
+                merged = Some(match merged {
+                    Some(acc) => Self::merged_disjoint(acc, vcard)?,
+                    None => vcard,
+                });
             }
         }
 
         merged.context("No VCARD data in provided blobs")
     }
 
-    fn merge_in_place(acc: &mut VCard, mut other: VCard) {
-        acc.addresses.extend(other.addresses.drain());
-        acc.calendar_addresses
-            .extend(other.calendar_addresses.drain());
-        acc.calendar_user_addresses
-            .extend(other.calendar_user_addresses.drain());
-        acc.categories.extend(other.categories.drain());
-        acc.client_pid_map.extend(other.client_pid_map.drain());
-        acc.emails.extend(other.emails.drain());
-        acc.fburls.extend(other.fburls.drain());
-        acc.formatted_names.extend(other.formatted_names.drain());
-        acc.geos.extend(other.geos.drain());
-        acc.impps.extend(other.impps.drain());
-        acc.keys.extend(other.keys.drain());
-        acc.languages.extend(other.languages.drain());
-        acc.logos.extend(other.logos.drain());
-        acc.members.extend(other.members.drain());
-        acc.nicknames.extend(other.nicknames.drain());
-        acc.notes.extend(other.notes.drain());
-        acc.organizations.extend(other.organizations.drain());
-        acc.photos.extend(other.photos.drain());
-        acc.related.extend(other.related.drain());
-        acc.roles.extend(other.roles.drain());
-        acc.sounds.extend(other.sounds.drain());
-        acc.sources.extend(other.sources.drain());
-        acc.telephones.extend(other.telephones.drain());
-        acc.time_zones.extend(other.time_zones.drain());
-        acc.titles.extend(other.titles.drain());
-        acc.urls.extend(other.urls.drain());
-        acc.xmls.extend(other.xmls.drain());
-        acc.xtendeds.extend(other.xtendeds.drain());
+    fn merged_disjoint(lhs: VCard, rhs: VCard) -> Result<VCard, DuplicatedVCardProperty> {
+        fn pick<Property>(
+            lhs: HashMap<PropertyUid, Property>,
+            rhs: HashMap<PropertyUid, Property>,
+        ) -> Result<HashMap<PropertyUid, Property>, DuplicatedVCardProperty> {
+            match (lhs.is_empty(), rhs.is_empty()) {
+                (true, true) => Ok(HashMap::new()),
+                (true, false) => Ok(rhs),
+                (false, true) => Ok(lhs),
+                (false, false) => Err(DuplicatedVCardProperty),
+            }
+        }
 
-        if other.anniversary.is_some() {
-            acc.anniversary = other.anniversary.take();
-        }
-        if other.birthday.is_some() {
-            acc.birthday = other.birthday.take();
-        }
-        if other.gender.is_some() {
-            acc.gender = other.gender.take();
-        }
-        if other.kind.is_some() {
-            acc.kind = other.kind.take();
-        }
-        if other.name.is_some() {
-            acc.name = other.name.take();
-        }
-        if other.product_id.is_some() {
-            acc.product_id = other.product_id.take();
-        }
-        if other.revision.is_some() {
-            acc.revision = other.revision.take();
-        }
-        if other.uid.is_some() {
-            acc.uid = other.uid.take();
-        }
+        let mut merged = VCard::default();
+
+        merged.addresses = pick(lhs.addresses, rhs.addresses)?;
+        merged.calendar_addresses = pick(lhs.calendar_addresses, rhs.calendar_addresses)?;
+        merged.calendar_user_addresses =
+            pick(lhs.calendar_user_addresses, rhs.calendar_user_addresses)?;
+        merged.categories = pick(lhs.categories, rhs.categories)?;
+        merged.client_pid_map = pick(lhs.client_pid_map, rhs.client_pid_map)?;
+        merged.emails = pick(lhs.emails, rhs.emails)?;
+        merged.fburls = pick(lhs.fburls, rhs.fburls)?;
+        merged.formatted_names = pick(lhs.formatted_names, rhs.formatted_names)?;
+        merged.geos = pick(lhs.geos, rhs.geos)?;
+        merged.impps = pick(lhs.impps, rhs.impps)?;
+        merged.keys = pick(lhs.keys, rhs.keys)?;
+        merged.languages = pick(lhs.languages, rhs.languages)?;
+        merged.logos = pick(lhs.logos, rhs.logos)?;
+        merged.members = pick(lhs.members, rhs.members)?;
+        merged.nicknames = pick(lhs.nicknames, rhs.nicknames)?;
+        merged.notes = pick(lhs.notes, rhs.notes)?;
+        merged.organizations = pick(lhs.organizations, rhs.organizations)?;
+        merged.photos = pick(lhs.photos, rhs.photos)?;
+        merged.related = pick(lhs.related, rhs.related)?;
+        merged.roles = pick(lhs.roles, rhs.roles)?;
+        merged.sounds = pick(lhs.sounds, rhs.sounds)?;
+        merged.sources = pick(lhs.sources, rhs.sources)?;
+        merged.telephones = pick(lhs.telephones, rhs.telephones)?;
+        merged.time_zones = pick(lhs.time_zones, rhs.time_zones)?;
+        merged.titles = pick(lhs.titles, rhs.titles)?;
+        merged.urls = pick(lhs.urls, rhs.urls)?;
+        merged.xmls = pick(lhs.xmls, rhs.xmls)?;
+        merged.xtendeds = pick(lhs.xtendeds, rhs.xtendeds)?;
+
+        merged.anniversary = lhs.anniversary.or(rhs.anniversary);
+        merged.birthday = lhs.birthday.or(rhs.birthday);
+        merged.gender = lhs.gender.or(rhs.gender);
+        merged.kind = lhs.kind.or(rhs.kind);
+        merged.name = lhs.name.or(rhs.name);
+        merged.product_id = lhs.product_id.or(rhs.product_id);
+        merged.revision = lhs.revision.or(rhs.revision);
+        merged.uid = lhs.uid.or(rhs.uid);
+
+        Ok(merged)
     }
 
     /// Returns the associated emails for a contact.
@@ -860,7 +864,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vcard_details_parses_and_merges_three_split_blobs() {
+    fn merged_vcards_from_decrypted_blobs_with_duplicated_properties_throws_error() {
+        let blob1 = "
+BEGIN:VCARD
+VERSION:4.0
+PRODID;TYPE=text;VALUE=TEXT:pm-ez-vcard 0.0.1
+ITEM1.EMAIL:one@passmail.net
+END:VCARD"
+            .trim()
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let blob2 = "
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//ProtonMail//ProtonMail vCard 1.0.0//EN
+ITEM2.EMAIL:two@passmail.net
+END:VCARD"
+            .trim()
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let given = Contact::merged_vcards_from_decrypted_blobs(vec![blob1, blob2]);
+
+        assert!(
+            given
+                .as_ref()
+                .expect_err("Expected error")
+                .downcast_ref::<DuplicatedVCardProperty>()
+                .is_some(),
+            "Expected DuplicatedVCardProperty error"
+        );
+    }
+
+    #[test]
+    fn merged_vcards_from_decrypted_blobs_merges_three_split_blobs() {
         let blob1 = "BEGIN:VCARD
 VERSION:4.0
 N:;11111111123232323;;;
@@ -893,16 +931,16 @@ END:VCARD"
             .replace('\n', "\r\n")
             .into_bytes();
 
-        let merged = Contact::merged_vcards_from_decrypted_blobs(vec![blob1, blob2, blob3])
+        let given = Contact::merged_vcards_from_decrypted_blobs(vec![blob1, blob2, blob3])
             .expect("should merge into a single VCard");
-        let merged_debug = format!("{merged:#?}");
+        let given_debug = format!("{given:#?}");
 
         assert!(
-            merged_debug.contains("protonmail-ios-autoimport-E233D520-6965-4442-8C54-8F627E77399C"),
+            given_debug.contains("protonmail-ios-autoimport-E233D520-6965-4442-8C54-8F627E77399C"),
             "UID should be present"
         );
         assert!(
-            merged_debug.contains("11111111123232323"),
+            given_debug.contains("11111111123232323"),
             "Formatted/given name should be present"
         );
         for email in [
@@ -911,32 +949,32 @@ END:VCARD"
             "proton.rectangle212@passmail.net",
             "proton.splotchy980@passmail.net",
         ] {
-            assert!(merged_debug.contains(email), "Missing email: {email}");
+            assert!(given_debug.contains(email), "Missing email: {email}");
         }
         assert!(
-            merged_debug.contains("New test group #1 [Mateusz]"),
+            given_debug.contains("New test group #1 [Mateusz]"),
             "Missing category 1"
         );
         assert!(
-            merged_debug.contains("New test group #2 [Mateusz]"),
+            given_debug.contains("New test group #2 [Mateusz]"),
             "Missing category 2"
         );
-        assert!(merged_debug.contains("2345678"), "Missing telephone number");
+        assert!(given_debug.contains("2345678"), "Missing telephone number");
         assert!(
-            merged_debug.contains("vb "),
+            given_debug.contains("vb "),
             "First address (street 'vb ') missing"
         );
         assert!(
-            merged_debug.contains("jk"),
+            given_debug.contains("jk"),
             "Second address (street 'jk') missing"
         );
         assert!(
-            merged_debug.contains("fgchvbjnkm"),
+            given_debug.contains("fgchvbjnkm"),
             "NOTE content should be present"
         );
         assert!(
-            merged_debug.contains("ProtonMail vCard 1.0.0"),
-            "Product ID from blob3 should be chosen (last wins)"
+            given_debug.contains("pm-ez-vcard 0.0.1"),
+            "Product ID from blob2 should be chosen"
         );
     }
 }
