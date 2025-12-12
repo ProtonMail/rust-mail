@@ -676,7 +676,7 @@ impl DraftActor {
                     MessageMimeType::TextPlain => body,
                 };
 
-                draft.set_body(body).await
+                draft.prepend_body(body).await
             }
             .await;
 
@@ -776,15 +776,9 @@ impl DraftActor {
             this.set_subject(subject).await?;
         }
 
-        this.set_body({
+        this.prepend_body({
             if let Some(user_body) = draft.body {
                 body.push_str(&user_body);
-            }
-
-            let signature = this.body().await?;
-
-            if !signature.is_empty() {
-                body.push_str(&signature);
             }
 
             body
@@ -957,6 +951,10 @@ impl DraftActor {
             .await?
     }
 
+    pub(crate) async fn prepend_body(&self, body: String) -> Result<(), MailContextError> {
+        self.set_body(format!("{body}{}", self.body().await?)).await
+    }
+
     pub async fn mime_type(&self) -> Result<MessageMimeType, MailContextError> {
         self.act(DraftActorMessage::GetMimeType).await
     }
@@ -983,9 +981,11 @@ impl DraftActor {
         self.act(move |sender| DraftActorMessage::ChangeSenderAddress { email, sender })
             .await?
     }
+
     pub async fn is_password_protected(&self) -> Result<bool, MailContextError> {
         self.act(DraftActorMessage::IsPasswordProtected).await?
     }
+
     pub async fn get_password(&self) -> Result<Option<EoData>, MailContextError> {
         self.act(DraftActorMessage::GetPassword).await?
     }
@@ -1015,9 +1015,11 @@ impl DraftActor {
         })
         .await?
     }
+
     pub async fn remove_password(&self) -> Result<(), MailContextError> {
         self.act(DraftActorMessage::RemovePassword).await?
     }
+
     pub async fn set_expiration_time(
         &self,
         expiration_time: DraftExpirationTime,
@@ -1028,6 +1030,7 @@ impl DraftActor {
         })
         .await?
     }
+
     pub async fn expiration_time(&self) -> Result<DraftExpirationTime, MailContextError> {
         self.act(DraftActorMessage::GetExpirationTime).await?
     }
@@ -1331,6 +1334,7 @@ impl DraftActor {
         })
         .await?
     }
+
     pub async fn swap_attachment_disposition_from_inline(
         &self,
         content_id: ContentId,
