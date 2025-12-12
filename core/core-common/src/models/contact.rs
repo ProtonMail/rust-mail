@@ -933,48 +933,7 @@ END:VCARD"
 
         let given = Contact::merged_vcards_from_decrypted_blobs(vec![blob1, blob2, blob3])
             .expect("should merge into a single VCard");
-        let given_debug = format!("{given:#?}");
 
-        assert!(
-            given_debug.contains("protonmail-ios-autoimport-E233D520-6965-4442-8C54-8F627E77399C"),
-            "UID should be present"
-        );
-        assert!(
-            given_debug.contains("11111111123232323"),
-            "Formatted/given name should be present"
-        );
-        for email in [
-            "fkjhkdfgjhdghjdgkjhdgkfjhdjkhkdjfhg@pm.me",
-            "proton.domelike477@passmail.net",
-            "proton.rectangle212@passmail.net",
-            "proton.splotchy980@passmail.net",
-        ] {
-            assert!(given_debug.contains(email), "Missing email: {email}");
-        }
-        assert!(
-            given_debug.contains("New test group #1 [Mateusz]"),
-            "Missing category 1"
-        );
-        assert!(
-            given_debug.contains("New test group #2 [Mateusz]"),
-            "Missing category 2"
-        );
-        assert!(given_debug.contains("2345678"), "Missing telephone number");
-        assert!(
-            given_debug.contains("vb "),
-            "First address (street 'vb ') missing"
-        );
-        assert!(
-            given_debug.contains("jk"),
-            "Second address (street 'jk') missing"
-        );
-        assert!(
-            given_debug.contains("fgchvbjnkm"),
-            "NOTE content should be present"
-        );
-        assert!(
-            given_debug.contains("pm-ez-vcard 0.0.1"),
-            "Product ID from blob2 should be chosen"
-        );
+        insta::assert_snapshot!(given);
     }
 }
