@@ -55,6 +55,6 @@ cd /data/local/tmp
 
 ## Docs
 
-- [MailScroller Architecture](docs/MailScroller.md) - Comprehensive guide to the reactive pagination system for mail items [Confluence](https://protonag.atlassian.net/wiki/spaces/INBOX/pages/827523082/ET+-+Mail+Scroller+Architecture)
+- [MailScroller Architecture](../../docs/specifications/mail/MailScroller.md) - Comprehensive guide to the reactive pagination system for mail items [Confluence](https://protonag.atlassian.net/wiki/spaces/INBOX/pages/827523082/ET+-+Mail+Scroller+Architecture)
 
 
