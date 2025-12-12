@@ -135,7 +135,13 @@ pub trait ProtonCore {
     async fn post_report_bug(&self, body: PostReportBug) -> ApiServiceResult<()>;
 
     /// Gets an image through proton's proxy.
-    async fn proxy_img(&self, url: &url::Url) -> ApiServiceResult<Vec<u8>>;
+    /// When dry run is enabled, image is not really fetched from the remote server,
+    /// but the information whether it is tracker or not is still returned.
+    async fn proxy_img(
+        &self,
+        url: &url::Url,
+        dry_run: bool,
+    ) -> ApiServiceResult<GetProxyImageResponse>;
 
     /// Gets feature flags defined in Unleash service.
     /// See: <https://docs.getunleash.io/reference/api/unleash/get-frontend-features/>

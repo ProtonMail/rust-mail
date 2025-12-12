@@ -276,17 +276,35 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
         Ok(())
     }
 
-    async fn proxy_img(&self, url: &url::Url) -> ApiServiceResult<Vec<u8>> {
+    async fn proxy_img(
+        &self,
+        url: &url::Url,
+        dry_run: bool,
+    ) -> ApiServiceResult<GetProxyImageResponse> {
         let query = json! ({
-            "Url": url
+            "Url": url,
+            "DryRun": i32::from(dry_run)
         });
 
-        Ok(GET!("{CORE_V4}/images")
+        let response = GET!("{CORE_V4}/images")
             .query(serde_to_query(query)?)
             .send_with(self)
             .await?
-            .ok()?
-            .into_body())
+            .ok()?;
+
+        let headers = response.headers();
+
+        let tracker_provider = headers
+            .get("X-Pm-Tracker-Provider")
+            .and_then(|v| v.to_str().ok())
+            .map(ToString::to_string);
+
+        let image = response.into_body();
+
+        Ok(GetProxyImageResponse {
+            image,
+            tracker_provider,
+        })
     }
 
     async fn get_unleash_feature_flags(&self) -> ApiServiceResult<GetUnleashFeaturesResponse> {

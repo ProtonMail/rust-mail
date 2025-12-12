@@ -327,6 +327,12 @@ pub struct PutFeatureFlagOverrideResponse {
     pub feature: LegacyFeatureFlag,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct GetProxyImageResponse {
+    pub image: Vec<u8>,
+    pub tracker_provider: Option<String>,
+}
+
 //  TRAITS
 //==============================================================================
 
