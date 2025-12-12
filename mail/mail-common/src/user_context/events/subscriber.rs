@@ -10,7 +10,7 @@ use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
-use crate::{MailContextError, MailUserContext};
+use crate::{AppError, MailContextError, MailUserContext};
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::Context;
 use anyhow::anyhow;
@@ -69,6 +69,27 @@ impl SubscriberError for MailEventSubscriberError {
     }
 }
 
+impl From<MailContextError> for MailEventSubscriberError {
+    fn from(value: MailContextError) -> Self {
+        match value {
+            MailContextError::App(e) => e.into(),
+            MailContextError::Stash(e) => Self::Stash(e),
+            MailContextError::Api(e) => Self::Api(e),
+            e => Self::Other(e.into()),
+        }
+    }
+}
+
+impl From<AppError> for MailEventSubscriberError {
+    fn from(value: AppError) -> Self {
+        match value {
+            AppError::API(e) => Self::Api(e),
+            AppError::Stash(e) => Self::Stash(e),
+            e => Self::Other(e.into()),
+        }
+    }
+}
+
 #[async_trait]
 impl Subscriber<MailEvent> for MailEventSubscriber {
     fn name(&self) -> &'static str {
@@ -95,7 +116,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 .context("Failed to calculate dependencies")?
                 .fetch_and_store(ctx.session(), &mut tether)
                 .await
-                .context("Failed to fetch or store dependencies")?;
+                .inspect_err(|e| error!("Failed to fetch or store dependencies:{e}"))?;
 
             tether
                 .tx::<_, _, MailEventSubscriberError>(async |tx| {
