@@ -1,7 +1,10 @@
 use crate::utils::{MapVec as _, Paginatable};
 use std::collections::{BTreeSet, HashMap};
+use std::default::Default;
+use std::io::Cursor;
 use std::sync::Arc;
 use std::time::Instant;
+use thiserror::Error;
 
 use super::{InitializationError, InitializationWatcher, InitializedComponent, Label};
 use crate::actions::contacts::Delete as ContactsDelete;
@@ -32,9 +35,9 @@ use proton_core_api::services::proton::{ContactUID, GetContactsEmailsResponse};
 use proton_core_api::services::proton::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_core_api::session::Session;
 use proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard as _};
+use proton_crypto_account::contacts::DecryptableVerifiableCard as _;
 use proton_crypto_account::keys::UnlockedUserKeys;
-use proton_vcard::vcard::VCard;
+use proton_vcard::vcard::{PropertyUid, VCard};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::Transaction;
 use stash::macros::Model;
@@ -89,6 +92,10 @@ impl ModelIdExtension for Contact {
         self.remote_id.as_ref()
     }
 }
+
+#[derive(Debug, Error)]
+#[error("Cannot merge vCards: duplicate property found")]
+pub struct DuplicatedVCardProperty;
 
 impl Contact {
     /// Returns the associated cards for a contact.
@@ -154,28 +161,106 @@ impl Contact {
         )
         .await?;
 
-        let card = cards
+        let blobs = cards
             .into_iter()
-            .find(|c| {
-                matches!(
-                    c.card_type,
-                    ContactCardType::Encrypted | ContactCardType::EncryptedAndSigned
-                )
+            .map(|contact_card| {
+                contact_card
+                    .decrypt_and_verify_sync(provider, keys, keys)
+                    .context("Error decrypting vCard")
             })
-            .context("No card details")?;
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
-        let card = card
-            .decrypt_and_verify_sync(provider, keys, keys)
-            .context("Error decrypting vCard")?;
-        let mut cards = VcardParser::new(card.reader());
-        let card = cards
-            .next()
-            .context("Not vCard in card?")?
-            .context("Can't parse vCard with ical")?;
-        let card = card
-            .try_into()
-            .context("Error parsing vCard with proton-vcard")?;
-        Ok(card)
+        Self::merged_vcards_from_decrypted_blobs(blobs)
+    }
+
+    /// Parses one decrypted blob (which may contain multiple vCards) into `Vec<VCard>`
+    fn vcards_from_bytes(bytes: &[u8]) -> anyhow::Result<Vec<VCard>> {
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        let mut vcards = Vec::new();
+        let parser = VcardParser::new(Cursor::new(text.as_bytes()));
+
+        for card_res in parser {
+            let vcard_contact = card_res.context("Can't parse vCard with ical")?;
+            let vcard: VCard = vcard_contact
+                .try_into()
+                .context("Error parsing vCard with proton-vcard")?;
+            vcards.push(vcard);
+        }
+        Ok(vcards)
+    }
+
+    /// Merges one or more decrypted vCard blobs into a single `VCard`
+    fn merged_vcards_from_decrypted_blobs(blobs: Vec<Vec<u8>>) -> anyhow::Result<VCard> {
+        let mut merged: Option<VCard> = None;
+
+        for bytes in blobs {
+            let vcards = Self::vcards_from_bytes(&bytes)?;
+            for vcard in vcards {
+                merged = Some(match merged {
+                    Some(acc) => Self::merged_disjoint(acc, vcard)?,
+                    None => vcard,
+                });
+            }
+        }
+
+        merged.context("No VCARD data in provided blobs")
+    }
+
+    fn merged_disjoint(lhs: VCard, rhs: VCard) -> Result<VCard, DuplicatedVCardProperty> {
+        fn pick<Property>(
+            lhs: HashMap<PropertyUid, Property>,
+            rhs: HashMap<PropertyUid, Property>,
+        ) -> Result<HashMap<PropertyUid, Property>, DuplicatedVCardProperty> {
+            match (lhs.is_empty(), rhs.is_empty()) {
+                (true, true) => Ok(HashMap::new()),
+                (true, false) => Ok(rhs),
+                (false, true) => Ok(lhs),
+                (false, false) => Err(DuplicatedVCardProperty),
+            }
+        }
+
+        let mut merged = VCard::default();
+
+        merged.addresses = pick(lhs.addresses, rhs.addresses)?;
+        merged.calendar_addresses = pick(lhs.calendar_addresses, rhs.calendar_addresses)?;
+        merged.calendar_user_addresses =
+            pick(lhs.calendar_user_addresses, rhs.calendar_user_addresses)?;
+        merged.categories = pick(lhs.categories, rhs.categories)?;
+        merged.client_pid_map = pick(lhs.client_pid_map, rhs.client_pid_map)?;
+        merged.emails = pick(lhs.emails, rhs.emails)?;
+        merged.fburls = pick(lhs.fburls, rhs.fburls)?;
+        merged.formatted_names = pick(lhs.formatted_names, rhs.formatted_names)?;
+        merged.geos = pick(lhs.geos, rhs.geos)?;
+        merged.impps = pick(lhs.impps, rhs.impps)?;
+        merged.keys = pick(lhs.keys, rhs.keys)?;
+        merged.languages = pick(lhs.languages, rhs.languages)?;
+        merged.logos = pick(lhs.logos, rhs.logos)?;
+        merged.members = pick(lhs.members, rhs.members)?;
+        merged.nicknames = pick(lhs.nicknames, rhs.nicknames)?;
+        merged.notes = pick(lhs.notes, rhs.notes)?;
+        merged.organizations = pick(lhs.organizations, rhs.organizations)?;
+        merged.photos = pick(lhs.photos, rhs.photos)?;
+        merged.related = pick(lhs.related, rhs.related)?;
+        merged.roles = pick(lhs.roles, rhs.roles)?;
+        merged.sounds = pick(lhs.sounds, rhs.sounds)?;
+        merged.sources = pick(lhs.sources, rhs.sources)?;
+        merged.telephones = pick(lhs.telephones, rhs.telephones)?;
+        merged.time_zones = pick(lhs.time_zones, rhs.time_zones)?;
+        merged.titles = pick(lhs.titles, rhs.titles)?;
+        merged.urls = pick(lhs.urls, rhs.urls)?;
+        merged.xmls = pick(lhs.xmls, rhs.xmls)?;
+        merged.xtendeds = pick(lhs.xtendeds, rhs.xtendeds)?;
+
+        merged.anniversary = lhs.anniversary.or(rhs.anniversary);
+        merged.birthday = lhs.birthday.or(rhs.birthday);
+        merged.gender = lhs.gender.or(rhs.gender);
+        merged.kind = lhs.kind.or(rhs.kind);
+        merged.name = lhs.name.or(rhs.name);
+        merged.product_id = lhs.product_id.or(rhs.product_id);
+        merged.revision = lhs.revision.or(rhs.revision);
+        merged.uid = lhs.uid.or(rhs.uid);
+
+        Ok(merged)
     }
 
     /// Returns the associated emails for a contact.
@@ -215,7 +300,7 @@ impl Contact {
 
     pub const INIT_KEY: InitializationKey = InitializationKey::new("contacts");
 
-    /// It initializes contats by syncing with the Backend.
+    /// It initializes contacts by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
     /// This function is idempotent. If successfully initialized in the past.
@@ -449,7 +534,7 @@ impl Contact {
 
     /// Marks a contact as undeleted.
     /// This method serves as the reverse of [`Contact::mark_delete()`].
-    /// which can revert the deletion of a contact in case of something unpredictable happend.
+    /// which can revert the deletion of a contact in case of something unpredictable happened.
     ///
     pub async fn mark_undelete(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         self.deleted = false;
@@ -529,7 +614,7 @@ impl Contact {
 
 impl ModelHooks for Contact {
     fn before_save(&mut self, tx: &Transaction<'_>) -> stash::stash::StashResult<()> {
-        // WARN: For perfomance reasons this will NOT be called in the initial sync. See `SyncedContacts::store`
+        // WARN: For performance reasons this will NOT be called in the initial sync. See `SyncedContacts::store`
         // Any extra logic here should be copied there.
         if let Some(remote_id) = &self.remote_id {
             if let Some(existing) = Self::find_by_remote_id_sync(remote_id, tx)? {
@@ -679,7 +764,7 @@ impl SyncedContacts {
         )?;
 
         // We will use this to map the contact_emails to the contacts without having to
-        // query the db each time we instert one.
+        // query the db each time we insert one.
         // We require this to happen since the contact_emails need the local id of its contact.
         let mut id_map = HashMap::new();
 
@@ -772,5 +857,83 @@ impl Paginatable for PaginateEmails {
         options: Self::PaginateOptions,
     ) -> Result<Self::Response, Self::Error> {
         api.get_contacts_emails(options).await
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merged_vcards_from_decrypted_blobs_with_duplicated_properties_throws_error() {
+        let blob1 = "
+BEGIN:VCARD
+VERSION:4.0
+PRODID;TYPE=text;VALUE=TEXT:pm-ez-vcard 0.0.1
+ITEM1.EMAIL:one@passmail.net
+END:VCARD"
+            .trim()
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let blob2 = "
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//ProtonMail//ProtonMail vCard 1.0.0//EN
+ITEM2.EMAIL:two@passmail.net
+END:VCARD"
+            .trim()
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let given = Contact::merged_vcards_from_decrypted_blobs(vec![blob1, blob2]);
+
+        assert!(
+            given
+                .as_ref()
+                .expect_err("Expected error")
+                .downcast_ref::<DuplicatedVCardProperty>()
+                .is_some(),
+            "Expected DuplicatedVCardProperty error"
+        );
+    }
+
+    #[test]
+    fn merged_vcards_from_decrypted_blobs_merges_three_split_blobs() {
+        let blob1 = "BEGIN:VCARD
+VERSION:4.0
+N:;11111111123232323;;;
+TEL;PREF=1:2345678
+ADR;PREF=1:;;vb ;n;m;n;nj
+ADR;PREF=2:;;jk;j;j;jm;k
+NOTE:fgchvbjnkm\\nfcgvhbjnkml\\n\\\\ghjknml\\nvhbkm\\nnbm\\nnbm\\,\\.\\nbnmkl\\,\\n mn\\,\\nnbm\\,\\n\\\\
+END:VCARD"
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let blob2 = "BEGIN:VCARD
+VERSION:4.0
+PRODID;TYPE=text;VALUE=TEXT:pm-ez-vcard 0.0.1
+UID:protonmail-ios-autoimport-E233D520-6965-4442-8C54-8F627E77399C
+FN;PREF=1:11111111123232323
+ITEM1.EMAIL;PREF=1:fkjhkdfgjhdghjdgkjhdgkfjhdjkhkdjfhg@pm.me
+ITEM2.EMAIL;PREF=2:proton.domelike477@passmail.net
+ITEM3.EMAIL;PREF=3:proton.rectangle212@passmail.net
+ITEM4.EMAIL;PREF=4:proton.splotchy980@passmail.net
+END:VCARD"
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let blob3 = "BEGIN:VCARD
+VERSION:4.0
+PRODID:-//ProtonMail//ProtonMail vCard 1.0.0//EN
+ITEM1.CATEGORIES:New test group #1 [Mateusz],New test group #2 [Mateusz]
+END:VCARD"
+            .replace('\n', "\r\n")
+            .into_bytes();
+
+        let given = Contact::merged_vcards_from_decrypted_blobs(vec![blob1, blob2, blob3])
+            .expect("should merge into a single VCard");
+
+        insta::assert_snapshot!(given);
     }
 }

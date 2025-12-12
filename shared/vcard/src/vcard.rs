@@ -298,11 +298,16 @@ macro_rules! display_optional {
 }
 
 /// Macro to display a set of properties if any is present
+/// Properties are sorted by preference for deterministic output
 macro_rules! display_set {
     ($self:ident, $f:ident, $name:ident) => {
         if !$self.$name.is_empty() {
             writeln!($f, "  {}:", stringify!($name))?;
-            for (id, value) in &$self.$name {
+            for (id, value) in $self.$name.iter().sorted_by_key(|(_, value)| {
+                value
+                    .get_preference()
+                    .map_or(u32::MAX, |preference| preference.value)
+            }) {
                 writeln!($f, "    {id} -> {value:?}")?;
             }
         }
