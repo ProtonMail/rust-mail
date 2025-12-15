@@ -21,7 +21,7 @@ use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOu
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_common::datatypes::{Refresh, SystemLabel};
-use proton_core_common::models::Label;
+use proton_core_common::models::{Label, LabelError};
 use proton_event_loop::subscriber::{Subscriber, SubscriberError, SubscriberResult};
 use stash::orm::Model;
 use std::collections::HashMap;
@@ -75,6 +75,7 @@ impl From<MailContextError> for MailEventSubscriberError {
             MailContextError::App(e) => e.into(),
             MailContextError::Stash(e) => Self::Stash(e),
             MailContextError::Api(e) => Self::Api(e),
+            MailContextError::Label(e) => e.into(),
             e => Self::Other(e.into()),
         }
     }
@@ -85,6 +86,16 @@ impl From<AppError> for MailEventSubscriberError {
         match value {
             AppError::API(e) => Self::Api(e),
             AppError::Stash(e) => Self::Stash(e),
+            e => Self::Other(e.into()),
+        }
+    }
+}
+
+impl From<LabelError> for MailEventSubscriberError {
+    fn from(value: LabelError) -> Self {
+        match value {
+            LabelError::API(e) => Self::Api(e),
+            LabelError::Stash(e) => Self::Stash(e),
             e => Self::Other(e.into()),
         }
     }
