@@ -16,6 +16,8 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
+use proton_core_common::models::Label;
+use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,
@@ -429,6 +431,12 @@ impl RemoteMessageScrollerSource {
         // downloaded in the background
         let messages = tether
             .quiet_tx(async |tx| {
+                if let Some(label) = Label::find_by_id(local_label_id, tx).await?
+                    && label.is_busy(tx).await?
+                {
+                    return Ok(vec![]);
+                }
+
                 if !message_labels_count.is_empty() {
                     MessageLabelsCount::create_or_update_message_counts(
                         message_labels_count.clone(),
