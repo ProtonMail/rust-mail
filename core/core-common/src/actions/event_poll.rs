@@ -30,6 +30,7 @@ impl EventPoll {
     pub fn forced() -> Self {
         EventPoll { force: true }
     }
+
     #[must_use]
     pub fn dependency_key() -> ActionDependencyKey {
         ActionDependencyKey::from("event-poll")
@@ -153,6 +154,7 @@ impl Handler for EventPollHandler {
 
         Ok(())
     }
+
     async fn rebase_local(
         &self,
         _: ActionId,
@@ -160,7 +162,6 @@ impl Handler for EventPollHandler {
         _: &RebaseChangeSet,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // do nothing
         Ok(())
     }
 }

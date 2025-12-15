@@ -48,9 +48,8 @@ impl EventPoll {
         Self { tx }
     }
 
-    pub async fn initialize(&self) -> Result<&Self, EventLoopError> {
-        self.act(EventPollActorMessage::Initialize).await??;
-        Ok(self)
+    pub async fn initialize(&self) -> Result<(), EventLoopError> {
+        self.act(EventPollActorMessage::Initialize).await?
     }
 
     /// Register a typed subscriber by wrapping it in `TypedSubscribers`.
@@ -137,10 +136,8 @@ impl EventPollActor {
     }
 
     async fn poll(&mut self) -> Result<(), EventLoopError> {
-        {
-            for s in self.subscribers.values_mut() {
-                s.cleanup();
-            }
+        for s in self.subscribers.values_mut() {
+            s.cleanup();
         }
 
         self.epoll
