@@ -9,6 +9,7 @@ use proton_core_common::models::ModelIdExtension;
 use proton_core_common::test_utils::test_context::MockApiEnv;
 use proton_core_common::test_utils::utils::mock_auth_endpoints;
 use proton_mail_api::services::proton::common::ConversationId;
+use proton_mail_api::services::proton::prelude::RunningTasks;
 use proton_mail_api::services::proton::responses::GetMessagesResponse;
 use proton_mail_common::test_utils::db::new_test_connection_file;
 use proton_mail_common::{
@@ -338,6 +339,7 @@ async fn mock_get_message(mock_server: &MockServer, items: Vec<RollbackItem>, te
     mock.respond_with(
         ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
             messages: api_metadatas,
+            tasks_running: RunningTasks::none(),
             stale: false,
             total: 0,
         }),

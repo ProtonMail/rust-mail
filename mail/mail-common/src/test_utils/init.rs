@@ -9,7 +9,7 @@ use proton_core_api::services::proton::{
 };
 use proton_core_api::services::proton::{AddressId, EventId, LabelId, LabelType as ApiLabelType};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
-use proton_mail_api::services::proton::prelude::GetIncomingDefaultResponse;
+use proton_mail_api::services::proton::prelude::{GetIncomingDefaultResponse, RunningTasks};
 use proton_mail_api::services::proton::request_data::{
     PutMobileSettings, PutNextMessageOnMoveRequest,
 };
@@ -248,6 +248,7 @@ impl MailTestContext {
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                     conversations,
+                    tasks_running: RunningTasks::none(),
                     stale: false,
                     total: 1,
                 }),
@@ -270,6 +271,7 @@ impl MailTestContext {
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                     total: conversations.len() as u64,
+                    tasks_running: RunningTasks::none(),
                     conversations,
                     stale: false,
                 }),
@@ -319,6 +321,7 @@ impl MailTestContext {
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                     conversations,
+                    tasks_running: RunningTasks::none(),
                     stale: false,
                     total,
                 }),
@@ -332,14 +335,15 @@ impl MailTestContext {
     #[function_name::named]
     pub async fn mock_get_message_metadata(
         &self,
-        metadata: Vec<MessageMetadata>,
+        messages: Vec<MessageMetadata>,
         expect: impl Into<Times>,
     ) {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/messages"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
-                    messages: metadata,
+                    messages,
+                    tasks_running: RunningTasks::none(),
                     stale: false,
                     total: 1,
                 }),
@@ -353,7 +357,7 @@ impl MailTestContext {
     #[function_name::named]
     pub async fn mock_get_message_metadata_and(
         &self,
-        metadata: Vec<MessageMetadata>,
+        messages: Vec<MessageMetadata>,
         and: impl FnOnce(Mock) -> Mock,
         expect: impl Into<Times>,
     ) {
@@ -361,8 +365,9 @@ impl MailTestContext {
             .and(path("/api/mail/v4/messages"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
-                    total: metadata.len() as u64,
-                    messages: metadata,
+                    total: messages.len() as u64,
+                    messages,
+                    tasks_running: RunningTasks::none(),
                     stale: false,
                 }),
             ))
@@ -375,7 +380,7 @@ impl MailTestContext {
     #[function_name::named]
     pub async fn mock_get_message_metadata_page(
         &self,
-        metadata: Vec<MessageMetadata>,
+        messages: Vec<MessageMetadata>,
         end_id: Option<MessageId>,
         end_time: Option<u64>,
         page_size: u64,
@@ -394,7 +399,8 @@ impl MailTestContext {
         mock.and(query_param("PageSize", page_size.to_string()))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
-                    messages: metadata,
+                    messages,
+                    tasks_running: RunningTasks::none(),
                     stale: false,
                     total: 1,
                 }),

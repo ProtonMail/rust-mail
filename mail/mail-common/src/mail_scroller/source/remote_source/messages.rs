@@ -1,8 +1,8 @@
-use super::{MailPaginatorJoinHandle, RemoteSource};
+use super::{MailPaginatorJoinHandle, RemoteSource, utils};
+use crate::datatypes::MessageLabelsCount;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
-use crate::datatypes::{MessageLabelsCount, SystemLabelId};
 use crate::prefetch::PrefetchJob;
 use crate::{
     MailContextError, MailUserContext,
@@ -21,6 +21,7 @@ use proton_mail_api::services::proton::{
     response_data::MessageMetadata as ApiMessageMetadata,
 };
 use stash::stash::{Bond, Tether};
+use std::ops::ControlFlow;
 use tracing::{debug, error, info, instrument};
 
 #[derive(Debug)]
@@ -209,15 +210,23 @@ impl RemoteMessageScrollerSource {
             .await?;
 
         log_response(&response);
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
 
-        if response.messages.is_empty() || stale_in_trash_or_spam {
+        let mut tether = ctx.user_stash().connection().await?;
+
+        // ---
+
+        let ControlFlow::Continue(()) =
+            utils::ensure_label_is_idle(&mut tether, local_label_id, &response.tasks_running)
+                .await?
+        else {
+            return Ok(vec![]);
+        };
+
+        if response.messages.is_empty() {
             return Ok(vec![]);
         }
 
-        let mut tether = ctx.user_stash().connection().await?;
+        // ---
 
         Self::save_messages(
             local_label_id,
@@ -271,6 +280,12 @@ impl RemoteMessageScrollerSource {
             })
             .await?;
 
+        log_response(&response);
+
+        let mut tether = ctx.user_stash().connection().await?;
+
+        // ---
+
         if !response.messages.is_empty() {
             // Unless we are filtering, end id is always the first element in the returned
             // data, even if there is are no more elements.
@@ -282,17 +297,18 @@ impl RemoteMessageScrollerSource {
             }
         }
 
-        log_response(&response);
+        let ControlFlow::Continue(()) =
+            utils::ensure_label_is_idle(&mut tether, local_label_id, &response.tasks_running)
+                .await?
+        else {
+            return Ok(vec![]);
+        };
 
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
-
-        if response.messages.is_empty() || stale_in_trash_or_spam {
+        if response.messages.is_empty() {
             return Ok(vec![]);
         }
 
-        let mut tether = ctx.user_stash().connection().await?;
+        // ---
 
         Self::save_messages(
             local_label_id,
@@ -348,20 +364,27 @@ impl RemoteMessageScrollerSource {
 
         log_response(&response);
 
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
+        let mut tether = ctx.user_stash().connection().await?;
 
-        if response.messages.is_empty() || stale_in_trash_or_spam {
+        // ---
+
+        let ControlFlow::Continue(()) =
+            utils::ensure_label_is_idle(&mut tether, local_label_id, &response.tasks_running)
+                .await?
+        else {
+            return Ok(vec![]);
+        };
+
+        if response.messages.is_empty() {
             return Ok(vec![]);
         }
+
+        // ---
 
         let message_label_counts = ctx
             .session()
             .get_messages_count_for_labels(vec![remote_label_id.clone()])
             .await?;
-
-        let mut tether = ctx.user_stash().connection().await?;
 
         let messages = Self::save_messages(
             local_label_id,

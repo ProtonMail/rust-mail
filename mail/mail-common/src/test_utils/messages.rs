@@ -8,7 +8,7 @@ use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::prelude::{
     AddressSubPackage, AuthInput, IncomingDefault, Package, PostCancelSendResponse,
     PostIncomingDefaultResponse, PostSendDirectMessageResponse, PostSendRequest,
-    PutIncomingDefaultResponse, PutMessageHamResponse,
+    PutIncomingDefaultResponse, PutMessageHamResponse, RunningTasks,
 };
 use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
@@ -779,8 +779,8 @@ pub struct GetMessagesMock<'a> {
     label_id: Option<String>,
     keyword: Option<String>,
     end_id: Option<String>,
-    expect: Option<Times>,
     conversation_ids: Option<Vec<ConversationId>>,
+    alter: Option<Box<dyn FnOnce(Mock) -> Mock>>,
 }
 
 impl<'a> GetMessagesMock<'a> {
@@ -791,8 +791,8 @@ impl<'a> GetMessagesMock<'a> {
             label_id: None,
             keyword: None,
             end_id: None,
-            expect: None,
             conversation_ids: None,
+            alter: None,
         }
     }
 
@@ -819,16 +819,22 @@ impl<'a> GetMessagesMock<'a> {
         self
     }
 
-    pub fn expect(mut self, expect: impl Into<Times>) -> Self {
-        self.expect = Some(expect.into());
+    pub fn alter(mut self, f: impl FnOnce(Mock) -> Mock + 'static) -> Self {
+        self.alter = Some(Box::new(f));
         self
     }
 
     pub async fn respond_with(self, messages: Vec<MessageMetadata>) {
-        self.respond_with_ex(messages.len(), messages).await;
+        self.respond_with_ex(messages.len(), messages, RunningTasks::none())
+            .await;
     }
 
-    pub async fn respond_with_ex(self, total: usize, messages: Vec<MessageMetadata>) {
+    pub async fn respond_with_ex(
+        self,
+        total: usize,
+        messages: Vec<MessageMetadata>,
+        tasks_running: RunningTasks,
+    ) {
         let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/messages"));
 
         if let Some(label_id) = self.label_id {
@@ -839,20 +845,32 @@ impl<'a> GetMessagesMock<'a> {
             mock = mock.and(query_param("EndID", end_id));
         }
 
+        if let Some(cnv_ids) = self.conversation_ids {
+            for (cnv_idx, cnv_id) in cnv_ids.into_iter().enumerate() {
+                mock = mock.and(query_param(
+                    format!("ConversationID[{cnv_idx}]"),
+                    cnv_id.to_string(),
+                ));
+            }
+        }
+
         if let Some(keyword) = self.keyword {
             mock = mock.and(query_param("Keyword", keyword));
         }
 
-        mock.respond_with(
-            ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
-                total: total.try_into().unwrap(),
+        let mut mock = mock.respond_with(ResponseTemplate::new(200).set_body_json(
+            GetMessagesResponse {
                 messages,
+                tasks_running,
                 stale: false,
-            }),
-        )
-        .expect(self.expect.unwrap_or_else(|| 1.into()))
-        .named(self.name)
-        .mount(self.ctx.mock_server())
-        .await;
+                total: total.try_into().unwrap(),
+            },
+        ));
+
+        if let Some(f) = self.alter {
+            mock = f(mock);
+        }
+
+        mock.named(self.name).mount(self.ctx.mock_server()).await;
     }
 }

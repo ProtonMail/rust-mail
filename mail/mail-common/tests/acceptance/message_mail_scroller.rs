@@ -5,17 +5,22 @@ use proton_core_common::{
     models::{Address, Label, ModelIdExtension},
 };
 use proton_mail_api::services::proton::{
-    common::MessageId, prelude::GetMessagesResponse,
+    common::MessageId,
+    prelude::{GetMessagesResponse, RunningTasks},
     response_data::MessageMetadata as ApiMessageMetadata,
 };
-use proton_mail_common::test_utils::scroller::{
-    StoreLabeledModelMap, TestScroller, save_single_message, test_messages,
+use proton_mail_common::test_utils::{
+    scroller::{StoreLabeledModelMap, TestScroller, save_single_message, test_messages},
+    test_context::MailUserContextTestExtension,
 };
-use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
 use proton_mail_common::{api_message_meta, datatypes::labels::ScrollOrderField};
 use proton_mail_common::{
     datatypes::ReadFilter,
     models::{Conversation, Message, MessageCounters, MessageScrollData},
+};
+use proton_mail_common::{
+    datatypes::SystemLabelId,
+    test_utils::{init::Params as TestParams, test_context::MailTestContext},
 };
 use proton_mail_common::{message, msg_id};
 use velcro::hash_map;
@@ -127,7 +132,7 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
     );
 
     ctx.mock_get_messages()
-        .expect(1..=4)
+        .alter(|mock| mock.expect(3))
         .respond_with(vec![message])
         .await;
 
@@ -508,6 +513,141 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
     assert!(!test_scroller.has_more().await.unwrap());
 }
 
+/// Make sure that deleting all messages from a label causes that label to
+/// appear empty until the server confirms that messages are actually gone.
+///
+/// This is a ~copy-pasted, comment-less variant of the same test we've got for
+/// conversations - please take a look at that test for details.
+#[tokio::test]
+async fn delete_all() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let tether = user_ctx.user_stash().connection().await.unwrap();
+    let label = SystemLabel::Trash.load(&tether).await.unwrap().unwrap();
+
+    // ---
+    // [1]
+
+    let params = setup_api_message_pages_ext(&ctx, 10, 0, SystemLabel::Trash, true).await;
+
+    let test_msg = api_message_meta!(
+        id: "mymsg".into(),
+        conversation_id: params.conversations[0].id.clone(),
+        address_id: params.addresses[0].id.clone(),
+        label_ids: vec![SystemLabel::Trash.remote_id()]
+    );
+
+    ctx.setup_user(params.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
+
+    // ---
+
+    let mut target = TestScroller::messages(&user_ctx, label.id(), 10)
+        .await
+        .unwrap();
+
+    target.fetch_more().unwrap();
+
+    assert_eq!(
+        vec![
+            "mymsg_19", "mymsg_18", "mymsg_17", "mymsg_16", "mymsg_15", "mymsg_14", "mymsg_13",
+            "mymsg_12", "mymsg_11", "mymsg_10",
+        ],
+        target
+            .wait_for_update()
+            .await
+            .unwrap()
+            .unwrap()
+            .into_iter()
+            .map(|msg| msg.remote_id.unwrap().to_string())
+            .collect::<Vec<_>>()
+    );
+
+    // ---
+    // [2]
+
+    ctx.mock_empty_label(LabelId::trash()).await;
+
+    let queue = user_ctx.action_queue();
+
+    assert!(label.is_idle(&tether).await.unwrap());
+
+    Message::action_delete_all_in_label(queue, label.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    user_ctx.execute_all_actions().await.unwrap();
+
+    assert!(label.is_busy(&tether).await.unwrap());
+    assert!(target.wait_for_update().await.unwrap().unwrap().is_empty());
+
+    // ---
+    // [3]
+
+    let msgs: Vec<_> = (0..10)
+        .map(|i| {
+            let mut msg = test_msg.clone();
+
+            msg.id = format!("{}_{}", msg.id, 20 + i).into();
+            msg.order = 20 + i;
+            msg.time = msg.order + 1;
+            msg.snooze_time = msg.time;
+            msg
+        })
+        .collect();
+
+    ctx.mock_get_messages()
+        .alter(|mock| mock.expect(1).with_priority(4))
+        .respond_with_ex(msgs.len(), msgs, RunningTasks::some())
+        .await;
+
+    user_ctx.force_event_loop_poll().await.unwrap();
+
+    assert!(target.wait_for_update().await.unwrap().is_none());
+    assert!(label.is_busy(&tether).await.unwrap());
+
+    // ---
+    // [4]
+
+    let msgs: Vec<_> = (0..5)
+        .map(|i| {
+            let mut msg = test_msg.clone();
+
+            msg.id = format!("{}_{}", msg.id, 100 + i).into();
+            msg.order = 100 + i;
+            msg.time = msg.order + 1;
+            msg.snooze_time = msg.time;
+            msg
+        })
+        .collect();
+
+    ctx.mock_get_messages()
+        .alter(|mock| mock.expect(1).with_priority(3))
+        .respond_with_ex(msgs.len(), msgs, RunningTasks::none())
+        .await;
+
+    user_ctx.force_event_loop_poll().await.unwrap();
+
+    assert_eq!(
+        vec![
+            "mymsg_104",
+            "mymsg_103",
+            "mymsg_102",
+            "mymsg_101",
+            "mymsg_100",
+        ],
+        target
+            .wait_for_update()
+            .await
+            .unwrap()
+            .unwrap()
+            .into_iter()
+            .map(|msg| msg.remote_id.unwrap().to_string())
+            .collect::<Vec<_>>()
+    );
+}
+
 async fn setup_api_message_pages(
     ctx: &MailTestContext,
     page_size: usize,
@@ -606,7 +746,7 @@ async fn setup_api_message_pages_ext(
     .await;
 
     ctx.mock_get_messages()
-        .expect(1..3)
+        .alter(|mock| mock.expect(1..3))
         .respond_with(first_page)
         .await;
 
@@ -632,6 +772,7 @@ pub async fn mock_api_sync_previous_messages_page(
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
                 messages: vec![],
+                tasks_running: RunningTasks::none(),
                 stale: false,
                 total: 0,
             }),
@@ -660,6 +801,7 @@ pub async fn mock_get_messages_page(
             ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
                 total: messages.len() as u64,
                 messages,
+                tasks_running: RunningTasks::none(),
                 stale: false,
             }),
         )

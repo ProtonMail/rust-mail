@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use proton_core_api::services::proton::{AddressId, LabelId};
+use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_core_common::test_utils::account::TEST_ADDRESS_ID;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
@@ -19,19 +20,40 @@ async fn smoke() {
     })
     .await;
 
+    let queue = user_ctx.action_queue();
     let tether = user_ctx.user_stash().connection().await.unwrap();
+    let label = SystemLabel::Inbox.load(&tether).await.unwrap().unwrap();
 
-    let local_label_id = Label::remote_id_counterpart(LabelId::inbox(), &tether)
+    // ---
+
+    assert!(label.is_idle(&tether).await.unwrap());
+
+    Message::action_delete_all_in_label(queue, label.id(), &tether)
         .await
         .unwrap()
         .unwrap();
 
-    Message::action_delete_all_in_label(user_ctx.action_queue(), local_label_id, &tether)
-        .await
-        .unwrap();
+    // ---
 
-    let messages = Message::in_label(local_label_id, &tether).await.unwrap();
-    assert!(messages.is_empty());
+    assert!(label.is_busy(&tether).await.unwrap());
+
+    // Make sure we don't allow to schedule parallel delete-alls - see the
+    // action's constructor for more details.
+    assert!(
+        Message::action_delete_all_in_label(queue, label.id(), &tether)
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    // ---
+
+    assert!(
+        Message::in_label(label.id(), &tether)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 
     user_ctx.execute_single_action().await.unwrap();
 }
@@ -67,6 +89,7 @@ mod rebase {
         let queued =
             Message::action_delete_all_in_label(user_ctx.action_queue(), local_label_id, &tether)
                 .await
+                .unwrap()
                 .unwrap();
 
         assert_eq!(

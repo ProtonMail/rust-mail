@@ -9,7 +9,7 @@ use crate::datatypes::{
     ALL_LABEL_TYPES, CONTACT_LABEL_TYPES, InitializationKey, LabelColor, LabelType, LocalLabelId,
     MAIL_LABEL_TYPES,
 };
-use crate::models::ModelIdExtension;
+use crate::models::{ModelExtension, ModelIdExtension};
 use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::Label as ApiLabel;
@@ -26,7 +26,7 @@ use stash::utils::{MapToSql as _, placeholders};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use topological_sort::TopologicalSort;
-use tracing::{error, instrument};
+use tracing::{error, info, instrument};
 
 #[derive(Debug, Error)]
 pub enum LabelError {
@@ -304,6 +304,43 @@ impl Label {
         };
         Ok(label_id)
     }
+
+    #[instrument(skip_all)]
+    pub async fn is_idle(&self, tether: &Tether) -> Result<bool, LabelError> {
+        Ok(!self.is_busy(tether).await?)
+    }
+
+    #[instrument(skip_all)]
+    pub async fn is_busy(&self, tether: &Tether) -> Result<bool, LabelError> {
+        Ok(self.as_busy(tether).await?.is_some())
+    }
+
+    #[instrument(skip_all)]
+    pub async fn as_busy(&self, tether: &Tether) -> Result<Option<BusyLabel>, LabelError> {
+        Ok(BusyLabel::load(self.id(), tether).await?)
+    }
+
+    #[instrument(skip_all)]
+    pub async fn mark_busy(&self, bond: &Bond<'_>) -> Result<(), LabelError> {
+        let id = self.id();
+
+        info!(?id, "Marking label as busy");
+
+        BusyLabel { id }.save(bond).await?;
+
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    pub async fn mark_idle(&self, bond: &Bond<'_>) -> Result<(), LabelError> {
+        info!(id = ?self.id(), "Marking label as idle");
+
+        if let Some(busy) = self.as_busy(bond).await? {
+            busy.delete(bond).await?;
+        }
+
+        Ok(())
+    }
 }
 
 impl ModelHooks for Label {
@@ -415,9 +452,26 @@ impl Label {
     }
 }
 
+/// Keeps track of labels for which a `delete all` action is running.
+///
+/// Basically, if this record exists, then label is currently being emptied -
+/// this record gets created when you schedule a `delete all` action and later
+/// gets removed once we get a confirmation from the server that the action has
+/// completed.
+///
+/// See scroller's tests for more details - look for tests related to the
+/// "delete all" functionality.
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[TableName("busy_labels")]
+pub struct BusyLabel {
+    #[IdField]
+    pub id: LocalLabelId,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{datatypes::SystemLabel, test_utils::test_context::TestContext};
     use std::cmp::Ordering;
 
     fn api_label(id: &str, parent_id: Option<&str>) -> ApiLabel {
@@ -426,6 +480,17 @@ mod tests {
             parent_id: parent_id.map(Into::into),
             ..ApiLabel::test_default()
         }
+    }
+
+    async fn system_label(tether: &mut Tether, label: SystemLabel) -> Label {
+        let mut label = Label::from(api_label(&label.remote_id(), None));
+
+        tether
+            .tx(async |bond| label.save(bond).await)
+            .await
+            .unwrap();
+
+        label
     }
 
     #[test]
@@ -465,5 +530,51 @@ mod tests {
 
         // `f` depends on `a`, so `a` must be processed first
         assert("a", Ordering::Less, "f");
+    }
+
+    #[tokio::test]
+    async fn busy() {
+        let ctx = TestContext::new().await;
+        let mut tether = ctx.user_context().await.stash().connection().await.unwrap();
+
+        let inbox = system_label(&mut tether, SystemLabel::Inbox).await;
+        let trash = system_label(&mut tether, SystemLabel::Trash).await;
+
+        // ---
+
+        assert!(inbox.is_idle(&tether).await.unwrap());
+        assert!(!inbox.is_busy(&tether).await.unwrap());
+
+        assert!(trash.is_idle(&tether).await.unwrap());
+        assert!(!trash.is_busy(&tether).await.unwrap());
+
+        // ---
+
+        tether
+            .tx(async |bond| trash.mark_busy(bond).await)
+            .await
+            .unwrap();
+
+        assert!(inbox.is_idle(&tether).await.unwrap());
+        assert!(!inbox.is_busy(&tether).await.unwrap());
+
+        assert!(!trash.is_idle(&tether).await.unwrap());
+        assert!(trash.is_busy(&tether).await.unwrap());
+
+        // ---
+
+        tether
+            .tx(async |bond| {
+                inbox.mark_idle(bond).await.unwrap();
+                trash.mark_idle(bond).await
+            })
+            .await
+            .unwrap();
+
+        assert!(inbox.is_idle(&tether).await.unwrap());
+        assert!(!inbox.is_busy(&tether).await.unwrap());
+
+        assert!(trash.is_idle(&tether).await.unwrap());
+        assert!(!trash.is_busy(&tether).await.unwrap());
     }
 }
