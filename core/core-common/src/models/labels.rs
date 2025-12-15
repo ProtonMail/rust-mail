@@ -14,8 +14,8 @@ use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::Label as ApiLabel;
 use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::PatchLabelRequest;
 use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::services::proton::{PatchLabelRequest, PostLabelsRequest};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::{Connection, Transaction};
 use stash::macros::Model;
@@ -96,25 +96,6 @@ impl ModelIdExtension for Label {
 
 impl Label {
     pub const INIT_KEY: InitializationKey = InitializationKey::new("labels");
-
-    pub async fn create<API: ProtonCore>(
-        name: String,
-        color: String,
-        label_type: LabelType,
-        parent_id: Option<LabelId>,
-        api: &API,
-    ) -> Result<Label, ApiServiceError> {
-        Ok(api
-            .post_labels(PostLabelsRequest {
-                parent_id,
-                color,
-                label_type: label_type.into(),
-                name,
-            })
-            .await?
-            .label
-            .into())
-    }
 
     pub async fn all_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
     where
