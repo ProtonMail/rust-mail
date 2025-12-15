@@ -522,6 +522,7 @@ async fn setup_api_message_pages(
     )
     .await
 }
+
 async fn setup_api_message_pages_ext(
     ctx: &MailTestContext,
     page_size: usize,
@@ -623,15 +624,16 @@ pub async fn mock_api_sync_previous_messages_page(
         .reverse()
         .as_api_desc()
         .unwrap();
+
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))
         .and(query_param_contains("AnchorID", first_id))
         .and(query_param_contains("Desc", (desc as u8).to_string()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
-                total: 0,
                 messages: vec![],
                 stale: false,
+                total: 0,
             }),
         )
         .expect(expect)
@@ -649,6 +651,7 @@ pub async fn mock_get_messages_page(
     expect: impl Into<Times>,
 ) {
     let desc = ScrollOrderDir::for_label(label).as_api_desc().unwrap();
+
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))
         .and(query_param_contains("AnchorID", last_id))

@@ -1,21 +1,12 @@
 use crate::datatypes::SystemLabelId;
-use crate::test_utils::test_context::MailTestContext;
-use proton_core_api::services::proton::{
-    Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
-    Label as ApiLabel,
-};
-use proton_core_api::services::proton::{
-    AddressFlags, AddressSignedKeyList as ApiAddressSignedKeyList,
-};
-use proton_core_api::services::proton::{AddressId, LabelId};
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
-use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
 use proton_mail_api::services::proton::common::{AttachmentId, ConversationId};
 use proton_mail_api::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
-    MessageMetadata, MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
+    MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
 };
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
@@ -24,8 +15,10 @@ use std::sync::LazyLock;
 
 pub static MY_LABEL_ID1: LazyLock<LabelId> = LazyLock::new(|| LabelId::from("MyLabelID1"));
 pub static MY_LABEL_ID2: LazyLock<LabelId> = LazyLock::new(|| LabelId::from("MyLabelID2"));
+
 pub static MY_ATTACHMENT_ID: LazyLock<AttachmentId> =
     LazyLock::new(|| AttachmentId::from("MyAttachmentID1"));
+
 pub static MY_CONVERSATION_ID: LazyLock<ConversationId> =
     LazyLock::new(|| ConversationId::from("MyConversationID"));
 
@@ -147,119 +140,6 @@ macro_rules! api_conversation {
             ..ApiConversation::test_default()
         }
     }};
-}
-
-impl MailTestContext {
-    #[must_use]
-    pub fn get_test_labels(&self) -> Vec<ApiLabel> {
-        let label1 = ApiLabel {
-            id: "Label1".into(),
-            name: "Label1".into(),
-            ..ApiLabel::test_default()
-        };
-        let label2 = ApiLabel {
-            id: "Label2".into(),
-            name: "Label2".into(),
-            ..ApiLabel::test_default()
-        };
-        let label3 = ApiLabel {
-            id: "Label3".into(),
-            name: "Label3".into(),
-            ..ApiLabel::test_default()
-        };
-
-        vec![label1, label2, label3]
-    }
-
-    #[must_use]
-    pub fn default_address(&self) -> ApiAddress {
-        ApiAddress {
-            id: "".into(),
-            address_type: ApiAddressType::Original,
-            catch_all: Default::default(),
-            display_name: String::default(),
-            domain_id: Some(String::default()),
-            email: String::default(),
-            keys: CryptoAddressKeys(vec![]),
-            order: Default::default(),
-            proton_mx: Default::default(),
-            receive: Default::default(),
-            send: Default::default(),
-            signature: String::default(),
-            signed_key_list: ApiAddressSignedKeyList::default(),
-            status: ApiAddressStatus::Enabled,
-            flags: AddressFlags::default(),
-        }
-    }
-
-    #[must_use]
-    pub fn get_test_addrs(&self) -> Vec<ApiAddress> {
-        let addr1 = ApiAddress {
-            id: "Addr1".into(),
-            email: "foo@bar".into(),
-            ..self.default_address()
-        };
-        let addr2 = ApiAddress {
-            id: "Addr2".into(),
-            email: "foo@baz".into(),
-            ..self.default_address()
-        };
-
-        vec![addr1, addr2]
-    }
-
-    #[must_use]
-    pub fn default_conv_label(&self) -> ApiConversationLabel {
-        ApiConversationLabel {
-            id: "".into(),
-            context_expiration_time: Default::default(),
-            context_num_attachments: Default::default(),
-            context_num_messages: Default::default(),
-            context_num_unread: Default::default(),
-            context_size: Default::default(),
-            context_snooze_time: Default::default(),
-            context_time: Default::default(),
-        }
-    }
-
-    #[must_use]
-    pub fn get_test_convers(&self) -> Vec<ApiConversation> {
-        vec![ApiConversation {
-            id: "Conv1".into(),
-            labels: vec![
-                ApiConversationLabel {
-                    id: "Label1".into(),
-                    ..self.default_conv_label()
-                },
-                ApiConversationLabel {
-                    id: "Label2".into(),
-                    ..self.default_conv_label()
-                },
-                ApiConversationLabel {
-                    id: "Label3".into(),
-                    ..self.default_conv_label()
-                },
-            ],
-            ..ApiConversation::test_default()
-        }]
-    }
-
-    #[must_use]
-    pub fn get_test_msgs(&self) -> Vec<MessageMetadata> {
-        let m1 = MessageMetadata {
-            id: "Message1".into(),
-            address_id: AddressId::from("Addr1"),
-            label_ids: vec![LabelId::from("Label1"), LabelId::from("Label2")],
-            ..MessageMetadata::test_default()
-        };
-        let m2 = MessageMetadata {
-            id: "Message2".into(),
-            address_id: AddressId::from("Addr2"),
-            label_ids: vec![LabelId::from("Label2"), LabelId::from("Label3")],
-            ..MessageMetadata::test_default()
-        };
-        vec![m1, m2]
-    }
 }
 
 /// Can panic if the local conversation `id` is not set, the remote
