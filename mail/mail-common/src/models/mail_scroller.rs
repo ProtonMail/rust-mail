@@ -212,7 +212,7 @@ impl ScrollData for MessageScrollData {
         };
 
         let cursor_constraint = match order_field {
-            ScrollOrderField::Time => format!(
+            ScrollOrderField::Time => formatdoc!(
                 "(
                 {time_column} {time_op} {time}
                 OR
@@ -245,6 +245,7 @@ impl ScrollData for MessageScrollData {
             AND {cursor_constraint}
             "
         );
+
         if require_remote_id {
             query += " AND messages.remote_id IS NOT NULL"
         }
@@ -1142,6 +1143,7 @@ impl<T: ScrollData> ScrollQuery<T> {
             self.cursor.time,
             self.cursor.snooze_time,
         );
+
         let items = T::Model::find(
             query,
             params![self.cursor.local_label_id, self.cursor.display_order],

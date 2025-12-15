@@ -154,7 +154,7 @@ impl SearchScrollerSource {
         Ok(Some(task))
     }
 
-    #[instrument(skip_all, fields(label_id=?remote_label_id) )]
+    #[instrument(skip_all)]
     async fn sync_first_page(
         session: &Session,
         total: &Mutex<u64>,
@@ -196,7 +196,7 @@ impl SearchScrollerSource {
         Self::save_messages(response.messages, session, tether, queue).await
     }
 
-    #[instrument(skip_all, fields(label_id=?remote_label_id) )]
+    #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments)]
     async fn sync_next_page(
         session: &Session,

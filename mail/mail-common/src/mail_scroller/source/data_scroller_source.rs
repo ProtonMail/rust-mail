@@ -292,7 +292,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
 impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     type Item = T::Item;
 
-    #[instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
+    #[instrument(skip_all)]
     async fn initialize(
         &mut self,
         ctx: &MailUserContext,
@@ -346,7 +346,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         Ok(has_more)
     }
 
-    #[instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
+    #[instrument(skip_all)]
     async fn sync_next(
         &mut self,
         ctx: &MailUserContext,
@@ -430,7 +430,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         Ok((items, task))
     }
 
-    #[instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
+    #[instrument(skip_all)]
     async fn sync_new(
         &mut self,
         ctx: &MailUserContext,
