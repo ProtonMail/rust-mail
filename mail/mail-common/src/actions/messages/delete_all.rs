@@ -1,6 +1,6 @@
 use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
-use crate::models::Message;
+use crate::models::{LabelExt, Message};
 use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,

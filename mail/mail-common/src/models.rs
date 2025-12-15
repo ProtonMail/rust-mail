@@ -28,6 +28,7 @@
 //!
 mod attachment;
 pub mod attachment_cache;
+mod busy_label;
 mod conversation;
 mod custom_settings;
 mod draft;
@@ -41,6 +42,7 @@ mod network;
 mod rollback_item;
 
 pub use self::attachment::*;
+pub use self::busy_label::*;
 pub use self::conversation::*;
 pub use self::custom_settings::*;
 pub use self::draft::*;

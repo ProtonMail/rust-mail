@@ -3,6 +3,7 @@ use crate::datatypes::MessageLabelsCount;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::models::LabelExt;
 use crate::prefetch::PrefetchJob;
 use crate::{
     MailContextError, MailUserContext,

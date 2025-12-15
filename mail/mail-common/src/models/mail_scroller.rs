@@ -4,12 +4,12 @@ use crate::datatypes::LocalMessageId;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::mail_scroller::MailScrollerItem;
-use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
+use crate::models::{Conversation, ConversationLabel, MailBusyLabel, Message, MessageLabel};
 use anyhow::anyhow;
 use indoc::formatdoc;
 use proton_core_api::services::proton::ProtonIdMarker;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
-use proton_core_common::models::{BusyLabel, ModelExtension};
+use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::prelude::{ConversationId, MessageId};
 use stash::macros::Model;
 use stash::orm::Model;
@@ -348,7 +348,7 @@ impl ScrollData for MessageScrollData {
             Message::table_name().to_owned(),
             MessageLabel::table_name().to_owned(),
             MessageCounters::table_name().to_owned(),
-            BusyLabel::table_name().to_owned(),
+            MailBusyLabel::table_name().to_owned(),
         ]
     }
 }
@@ -625,7 +625,7 @@ impl ScrollData for ConversationScrollData {
             Conversation::table_name().to_owned(),
             ConversationLabel::table_name().to_owned(),
             ConversationCounters::table_name().to_owned(),
-            BusyLabel::table_name().to_owned(),
+            MailBusyLabel::table_name().to_owned(),
         ]
     }
 }
@@ -1135,7 +1135,7 @@ impl<T: ScrollData> ScrollQuery<T> {
     }
 
     pub async fn find(&self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
-        if BusyLabel::load(self.cursor.local_label_id, tether)
+        if MailBusyLabel::load(self.cursor.local_label_id, tether)
             .await?
             .is_some()
         {
@@ -1164,7 +1164,7 @@ impl<T: ScrollData> ScrollQuery<T> {
     }
 
     pub async fn count(&self, tether: &Tether) -> Result<u64, StashError> {
-        if BusyLabel::load(self.cursor.local_label_id, tether)
+        if MailBusyLabel::load(self.cursor.local_label_id, tether)
             .await?
             .is_some()
         {

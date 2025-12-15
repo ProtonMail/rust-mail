@@ -6,7 +6,7 @@ use proton_core_common::test_utils::account::TEST_ADDRESS_ID;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::Message;
+use proton_mail_common::models::{LabelExt, Message};
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;

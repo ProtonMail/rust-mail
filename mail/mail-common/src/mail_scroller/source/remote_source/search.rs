@@ -2,6 +2,7 @@ use super::MailPaginatorJoinHandle;
 use crate::AppError;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::models::MailBusyLabel;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, SearchOptions},
@@ -12,7 +13,7 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
-use proton_core_common::models::{BusyLabel, Label, ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
     response_data::MessageMetadata as ApiMessageMetadata,
@@ -445,7 +446,7 @@ impl MailScrollerSource for SearchScrollerSource {
             Message::table_name().to_owned(),
             MessageLabel::table_name().to_owned(),
             MessageCounters::table_name().to_owned(),
-            BusyLabel::table_name().to_owned(),
+            MailBusyLabel::table_name().to_owned(),
         ]
     }
 

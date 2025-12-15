@@ -22,7 +22,9 @@ use proton_mail_common::datatypes::{
     SystemLabelId,
     labels::{ScrollOrderDir, ScrollOrderField},
 };
-use proton_mail_common::models::{CachedScrollData, ConversationLabel, LabelWithCounters, Message};
+use proton_mail_common::models::{
+    CachedScrollData, ConversationLabel, LabelExt, LabelWithCounters, Message,
+};
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
     scroller::{

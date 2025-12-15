@@ -1,4 +1,4 @@
-use crate::MailContextError;
+use crate::{MailContextError, models::LabelExt};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::LocalLabelId,

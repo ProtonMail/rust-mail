@@ -9,10 +9,6 @@ use proton_mail_api::services::proton::{
     prelude::{GetMessagesResponse, RunningTasks},
     response_data::MessageMetadata as ApiMessageMetadata,
 };
-use proton_mail_common::test_utils::{
-    scroller::{StoreLabeledModelMap, TestScroller, save_single_message, test_messages},
-    test_context::MailUserContextTestExtension,
-};
 use proton_mail_common::{api_message_meta, datatypes::labels::ScrollOrderField};
 use proton_mail_common::{
     datatypes::ReadFilter,
@@ -23,6 +19,13 @@ use proton_mail_common::{
     test_utils::{init::Params as TestParams, test_context::MailTestContext},
 };
 use proton_mail_common::{message, msg_id};
+use proton_mail_common::{
+    models::LabelExt,
+    test_utils::{
+        scroller::{StoreLabeledModelMap, TestScroller, save_single_message, test_messages},
+        test_context::MailUserContextTestExtension,
+    },
+};
 use velcro::hash_map;
 
 use proton_mail_common::datatypes::labels::ScrollOrderDir;

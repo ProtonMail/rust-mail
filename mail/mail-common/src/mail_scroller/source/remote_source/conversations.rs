@@ -3,6 +3,7 @@ use crate::datatypes::ConversationLabelsCount;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::models::LabelExt;
 use crate::models::Message;
 use crate::prefetch::PrefetchJob;
 use crate::{
