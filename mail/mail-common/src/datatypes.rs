@@ -78,7 +78,7 @@ use stash::exports::{
     Connection, FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Transaction,
     Value, ValueRef,
 };
-use stash::sql_using_serde;
+use stash::{params, sql_using_serde};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -897,6 +897,19 @@ impl ConversationLabelsCount {
         }
         Ok(())
     }
+
+    //TODO(ET-5589): This should be removed
+    pub(crate) async fn fake_update(
+        label_id: LocalLabelId,
+        tx: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        tx.execute(
+            "UPDATE conversation_counters SET total=total, unread=unread WHERE local_label_id=?",
+            params![label_id],
+        )
+        .await?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1488,6 +1501,19 @@ impl MessageLabelsCount {
                 count.unread,
             ))?;
         }
+        Ok(())
+    }
+
+    //TODO(ET-5589): This should be removed
+    pub(crate) async fn fake_update(
+        label_id: LocalLabelId,
+        tx: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        tx.execute(
+            "UPDATE message_counters SET total=total, unread=unread WHERE local_label_id=?",
+            params![label_id],
+        )
+        .await?;
         Ok(())
     }
 }

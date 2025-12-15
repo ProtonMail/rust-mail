@@ -7,7 +7,9 @@ use proton_core_common::{
     models::{Label, ModelIdExtension},
 };
 use proton_mail_api::services::proton::common::MessageId;
-use proton_mail_api::services::proton::prelude::{ConversationEvent, MailEvent};
+use proton_mail_api::services::proton::prelude::{
+    ConversationEvent, GetConversationsCountResponse, MailEvent,
+};
 use proton_mail_api::services::proton::response_data::ConversationCount;
 use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
@@ -20,7 +22,7 @@ use proton_mail_common::datatypes::{
     SystemLabelId,
     labels::{ScrollOrderDir, ScrollOrderField},
 };
-use proton_mail_common::models::{CachedScrollData, ConversationLabel, Message};
+use proton_mail_common::models::{CachedScrollData, ConversationLabel, LabelWithCounters, Message};
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
     scroller::{
@@ -1325,6 +1327,9 @@ async fn test_conversation_mail_scroller_fetch_new() {
     // Mock previous page
     setup_api_sync_previous_page(&ctx, "myconv_0", None, &remote_label_id, 1).await;
     setup_api_sync_previous_page(&ctx, "myconv", Some(previous_page), &remote_label_id, 1).await;
+    // Counters are also fetched on previous page
+    setup_api_sync_conv_label_counters(&ctx, &remote_label_id, 1, 1, 5).await;
+
     // Mock next page
     mock_get_conversations_page(&ctx, vec![], "myconv", &remote_label_id, 1).await;
     // Mock first page
@@ -1365,6 +1370,12 @@ async fn test_conversation_mail_scroller_fetch_new() {
     test_scroller.fetch_new().unwrap();
     test_scroller.match_next_update(TestUpdate::None).await;
     assert_eq!(test_scroller.items().len(), 2);
+    let tether = user_ctx.user_stash().connection().await.unwrap();
+    let label = LabelWithCounters::load(local_label_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(label.unread_conv, 5);
 }
 
 #[tokio::test]
@@ -2029,6 +2040,33 @@ async fn setup_api_sync_previous_page(
         )
         .expect(expect)
         .named(function_name!())
+        .mount(ctx.mock_server())
+        .await;
+}
+
+#[function_name::named]
+async fn setup_api_sync_conv_label_counters(
+    ctx: &MailTestContext,
+    label_id: &LabelId,
+    expect: impl Into<Times>,
+    total: u64,
+    unread: u64,
+) {
+    Mock::given(method("GET"))
+        .and(path("/api/mail/v4/conversations/count"))
+        .and(query_param_contains("LabelIDs[0]", label_id.as_str()))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetConversationsCountResponse {
+                counts: vec![ConversationCount {
+                    label_id: label_id.clone(),
+                    total,
+                    unread,
+                }],
+            }),
+        )
+        .expect(expect)
+        .named(function_name!())
+        .with_priority(1)
         .mount(ctx.mock_server())
         .await;
 }
