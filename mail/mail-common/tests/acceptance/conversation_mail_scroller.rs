@@ -2027,6 +2027,7 @@ async fn setup_api_sync_previous_page(
         .reverse()
         .as_api_desc()
         .unwrap();
+
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
         .and(query_param_contains("AnchorID", first_id))
@@ -2077,6 +2078,7 @@ fn create_api_conversation_page(
 ) -> Vec<ApiConversation> {
     let params = TestParams::default_basic();
     let test_conversation = params.conversations.clone().pop().unwrap();
+
     // Conversations are returned and displayed in reversed order
     range
         .into()
@@ -2144,6 +2146,7 @@ pub async fn mock_get_conversations_page(
     expect: impl Into<Times>,
 ) {
     let desc = ScrollOrderDir::for_label(label).as_api_desc().unwrap();
+
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
         .and(query_param_contains("AnchorID", last_id))
@@ -2171,6 +2174,7 @@ pub async fn mock_not_responsive_api(ctx: &MailTestContext) {
         .named(function_name!())
         .mount(ctx.mock_server())
         .await;
+
     Mock::given(method("GET"))
         .and(path("/api/core/v4/tests/ping"))
         .respond_with_err(|_: &Request| {
@@ -2178,6 +2182,7 @@ pub async fn mock_not_responsive_api(ctx: &MailTestContext) {
         })
         .mount(ctx.mock_server())
         .await;
+
     ctx.mail_context
         .network_monitor_service()
         .update_os_network_status(OsNetworkStatus::Offline);
