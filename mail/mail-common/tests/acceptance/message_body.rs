@@ -38,7 +38,7 @@ async fn mailbox_message_body_simple() {
 
     // Will be called only once
     ctx.mock_get_messages()
-        .expect(1)
+        .alter(|mock| mock.expect(1))
         .respond_with(vec![message.metadata.clone()])
         .await;
 

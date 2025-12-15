@@ -1,8 +1,9 @@
-use super::{MailPaginatorJoinHandle, RemoteSource};
+use super::{MailPaginatorJoinHandle, RemoteSource, utils};
+use crate::datatypes::ConversationLabelsCount;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
-use crate::datatypes::{ConversationLabelsCount, SystemLabelId};
+use crate::models::LabelExt;
 use crate::models::Message;
 use crate::prefetch::PrefetchJob;
 use crate::{
@@ -18,6 +19,8 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
+use proton_core_common::models::Label;
+use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::prelude::GetMessagesOptions;
 use proton_mail_api::services::proton::{
     ProtonMail,
@@ -26,6 +29,7 @@ use proton_mail_api::services::proton::{
     response_data::MessageMetadata as ApiMessageMetadata,
 };
 use stash::stash::{Bond, Tether};
+use std::ops::ControlFlow;
 use tracing::{debug, error, info, instrument};
 
 #[derive(Debug)]
@@ -216,13 +220,27 @@ impl RemoteConversationScrollerSource {
         .await?;
 
         log_response(&response);
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
 
-        if response.conversations.is_empty() || stale_in_trash_or_spam {
+        let mut tether = ctx.user_stash().connection().await?;
+
+        // ---
+
+        let ControlFlow::Continue(()) = utils::ensure_label_is_idle(
+            &mut tether,
+            local_label_id,
+            &remote_label_id,
+            &response.tasks_running,
+        )
+        .await?
+        else {
+            return Ok(vec![]);
+        };
+
+        if response.conversations.is_empty() {
             return Ok(vec![]);
         }
+
+        // ---
 
         let context_time = Self::context_time(&response, unread);
 
@@ -231,8 +249,6 @@ impl RemoteConversationScrollerSource {
             .into_iter()
             .map(|c| c.into())
             .collect();
-
-        let mut tether = ctx.user_stash().connection().await?;
 
         Self::save_conversations(
             local_label_id,
@@ -296,13 +312,27 @@ impl RemoteConversationScrollerSource {
         .await?;
 
         log_response(&response);
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
 
-        if response.conversations.is_empty() || stale_in_trash_or_spam {
+        let mut tether = ctx.user_stash().connection().await?;
+
+        // ---
+
+        let ControlFlow::Continue(()) = utils::ensure_label_is_idle(
+            &mut tether,
+            local_label_id,
+            &remote_label_id,
+            &response.tasks_running,
+        )
+        .await?
+        else {
+            return Ok(vec![]);
+        };
+
+        if response.conversations.is_empty() {
             return Ok(vec![]);
         }
+
+        // ---
 
         // Event though we are fetching messages, we do not need to fetch the message counters
         // as they are not displayed in conversation view mode.
@@ -313,18 +343,17 @@ impl RemoteConversationScrollerSource {
 
         let context_time = Self::context_time(&response, unread);
 
-        let mut conversations: Vec<Conversation> = response
+        let mut conversations: Vec<_> = response
             .conversations
             .into_iter()
             .map(|c| c.into())
             .collect();
+
         let conversation_counts = conversation_label_counts
             .counts
             .into_iter()
             .map_into()
             .collect();
-
-        let mut tether = ctx.user_stash().connection().await?;
 
         Self::save_conversations(
             local_label_id,
@@ -387,6 +416,12 @@ impl RemoteConversationScrollerSource {
         )
         .await?;
 
+        log_response(&response);
+
+        let mut tether = ctx.user_stash().connection().await?;
+
+        // ---
+
         if !response.conversations.is_empty() {
             // Unless we are filtering, end id is always the first element in the returned
             // data, even if there is are no more elements.
@@ -398,15 +433,22 @@ impl RemoteConversationScrollerSource {
             }
         }
 
-        log_response(&response);
+        let ControlFlow::Continue(()) = utils::ensure_label_is_idle(
+            &mut tether,
+            local_label_id,
+            &remote_label_id,
+            &response.tasks_running,
+        )
+        .await?
+        else {
+            return Ok(vec![]);
+        };
 
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
-
-        if response.conversations.is_empty() || stale_in_trash_or_spam {
+        if response.conversations.is_empty() {
             return Ok(vec![]);
         }
+
+        // ---
 
         let context_time = Self::context_time(&response, unread);
 
@@ -415,8 +457,6 @@ impl RemoteConversationScrollerSource {
             .into_iter()
             .map(|c| c.into())
             .collect();
-
-        let mut tether = ctx.user_stash().connection().await?;
 
         Self::save_conversations(
             local_label_id,
@@ -502,7 +542,12 @@ impl RemoteConversationScrollerSource {
         // downloaded in the background
         tether
             .quiet_tx(async |tx| {
-                // Update conversation counters
+                if let Some(label) = Label::find_by_id(local_label_id, tx).await?
+                    && label.is_busy(tx).await?
+                {
+                    return Ok(());
+                }
+
                 if !conversation_labels_count.is_empty() {
                     ConversationLabelsCount::create_or_update_conversation_counts(
                         conversation_labels_count.clone(),
@@ -510,6 +555,7 @@ impl RemoteConversationScrollerSource {
                     )
                     .await?;
                 }
+
                 let mut rebase_change_set = RebaseChangeSet::default();
                 // Save all conversations.
                 for conversation in conversations.iter_mut() {

@@ -6,10 +6,12 @@ use crate::services::proton::response_data::{
     MessageMetadata, OperationResult, UndoToken,
 };
 use proton_api_utils::PaginateResponse;
+use proton_core_api::services::proton::LabelId;
 use serde::Deserialize;
 #[cfg(feature = "mocks")]
 use serde::Serialize;
 use serde_with::{BoolFromInt, DefaultOnNull, serde_as};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
@@ -32,6 +34,9 @@ pub struct GetConversationResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationsResponse {
     pub conversations: Vec<Conversation>,
+    #[serde(default)]
+    #[serde_as(as = "DefaultOnNull")]
+    pub tasks_running: RunningTasks,
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
     pub stale: bool,
     pub total: u64,
@@ -57,6 +62,9 @@ pub struct GetMessageResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct GetMessagesResponse {
     pub messages: Vec<MessageMetadata>,
+    #[serde(default)]
+    #[serde_as(as = "DefaultOnNull")]
+    pub tasks_running: RunningTasks,
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
     pub stale: bool,
     pub total: u64,
@@ -284,4 +292,164 @@ pub struct PutMobileSettingsResponse {
 pub struct PutNextMessageOnMoveResponse {
     pub code: i64,
     pub mail_settings: MailSettings,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(untagged)]
+pub enum RunningTasks {
+    /// We don't know if any background tasks are running - this is returned for
+    /// requests that don't specify the `?LabelID=...` parameter.
+    #[default]
+    NotKnown,
+
+    /// No background tasks are running.
+    None([(); 0]),
+
+    /// Some background tasks are running.
+    ///
+    /// The value is a map from label ids onto some metadata describing nature
+    /// of the tasks that are running on those labels - since we don't care
+    /// about that, we don't model that metadata here.
+    Some(HashMap<LabelId, serde_json::Value>),
+}
+
+impl RunningTasks {
+    #[must_use]
+    pub fn none() -> Self {
+        Self::None([])
+    }
+
+    #[must_use]
+    pub fn some(ids: &[LabelId]) -> Self {
+        Self::Some(
+            ids.iter()
+                .cloned()
+                .map(|id| {
+                    (
+                        id,
+                        serde_json::Value::Array(vec![serde_json::Map::default().into()]),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    #[must_use]
+    pub fn is_not_known(&self) -> bool {
+        matches!(self, Self::NotKnown)
+    }
+
+    #[must_use]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None(_))
+    }
+
+    #[must_use]
+    pub fn is_some(&self) -> bool {
+        matches!(self, Self::Some(_))
+    }
+
+    #[must_use]
+    pub fn has(&self, id: &LabelId) -> bool {
+        if let Self::Some(labels) = self {
+            labels.contains_key(id)
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn running_tasks_deserialization() {
+        let parse = |s: &str| -> GetConversationsResponse { serde_json::from_str(s).unwrap() };
+
+        // ---
+
+        let target = parse(
+            r#"
+            {
+              "Conversations": [],
+              "Stale": 0,
+              "Total": 0
+            }
+            "#,
+        );
+
+        assert_eq!(RunningTasks::NotKnown, target.tasks_running);
+
+        assert!(target.tasks_running.is_not_known());
+        assert!(!target.tasks_running.is_none());
+        assert!(!target.tasks_running.is_some());
+        assert!(!target.tasks_running.has(&"3".into()));
+
+        // ---
+
+        let target = parse(
+            r#"
+            {
+              "Conversations": [],
+              "TasksRunning": null,
+              "Stale": 0,
+              "Total": 0
+            }
+            "#,
+        );
+
+        assert_eq!(RunningTasks::NotKnown, target.tasks_running);
+
+        assert!(target.tasks_running.is_not_known());
+        assert!(!target.tasks_running.is_none());
+        assert!(!target.tasks_running.is_some());
+        assert!(!target.tasks_running.has(&"3".into()));
+
+        // ---
+
+        let target = parse(
+            r#"
+            {
+              "Conversations": [],
+              "TasksRunning": [],
+              "Stale": 0,
+              "Total": 0
+            }
+            "#,
+        );
+
+        assert!(matches!(target.tasks_running, RunningTasks::None(..)));
+
+        assert!(!target.tasks_running.is_not_known());
+        assert!(target.tasks_running.is_none());
+        assert!(!target.tasks_running.is_some());
+        assert!(!target.tasks_running.has(&"3".into()));
+
+        // ---
+
+        let target = parse(
+            r#"
+            {
+              "Conversations": [],
+              "TasksRunning": {
+                "3": [{}]
+              },
+              "Stale": 0,
+              "Total": 0
+            }
+            "#,
+        );
+
+        assert!(matches!(target.tasks_running, RunningTasks::Some(..)));
+
+        assert!(!target.tasks_running.is_not_known());
+        assert!(!target.tasks_running.is_none());
+        assert!(target.tasks_running.is_some());
+
+        assert!(!target.tasks_running.has(&"2".into()));
+        assert!(target.tasks_running.has(&"3".into()));
+        assert!(!target.tasks_running.has(&"4".into()));
+    }
 }

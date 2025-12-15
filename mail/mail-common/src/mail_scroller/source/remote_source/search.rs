@@ -2,6 +2,7 @@ use super::MailPaginatorJoinHandle;
 use crate::AppError;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::models::MailBusyLabel;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, SearchOptions},
@@ -445,6 +446,7 @@ impl MailScrollerSource for SearchScrollerSource {
             Message::table_name().to_owned(),
             MessageLabel::table_name().to_owned(),
             MessageCounters::table_name().to_owned(),
+            MailBusyLabel::table_name().to_owned(),
         ]
     }
 
