@@ -621,7 +621,8 @@ impl Save {
 
                 // check if someone else already created this conversation through some other
                 // flow.
-                if let Some(remote_conv_local_id) = Conversation::remote_id_counterpart(new_message.metadata.conversation_id.clone(), bond).await?
+                if Conversation::local_id_counterpart(local_conversation_id, bond).await?.is_none() &&
+                let Some(remote_conv_local_id) = Conversation::remote_id_counterpart(new_message.metadata.conversation_id.clone(), bond).await?
                     && remote_conv_local_id != local_conversation_id {
                     warn!("Draft conversation was synced by other means, patching data to preserve local changes");
                     // Someone else managed to create this before us, but we don't want this
@@ -684,7 +685,7 @@ impl Save {
 
                         new_conversation.save(bond).await.inspect_err(|e| tracing::error!("Failed to create place holder conversation:{e}"))?;
                         metadata.local_conversation_id = Some(new_conversation.id());
-                        metadata.save(bond).await?;
+                        metadata.save(bond).await.inspect_err(|e| error!("Failed to update metadata:{e}"))?;
                         local_conversation_id = new_conversation.id();
                     }
                 }
@@ -815,7 +816,7 @@ impl Save {
                                     &path,
                                     bond,
                                 )
-                                    .await?;
+                                    .await.inspect_err(|e| error!("Failed to copy attachment to cache: {e}"))?;
                             }
 
                             // Update the original attachment to make sure the next
@@ -838,7 +839,7 @@ impl Save {
                         tracing::info!("Detected address change on attachment ({}/{})", original_attachment.local_id.unwrap(), original_attachment.remote_id().as_ref().unwrap());
                         new_attachment.local_id = original_attachment.local_id;
                         new_attachment.attachment_type = original_attachment.attachment_type.clone();
-                        new_attachment.update_after_draft_address_change(bond).await?;
+                        new_attachment.update_after_draft_address_change(bond).await.inspect_err(|e| error!("Failed to update draft after address change: {e}"))?;
                     }
                 }
 

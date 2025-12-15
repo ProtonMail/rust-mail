@@ -2025,3 +2025,152 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject() {
     assert_ne!(first_conversation_id, second_conversation_id);
     assert_eq!(local_changed_conversation_id, second_conversation_id)
 }
+
+#[tokio::test]
+async fn draft_reply_handles_conversation_id_change_multiple_times_without_destroying_existing_conversations()
+ {
+    // changing the subject of a message in a reply can lead to reply with
+    // a new conversation id that is not known yet. This can happen multiple times
+    // over some updates.
+    // There was a bug that would delete existing conversation code and invalidate the local parent
+    // id in the draft metadata, leading to a foreing constraint error.
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let mut params = draft_test_params_with_mime_type(MimeType::TextHtml);
+    params.addresses[0].status = AddressStatus::Disabled;
+
+    // Create one message we can reply to.
+    let mut remote_existing_message = draft_message_with_attachments();
+
+    let time = UnixTimestamp::now().saturating_add(100);
+    let expiration_time = UnixTimestamp::now().saturating_add(2000);
+
+    remote_existing_message.metadata.sender.address = "me@proton.me".into();
+    remote_existing_message.body.reply_to.address = "me@proton.me".into();
+    remote_existing_message.metadata.id = "FancyRemoteId".into();
+    remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+    remote_existing_message.metadata.expiration_time = expiration_time.as_u64();
+    remote_existing_message.metadata.time = time.as_u64();
+    remote_existing_message
+        .metadata
+        .attachments_metadata
+        .clear();
+    remote_existing_message.body.attachments.clear();
+
+    let params = draft_test_params();
+    let message = draft_message();
+
+    let changed_conversation_id = ConversationId::new("surprise!".into());
+
+    ctx.setup_user(params.clone()).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let (mut existing_message, _, _) =
+        Message::from_api_data(remote_existing_message.clone(), &tether)
+            .await
+            .unwrap();
+
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
+
+    ctx.mock_get_message(
+        &remote_existing_message.metadata.id,
+        remote_existing_message.clone(),
+    )
+    .await;
+
+    let expected_draft_params = expected_create_reply_draft_params(
+        &existing_message,
+        MimeType::TextHtml,
+        ReplyMode::Sender,
+    );
+
+    let message_with_new_conv_id = {
+        let mut m = message.clone();
+        m.metadata.conversation_id = changed_conversation_id.clone();
+        m
+    };
+
+    let mut conv = Conversation {
+        remote_id: Some(changed_conversation_id.clone()),
+        ..Conversation::test_default()
+    };
+
+    user_ctx
+        .user_stash()
+        .connection()
+        .await
+        .unwrap()
+        .tx(async |tx| conv.save(tx).await)
+        .await
+        .unwrap();
+
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message.clone(),
+        Some(remote_existing_message.metadata.id.clone()),
+        Some(DraftAttachmentKeyPackets::new()),
+    )
+    .await;
+
+    ctx.mock_update_draft(
+        message_with_new_conv_id.metadata.id.clone(),
+        expected_draft_params.clone(),
+        message_with_new_conv_id,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    ctx.mock_update_draft(
+        message.metadata.id.clone(),
+        {
+            let mut params = expected_draft_params.clone();
+            params.subject = "foo12345".into();
+            params
+        },
+        message.clone(),
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    // Get the message body - required to reply to draft.
+    Message::force_sync_message_and_body(
+        &user_ctx,
+        existing_message.remote_id.unwrap(),
+        false,
+        &mut tether,
+    )
+    .await
+    .unwrap();
+    // Create draft.
+    let draft = Draft::reply(
+        &user_ctx,
+        existing_message.local_id.unwrap(),
+        ReplyMode::Sender,
+        true,
+    )
+    .await
+    .unwrap();
+
+    draft.save().await.unwrap();
+
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // update once, changes conv id
+    draft.save().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // update again, changes conv id again
+    draft.set_subject("foo12345".into()).await.unwrap();
+    draft.save().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
+}
