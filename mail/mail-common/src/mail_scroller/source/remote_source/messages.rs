@@ -1,8 +1,8 @@
 use super::{MailPaginatorJoinHandle, RemoteSource};
-use crate::datatypes::SystemLabelId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::datatypes::{MessageLabelsCount, SystemLabelId};
 use crate::prefetch::PrefetchJob;
 use crate::{
     MailContextError, MailUserContext,
@@ -10,6 +10,7 @@ use crate::{
     models::{Message, MessageScrollData},
 };
 use anyhow::anyhow;
+use itertools::Itertools;
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
@@ -231,6 +232,7 @@ impl RemoteMessageScrollerSource {
             true,
             order_dir,
             order_field,
+            vec![],
             session,
             &mut tether,
             queue,
@@ -300,6 +302,7 @@ impl RemoteMessageScrollerSource {
             true,
             order_dir,
             order_field,
+            vec![],
             session,
             &mut tether,
             queue,
@@ -349,20 +352,28 @@ impl RemoteMessageScrollerSource {
             return Ok(vec![]);
         }
 
+        // refetch label counters
+        let message_label_counts = session
+            .get_messages_count_for_labels(vec![remote_label_id.clone()])
+            .await?;
+
         let mut tether = stash.connection().await?;
 
-        Self::save_messages(
+        let messages = Self::save_messages(
             local_label_id,
             response.messages,
             unread,
             false,
             order_dir,
             order_field,
+            message_label_counts.counts.into_iter().map_into().collect(),
             session,
             &mut tether,
             queue,
         )
-        .await
+        .await?;
+
+        Ok(messages)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -373,6 +384,7 @@ impl RemoteMessageScrollerSource {
         update_scroller: bool,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        message_labels_count: Vec<MessageLabelsCount>,
         api: &Session,
         tether: &mut Tether,
         queue: RebasableQueue<'_>,
@@ -392,8 +404,16 @@ impl RemoteMessageScrollerSource {
 
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
-        tether
+        let messages = tether
             .quiet_tx(async |tx| {
+                if !message_labels_count.is_empty() {
+                    MessageLabelsCount::create_or_update_message_counts(
+                        message_labels_count.clone(),
+                        tx,
+                    )
+                    .await?;
+                }
+
                 // Save all messages.
                 let mut rebase_change_set = RebaseChangeSet::default();
 
@@ -437,9 +457,21 @@ impl RemoteMessageScrollerSource {
                     .await?;
                 }
 
-                Ok(messages)
+                Ok::<_, MailContextError>(messages)
             })
-            .await
+            .await?;
+
+        //TODO(ET-5589): This should not be necessary
+        // Fake save the counters here again they trigger db watcher updates.
+        if !message_labels_count.is_empty()
+            && let Err(e) = tether
+                .tx(async |tx| MessageLabelsCount::fake_update(local_label_id, tx).await)
+                .await
+        {
+            error!("Failed to trigger fake label counters update: {e}");
+        }
+
+        Ok(messages)
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -1,8 +1,8 @@
 use super::{MailPaginatorJoinHandle, RemoteSource};
-use crate::datatypes::SystemLabelId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::datatypes::{ConversationLabelsCount, SystemLabelId};
 use crate::models::Message;
 use crate::prefetch::PrefetchJob;
 use crate::{
@@ -11,6 +11,7 @@ use crate::{
     models::{Conversation, ConversationScrollData},
 };
 use anyhow::anyhow;
+use itertools::Itertools;
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
@@ -250,6 +251,7 @@ impl RemoteConversationScrollerSource {
             true,
             order_dir,
             order_field,
+            vec![],
             session,
             &mut tether,
             queue,
@@ -305,12 +307,23 @@ impl RemoteConversationScrollerSource {
             return Ok(vec![]);
         }
 
+        // Event though we are fetching messages, we do not need to fetch the message counters
+        // as they are not displayed in conversation view mode.
+        let conversation_label_counts = session
+            .get_conversations_count_for_labels(vec![remote_label_id.clone()])
+            .await?;
+
         let context_time = Self::context_time(&response, unread);
 
         let mut conversations: Vec<Conversation> = response
             .conversations
             .into_iter()
             .map(|c| c.into())
+            .collect();
+        let conversation_counts = conversation_label_counts
+            .counts
+            .into_iter()
+            .map_into()
             .collect();
 
         let mut tether = stash.connection().await?;
@@ -325,6 +338,7 @@ impl RemoteConversationScrollerSource {
             false,
             order_dir,
             order_field,
+            conversation_counts,
             session,
             &mut tether,
             queue,
@@ -413,6 +427,7 @@ impl RemoteConversationScrollerSource {
             true,
             order_dir,
             order_field,
+            vec![],
             session,
             &mut tether,
             queue,
@@ -463,6 +478,7 @@ impl RemoteConversationScrollerSource {
         update_scroller: bool,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
+        conversation_labels_count: Vec<ConversationLabelsCount>,
         api: &Session,
         tether: &mut Tether,
         queue: RebasableQueue<'_>,
@@ -485,6 +501,14 @@ impl RemoteConversationScrollerSource {
         // downloaded in the background
         tether
             .quiet_tx(async |tx| {
+                // Update conversation counters
+                if !conversation_labels_count.is_empty() {
+                    ConversationLabelsCount::create_or_update_conversation_counts(
+                        conversation_labels_count.clone(),
+                        tx,
+                    )
+                    .await?;
+                }
                 let mut rebase_change_set = RebaseChangeSet::default();
                 // Save all conversations.
                 for conversation in conversations.iter_mut() {
@@ -556,7 +580,19 @@ impl RemoteConversationScrollerSource {
 
                 Ok(())
             })
-            .await
+            .await?;
+
+        //TODO(ET-5589): This should not be necessary
+        // Fake update to trigger the counters again in a tracking tx to see updates
+        if !conversation_labels_count.is_empty()
+            && let Err(e) = tether
+                .tx(async |tx| ConversationLabelsCount::fake_update(local_label_id, tx).await)
+                .await
+        {
+            error!("Failed to trigger fake label counters update: {e}");
+        }
+
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
