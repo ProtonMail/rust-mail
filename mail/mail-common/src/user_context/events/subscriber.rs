@@ -11,7 +11,7 @@ use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
-use crate::{MailContextError, MailUserContext};
+use crate::{AppError, MailContextError, MailUserContext};
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::Context;
 use anyhow::anyhow;
@@ -21,7 +21,7 @@ use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::datatypes::{Refresh, SystemLabel};
-use proton_core_common::models::Label;
+use proton_core_common::models::{Label, LabelError};
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use stash::orm::Model;
 use std::collections::HashMap;
@@ -75,7 +75,25 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
             .context("Failed to calculate dependencies")?
             .fetch_and_store(ctx.session(), &mut tether)
             .await
-            .context("Failed to fetch or store dependencies")?;
+            .map_err(|e| {
+                let e = match e {
+                    MailContextError::App(e) => match e {
+                        AppError::API(e) => SubscriberError::Api(e),
+                        AppError::Stash(e) => SubscriberError::StashError(e),
+                        e => SubscriberError::Other(e.into()),
+                    },
+                    MailContextError::Stash(e) => SubscriberError::StashError(e),
+                    MailContextError::Api(e) => SubscriberError::Api(e),
+                    MailContextError::Label(e) => match e {
+                        LabelError::API(e) => SubscriberError::Api(e),
+                        LabelError::Stash(e) => SubscriberError::StashError(e),
+                        e => SubscriberError::Other(e.into()),
+                    },
+                    e => SubscriberError::Other(e.into()),
+                };
+                error!("Failed to fetch or store dependencies: {e}");
+                e
+            })?;
 
         tether
             .tx::<_, _, SubscriberError>(async |tx| {

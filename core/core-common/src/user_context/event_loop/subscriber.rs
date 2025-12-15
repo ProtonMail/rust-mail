@@ -249,7 +249,15 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
             .context("Failed to calculate missing dependencies")?
             .fetch_and_store(ctx.session(), &mut conn)
             .await
-            .context("Failed to fetch or store dependencies")?;
+            .map_err(|e| {
+                let e = match e {
+                    CoreContextError::Api(e) => SubscriberError::Api(e),
+                    CoreContextError::Stash(e) => SubscriberError::StashError(e),
+                    e => SubscriberError::Other(e.into()),
+                };
+                error!("Failed to fetch and store dependencies: {e}");
+                e
+            })?;
 
         conn.tx::<_, _, StashError>(async |tx| {
             for event in events.iter_mut() {
