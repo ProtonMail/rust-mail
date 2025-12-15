@@ -26,7 +26,7 @@ use stash::utils::{MapToSql as _, placeholders};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use topological_sort::TopologicalSort;
-use tracing::error;
+use tracing::{error, instrument};
 
 #[derive(Debug, Error)]
 pub enum LabelError {
@@ -97,6 +97,7 @@ impl ModelIdExtension for Label {
 impl Label {
     pub const INIT_KEY: InitializationKey = InitializationKey::new("labels");
 
+    #[instrument(skip_all)]
     pub async fn all_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
     where
         API: ProtonCore,
@@ -104,6 +105,7 @@ impl Label {
         Self::fetch_labels(api, &ALL_LABEL_TYPES).await
     }
 
+    #[instrument(skip_all)]
     pub async fn fetch_mail_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
     where
         API: ProtonCore,
@@ -111,6 +113,7 @@ impl Label {
         Self::fetch_labels(api, &MAIL_LABEL_TYPES).await
     }
 
+    #[instrument(skip_all)]
     pub async fn fetch_contact_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
     where
         API: ProtonCore,
@@ -118,6 +121,7 @@ impl Label {
         Self::fetch_labels(api, &CONTACT_LABEL_TYPES).await
     }
 
+    #[instrument(skip_all)]
     async fn fetch_labels<API>(
         api: &API,
         label_types: &[LabelType],
@@ -172,6 +176,7 @@ impl Label {
         labels
     }
 
+    #[instrument(skip_all)]
     pub async fn get_labels_by_ids<API>(
         api: &API,
         ids: Vec<LabelId>,
@@ -188,6 +193,7 @@ impl Label {
             .collect())
     }
 
+    #[instrument(skip_all)]
     pub async fn store_labels_async(
         tx: &Bond<'_>,
         labels: Vec<Label>,
@@ -196,6 +202,7 @@ impl Label {
             .await
     }
 
+    #[instrument(skip_all)]
     pub fn store_labels(
         tx: &Transaction<'_>,
         labels: Vec<Label>,
@@ -209,6 +216,7 @@ impl Label {
         Ok(label_ids)
     }
 
+    #[instrument(skip(api))]
     pub async fn patch_expanded<API: ProtonCore>(
         id: LabelId,
         expanded: bool,
@@ -225,6 +233,7 @@ impl Label {
         .map(|r| r.label.into())
     }
 
+    #[instrument(skip(tether))]
     pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
         Label::find(
             "WHERE label_type = ? ORDER BY display_order ASC",
@@ -234,6 +243,7 @@ impl Label {
         .await
     }
 
+    #[instrument(skip(tether))]
     pub async fn local_ids_by_kind(
         kind: LabelType,
         tether: &Tether,
@@ -241,6 +251,7 @@ impl Label {
         Label::find_local_id_by(tether, "WHERE label_type = ?", params![kind]).await
     }
 
+    #[instrument(skip(tether))]
     pub async fn find_by_kinds(
         kinds: &[LabelType],
         tether: &Tether,
@@ -254,20 +265,24 @@ impl Label {
         .await
     }
 
+    #[instrument(skip_all)]
     pub async fn all_mail(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find_by_kinds(&MAIL_LABEL_TYPES, tether).await
     }
 
+    #[instrument(skip_all)]
     pub async fn all_contact_groups(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find_by_kinds(&CONTACT_LABEL_TYPES, tether).await
     }
 
+    #[instrument(skip_all)]
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(LabelWatcher { sender }))
             .await
     }
 
+    #[instrument(skip(tether))]
     pub async fn resolve_remote_label_id(
         local_id: LocalLabelId,
         tether: &Tether,
@@ -279,6 +294,7 @@ impl Label {
         Ok(label_id)
     }
 
+    #[instrument(skip(tether))]
     pub async fn resolve_local_label_id(
         label_id: LabelId,
         tether: &Tether,
@@ -297,6 +313,7 @@ impl ModelHooks for Label {
         {
             self.local_parent_id = Self::remote_id_counterpart_sync(remote_id, conn)?;
         }
+
         // TODO: https://jira.protontech.ch/browse/ET-1169 ensure that local_remote_id are resolve for Label
         Ok(())
     }
@@ -334,6 +351,7 @@ impl ModelHooks for Label {
             self.local_parent_id = label.local_parent_id;
             self.local_id = label.local_id;
         }
+
         Ok(())
     }
 }
