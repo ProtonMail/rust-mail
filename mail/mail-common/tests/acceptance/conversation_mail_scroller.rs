@@ -2053,7 +2053,7 @@ async fn delete_all() {
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                     conversations: convs,
-                    tasks_running: RunningTasks::some(),
+                    tasks_running: RunningTasks::some(&[label.remote_id.clone().unwrap()]),
                     stale: false,
                     total: 80,
                 }),
@@ -2096,7 +2096,15 @@ async fn delete_all() {
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                     conversations: convs,
-                    tasks_running: RunningTasks::none(),
+                    tasks_running: RunningTasks::some(&[
+                        // Pretend that task on another label is still running,
+                        // to make sure that we don't care about tasks on other
+                        // labels.
+                        //
+                        // i.e. as long as the task on `Trash` completed, we're
+                        // good
+                        SystemLabel::Archive.label_id(),
+                    ]),
                     stale: false,
                     total: 5,
                 }),

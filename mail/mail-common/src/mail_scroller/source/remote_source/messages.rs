@@ -217,9 +217,13 @@ impl RemoteMessageScrollerSource {
 
         // ---
 
-        let ControlFlow::Continue(()) =
-            utils::ensure_label_is_idle(&mut tether, local_label_id, &response.tasks_running)
-                .await?
+        let ControlFlow::Continue(()) = utils::ensure_label_is_idle(
+            &mut tether,
+            local_label_id,
+            &remote_label_id,
+            &response.tasks_running,
+        )
+        .await?
         else {
             return Ok(vec![]);
         };
@@ -299,9 +303,13 @@ impl RemoteMessageScrollerSource {
             }
         }
 
-        let ControlFlow::Continue(()) =
-            utils::ensure_label_is_idle(&mut tether, local_label_id, &response.tasks_running)
-                .await?
+        let ControlFlow::Continue(()) = utils::ensure_label_is_idle(
+            &mut tether,
+            local_label_id,
+            &remote_label_id,
+            &response.tasks_running,
+        )
+        .await?
         else {
             return Ok(vec![]);
         };
@@ -370,9 +378,13 @@ impl RemoteMessageScrollerSource {
 
         // ---
 
-        let ControlFlow::Continue(()) =
-            utils::ensure_label_is_idle(&mut tether, local_label_id, &response.tasks_running)
-                .await?
+        let ControlFlow::Continue(()) = utils::ensure_label_is_idle(
+            &mut tether,
+            local_label_id,
+            &remote_label_id,
+            &response.tasks_running,
+        )
+        .await?
         else {
             return Ok(vec![]);
         };

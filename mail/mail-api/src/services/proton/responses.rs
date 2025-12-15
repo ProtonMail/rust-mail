@@ -6,10 +6,12 @@ use crate::services::proton::response_data::{
     MessageMetadata, OperationResult, UndoToken,
 };
 use proton_api_utils::PaginateResponse;
+use proton_core_api::services::proton::LabelId;
 use serde::Deserialize;
 #[cfg(feature = "mocks")]
 use serde::Serialize;
 use serde_with::{BoolFromInt, DefaultOnNull, serde_as};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
@@ -309,7 +311,7 @@ pub enum RunningTasks {
     /// The value is a map from label ids onto some metadata describing nature
     /// of the tasks that are running on those labels - since we don't care
     /// about that, we don't model that metadata here.
-    Some(serde_json::Value),
+    Some(HashMap<LabelId, serde_json::Value>),
 }
 
 impl RunningTasks {
@@ -319,8 +321,18 @@ impl RunningTasks {
     }
 
     #[must_use]
-    pub fn some() -> Self {
-        Self::Some(serde_json::Value::Object(serde_json::Map::default()))
+    pub fn some(ids: &[LabelId]) -> Self {
+        Self::Some(
+            ids.iter()
+                .cloned()
+                .map(|id| {
+                    (
+                        id,
+                        serde_json::Value::Array(vec![serde_json::Map::default().into()]),
+                    )
+                })
+                .collect(),
+        )
     }
 
     #[must_use]
@@ -336,6 +348,15 @@ impl RunningTasks {
     #[must_use]
     pub fn is_some(&self) -> bool {
         matches!(self, Self::Some(_))
+    }
+
+    #[must_use]
+    pub fn has(&self, id: &LabelId) -> bool {
+        if let Self::Some(labels) = self {
+            labels.contains_key(id)
+        } else {
+            false
+        }
     }
 }
 
@@ -364,6 +385,7 @@ mod tests {
         assert!(target.tasks_running.is_not_known());
         assert!(!target.tasks_running.is_none());
         assert!(!target.tasks_running.is_some());
+        assert!(!target.tasks_running.has(&"3".into()));
 
         // ---
 
@@ -383,6 +405,7 @@ mod tests {
         assert!(target.tasks_running.is_not_known());
         assert!(!target.tasks_running.is_none());
         assert!(!target.tasks_running.is_some());
+        assert!(!target.tasks_running.has(&"3".into()));
 
         // ---
 
@@ -402,6 +425,7 @@ mod tests {
         assert!(!target.tasks_running.is_not_known());
         assert!(target.tasks_running.is_none());
         assert!(!target.tasks_running.is_some());
+        assert!(!target.tasks_running.has(&"3".into()));
 
         // ---
 
@@ -410,7 +434,7 @@ mod tests {
             {
               "Conversations": [],
               "TasksRunning": {
-                "label-id": 1234
+                "3": [{}]
               },
               "Stale": 0,
               "Total": 0
@@ -423,5 +447,9 @@ mod tests {
         assert!(!target.tasks_running.is_not_known());
         assert!(!target.tasks_running.is_none());
         assert!(target.tasks_running.is_some());
+
+        assert!(!target.tasks_running.has(&"2".into()));
+        assert!(target.tasks_running.has(&"3".into()));
+        assert!(!target.tasks_running.has(&"4".into()));
     }
 }

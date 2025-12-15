@@ -599,7 +599,11 @@ async fn delete_all() {
 
     ctx.mock_get_messages()
         .alter(|mock| mock.expect(1).with_priority(4))
-        .respond_with_ex(msgs.len(), msgs, RunningTasks::some())
+        .respond_with_ex(
+            msgs.len(),
+            msgs,
+            RunningTasks::some(&[label.remote_id.clone().unwrap()]),
+        )
         .await;
 
     user_ctx.force_event_loop_poll().await.unwrap();
