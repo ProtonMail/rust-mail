@@ -104,7 +104,7 @@ impl RawEvent {
         })
     }
 
-    pub fn deserialize_generic<'a, T: Deserialize<'a>>(&'a self) -> Result<T, serde_json::Error> {
+    pub fn deserialize<'a, T: Deserialize<'a>>(&'a self) -> Result<T, serde_json::Error> {
         serde_json::from_str(&self.raw)
     }
 }
@@ -120,6 +120,10 @@ impl RawEvent {
     fn is_refresh(&self) -> bool {
         self.meta.refresh.as_bool()
     }
+
+    fn refresh_flag(&self) -> RefreshFlag {
+        self.meta.refresh
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
@@ -128,34 +132,51 @@ struct EventMetadata {
     #[serde(rename = "EventID")]
     event_id: EventId,
     #[serde(rename = "More")]
-    has_more: BoolOrInteger,
-    refresh: BoolOrInteger,
+    has_more: RefreshFlag,
+    refresh: RefreshFlag,
 }
 
+/// Compatability type to handle differences in the refresh value between
+/// v5 and v6 loops.
 #[derive(Debug, Copy, Clone, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 #[serde(untagged)]
-enum BoolOrInteger {
+pub enum RefreshFlag {
     Bool(bool),
     Integer(u8),
 }
 
-impl BoolOrInteger {
-    fn as_bool(self) -> bool {
+impl RefreshFlag {
+    #[must_use]
+    pub fn as_bool(self) -> bool {
         match self {
-            BoolOrInteger::Bool(v) => v,
-            BoolOrInteger::Integer(v) => v != 0,
+            RefreshFlag::Bool(v) => v,
+            RefreshFlag::Integer(v) => v != 0,
+        }
+    }
+
+    #[must_use]
+    pub fn as_u8(self) -> u8 {
+        match self {
+            RefreshFlag::Bool(v) => {
+                if v {
+                    u8::MAX
+                } else {
+                    0
+                }
+            }
+            RefreshFlag::Integer(v) => v,
         }
     }
 }
 
-impl From<bool> for BoolOrInteger {
+impl From<bool> for RefreshFlag {
     fn from(value: bool) -> Self {
         Self::Bool(value)
     }
 }
 
-impl From<u8> for BoolOrInteger {
+impl From<u8> for RefreshFlag {
     fn from(value: u8) -> Self {
         Self::Integer(value)
     }

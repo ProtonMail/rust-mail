@@ -4,6 +4,7 @@ use crate::event_loop::event_source::CoreEventSource;
 use crate::event_loop::v6::{CoreEventCache, handle_user_refresh, handle_user_update_event};
 use async_trait::async_trait;
 use proton_core_api::service::ApiServiceError;
+use proton_event_loop::RefreshFlag;
 use proton_event_loop::v6::{
     EventSource, EventSubscriber, EventSubscriberError, EventSubscriberResult,
 };
@@ -72,13 +73,13 @@ impl EventSubscriber<CoreEventSource> for AccountEventSubscriber {
         .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
     }
 
-    async fn on_refresh<'a>(
+    async fn on_refresh(
         &self,
-        event: Option<&'a <CoreEventSource as EventSource>::Event>,
+        refresh_flag: RefreshFlag,
         cache: &mut CoreEventCache,
     ) -> EventSubscriberResult<()> {
         async {
-            if event.is_none_or(|event| Refresh::from(event.refresh) == Refresh::All) {
+            if Refresh::from(refresh_flag.as_u8()) == Refresh::All {
                 let Some(ctx) = self.0.upgrade() else {
                     warn!("User context is no longer alive");
                     return Ok(());

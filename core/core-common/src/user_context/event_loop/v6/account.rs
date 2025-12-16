@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_core_api::services::proton::User;
 use proton_event_loop::v6::{EventSource, EventSubscriber};
-use proton_event_loop::{EventSubscriberError, EventSubscriberResult};
+use proton_event_loop::{EventSubscriberError, EventSubscriberResult, RefreshFlag};
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use stash::orm::Model;
 use stash::stash::{Bond, StashError};
@@ -50,9 +50,9 @@ impl EventSubscriber<CoreEventSourceV6> for AccountEventV6Subscriber {
         .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
     }
 
-    async fn on_refresh<'a>(
+    async fn on_refresh(
         &self,
-        _: Option<&'a <CoreEventSourceV6 as EventSource>::Event>,
+        _: RefreshFlag,
         cache: &mut <CoreEventSourceV6 as EventSource>::Cache,
     ) -> EventSubscriberResult<()> {
         let Some(ctx) = self.0.upgrade() else {

@@ -8,7 +8,7 @@ use crate::{
 use anyhow::Context;
 use async_trait::async_trait;
 use proton_core_api::services::proton::UserId;
-use proton_event_loop::EventLoopError;
+use proton_event_loop::{EventLoopError, RefreshFlag};
 use stash::{
     orm::Model,
     stash::{Bond, StashError},
@@ -176,9 +176,9 @@ impl EventSubscriber<CoreEventSource> for CoreEventSubscriber {
         .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
     }
 
-    async fn on_refresh<'a>(
+    async fn on_refresh(
         &self,
-        event: Option<&'a <CoreEventSource as EventSource>::Event>,
+        refresh_flag: RefreshFlag,
         _: &mut CoreEventCache,
     ) -> EventSubscriberResult<()> {
         let Some(ctx) = self.0.upgrade() else {
@@ -186,8 +186,7 @@ impl EventSubscriber<CoreEventSource> for CoreEventSubscriber {
             return Ok(());
         };
 
-        ctx.on_refresh_impl(event.map_or(Refresh::All, |event| event.refresh.into()))
-            .await
+        ctx.on_refresh_impl(refresh_flag.as_u8().into()).await
     }
 }
 

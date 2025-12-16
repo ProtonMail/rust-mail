@@ -4,7 +4,7 @@ use crate::v6::source::EventSource;
 use crate::v6::subscriber::{
     EventSubscriber, EventSubscriberId, SubscriberList, TypedSubscriberList,
 };
-use crate::{EventLoopError, EventProvider};
+use crate::{EventLoopError, EventProvider, RefreshFlag};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -203,7 +203,7 @@ impl EventManager {
         };
         source
             .subscribers
-            .on_refresh(None)
+            .on_refresh(RefreshFlag::from(true))
             .instrument(tracing::debug_span!("Refreshing", name=?source.name))
             .await
     }

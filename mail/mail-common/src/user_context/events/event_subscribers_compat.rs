@@ -2,8 +2,8 @@
 
 use crate::events::event_source::MailEventSourceV5;
 use proton_core_common::event_loop::event_source::CoreEventSource;
-use proton_event_loop::EventSubscriberResult;
 use proton_event_loop::v6::{EventSource, EventSubscriber};
+use proton_event_loop::{EventSubscriberResult, RefreshFlag};
 
 pub struct MailEventV5SubscriberCompat<T: EventSubscriber<CoreEventSource>>(pub T);
 #[async_trait::async_trait]
@@ -23,11 +23,11 @@ where
         self.0.on_event(&event.core, cache).await
     }
 
-    async fn on_refresh<'a>(
+    async fn on_refresh(
         &self,
-        event: Option<&'a <MailEventSourceV5 as EventSource>::Event>,
+        refresh_flag: RefreshFlag,
         cache: &mut <MailEventSourceV5 as EventSource>::Cache,
     ) -> EventSubscriberResult<()> {
-        self.0.on_refresh(event.map(|e| &e.core), cache).await
+        self.0.on_refresh(refresh_flag, cache).await
     }
 }

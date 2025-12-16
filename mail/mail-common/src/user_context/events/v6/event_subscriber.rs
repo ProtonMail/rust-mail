@@ -18,7 +18,7 @@ use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::join_task;
 use proton_core_common::models::Label;
 use proton_event_loop::v6::{EventSource, EventSubscriber};
-use proton_event_loop::{EventSubscriberError, EventSubscriberResult};
+use proton_event_loop::{EventSubscriberError, EventSubscriberResult, RefreshFlag};
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use stash::orm::Model;
 use std::collections::HashMap;
@@ -172,9 +172,9 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
         .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
     }
 
-    async fn on_refresh<'a>(
+    async fn on_refresh(
         &self,
-        _: Option<&'a <MailEventSourceV6 as EventSource>::Event>,
+        _: RefreshFlag,
         _: &mut <MailEventSourceV6 as EventSource>::Cache,
     ) -> EventSubscriberResult<()> {
         let Some(ctx) = self.0.upgrade() else {
