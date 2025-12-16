@@ -1839,11 +1839,19 @@ impl Message {
         label_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<
-        QueuedActionOutput<DeleteAllMessagesInLabel>,
+        Option<QueuedActionOutput<DeleteAllMessagesInLabel>>,
         QueueActionError<DeleteAllMessagesInLabel>,
     > {
-        let action = DeleteAllMessagesInLabel::new(label_id, tether).await?;
-        queue.queue_action(action).await
+        let action = DeleteAllMessagesInLabel::new(label_id, tether)
+            .await
+            .map_err(Into::into)
+            .map_err(QueueActionError::Action)?;
+
+        if let Some(action) = action {
+            Ok(Some(queue.queue_action(action).await?))
+        } else {
+            Ok(None)
+        }
     }
 
     #[must_use]

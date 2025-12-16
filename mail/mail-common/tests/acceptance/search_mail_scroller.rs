@@ -2,6 +2,7 @@ use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::prelude::RunningTasks;
 use proton_mail_common::api_message_meta;
 use proton_mail_common::datatypes::{AlmostAllMail, IncludeSwitch, SearchOptions, SystemLabelId};
 use proton_mail_common::models::{MailSettings, Message};
@@ -28,7 +29,7 @@ async fn reads_one_item_from_online_scroll_data() {
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::almost_all_mail())
-        .expect(2)
+        .alter(|mock| mock.expect(2))
         .respond_with(vec![message])
         .await;
 
@@ -195,7 +196,7 @@ async fn does_not_refresh_on_new_message_in_database() {
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::almost_all_mail())
-        .expect(2)
+        .alter(|mock| mock.expect(2))
         .respond_with(vec![message])
         .await;
 
@@ -265,7 +266,7 @@ async fn does_refresh_on_modified_message_in_database() {
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::almost_all_mail())
-        .expect(2)
+        .alter(|mock| mock.expect(2))
         .respond_with(vec![message])
         .await;
 
@@ -330,7 +331,7 @@ async fn all_mail() {
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::all_mail())
-        .expect(1..=2)
+        .alter(|mock| mock.expect(1..=2))
         .respond_with(vec![message])
         .await;
 
@@ -398,20 +399,20 @@ async fn almost_all_mail_with_spam_and_trash() {
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::almost_all_mail())
-        .expect(1..=2)
+        .alter(|mock| mock.expect(1..=2))
         .respond_with(vec![message1.clone()])
         .await;
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::all_mail())
         .given_keyword("keyword")
-        .expect(1..=2)
+        .alter(|mock| mock.expect(1..=2))
         .respond_with(vec![message2.clone()])
         .await;
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::all_mail())
-        .expect(1..=2)
+        .alter(|mock| mock.expect(1..=2))
         .respond_with(vec![message1, message2])
         .await;
 
@@ -507,26 +508,26 @@ async fn change_include_multiple_times_in_a_row() {
     ctx.mock_get_messages()
         .given_label_id(&LabelId::almost_all_mail())
         .given_end_id(message1.id.as_str())
-        .expect(2..=4)
+        .alter(|mock| mock.expect(2..=4))
         .respond_with(vec![])
         .await;
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::almost_all_mail())
-        .expect(2..=4)
+        .alter(|mock| mock.expect(2..=4))
         .respond_with(vec![message1.clone()])
         .await;
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::all_mail())
         .given_end_id(message2.id.as_str())
-        .expect(2..=4)
+        .alter(|mock| mock.expect(2..=4))
         .respond_with(vec![])
         .await;
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::all_mail())
-        .expect(2..=4)
+        .alter(|mock| mock.expect(2..=4))
         .respond_with(vec![message1, message2])
         .await;
 
@@ -633,14 +634,14 @@ async fn change_keywords_multiple_times_in_a_row() {
     ctx.mock_get_messages()
         .given_label_id(&LabelId::almost_all_mail())
         .given_keyword("keyword")
-        .expect(6..=8)
+        .alter(|mock| mock.expect(6..=8))
         .respond_with(vec![message1.clone()])
         .await;
 
     ctx.mock_get_messages()
         .given_label_id(&LabelId::almost_all_mail())
         .given_keyword("other keyword")
-        .expect(6..=8)
+        .alter(|mock| mock.expect(6..=8))
         .respond_with(vec![message1, message2])
         .await;
 
@@ -766,21 +767,21 @@ async fn setup_api_message_pages(
         .given_label_id(label_id)
         .given_keyword(keyword)
         .given_end_id(&first_page_last_id)
-        .expect(expect)
-        .respond_with_ex(total, second_page)
+        .alter(move |mock| mock.expect(expect))
+        .respond_with_ex(total, second_page, RunningTasks::none())
         .await;
 
     ctx.mock_get_messages()
         .given_label_id(label_id)
         .given_keyword(keyword)
         .given_end_id(&second_page_last_id)
-        .expect(expect)
-        .respond_with_ex(total, Vec::new())
+        .alter(move |mock| mock.expect(expect))
+        .respond_with_ex(total, Vec::new(), RunningTasks::none())
         .await;
 
     ctx.mock_get_messages()
-        .expect(expect)
-        .respond_with_ex(total, first_page)
+        .alter(move |mock| mock.expect(expect))
+        .respond_with_ex(total, first_page, RunningTasks::none())
         .await;
 
     params

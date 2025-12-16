@@ -1,31 +1,3 @@
-//! Response structures for the Proton Mail API.
-//!
-//! This module provides structures that are used to receive responses from the
-//! Proton Mail API. These structures are used to define the response bodies
-//! that are received from the API when making a request.
-//!
-//! The purpose of the API service is to provide not only the means to make
-//! requests, but also a formalisation of the data that is sent and received. To
-//! this end, the structs in this module should mirror the API endpoint response
-//! definitions, and NOT have any business logic or other functionality.
-//!
-//! To be clear, they should only contain data, and not methods; should not be
-//! saved in the database; and should not be used for anything except providing
-//! an interface for incoming data.
-//!
-//! Structs in this module should only implement [`Deserialize`], and should not
-//! implement [`Serialize`](serde::Serialize). If anything in this module
-//! implements [`Serialize`](serde::Serialize), it is a sign that a mistake has
-//! been made. The exception here is for testing purposes, e.g. when mocking
-//! response data — in which case implementing [`Serialize`](serde::Serialize)
-//! conditionally, only in test mode, is advised.
-//!
-//! Any types that are children of the primary response structures should be
-//! defined separately in the [`response_data`](crate::services::proton::response_data)
-//! module, or in the [`common`](crate::services::proton::common) module if they
-//! are used by both requests and responses.
-//!
-
 use crate::services::proton::IncomingDefault;
 use crate::services::proton::common::{ConversationId, MessageId};
 use crate::services::proton::prelude::NewAttachmentResponse;
@@ -34,210 +6,164 @@ use crate::services::proton::response_data::{
     MessageMetadata, OperationResult, UndoToken,
 };
 use proton_api_utils::PaginateResponse;
+use proton_core_api::services::proton::LabelId;
 use serde::Deserialize;
 #[cfg(feature = "mocks")]
 use serde::Serialize;
 use serde_with::{BoolFromInt, DefaultOnNull, serde_as};
+use std::collections::HashMap;
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetAttachmentMetadataResponse {
-    /// TODO: Document this field.
     pub attachment: Attachment,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationResponse {
-    /// TODO: Document this field.
     pub conversation: Conversation,
-
-    /// TODO: Document this field.
     pub messages: Vec<MessageMetadata>,
 }
 
-/// TODO: Document this struct.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationsResponse {
-    /// TODO: Document this field.
     pub conversations: Vec<Conversation>,
-
-    /// TODO: Document this field.
+    #[serde(default)]
+    #[serde_as(as = "DefaultOnNull")]
+    pub tasks_running: RunningTasks,
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
     pub stale: bool,
-
-    /// TODO: Document this field.
     pub total: u64,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationsCountResponse {
-    /// TODO: Document this field.
     pub counts: Vec<ConversationCount>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMessageResponse {
-    /// TODO: Document this field.
     pub message: Message,
 }
 
-/// TODO: Document this struct.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMessagesResponse {
-    /// TODO: Document this field.
     pub messages: Vec<MessageMetadata>,
-
-    /// TODO: Document this field.
+    #[serde(default)]
+    #[serde_as(as = "DefaultOnNull")]
+    pub tasks_running: RunningTasks,
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
     pub stale: bool,
-
-    /// TODO: Document this field.
     pub total: u64,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMessagesCountResponse {
-    /// TODO: Document this field.
     pub counts: Vec<MessageCount>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMailSettingsResponse {
-    /// TODO: Document this field.
     pub mail_settings: MailSettings,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsDeleteResponse {
-    /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<ConversationId>>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsLabelResponse {
-    /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<ConversationId>>,
-
-    /// TODO: Document this field.
     pub undo_token: Option<UndoToken>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsReadResponse {
-    /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<ConversationId>>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsUnlabelResponse {
-    /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<ConversationId>>,
-
-    /// TODO: Document this field.
     pub undo_token: Option<UndoToken>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsUnreadResponse {
-    /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<ConversationId>>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesDeleteResponse {
-    /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<MessageId>>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesLabelResponse {
-    /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<MessageId>>,
-
-    /// TODO: Document this field.
     pub undo_token: Option<UndoToken>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesReadResponse {
-    /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<MessageId>>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesUnlabelResponse {
-    /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<MessageId>>,
-
-    /// TODO: Document this field.
     pub undo_token: Option<UndoToken>,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesUnreadResponse {
-    /// TODO: Document this field.
     pub responses: Vec<OperationResult<MessageId>>,
 }
 
@@ -366,4 +292,164 @@ pub struct PutMobileSettingsResponse {
 pub struct PutNextMessageOnMoveResponse {
     pub code: i64,
     pub mail_settings: MailSettings,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(untagged)]
+pub enum RunningTasks {
+    /// We don't know if any background tasks are running - this is returned for
+    /// requests that don't specify the `?LabelID=...` parameter.
+    #[default]
+    NotKnown,
+
+    /// No background tasks are running.
+    None([(); 0]),
+
+    /// Some background tasks are running.
+    ///
+    /// The value is a map from label ids onto some metadata describing nature
+    /// of the tasks that are running on those labels - since we don't care
+    /// about that, we don't model that metadata here.
+    Some(HashMap<LabelId, serde_json::Value>),
+}
+
+impl RunningTasks {
+    #[must_use]
+    pub fn none() -> Self {
+        Self::None([])
+    }
+
+    #[must_use]
+    pub fn some(ids: &[LabelId]) -> Self {
+        Self::Some(
+            ids.iter()
+                .cloned()
+                .map(|id| {
+                    (
+                        id,
+                        serde_json::Value::Array(vec![serde_json::Map::default().into()]),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    #[must_use]
+    pub fn is_not_known(&self) -> bool {
+        matches!(self, Self::NotKnown)
+    }
+
+    #[must_use]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None(_))
+    }
+
+    #[must_use]
+    pub fn is_some(&self) -> bool {
+        matches!(self, Self::Some(_))
+    }
+
+    #[must_use]
+    pub fn has(&self, id: &LabelId) -> bool {
+        if let Self::Some(labels) = self {
+            labels.contains_key(id)
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn running_tasks_deserialization() {
+        let parse = |s: &str| -> GetConversationsResponse { serde_json::from_str(s).unwrap() };
+
+        // ---
+
+        let target = parse(
+            r#"
+            {
+              "Conversations": [],
+              "Stale": 0,
+              "Total": 0
+            }
+            "#,
+        );
+
+        assert_eq!(RunningTasks::NotKnown, target.tasks_running);
+
+        assert!(target.tasks_running.is_not_known());
+        assert!(!target.tasks_running.is_none());
+        assert!(!target.tasks_running.is_some());
+        assert!(!target.tasks_running.has(&"3".into()));
+
+        // ---
+
+        let target = parse(
+            r#"
+            {
+              "Conversations": [],
+              "TasksRunning": null,
+              "Stale": 0,
+              "Total": 0
+            }
+            "#,
+        );
+
+        assert_eq!(RunningTasks::NotKnown, target.tasks_running);
+
+        assert!(target.tasks_running.is_not_known());
+        assert!(!target.tasks_running.is_none());
+        assert!(!target.tasks_running.is_some());
+        assert!(!target.tasks_running.has(&"3".into()));
+
+        // ---
+
+        let target = parse(
+            r#"
+            {
+              "Conversations": [],
+              "TasksRunning": [],
+              "Stale": 0,
+              "Total": 0
+            }
+            "#,
+        );
+
+        assert!(matches!(target.tasks_running, RunningTasks::None(..)));
+
+        assert!(!target.tasks_running.is_not_known());
+        assert!(target.tasks_running.is_none());
+        assert!(!target.tasks_running.is_some());
+        assert!(!target.tasks_running.has(&"3".into()));
+
+        // ---
+
+        let target = parse(
+            r#"
+            {
+              "Conversations": [],
+              "TasksRunning": {
+                "3": [{}]
+              },
+              "Stale": 0,
+              "Total": 0
+            }
+            "#,
+        );
+
+        assert!(matches!(target.tasks_running, RunningTasks::Some(..)));
+
+        assert!(!target.tasks_running.is_not_known());
+        assert!(!target.tasks_running.is_none());
+        assert!(target.tasks_running.is_some());
+
+        assert!(!target.tasks_running.has(&"2".into()));
+        assert!(target.tasks_running.has(&"3".into()));
+        assert!(!target.tasks_running.has(&"4".into()));
+    }
 }

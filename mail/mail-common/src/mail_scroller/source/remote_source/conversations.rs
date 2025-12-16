@@ -1,8 +1,9 @@
-use super::{MailPaginatorJoinHandle, RemoteSource};
+use super::{MailPaginatorJoinHandle, RemoteSource, utils};
+use crate::datatypes::ConversationLabelsCount;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
-use crate::datatypes::{ConversationLabelsCount, SystemLabelId};
+use crate::models::LabelExt;
 use crate::models::Message;
 use crate::prefetch::PrefetchJob;
 use crate::{
@@ -18,6 +19,8 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::{services::proton::LabelId, session::Session};
 use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
+use proton_core_common::models::Label;
+use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::prelude::GetMessagesOptions;
 use proton_mail_api::services::proton::{
     ProtonMail,
@@ -25,7 +28,8 @@ use proton_mail_api::services::proton::{
     prelude::{GetConversationsOptions, GetConversationsResponse},
     response_data::MessageMetadata as ApiMessageMetadata,
 };
-use stash::stash::{Bond, Stash, Tether};
+use stash::stash::{Bond, Tether};
+use std::ops::ControlFlow;
 use tracing::{debug, error, info, instrument};
 
 #[derive(Debug)]
@@ -42,20 +46,15 @@ impl RemoteSource for ConversationScrollData {
         order_field: ScrollOrderField,
         invalidate: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        let session = ctx.session().clone();
-        let stash = ctx.user_stash().clone();
-
         let handle = ctx.spawn_ex(async move |ctx| {
             let items = RemoteConversationScrollerSource::sync_first_page(
-                &session,
-                stash,
+                &ctx,
                 local_label_id,
-                remote_label_id.clone(),
+                remote_label_id,
                 unread,
                 page_size,
                 order_dir,
                 order_field,
-                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -117,15 +116,12 @@ impl RemoteSource for ConversationScrollData {
         order_field: ScrollOrderField,
         sender: Option<flume::Sender<()>>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        let stash = ctx.user_stash().clone();
         let remote_id = scroller.remote_conversation_id.clone();
         let context_time = scroller.context_time(order_field);
-        let session = ctx.session().clone();
 
         let task = ctx.spawn_ex(async move |ctx| {
             let items = RemoteConversationScrollerSource::sync_previous_page(
-                &session,
-                stash,
+                &ctx,
                 local_label_id,
                 remote_label_id,
                 remote_id,
@@ -134,7 +130,6 @@ impl RemoteSource for ConversationScrollData {
                 page_size,
                 order_dir,
                 order_field,
-                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -167,15 +162,12 @@ impl RemoteConversationScrollerSource {
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        let stash = ctx.user_stash().clone();
         let remote_id = scroller.remote_conversation_id.clone();
         let context_time = scroller.context_time(order_field);
-        let session = ctx.session().clone();
 
         let task = ctx.spawn_ex(async move |ctx| {
             Self::sync_next_page(
-                &session,
-                stash,
+                &ctx,
                 label_local_id,
                 remote_label_id,
                 remote_id,
@@ -184,7 +176,6 @@ impl RemoteConversationScrollerSource {
                 page_size,
                 order_dir,
                 order_field,
-                ctx.rebaseable_queue().await,
             )
             .await?;
 
@@ -194,23 +185,29 @@ impl RemoteConversationScrollerSource {
         Ok(Some(task))
     }
 
-    #[instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_first_page(
-        session: &Session,
-        stash: Stash,
+        ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        queue: RebasableQueue<'_>,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
-        info!("Syncing first page in {remote_label_id:?}");
+        info!(
+            ?local_label_id,
+            ?remote_label_id,
+            ?unread,
+            ?page_size,
+            ?order_dir,
+            ?order_field,
+            "Syncing first page"
+        );
 
         let (response, message_metadata) = fetch_conversations_and_messages(
-            session,
+            ctx.session(),
             GetConversationsOptions {
                 label_id: Some(remote_label_id.clone()),
                 page_size: page_size as u64,
@@ -223,23 +220,35 @@ impl RemoteConversationScrollerSource {
         .await?;
 
         log_response(&response);
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
 
-        if response.conversations.is_empty() || stale_in_trash_or_spam {
+        let mut tether = ctx.user_stash().connection().await?;
+
+        // ---
+
+        let ControlFlow::Continue(()) = utils::ensure_label_is_idle(
+            &mut tether,
+            local_label_id,
+            &remote_label_id,
+            &response.tasks_running,
+        )
+        .await?
+        else {
+            return Ok(vec![]);
+        };
+
+        if response.conversations.is_empty() {
             return Ok(vec![]);
         }
 
+        // ---
+
         let context_time = Self::context_time(&response, unread);
 
-        let mut conversations: Vec<Conversation> = response
+        let mut conversations: Vec<_> = response
             .conversations
             .into_iter()
             .map(|c| c.into())
             .collect();
-
-        let mut tether = stash.connection().await?;
 
         Self::save_conversations(
             local_label_id,
@@ -252,9 +261,9 @@ impl RemoteConversationScrollerSource {
             order_dir,
             order_field,
             vec![],
-            session,
+            ctx.session(),
             &mut tether,
-            queue,
+            ctx.rebaseable_queue().await,
         )
         .await?;
 
@@ -264,11 +273,10 @@ impl RemoteConversationScrollerSource {
         ))
     }
 
-    #[instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_previous_page(
-        session: &Session,
-        stash: Stash,
+        ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         first_element_id: ConversationId,
@@ -277,17 +285,22 @@ impl RemoteConversationScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        queue: RebasableQueue<'_>,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         info!(
-            "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
+            ?local_label_id,
+            ?remote_label_id,
+            ?unread,
+            ?page_size,
+            ?order_dir,
+            ?order_field,
+            "Syncing previous page"
         );
 
         let (response, message_metadata) = fetch_conversations_and_messages(
-            session,
+            ctx.session(),
             GetConversationsOptions {
                 anchor: Some(first_element_time.as_u64()),
-                anchor_id: Some(first_element_id.clone()),
+                anchor_id: Some(first_element_id),
                 label_id: Some(remote_label_id.clone()),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
@@ -299,34 +312,48 @@ impl RemoteConversationScrollerSource {
         .await?;
 
         log_response(&response);
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
 
-        if response.conversations.is_empty() || stale_in_trash_or_spam {
+        let mut tether = ctx.user_stash().connection().await?;
+
+        // ---
+
+        let ControlFlow::Continue(()) = utils::ensure_label_is_idle(
+            &mut tether,
+            local_label_id,
+            &remote_label_id,
+            &response.tasks_running,
+        )
+        .await?
+        else {
+            return Ok(vec![]);
+        };
+
+        if response.conversations.is_empty() {
             return Ok(vec![]);
         }
 
+        // ---
+
         // Event though we are fetching messages, we do not need to fetch the message counters
         // as they are not displayed in conversation view mode.
-        let conversation_label_counts = session
+        let conversation_label_counts = ctx
+            .session()
             .get_conversations_count_for_labels(vec![remote_label_id.clone()])
             .await?;
 
         let context_time = Self::context_time(&response, unread);
 
-        let mut conversations: Vec<Conversation> = response
+        let mut conversations: Vec<_> = response
             .conversations
             .into_iter()
             .map(|c| c.into())
             .collect();
+
         let conversation_counts = conversation_label_counts
             .counts
             .into_iter()
             .map_into()
             .collect();
-
-        let mut tether = stash.connection().await?;
 
         Self::save_conversations(
             local_label_id,
@@ -339,9 +366,9 @@ impl RemoteConversationScrollerSource {
             order_dir,
             order_field,
             conversation_counts,
-            session,
+            ctx.session(),
             &mut tether,
-            queue,
+            ctx.rebaseable_queue().await,
         )
         .await?;
 
@@ -351,11 +378,10 @@ impl RemoteConversationScrollerSource {
         ))
     }
 
-    #[instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
+    #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_next_page(
-        session: &Session,
-        stash: Stash,
+        ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         last_element_id: ConversationId,
@@ -364,16 +390,20 @@ impl RemoteConversationScrollerSource {
         page_size: usize,
         order_dir: ScrollOrderDir,
         order_field: ScrollOrderField,
-        queue: RebasableQueue<'_>,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         info!(
-            "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
+            ?local_label_id,
+            ?remote_label_id,
+            ?unread,
+            ?page_size,
+            ?order_dir,
+            ?order_field,
+            "Syncing next page"
         );
 
         let (mut response, message_metadata) = fetch_conversations_and_messages(
-            session,
+            ctx.session(),
             GetConversationsOptions {
-                // time == 0 breaks the api query.
                 anchor: Some(last_element_time.as_u64()),
                 anchor_id: Some(last_element_id.clone()),
                 label_id: Some(remote_label_id.clone()),
@@ -386,6 +416,12 @@ impl RemoteConversationScrollerSource {
         )
         .await?;
 
+        log_response(&response);
+
+        let mut tether = ctx.user_stash().connection().await?;
+
+        // ---
+
         if !response.conversations.is_empty() {
             // Unless we are filtering, end id is always the first element in the returned
             // data, even if there is are no more elements.
@@ -397,25 +433,30 @@ impl RemoteConversationScrollerSource {
             }
         }
 
-        log_response(&response);
+        let ControlFlow::Continue(()) = utils::ensure_label_is_idle(
+            &mut tether,
+            local_label_id,
+            &remote_label_id,
+            &response.tasks_running,
+        )
+        .await?
+        else {
+            return Ok(vec![]);
+        };
 
-        let trash_or_spam =
-            remote_label_id == LabelId::trash() || remote_label_id == LabelId::spam();
-        let stale_in_trash_or_spam = response.stale && trash_or_spam;
-
-        if response.conversations.is_empty() || stale_in_trash_or_spam {
+        if response.conversations.is_empty() {
             return Ok(vec![]);
         }
 
+        // ---
+
         let context_time = Self::context_time(&response, unread);
 
-        let mut conversations: Vec<Conversation> = response
+        let mut conversations: Vec<_> = response
             .conversations
             .into_iter()
             .map(|c| c.into())
             .collect();
-
-        let mut tether = stash.connection().await?;
 
         Self::save_conversations(
             local_label_id,
@@ -428,9 +469,9 @@ impl RemoteConversationScrollerSource {
             order_dir,
             order_field,
             vec![],
-            session,
+            ctx.session(),
             &mut tether,
-            queue,
+            ctx.rebaseable_queue().await,
         )
         .await?;
 
@@ -501,7 +542,12 @@ impl RemoteConversationScrollerSource {
         // downloaded in the background
         tether
             .quiet_tx(async |tx| {
-                // Update conversation counters
+                if let Some(label) = Label::find_by_id(local_label_id, tx).await?
+                    && label.is_busy(tx).await?
+                {
+                    return Ok(());
+                }
+
                 if !conversation_labels_count.is_empty() {
                     ConversationLabelsCount::create_or_update_conversation_counts(
                         conversation_labels_count.clone(),
@@ -509,6 +555,7 @@ impl RemoteConversationScrollerSource {
                     )
                     .await?;
                 }
+
                 let mut rebase_change_set = RebaseChangeSet::default();
                 // Save all conversations.
                 for conversation in conversations.iter_mut() {
@@ -566,7 +613,7 @@ impl RemoteConversationScrollerSource {
                 if update_scroller {
                     Self::update_scroller_data(
                         local_label_id,
-                        remote_id.clone(),
+                        remote_id,
                         unread,
                         context_time,
                         snooze_time,
@@ -637,13 +684,14 @@ fn log_response(response: &GetConversationsResponse) {
     );
 }
 
-const MESSAGE_PAGE_SIZE: u64 = 100;
-
 async fn fetch_conversations_and_messages(
     session: &Session,
     options: GetConversationsOptions,
 ) -> Result<(GetConversationsResponse, Vec<ApiMessageMetadata>), ApiServiceError> {
+    const MESSAGE_PAGE_SIZE: u64 = 100;
+
     let conversations_response = session.get_conversations(options).await?;
+
     let conversation_ids = conversations_response
         .conversations
         .iter()
@@ -656,8 +704,10 @@ async fn fetch_conversations_and_messages(
 
     let mut messages = Vec::new();
     let mut page_index = 0_u64;
+
     loop {
         debug!("Fetching conversations messages (page={})", page_index);
+
         let messages_response = session
             .get_messages(GetMessagesOptions {
                 conversation_id: Some(conversation_ids.clone()),
@@ -666,9 +716,11 @@ async fn fetch_conversations_and_messages(
                 ..Default::default()
             })
             .await?;
+
         debug!("Done fetching conversations messages (page={})", page_index);
 
         let was_empty = messages.is_empty();
+
         messages.extend(messages_response.messages);
 
         // if the returned messages is equal to the total, we can early exit, since we

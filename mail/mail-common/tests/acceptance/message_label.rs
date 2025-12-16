@@ -395,6 +395,7 @@ async fn message_action_ham() {
 
     Message::action_delete_all_in_label(user_context.action_queue(), local_inbox, &tether)
         .await
+        .unwrap()
         .unwrap();
 
     user_context.execute_all_actions().await.unwrap();

@@ -174,7 +174,7 @@ where
     id: Uuid,
     queries: flume::Sender<ScrollerQuery<T>>,
     commands: flume::Sender<ScrollerCommand>,
-    aborts: Vec<AbortHandle>,
+    tasks: Vec<AbortHandle>,
 }
 
 impl MailScroller<ContextualConversation> {
@@ -266,7 +266,7 @@ where
             commands,
             updates,
             handle,
-            aborts,
+            tasks,
         } = ScrollerWorker::run(ctx_weak.clone(), source, page_size, label).await?;
 
         let events = ctx.core_context().event_service();
@@ -312,7 +312,7 @@ where
                 id,
                 queries,
                 commands,
-                aborts,
+                tasks,
             },
             MailScrollerHandle { updates, handle },
         ))
@@ -575,8 +575,8 @@ where
     }
 
     pub fn terminate(&self) {
-        for abort in &self.aborts {
-            abort.abort();
+        for task in &self.tasks {
+            task.abort();
         }
     }
 }
@@ -668,7 +668,7 @@ where
             command_tx: command_tx.clone(),
         };
 
-        let aborts = this.spawn(
+        let tasks = this.spawn(
             query_rx,
             command_tx.clone(),
             receiver,
@@ -680,7 +680,7 @@ where
             commands: command_tx,
             updates: update_receiver,
             handle,
-            aborts,
+            tasks,
         })
     }
 
@@ -688,13 +688,12 @@ where
         mut self,
         queries: flume::Receiver<ScrollerQuery<S::Item>>,
         commands: flume::Sender<ScrollerCommand>,
-        db_receiver: flume::Receiver<()>,
-        invalidation_receiver: flume::Receiver<()>,
+        on_db_changed: flume::Receiver<()>,
+        on_invalidated: flume::Receiver<()>,
     ) -> Result<Vec<AbortHandle>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let source_clone = self.source.clone();
-        let items_clone = Arc::clone(&self.items);
-        let weak_ctx = self.ctx.clone();
+        let source = self.source.clone();
+        let items = Arc::clone(&self.items);
 
         let cmd_handler = ctx.spawn(async move {
             while let Ok(command) = self.command_rx.recv_async().await {
@@ -712,10 +711,12 @@ where
             }
         });
 
-        let query_handler = ctx.spawn(async move {
+        let query_handler = ctx.spawn_ex(async move |ctx| {
+            let ctx = ctx.as_weak();
+
             loop {
                 select! {
-                    r = invalidation_receiver.recv_async() => {
+                    r = on_invalidated.recv_async() => {
                         if let Err(e) = r {
                             error!("Failed to receive invalidation: {e:?}");
                             return;
@@ -726,7 +727,7 @@ where
                             .inspect_err(|e| error!("Failed to send refresh command: {e:?}"));
                     }
 
-                    r = db_receiver.recv_async() => {
+                    r = on_db_changed.recv_async() => {
                         if let Err(e) = r {
                             error!("Failed to receive db update: {e:?}");
                             return;
@@ -743,7 +744,7 @@ where
                             return;
                         }
 
-                        if let Err(e) = Self::handle_query(r.unwrap(), &source_clone, items_clone.clone(), &weak_ctx).await {
+                        if let Err(e) = Self::handle_query(r.unwrap(), &source, &items, &ctx).await {
                             error!("Failed to handle query: {e:?}");
                         }
                     }
@@ -948,7 +949,7 @@ where
     async fn handle_query(
         command: ScrollerQuery<S::Item>,
         source: &RwLock<S>,
-        items: Arc<SyncRwLock<Vec<S::Item>>>,
+        items: &Arc<SyncRwLock<Vec<S::Item>>>,
         ctx: &Weak<MailUserContext>,
     ) -> Result<(), MailContextError> {
         match command {
@@ -1379,7 +1380,7 @@ where
     commands: flume::Sender<ScrollerCommand>,
     updates: flume::Receiver<ScrollerUpdate<S::Item>>,
     handle: DropRemoveTableObserverHandle,
-    aborts: Vec<AbortHandle>,
+    tasks: Vec<AbortHandle>,
 }
 
 enum ScrollerQuery<T>

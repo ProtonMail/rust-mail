@@ -1,6 +1,7 @@
 mod conversations;
 mod messages;
 mod search;
+mod utils;
 
 pub use self::search::*;
 use super::MailPaginatorJoinHandle;

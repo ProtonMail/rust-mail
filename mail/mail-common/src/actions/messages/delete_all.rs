@@ -1,6 +1,7 @@
 use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
-use crate::models::Message;
+use crate::models::{LabelExt, Message};
+use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
@@ -8,12 +9,13 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{Label, LabelError, ModelIdExtension as _};
+use proton_core_common::models::{Label, LabelError, ModelExtension};
 use proton_mail_api::services::proton::ProtonMail as _;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, StashError, Tether};
+use stash::orm::Model;
+use stash::stash::{Bond, Tether};
 use std::mem;
-use tracing::{error, info};
+use tracing::{info, instrument, warn};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeleteAllMessagesInLabel {
@@ -22,12 +24,36 @@ pub struct DeleteAllMessagesInLabel {
 }
 
 impl DeleteAllMessagesInLabel {
-    pub async fn new(local_id: LocalLabelId, tether: &Tether) -> Result<Self, StashError> {
-        let ids = Message::ids_in_label(local_id, tether).await?;
-        Ok(Self {
-            local_id,
-            ids_for_rollback: ids,
-        })
+    pub async fn new(local_id: LocalLabelId, tether: &Tether) -> Result<Option<Self>, LabelError> {
+        let ids_for_rollback = Message::ids_in_label(local_id, tether).await?;
+
+        let label = Label::find_by_id(local_id, tether)
+            .await?
+            .ok_or_else(|| LabelError::CouldNotResolveRemoteLabel(local_id))?;
+
+        if label.is_idle(tether).await? {
+            Ok(Some(Self {
+                local_id,
+                ids_for_rollback,
+            }))
+        } else {
+            // If a label is already being emptied, scheduling another emptying
+            // would fail on the `apply_remote()` stage as the backend doesn't
+            // allow for parallel empty-ings to run.
+            //
+            // At the same time, we don't want for this action to fail, because
+            // some people might be tempted to press the "delete all" button
+            // multiple times in a row, thinking it might speed the process up
+            // or something (let's call it "the elevator button phenomenon").
+            //
+            // So instead let's just silently ignore the action.
+            warn!(
+                "Label {local_id} is already busy, no point scheduling another \
+                 delete-all action for it",
+            );
+
+            Ok(None)
+        }
     }
 }
 
@@ -53,6 +79,19 @@ pub struct DeleteAllMessagesInLabelHandler {
     pub api: Session,
 }
 
+impl DeleteAllMessagesInLabelHandler {
+    #[instrument(skip_all)]
+    async fn label(
+        &self,
+        action: &DeleteAllMessagesInLabel,
+        tether: &Tether,
+    ) -> Result<Label, LabelError> {
+        Label::find_by_id(action.local_id, tether)
+            .await?
+            .ok_or_else(|| LabelError::CouldNotResolveRemoteLabel(action.local_id))
+    }
+}
+
 impl Handler for DeleteAllMessagesInLabelHandler {
     type Action = DeleteAllMessagesInLabel;
 
@@ -62,6 +101,15 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
+        let label = self.label(action, tx).await?;
+
+        if label.is_busy(tx).await? {
+            // Soft-unreachable, since we validate this in the constructor, but
+            // won't hurt to double-check
+            return Err(anyhow!("Label {} is busy", label.id()).into());
+        }
+
+        label.mark_busy(tx).await?;
         Message::mark_deleted(action.ids_for_rollback.clone(), tx).await?;
 
         Ok(())
@@ -73,6 +121,9 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
+        let label = self.label(action, tx).await?;
+
+        label.mark_idle(tx).await?;
         Message::mark_undeleted(mem::take(&mut action.ids_for_rollback), tx).await?;
 
         Ok(())
@@ -84,19 +135,29 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let id = Label::local_id_counterpart(action.local_id, guard.tether())
-            .await?
-            .ok_or_else(|| {
-                error!("remote_id not found for local_label_id (trying to empty a local folder?)");
-                LabelError::CouldNotResolveRemoteLabel(action.local_id)
-            })?;
+        let label = self.label(action, guard.tether()).await?;
 
-        info!("Deleting all messages in {id}");
+        info!(
+            local_id = ?label.local_id,
+            remote_id = ?label.remote_id,
+            "Deleting all messages"
+        );
 
-        self.api.delete_all_messages_in_label(id).await?;
+        if let Some(remote_id) = &label.remote_id {
+            self.api
+                .delete_all_messages_in_label(remote_id.clone())
+                .await?;
+
+            // Emptying a label is an asynchronous action - even though backend
+            // responds immediately, the action is actually carried out in the
+            // background.
+            //
+            // That's why we cannot mark the label as idle back again here.
+        }
 
         Ok(())
     }
+
     async fn rebase_local(
         &self,
         _: ActionId,
@@ -108,7 +169,9 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         // while the action is active, we need to always recalculate until we have support
         // for delete up to.
         action.ids_for_rollback = Message::ids_in_label_with_deleted(action.local_id, tx).await?;
+
         Message::mark_deleted(action.ids_for_rollback.clone(), tx).await?;
+
         Ok(())
     }
 }
