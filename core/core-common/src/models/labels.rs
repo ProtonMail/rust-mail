@@ -28,6 +28,7 @@ use stash::utils::{MapToSql as _, placeholders};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use topological_sort::TopologicalSort;
+use tracing::log::warn;
 use tracing::{error, instrument};
 
 #[derive(Debug, Error)]
