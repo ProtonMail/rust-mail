@@ -1,65 +1,18 @@
 //! Utilities to listen to the proton event loop. This crate provides an event polling system
-//! that can handle multiple event types through the [`EventPoll`] which is the main entry point to this crate.
+//! that can handle multiple event types through the [`EventManager`](`crate::v6::EventManager`)
+//! which is the main entry point to this crate.
 //!
-//! The system works with raw events that are then converted to specific event types by registered subscribers.
-//! Handling of events is delegated to [`Subscriber`]s which are automatically wrapped in [`TypedSubscribers`] containers
-//! that implement the [`RawSubscriber`] trait.
+//! The system works with [`RawEvent`]s that are then converted to specific event types by registered
+//! subscribers.
 //!
-//! # Event Polling Architecture
 //!
 //! The event polling system uses a two-tier approach:
 //! - **Raw Events**: Events are initially fetched as [`RawEvent`]s from the API
-//! - **Typed Events**: Each [`RawSubscriber`] deserializes raw events to specific event types
+//! - **Typed Events**: Each [`v6::EventSource`] deserializes the [`RawEvent`] into a typed version that
+//!   is then consumed by the registered [`Subscriber`]s
 //!
-//! This design allows a single [`EventPoll`] to handle multiple event types (e.g., core events, mail events)
-//! without requiring separate polling loops.
 //!
-//! # Registration System
-//!
-//! The event poll uses a **type-based registration system**:
-//! - Subscribers are grouped by their event type (`TypeId`)
-//! - Multiple subscribers for the same event type are automatically grouped together
-//! - No need to manually manage subscriber names or collections
-//!
-//! ## Basic Usage
-//!
-//! ```ignore
-//! use proton_event_loop::{EventPoll, Provider, Store, Subscriber};
-//!
-//! async fn create_poll_and_run(
-//!     store: Box<dyn Store>,
-//!     provider: Box<dyn Provider>,
-//!     core_subscriber1: Box<dyn Subscriber<CoreEvent>>,
-//!     core_subscriber2: Box<dyn Subscriber<CoreEvent>>,
-//!     mail_subscriber: Box<dyn Subscriber<MailEvent>>
-//! ) -> Result<(), EventLoopError> {
-//!     let event_poll = EventPoll::new(store, provider);
-//!
-//!     // Initialize the poll to set up the initial event ID if needed
-//!     event_poll.initialize().await?;
-//!
-//!     // Register subscribers - they're automatically grouped by event type
-//!     event_poll.register(core_subscriber1).await?;  // Creates TypedSubscribers<CoreEvent>
-//!     event_poll.register(core_subscriber2).await?;  // Adds to existing TypedSubscribers<CoreEvent>
-//!     event_poll.register(mail_subscriber).await?;   // Creates TypedSubscribers<MailEvent>
-//!
-//!     // Poll for events - all registered subscribers will receive appropriate events
-//!     loop {
-//!         if let Err(e) = event_poll.poll().await {
-//!             // Handle error - detailed error information is provided
-//!             eprintln!("Event polling failed: {e}");
-//!         }
-//!     }
-//! }
-//! ```
-//!
-//! ## Key Features
-//!
-//! - **Automatic Grouping**: Multiple subscribers for the same event type are automatically grouped
-//! - **Type Safety**: Registration is compile-time type-safe with `register<T>()`
-//! - **Error Handling**: Comprehensive error reporting with context about which subscriber failed
-//! - **FIFO Processing**: Subscribers are processed in the order they were registered
-//! - **Single Poll Loop**: One event poll can handle multiple event types efficiently
+//! For more details see the [`v6 module`](`crate::v6`) documentation.
 //!
 pub mod provider;
 pub mod store;
