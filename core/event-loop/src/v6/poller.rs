@@ -97,7 +97,7 @@ impl EventPoller {
             has_more = raw_event.has_more();
             info!("Applying {:?}", previous_event_id);
             if raw_event.is_refresh() {
-                subscribers.on_refresh(Some(&raw_event)).await?;
+                subscribers.on_refresh(raw_event.refresh_flag()).await?;
             } else {
                 subscribers.on_event(&raw_event).await?;
             }

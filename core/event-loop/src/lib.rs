@@ -1,65 +1,18 @@
 //! Utilities to listen to the proton event loop. This crate provides an event polling system
-//! that can handle multiple event types through the [`EventPoll`] which is the main entry point to this crate.
+//! that can handle multiple event types through the [`EventManager`](`crate::v6::EventManager`)
+//! which is the main entry point to this crate.
 //!
-//! The system works with raw events that are then converted to specific event types by registered subscribers.
-//! Handling of events is delegated to [`Subscriber`]s which are automatically wrapped in [`TypedSubscribers`] containers
-//! that implement the [`RawSubscriber`] trait.
+//! The system works with [`RawEvent`]s that are then converted to specific event types by registered
+//! subscribers.
 //!
-//! # Event Polling Architecture
 //!
 //! The event polling system uses a two-tier approach:
 //! - **Raw Events**: Events are initially fetched as [`RawEvent`]s from the API
-//! - **Typed Events**: Each [`RawSubscriber`] deserializes raw events to specific event types
+//! - **Typed Events**: Each [`v6::EventSource`] deserializes the [`RawEvent`] into a typed version that
+//!   is then consumed by the registered [`Subscriber`]s
 //!
-//! This design allows a single [`EventPoll`] to handle multiple event types (e.g., core events, mail events)
-//! without requiring separate polling loops.
 //!
-//! # Registration System
-//!
-//! The event poll uses a **type-based registration system**:
-//! - Subscribers are grouped by their event type (`TypeId`)
-//! - Multiple subscribers for the same event type are automatically grouped together
-//! - No need to manually manage subscriber names or collections
-//!
-//! ## Basic Usage
-//!
-//! ```ignore
-//! use proton_event_loop::{EventPoll, Provider, Store, Subscriber};
-//!
-//! async fn create_poll_and_run(
-//!     store: Box<dyn Store>,
-//!     provider: Box<dyn Provider>,
-//!     core_subscriber1: Box<dyn Subscriber<CoreEvent>>,
-//!     core_subscriber2: Box<dyn Subscriber<CoreEvent>>,
-//!     mail_subscriber: Box<dyn Subscriber<MailEvent>>
-//! ) -> Result<(), EventLoopError> {
-//!     let event_poll = EventPoll::new(store, provider);
-//!
-//!     // Initialize the poll to set up the initial event ID if needed
-//!     event_poll.initialize().await?;
-//!
-//!     // Register subscribers - they're automatically grouped by event type
-//!     event_poll.register(core_subscriber1).await?;  // Creates TypedSubscribers<CoreEvent>
-//!     event_poll.register(core_subscriber2).await?;  // Adds to existing TypedSubscribers<CoreEvent>
-//!     event_poll.register(mail_subscriber).await?;   // Creates TypedSubscribers<MailEvent>
-//!
-//!     // Poll for events - all registered subscribers will receive appropriate events
-//!     loop {
-//!         if let Err(e) = event_poll.poll().await {
-//!             // Handle error - detailed error information is provided
-//!             eprintln!("Event polling failed: {e}");
-//!         }
-//!     }
-//! }
-//! ```
-//!
-//! ## Key Features
-//!
-//! - **Automatic Grouping**: Multiple subscribers for the same event type are automatically grouped
-//! - **Type Safety**: Registration is compile-time type-safe with `register<T>()`
-//! - **Error Handling**: Comprehensive error reporting with context about which subscriber failed
-//! - **FIFO Processing**: Subscribers are processed in the order they were registered
-//! - **Single Poll Loop**: One event poll can handle multiple event types efficiently
+//! For more details see the [`v6 module`](`crate::v6`) documentation.
 //!
 pub mod provider;
 pub mod store;
@@ -151,7 +104,7 @@ impl RawEvent {
         })
     }
 
-    pub fn deserialize_generic<'a, T: Deserialize<'a>>(&'a self) -> Result<T, serde_json::Error> {
+    pub fn deserialize<'a, T: Deserialize<'a>>(&'a self) -> Result<T, serde_json::Error> {
         serde_json::from_str(&self.raw)
     }
 }
@@ -167,6 +120,10 @@ impl RawEvent {
     fn is_refresh(&self) -> bool {
         self.meta.refresh.as_bool()
     }
+
+    fn refresh_flag(&self) -> RefreshFlag {
+        self.meta.refresh
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
@@ -175,34 +132,51 @@ struct EventMetadata {
     #[serde(rename = "EventID")]
     event_id: EventId,
     #[serde(rename = "More")]
-    has_more: BoolOrInteger,
-    refresh: BoolOrInteger,
+    has_more: RefreshFlag,
+    refresh: RefreshFlag,
 }
 
+/// Compatability type to handle differences in the refresh value between
+/// v5 and v6 loops.
 #[derive(Debug, Copy, Clone, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 #[serde(untagged)]
-enum BoolOrInteger {
+pub enum RefreshFlag {
     Bool(bool),
     Integer(u8),
 }
 
-impl BoolOrInteger {
-    fn as_bool(self) -> bool {
+impl RefreshFlag {
+    #[must_use]
+    pub fn as_bool(self) -> bool {
         match self {
-            BoolOrInteger::Bool(v) => v,
-            BoolOrInteger::Integer(v) => v != 0,
+            RefreshFlag::Bool(v) => v,
+            RefreshFlag::Integer(v) => v != 0,
+        }
+    }
+
+    #[must_use]
+    pub fn as_u8(self) -> u8 {
+        match self {
+            RefreshFlag::Bool(v) => {
+                if v {
+                    u8::MAX
+                } else {
+                    0
+                }
+            }
+            RefreshFlag::Integer(v) => v,
         }
     }
 }
 
-impl From<bool> for BoolOrInteger {
+impl From<bool> for RefreshFlag {
     fn from(value: bool) -> Self {
         Self::Bool(value)
     }
 }
 
-impl From<u8> for BoolOrInteger {
+impl From<u8> for RefreshFlag {
     fn from(value: u8) -> Self {
         Self::Integer(value)
     }

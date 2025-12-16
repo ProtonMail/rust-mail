@@ -3,7 +3,9 @@
 use proton_event_loop::v6::{
     EventSource, EventSourceDependencyList, EventSubscriber, EventSubscriberResult,
 };
-use proton_event_loop::{EventId, EventProvider, EventProviderResult, RawEvent, store::EventStore};
+use proton_event_loop::{
+    EventId, EventProvider, EventProviderResult, RawEvent, RefreshFlag, store::EventStore,
+};
 use serde::Deserialize;
 struct CoreEventSource;
 
@@ -63,11 +65,7 @@ impl EventSubscriber<MailEventSource> for MailSubscriber {
     async fn on_event(&self, event: &MailEvent, cache: &mut ()) -> EventSubscriberResult<()> {
         todo!()
     }
-    async fn on_refresh<'a>(
-        &self,
-        _: Option<&'a MailEvent>,
-        (): &mut (),
-    ) -> EventSubscriberResult<()> {
+    async fn on_refresh(&self, _: RefreshFlag, (): &mut ()) -> EventSubscriberResult<()> {
         todo!()
     }
 }

@@ -16,6 +16,7 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::LabelError;
+use proton_event_loop::RefreshFlag;
 use stash::orm::Model;
 use std::sync::{Arc, Weak};
 use tracing::{debug, error, info, warn};
@@ -267,17 +268,16 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
         .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
     }
 
-    async fn on_refresh<'a>(
+    async fn on_refresh(
         &self,
-        event: Option<&'a MailEventV5>,
+        refresh_flag: RefreshFlag,
         _: &mut <MailEventSourceV5 as EventSource>::Cache,
     ) -> EventSubscriberResult<()> {
         let Some(ctx) = self.0.upgrade() else {
             warn!("Mail user context is no longer alive");
             return Ok(());
         };
-        ctx.on_refresh_impl(event.map_or(Refresh::All, |event| Refresh::from(event.core.refresh)))
-            .await
+        ctx.on_refresh_impl(refresh_flag.as_u8().into()).await
     }
 }
 

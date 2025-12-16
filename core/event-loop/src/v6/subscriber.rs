@@ -1,5 +1,5 @@
 use crate::v6::source::EventSource;
-use crate::{EventLoopError, MAX_ERROR_RETRIES, RawEvent};
+use crate::{EventLoopError, MAX_ERROR_RETRIES, RawEvent, RefreshFlag};
 use async_trait::async_trait;
 use slotmap::{DefaultKey, SlotMap};
 use std::any::Any;
@@ -60,9 +60,9 @@ pub trait EventSubscriber<E: EventSource>: Send + Sync + 'static {
 
     /// Invoked either when a refresh event was retrieved from the server or if manually requested.
     /// In the latter case, there is no `event` object.
-    async fn on_refresh<'a>(
+    async fn on_refresh(
         &self,
-        event: Option<&'a E::Event>,
+        event: RefreshFlag,
         cache: &mut E::Cache,
     ) -> EventSubscriberResult<()>;
 }
@@ -72,7 +72,7 @@ pub trait EventSubscriber<E: EventSource>: Send + Sync + 'static {
 #[async_trait]
 pub(crate) trait SubscriberList: Any + Send + Sync {
     async fn on_event(&self, events: &RawEvent) -> Result<(), EventLoopError>;
-    async fn on_refresh<'a>(&self, event: Option<&'a RawEvent>) -> Result<(), EventLoopError>;
+    async fn on_refresh(&self, refresh: RefreshFlag) -> Result<(), EventLoopError>;
 }
 
 /// A collection of subscribers that handle events of a specific type.
@@ -122,7 +122,7 @@ where
     E: EventSource,
 {
     async fn on_event(&self, event: &RawEvent) -> Result<(), EventLoopError> {
-        let event = RawEvent::deserialize_generic::<E::Event>(event)
+        let event = RawEvent::deserialize::<E::Event>(event)
             .map_err(|e| EventLoopError::Deserialize(anyhow::Error::new(e)))?;
         let mut cache = E::Cache::default();
 
@@ -142,19 +142,11 @@ where
         Ok(())
     }
 
-    async fn on_refresh<'a>(&self, event: Option<&'a RawEvent>) -> Result<(), EventLoopError> {
-        let event = if let Some(event) = event {
-            Some(
-                RawEvent::deserialize_generic::<E::Event>(event)
-                    .map_err(|e| EventLoopError::Deserialize(anyhow::Error::new(e)))?,
-            )
-        } else {
-            None
-        };
+    async fn on_refresh(&self, refresh: RefreshFlag) -> Result<(), EventLoopError> {
         let mut cache = E::Cache::default();
         for subscriber in self.subscribers.values() {
             let mut num_attempts = 0;
-            while let Err(e) = subscriber.on_refresh(event.as_ref(), &mut cache).await {
+            while let Err(e) = subscriber.on_refresh(refresh, &mut cache).await {
                 error!(
                     "Failed to apply refresh to '{}' (attempt:{num_attempts}): {e:?}",
                     subscriber.name()

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_event_loop::v6::{EventSource, EventSubscriber};
-use proton_event_loop::{EventSubscriberError, EventSubscriberResult};
+use proton_event_loop::{EventSubscriberError, EventSubscriberResult, RefreshFlag};
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use std::collections::HashMap;
 use std::sync::Weak;
@@ -98,9 +98,9 @@ impl EventSubscriber<ContactEventSourceV6> for ContactEventV6Subscriber {
         .map_err(|e| -> Box<dyn EventSubscriberError> { Box::new(e) })
     }
 
-    async fn on_refresh<'a>(
+    async fn on_refresh(
         &self,
-        _: Option<&'a <ContactEventSourceV6 as EventSource>::Event>,
+        _: RefreshFlag,
         _: &mut <ContactEventSourceV6 as EventSource>::Cache,
     ) -> EventSubscriberResult<()> {
         let ctx = self
