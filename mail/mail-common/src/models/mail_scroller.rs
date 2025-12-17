@@ -176,6 +176,13 @@ impl ScrollData for MessageScrollData {
         unread: ReadFilter,
         tether: &Tether,
     ) -> Result<u64, AppError> {
+        // HACK MessageCounters get updated by event loop even if the label is
+        //      busy - for our purposes, we need to short-circuit that to zero,
+        //      though
+        if MailBusyLabel::load(local_label_id, tether).await?.is_some() {
+            return Ok(0);
+        }
+
         let Some(counters) = MessageCounters::find_by_id(local_label_id, tether).await? else {
             return Err(AppError::LocalLabelHasNoCounters(local_label_id));
         };
@@ -450,6 +457,13 @@ impl ScrollData for ConversationScrollData {
         unread: ReadFilter,
         tether: &Tether,
     ) -> Result<u64, AppError> {
+        // HACK ConversationCounters get updated by event loop even if the label
+        //      is busy - for our purposes, we need to short-circuit that to
+        //      zero, though
+        if MailBusyLabel::load(local_label_id, tether).await?.is_some() {
+            return Ok(0);
+        }
+
         let Some(counters) = ConversationCounters::find_by_id(local_label_id, tether).await? else {
             return Err(AppError::LocalLabelHasNoCounters(local_label_id));
         };
