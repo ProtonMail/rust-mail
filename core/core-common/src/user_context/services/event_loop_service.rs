@@ -6,6 +6,7 @@ use proton_task_service::TaskService;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
+use tracing::{Instrument, Span};
 
 pub struct EventLoopService {
     event_poll: EventManager,
@@ -77,7 +78,7 @@ impl EventManager {
     pub async fn initialize(&self) -> Result<(), EventLoopError> {
         let (tx, rx) = oneshot::channel();
         self.tx
-            .send(EventManagerMessage::Init(tx))
+            .send(EventManagerMessage::Init(tx, Span::current()))
             .await
             .map_err(|_| EventLoopError::Actor)?;
 
@@ -87,7 +88,7 @@ impl EventManager {
     pub async fn poll(&self) -> Result<(), EventLoopError> {
         let (tx, rx) = oneshot::channel();
         self.tx
-            .send(EventManagerMessage::Poll(tx))
+            .send(EventManagerMessage::Poll(tx, Span::current()))
             .await
             .map_err(|_| EventLoopError::Actor)?;
 
@@ -114,8 +115,8 @@ impl EventManager {
 
 enum EventManagerMessage {
     Run(Box<dyn FnOnce(&mut v6::EventManager) + Send + 'static>),
-    Poll(oneshot::Sender<Result<(), EventLoopError>>),
-    Init(oneshot::Sender<Result<(), EventLoopError>>),
+    Poll(oneshot::Sender<Result<(), EventLoopError>>, Span),
+    Init(oneshot::Sender<Result<(), EventLoopError>>, Span),
 }
 struct EventManagerActor {
     rx: mpsc::Receiver<EventManagerMessage>,
@@ -134,12 +135,12 @@ impl EventManagerActor {
         while let Some(event) = self.rx.recv().await {
             match event {
                 EventManagerMessage::Run(f) => f(&mut self.manager),
-                EventManagerMessage::Poll(sender) => {
-                    let r = self.manager.poll().await;
+                EventManagerMessage::Poll(sender, span) => {
+                    let r = self.manager.poll().instrument(span).await;
                     let _ = sender.send(r);
                 }
-                EventManagerMessage::Init(sender) => {
-                    let r = self.manager.initialize_all().await;
+                EventManagerMessage::Init(sender, span) => {
+                    let r = self.manager.initialize_all().instrument(span).await;
                     let _ = sender.send(r);
                 }
             }
