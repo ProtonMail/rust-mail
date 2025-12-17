@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.160.12] - 2025-12-17
+
+### Fixes
+
+- delete-all: Reset counters when emptying a label
+- Missing system label 13
+
+
+## [mail-uniffi-v0.160.11] - 2025-12-16
 
 ### Fixes
 
