@@ -2058,6 +2058,10 @@ pub trait SystemLabelId: for<'a> From<&'a str> + ToSql {
         Self::from("12")
     }
 
+    fn broken() -> Self {
+        Self::from("13")
+    }
+
     #[must_use]
     fn blocked() -> Self {
         Self::from("14")
@@ -2106,11 +2110,12 @@ pub trait SystemLabelId: for<'a> From<&'a str> + ToSql {
         Self::from("26")
     }
 
-    fn non_removable_system_labels() -> [Self; 10] {
+    fn non_removable_system_labels() -> [Self; 11] {
         [
             Self::all_mail(),
             Self::all_sent(),
             Self::all_drafts(),
+            Self::broken(),
             Self::category_social(),
             Self::category_promotions(),
             Self::category_updates(),
