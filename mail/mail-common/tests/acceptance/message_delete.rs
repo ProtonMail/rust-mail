@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use proton_action_queue::queue::QueuedError;
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
@@ -6,11 +7,11 @@ use proton_core_common::test_utils::account::TEST_ADDRESS_ID;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{LabelExt, Message};
+use proton_mail_common::models::{ConversationCounters, LabelExt, Message, MessageCounters};
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
-use stash::stash::StashError;
+use stash::stash::{StashError, Tether};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -21,8 +22,11 @@ async fn smoke() {
     .await;
 
     let queue = user_ctx.action_queue();
-    let tether = user_ctx.user_stash().connection().await.unwrap();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
     let label = SystemLabel::Inbox.load(&tether).await.unwrap().unwrap();
+    let mut msg_counter = msg_counter(&label, &mut tether).await;
+    let mut conv_counter = conv_counter(&label, &mut tether).await;
 
     // ---
 
@@ -32,6 +36,15 @@ async fn smoke() {
         .await
         .unwrap()
         .unwrap();
+
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
+
+    assert_eq!(0, msg_counter.total);
+    assert_eq!(0, msg_counter.unread);
+
+    assert_eq!(0, conv_counter.total);
+    assert_eq!(0, conv_counter.unread);
 
     // ---
 
@@ -56,6 +69,54 @@ async fn smoke() {
     );
 
     user_ctx.execute_single_action().await.unwrap();
+}
+
+#[tokio::test]
+async fn revert() {
+    let (_test_ctx, user_ctx, _) = setup(5, async |_, _| {}).await;
+
+    let queue = user_ctx.action_queue();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let label = SystemLabel::Inbox.load(&tether).await.unwrap().unwrap();
+    let mut msg_counter = msg_counter(&label, &mut tether).await;
+    let mut conv_counter = conv_counter(&label, &mut tether).await;
+
+    // ---
+
+    assert!(label.is_idle(&tether).await.unwrap());
+
+    Message::action_delete_all_in_label(queue, label.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
+
+    assert_eq!(0, msg_counter.total);
+    assert_eq!(0, msg_counter.unread);
+
+    assert_eq!(0, conv_counter.total);
+    assert_eq!(0, conv_counter.unread);
+
+    // ---
+
+    let err = user_ctx.execute_single_action().await.unwrap_err();
+
+    // 404 Not Found
+    assert!(matches!(err, QueuedError::Action(_, _)));
+
+    // ---
+
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
+
+    assert_eq!(100, msg_counter.total);
+    assert_eq!(80, msg_counter.unread);
+
+    assert_eq!(30, conv_counter.total);
+    assert_eq!(20, conv_counter.unread);
 }
 
 mod rebase {
@@ -186,4 +247,28 @@ async fn setup(
     mk_mocks(&ctx, &messages).await;
 
     (ctx, user_ctx, messages)
+}
+
+async fn msg_counter(label: &Label, tether: &mut Tether) -> MessageCounters {
+    let mut counter = MessageCounters {
+        local_label_id: label.id(),
+        total: 100,
+        unread: 80,
+    };
+
+    tether.tx(async |tx| counter.save(tx).await).await.unwrap();
+
+    counter
+}
+
+async fn conv_counter(label: &Label, tether: &mut Tether) -> ConversationCounters {
+    let mut counter = ConversationCounters {
+        local_label_id: label.id(),
+        total: 30,
+        unread: 20,
+    };
+
+    tether.tx(async |tx| counter.save(tx).await).await.unwrap();
+
+    counter
 }

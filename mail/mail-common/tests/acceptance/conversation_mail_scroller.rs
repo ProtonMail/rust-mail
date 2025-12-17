@@ -23,7 +23,7 @@ use proton_mail_common::datatypes::{
     labels::{ScrollOrderDir, ScrollOrderField},
 };
 use proton_mail_common::models::{
-    CachedScrollData, ConversationLabel, LabelExt, LabelWithCounters, Message,
+    CachedScrollData, ConversationLabel, LabelExt, LabelWithCounters, Message, MessageCounters,
 };
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
@@ -1904,11 +1904,35 @@ async fn delete_all() {
     ctx.setup_user(params.clone()).await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection().await.unwrap();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let label = SystemLabel::Trash.load(&tether).await.unwrap().unwrap();
 
     // ---
     // [1] Initial state - pretend we've got 100 messages in trash
+
+    let mut msg_counter = MessageCounters {
+        local_label_id: label.id(),
+        total: 100,
+        unread: 80,
+    };
+
+    let mut conv_counter = ConversationCounters {
+        local_label_id: label.id(),
+        total: 30,
+        unread: 20,
+    };
+
+    tether
+        .tx(async |tx| msg_counter.save(tx).await)
+        .await
+        .unwrap();
+
+    tether
+        .tx(async |tx| conv_counter.save(tx).await)
+        .await
+        .unwrap();
+
+    // ---
 
     let mut convs1 = create_api_conversation_page(0..10, 100);
     let mut convs2 = create_api_conversation_page(0..10, 110);
@@ -2003,6 +2027,8 @@ async fn delete_all() {
             .collect::<Vec<_>>()
     );
 
+    assert!(target.has_more().await.unwrap());
+
     // ---
     // [2] Schedule the "delete all" action
 
@@ -2023,6 +2049,7 @@ async fn delete_all() {
     // a confirmation from the server that the task has completed
     assert!(label.is_busy(&tether).await.unwrap());
     assert!(target.wait_for_update().await.unwrap().unwrap().is_empty());
+    assert!(!target.has_more().await.unwrap());
 
     // ---
     // [3] Pretend the server is in the middle of the removal.
@@ -2065,11 +2092,25 @@ async fn delete_all() {
     })
     .await;
 
+    // Pretend event loop has bumped counters in the meantime - scroller should
+    // pretend the counters are still zero
+    msg_counter.total = 15;
+    conv_counter.total = 50;
+
+    tether
+        .tx(async |tx| {
+            msg_counter.save(tx).await.unwrap();
+            conv_counter.save(tx).await
+        })
+        .await
+        .unwrap();
+
     user_ctx.force_event_loop_poll().await.unwrap();
 
     // Since the background task is still running, the scroller should continue
     // to report the label as empty
     assert!(target.wait_for_update().await.unwrap().is_none());
+    assert!(!target.has_more().await.unwrap());
     assert!(label.is_busy(&tether).await.unwrap());
 
     // ---
