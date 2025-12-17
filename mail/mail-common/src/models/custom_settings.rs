@@ -300,6 +300,28 @@ mod tests {
         );
     }
 
+    /// Mobile signature used to be stored in a `STRING` column by accident - in
+    /// SQLite strings have numeric affinity and, long story short, this used to
+    /// fail, because `"1234"` (a string) was being interpreted as `1234` (an
+    /// integer).
+    #[tokio::test]
+    async fn update_mobile_signature_with_just_digits() {
+        let ctx = MailTestContext::new().await;
+        let ctx = ctx.uninitialized_mail_user_context().await;
+
+        CustomSettings::update_mobile_signature(&ctx, Some("1234".into()))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            Some("1234".into()),
+            CustomSettings::get_or_default(&ctx.user_stash().connection().await.unwrap())
+                .await
+                .unwrap()
+                .mobile_signature
+        );
+    }
+
     #[tokio::test]
     async fn update_mobile_signature_enabled() {
         let ctx = MailTestContext::new().await;
