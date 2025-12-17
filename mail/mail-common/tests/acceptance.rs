@@ -3,6 +3,7 @@ mod acceptance {
     mod action_label;
     mod action_label_as;
     mod actions_read_unread;
+    mod addresses;
     mod attachment;
     mod attachment_cache;
     mod banners;

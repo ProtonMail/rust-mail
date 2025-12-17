@@ -15,7 +15,7 @@ use stash::params;
 use stash::rusqlite::params_from_iter;
 use stash::stash::{Bond, Stash, StashError, StashResult, Tether};
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{error, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("addresses")]
@@ -173,18 +173,16 @@ impl Address {
             .await;
         match action {
             Action::Delete => {
-                warn!("[ET-1461] Delete action not implemented for address event");
+                Address::delete_by_remote_id(id.clone(), tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to delete address: {e}"))?;
             }
 
-            Action::Create | Action::Update => {
+            Action::Create | Action::Update | Action::UpdateFlags => {
                 if let Some(address) = address {
                     address.save(tx).await?;
                     changeset.add(address.id());
                 }
-            }
-
-            Action::UpdateFlags => {
-                warn!("[ET-1461] UpdateFlags action not implemented for address event");
             }
         }
         Ok(())
