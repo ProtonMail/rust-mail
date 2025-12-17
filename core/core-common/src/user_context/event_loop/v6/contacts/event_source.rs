@@ -1,4 +1,5 @@
 use crate::event_loop::event_subscriber::CoreEventSubscriberError;
+use crate::event_loop::v6::CoreEventSourceV6;
 use crate::models::{Contact, Label};
 use futures::StreamExt;
 use futures::stream::FuturesOrdered;
@@ -8,7 +9,7 @@ use proton_core_api::services::proton::{
     Action, ContactId, ContactRootEventV6, LabelId, ProtonCore,
 };
 use proton_core_api::session::Session;
-use proton_event_loop::v6::EventSource;
+use proton_event_loop::v6::{EventSource, EventSourceDependencyList};
 use std::collections::HashMap;
 
 pub struct ContactEventSourceV6;
@@ -19,6 +20,10 @@ impl EventSource for ContactEventSourceV6 {
 
     fn name() -> &'static str {
         "contacts-v6"
+    }
+
+    fn dependencies() -> EventSourceDependencyList {
+        EventSourceDependencyList::default().with::<CoreEventSourceV6>()
     }
 }
 
