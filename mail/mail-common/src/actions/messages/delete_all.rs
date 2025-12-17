@@ -1,6 +1,6 @@
 use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
-use crate::models::{LabelExt, Message};
+use crate::models::{ConversationCounters, LabelExt, Message, MessageCounters};
 use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
@@ -21,6 +21,18 @@ use tracing::{info, instrument, warn};
 pub struct DeleteAllMessagesInLabel {
     local_id: LocalLabelId,
     ids_for_rollback: Vec<LocalMessageId>,
+
+    #[serde(default)]
+    prev_msg_total: Option<u64>,
+
+    #[serde(default)]
+    prev_msg_unread: Option<u64>,
+
+    #[serde(default)]
+    prev_conv_total: Option<u64>,
+
+    #[serde(default)]
+    prev_conv_unread: Option<u64>,
 }
 
 impl DeleteAllMessagesInLabel {
@@ -35,6 +47,10 @@ impl DeleteAllMessagesInLabel {
             Ok(Some(Self {
                 local_id,
                 ids_for_rollback,
+                prev_msg_total: None,
+                prev_msg_unread: None,
+                prev_conv_total: None,
+                prev_conv_unread: None,
             }))
         } else {
             // If a label is already being emptied, scheduling another emptying
@@ -90,6 +106,43 @@ impl DeleteAllMessagesInLabelHandler {
             .await?
             .ok_or_else(|| LabelError::CouldNotResolveRemoteLabel(action.local_id))
     }
+
+    /// Message and conversation counters are only decremented by the number of
+    /// messages and conversations we know of locally - this might be less than
+    /// the amount of objects that actually exist in the label.
+    ///
+    /// Since we know that this action removes all messages and conversations,
+    /// we can just set the counters to zero up-front.
+    async fn reset_counters(
+        &self,
+        tx: &Bond<'_>,
+        mut action: Option<&mut DeleteAllMessagesInLabel>,
+        label: &Label,
+    ) -> Result<(), MailActionError> {
+        if let Some(mut counters) = MessageCounters::find_by_id(label.id(), tx).await? {
+            if let Some(action) = &mut action {
+                action.prev_msg_total = Some(counters.total);
+                action.prev_msg_unread = Some(counters.unread);
+            }
+
+            counters.total = 0;
+            counters.unread = 0;
+            counters.save(tx).await?;
+        }
+
+        if let Some(mut counters) = ConversationCounters::find_by_id(label.id(), tx).await? {
+            if let Some(action) = &mut action {
+                action.prev_conv_total = Some(counters.total);
+                action.prev_conv_unread = Some(counters.unread);
+            }
+
+            counters.total = 0;
+            counters.unread = 0;
+            counters.save(tx).await?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Handler for DeleteAllMessagesInLabelHandler {
@@ -110,6 +163,9 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         }
 
         label.mark_busy(tx).await?;
+
+        self.reset_counters(tx, Some(action), &label).await?;
+
         Message::mark_deleted(action.ids_for_rollback.clone(), tx).await?;
 
         Ok(())
@@ -125,6 +181,30 @@ impl Handler for DeleteAllMessagesInLabelHandler {
 
         label.mark_idle(tx).await?;
         Message::mark_undeleted(mem::take(&mut action.ids_for_rollback), tx).await?;
+
+        if let Some(total) = action.prev_msg_total
+            && let Some(unread) = action.prev_msg_unread
+        {
+            MessageCounters {
+                local_label_id: label.id(),
+                total,
+                unread,
+            }
+            .save(tx)
+            .await?;
+        }
+
+        if let Some(total) = action.prev_conv_total
+            && let Some(unread) = action.prev_conv_unread
+        {
+            ConversationCounters {
+                local_label_id: label.id(),
+                total,
+                unread,
+            }
+            .save(tx)
+            .await?;
+        }
 
         Ok(())
     }
@@ -165,12 +245,22 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         _: &RebaseChangeSet,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // Since new conversation and messages/conversations can be added to this label
-        // while the action is active, we need to always recalculate until we have support
-        // for delete up to.
+        let label = self.label(action, tx).await?;
+
+        // Since new conversation and messages/conversations can be added to
+        // this label while the action is active, we need to always recalculate
+        // until we have support for delete up to
         action.ids_for_rollback = Message::ids_in_label_with_deleted(action.local_id, tx).await?;
 
         Message::mark_deleted(action.ids_for_rollback.clone(), tx).await?;
+
+        // Note that we don't save counters back to `action` here - that's
+        // because with all likelihood the changeset here contains just a subset
+        // of the messages we've deleted before and there's no way to know the
+        // overlap.
+        //
+        // (unless we stored the deleted ids into `action`, but come on.)
+        self.reset_counters(tx, None, &label).await?;
 
         Ok(())
     }

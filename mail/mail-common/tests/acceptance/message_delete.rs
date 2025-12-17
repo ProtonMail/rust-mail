@@ -1,4 +1,7 @@
 use itertools::Itertools;
+use proton_action_queue::action::ActionGroup;
+use proton_action_queue::queue::QueuedError;
+use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
@@ -6,11 +9,11 @@ use proton_core_common::test_utils::account::TEST_ADDRESS_ID;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{LabelExt, Message};
+use proton_mail_common::models::{ConversationCounters, LabelExt, Message, MessageCounters};
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
-use stash::stash::StashError;
+use stash::stash::{StashError, Tether};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -21,8 +24,11 @@ async fn smoke() {
     .await;
 
     let queue = user_ctx.action_queue();
-    let tether = user_ctx.user_stash().connection().await.unwrap();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
     let label = SystemLabel::Inbox.load(&tether).await.unwrap().unwrap();
+    let mut msg_counter = msg_counter(&label, &mut tether).await;
+    let mut conv_counter = conv_counter(&label, &mut tether).await;
 
     // ---
 
@@ -32,6 +38,14 @@ async fn smoke() {
         .await
         .unwrap()
         .unwrap();
+
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
+
+    assert_eq!(0, msg_counter.total);
+    assert_eq!(0, msg_counter.unread);
+    assert_eq!(0, conv_counter.total);
+    assert_eq!(0, conv_counter.unread);
 
     // ---
 
@@ -58,89 +72,165 @@ async fn smoke() {
     user_ctx.execute_single_action().await.unwrap();
 }
 
-mod rebase {
-    use super::*;
-    use proton_action_queue::action::ActionGroup;
-    use proton_action_queue::rebase::RebaseChangeSet;
+#[tokio::test]
+async fn revert() {
+    let (_test_ctx, user_ctx, _) = setup(5, async |_, _| {}).await;
 
-    #[tokio::test]
-    async fn rebase_reapplies_to_all() {
-        let (_test_ctx, user_ctx, messages) = setup(5, async |_, _| {}).await;
+    let queue = user_ctx.action_queue();
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
-        let mut new_messages = messages
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(idx, m)| Message {
-                local_id: None,
-                remote_id: Some(MessageId::from(format!("msg-{}", 100 + idx))),
-                time: ((300 + idx) as u64).into(),
-                ..m
-            })
-            .collect::<Vec<_>>();
+    let label = SystemLabel::Inbox.load(&tether).await.unwrap().unwrap();
+    let mut msg_counter = msg_counter(&label, &mut tether).await;
+    let mut conv_counter = conv_counter(&label, &mut tether).await;
 
-        let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    // ---
 
-        let local_label_id = Label::remote_id_counterpart(LabelId::inbox(), &tether)
-            .await
-            .unwrap()
-            .unwrap();
+    assert!(label.is_idle(&tether).await.unwrap());
 
-        let queued =
-            Message::action_delete_all_in_label(user_ctx.action_queue(), local_label_id, &tether)
-                .await
-                .unwrap()
-                .unwrap();
+    Message::action_delete_all_in_label(queue, label.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
 
-        assert_eq!(
-            Message::in_label(local_label_id, &tether)
-                .await
-                .unwrap()
-                .len(),
-            0,
-        );
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
 
-        tether
-            .tx(async |tx| {
-                for msg in &mut new_messages {
-                    msg.save(tx).await?;
-                }
-                Ok::<_, StashError>(())
-            })
-            .await
-            .unwrap();
+    assert_eq!(0, msg_counter.total);
+    assert_eq!(0, msg_counter.unread);
+    assert_eq!(0, conv_counter.total);
+    assert_eq!(0, conv_counter.unread);
 
-        assert_eq!(
-            Message::in_label(local_label_id, &tether)
-                .await
-                .unwrap()
-                .len(),
-            5
-        );
-        user_ctx
-            .action_queue()
-            .rebase(ActionGroup::default(), &RebaseChangeSet::default())
-            .await
-            .unwrap();
+    // ---
 
-        assert_eq!(
-            Message::in_label(local_label_id, &tether)
-                .await
-                .unwrap()
-                .len(),
-            0
-        );
+    let err = user_ctx.execute_single_action().await.unwrap_err();
 
-        user_ctx.action_queue().cancel(queued.id).await.unwrap();
+    // 404 Not Found
+    assert!(matches!(err, QueuedError::Action(_, _)));
 
-        assert_eq!(
-            Message::in_label(local_label_id, &tether)
-                .await
-                .unwrap()
-                .len(),
-            10
-        );
-    }
+    // ---
+
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
+
+    assert_eq!(10, msg_counter.total);
+    assert_eq!(8, msg_counter.unread);
+    assert_eq!(3, conv_counter.total);
+    assert_eq!(2, conv_counter.unread);
+}
+
+#[tokio::test]
+async fn rebase() {
+    let (_test_ctx, user_ctx, messages) = setup(5, async |_, _| {}).await;
+
+    let new_messages = messages
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(idx, m)| Message {
+            local_id: None,
+            remote_id: Some(MessageId::from(format!("msg-{}", 10 + idx))),
+            time: ((30 + idx) as u64).into(),
+            ..m
+        })
+        .collect::<Vec<_>>();
+
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let label = SystemLabel::Inbox.load(&tether).await.unwrap().unwrap();
+    let mut msg_counter = msg_counter(&label, &mut tether).await;
+    let mut conv_counter = conv_counter(&label, &mut tether).await;
+
+    // ---
+
+    let queued = Message::action_delete_all_in_label(user_ctx.action_queue(), label.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
+
+    assert_eq!(
+        0,
+        Message::in_label(label.id(), &tether).await.unwrap().len(),
+    );
+
+    assert_eq!(0, msg_counter.total);
+    assert_eq!(0, msg_counter.unread);
+    assert_eq!(0, conv_counter.total);
+    assert_eq!(0, conv_counter.unread);
+
+    // ---
+
+    tether
+        .tx(async |tx| {
+            MessageCounters {
+                local_label_id: label.id(),
+                total: new_messages.len() as u64,
+                unread: new_messages.len() as u64,
+            }
+            .save(tx)
+            .await?;
+
+            for mut msg in new_messages {
+                msg.save(tx).await?;
+            }
+
+            Ok::<_, StashError>(())
+        })
+        .await
+        .unwrap();
+
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
+
+    assert_eq!(
+        5,
+        Message::in_label(label.id(), &tether).await.unwrap().len(),
+    );
+
+    assert_eq!(5, msg_counter.total);
+    assert_eq!(5, msg_counter.unread);
+    assert_eq!(0, conv_counter.total);
+    assert_eq!(0, conv_counter.unread);
+
+    // ---
+
+    user_ctx
+        .action_queue()
+        .rebase(ActionGroup::default(), &RebaseChangeSet::default())
+        .await
+        .unwrap();
+
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
+
+    assert_eq!(
+        0,
+        Message::in_label(label.id(), &tether).await.unwrap().len(),
+    );
+
+    assert_eq!(0, msg_counter.total);
+    assert_eq!(0, msg_counter.unread);
+    assert_eq!(0, conv_counter.total);
+    assert_eq!(0, conv_counter.unread);
+
+    // ---
+
+    user_ctx.action_queue().cancel(queued.id).await.unwrap();
+
+    msg_counter.reload(&tether).await.unwrap();
+    conv_counter.reload(&tether).await.unwrap();
+
+    assert_eq!(
+        10,
+        Message::in_label(label.id(), &tether).await.unwrap().len(),
+    );
+
+    assert_eq!(10, msg_counter.total);
+    assert_eq!(8, msg_counter.unread);
+    assert_eq!(3, conv_counter.total);
+    assert_eq!(2, conv_counter.unread);
 }
 
 async fn setup(
@@ -167,7 +257,7 @@ async fn setup(
             remote_address_id: addr_id.clone(),
             local_address_id: local_addr_id,
             label_ids: vec![LabelId::inbox()],
-            time: ((idx * 100) as u64).into(),
+            time: ((idx * 10) as u64).into(),
             ..Message::test_default()
         })
         .collect_vec();
@@ -186,4 +276,28 @@ async fn setup(
     mk_mocks(&ctx, &messages).await;
 
     (ctx, user_ctx, messages)
+}
+
+async fn msg_counter(label: &Label, tether: &mut Tether) -> MessageCounters {
+    let mut counter = MessageCounters {
+        local_label_id: label.id(),
+        total: 10,
+        unread: 8,
+    };
+
+    tether.tx(async |tx| counter.save(tx).await).await.unwrap();
+
+    counter
+}
+
+async fn conv_counter(label: &Label, tether: &mut Tether) -> ConversationCounters {
+    let mut counter = ConversationCounters {
+        local_label_id: label.id(),
+        total: 3,
+        unread: 2,
+    };
+
+    tether.tx(async |tx| counter.save(tx).await).await.unwrap();
+
+    counter
 }
