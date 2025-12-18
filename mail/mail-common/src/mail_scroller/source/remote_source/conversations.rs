@@ -549,11 +549,7 @@ impl RemoteConversationScrollerSource {
                 }
 
                 if !conversation_labels_count.is_empty() {
-                    ConversationLabelsCount::create_or_update_conversation_counts(
-                        conversation_labels_count.clone(),
-                        tx,
-                    )
-                    .await?;
+                    ConversationLabelsCount::upsert(conversation_labels_count.clone(), tx).await?;
                 }
 
                 let mut rebase_change_set = RebaseChangeSet::default();

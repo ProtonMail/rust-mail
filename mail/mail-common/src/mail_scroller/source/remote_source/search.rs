@@ -7,7 +7,7 @@ use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, SearchOptions},
     mail_scroller::MailScrollerSource,
-    models::{Message, MessageCounters, MessageLabel, SearchScrollData},
+    models::{Message, MessageCounter, MessageLabel, SearchScrollData},
 };
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
@@ -445,7 +445,7 @@ impl MailScrollerSource for SearchScrollerSource {
         vec![
             Message::table_name().to_owned(),
             MessageLabel::table_name().to_owned(),
-            MessageCounters::table_name().to_owned(),
+            MessageCounter::table_name().to_owned(),
             MailBusyLabel::table_name().to_owned(),
         ]
     }

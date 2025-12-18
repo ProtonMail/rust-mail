@@ -5,7 +5,7 @@ use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_common::actions::ConversationOrMessage;
 use proton_mail_common::actions::conversations::Snooze;
 use proton_mail_common::datatypes::{MessageFlags, SystemLabelId};
-use proton_mail_common::models::{Conversation, ConversationCounters, ConversationLabel, Message};
+use proton_mail_common::models::{Conversation, ConversationCounter, ConversationLabel, Message};
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::scroller::StoreLabeledModelMap as _;
 use proton_mail_common::test_utils::test_context::{
@@ -56,7 +56,7 @@ async fn setup_test_label(label_id: LocalLabelId, tether: &mut Tether) -> TestDa
     );
 
     // Set up counters for inbox
-    let mut inbox_conv_counter = ConversationCounters::new(label_id);
+    let mut inbox_conv_counter = ConversationCounter::new(label_id);
     inbox_conv_counter.total = 1;
 
     tether
@@ -375,13 +375,13 @@ async fn action_unsnooze_conversation_from_snoozed_to_inbox() {
     assert_eq!(inbox_label.context_snooze_time, inbox_label.context_time);
 
     // * verify counters are updated correctly
-    let snoozed_counters = ConversationCounters::load(snoozed.id(), &tether)
+    let snoozed_counters = ConversationCounter::load(snoozed.id(), &tether)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(snoozed_counters.total, 0);
 
-    let inbox_counters = ConversationCounters::load(inbox.id(), &tether)
+    let inbox_counters = ConversationCounter::load(inbox.id(), &tether)
         .await
         .unwrap()
         .unwrap();

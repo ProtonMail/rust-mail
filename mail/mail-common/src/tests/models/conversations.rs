@@ -2,8 +2,8 @@ use std::sync::LazyLock;
 
 use super::*;
 use crate::datatypes::{
-    ContextualConversation, ConversationLabelsCount, MessageFlags, MessageSender,
-    MovableSystemFolder, SystemLabelId, attachment,
+    ContextualConversation, MessageFlags, MessageSender, MovableSystemFolder, SystemLabelId,
+    attachment,
 };
 use crate::label;
 use crate::models::{Attachment, Conversation, ConversationLabel, MailSettings, Message};
@@ -22,7 +22,6 @@ use crate::test_utils::utils::{
     msg_counts_as_map, prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip,
     prepare_db_state_core,
 };
-use futures::StreamExt;
 use pretty_assertions::assert_eq;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType};
@@ -45,18 +44,25 @@ mod first_unread_message {
 
     static STARRED: LazyLock<Label> =
         LazyLock::new(|| new_label(LabelType::System, Some(LabelId::starred().clone())));
+
     static LABEL: LazyLock<Label> =
         LazyLock::new(|| new_label(LabelType::Label, Some("label".into())));
+
     static FOLDER: LazyLock<Label> =
         LazyLock::new(|| new_label(LabelType::Folder, Some("folder".into())));
+
     static INBOX: LazyLock<Label> =
         LazyLock::new(|| new_label(LabelType::System, Some(LabelId::inbox().clone())));
+
     static DRAFTS: LazyLock<Label> =
         LazyLock::new(|| new_label(LabelType::System, Some(LabelId::drafts().clone()))); // There is no conversations in drafts - this is theoretical case
+
     static ALL_LABELS: LazyLock<Vec<&'static Label>> =
         LazyLock::new(|| vec![&STARRED, &LABEL, &FOLDER, &INBOX, &DRAFTS]);
+
     static MOVED_CONV_LABELS: LazyLock<Vec<&'static Label>> =
         LazyLock::new(|| vec![&STARRED, &LABEL, &FOLDER]);
+
     static INBOX_AND_DRAFTS_LABELS: LazyLock<Vec<&'static Label>> =
         LazyLock::new(|| vec![&INBOX, &DRAFTS]);
 
@@ -644,7 +650,7 @@ mod available_move_to_actions {
 
                     let label_id = label.id();
 
-                    ConversationCounters::new(label_id)
+                    ConversationCounter::new(label_id)
                         .save(tx)
                         .await
                         .expect("Failed to create counters");
@@ -1397,7 +1403,7 @@ async fn test_conversation_delete_all_mail() {
         .await
         .unwrap();
 
-    let all_counters = MessageCounters::all(&tether).await.expect("no error");
+    let all_counters = MessageCounter::all(&tether).await.expect("no error");
     tracing::error!("ALL COUNTERS {all_counters:?}");
 
     for count in Label::all(&tether).await.unwrap() {
@@ -1677,61 +1683,6 @@ async fn test_conversation_undelete() {
             assert_eq!(label_counts.total, start_label_counts.total);
         }
     }
-}
-
-#[tokio::test]
-async fn test_conversation_counts() {
-    let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection().await.unwrap();
-    tether.execute("DELETE FROM labels", vec![]).await.unwrap();
-    create_address(&mut tether).await;
-    let labels = create_labels(&mut tether).await;
-    let counts = vec![
-        ConversationLabelsCount {
-            label_id: MY_LABEL_ID1.clone(),
-            total: 20,
-            unread: 4,
-        },
-        ConversationLabelsCount {
-            label_id: MY_LABEL_ID2.clone(),
-            total: 400,
-            unread: 124,
-        },
-    ];
-    let counts_clone = counts.clone();
-    tether
-        .tx::<_, _, StashError>(async |tx| {
-            ConversationLabelsCount::create_or_update_conversation_counts(counts_clone, tx)
-                .await
-                .expect("failed to creat counters");
-            Ok(())
-        })
-        .await
-        .unwrap();
-
-    let db_labels = Label::all(&tether).await.expect("failed to get counters");
-    let db_counters = ConversationCounters::all(&tether)
-        .await
-        .expect("failed to get counters");
-    let db_counters = futures::stream::FuturesOrdered::from_iter(db_counters.iter().map({
-        let tether = &tether;
-        move |c| async move {
-            c.conversation_count(tether)
-                .await
-                .expect("failed to get conversation count")
-        }
-    }))
-    .collect::<Vec<_>>()
-    .await;
-
-    assert!(db_counters.contains(&counts[0]));
-    assert!(db_counters.contains(&counts[1]));
-
-    let label_conv_counter = Label::load(labels[0], &tether).await.unwrap().unwrap();
-    assert!(db_labels.contains(&label_conv_counter));
-
-    assert_eq!(db_labels.len(), 2);
-    assert_eq!(db_labels[0].remote_id.as_ref(), Some(&counts[0].label_id));
 }
 
 #[tokio::test]

@@ -451,11 +451,7 @@ impl RemoteMessageScrollerSource {
                 }
 
                 if !message_labels_count.is_empty() {
-                    MessageLabelsCount::create_or_update_message_counts(
-                        message_labels_count.clone(),
-                        tx,
-                    )
-                    .await?;
+                    MessageLabelsCount::upsert(message_labels_count.clone(), tx).await?;
                 }
 
                 // Save all messages.

@@ -1,5 +1,5 @@
 use crate::AppError;
-use crate::models::{ConversationCounters, MessageCounters};
+use crate::models::{ConversationCounter, MessageCounter};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::event_loop::events::{Action, LabelEvent};
 use proton_core_common::models::{Label, ModelIdExtension};
@@ -26,8 +26,8 @@ pub async fn handle_counters_label_event(
         let local_id = Label::remote_id_counterpart(id.clone(), tx)
             .await?
             .ok_or_else(|| AppError::RemoteLabelDoesNotExist(id.clone()))?;
-        MessageCounters::new(local_id).save(tx).await?;
-        ConversationCounters::new(local_id).save(tx).await?;
+        MessageCounter::new(local_id).save(tx).await?;
+        ConversationCounter::new(local_id).save(tx).await?;
     }
     Ok(())
 }

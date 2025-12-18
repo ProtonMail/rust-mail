@@ -12,7 +12,7 @@ use proton_mail_api::services::proton::{
 use proton_mail_common::{api_message_meta, datatypes::labels::ScrollOrderField};
 use proton_mail_common::{
     datatypes::ReadFilter,
-    models::{Conversation, Message, MessageCounters, MessageScrollData},
+    models::{Conversation, Message, MessageCounter, MessageScrollData},
 };
 use proton_mail_common::{
     datatypes::SystemLabelId,
@@ -190,7 +190,7 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all messages
-    let mut counters = MessageCounters::load(local_label_id, &tether)
+    let mut counters = MessageCounter::load(local_label_id, &tether)
         .await
         .unwrap()
         .unwrap();
@@ -320,7 +320,7 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all messages
-    let mut counters = MessageCounters::load(local_label_id, &tether)
+    let mut counters = MessageCounter::load(local_label_id, &tether)
         .await
         .unwrap()
         .unwrap();
@@ -455,7 +455,7 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all messages
-    let mut counters = MessageCounters::load(local_label_id, &tether)
+    let mut counters = MessageCounter::load(local_label_id, &tether)
         .await
         .unwrap()
         .unwrap();

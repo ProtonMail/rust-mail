@@ -675,7 +675,7 @@ impl Conversation {
             let label_id = conv_label.local_label_id.unwrap();
             let stats = all_stats.get(&label_id);
 
-            let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
+            let mut conv_counter = ConversationCounter::find_by_id(label_id, bond)
                 .await?
                 .ok_or_else(|| AppError::LabelNotFound(label_id))?;
             conv_counter.total = conv_counter.total.saturating_sub(1);
@@ -758,7 +758,7 @@ impl Conversation {
         .await?;
 
         if let Some(mut conv_label) = conv_label {
-            let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
+            let mut conv_counter = ConversationCounter::find_by_id(label_id, bond)
                 .await?
                 .ok_or_else(|| AppError::LabelNotFound(label_id))?;
             conv_counter.total = conv_counter.total.saturating_sub(1);
@@ -865,7 +865,7 @@ impl Conversation {
 
         for mut conv_label in conv_labels {
             let label_id = conv_label.local_label_id.unwrap();
-            let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
+            let mut conv_counter = ConversationCounter::find_by_id(label_id, bond)
                 .await?
                 .ok_or_else(|| AppError::LabelNotFound(label_id))?;
             let stats = all_stats.get(&label_id);
@@ -961,7 +961,7 @@ impl Conversation {
         .await?;
 
         if let Some(mut conv_label) = conv_label {
-            let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
+            let mut conv_counter = ConversationCounter::find_by_id(label_id, bond)
                 .await?
                 .ok_or_else(|| AppError::LabelNotFound(label_id))?;
             conv_counter.total += 1;
@@ -1219,7 +1219,7 @@ impl Conversation {
 
                     if should_update_counter
                         && let Some(mut counter) =
-                            ConversationCounters::load_by_id_sync(local_label_id, tx)?
+                            ConversationCounter::load_by_id_sync(local_label_id, tx)?
                     {
                         counter.unread += 1;
                         counter.save_sync(tx)?;
@@ -1243,13 +1243,13 @@ impl Conversation {
             )?;
 
             for label_id in label_ids {
-                if let Some(mut counter) = MessageCounters::load_by_id_sync(label_id, tx)? {
+                if let Some(mut counter) = MessageCounter::load_by_id_sync(label_id, tx)? {
                     // Always update the message count
                     counter.unread += 1;
                     counter.save_sync(tx)?;
                 }
 
-                if let Some(mut counter) = ConversationCounters::load_by_id_sync(label_id, tx)? {
+                if let Some(mut counter) = ConversationCounter::load_by_id_sync(label_id, tx)? {
                     if let Some(conv_label) = conversation
                         .labels
                         .iter_mut()
@@ -1773,12 +1773,12 @@ impl Conversation {
         conversation_label.save_sync(tx)?;
 
         // Update message label counts.
-        let Some(mut conv_counters) = ConversationCounters::load_by_id_sync(label_id, tx)? else {
+        let Some(mut conv_counters) = ConversationCounter::load_by_id_sync(label_id, tx)? else {
             error!("Could not find label counters");
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
 
-        let Some(mut msg_counters) = MessageCounters::load_by_id_sync(label_id, tx)? else {
+        let Some(mut msg_counters) = MessageCounter::load_by_id_sync(label_id, tx)? else {
             error!("Could not find label counters");
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
@@ -2326,7 +2326,7 @@ impl ConversationOrMessage for Conversation {
 
             new_label.save_sync(tx)?;
 
-            let mut counters = ConversationCounters::load_by_id_exact_sync(label_id, tx)?;
+            let mut counters = ConversationCounter::load_by_id_exact_sync(label_id, tx)?;
             counters.total += 1;
             counters.save_sync(tx)?;
         }
@@ -2344,7 +2344,7 @@ impl ConversationOrMessage for Conversation {
             return Ok(vec![]);
         }
 
-        let mut conv_counter = ConversationCounters::load_by_id_exact_sync(label_id, tx)?;
+        let mut conv_counter = ConversationCounter::load_by_id_exact_sync(label_id, tx)?;
 
         let mut modified_messages = Vec::new();
 
@@ -2382,7 +2382,7 @@ impl ConversationOrMessage for Conversation {
                     value
                 });
 
-                if let Some(mut msg_counter) = MessageCounters::load_by_id_sync(label_id, tx)? {
+                if let Some(mut msg_counter) = MessageCounter::load_by_id_sync(label_id, tx)? {
                     msg_counter.total = msg_counter.total.saturating_sub(message_ids.len() as u64);
                     msg_counter.unread = msg_counter.unread.saturating_sub(num_unread);
                     msg_counter.save_sync(tx)?;
@@ -2520,15 +2520,14 @@ impl ConversationOrMessage for Conversation {
 
         // update message label counters
         for (label_id, count) in &mut message_label_counts {
-            if let Some(mut counters) = MessageCounters::load_by_id_sync(*label_id, bond)? {
+            if let Some(mut counters) = MessageCounter::load_by_id_sync(*label_id, bond)? {
                 counters.unread = counters.unread.saturating_sub(*count);
                 counters.save_sync(bond)?;
             }
         }
         // Update conversation counters
         for (label_id, count) in &mut conversation_label_counts {
-            if let Some(mut conv_counter) = ConversationCounters::load_by_id_sync(*label_id, bond)?
-            {
+            if let Some(mut conv_counter) = ConversationCounter::load_by_id_sync(*label_id, bond)? {
                 conv_counter.unread = conv_counter.unread.saturating_sub(*count);
                 conv_counter.save_sync(bond)?;
             }
@@ -2965,7 +2964,7 @@ impl ConversationLabel {
     ) -> Result<(), AppError> {
         if let Some(stats) = stats {
             let mut conv_counter =
-                ConversationCounters::find_by_id(self.local_label_id.unwrap(), bond)
+                ConversationCounter::find_by_id(self.local_label_id.unwrap(), bond)
                     .await?
                     .ok_or_else(|| AppError::LabelNotFound(self.local_label_id.unwrap()))?;
             let existing_message_count = self.context_num_messages;
@@ -3006,7 +3005,7 @@ impl ConversationLabel {
     ) -> Result<(), AppError> {
         if let Some(stats) = stats {
             let mut conv_counter =
-                ConversationCounters::find_by_id(self.local_label_id.unwrap(), bond)
+                ConversationCounter::find_by_id(self.local_label_id.unwrap(), bond)
                     .await?
                     .ok_or_else(|| AppError::LabelNotFound(self.local_label_id.unwrap()))?;
             let existing_message_count = self.context_num_messages;
@@ -3254,7 +3253,7 @@ impl AddAssign<&ApiMessageMetadata> for ConversationMessageLabelStats {
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversation_counters")]
-pub struct ConversationCounters {
+pub struct ConversationCounter {
     #[IdField]
     pub local_label_id: LocalLabelId,
 
@@ -3265,7 +3264,7 @@ pub struct ConversationCounters {
     pub unread: u64,
 }
 
-impl ConversationCounters {
+impl ConversationCounter {
     pub fn new(local_label_id: LocalLabelId) -> Self {
         Self {
             local_label_id,
@@ -3274,7 +3273,7 @@ impl ConversationCounters {
         }
     }
 
-    pub fn counters(&self) -> (u64, u64) {
+    pub fn get(&self) -> (u64, u64) {
         (self.unread, self.total)
     }
 
@@ -3284,19 +3283,6 @@ impl ConversationCounters {
             ReadFilter::Unread => self.unread,
             ReadFilter::Read => self.total.saturating_sub(self.unread),
         }
-    }
-
-    pub async fn conversation_count(
-        &self,
-        tether: &Tether,
-    ) -> Result<ConversationLabelsCount, AppError> {
-        let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
-
-        Ok(ConversationLabelsCount {
-            label_id: remote_id,
-            total: self.total,
-            unread: self.unread,
-        })
     }
 
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
@@ -3341,8 +3327,8 @@ impl StoreLabelCounters {
 
     pub fn store(self, tx: &Transaction<'_>) -> Result<(), StashError> {
         let Self(convs_count, msgs_count) = self;
-        ConversationLabelsCount::create_or_update_conversation_counts_sync(convs_count, tx)?;
-        MessageLabelsCount::create_or_update_message_counts_sync(msgs_count, tx)?;
+        ConversationLabelsCount::upsert_sync(convs_count, tx)?;
+        MessageLabelsCount::upsert_sync(msgs_count, tx)?;
         Ok(())
     }
 }
@@ -3353,7 +3339,7 @@ pub struct ConversationCounterWatcher {
 
 impl TableObserver for ConversationCounterWatcher {
     fn tables(&self) -> Vec<String> {
-        vec![ConversationCounters::table_name().to_string()]
+        vec![ConversationCounter::table_name().to_string()]
     }
 
     fn on_tables_changed(&self, _tables: &BTreeSet<String>) {

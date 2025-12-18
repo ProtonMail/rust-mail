@@ -864,15 +864,12 @@ impl From<ApiConversationCount> for ConversationLabelsCount {
 }
 
 impl ConversationLabelsCount {
-    pub async fn create_or_update_conversation_counts(
-        counts: Vec<Self>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        bond.sync_bridge(move |tx| Self::create_or_update_conversation_counts_sync(counts, tx))
+    pub async fn upsert(counts: Vec<Self>, bond: &Bond<'_>) -> Result<(), StashError> {
+        bond.sync_bridge(move |tx| Self::upsert_sync(counts, tx))
             .await
     }
 
-    pub fn create_or_update_conversation_counts_sync(
+    pub fn upsert_sync(
         counts: impl IntoIterator<Item = Self>,
         tx: &Transaction<'_>,
     ) -> Result<(), StashError> {
@@ -1469,15 +1466,12 @@ impl From<ApiMessageCount> for MessageLabelsCount {
 }
 
 impl MessageLabelsCount {
-    pub async fn create_or_update_message_counts(
-        counts: Vec<Self>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        bond.sync_bridge(move |tx| Self::create_or_update_message_counts_sync(counts, tx))
+    pub async fn upsert(counts: Vec<Self>, bond: &Bond<'_>) -> Result<(), StashError> {
+        bond.sync_bridge(move |tx| Self::upsert_sync(counts, tx))
             .await
     }
 
-    pub fn create_or_update_message_counts_sync(
+    pub fn upsert_sync(
         counts: impl IntoIterator<Item = Self>,
         tx: &Transaction<'_>,
     ) -> Result<(), StashError> {

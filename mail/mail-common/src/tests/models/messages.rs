@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use super::*;
 use crate::actions::{LabelAsAction, MoveAction};
 use crate::datatypes::{
-    ContextualConversation, ExclusiveLocation, LocalAttachmentId, MessageFlags, MessageLabelsCount,
+    ContextualConversation, ExclusiveLocation, LocalAttachmentId, MessageFlags,
     MovableSystemFolder, SystemLabelId, attachment,
 };
 use crate::label;
@@ -23,8 +23,8 @@ use crate::test_utils::utils::{
 };
 use crate::test_utils::utils::{create_address, test_address};
 use crate::{conv_id, conversation, message, msg_id};
+use futures::FutureExt;
 use futures::future::BoxFuture;
-use futures::{FutureExt, StreamExt as _};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType};
 use proton_core_common::models::Label;
@@ -50,12 +50,15 @@ use velcro::hash_map;
 
 static STARRED: LazyLock<Label> =
     LazyLock::new(|| label!(label_type: LabelType::System, remote_id: Some(LabelId::starred())));
+
 static FOLDER: LazyLock<Label> = LazyLock::new(
     || label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black()),
 );
+
 static INBOX: LazyLock<Label> = LazyLock::new(
     || label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black()),
 );
+
 static LABEL: LazyLock<Label> = LazyLock::new(
     || label!(label_type: LabelType::Label, remote_id: Some("label".into()), name: "Label".to_owned(), color: LabelColor::black()),
 );
@@ -161,7 +164,7 @@ mod available_label_as_actions {
 
             for mut label in labels {
                 label.save(tx).await.expect("failed to create label");
-                MessageCounters::new(label.id())
+                MessageCounter::new(label.id())
                     .save(tx)
                     .await
                     .expect("failed to create message counters");
@@ -184,11 +187,11 @@ mod available_label_as_actions {
                 for mut label in message_labels {
                     label.save(tx).await.expect("failed to create label");
                     let label_id = label.id();
-                    ConversationCounters::new(label_id)
+                    ConversationCounter::new(label_id)
                         .save(tx)
                         .await
                         .expect("failed to create conversation counters");
-                    MessageCounters::new(label_id)
+                    MessageCounter::new(label_id)
                         .save(tx)
                         .await
                         .expect("failed to create message counters");
@@ -546,7 +549,7 @@ mod available_move_to_actions {
 
             for mut label in labels {
                 label.save(tx).await.expect("failed to create label");
-                MessageCounters::new(label.id())
+                MessageCounter::new(label.id())
                     .save(tx)
                     .await
                     .expect("failed to create message counters");
@@ -569,11 +572,11 @@ mod available_move_to_actions {
                 for mut label in message_labels {
                     label.save(tx).await.expect("failed to create label");
                     let label_id = label.id();
-                    ConversationCounters::new(label_id)
+                    ConversationCounter::new(label_id)
                         .save(tx)
                         .await
                         .expect("failed to create conversation counters");
-                    MessageCounters::new(label_id)
+                    MessageCounter::new(label_id)
                         .save(tx)
                         .await
                         .expect("failed to create message counters");
@@ -920,59 +923,6 @@ async fn test_update_message() {
         .expect("must have a value");
     assert!(db_message.is_starred());
     assert_eq!(db_message.label_ids.len(), 2);
-}
-
-#[tokio::test]
-#[ignore]
-async fn test_message_counts() {
-    let (stash, _db_dir) = new_test_connection_file().await;
-    let mut tether = stash.connection().await.unwrap();
-    create_address(&mut tether).await;
-    let labels = create_labels(&mut tether).await;
-    let counts = vec![
-        MessageLabelsCount {
-            label_id: MY_LABEL_ID1.clone(),
-            total: 20,
-            unread: 4,
-        },
-        MessageLabelsCount {
-            label_id: MY_LABEL_ID2.clone(),
-            total: 400,
-            unread: 124,
-        },
-    ];
-
-    tether
-        .tx::<_, _, StashError>(async |tx| {
-            MessageLabelsCount::create_or_update_message_counts(counts.clone(), tx)
-                .await
-                .expect("failed to creat counters");
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let db_labels = Label::all(&tether).await.expect("failed to get counters");
-    let db_counters = MessageCounters::all(&tether)
-        .await
-        .expect("failed to get counters");
-    let db_counters = futures::stream::FuturesOrdered::from_iter(db_counters.iter().map({
-        let tether = &tether;
-        move |c| async move {
-            c.message_count(tether)
-                .await
-                .expect("failed to get message count")
-        }
-    }))
-    .collect::<Vec<_>>()
-    .await;
-    assert!(db_counters.contains(&counts[0]));
-    assert!(db_counters.contains(&counts[1]));
-
-    let label_msg_count = Label::load(labels[0], &tether).await.unwrap().unwrap();
-    assert!(db_labels.contains(&label_msg_count));
-
-    assert_eq!(db_labels.len(), 1);
-    assert_eq!(db_labels[0].remote_id, Some(counts[0].label_id.clone()));
 }
 
 #[tokio::test]

@@ -15,7 +15,7 @@ use proton_mail_api::services::proton::response_data::{
 };
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabelId};
-use proton_mail_common::models::{ConversationCounters, Message, MessageCounters};
+use proton_mail_common::models::{ConversationCounter, Message, MessageCounter};
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
@@ -120,30 +120,30 @@ async fn label_as_without_archive() {
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters1 = MessageCounters::new(label1.id());
+            let mut msg_counters1 = MessageCounter::new(label1.id());
             msg_counters1.total = 2;
             msg_counters1.save(tx).await.unwrap();
-            let mut conv_counters1 = ConversationCounters::new(label1.id());
+            let mut conv_counters1 = ConversationCounter::new(label1.id());
             conv_counters1.total = 1;
             conv_counters1.save(tx).await.unwrap();
             let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters2 = MessageCounters::new(label2.id());
+            let mut msg_counters2 = MessageCounter::new(label2.id());
             msg_counters2.total = 2;
             msg_counters2.save(tx).await.unwrap();
-            let mut conv_counters2 = ConversationCounters::new(label2.id());
+            let mut conv_counters2 = ConversationCounter::new(label2.id());
             conv_counters2.total = 1;
             conv_counters2.save(tx).await.unwrap();
             let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters3 = MessageCounters::new(label3.id());
+            let mut msg_counters3 = MessageCounter::new(label3.id());
             msg_counters3.total = 3;
             msg_counters3.save(tx).await.unwrap();
-            let mut conv_counters3 = ConversationCounters::new(label3.id());
+            let mut conv_counters3 = ConversationCounter::new(label3.id());
             conv_counters3.total = 1;
             conv_counters3.save(tx).await.unwrap();
             Ok((label1, label2))
@@ -303,30 +303,30 @@ async fn label_as_with_archive() {
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters1 = MessageCounters::new(label1.id());
+            let mut msg_counters1 = MessageCounter::new(label1.id());
             msg_counters1.total = 1;
             msg_counters1.save(tx).await.unwrap();
-            let mut conv_counters1 = ConversationCounters::new(label1.id());
+            let mut conv_counters1 = ConversationCounter::new(label1.id());
             conv_counters1.total = 1;
             conv_counters1.save(tx).await.unwrap();
             let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters2 = MessageCounters::new(label2.id());
+            let mut msg_counters2 = MessageCounter::new(label2.id());
             msg_counters2.total = 1;
             msg_counters2.save(tx).await.unwrap();
-            let mut conv_counters2 = ConversationCounters::new(label2.id());
+            let mut conv_counters2 = ConversationCounter::new(label2.id());
             conv_counters2.total = 1;
             conv_counters2.save(tx).await.unwrap();
             let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters3 = MessageCounters::new(label3.id());
+            let mut msg_counters3 = MessageCounter::new(label3.id());
             msg_counters3.total = 1;
             msg_counters3.save(tx).await.unwrap();
-            let mut conv_counters3 = ConversationCounters::new(label3.id());
+            let mut conv_counters3 = ConversationCounter::new(label3.id());
             conv_counters3.total = 1;
             conv_counters3.save(tx).await.unwrap();
             Ok((label1, label2))
@@ -951,8 +951,8 @@ fn test_mail_settings() -> ApiMailSettings {
     }
 }
 
-async fn msg_counter_for(label: &Label, tx: &Tether) -> MessageCounters {
-    MessageCounters::find_by_id(label.id(), tx)
+async fn msg_counter_for(label: &Label, tx: &Tether) -> MessageCounter {
+    MessageCounter::find_by_id(label.id(), tx)
         .await
         .expect("failed to load")
         .expect("value not found")

@@ -127,11 +127,7 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
                         .collect::<Vec<_>>();
                     if !conversation_counts.is_empty() {
                         tracing::debug!("Handling conversation counts");
-                        ConversationLabelsCount::create_or_update_conversation_counts(
-                            conversation_counts,
-                            tx,
-                        )
-                        .await?;
+                        ConversationLabelsCount::upsert(conversation_counts, tx).await?;
                     }
 
                     let message_counts = cache
@@ -141,8 +137,7 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
                         .collect::<Vec<_>>();
                     if !message_counts.is_empty() {
                         tracing::debug!("Handling message counts");
-                        MessageLabelsCount::create_or_update_message_counts(message_counts, tx)
-                            .await?;
+                        MessageLabelsCount::upsert(message_counts, tx).await?;
                     }
 
                     if event

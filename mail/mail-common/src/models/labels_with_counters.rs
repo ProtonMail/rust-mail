@@ -4,7 +4,7 @@
 #[path = "../tests/models/labels_with_counters.rs"]
 mod labels_with_counters;
 
-use super::{ConversationCounters, MessageCounters};
+use super::{ConversationCounter, MessageCounter};
 use crate::models::MailSettings;
 use indoc::formatdoc;
 use proton_core_api::services::proton::{LabelId, ProtonCore};
@@ -63,8 +63,8 @@ impl LabelWithCounters {
             move |tx, labels| {
                 let label_ids = Label::store_labels(tx, labels)?;
                 for local_id in label_ids {
-                    ConversationCounters::new(local_id).save_sync(tx)?;
-                    MessageCounters::new(local_id).save_sync(tx)?;
+                    ConversationCounter::new(local_id).save_sync(tx)?;
+                    MessageCounter::new(local_id).save_sync(tx)?;
                 }
                 Ok(())
             },
@@ -94,8 +94,8 @@ impl LabelWithCounters {
                     {query}
                     LIMIT 1",
                     labels = Label::table_name(),
-                    msgs = MessageCounters::table_name(),
-                    convs = ConversationCounters::table_name(),
+                    msgs = MessageCounter::table_name(),
+                    convs = ConversationCounter::table_name(),
                     query = query.into()
                 ),
                 params,
@@ -135,8 +135,8 @@ impl LabelWithCounters {
                 {labels}.display_order ASC
             ",
                     labels = Label::table_name(),
-                    msgs = MessageCounters::table_name(),
-                    convs = ConversationCounters::table_name(),
+                    msgs = MessageCounter::table_name(),
+                    convs = ConversationCounter::table_name(),
                 ),
                 params![kind],
             )
@@ -182,8 +182,8 @@ impl LabelWithCounters {
                 {labels}.display_order ASC
             ",
                     labels = Label::table_name(),
-                    msgs = MessageCounters::table_name(),
-                    convs = ConversationCounters::table_name(),
+                    msgs = MessageCounter::table_name(),
+                    convs = ConversationCounter::table_name(),
                 ),
                 label_ids,
             )
@@ -233,8 +233,8 @@ pub struct LabelWithCountersWatcher {
 impl TableObserver for LabelWithCountersWatcher {
     fn tables(&self) -> Vec<String> {
         vec![
-            ConversationCounters::table_name().to_string(),
-            MessageCounters::table_name().to_string(),
+            ConversationCounter::table_name().to_string(),
+            MessageCounter::table_name().to_string(),
             Label::table_name().to_string(),
             MailSettings::table_name().to_string(),
         ]

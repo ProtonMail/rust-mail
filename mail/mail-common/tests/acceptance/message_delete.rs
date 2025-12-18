@@ -9,7 +9,7 @@ use proton_core_common::test_utils::account::TEST_ADDRESS_ID;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{ConversationCounters, LabelExt, Message, MessageCounters};
+use proton_mail_common::models::{ConversationCounter, LabelExt, Message, MessageCounter};
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
@@ -164,7 +164,7 @@ async fn rebase() {
 
     tether
         .tx(async |tx| {
-            MessageCounters {
+            MessageCounter {
                 local_label_id: label.id(),
                 total: new_messages.len() as u64,
                 unread: new_messages.len() as u64,
@@ -278,8 +278,8 @@ async fn setup(
     (ctx, user_ctx, messages)
 }
 
-async fn msg_counter(label: &Label, tether: &mut Tether) -> MessageCounters {
-    let mut counter = MessageCounters {
+async fn msg_counter(label: &Label, tether: &mut Tether) -> MessageCounter {
+    let mut counter = MessageCounter {
         local_label_id: label.id(),
         total: 10,
         unread: 8,
@@ -290,8 +290,8 @@ async fn msg_counter(label: &Label, tether: &mut Tether) -> MessageCounters {
     counter
 }
 
-async fn conv_counter(label: &Label, tether: &mut Tether) -> ConversationCounters {
-    let mut counter = ConversationCounters {
+async fn conv_counter(label: &Label, tether: &mut Tether) -> ConversationCounter {
+    let mut counter = ConversationCounter {
         local_label_id: label.id(),
         total: 3,
         unread: 2,

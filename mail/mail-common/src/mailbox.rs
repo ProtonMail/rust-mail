@@ -2,7 +2,7 @@ pub mod attachments;
 pub mod decrypted_message;
 
 use crate::datatypes::{MessageRecipientDisplayMode, ViewMode};
-use crate::models::{ConversationCounters, MailLabel, MessageCounters};
+use crate::models::{ConversationCounter, MailLabel, MessageCounter};
 use crate::{AppError, MailContextResult};
 pub use attachments::DecryptedAttachment;
 use parking_lot::RwLock;
@@ -111,11 +111,11 @@ impl Mailbox {
     pub async fn unread_count(&self, tether: &Tether) -> MailContextResult<u64> {
         Ok(match self.view_mode() {
             ViewMode::Conversations => {
-                let counters = ConversationCounters::find_by_id(self.label_id(), tether).await?;
+                let counters = ConversationCounter::find_by_id(self.label_id(), tether).await?;
                 counters.map(|c| c.unread).unwrap_or_default()
             }
             ViewMode::Messages => {
-                let counters = MessageCounters::find_by_id(self.label_id(), tether).await?;
+                let counters = MessageCounter::find_by_id(self.label_id(), tether).await?;
                 counters.map(|c| c.unread).unwrap_or_default()
             }
         })
@@ -126,8 +126,8 @@ impl Mailbox {
     ///
     pub async fn watch_unread_count(&self, stash: &Stash) -> MailContextResult<WatcherHandle> {
         let watcher = match self.view_mode() {
-            ViewMode::Conversations => ConversationCounters::watch(stash).await?,
-            ViewMode::Messages => MessageCounters::watch(stash).await?,
+            ViewMode::Conversations => ConversationCounter::watch(stash).await?,
+            ViewMode::Messages => MessageCounter::watch(stash).await?,
         };
 
         Ok(watcher)

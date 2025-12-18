@@ -11,7 +11,7 @@ use crate::draft::{
 };
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
-    DraftSendResultOrigin, MailSettings, Message, MessageBody, MessageCounters, MessageMimeType,
+    DraftSendResultOrigin, MailSettings, Message, MessageBody, MessageCounter, MessageMimeType,
     MetadataId, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext, draft};
@@ -172,7 +172,7 @@ impl Handler for SendHandler {
 
         if action.is_scheduled()
             && let Some(counters) =
-                MessageCounters::find_by_id(local_all_scheduled_label_id, tx).await?
+                MessageCounter::find_by_id(local_all_scheduled_label_id, tx).await?
             && counters.total >= MAX_SCHEDULED_SEND_COUNT
         {
             return Err(SendError::ScheduleSendMessageLimitExceeded.into());
