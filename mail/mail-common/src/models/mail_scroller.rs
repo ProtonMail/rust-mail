@@ -1,4 +1,4 @@
-use super::{ConversationCounters, MessageCounters};
+use super::{ConversationCounter, MessageCounter};
 use crate::AppError;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::labels::{ScrollOrderDir, ScrollOrderField};
@@ -183,7 +183,7 @@ impl ScrollData for MessageScrollData {
             return Ok(0);
         }
 
-        let Some(counters) = MessageCounters::find_by_id(local_label_id, tether).await? else {
+        let Some(counters) = MessageCounter::find_by_id(local_label_id, tether).await? else {
             return Err(AppError::LocalLabelHasNoCounters(local_label_id));
         };
 
@@ -354,7 +354,7 @@ impl ScrollData for MessageScrollData {
         vec![
             Message::table_name().to_owned(),
             MessageLabel::table_name().to_owned(),
-            MessageCounters::table_name().to_owned(),
+            MessageCounter::table_name().to_owned(),
             MailBusyLabel::table_name().to_owned(),
         ]
     }
@@ -464,7 +464,7 @@ impl ScrollData for ConversationScrollData {
             return Ok(0);
         }
 
-        let Some(counters) = ConversationCounters::find_by_id(local_label_id, tether).await? else {
+        let Some(counters) = ConversationCounter::find_by_id(local_label_id, tether).await? else {
             return Err(AppError::LocalLabelHasNoCounters(local_label_id));
         };
 
@@ -638,7 +638,7 @@ impl ScrollData for ConversationScrollData {
         vec![
             Conversation::table_name().to_owned(),
             ConversationLabel::table_name().to_owned(),
-            ConversationCounters::table_name().to_owned(),
+            ConversationCounter::table_name().to_owned(),
             MailBusyLabel::table_name().to_owned(),
         ]
     }

@@ -108,12 +108,8 @@ impl MessageOrConversationDependencyFetcher {
                         unread: 0,
                     })
                     .collect::<Vec<_>>();
-                MessageLabelsCount::create_or_update_message_counts(message_counts, tx).await?;
-                ConversationLabelsCount::create_or_update_conversation_counts(
-                    conversation_counts,
-                    tx,
-                )
-                .await?;
+                MessageLabelsCount::upsert(message_counts, tx).await?;
+                ConversationLabelsCount::upsert(conversation_counts, tx).await?;
                 Ok(())
             })
             .await

@@ -38,7 +38,7 @@ async fn label_with_counters() {
         .tx::<_, _, StashError>(async |tx| {
             local_label.save(tx).await.unwrap();
 
-            ConversationLabelsCount::create_or_update_conversation_counts(
+            ConversationLabelsCount::upsert(
                 vec![ConversationLabelsCount {
                     label_id: local_label.remote_id.clone().unwrap(),
                     total: total_conv,
@@ -49,7 +49,7 @@ async fn label_with_counters() {
             .await
             .unwrap();
 
-            MessageLabelsCount::create_or_update_message_counts(
+            MessageLabelsCount::upsert(
                 vec![MessageLabelsCount {
                     label_id: local_label.remote_id.clone().unwrap(),
                     total: total_msg,

@@ -1,7 +1,7 @@
 use crate::AppError;
 use crate::actions::messages::Move;
 use crate::actions::{LabelAsData, MailActionError};
-use crate::models::{Message, MessageCounters};
+use crate::models::{Message, MessageCounter};
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, FactoryResult, Handler, Metadata, Type,
     VersionConverter, WriterGuard,
@@ -54,7 +54,7 @@ impl Handler for LabelAsHandler {
         action.0.apply_local_common(tx).await?;
 
         let total = if let Some(id) = action.0.source_label_id {
-            MessageCounters::load(id, tx).await?.map_or(0, |x| x.total)
+            MessageCounter::load(id, tx).await?.map_or(0, |x| x.total)
         } else {
             0
         };

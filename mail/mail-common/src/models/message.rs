@@ -1204,7 +1204,7 @@ impl Message {
 
         // Messages Counters
         for id_pair in &updated {
-            let counters = MessageCounters::find_sync(
+            let counters = MessageCounter::find_sync(
                 indoc! {"
                     WHERE local_label_id IN (
                         SELECT local_label_id FROM message_labels
@@ -1260,7 +1260,7 @@ impl Message {
 
         for (label_id, count) in label_ids {
             // Update conversation label counts.
-            if let Some(mut counters) = ConversationCounters::load_by_id_sync(label_id, tx)? {
+            if let Some(mut counters) = ConversationCounter::load_by_id_sync(label_id, tx)? {
                 if mark_read {
                     counters.unread = counters.unread.saturating_sub(count);
                 } else {
@@ -1487,7 +1487,7 @@ impl Message {
     ) -> Result<HashMap<LocalLabelId, MessageLabelStats>, StashError> {
         let label_stats = MessageLabelStats::build(messages, bond).await?;
         for (label_id, stats) in label_stats.iter() {
-            if let Some(mut counters) = MessageCounters::find_by_id(*label_id, bond).await? {
+            if let Some(mut counters) = MessageCounter::find_by_id(*label_id, bond).await? {
                 counters.total = counters.total.saturating_sub(stats.count);
                 counters.unread = counters.unread.saturating_sub(stats.unread_count);
                 counters.save(bond).await?;
@@ -1503,7 +1503,7 @@ impl Message {
     ) -> Result<HashMap<LocalLabelId, MessageLabelStats>, StashError> {
         let label_stats = MessageLabelStats::build(messages, bond).await?;
         for (label_id, stats) in label_stats.iter() {
-            if let Some(mut counters) = MessageCounters::find_by_id(*label_id, bond).await? {
+            if let Some(mut counters) = MessageCounter::find_by_id(*label_id, bond).await? {
                 counters.total += stats.count;
                 counters.unread += stats.unread_count;
                 counters.save(bond).await?;
@@ -2221,7 +2221,7 @@ impl ConversationOrMessage for Message {
             return Ok(vec![]);
         }
 
-        let mut msg_counters = MessageCounters::load_by_id_sync(local_label_id, tx)?
+        let mut msg_counters = MessageCounter::load_by_id_sync(local_label_id, tx)?
             .context("No message counter for label")?;
 
         msg_counters.unread = msg_counters.unread.saturating_sub(unread_msg_count);
@@ -2230,7 +2230,7 @@ impl ConversationOrMessage for Message {
             .save_sync(tx)
             .context("Error saving counters")?;
 
-        let mut conv_counters = ConversationCounters::load_by_id_sync(local_label_id, tx)?
+        let mut conv_counters = ConversationCounter::load_by_id_sync(local_label_id, tx)?
             .context("No conversation counter for label")?;
 
         for conversation_id in conversations {
@@ -2890,7 +2890,7 @@ impl MessageLabelStats {
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("message_counters")]
-pub struct MessageCounters {
+pub struct MessageCounter {
     #[IdField]
     pub local_label_id: LocalLabelId,
 
@@ -2901,7 +2901,7 @@ pub struct MessageCounters {
     pub unread: u64,
 }
 
-impl MessageCounters {
+impl MessageCounter {
     pub fn new(local_label_id: LocalLabelId) -> Self {
         Self {
             local_label_id,
@@ -2910,7 +2910,7 @@ impl MessageCounters {
         }
     }
 
-    pub fn counters(&self) -> (u64, u64) {
+    pub fn get(&self) -> (u64, u64) {
         (self.unread, self.total)
     }
 
@@ -2920,16 +2920,6 @@ impl MessageCounters {
             ReadFilter::Unread => self.unread,
             ReadFilter::Read => self.total.saturating_sub(self.unread),
         }
-    }
-
-    pub async fn message_count(&self, tether: &Tether) -> Result<MessageLabelsCount, AppError> {
-        let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
-
-        Ok(MessageLabelsCount {
-            label_id: remote_id,
-            total: self.total,
-            unread: self.unread,
-        })
     }
 
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
@@ -2945,7 +2935,7 @@ pub struct MessageCounterWatcher {
 
 impl TableObserver for MessageCounterWatcher {
     fn tables(&self) -> Vec<String> {
-        vec![MessageCounters::table_name().to_string()]
+        vec![MessageCounter::table_name().to_string()]
     }
 
     fn on_tables_changed(&self, _tables: &BTreeSet<String>) {

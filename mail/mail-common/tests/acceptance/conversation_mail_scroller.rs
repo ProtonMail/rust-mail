@@ -23,7 +23,7 @@ use proton_mail_common::datatypes::{
     labels::{ScrollOrderDir, ScrollOrderField},
 };
 use proton_mail_common::models::{
-    CachedScrollData, ConversationLabel, LabelExt, LabelWithCounters, Message, MessageCounters,
+    CachedScrollData, ConversationLabel, LabelExt, LabelWithCounters, Message, MessageCounter,
 };
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
@@ -38,7 +38,7 @@ use proton_mail_common::{
 };
 use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter},
-    models::{Conversation, ConversationCounters, ConversationScrollData},
+    models::{Conversation, ConversationCounter, ConversationScrollData},
 };
 use proton_network_monitor_service::OsNetworkStatus;
 use stash::orm::Model;
@@ -353,7 +353,7 @@ async fn test_conversation_mail_scroller_try_to_read_one_item_from_api_when_it_d
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 1;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -391,7 +391,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all conversations
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = page_size as u64 * 2;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -466,7 +466,7 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     mock_api_forbidden(&ctx).await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 1;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -540,7 +540,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     mock_not_responsive_api(&ctx).await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 1;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -592,7 +592,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     mock_not_responsive_api(&ctx).await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 10;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -638,7 +638,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     mock_not_responsive_api(&ctx).await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 15;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -763,7 +763,7 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
     // Mock offline
     mock_not_responsive_api(&ctx).await;
 
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 150;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -819,7 +819,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all conversations
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = page_size as u64 * 2 + 3;
     // And simulate we have a cursor pointing correctly to the last
     // conversation which we expect to have 3 though 5 is the page_size
@@ -972,7 +972,7 @@ async fn test_conversation_mail_scroller_database_refresh_will_not_triggers_fetc
     // Mock offline to use cached data
     mock_not_responsive_api(&ctx).await;
 
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 3; // Less than page_size (10)
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -1031,7 +1031,7 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_sma
     // Mock offline to use cached data
     mock_not_responsive_api(&ctx).await;
 
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 3; // Less than page_size (10)
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -1092,7 +1092,7 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_lar
     // Mock offline to use cached data
     mock_not_responsive_api(&ctx).await;
 
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 15;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -1228,7 +1228,7 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
         .order_dir(ScrollOrderDir::Desc)
         .order_field(ScrollOrderField::SnoozeTime)
         .build();
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 3;
     tether
         .tx(async |bond| {
@@ -1408,7 +1408,7 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
     //mock_get_conversations_page(&ctx, vec![], &test_conv_id, 1).await;
 
     // Update the inbox label to have all conversations
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 1;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -1479,7 +1479,7 @@ async fn conversation_mail_scroller_reacts_to_creat_conversation_event() {
     assert_eq!(conversations.len(), 2);
     assert_eq!(conversations[0].remote_id.as_ref(), Some(&conv_id_2));
     assert_eq!(conversations[1].remote_id.as_ref(), Some(&conv_id_1));
-    let conv_counts = ConversationCounters::find_by_id(local_label_id, &tether)
+    let conv_counts = ConversationCounter::find_by_id(local_label_id, &tether)
         .await
         .unwrap()
         .unwrap();
@@ -1532,7 +1532,7 @@ async fn test_conversation_mail_scroller_reads_non_empty_folder_for_the_first_ti
     ctx.mock_ping_success().await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 10;
     tether
         .tx(async |bond| counters.save(bond).await)
@@ -1621,13 +1621,13 @@ async fn test_conversation_mail_scroller_change_label() {
 
     // we should get an update on the first fetch_more in Inbox despite the data being stale
     let inbox_local_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut inbox_counters = ConversationCounters::new(inbox_local_id);
+    let mut inbox_counters = ConversationCounter::new(inbox_local_id);
     let remote_label_id = LabelId::from("rid2");
     let rid2_local_id = Label::remote_id_counterpart(remote_label_id, &tether)
         .await
         .unwrap()
         .unwrap();
-    let mut rid2_counters = ConversationCounters::new(rid2_local_id);
+    let mut rid2_counters = ConversationCounter::new(rid2_local_id);
     inbox_counters.total = 10;
     rid2_counters.total = 50;
     tether
@@ -1720,8 +1720,8 @@ async fn test_conversation_mail_scroller_change_include() {
         .await
         .unwrap()
         .unwrap();
-    let mut almost_all_mail_counters = ConversationCounters::new(almost_all_mail_local_id);
-    let mut all_mail_counters = ConversationCounters::new(all_mail_local_id);
+    let mut almost_all_mail_counters = ConversationCounter::new(almost_all_mail_local_id);
+    let mut all_mail_counters = ConversationCounter::new(all_mail_local_id);
     almost_all_mail_counters.total = 10;
     all_mail_counters.total = 50;
     tether
@@ -1784,7 +1784,7 @@ async fn test_conversation_mail_scroller_end_cursor_is_not_pointing_to_any_eleme
     ctx.mock_get_conversations(vec![], 3).await;
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
+    let mut counters = ConversationCounter::new(local_label_id);
     counters.total = 10;
     let mut cursor = ConversationScrollData::builder()
         .local_label_id(local_label_id)
@@ -1910,13 +1910,13 @@ async fn delete_all() {
     // ---
     // [1] Initial state - pretend we've got 100 messages in trash
 
-    let mut msg_counter = MessageCounters {
+    let mut msg_counter = MessageCounter {
         local_label_id: label.id(),
         total: 100,
         unread: 80,
     };
 
-    let mut conv_counter = ConversationCounters {
+    let mut conv_counter = ConversationCounter {
         local_label_id: label.id(),
         total: 30,
         unread: 20,

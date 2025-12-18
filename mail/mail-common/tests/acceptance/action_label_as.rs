@@ -11,7 +11,7 @@ use proton_mail_api::services::proton::response_data::{
 };
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Conversation, ConversationCounters, LabelWithCounters, Message};
+use proton_mail_common::models::{Conversation, ConversationCounter, LabelWithCounters, Message};
 use proton_mail_common::test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
@@ -99,21 +99,21 @@ async fn action_label_as_without_archive() {
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters1 = ConversationCounters::new(label1.id());
+            let mut counters1 = ConversationCounter::new(label1.id());
             counters1.total = 2;
             counters1.save(tx).await.unwrap();
             let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters2 = ConversationCounters::new(label2.id());
+            let mut counters2 = ConversationCounter::new(label2.id());
             counters2.total = 2;
             counters2.save(tx).await.unwrap();
             let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters3 = ConversationCounters::new(label3.id());
+            let mut counters3 = ConversationCounter::new(label3.id());
             counters3.total = 3;
             counters3.save(tx).await.unwrap();
 
@@ -318,21 +318,21 @@ async fn action_label_as_with_archive() {
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters1 = ConversationCounters::new(label1.id());
+            let mut counters1 = ConversationCounter::new(label1.id());
             counters1.total = 2;
             counters1.save(tx).await.unwrap();
             let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters2 = ConversationCounters::new(label2.id());
+            let mut counters2 = ConversationCounter::new(label2.id());
             counters2.total = 2;
             counters2.save(tx).await.unwrap();
             let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters3 = ConversationCounters::new(label3.id());
+            let mut counters3 = ConversationCounter::new(label3.id());
             counters3.total = 3;
             counters3.save(tx).await.unwrap();
 

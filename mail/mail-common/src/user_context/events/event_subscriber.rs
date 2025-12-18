@@ -216,20 +216,12 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
 
                     if let Some(conversation_counts) = &event.conversation_counts {
                         debug!("Handling conversation counts");
-                        ConversationLabelsCount::create_or_update_conversation_counts(
-                            conversation_counts.clone(),
-                            tx,
-                        )
-                        .await?;
+                        ConversationLabelsCount::upsert(conversation_counts.clone(), tx).await?;
                     }
 
                     if let Some(message_counts) = &event.message_counts {
                         debug!("Handling message counts");
-                        MessageLabelsCount::create_or_update_message_counts(
-                            message_counts.clone(),
-                            tx,
-                        )
-                        .await?;
+                        MessageLabelsCount::upsert(message_counts.clone(), tx).await?;
                     }
 
                     if let Some(mail_settings) = event.mail_settings.as_mut() {

@@ -18,7 +18,7 @@ use crate::{
     label, lbl_id,
     mail_scroller::MailScrollerItem,
     message,
-    models::{Conversation, ConversationCounters, Message, MessageCounters},
+    models::{Conversation, ConversationCounter, Message, MessageCounter},
     msg_id,
     traits::ScrollerEq,
 };
@@ -146,14 +146,14 @@ impl<D: Display + Send + Sync> StoreLabeledModelMap<D, Conversation>
                         };
                         label.save(bond).await.unwrap();
 
-                        let mut counters = ConversationCounters::find_first(
+                        let mut counters = ConversationCounter::find_first(
                             "WHERE local_label_id = ?",
                             params![label.id()],
                             bond,
                         )
                         .await
                         .unwrap()
-                        .unwrap_or_else(|| ConversationCounters::new(label.id()));
+                        .unwrap_or_else(|| ConversationCounter::new(label.id()));
 
                         for conversation in conversations.iter_mut() {
                             counters.total += 1;
@@ -217,10 +217,10 @@ async fn create_label(bond: &Bond<'_>, label_id: impl Into<LabelId>) -> Result<L
         }
     };
 
-    let mut counters = ConversationCounters::new(label.id());
+    let mut counters = ConversationCounter::new(label.id());
     counters.save(bond).await?;
 
-    let mut counters = MessageCounters::new(label.id());
+    let mut counters = MessageCounter::new(label.id());
     counters.save(bond).await?;
 
     Ok(label)
@@ -266,14 +266,14 @@ where
                     label.save(bond).await.unwrap();
 
                     {
-                        let mut counters = MessageCounters::find_first(
+                        let mut counters = MessageCounter::find_first(
                             "WHERE local_label_id = ?",
                             params![label.id()],
                             bond,
                         )
                         .await
                         .unwrap()
-                        .unwrap_or_else(|| MessageCounters::new(label.id()));
+                        .unwrap_or_else(|| MessageCounter::new(label.id()));
                         counters.total += 1;
                         counters.unread += if message.unread { 1 } else { 0 };
                         counters.save(bond).await.unwrap();

@@ -22,7 +22,7 @@ use proton_mail_api::services::proton::response_data::{
 };
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{
-    Conversation, ConversationCounters, ConversationLabel, Message, MessageCounters,
+    Conversation, ConversationCounter, ConversationLabel, Message, MessageCounter,
 };
 use proton_mail_common::test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_common::test_utils::init::Params as TestParams;
@@ -88,10 +88,10 @@ async fn move_between_folders() {
         .unwrap()
         .unwrap();
 
-    let mut source_conv = ConversationCounters::new(source.id());
+    let mut source_conv = ConversationCounter::new(source.id());
     source_conv.total = 1;
 
-    let mut source_msg = MessageCounters::new(source.id());
+    let mut source_msg = MessageCounter::new(source.id());
     source_msg.total = 1;
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -188,10 +188,10 @@ async fn move_between_folders_and_undo() {
         .unwrap()
         .unwrap();
 
-    let mut source_conv = ConversationCounters::new(source.id());
+    let mut source_conv = ConversationCounter::new(source.id());
     source_conv.total = 1;
 
-    let mut source_msg = MessageCounters::new(source.id());
+    let mut source_msg = MessageCounter::new(source.id());
     source_msg.total = 1;
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -569,10 +569,10 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .unwrap()
         .unwrap();
 
-    let mut spam_conv = ConversationCounters::new(spam.id());
+    let mut spam_conv = ConversationCounter::new(spam.id());
     spam_conv.total = 1;
 
-    let mut spam_msg = MessageCounters::new(spam.id());
+    let mut spam_msg = MessageCounter::new(spam.id());
     spam_msg.total = 1;
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -654,13 +654,13 @@ async fn move_from_spam_to_trash_do_not_remove_almost_all_mail_label() {
 
     let spam = SystemLabel::Spam.load(&tether).await.unwrap().unwrap();
 
-    let mut spam_conv = ConversationCounters::new(spam.id());
+    let mut spam_conv = ConversationCounter::new(spam.id());
     spam_conv.total = 1;
 
-    let mut spam_msg = MessageCounters::new(spam.id());
+    let mut spam_msg = MessageCounter::new(spam.id());
     spam_msg.total = 1;
 
-    let mut all_mail = MessageCounters::new(
+    let mut all_mail = MessageCounter::new(
         SystemLabel::AllMail
             .load(&tether)
             .await
@@ -738,7 +738,7 @@ async fn move_from_spam_to_trash_do_not_remove_almost_all_mail_label() {
         vec![LabelId::trash(), LabelId::all_mail()]
     );
 
-    let counters = MessageCounters::find_by_id(spam.id(), &tether)
+    let counters = MessageCounter::find_by_id(spam.id(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -750,21 +750,21 @@ async fn move_from_spam_to_trash_do_not_remove_almost_all_mail_label() {
         .await
         .unwrap()
         .unwrap();
-    let counters = MessageCounters::find_by_id(almost_all_mail.id(), &tether)
+    let counters = MessageCounter::find_by_id(almost_all_mail.id(), &tether)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(counters.total, 0);
     assert_eq!(counters.unread, 0);
 
-    let counters = MessageCounters::find_by_id(trash.id(), &tether)
+    let counters = MessageCounter::find_by_id(trash.id(), &tether)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(counters.total, 1);
     assert_eq!(counters.unread, 0);
     let all_mail = SystemLabel::AllMail.load(&tether).await.unwrap().unwrap();
-    let counters = MessageCounters::find_by_id(all_mail.id(), &tether)
+    let counters = MessageCounter::find_by_id(all_mail.id(), &tether)
         .await
         .unwrap()
         .unwrap();

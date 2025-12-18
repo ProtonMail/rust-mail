@@ -1,6 +1,6 @@
 use crate::AppError;
 use crate::datatypes::{LabelColor, SystemLabelId, ViewMode};
-use crate::models::{ConversationCounters, MailLabel, MailSettings, MessageCounters};
+use crate::models::{ConversationCounter, MailLabel, MailSettings, MessageCounter};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
@@ -20,13 +20,13 @@ pub mod system_labels;
 pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64), AppError> {
     match label.view_mode(tether).await? {
         ViewMode::Conversations => {
-            let counters = ConversationCounters::find_by_id(label.id(), tether).await?;
-            let (unread, total) = counters.map(|c| c.counters()).unwrap_or_default();
+            let counters = ConversationCounter::find_by_id(label.id(), tether).await?;
+            let (unread, total) = counters.map(|c| c.get()).unwrap_or_default();
             Ok((unread, total))
         }
         ViewMode::Messages => {
-            let counters = MessageCounters::find_by_id(label.id(), tether).await?;
-            let (unread, total) = counters.map(|c| c.counters()).unwrap_or_default();
+            let counters = MessageCounter::find_by_id(label.id(), tether).await?;
+            let (unread, total) = counters.map(|c| c.get()).unwrap_or_default();
             Ok((unread, total))
         }
     }

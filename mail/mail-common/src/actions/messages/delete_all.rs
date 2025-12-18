@@ -1,6 +1,6 @@
 use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
-use crate::models::{ConversationCounters, LabelExt, Message, MessageCounters};
+use crate::models::{ConversationCounter, LabelExt, Message, MessageCounter};
 use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
@@ -119,7 +119,7 @@ impl DeleteAllMessagesInLabelHandler {
         mut action: Option<&mut DeleteAllMessagesInLabel>,
         label: &Label,
     ) -> Result<(), MailActionError> {
-        if let Some(mut counters) = MessageCounters::find_by_id(label.id(), tx).await? {
+        if let Some(mut counters) = MessageCounter::find_by_id(label.id(), tx).await? {
             if let Some(action) = &mut action {
                 action.prev_msg_total = Some(counters.total);
                 action.prev_msg_unread = Some(counters.unread);
@@ -130,7 +130,7 @@ impl DeleteAllMessagesInLabelHandler {
             counters.save(tx).await?;
         }
 
-        if let Some(mut counters) = ConversationCounters::find_by_id(label.id(), tx).await? {
+        if let Some(mut counters) = ConversationCounter::find_by_id(label.id(), tx).await? {
             if let Some(action) = &mut action {
                 action.prev_conv_total = Some(counters.total);
                 action.prev_conv_unread = Some(counters.unread);
@@ -185,7 +185,7 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         if let Some(total) = action.prev_msg_total
             && let Some(unread) = action.prev_msg_unread
         {
-            MessageCounters {
+            MessageCounter {
                 local_label_id: label.id(),
                 total,
                 unread,
@@ -197,7 +197,7 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         if let Some(total) = action.prev_conv_total
             && let Some(unread) = action.prev_conv_unread
         {
-            ConversationCounters {
+            ConversationCounter {
                 local_label_id: label.id(),
                 total,
                 unread,

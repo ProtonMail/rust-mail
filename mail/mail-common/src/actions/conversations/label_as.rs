@@ -3,7 +3,7 @@ use proton_core_api::session::Session;
 use crate::AppError;
 use crate::actions::conversations::Move;
 use crate::actions::{LabelAsData, MailActionError};
-use crate::models::{Conversation, ConversationCounters};
+use crate::models::{Conversation, ConversationCounter};
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionId, FactoryResult, Handler, Metadata, Type,
     VersionConverter, WriterGuard,
@@ -54,7 +54,7 @@ impl Handler for LabelAsHandler {
         action.0.apply_local_common(tx).await?;
 
         let total = if let Some(label_id) = action.0.source_label_id {
-            ConversationCounters::load(label_id, tx)
+            ConversationCounter::load(label_id, tx)
                 .await?
                 .map_or(0, |x| x.total)
         } else {

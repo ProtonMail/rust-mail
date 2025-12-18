@@ -3,7 +3,7 @@ use crate::datatypes::{
     MessageRecipient, MessageRecipients, MessageSender, MessageSenders,
 };
 use crate::models::{
-    Conversation, ConversationCounters, ConversationLabel, Message, MessageCounters,
+    Conversation, ConversationCounter, ConversationLabel, Message, MessageCounter,
 };
 use futures::{FutureExt as _, StreamExt};
 use proton_core_api::services::proton::LabelId;
@@ -247,19 +247,16 @@ pub async fn prepare_and_patch_db_state_and_skip(
             }
 
             // create conversation_counts
-            ConversationLabelsCount::create_or_update_conversation_counts(
+            ConversationLabelsCount::upsert(
                 result.conversation_counts.values().cloned().collect(),
                 tx,
             )
             .await
             .expect("failed to create conversation counts");
             if !skip_messages {
-                MessageLabelsCount::create_or_update_message_counts(
-                    result.message_counts.values().cloned().collect(),
-                    tx,
-                )
-                .await
-                .expect("failed to create message counts");
+                MessageLabelsCount::upsert(result.message_counts.values().cloned().collect(), tx)
+                    .await
+                    .expect("failed to create message counts");
             }
 
             Ok((env, result))
@@ -308,7 +305,7 @@ pub fn message_counts_for_conversation(
 pub async fn conv_counts_as_map(
     tether: &Tether,
 ) -> BTreeMap<LocalLabelId, ConversationLabelsCount> {
-    let iter = ConversationCounters::all(tether)
+    let iter = ConversationCounter::all(tether)
         .await
         .unwrap()
         .into_iter()
@@ -334,7 +331,7 @@ pub async fn conv_counts_as_map(
 
 #[allow(clippy::from_iter_instead_of_collect)]
 pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, MessageLabelsCount> {
-    let iter = MessageCounters::all(tether)
+    let iter = MessageCounter::all(tether)
         .await
         .unwrap()
         .into_iter()

@@ -9,7 +9,7 @@ use proton_mail_api::services::proton::response_data::ConversationLabel as ApiCo
 use proton_mail_api::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::ConversationCounters;
+use proton_mail_common::models::ConversationCounter;
 use proton_mail_common::models::{Conversation, Message};
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
@@ -155,7 +155,7 @@ async fn mark_conversation_read(conversations: &[TestCase], expected_read: usize
         .unwrap()
         .unwrap();
 
-    let mut counters = ConversationCounters::find_by_id(inbox.id(), &tether)
+    let mut counters = ConversationCounter::find_by_id(inbox.id(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -245,7 +245,7 @@ async fn mark_conversation_unread(conversations: &[TestCase], expected_read: usi
         .unwrap()
         .unwrap();
 
-    let mut counters = ConversationCounters::find_by_id(inbox.id(), &tether)
+    let mut counters = ConversationCounter::find_by_id(inbox.id(), &tether)
         .await
         .unwrap()
         .unwrap();
