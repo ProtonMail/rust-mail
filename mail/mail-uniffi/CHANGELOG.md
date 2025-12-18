@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.0] - 2025-12-18
+
+### Changed
+
+- [ET-5182] Adjust RawEvent structure
+
+### Features
+
+- [ET-5182] Move v5 code to new event loop setup
+- [ET-5182] Core and Contact v6 event loops
+- [ET-5544] View raw message body and headers
+- [ET-5182] Integrate Mail Event v6
+- [ET-5590] Exposing 'dry-run' option parameter and fetching tracker provider header from response
+
+### Fixes
+
+- [ET-3273] Fix merging multiple vCards causing missing contact group
+- [ET-1461] Handle missing address events
+- Support digital (heh) mobile signatures
+
+
 ## [mail-uniffi-v0.160.12] - 2025-12-17
 
 ### Fixes
