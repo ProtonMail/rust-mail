@@ -87,8 +87,8 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
                     }
 
                     if let Some(ref events) = event.conversations {
+                        debug!("Handling conversation events");
                         for event in events {
-                            debug!("Handling conversation events");
                             if let Some(id) = Conversation::handle_event(
                                 tx,
                                 &event.id,
@@ -104,8 +104,8 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
                     }
 
                     if let Some(ref events) = event.messages {
+                        debug!("Handling message events");
                         for event in events {
-                            debug!("Handling message events");
                             if let Some(id) = Message::handle_event(
                                 tx,
                                 &event.id,
@@ -126,7 +126,7 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
                         .map_into()
                         .collect::<Vec<_>>();
                     if !conversation_counts.is_empty() {
-                        tracing::debug!("Handling conversation counts");
+                        debug!("Handling conversation counts");
                         ConversationLabelsCount::upsert(conversation_counts, tx).await?;
                     }
 

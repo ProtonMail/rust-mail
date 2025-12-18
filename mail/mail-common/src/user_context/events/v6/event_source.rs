@@ -2,7 +2,8 @@ use crate::MailContextError;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::models::{Conversation, MailSettings};
 use futures::StreamExt;
-use futures::stream::FuturesOrdered;
+use futures::future::BoxFuture;
+use futures::stream::FuturesUnordered;
 use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{Action, LabelId, ProtonCore};
@@ -18,6 +19,7 @@ use proton_mail_api::services::proton::prelude::{
 use proton_mail_api::services::proton::requests::GetMessagesOptions;
 use stash::stash::Tether;
 use std::collections::{HashMap, HashSet};
+use tracing::error;
 
 pub struct MailEventSourceV6;
 
@@ -39,7 +41,7 @@ pub struct MailEventCache {
     conversations: HashMap<ConversationId, Conversation>,
     messages: HashMap<MessageId, MessageMetadata>,
     labels: HashMap<LabelId, Label>,
-    settings: Option<MailSettings>,
+    settings: Option<Box<MailSettings>>,
     message_counters: HashMap<LabelId, MessageCount>,
     conversation_counters: HashMap<LabelId, ConversationCount>,
 }
@@ -51,13 +53,15 @@ impl MailEventCache {
         session: &Session,
         event: &MailEventV6,
     ) -> Result<(), ApiServiceError> {
+        let mut tasks = FuturesUnordered::<FutureTask>::new();
+
         if let Some(ref events) = event.labels {
             let ids = events
                 .iter()
                 .filter(|e| e.action != Action::Delete)
                 .map(|e| e.id.clone());
             tracing::info!("Fetching labels");
-            self.fetch_labels(session, ids).await?;
+            self.fetch_labels(&mut tasks, session, ids);
         }
 
         if let Some(ref events) = event.conversations {
@@ -66,7 +70,7 @@ impl MailEventCache {
                 .filter(|e| e.action != Action::Delete)
                 .map(|e| e.id.clone());
             tracing::info!("Fetching Conversations");
-            self.fetch_conversations(session, ids).await?;
+            self.fetch_conversations(&mut tasks, session, ids);
         }
 
         if let Some(ref events) = event.messages {
@@ -75,12 +79,28 @@ impl MailEventCache {
                 .filter(|e| e.action != Action::Delete)
                 .map(|e| e.id.clone());
             tracing::info!("Fetching Messages");
-            self.fetch_messages(session, ids).await?;
+            self.fetch_messages(&mut tasks, session, ids);
         }
 
         if event.mail_settings.as_ref().is_some_and(|e| !e.is_empty()) {
             tracing::info!("Fetching Mail Settings");
-            self.fetch_mail_settings(session).await?;
+            self.fetch_mail_settings(&mut tasks, session);
+        }
+
+        let mut first_err = None;
+        while let Some(result) = tasks.next().await {
+            match result {
+                Ok(data) => data.apply(self),
+                Err(e) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+            }
+        }
+
+        if let Some(first_err) = first_err {
+            return Err(first_err);
         }
 
         // calculate label counters to fetch
@@ -98,210 +118,230 @@ impl MailEventCache {
             .collect::<HashSet<LabelId>>();
 
         if !label_counter_ids.is_empty() {
-            tracing::info!("Fetching message counters");
-            self.fetch_message_counters(session, label_counter_ids.iter().cloned())
-                .await?;
-            tracing::info!("Fetching conversation counters");
-            self.fetch_conversation_counters(session, label_counter_ids)
-                .await?;
+            tracing::info!("Fetching counters");
+            let mut tasks = FuturesUnordered::<FutureTask>::new();
+            self.fetch_message_counters(&mut tasks, session, label_counter_ids.iter().cloned());
+            self.fetch_conversation_counters(&mut tasks, session, label_counter_ids);
+            while let Some(result) = tasks.next().await {
+                result?.apply(self);
+            }
         }
 
         Ok(())
     }
-    pub async fn fetch_labels(
+    fn fetch_labels(
         &mut self,
+        tasks: &mut FuturesUnordered<FutureTask>,
         session: &Session,
-        id: impl IntoIterator<Item = LabelId>,
-    ) -> Result<(), ApiServiceError> {
+        ids: impl IntoIterator<Item = LabelId>,
+    ) {
         const MAX_LABELS_PER_REQUEST: usize = 50;
-        let mut tasks = id
-            .into_iter()
-            .filter(|id| !self.labels.contains_key(id))
-            .chunks(MAX_LABELS_PER_REQUEST)
-            .into_iter()
-            .map(|ids| session.get_labels_by_ids(ids.collect()))
-            .collect::<FuturesOrdered<_>>();
-        while let Some(task) = tasks.next().await {
-            let response =
-                task.inspect_err(|e| tracing::error!("Failed to fetch mail labels: {e}"))?;
-            for label in response.labels {
-                self.labels.insert(label.id.clone(), label.into());
-            }
-        }
-        Ok(())
+        tasks.extend(
+            ids.into_iter()
+                .filter(|id| !self.labels.contains_key(id))
+                .chunks(MAX_LABELS_PER_REQUEST)
+                .into_iter()
+                .map(|ids| -> FutureTask {
+                    let session = session.clone();
+                    let ids = ids.collect();
+                    Box::pin(async move {
+                        session
+                            .get_labels_by_ids(ids)
+                            .await
+                            .inspect_err(|e| error!("Failed to fetch labels: {e}"))
+                            .map(|r| {
+                                FetchData::Label(r.labels.into_iter().map(Into::into).collect())
+                            })
+                    })
+                }),
+        );
     }
 
     pub fn get_label_mut(&mut self, label_id: &LabelId) -> Option<&mut Label> {
         self.labels.get_mut(label_id)
     }
 
-    pub async fn fetch_conversations(
+    fn fetch_conversations(
         &mut self,
+        tasks: &mut FuturesUnordered<FutureTask>,
         session: &Session,
-        id: impl IntoIterator<Item = ConversationId>,
-    ) -> Result<(), ApiServiceError> {
+        ids: impl IntoIterator<Item = ConversationId>,
+    ) {
         const MAX_CONV_PER_REQUEST: usize = 50;
-        let mut tasks = id
-            .into_iter()
-            .filter(|id| !self.conversations.contains_key(id))
-            .chunks(MAX_CONV_PER_REQUEST)
-            .into_iter()
-            .map(|ids| {
-                session.get_conversations(GetConversationsOptions {
-                    address_id: None,
-                    attachments: None,
-                    auto_wildcard: None,
-                    begin: None,
-                    begin_id: None,
-                    desc: None,
-                    end: None,
-                    end_id: None,
-                    anchor: None,
-                    anchor_id: None,
-                    external_id: None,
-                    from: None,
-                    ids: Some(ids.collect()),
-                    keyword: None,
-                    label_id: None,
-                    limit: None,
-                    page: 0,
-                    page_size: MAX_CONV_PER_REQUEST as u64,
-                    recipients: None,
-                    sort: None,
-                    subject: None,
-                    unread: None,
-                })
-            })
-            .collect::<FuturesOrdered<_>>();
-        while let Some(task) = tasks.next().await {
-            let response =
-                task.inspect_err(|e| tracing::error!("Failed to fetch conversations: {e}"))?;
-            for conversation in response.conversations {
-                tracing::debug!("Fetched {:?}", conversation.id);
-                self.conversations
-                    .insert(conversation.id.clone(), conversation.into());
-            }
-        }
-        Ok(())
+        tasks.extend(
+            ids.into_iter()
+                .filter(|id| !self.conversations.contains_key(id))
+                .chunks(MAX_CONV_PER_REQUEST)
+                .into_iter()
+                .map(|ids| -> FutureTask {
+                    let session = session.clone();
+                    let ids = ids.collect();
+                    Box::pin(async move {
+                        session
+                            .get_conversations(GetConversationsOptions {
+                                address_id: None,
+                                attachments: None,
+                                auto_wildcard: None,
+                                begin: None,
+                                begin_id: None,
+                                desc: None,
+                                end: None,
+                                end_id: None,
+                                anchor: None,
+                                anchor_id: None,
+                                external_id: None,
+                                from: None,
+                                ids: Some(ids),
+                                keyword: None,
+                                label_id: None,
+                                limit: None,
+                                page: 0,
+                                page_size: MAX_CONV_PER_REQUEST as u64,
+                                recipients: None,
+                                sort: None,
+                                subject: None,
+                                unread: None,
+                            })
+                            .await
+                            .inspect_err(|e| error!("Failed to get conversations: {e}"))
+                            .map(|r| {
+                                FetchData::Conversation(
+                                    r.conversations.into_iter().map(Into::into).collect(),
+                                )
+                            })
+                    })
+                }),
+        );
     }
 
     pub fn get_conversation_mut(&mut self, id: &ConversationId) -> Option<&mut Conversation> {
         self.conversations.get_mut(id)
     }
 
-    pub async fn fetch_messages(
-        &mut self,
+    fn fetch_messages(
+        &self,
+        tasks: &mut FuturesUnordered<FutureTask>,
         session: &Session,
-        id: impl IntoIterator<Item = MessageId>,
-    ) -> Result<(), ApiServiceError> {
+        ids: impl IntoIterator<Item = MessageId>,
+    ) {
         const MAX_MSG_PER_REQUEST: usize = 50;
-        let mut tasks = id
-            .into_iter()
-            .filter(|id| !self.messages.contains_key(id))
-            .chunks(MAX_MSG_PER_REQUEST)
-            .into_iter()
-            .map(|ids| {
-                session.get_messages(GetMessagesOptions {
-                    address_id: None,
-                    attachments: None,
-                    auto_wildcard: None,
-                    bcc: None,
-                    begin: None,
-                    begin_id: None,
-                    cc: None,
-                    conversation_id: None,
-                    desc: None,
-                    end: None,
-                    end_id: None,
-                    anchor: None,
-                    anchor_id: None,
-                    external_id: None,
-                    from: None,
-                    ids: Some(ids.collect()),
-                    keyword: None,
-                    label_id: None,
-                    limit: None,
-                    page: 0,
-                    page_size: MAX_MSG_PER_REQUEST as u64,
-                    recipients: None,
-                    sort: None,
-                    subject: None,
-                    to: None,
-                    unread: None,
-                })
-            })
-            .collect::<FuturesOrdered<_>>();
-        while let Some(task) = tasks.next().await {
-            let response =
-                task.inspect_err(|e| tracing::error!("Failed to fetch messages: {e}"))?;
-            for message in response.messages {
-                tracing::debug!("Fetched {:?}", message.id);
-                self.messages.insert(message.id.clone(), message);
-            }
-        }
-        Ok(())
+        tasks.extend(
+            ids.into_iter()
+                .filter(|id| !self.messages.contains_key(id))
+                .chunks(MAX_MSG_PER_REQUEST)
+                .into_iter()
+                .map(|ids| -> FutureTask {
+                    let session = session.clone();
+                    let ids = ids.collect();
+                    Box::pin(async move {
+                        session
+                            .get_messages(GetMessagesOptions {
+                                address_id: None,
+                                attachments: None,
+                                auto_wildcard: None,
+                                bcc: None,
+                                begin: None,
+                                begin_id: None,
+                                cc: None,
+                                conversation_id: None,
+                                desc: None,
+                                end: None,
+                                end_id: None,
+                                anchor: None,
+                                anchor_id: None,
+                                external_id: None,
+                                from: None,
+                                ids: Some(ids),
+                                keyword: None,
+                                label_id: None,
+                                limit: None,
+                                page: 0,
+                                page_size: MAX_MSG_PER_REQUEST as u64,
+                                recipients: None,
+                                sort: None,
+                                subject: None,
+                                to: None,
+                                unread: None,
+                            })
+                            .await
+                            .inspect_err(|e| error!("Failed to get messages: {e}"))
+                            .map(|r| FetchData::Messages(r.messages))
+                    })
+                }),
+        );
     }
 
     pub fn get_message(&mut self, id: &MessageId) -> Option<&MessageMetadata> {
         self.messages.get(id)
     }
 
-    pub async fn fetch_mail_settings(&mut self, session: &Session) -> Result<(), ApiServiceError> {
+    fn fetch_mail_settings(&self, tasks: &mut FuturesUnordered<FutureTask>, session: &Session) {
         if self.settings.is_none() {
-            self.settings = Some(session.get_mail_settings().await?.mail_settings.into());
+            let session = session.clone();
+            tasks.push(Box::pin(async move {
+                session
+                    .get_mail_settings()
+                    .await
+                    .inspect_err(|e| error!("Failed to fetch mail settings: {e}"))
+                    .map(|s| FetchData::MailSettings(Box::new(s.mail_settings.into())))
+            }));
         }
-        Ok(())
     }
 
     pub fn get_settings_mut(&mut self) -> Option<&mut MailSettings> {
-        self.settings.as_mut()
+        self.settings.as_mut().map(|v| v.as_mut())
     }
 
-    pub async fn fetch_message_counters(
+    fn fetch_message_counters(
         &mut self,
+        tasks: &mut FuturesUnordered<FutureTask>,
         session: &Session,
-        id: impl IntoIterator<Item = LabelId>,
-    ) -> Result<(), ApiServiceError> {
+        ids: impl IntoIterator<Item = LabelId>,
+    ) {
         const MAX_ITEMS_PER_REQUEST: usize = 50;
-        let mut tasks = id
-            .into_iter()
-            .filter(|id| self.message_counters.contains_key(id))
-            .chunks(MAX_ITEMS_PER_REQUEST)
-            .into_iter()
-            .map(|ids| session.get_messages_count_for_labels(ids.collect()))
-            .collect::<FuturesOrdered<_>>();
-        while let Some(task) = tasks.next().await {
-            let response =
-                task.inspect_err(|e| tracing::error!("Failed to fetch message counters: {e}"))?;
-            for count in response.counts {
-                self.message_counters.insert(count.label_id.clone(), count);
-            }
-        }
-        Ok(())
+        tasks.extend(
+            ids.into_iter()
+                .filter(|id| self.message_counters.contains_key(id))
+                .chunks(MAX_ITEMS_PER_REQUEST)
+                .into_iter()
+                .map(|ids| -> FutureTask {
+                    let session = session.clone();
+                    let ids = ids.collect::<Vec<_>>();
+                    Box::pin(async move {
+                        session
+                            .get_messages_count_for_labels(ids)
+                            .await
+                            .inspect_err(|e| error!("Failed to fetch message counters: {e}"))
+                            .map(|r| FetchData::MessagesCount(r.counts))
+                    })
+                }),
+        );
     }
 
-    pub async fn fetch_conversation_counters(
+    fn fetch_conversation_counters(
         &mut self,
+        tasks: &mut FuturesUnordered<FutureTask>,
         session: &Session,
-        id: impl IntoIterator<Item = LabelId>,
-    ) -> Result<(), ApiServiceError> {
+        ids: impl IntoIterator<Item = LabelId>,
+    ) {
         const MAX_ITEMS_PER_REQUEST: usize = 50;
-        let mut tasks = id
-            .into_iter()
-            .filter(|id| self.conversation_counters.contains_key(id))
-            .chunks(MAX_ITEMS_PER_REQUEST)
-            .into_iter()
-            .map(|ids| session.get_conversations_count_for_labels(ids.collect()))
-            .collect::<FuturesOrdered<_>>();
-        while let Some(task) = tasks.next().await {
-            let response = task
-                .inspect_err(|e| tracing::error!("Failed to fetch conversation counters: {e}"))?;
-            for count in response.counts {
-                self.conversation_counters
-                    .insert(count.label_id.clone(), count);
-            }
-        }
-        Ok(())
+        tasks.extend(
+            ids.into_iter()
+                .filter(|id| self.conversation_counters.contains_key(id))
+                .chunks(MAX_ITEMS_PER_REQUEST)
+                .into_iter()
+                .map(|ids| -> FutureTask {
+                    let session = session.clone();
+                    let ids = ids.collect();
+                    Box::pin(async move {
+                        session
+                            .get_conversations_count_for_labels(ids)
+                            .await
+                            .inspect_err(|e| error!("Failed to fetch conversation counters: {e}"))
+                            .map(|r| FetchData::ConversationCount(r.counts))
+                    })
+                }),
+        );
     }
 
     pub async fn calculate_missing_dependencies(
@@ -326,5 +366,60 @@ impl MailEventCache {
 
     pub fn get_conversation_counts(&self) -> impl Iterator<Item = &ConversationCount> + use<'_> {
         self.conversation_counters.values()
+    }
+}
+
+type FutureTask = BoxFuture<'static, Result<FetchData, ApiServiceError>>;
+
+enum FetchData {
+    Label(Vec<Label>),
+    Conversation(Vec<Conversation>),
+    Messages(Vec<MessageMetadata>),
+    MailSettings(Box<MailSettings>),
+    ConversationCount(Vec<ConversationCount>),
+    MessagesCount(Vec<MessageCount>),
+}
+
+impl FetchData {
+    fn apply(self, cache: &mut MailEventCache) {
+        match self {
+            FetchData::Label(labels) => {
+                for label in labels {
+                    cache
+                        .labels
+                        .insert(label.remote_id.clone().expect("Should be set"), label);
+                }
+            }
+            FetchData::Conversation(conversations) => {
+                for conversation in conversations {
+                    cache.conversations.insert(
+                        conversation.remote_id.clone().expect("Should be set"),
+                        conversation,
+                    );
+                }
+            }
+            FetchData::Messages(messages) => {
+                for message in messages {
+                    cache.messages.insert(message.id.clone(), message);
+                }
+            }
+            FetchData::MailSettings(settings) => {
+                cache.settings = Some(settings);
+            }
+            FetchData::ConversationCount(counters) => {
+                for counter in counters {
+                    cache
+                        .conversation_counters
+                        .insert(counter.label_id.clone(), counter);
+                }
+            }
+            FetchData::MessagesCount(counters) => {
+                for counter in counters {
+                    cache
+                        .message_counters
+                        .insert(counter.label_id.clone(), counter);
+                }
+            }
+        }
     }
 }

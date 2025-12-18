@@ -1,12 +1,14 @@
 use crate::event_loop::event_subscriber::CoreEventSubscriberError;
 use crate::models::{Address, UserSettings};
 use futures::StreamExt;
-use futures::stream::FuturesOrdered;
+use futures::future::BoxFuture;
+use futures::stream::FuturesUnordered;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{Action, AddressId, CoreEventV6, ProtonCore, User};
 use proton_core_api::session::Session;
 use proton_event_loop::v6::EventSource;
 use std::collections::HashMap;
+use tracing::error;
 
 pub struct CoreEventSourceV6;
 
@@ -32,23 +34,63 @@ impl CoreEventCache {
         event: &CoreEventV6,
         session: &Session,
     ) -> Result<(), CoreEventSubscriberError> {
+        let mut tasks = FuturesUnordered::<FutureTask>::new();
+
         if event.users.as_ref().is_some_and(|v| !v.is_empty()) {
-            self.get_or_fetch_user(session).await?;
+            let session = session.clone();
+            tasks.push(Box::pin(async move {
+                session
+                    .get_users()
+                    .await
+                    .inspect_err(|e| error!("Failed to get user: {e}"))
+                    .map(|u| FetchData::User(u.user))
+            }));
         }
 
         if event.user_settings.as_ref().is_some_and(|v| !v.is_empty()) {
-            self.get_or_fetch_user_settings(session).await?;
+            let session = session.clone();
+            tasks.push(Box::pin(async move {
+                session
+                    .get_settings()
+                    .await
+                    .inspect_err(|e| error!("Failed to get user settings: {e}"))
+                    .map(|u| FetchData::Settings(u.user_settings.into()))
+            }));
         }
 
         if let Some(events) = &event.addresses {
-            self.fetch_addresses(
-                session,
-                events
-                    .iter()
-                    .filter_map(|e| (e.action != Action::Delete).then_some(e.id.clone())),
-            )
-            .await?;
+            for id in events
+                .iter()
+                .filter_map(|e| (e.action != Action::Delete).then_some(e.id.clone()))
+            {
+                let session = session.clone();
+                tasks.push(Box::pin(async move {
+                    session
+                        .get_address_by_id(id.clone())
+                        .await
+                        .inspect_err(|e| error!("Failed to get {id:?}: {e}"))
+                        .map(|a| FetchData::Address(id, a.address.into()))
+                }));
+            }
         }
+
+        let mut first_err = None;
+        while let Some(result) = tasks.next().await {
+            match result {
+                Ok(data) => data.apply(self),
+                Err(e) => {
+                    // try to collect as man successful requests as possible
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+            }
+        }
+
+        if let Some(first_err) = first_err {
+            return Err(first_err.into());
+        }
+
         Ok(())
     }
     pub async fn get_or_fetch_user(&mut self, api: &Session) -> Result<&mut User, ApiServiceError> {
@@ -91,24 +133,28 @@ impl CoreEventCache {
         self.user_settings.as_mut()
     }
 
-    pub async fn fetch_addresses(
-        &mut self,
-        session: &Session,
-        id: impl IntoIterator<Item = AddressId>,
-    ) -> Result<(), ApiServiceError> {
-        let mut tasks = id
-            .into_iter()
-            .filter(|id| self.addresses.contains_key(id))
-            .map(|id| async { (id.clone(), session.get_address_by_id(id).await) })
-            .collect::<FuturesOrdered<_>>();
-        while let Some((id, task)) = tasks.next().await {
-            let response = task.inspect_err(|e| tracing::error!("Failed to fetch {id:?}: {e}"))?;
-            self.addresses.insert(id, response.address.into());
-        }
-        Ok(())
-    }
-
     pub fn get_address_mut(&mut self, id: &AddressId) -> Option<&mut Address> {
         self.addresses.get_mut(id)
+    }
+}
+
+type FutureTask = BoxFuture<'static, Result<FetchData, ApiServiceError>>;
+enum FetchData {
+    Address(AddressId, Address),
+    User(User),
+    Settings(UserSettings),
+}
+
+impl FetchData {
+    fn apply(self, cache: &mut CoreEventCache) {
+        match self {
+            FetchData::Address(id, address) => {
+                cache.addresses.insert(id, address);
+            }
+            FetchData::User(user) => cache.user = Some(user),
+            FetchData::Settings(settings) => {
+                cache.user_settings = Some(settings);
+            }
+        }
     }
 }

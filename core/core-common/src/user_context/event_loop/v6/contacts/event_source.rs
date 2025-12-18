@@ -2,7 +2,8 @@ use crate::event_loop::event_subscriber::CoreEventSubscriberError;
 use crate::event_loop::v6::CoreEventSourceV6;
 use crate::models::{Contact, Label};
 use futures::StreamExt;
-use futures::stream::FuturesOrdered;
+use futures::future::BoxFuture;
+use futures::stream::FuturesUnordered;
 use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{
@@ -11,6 +12,7 @@ use proton_core_api::services::proton::{
 use proton_core_api::session::Session;
 use proton_event_loop::v6::{EventSource, EventSourceDependencyList};
 use std::collections::HashMap;
+use tracing::{debug, error};
 
 pub struct ContactEventSourceV6;
 
@@ -39,7 +41,9 @@ impl ContactEventCache {
         event: &ContactRootEventV6,
         session: &Session,
     ) -> Result<(), CoreEventSubscriberError> {
+        let mut tasks = FuturesUnordered::new();
         if let Some(events) = &event.contacts {
+            debug!("Fetching contacts");
             let mut contact_ids = Vec::with_capacity(events.len());
             for event in events {
                 if event.action != Action::Delete && event.action != Action::UpdateFlags {
@@ -47,66 +51,117 @@ impl ContactEventCache {
                 }
             }
 
-            self.fetch_contacts(session, contact_ids).await?;
+            self.fetch_contacts(&mut tasks, session, contact_ids);
         }
 
         if let Some(events) = &event.labels {
+            debug!("Fetching contact labels");
             let mut label_ids = Vec::with_capacity(events.len());
             for event in events {
                 if event.action != Action::Delete {
                     label_ids.push(event.id.clone());
                 }
             }
-            self.fetch_labels(session, label_ids).await?;
+            self.fetch_labels(&mut tasks, session, label_ids);
+        }
+
+        let mut first_err = None;
+        while let Some(result) = tasks.next().await {
+            match result {
+                Ok(data) => data.apply(self),
+                Err(e) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+            }
+        }
+
+        if let Some(e) = first_err {
+            return Err(e.into());
         }
 
         Ok(())
     }
-    pub async fn fetch_contacts(
-        &mut self,
+    fn fetch_contacts(
+        &self,
+        tasks: &mut FuturesUnordered<FutureTask>,
         session: &Session,
-        id: impl IntoIterator<Item = ContactId>,
-    ) -> Result<(), ApiServiceError> {
-        let mut tasks = id
-            .into_iter()
-            .filter(|id| !self.contacts.contains_key(id))
-            .map(|id| async { (id.clone(), session.get_contact(id).await) })
-            .collect::<FuturesOrdered<_>>();
-        while let Some((id, task)) = tasks.next().await {
-            let response =
-                task.inspect_err(|e| tracing::error!("Failed to fetch contact {id:?}: {e}"))?;
-            self.contacts.insert(id, response.contact.into());
-        }
-        Ok(())
+        ids: impl IntoIterator<Item = ContactId>,
+    ) {
+        tasks.extend(
+            ids.into_iter()
+                .filter(|id| !self.contacts.contains_key(id))
+                .map(|id| -> FutureTask {
+                    let session = session.clone();
+                    Box::pin(async move {
+                        session
+                            .get_contact(id.clone())
+                            .await
+                            .inspect_err(|e| error!("Failed to fetch {id:?}: {e}"))
+                            .map(|r| FetchData::Contact(id, r.contact.into()))
+                    })
+                }),
+        );
     }
 
     pub fn get_contact_mut(&mut self, id: &ContactId) -> Option<&mut Contact> {
         self.contacts.get_mut(id)
     }
 
-    pub async fn fetch_labels(
-        &mut self,
+    fn fetch_labels(
+        &self,
+        tasks: &mut FuturesUnordered<FutureTask>,
         session: &Session,
-        id: impl IntoIterator<Item = LabelId>,
-    ) -> Result<(), ApiServiceError> {
+        ids: impl IntoIterator<Item = LabelId>,
+    ) {
         const MAX_CURRENT_LABEL_REQUEST: usize = 50;
-        let mut tasks = id
-            .into_iter()
-            .filter(|id| !self.labels.contains_key(id))
-            .chunks(MAX_CURRENT_LABEL_REQUEST)
-            .into_iter()
-            .map(|ids| session.get_labels_by_ids(ids.collect()))
-            .collect::<FuturesOrdered<_>>();
-        while let Some(task) = tasks.next().await {
-            let response = task.inspect_err(|e| tracing::error!("Failed to fetch labels: {e}"))?;
-            for label in response.labels {
-                self.labels.insert(label.id.clone(), label.into());
-            }
-        }
-        Ok(())
+        tasks.extend(
+            ids.into_iter()
+                .filter(|id| !self.labels.contains_key(id))
+                .chunks(MAX_CURRENT_LABEL_REQUEST)
+                .into_iter()
+                .map(|ids| -> FutureTask {
+                    let session = session.clone();
+                    let ids = ids.collect::<Vec<_>>();
+                    Box::pin(async move {
+                        session
+                            .get_labels_by_ids(ids)
+                            .await
+                            .inspect_err(|e| error!("Failed to get contact labels: {e}"))
+                            .map(|r| {
+                                FetchData::Labels(r.labels.into_iter().map(Into::into).collect())
+                            })
+                    })
+                }),
+        );
     }
 
     pub fn get_label_mut(&mut self, id: &LabelId) -> Option<&mut Label> {
         self.labels.get_mut(id)
+    }
+}
+
+type FutureTask = BoxFuture<'static, Result<FetchData, ApiServiceError>>;
+
+enum FetchData {
+    Contact(ContactId, Contact),
+    Labels(Vec<Label>),
+}
+
+impl FetchData {
+    fn apply(self, cache: &mut ContactEventCache) {
+        match self {
+            FetchData::Contact(id, contact) => {
+                cache.contacts.insert(id, contact);
+            }
+            FetchData::Labels(labels) => {
+                for label in labels {
+                    cache
+                        .labels
+                        .insert(label.remote_id.clone().expect("Should be set"), label);
+                }
+            }
+        }
     }
 }
