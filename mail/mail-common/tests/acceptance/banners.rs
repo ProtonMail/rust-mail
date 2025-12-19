@@ -573,7 +573,7 @@ async fn banners_unsubscribe() {
     );
 
     let banners = d
-        .transformed("", Default::default(), tether)
+        .transformed("", Default::default(), &ctx, tether)
         .await
         .body_banners;
 
@@ -587,7 +587,7 @@ async fn banners_unsubscribe() {
     d.action_unsubscribe_from_newsletter(&ctx).await.unwrap();
 
     let banners = d
-        .transformed("", Default::default(), tether)
+        .transformed("", Default::default(), &ctx, tether)
         .await
         .body_banners;
 

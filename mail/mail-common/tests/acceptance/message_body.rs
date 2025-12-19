@@ -465,7 +465,7 @@ async fn message_body_failed_to_decrypt() {
     assert!(decrypted_body.failed_to_decrypt());
 
     let body_output = decrypted_body
-        .transformed("", Default::default(), &tether)
+        .transformed("", Default::default(), &user_ctx, &tether)
         .await;
 
     assert!(

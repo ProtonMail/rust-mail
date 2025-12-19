@@ -14,6 +14,7 @@ use lightningcss::printer::PrinterOptions;
 use lightningcss::properties::custom::Function;
 use lightningcss::values::url::Url;
 use lightningcss::visitor::{Visit, VisitTypes, Visitor};
+use std::collections::HashSet;
 use std::convert::Infallible;
 use tracing::warn;
 
@@ -23,13 +24,23 @@ pub enum Error {
     Url(#[from] url::ParseError),
 }
 
-pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: bool) -> (u64, u64) {
+#[derive(Default)]
+pub struct UniqueUrlsOutput {
+    pub remote_urls: HashSet<String>,
+    pub embedded_urls: HashSet<String>,
+}
+
+pub fn disable_content(
+    document: &NodeRef,
+    hide_remote: bool,
+    hide_embedded: bool,
+) -> UniqueUrlsOutput {
     if !hide_remote && !hide_embedded {
-        return (0, 0);
+        return UniqueUrlsOutput::default();
     }
 
-    let mut remote_count = 0;
-    let mut embedded_count = 0;
+    let mut remote_urls = HashSet::new();
+    let mut embedded_urls = HashSet::new();
     let should_check_css = hide_remote || hide_embedded;
 
     let style_attribute = ExpandedName::new("", "style");
@@ -64,7 +75,10 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
         if should_check_css && element.name.local.as_ref() == "style" {
             node_ref.children().for_each(|child| {
                 if let NodeData::Text(text) = child.data() {
-                    handle_style_sheet(&mut text.borrow_mut(), hide_remote, hide_embedded);
+                    let mut css_visitor_output =
+                        handle_style_sheet(&mut text.borrow_mut(), hide_remote, hide_embedded);
+                    remote_urls.extend(css_visitor_output.remote_urls.drain());
+                    embedded_urls.extend(css_visitor_output.embedded_urls.drain());
                 }
             });
         }
@@ -76,40 +90,44 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
 
         let mut attributes = element.attributes.borrow_mut();
 
-        let mut disabled_remote = false;
-        let mut disabled_embedded = false;
-
         for item in &attrs {
             let Some(attr) = attributes.map.get_mut(item) else {
                 continue;
             };
 
             match is_embedded_url(attr) {
-                Ok(true) if hide_embedded => {
-                    attr.value = String::new();
-                    disabled_embedded = true;
+                Ok(true) => {
+                    embedded_urls.insert(attr.value.clone());
+                    if hide_embedded {
+                        attr.value = String::new();
+                    }
                 }
-                Ok(false) if hide_remote => {
-                    attr.value = String::new();
-                    disabled_remote = true;
+                Ok(false) => {
+                    remote_urls.insert(attr.value.clone());
+                    if hide_remote {
+                        attr.value = String::new();
+                    }
                 }
                 Err(_) => {
+                    remote_urls.insert(attr.value.clone());
                     attr.value = String::new();
-                    disabled_remote = hide_remote;
                 }
-                _ => {}
             }
         }
 
         // Check css styles
         if should_check_css && let Some(attr) = attributes.map.get_mut(&style_attribute) {
-            handle_style_attribute(&mut attr.value, hide_remote, hide_embedded);
+            let mut css_visitor_output =
+                handle_style_attribute(&mut attr.value, hide_remote, hide_embedded);
+            remote_urls.extend(css_visitor_output.remote_urls.drain());
+            embedded_urls.extend(css_visitor_output.embedded_urls.drain());
         }
-
-        remote_count += u64::from(disabled_remote);
-        embedded_count += u64::from(disabled_embedded);
     }
-    (remote_count, embedded_count)
+
+    UniqueUrlsOutput {
+        remote_urls,
+        embedded_urls,
+    }
 }
 
 fn is_embedded_url(attr: &Attribute) -> Result<bool, url::ParseError> {
@@ -124,11 +142,15 @@ fn is_embedded_url_str(uri: &str) -> Result<bool, url::ParseError> {
         // If at some point we treat PGP inline attachments different revisit this.
         scheme.eq_ignore_ascii_case("data"))
 }
-fn handle_style_sheet(css: &mut String, disable_remote: bool, disable_embedded: bool) {
+fn handle_style_sheet(
+    css: &mut String,
+    disable_remote: bool,
+    disable_embedded: bool,
+) -> UniqueUrlsOutput {
     let Ok(mut sheet) = parse_stylesheet(css).inspect_err(|e| {
         warn!("StyleSheet parsing failed: {}", e);
     }) else {
-        return;
+        return UniqueUrlsOutput::default();
     };
 
     let mut visitor = CssUrlVisitor::new(disable_remote, disable_embedded);
@@ -136,24 +158,36 @@ fn handle_style_sheet(css: &mut String, disable_remote: bool, disable_embedded: 
     let _ = sheet.visit(&mut visitor);
 
     if !visitor.has_changes {
-        return;
+        return UniqueUrlsOutput {
+            remote_urls: visitor.remote_urls,
+            embedded_urls: visitor.embedded_urls,
+        };
     }
 
     let Ok(patched) = sheet.to_css(PrinterOptions::default()) else {
         warn!("Failed to convert style sheet to css value");
-        return;
+        return UniqueUrlsOutput::default();
     };
 
     drop(sheet);
 
     *css = patched.code;
+
+    UniqueUrlsOutput {
+        remote_urls: visitor.remote_urls,
+        embedded_urls: visitor.embedded_urls,
+    }
 }
 
-fn handle_style_attribute(css: &mut String, disable_remote: bool, disable_embedded: bool) {
+fn handle_style_attribute(
+    css: &mut String,
+    disable_remote: bool,
+    disable_embedded: bool,
+) -> UniqueUrlsOutput {
     let Ok(mut style_attribute) = parse_style_attribute(css).inspect_err(|e| {
         warn!("Style attribute parsing failed: {}", e);
     }) else {
-        return;
+        return UniqueUrlsOutput::default();
     };
 
     let mut visitor = CssUrlVisitor::new(disable_remote, disable_embedded);
@@ -161,23 +195,33 @@ fn handle_style_attribute(css: &mut String, disable_remote: bool, disable_embedd
     let _ = style_attribute.visit(&mut visitor);
 
     if !visitor.has_changes {
-        return;
+        return UniqueUrlsOutput {
+            remote_urls: visitor.remote_urls,
+            embedded_urls: visitor.embedded_urls,
+        };
     }
 
     let Ok(patched) = style_attribute.to_css(PrinterOptions::default()) else {
         warn!("Failed to convert style attribute to css value");
-        return;
+        return UniqueUrlsOutput::default();
     };
 
     drop(style_attribute);
 
     *css = patched.code;
+
+    UniqueUrlsOutput {
+        remote_urls: visitor.remote_urls,
+        embedded_urls: visitor.embedded_urls,
+    }
 }
 
 struct CssUrlVisitor {
     has_changes: bool,
     disable_remote: bool,
     disable_embedded: bool,
+    remote_urls: HashSet<String>,
+    embedded_urls: HashSet<String>,
 }
 
 impl CssUrlVisitor {
@@ -186,6 +230,8 @@ impl CssUrlVisitor {
             has_changes: false,
             disable_remote,
             disable_embedded,
+            remote_urls: HashSet::new(),
+            embedded_urls: HashSet::new(),
         }
     }
 }
@@ -199,19 +245,25 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
 
     fn visit_url(&mut self, url: &mut Url<'i>) -> Result<(), Self::Error> {
         match is_embedded_url_str(&url.url) {
-            Ok(true) if self.disable_embedded => {
-                url.url = String::new().into();
-                self.has_changes = true;
+            Ok(true) => {
+                self.embedded_urls.insert(url.url.to_string());
+                if self.disable_embedded {
+                    url.url = String::new().into();
+                    self.has_changes = true;
+                }
             }
-            Ok(false) if self.disable_remote => {
-                url.url = String::new().into();
-                self.has_changes = true;
+            Ok(false) => {
+                self.remote_urls.insert(url.url.to_string());
+                if self.disable_remote {
+                    url.url = String::new().into();
+                    self.has_changes = true;
+                }
             }
             Err(_) => {
+                self.remote_urls.insert(url.url.to_string());
                 url.url = String::new().into();
                 self.has_changes = true;
             }
-            _ => {}
         }
         Ok(())
     }

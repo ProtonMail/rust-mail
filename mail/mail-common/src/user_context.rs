@@ -18,7 +18,9 @@ use crate::prefetch::{Prefetch, PrefetchJob, PrefetchService};
 use crate::rsvp::RsvpService;
 use crate::upsell_eligibility_watcher::UpsellEligibilityWatcher;
 use crate::user_context::events::event_source::MailEventSourceV5;
-use crate::{AppError, ImageLoader, MailContext, MailContextError, MailContextResult};
+use crate::{
+    AppError, ImageLoader, MailContext, MailContextError, MailContextResult, TrackerDetector,
+};
 use anyhow::anyhow;
 use attachment_cache::AttachmentCacheState;
 use builder::MailUserContextBuilder;
@@ -313,7 +315,8 @@ impl MailUserContext {
                 MailUserContextBuilder::new()
                     .with_service(AttachmentCacheState::new())
                     .with_service(EventSubscriberList::default())
-                    .with_cyclic_service(ImageLoader::new);
+                    .with_cyclic_service(ImageLoader::new)
+                    .with_cyclic_service(TrackerDetector::new);
 
             builder = match origin {
                 Origin::App => {

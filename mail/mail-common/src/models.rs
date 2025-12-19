@@ -40,6 +40,8 @@ mod mailbox_labels;
 mod message;
 mod network;
 mod rollback_item;
+mod tracked_message;
+mod tracking_url;
 
 pub use self::attachment::*;
 pub use self::busy_label::*;
@@ -54,3 +56,5 @@ pub use self::mailbox_labels::*;
 pub use self::message::*;
 pub use self::network::*;
 pub use self::rollback_item::*;
+pub use self::tracked_message::*;
+pub use self::tracking_url::*;

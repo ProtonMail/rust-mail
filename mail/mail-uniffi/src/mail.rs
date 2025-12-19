@@ -18,6 +18,7 @@ mod session;
 pub mod settings;
 mod sidebar;
 mod state;
+mod trackers;
 mod user_session;
 
 pub use self::device::*;
@@ -28,4 +29,5 @@ pub use self::notifications::*;
 pub use self::rsvp::*;
 pub use self::session::*;
 pub use self::settings::*;
+pub use self::trackers::*;
 pub use self::user_session::*;

@@ -141,7 +141,11 @@ impl Transformer {
     ///
     /// See [`remote_content::disable_remote_content()`] for more details.
     #[tracing::instrument(skip_all)]
-    pub fn disable_content(&mut self, no_remote: bool, no_embedded: bool) -> (u64, u64) {
+    pub fn disable_content(
+        &mut self,
+        no_remote: bool,
+        no_embedded: bool,
+    ) -> remote_content::UniqueUrlsOutput {
         remote_content::disable_content(&self.document, no_remote, no_embedded)
     }
 

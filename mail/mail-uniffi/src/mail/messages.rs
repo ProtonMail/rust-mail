@@ -65,10 +65,11 @@ impl DecryptedMessage {
     #[returns(BodyOutputResult)]
     pub async fn body(self: Arc<Self>, opts: TransformOpts) -> Result<BodyOutput, ProtonError> {
         uniffi_async(async move {
-            let tether = self.ctx()?.user_stash().connection().await?;
+            let ctx = self.ctx()?;
+            let tether = ctx.user_stash().connection().await?;
             Ok::<_, RealProtonMailError>(
                 self.body
-                    .transformed(&self.sender, opts.into(), &tether)
+                    .transformed(&self.sender, opts.into(), &ctx, &tether)
                     .await
                     .into(),
             )
@@ -208,12 +209,6 @@ pub struct BodyOutput {
     /// How many UTM tracking params it has removed.
     pub utm_stripped: u64,
 
-    /// How many html tags it has removed.
-    pub remote_images_disabled: u64,
-
-    /// How many embedded images it has disabled.
-    pub embedded_images_disabled: u64,
-
     /// The transform opts that were used. All fields are actually Some.
     pub transform_opts: TransformOpts,
 
@@ -228,8 +223,6 @@ impl From<RealBodyOutput> for BodyOutput {
             had_blockquote: output.had_blockquote,
             tags_stripped: output.tags_stripped,
             utm_stripped: output.utm_stripped,
-            remote_images_disabled: output.remote_images_disabled,
-            embedded_images_disabled: output.embedded_images_disabled,
             transform_opts: output.transform_opts.into(),
             body_banners: output.body_banners.into_iter().map(Into::into).collect(),
         }
