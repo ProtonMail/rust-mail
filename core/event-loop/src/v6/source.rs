@@ -15,6 +15,12 @@ pub trait EventSource: Send + Sync + 'static {
     /// It's possible multiple subscribers for the same source may want to fetch the same data.
     /// This type allows one to share previously fetched sources with subsequent subscribers to
     /// avoid re-fetches.
+    ///
+    /// # Remarks
+    ///
+    /// The cache's lifetime is tied to a specific event. Once the event has been successfully
+    /// applied or we have exceeded the retries on error, a new cache is created for the next
+    /// iteration.
     type Cache: Default + Send;
 
     fn name() -> &'static str;
