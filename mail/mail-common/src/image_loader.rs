@@ -6,6 +6,7 @@ use crate::{
 use proton_core_api::{
     service::{ApiServiceError, ApiServiceResult},
     services::proton::ProtonCore,
+    utils::HeadersExt,
 };
 use reqwest::Method;
 use stash::stash::StashError;
@@ -107,7 +108,7 @@ impl ImageLoader {
             }
         };
 
-        let data = if use_proxy {
+        let (data, content_type) = if use_proxy {
             Self::fetch_proxied(&ctx, url)
                 .await?
                 .ok_or(ImageLoaderError::ProxyFailed)?
@@ -117,24 +118,30 @@ impl ImageLoader {
 
         Ok(AttachmentData {
             data,
-            mime: String::from("image/*"),
+            mime: content_type.unwrap_or(String::from("image/*")),
         })
     }
 
     #[instrument(skip_all)]
-    async fn fetch_proxied(ctx: &MailUserContext, url: Url) -> ApiServiceResult<Option<Vec<u8>>> {
+    async fn fetch_proxied(
+        ctx: &MailUserContext,
+        url: Url,
+    ) -> ApiServiceResult<Option<(Vec<u8>, Option<String>)>> {
         let data = ctx.session().proxy_img(&url, false).await?;
 
         // Yes, proxy returns an empty response if the image failed to be loaded
         if data.image.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(data.image))
+            Ok(Some((data.image, data.content_type)))
         }
     }
 
     #[instrument(skip_all)]
-    async fn fetch_direct(ctx: &MailUserContext, url: Url) -> ApiServiceResult<Vec<u8>> {
+    async fn fetch_direct(
+        ctx: &MailUserContext,
+        url: Url,
+    ) -> ApiServiceResult<(Vec<u8>, Option<String>)> {
         // Since we can't easily mock https requests, for testing purposes let's
         // mock them with a query param instead
         #[cfg(any(test, feature = "test-utils"))]
@@ -160,7 +167,9 @@ impl ImageLoader {
             ApiServiceError::UnknownError(format!("Couldn't fetch image (direct): {e:?}"))
         })?;
 
-        let response = response
+        let content_type = response.headers().get_string("Content-Type");
+
+        let response_data = response
             .bytes()
             .await
             .map_err(|e| {
@@ -168,7 +177,7 @@ impl ImageLoader {
             })?
             .to_vec();
 
-        Ok(response)
+        Ok((response_data, content_type))
     }
 }
 
@@ -388,7 +397,11 @@ mod tests {
                 if let Some(url) = url.strip_prefix("http://le.ona") {
                     Mock::given(method("GET"))
                         .and(path(url))
-                        .respond_with(ResponseTemplate::new(200).set_body_bytes([1, 2, 3]))
+                        .respond_with(
+                            ResponseTemplate::new(200)
+                                .set_body_bytes([1, 2, 3])
+                                .insert_header("Content-Type", "image/png"),
+                        )
                         .expect(1)
                         .mount(&ctx.mock_web_server)
                         .await;
@@ -399,7 +412,11 @@ mod tests {
                     Mock::given(method("GET"))
                         .and(path(url))
                         .and(query_param("https", "1"))
-                        .respond_with(ResponseTemplate::new(200).set_body_bytes([1, 2, 3]))
+                        .respond_with(
+                            ResponseTemplate::new(200)
+                                .set_body_bytes([1, 2, 3])
+                                .insert_header("Content-Type", "image/png"),
+                        )
                         .expect(1)
                         .mount(&ctx.mock_web_server)
                         .await;
@@ -409,7 +426,7 @@ mod tests {
             }
 
             ExpectedRequest::Proxied(url) => {
-                ctx.mock_proxy_img(url, vec![1, 2, 3]).await;
+                ctx.mock_proxy_img(url, vec![1, 2, 3], "image/png").await;
             }
         }
 
@@ -435,7 +452,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(vec![1, 2, 3], img.data);
-        assert_eq!("image/*", img.mime);
+        assert_eq!("image/png", img.mime);
     }
 
     #[tokio::test]
@@ -491,8 +508,12 @@ mod tests {
 
         // ---
 
-        ctx.mock_proxy_img("https://le.ona/covers/bleeding-love.tiff", vec![])
-            .await;
+        ctx.mock_proxy_img(
+            "https://le.ona/covers/bleeding-love.tiff",
+            vec![],
+            "image/tiff",
+        )
+        .await;
 
         let url = "https://le.ona/covers/bleeding-love.tiff";
         let policy = ImagePolicy::Safe;

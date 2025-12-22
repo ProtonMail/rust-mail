@@ -330,6 +330,7 @@ pub struct PutFeatureFlagOverrideResponse {
 #[derive(Clone, Debug, PartialEq)]
 pub struct GetProxyImageResponse {
     pub image: Vec<u8>,
+    pub content_type: Option<String>,
     pub tracker_provider: Option<String>,
 }
 

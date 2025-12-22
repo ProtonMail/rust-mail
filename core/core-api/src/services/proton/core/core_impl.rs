@@ -12,7 +12,7 @@ use serde_json::json;
 use crate::service::ApiServiceResult;
 use crate::services::proton::core::{CORE_V4, CORE_V5, ProtonCore};
 use crate::services::proton::prelude::*;
-use crate::utils::HttpReqExt;
+use crate::utils::{HeadersExt, HttpReqExt};
 
 impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
     async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse> {
@@ -293,16 +293,14 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonCore for This {
             .ok()?;
 
         let headers = response.headers();
-
-        let tracker_provider = headers
-            .get("X-Pm-Tracker-Provider")
-            .and_then(|v| v.to_str().ok())
-            .map(ToString::to_string);
+        let content_type = headers.get_string("Content-Type");
+        let tracker_provider = headers.get_string("X-Pm-Tracker-Provider");
 
         let image = response.into_body();
 
         Ok(GetProxyImageResponse {
             image,
+            content_type,
             tracker_provider,
         })
     }
