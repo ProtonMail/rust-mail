@@ -1,0 +1,46 @@
+[package]
+name = "proton-mail-search"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Self-contained search engine for Proton Mail local search"
+
+[features]
+default = []
+# Enable Foundation Search engine implementation
+foundation_search = ["dep:proton-foundation-search"]
+
+[dependencies]
+# Core dependencies (always needed)
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+# Database access (for intent/blob storage)
+stash = { workspace = true }
+sqlite-watcher = { workspace = true }
+flume = { workspace = true }
+
+# Migration support
+include_dir = { workspace = true }
+proton-sqlite3 = { workspace = true }
+
+# Message ID types
+proton-mail-api = { workspace = true }
+
+# HTML to text conversion (for text/html messages)
+proton-mail-html-transformer = { workspace = true }
+
+# Content hashing for duplicate detection
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Foundation Search (optional, behind feature flag)
+proton-foundation-search = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+

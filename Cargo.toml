@@ -18,6 +18,7 @@ members = [
   "mail/mail-api",
   "mail/mail-common",
   "mail/mail-common-derive",
+  "mail/mail-search",
   "mail/mail-html-transformer",
   "mail/mail-html-transformer-fuzz",
   "mail/mail-tui",
@@ -244,6 +245,10 @@ features = ["sql"]
 version = "0.1"
 path = "mail/mail-common-derive"
 
+[workspace.dependencies.proton-mail-search]
+version = "0.1"
+path = "mail/mail-search"
+
 [workspace.dependencies.proton-mail-uniffi]
 path = "mail/mail-uniffi"
 registry = "proton"
@@ -351,6 +356,10 @@ path = "shared/observability"
 
 [workspace.dependencies.proton-mailto]
 path = "shared/mailto"
+
+[workspace.dependencies.proton-foundation-search]
+version = "0.5.1-preview"
+registry = "proton"
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"
