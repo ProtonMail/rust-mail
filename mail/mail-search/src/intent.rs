@@ -56,7 +56,7 @@ impl FromSql for SearchOperation {
             "index" => Ok(Self::Index),
             "remove" => Ok(Self::Remove),
             other => Err(FromSqlError::Other(
-                format!("Invalid SearchOperation: {}", other).into(),
+                format!("Invalid SearchOperation: {other}").into(),
             )),
         }
     }
