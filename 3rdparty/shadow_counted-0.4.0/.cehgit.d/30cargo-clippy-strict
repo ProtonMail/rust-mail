@@ -1,0 +1,13 @@
+#!/bin/bash
+## checks 'cargo clippy' for warnings and errors
+require git cargo
+is_cargo_project || return 0
+git_hook_matches "pre-commit" "pre-merge-commit" || return 0
+git_branch_matches "master" "main" || return 0
+
+function clippy_strict
+{
+    cargo clippy 2>&1 | tee /dev/stderr | awk '/(warning|error).*: /{exit 1}'
+}
+
+run_test clippy_strict

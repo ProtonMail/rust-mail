@@ -1,0 +1,58 @@
+#!/bin/bash
+## git support
+
+## * is_git_project - checks whenever a '.git' exists
+function is_git_project
+{
+    [[ -d "$WORKTREE_DIR/.git" ]]
+}
+
+is_git_project || die "not a git project (cehgit requires git)"
+
+## * git_branch_name - returns the branch name that is checked out, dies when not in a git branch
+function git_branch_name
+{
+    memo_ok git branch --show-current
+}
+
+## * git_is_modified - checks that there are no modified files
+function git_is_modified
+{
+    if git diff --exit-code; then
+        debug "nothing modified"
+        return 0
+    else
+        info "files got modified"
+        return 1
+    fi
+}
+
+## * git_branch_matches [branchpattern..] - checks that the current git branch matches any of the patterns
+function git_branch_matches
+{
+    # shellcheck disable=SC2155
+    local branch=$(git_branch_name)
+    for pat in "$@"; do
+        [[ "$branch" =~ $pat ]] && {
+            debug "$branch matches $pat"
+            return 0
+        }
+    done
+    trace "$branch does not match $*"
+    return 1
+}
+
+## * git_hook_matches [hookpattern..] - checks that action is called from one of the given githooks
+function git_hook_matches
+{
+    for pat in "$@"; do
+        [[ "$CEHGIT_HOOK" =~ $pat ]] && {
+            debug "$CEHGIT_HOOK matched"
+            return 0
+        }
+    done
+    trace "$CEHGIT_HOOK not matched"
+    return 1
+}
+
+memofn git_is_modified git_branch_matches git_hook_matches

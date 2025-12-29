@@ -1,0 +1,131 @@
+---
+source: packages/search/src/index/text/inner/tests_store.rs
+expression: sut
+---
+TextIndex {
+    occurrences: {
+        (
+            EntryIndex(
+                0,
+            ),
+            AttributeIndex(
+                0,
+            ),
+        ),
+    },
+    tokens: [
+        (
+            "calcidation",
+            {
+                OccurrenceRef(
+                    0,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            0,
+                        ),
+                    },
+                },
+            },
+        ),
+    ],
+    trigrams: {
+        "alc": {
+            TrigramPosition(
+                1,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "ati": {
+            TrigramPosition(
+                6,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "cal": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "cid": {
+            TrigramPosition(
+                3,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "dat": {
+            TrigramPosition(
+                5,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "ida": {
+            TrigramPosition(
+                4,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "ion": {
+            TrigramPosition(
+                8,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "lci": {
+            TrigramPosition(
+                2,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "tio": {
+            TrigramPosition(
+                7,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+    },
+    stats: Stats {
+        sizes: {
+            AttributeIndex(
+                0,
+            ): {
+                EntryIndex(
+                    0,
+                ): (
+                    11,
+                    1,
+                ),
+            },
+        },
+    },
+}

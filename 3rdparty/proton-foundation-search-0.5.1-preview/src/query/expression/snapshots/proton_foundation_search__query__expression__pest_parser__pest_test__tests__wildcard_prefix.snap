@@ -1,0 +1,17 @@
+---
+source: packages/search/src/query/expression/pest_test.rs
+expression: tree
+---
+query: '*world'
+  expression: '*world'
+    or_seq: '*world'
+      and_seq: '*world'
+        primary_expr: '*world'
+          term_expr: '*world'
+            simple_term: '*world'
+              value: '*world'
+                STRING: '*world'
+                  UNQUOTED_STRING: '*world'
+                    WILDCARD: '*'
+                    USTRING: 'world'
+  EOI: ''

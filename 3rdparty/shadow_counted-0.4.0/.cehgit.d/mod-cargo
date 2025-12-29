@@ -1,0 +1,70 @@
+#!/bin/bash
+## rust/cargo support
+
+## * is_cargo_project - checks whenever a 'Cargo.toml' exists
+function is_cargo_project
+{
+    if [[ -f "$WORKTREE_DIR/Cargo.toml" ]]; then
+        debug "is cargo project"
+        return 0
+    else
+        trace "is not cargo project"
+        return 1
+    fi
+}
+
+## * cargo_toolchain_available {+toolchain} - check if a toolchain is available
+function cargo_toolchain_available
+{
+    if cargo "$1" --version &>/dev/null; then
+        debug "toolchain $1 is installed"
+        return 0
+    else
+        note "toolchain $1 is not installed"
+        return 1
+    fi
+}
+
+## * cargo_tool_installed [+toolchain] {tool} [args..] - checks if a 'cargo subcommand' is installed
+function cargo_tool_installed
+{
+    declare -a toolpart
+    # may be prefixed with a '+toolchain'
+    if [[ "${1:0:1}" = "+" ]]; then
+        toolpart=("$1" "$2")
+        shift 2
+    else
+        toolpart=("$1")
+        shift
+    fi
+    declare -a args
+    if [[ "$#" -eq 0 ]]; then
+        # when no args are given then default to '--version'
+        args=("--version")
+    else
+        args=("$@")
+    fi
+    if cargo "${toolpart[@]}" "${args[@]}" &>/dev/null; then
+        debug "cargo ${toolpart[*]} is installed"
+        return 0
+    else
+        note "cargo ${toolpart[*]} is not installed"
+        return 1
+    fi
+}
+
+## * cargo_has_unsafe_code - checks if the source use 'unsafe'
+function cargo_has_unsafe_code
+{
+    # this does only a coarse check, but depends not on external tools
+    if cargo rustc -- --emit=metadata -Funsafe-code &>/dev/null; then
+        debug "no unsafe used"
+        return 0
+    else
+        debug "unsafe used"
+        return 1
+    fi
+}
+
+memofn is_cargo_project
+#cargo_toolchain_available cargo_tool_installed cargo_has_unsafe_code

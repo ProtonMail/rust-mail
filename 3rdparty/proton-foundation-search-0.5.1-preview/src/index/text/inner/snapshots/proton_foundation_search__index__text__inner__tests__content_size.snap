@@ -1,0 +1,163 @@
+---
+source: packages/search/src/index/text/inner/tests.rs
+expression: index
+---
+TextIndex {
+    occurrences: {
+        (
+            EntryIndex(
+                1,
+            ),
+            AttributeIndex(
+                1,
+            ),
+        ),
+        (
+            EntryIndex(
+                0,
+            ),
+            AttributeIndex(
+                0,
+            ),
+        ),
+    },
+    tokens: [
+        (
+            "one",
+            {
+                OccurrenceRef(
+                    0,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            0,
+                        ),
+                    },
+                },
+                OccurrenceRef(
+                    1,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            0,
+                        ),
+                    },
+                },
+            },
+        ),
+        (
+            "xxx",
+            {
+                OccurrenceRef(
+                    0,
+                ): {
+                    ValueIndex(
+                        1,
+                    ): {
+                        TokenPosition(
+                            0,
+                        ),
+                    },
+                },
+            },
+        ),
+        (
+            "yyy",
+            {
+                OccurrenceRef(
+                    0,
+                ): {
+                    ValueIndex(
+                        1,
+                    ): {
+                        TokenPosition(
+                            1,
+                        ),
+                    },
+                },
+            },
+        ),
+        (
+            "two",
+            {
+                OccurrenceRef(
+                    1,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            1,
+                        ),
+                    },
+                },
+            },
+        ),
+    ],
+    trigrams: {
+        "one": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "two": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    3,
+                ),
+            },
+        },
+        "xxx": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    1,
+                ),
+            },
+        },
+        "yyy": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    2,
+                ),
+            },
+        },
+    },
+    stats: Stats {
+        sizes: {
+            AttributeIndex(
+                0,
+            ): {
+                EntryIndex(
+                    0,
+                ): (
+                    6,
+                    2,
+                ),
+            },
+            AttributeIndex(
+                1,
+            ): {
+                EntryIndex(
+                    1,
+                ): (
+                    9,
+                    3,
+                ),
+            },
+        },
+    },
+}

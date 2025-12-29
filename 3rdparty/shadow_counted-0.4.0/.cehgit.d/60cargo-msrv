@@ -1,0 +1,16 @@
+#!/bin/bash
+# shellcheck disable=SC2046
+## check with 'cargo msrv' that the rust-version in Cargo.toml is correct
+## runs in background
+## may take long time as it needs to install the toolchains to be checked
+require git cargo
+git_branch_matches "master" "main" "release.*" || return 0
+is_cargo_project || return 0
+cargo_tool_installed msrv || return 0
+
+git_hook_matches "pre-commit" "pre-merge-commit" "commit-msg" || return 0
+git_hook_matches "pre-commit" "pre-merge-commit" && background_schedule && return 0
+git_hook_matches "commit-msg" && background_wait && return $(background_result)
+
+# msrv check needs a extra long timeout
+run_test --timeout 300 cargo msrv --bisect --ignore-lockfile verify

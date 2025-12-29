@@ -1,0 +1,16 @@
+---
+source: packages/search/src/query/expression/pest_test.rs
+expression: tree
+---
+query: 'truethy'
+  expression: 'truethy'
+    or_seq: 'truethy'
+      and_seq: 'truethy'
+        primary_expr: 'truethy'
+          term_expr: 'truethy'
+            simple_term: 'truethy'
+              value: 'truethy'
+                STRING: 'truethy'
+                  UNQUOTED_STRING: 'truethy'
+                    USTRING: 'truethy'
+  EOI: ''
