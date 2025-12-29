@@ -156,7 +156,7 @@ mod tests {
         // Index body text (with default metadata for this test)
         let default_metadata = crate::traits::MessageMetadata::default();
         engine
-            .index_body(
+            .index_message(
                 "msg-1",
                 "Let's discuss the project timeline tomorrow at 10am.",
                 &default_metadata,
@@ -346,7 +346,9 @@ mod tests {
 
         // 5. Verify intents were created
         let tether = stash.connection().await.unwrap();
-        let intents = SearchIndexIntent::pop_batch(&tether, 10).await.unwrap();
+        let intents = SearchIndexIntent::get_pending_batch(&tether, 10)
+            .await
+            .unwrap();
         assert_eq!(intents.len(), 5, "Should have 5 intents queued");
 
         // 6. Create worker and process batch through the full worker flow
@@ -369,7 +371,9 @@ mod tests {
 
         // 7. Verify intents were deleted (worker deletes them after successful indexing)
         let tether = stash.connection().await.unwrap();
-        let remaining_intents = SearchIndexIntent::pop_batch(&tether, 10).await.unwrap();
+        let remaining_intents = SearchIndexIntent::get_pending_batch(&tether, 10)
+            .await
+            .unwrap();
         assert_eq!(
             remaining_intents.len(),
             0,

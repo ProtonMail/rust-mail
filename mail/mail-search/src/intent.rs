@@ -174,11 +174,11 @@ impl SearchIndexIntent {
         Ok(())
     }
 
-    /// Pop the next intent to process (oldest first)
+    /// Get the next pending intent to process (oldest first)
     ///
     /// Returns the oldest intent without removing it.
     /// Deletion happens after successful processing via `delete()`.
-    pub async fn pop_next(tether: &Tether) -> Result<Option<Self>, StashError> {
+    pub async fn get_pending(tether: &Tether) -> Result<Option<Self>, StashError> {
         tether
             .sync_query(|conn| {
                 conn.query_row(
@@ -203,11 +203,11 @@ impl SearchIndexIntent {
             .await
     }
 
-    /// Pop a batch of intents to process (oldest first)
+    /// Get a batch of pending intents to process (oldest first)
     ///
     /// Returns up to `limit` intents without removing them.
     /// Deletion happens after successful processing via `delete()`.
-    pub async fn pop_batch(tether: &Tether, limit: usize) -> Result<Vec<Self>, StashError> {
+    pub async fn get_pending_batch(tether: &Tether, limit: usize) -> Result<Vec<Self>, StashError> {
         let limit_i64 = limit as i64;
         tether
             .sync_query(move |conn| {

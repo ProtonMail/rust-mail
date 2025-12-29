@@ -13,7 +13,3 @@ CREATE TABLE IF NOT EXISTS search_index_content_hashes (
     content_hash TEXT NOT NULL,                 -- SHA256 hash of body + metadata
     updated_at INTEGER NOT NULL                  -- Unix timestamp when hash was last updated
 ) WITHOUT ROWID;
-
--- Index for efficient hash lookups
-CREATE INDEX IF NOT EXISTS idx_search_index_content_hashes_hash 
-    ON search_index_content_hashes(content_hash);

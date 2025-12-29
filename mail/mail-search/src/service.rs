@@ -50,7 +50,7 @@ impl SearchServiceError {
 /// - Body text indexing for full-text search
 /// - Local search queries
 ///
-/// The engine is wrapped in `RwLock` because write operations (`index_body`,
+/// The engine is wrapped in `RwLock` because write operations (`index_message`,
 /// `remove_message`, `cleanup`, `clear`) require exclusive access, while
 /// read operations (`search_with_metadata`, `stats`) can run concurrently.
 #[derive(Clone)]
@@ -103,7 +103,7 @@ impl MailSearchService {
             .engine
             .write()
             .await
-            .index_body(doc_id, body, metadata)
+            .index_message(doc_id, body, metadata)
             .await?;
 
         if result.cleanup_needed

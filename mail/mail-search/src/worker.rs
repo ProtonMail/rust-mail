@@ -204,7 +204,7 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
         let tether = self.stash.connection().await?;
 
         // Get a batch of intents
-        let intents = SearchIndexIntent::pop_batch(&tether, BATCH_SIZE).await?;
+        let intents = SearchIndexIntent::get_pending_batch(&tether, BATCH_SIZE).await?;
         if intents.is_empty() {
             return Ok(false);
         }

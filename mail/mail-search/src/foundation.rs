@@ -489,7 +489,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
     /// for comprehensive offline full-text search.
     ///
     /// Takes `&mut self` to enforce exclusive access - concurrent indexing is not supported.
-    pub async fn index_body(
+    pub async fn index_message(
         &mut self,
         message_id: &str,
         body: &str,
@@ -498,14 +498,14 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         debug!("Indexing body and metadata for message {:?}", message_id);
         let doc = Self::build_document(message_id, body, metadata);
         self.index_document(doc).await.map_err(|e| {
-            warn!("Failed to index body for message {}: {}", message_id, e);
+            warn!("Failed to index message {}: {}", message_id, e);
             e
         })
     }
 
     /// Index multiple message bodies and metadata in a single commit transaction
     ///
-    /// This is more efficient than calling `index_body` multiple times
+    /// This is more efficient than calling `index_message` multiple times
     /// because it performs a single commit operation for all messages.
     ///
     /// Takes `&mut self` to enforce exclusive access.

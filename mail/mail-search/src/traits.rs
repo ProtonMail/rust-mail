@@ -73,7 +73,7 @@ pub trait MessageDataProvider: Send + Sync {
 }
 
 /// Message metadata for search indexing
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Hash, PartialEq, Eq)]
 pub struct MessageMetadata {
     /// Message subject
     pub subject: String,
@@ -94,19 +94,19 @@ impl MessageMetadata {
     /// If the hash matches a previously indexed message, we can skip re-indexing.
     pub fn compute_content_hash(body: &str, metadata: Option<&Self>) -> String {
         use sha2::{Digest, Sha256};
+        use std::hash::{Hash, Hasher};
 
-        let mut hasher = Sha256::new();
-        hasher.update(body.as_bytes());
+        let mut sha256 = Sha256::new();
+        sha256.update(body.as_bytes());
 
         if let Some(meta) = metadata {
-            hasher.update(meta.subject.as_bytes());
-            hasher.update(meta.from.as_bytes());
-            hasher.update(meta.to.as_bytes());
-            hasher.update(meta.cc.as_bytes());
-            hasher.update(meta.bcc.as_bytes());
+            let mut hasher = std::hash::DefaultHasher::new();
+            meta.hash(&mut hasher);
+            let hash_value = hasher.finish();
+            sha256.update(hash_value.to_le_bytes());
         }
 
-        hex::encode(hasher.finalize())
+        hex::encode(sha256.finalize())
     }
 }
 
