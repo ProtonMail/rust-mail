@@ -9,6 +9,12 @@ use walkdir::WalkDir;
 
 const DB_FILE_EXTS: &[&str] = &["db", "db-wal", "db-shm"];
 
+/// Tables that cannot be dropped.
+///
+/// Those tables are deliberately ignored by [`drop_database_tables()`] so that
+/// it doesn't log spooky warnings about tables we know are indestructible.
+const DB_SYSTEM_TABLES: &[&str] = &["sqlite_sequence"];
+
 #[instrument(skip_all)]
 pub async fn drop_database_tables(mut tether: Tether) -> Result<(), StashError> {
     info!("Dropping database tables");
@@ -22,11 +28,21 @@ pub async fn drop_database_tables(mut tether: Tether) -> Result<(), StashError> 
     let result = tether
         .tx(async |tx| -> Result<(), StashError> {
             for table in tables {
+                if DB_SYSTEM_TABLES.contains(&table.as_str()) {
+                    continue;
+                }
+
                 debug!(?table, "Dropping table");
 
                 let query = format!("DROP TABLE IF EXISTS {table};");
 
                 if let Err(err) = tx.execute(query, vec![]).await {
+                    // Panic during tests so that it's obvious something is up
+                    // and e.g. a table needs to be added to `DB_SYSTEM_TABLES`
+                    #[cfg(test)]
+                    panic!("Couldn't drop table `{table}`: {err}");
+
+                    #[cfg(not(test))]
                     warn!("Couldn't drop table `{table}`: {err}");
                 }
             }
