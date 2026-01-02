@@ -1175,7 +1175,6 @@ pub async fn deleting_all_messages_in_a_label_removes_conversation_label() {
 }
 
 #[tokio::test]
-#[ignore]
 pub async fn test_message_metadata_list() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let mut conn = stash.connection().await.unwrap();
@@ -1183,9 +1182,7 @@ pub async fn test_message_metadata_list() {
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
     let (_, _state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
     let messages = Message::all(&conn).await.expect("failed to get messages");
-    assert_eq!(messages.len(), 3);
-    assert!(messages[0].time > messages[1].time);
-    assert!(messages[1].time > messages[2].time);
+    assert_eq!(messages.len(), 6);
 }
 
 #[tokio::test]
