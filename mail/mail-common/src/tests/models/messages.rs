@@ -1186,7 +1186,6 @@ pub async fn test_message_metadata_list() {
 }
 
 #[tokio::test]
-#[ignore]
 pub async fn test_delete_local_message_does_not_change_conv_unread_count() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let mut conn = stash.connection().await.unwrap();
