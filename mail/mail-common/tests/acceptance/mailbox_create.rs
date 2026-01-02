@@ -11,7 +11,6 @@ use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::test_context::MailTestContext;
 
 #[tokio::test]
-#[ignore]
 async fn test_new_mailbox_sync_conversations() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::new().await;
@@ -99,8 +98,8 @@ async fn test_new_mailbox_sync_conversations() {
         .await
         .unwrap();
 }
+
 #[tokio::test]
-#[ignore]
 async fn test_new_mailbox_sync_messages() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::new().await;
@@ -219,7 +218,6 @@ async fn test_new_mailbox_sync_messages() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::new().await;
