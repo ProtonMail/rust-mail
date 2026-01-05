@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use tracing::error;
+use tracing::{Instrument, error};
 
 #[derive(Debug)]
 #[repr(transparent)]
@@ -128,7 +128,11 @@ where
 
         for subscriber in self.subscribers.values() {
             let mut num_attempts = 0;
-            while let Err(e) = subscriber.on_event(&event, &mut cache).await {
+            while let Err(e) = subscriber
+                .on_event(&event, &mut cache)
+                .instrument(tracing::debug_span!("on_event", sub=?subscriber.name()))
+                .await
+            {
                 error!(
                     "Failed to apply events to '{}' (attempt:{num_attempts}): {e:?}",
                     subscriber.name()

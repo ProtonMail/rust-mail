@@ -147,7 +147,7 @@ impl From<ApiCombinedMailEvent> for MailEvent {
                     .map(ConversationEvent::from)
                     .collect()
             }),
-            labels: value.labels.map(|labels| labels.map_vec()),
+            labels: value.core.labels.map(|labels| labels.map_vec()),
             mail_settings: value.mail_settings.map(MailSettings::from),
             message_counts: value.message_counts.map(|message_counts| {
                 message_counts
