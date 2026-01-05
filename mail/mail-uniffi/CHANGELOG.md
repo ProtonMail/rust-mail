@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.1] - 2026-01-05
+
+### Changed
+
+- [ET-5619] Improve v6 event subscriber parallelism
+
+### Fixes
+
+- scroller: Include request's time in the debouncing
+- bump JNA to 5.18.1 to fix runtime crashes (Android)
+- [ET-5633] Fix Contact Email save/load
+- [ET-5633] Label event handling
+
+
 ## [mail-uniffi-v0.161.0] - 2025-12-18
 
 ### Changed
