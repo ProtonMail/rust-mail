@@ -551,7 +551,6 @@ async fn get_tracker_info_returns_correct_data() {
     let tracker_info = TrackerDetector::get_tracker_info(message_id, &tether)
         .await
         .unwrap();
-    assert!(tracker_info.is_some());
     assert!(tracker_info.unwrap().trackers.is_empty());
 
     tether

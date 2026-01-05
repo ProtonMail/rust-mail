@@ -4,11 +4,16 @@ use crate::models::{MessageTracker, MessageTrackerUrl};
 use anyhow::Context;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_common::datatypes::UnixTimestamp;
+use proton_core_common::models::ModelExtension;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Weak;
+use std::time::Duration;
 use url::Url;
+
+const CHECK_INTERVAL: Duration =
+    Duration::from_secs(60 /*s*/ * 60 /*m*/ * 24 /*h*/ * 3 /*d */);
 
 pub struct TrackerDetector {
     ctx: Weak<MailUserContext>,
@@ -35,6 +40,20 @@ impl TrackerDetector {
         let mut tether = ctx.user_stash().connection().await?;
 
         let mut found_trackers = Vec::new();
+        let now = UnixTimestamp::now();
+
+        if let Some(tracker) = MessageTracker::find_by_id(message_id, &tether).await? {
+            let last_checked_at = tracker.last_checked_at.to_date_time_utc();
+            let now_utc = now.to_date_time_utc();
+
+            if let Some(last_checked_at) = last_checked_at
+                && let Some(now_utc) = now_utc
+                && let Ok(duration) = (now_utc - last_checked_at).to_std()
+                && duration <= CHECK_INTERVAL
+            {
+                return Ok(());
+            }
+        }
 
         for url in urls {
             match self.check_url(&url).await {
@@ -52,7 +71,7 @@ impl TrackerDetector {
             .tx(async |tx| {
                 MessageTracker {
                     local_message_id: message_id,
-                    last_checked_at: UnixTimestamp::now(),
+                    last_checked_at: now,
                 }
                 .save(tx)
                 .await?;

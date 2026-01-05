@@ -55,7 +55,7 @@ pub async fn watch_tracker_info_for_message(
 
         let local_message_id: LocalMessageId = message_id.into();
         let handle = tether.subscribe_to(move |sender| {
-            Box::new(TrackerInfoTableObserver {
+            Box::new(MessageTrackerObserver {
                 message_id: local_message_id,
                 sender,
             })
@@ -72,12 +72,12 @@ pub async fn watch_tracker_info_for_message(
     .map_err(UserSessionError::from)
 }
 
-struct TrackerInfoTableObserver {
+struct MessageTrackerObserver {
     message_id: LocalMessageId,
     sender: flume::Sender<()>,
 }
 
-impl TableObserver for TrackerInfoTableObserver {
+impl TableObserver for MessageTrackerObserver {
     fn tables(&self) -> Vec<String> {
         vec![
             MessageTracker::table_name().to_string(),

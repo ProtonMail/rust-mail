@@ -7,3 +7,5 @@ CREATE TABLE message_tracker_urls (
         REFERENCES messages (local_id)
         ON DELETE CASCADE
 );
+
+CREATE INDEX index_message_tracker_urls_local_message_id ON message_tracker_urls (local_message_id);
