@@ -850,15 +850,11 @@ mod contact_suggestions {
         let mut tether = new_core_test_connection().await.connection().await.unwrap();
         tether
             .tx::<_, _, stash::stash::StashError>(async |tx| {
-                for contact in &mut test_case.contacts {
-                    contact.save(tx).await.unwrap();
-                    for email in &mut contact.contact_emails {
-                        email.remote_contact_id = contact.remote_id.clone();
-                        email.save(tx).await.unwrap();
-                    }
-                }
                 for label in &mut test_case.contact_groups {
                     label.save(tx).await.unwrap();
+                }
+                for contact in &mut test_case.contacts {
+                    contact.save(tx).await.unwrap();
                 }
                 Ok(())
             })

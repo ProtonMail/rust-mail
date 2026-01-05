@@ -76,10 +76,9 @@ impl InspectableContactDetails {
                     "Failed to get contact details from contact: {e:?}. Falling back to basic contact data"
                 );
 
-                let mut contact = Contact::load(contact_id, tether)
+                let contact = Contact::load(contact_id, tether)
                     .await?
                     .context("Contact does not exist")?;
-                contact.emails(tether).await?;
                 let contact_groups = Label::find_by_kind(LabelType::ContactGroup, tether).await?;
 
                 Ok(Self::get_from_contact_basic(contact, &contact_groups))
@@ -146,10 +145,9 @@ impl InspectableContactDetails {
     ) -> anyhow::Result<Self> {
         Contact::sync_with_card(contact_id, ctx.session(), tether).await?;
 
-        let mut contact = Contact::load(contact_id, tether)
+        let contact = Contact::load(contact_id, tether)
             .await?
             .context("Contact does not exist")?;
-        contact.emails(tether).await?;
 
         let pgp = new_pgp_provider();
         let unlocked_user_keys = ctx.unlocked_user_keys(&pgp, tether, ctx.session()).await?;

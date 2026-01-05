@@ -189,7 +189,7 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
                     let mut rebase_change_set = RebaseChangeSet::default();
 
                     if let Some(labels) = &event.labels {
-                        debug!("Handling label events");
+                        debug!("Handling mail counter label events");
                         handle_counters_label_events(tx, labels)
                             .await
                             .context("Error handling label events")?;
