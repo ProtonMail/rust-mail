@@ -145,8 +145,8 @@ impl Transformer {
         &mut self,
         no_remote: bool,
         no_embedded: bool,
-    ) -> remote_content::UniqueUrlsOutput {
-        remote_content::disable_content(&self.document, no_remote, no_embedded)
+    ) -> remote_content::RemoteContentOutput {
+        remote_content::remote_content(&self.document, no_remote, no_embedded)
     }
 
     /// Transform image URLs from HTTP/HTTPS to proton-http/proton-https schemes.

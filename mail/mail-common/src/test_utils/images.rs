@@ -17,7 +17,7 @@ impl MailTestContext {
     }
 
     #[function_name::named]
-    pub async fn mock_proxy_img_with_tracker(&self, url: &str, tracker_provider: &str) {
+    pub async fn mock_proxy_img_dry_run_tracked(&self, url: &str, tracker_provider: &str) {
         Mock::given(method("GET"))
             .and(path("/api/core/v4/images"))
             .and(query_param("Url", url))
@@ -33,7 +33,7 @@ impl MailTestContext {
     }
 
     #[function_name::named]
-    pub async fn mock_proxy_img_without_tracker(&self, url: &str) {
+    pub async fn mock_proxy_img_dry_run(&self, url: &str) {
         Mock::given(method("GET"))
             .and(path("/api/core/v4/images"))
             .and(query_param("Url", url))

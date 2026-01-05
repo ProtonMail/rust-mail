@@ -4,9 +4,9 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 
-#[derive(Clone, Debug, Eq, PartialEq, Model)]
-#[TableName("tracking_urls")]
-pub struct TrackingUrl {
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Model)]
+#[TableName("message_tracker_urls")]
+pub struct MessageTrackerUrl {
     #[IdField(autoincrement)]
     pub id: Option<i64>,
 
@@ -20,12 +20,17 @@ pub struct TrackingUrl {
     pub original_url: String,
 }
 
-impl TrackingUrl {
+impl MessageTrackerUrl {
     pub async fn find_by_message(
         message_id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
-        Self::find("WHERE local_message_id = ?", params![message_id], tether).await
+        Self::find(
+            "WHERE local_message_id = ? ORDER BY id ASC",
+            params![message_id],
+            tether,
+        )
+        .await
     }
 
     pub async fn delete_by_message(
@@ -33,7 +38,7 @@ impl TrackingUrl {
         tx: &Bond<'_>,
     ) -> Result<(), StashError> {
         tx.execute(
-            "DELETE FROM tracking_urls WHERE local_message_id = ?",
+            "DELETE FROM message_tracker_urls WHERE local_message_id = ?",
             params![message_id],
         )
         .await?;

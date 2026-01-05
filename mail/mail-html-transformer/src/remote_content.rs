@@ -25,18 +25,18 @@ pub enum Error {
 }
 
 #[derive(Default)]
-pub struct UniqueUrlsOutput {
+pub struct RemoteContentOutput {
     pub remote_urls: HashSet<String>,
     pub embedded_urls: HashSet<String>,
 }
 
-pub fn disable_content(
+pub fn remote_content(
     document: &NodeRef,
     hide_remote: bool,
     hide_embedded: bool,
-) -> UniqueUrlsOutput {
+) -> RemoteContentOutput {
     if !hide_remote && !hide_embedded {
-        return UniqueUrlsOutput::default();
+        return RemoteContentOutput::default();
     }
 
     let mut remote_urls = HashSet::new();
@@ -75,10 +75,10 @@ pub fn disable_content(
         if should_check_css && element.name.local.as_ref() == "style" {
             node_ref.children().for_each(|child| {
                 if let NodeData::Text(text) = child.data() {
-                    let mut css_visitor_output =
+                    let out =
                         handle_style_sheet(&mut text.borrow_mut(), hide_remote, hide_embedded);
-                    remote_urls.extend(css_visitor_output.remote_urls.drain());
-                    embedded_urls.extend(css_visitor_output.embedded_urls.drain());
+                    remote_urls.extend(out.remote_urls);
+                    embedded_urls.extend(out.embedded_urls);
                 }
             });
         }
@@ -117,14 +117,13 @@ pub fn disable_content(
 
         // Check css styles
         if should_check_css && let Some(attr) = attributes.map.get_mut(&style_attribute) {
-            let mut css_visitor_output =
-                handle_style_attribute(&mut attr.value, hide_remote, hide_embedded);
-            remote_urls.extend(css_visitor_output.remote_urls.drain());
-            embedded_urls.extend(css_visitor_output.embedded_urls.drain());
+            let out = handle_style_attribute(&mut attr.value, hide_remote, hide_embedded);
+            remote_urls.extend(out.remote_urls);
+            embedded_urls.extend(out.embedded_urls);
         }
     }
 
-    UniqueUrlsOutput {
+    RemoteContentOutput {
         remote_urls,
         embedded_urls,
     }
@@ -146,11 +145,11 @@ fn handle_style_sheet(
     css: &mut String,
     disable_remote: bool,
     disable_embedded: bool,
-) -> UniqueUrlsOutput {
+) -> RemoteContentOutput {
     let Ok(mut sheet) = parse_stylesheet(css).inspect_err(|e| {
         warn!("StyleSheet parsing failed: {}", e);
     }) else {
-        return UniqueUrlsOutput::default();
+        return RemoteContentOutput::default();
     };
 
     let mut visitor = CssUrlVisitor::new(disable_remote, disable_embedded);
@@ -158,7 +157,7 @@ fn handle_style_sheet(
     let _ = sheet.visit(&mut visitor);
 
     if !visitor.has_changes {
-        return UniqueUrlsOutput {
+        return RemoteContentOutput {
             remote_urls: visitor.remote_urls,
             embedded_urls: visitor.embedded_urls,
         };
@@ -166,14 +165,14 @@ fn handle_style_sheet(
 
     let Ok(patched) = sheet.to_css(PrinterOptions::default()) else {
         warn!("Failed to convert style sheet to css value");
-        return UniqueUrlsOutput::default();
+        return RemoteContentOutput::default();
     };
 
     drop(sheet);
 
     *css = patched.code;
 
-    UniqueUrlsOutput {
+    RemoteContentOutput {
         remote_urls: visitor.remote_urls,
         embedded_urls: visitor.embedded_urls,
     }
@@ -183,11 +182,11 @@ fn handle_style_attribute(
     css: &mut String,
     disable_remote: bool,
     disable_embedded: bool,
-) -> UniqueUrlsOutput {
+) -> RemoteContentOutput {
     let Ok(mut style_attribute) = parse_style_attribute(css).inspect_err(|e| {
         warn!("Style attribute parsing failed: {}", e);
     }) else {
-        return UniqueUrlsOutput::default();
+        return RemoteContentOutput::default();
     };
 
     let mut visitor = CssUrlVisitor::new(disable_remote, disable_embedded);
@@ -195,7 +194,7 @@ fn handle_style_attribute(
     let _ = style_attribute.visit(&mut visitor);
 
     if !visitor.has_changes {
-        return UniqueUrlsOutput {
+        return RemoteContentOutput {
             remote_urls: visitor.remote_urls,
             embedded_urls: visitor.embedded_urls,
         };
@@ -203,14 +202,14 @@ fn handle_style_attribute(
 
     let Ok(patched) = style_attribute.to_css(PrinterOptions::default()) else {
         warn!("Failed to convert style attribute to css value");
-        return UniqueUrlsOutput::default();
+        return RemoteContentOutput::default();
     };
 
     drop(style_attribute);
 
     *css = patched.code;
 
-    UniqueUrlsOutput {
+    RemoteContentOutput {
         remote_urls: visitor.remote_urls,
         embedded_urls: visitor.embedded_urls,
     }

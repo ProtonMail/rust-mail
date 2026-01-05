@@ -6,7 +6,7 @@ use crate::{AsyncLiveQueryCallback, WatchHandle, declare_live_query_tagger, unif
 use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::TrackerDetector;
 use proton_mail_common::datatypes::LocalMessageId;
-use proton_mail_common::models::{TrackedMessage, TrackingUrl};
+use proton_mail_common::models::{MessageTracker, MessageTrackerUrl};
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use std::collections::BTreeSet;
@@ -16,7 +16,7 @@ declare_live_query_tagger!(WatchTrackerInfoMarker);
 
 #[derive(Clone, uniffi::Record)]
 pub struct WatchedTrackerInfo {
-    pub tracker_info: TrackerInfo,
+    pub tracker_info: Option<TrackerInfo>,
     pub watch_handle: Arc<WatchHandle>,
 }
 
@@ -24,7 +24,7 @@ pub struct WatchedTrackerInfo {
 pub async fn get_tracker_info_for_message(
     session: &MailUserSession,
     message_id: Id,
-) -> Result<TrackerInfo, UserSessionError> {
+) -> Result<Option<TrackerInfo>, UserSessionError> {
     let stash = session.user_stash()?;
 
     uniffi_async::<_, RealProtonMailError, _>(async move {
@@ -32,7 +32,7 @@ pub async fn get_tracker_info_for_message(
         Ok(
             TrackerDetector::get_tracker_info(message_id.into(), &tether)
                 .await?
-                .into(),
+                .map(Into::into),
         )
     })
     .await
@@ -64,7 +64,7 @@ pub async fn watch_tracker_info_for_message(
         let watch_handle = WatchTrackerInfoMarker::watch_channel_async(&*ctx, handle, callback);
 
         Ok::<_, RealProtonMailError>(WatchedTrackerInfo {
-            tracker_info: info.into(),
+            tracker_info: info.map(Into::into),
             watch_handle,
         })
     })
@@ -80,8 +80,8 @@ struct TrackerInfoTableObserver {
 impl TableObserver for TrackerInfoTableObserver {
     fn tables(&self) -> Vec<String> {
         vec![
-            TrackedMessage::table_name().to_string(),
-            TrackingUrl::table_name().to_string(),
+            MessageTracker::table_name().to_string(),
+            MessageTrackerUrl::table_name().to_string(),
         ]
     }
 

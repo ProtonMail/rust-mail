@@ -387,17 +387,14 @@ impl DecryptedMessageBody {
         );
 
         if let Some(message_id) = self.metadata.local_message_id {
-            let weak_ctx = ctx.as_weak();
             let urls_clone = output.remote_urls.clone();
-            ctx.spawn(async move {
-                if let Some(ctx_clone) = weak_ctx.upgrade() {
-                    let tracker_detector = ctx_clone.get_service::<TrackerDetector>();
-                    if let Err(e) = tracker_detector
-                        .check_message_trackers(message_id, urls_clone)
-                        .await
-                    {
-                        tracing::error!("Could not update tracker information: {e}");
-                    }
+            ctx.spawn_ex(move |ctx_clone| async move {
+                let tracker_detector = ctx_clone.get_service::<TrackerDetector>();
+                if let Err(e) = tracker_detector
+                    .check_message_trackers(message_id, urls_clone)
+                    .await
+                {
+                    tracing::error!("Could not update tracker information: {e}");
                 }
             });
         }

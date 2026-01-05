@@ -15,7 +15,6 @@ mod search_options;
 mod system_folder;
 pub mod theme;
 mod tracker_info;
-mod tracker_status;
 
 use proton_mail_api::services::proton::prelude::ContentDisposition;
 use stash::orm::Model;
@@ -33,7 +32,6 @@ pub use search_options::SearchOptions;
 use stash::stash::{Bond, StashError, StashResult, Tether};
 pub use system_folder::MovableSystemFolder;
 pub use tracker_info::{TrackerDomain, TrackerInfo};
-pub use tracker_status::TrackerStatus;
 
 use crate::actions::messages::UnsubscribeNewsletter;
 use crate::decrypted_message::DecryptedMessageBody;

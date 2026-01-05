@@ -6,8 +6,8 @@ use proton_mail_api::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     ViewMode as ApiViewMode,
 };
-use proton_mail_common::datatypes::{LocalMessageId, SystemLabelId, TrackerStatus};
-use proton_mail_common::models::{TrackedMessage, TrackingUrl};
+use proton_mail_common::datatypes::{LocalMessageId, SystemLabelId};
+use proton_mail_common::models::{MessageTracker, MessageTrackerUrl};
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
 use proton_mail_common::test_utils::test_context::MailTestContext;
@@ -23,11 +23,11 @@ const TEST_USER_ADDRESS_ID: &str =
 
 #[derive(Clone)]
 struct TrackerTableWatcher {
-    sender: flume::Sender<Vec<String>>,
+    sender: flume::Sender<()>,
 }
 
 impl TrackerTableWatcher {
-    fn new() -> (Self, flume::Receiver<Vec<String>>) {
+    fn new() -> (Self, flume::Receiver<()>) {
         let (sender, receiver) = flume::unbounded();
         (Self { sender }, receiver)
     }
@@ -36,15 +36,14 @@ impl TrackerTableWatcher {
 impl TableObserver for TrackerTableWatcher {
     fn tables(&self) -> Vec<String> {
         vec![
-            TrackedMessage::table_name().to_string(),
-            TrackingUrl::table_name().to_string(),
+            MessageTracker::table_name().to_string(),
+            MessageTrackerUrl::table_name().to_string(),
         ]
     }
 
-    fn on_tables_changed(&self, changed_tables: &BTreeSet<String>) {
-        let tables: Vec<String> = changed_tables.iter().cloned().collect();
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
         self.sender
-            .send(tables)
+            .send(())
             .inspect_err(|e| {
                 tracing::error!(
                     "Failed to send notification for TrackerTableWatcher: {:?}",
@@ -56,13 +55,13 @@ impl TableObserver for TrackerTableWatcher {
 }
 
 async fn wait_for_tracker_tables(
-    receiver: &flume::Receiver<Vec<String>>,
+    receiver: &flume::Receiver<()>,
     timeout_duration: Duration,
-) -> Result<Vec<String>, &'static str> {
+) -> anyhow::Result<()> {
     match timeout(timeout_duration, receiver.recv_async()).await {
-        Ok(Ok(tables)) => Ok(tables),
-        Ok(Err(_)) => Err("Channel closed"),
-        Err(_) => Err("Timeout waiting for table changes"),
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(_)) => anyhow::bail!("Channel closed"),
+        Err(_) => anyhow::bail!("Timeout waiting for table changes"),
     }
 }
 
@@ -154,24 +153,21 @@ async fn check_message_trackers_with_empty_urls() {
     let message_id: LocalMessageId = 1.into();
     let urls = HashSet::new();
 
-    let status = tracker_detector
+    tracker_detector
         .check_message_trackers(message_id, urls)
         .await
         .unwrap();
-
-    assert_eq!(status, TrackerStatus::NoTrackers);
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
         .expect("Timeout waiting for tracker tables");
 
-    let tracked = TrackedMessage::load(message_id, &tether)
+    let _tracked = MessageTracker::load(message_id, &tether)
         .await
         .unwrap()
         .expect("TrackedMessage should exist");
-    assert_eq!(tracked.status, TrackerStatus::NoTrackers);
 
-    let tracking_urls = TrackingUrl::find_by_message(message_id, &tether)
+    let tracking_urls = MessageTrackerUrl::find_by_message(message_id, &tether)
         .await
         .unwrap();
     assert!(tracking_urls.is_empty());
@@ -185,9 +181,9 @@ async fn check_message_trackers_with_non_tracker_urls() {
     )
     .await;
 
-    ctx.mock_proxy_img_without_tracker("https://safe-image.example.com/logo.png")
+    ctx.mock_proxy_img_dry_run("https://safe-image.example.com/logo.png")
         .await;
-    ctx.mock_proxy_img_without_tracker("https://example.com/image.jpg")
+    ctx.mock_proxy_img_dry_run("https://example.com/image.jpg")
         .await;
 
     let message = test_message();
@@ -225,24 +221,21 @@ async fn check_message_trackers_with_non_tracker_urls() {
     urls.insert("https://safe-image.example.com/logo.png".to_string());
     urls.insert("https://example.com/image.jpg".to_string());
 
-    let status = tracker_detector
+    tracker_detector
         .check_message_trackers(message_id, urls)
         .await
         .unwrap();
-
-    assert_eq!(status, TrackerStatus::NoTrackers);
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
         .expect("Timeout waiting for tracker tables");
 
-    let tracked = TrackedMessage::load(message_id, &tether)
+    let _tracked = MessageTracker::load(message_id, &tether)
         .await
         .unwrap()
         .expect("TrackedMessage should exist");
-    assert_eq!(tracked.status, TrackerStatus::NoTrackers);
 
-    let tracking_urls = TrackingUrl::find_by_message(message_id, &tether)
+    let tracking_urls = MessageTrackerUrl::find_by_message(message_id, &tether)
         .await
         .unwrap();
     assert!(tracking_urls.is_empty());
@@ -256,7 +249,7 @@ async fn check_message_trackers_with_single_tracker() {
     )
     .await;
 
-    ctx.mock_proxy_img_with_tracker(
+    ctx.mock_proxy_img_dry_run_tracked(
         "https://tracker.example.com/pixel.gif",
         "tracker.example.com",
     )
@@ -296,32 +289,31 @@ async fn check_message_trackers_with_single_tracker() {
     let mut urls = HashSet::new();
     urls.insert("https://tracker.example.com/pixel.gif".to_string());
 
-    let status = tracker_detector
+    tracker_detector
         .check_message_trackers(message_id, urls)
         .await
         .unwrap();
-
-    assert_eq!(status, TrackerStatus::Trackers);
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
         .expect("Timeout waiting for tracker tables");
 
-    let tracked = TrackedMessage::load(message_id, &tether)
+    let _tracked = MessageTracker::load(message_id, &tether)
         .await
         .unwrap()
         .expect("TrackedMessage should exist");
-    assert_eq!(tracked.status, TrackerStatus::Trackers);
 
-    let tracking_urls = TrackingUrl::find_by_message(message_id, &tether)
+    let tracking_urls = MessageTrackerUrl::find_by_message(message_id, &tether)
         .await
         .unwrap();
-    assert_eq!(tracking_urls.len(), 1);
-    assert_eq!(tracking_urls[0].tracker_domain, "tracker.example.com");
-    assert_eq!(
-        tracking_urls[0].original_url,
-        "https://tracker.example.com/pixel.gif"
-    );
+
+    let expected = vec![MessageTrackerUrl {
+        id: tracking_urls.first().and_then(|u| u.id),
+        local_message_id: message_id,
+        tracker_domain: "tracker.example.com".to_string(),
+        original_url: "https://tracker.example.com/pixel.gif".to_string(),
+    }];
+    assert_eq!(tracking_urls, expected);
 }
 
 #[tokio::test]
@@ -332,12 +324,12 @@ async fn check_message_trackers_with_mixed_urls() {
     )
     .await;
 
-    ctx.mock_proxy_img_with_tracker(
+    ctx.mock_proxy_img_dry_run_tracked(
         "https://tracker.example.com/pixel.gif",
         "tracker.example.com",
     )
     .await;
-    ctx.mock_proxy_img_without_tracker("https://safe-image.example.com/logo.png")
+    ctx.mock_proxy_img_dry_run("https://safe-image.example.com/logo.png")
         .await;
 
     let message = test_message();
@@ -375,28 +367,31 @@ async fn check_message_trackers_with_mixed_urls() {
     urls.insert("https://tracker.example.com/pixel.gif".to_string());
     urls.insert("https://safe-image.example.com/logo.png".to_string());
 
-    let status = tracker_detector
+    tracker_detector
         .check_message_trackers(message_id, urls)
         .await
         .unwrap();
-
-    assert_eq!(status, TrackerStatus::Trackers);
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
         .expect("Timeout waiting for tracker tables");
 
-    let tracked = TrackedMessage::load(message_id, &tether)
+    let _tracked = MessageTracker::load(message_id, &tether)
         .await
         .unwrap()
         .expect("TrackedMessage should exist");
-    assert_eq!(tracked.status, TrackerStatus::Trackers);
 
-    let tracking_urls = TrackingUrl::find_by_message(message_id, &tether)
+    let tracking_urls = MessageTrackerUrl::find_by_message(message_id, &tether)
         .await
         .unwrap();
-    assert_eq!(tracking_urls.len(), 1);
-    assert_eq!(tracking_urls[0].tracker_domain, "tracker.example.com");
+
+    let expected = vec![MessageTrackerUrl {
+        id: tracking_urls.first().and_then(|u| u.id),
+        local_message_id: message_id,
+        tracker_domain: "tracker.example.com".to_string(),
+        original_url: "https://tracker.example.com/pixel.gif".to_string(),
+    }];
+    assert_eq!(tracking_urls, expected);
 }
 
 #[tokio::test]
@@ -407,17 +402,17 @@ async fn check_message_trackers_with_multiple_trackers() {
     )
     .await;
 
-    ctx.mock_proxy_img_with_tracker(
+    ctx.mock_proxy_img_dry_run_tracked(
         "https://tracker1.example.com/pixel.gif",
         "tracker1.example.com",
     )
     .await;
-    ctx.mock_proxy_img_with_tracker(
+    ctx.mock_proxy_img_dry_run_tracked(
         "https://tracker2.example.com/beacon.png",
         "tracker2.example.com",
     )
     .await;
-    ctx.mock_proxy_img_with_tracker(
+    ctx.mock_proxy_img_dry_run_tracked(
         "https://tracker1.example.com/another.gif",
         "tracker1.example.com",
     )
@@ -459,35 +454,47 @@ async fn check_message_trackers_with_multiple_trackers() {
     urls.insert("https://tracker2.example.com/beacon.png".to_string());
     urls.insert("https://tracker1.example.com/another.gif".to_string());
 
-    let status = tracker_detector
+    tracker_detector
         .check_message_trackers(message_id, urls)
         .await
         .unwrap();
-
-    assert_eq!(status, TrackerStatus::Trackers);
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
         .expect("Timeout waiting for tracker tables");
 
-    let tracked = TrackedMessage::load(message_id, &tether)
+    let _tracked = MessageTracker::load(message_id, &tether)
         .await
         .unwrap()
         .expect("TrackedMessage should exist");
-    assert_eq!(tracked.status, TrackerStatus::Trackers);
 
-    let tracking_urls = TrackingUrl::find_by_message(message_id, &tether)
+    let tracking_urls = MessageTrackerUrl::find_by_message(message_id, &tether)
         .await
         .unwrap();
+
     assert_eq!(tracking_urls.len(), 3);
 
-    let domains: HashSet<String> = tracking_urls
+    let urls: BTreeSet<_> = tracking_urls
         .iter()
-        .map(|url| url.tracker_domain.clone())
+        .map(|t| (t.tracker_domain.as_str(), t.original_url.as_str()))
         .collect();
-    assert_eq!(domains.len(), 2);
-    assert!(domains.contains("tracker1.example.com"));
-    assert!(domains.contains("tracker2.example.com"));
+
+    let expected_urls = BTreeSet::from([
+        (
+            "tracker1.example.com",
+            "https://tracker1.example.com/pixel.gif",
+        ),
+        (
+            "tracker2.example.com",
+            "https://tracker2.example.com/beacon.png",
+        ),
+        (
+            "tracker1.example.com",
+            "https://tracker1.example.com/another.gif",
+        ),
+    ]);
+
+    assert_eq!(urls, expected_urls);
 }
 
 #[tokio::test]
@@ -527,15 +534,12 @@ async fn get_tracker_info_returns_correct_data() {
     let tracker_info = TrackerDetector::get_tracker_info(message_id, &tether)
         .await
         .unwrap();
-    assert_eq!(tracker_info.status, TrackerStatus::Unknown);
-    assert!(tracker_info.trackers.is_empty());
-    assert_eq!(tracker_info.last_checked_at, UnixTimestamp::default());
+    assert!(tracker_info.is_none());
 
     tether
         .tx(async |tx| {
-            TrackedMessage {
+            MessageTracker {
                 local_message_id: message_id,
-                status: TrackerStatus::NoTrackers,
                 last_checked_at: UnixTimestamp::now(),
             }
             .save(tx)
@@ -547,20 +551,19 @@ async fn get_tracker_info_returns_correct_data() {
     let tracker_info = TrackerDetector::get_tracker_info(message_id, &tether)
         .await
         .unwrap();
-    assert_eq!(tracker_info.status, TrackerStatus::NoTrackers);
-    assert!(tracker_info.trackers.is_empty());
+    assert!(tracker_info.is_some());
+    assert!(tracker_info.unwrap().trackers.is_empty());
 
     tether
         .tx(async |tx| {
-            TrackedMessage {
+            MessageTracker {
                 local_message_id: message_id,
-                status: TrackerStatus::Trackers,
                 last_checked_at: UnixTimestamp::now(),
             }
             .save(tx)
             .await?;
 
-            TrackingUrl {
+            MessageTrackerUrl {
                 id: None,
                 local_message_id: message_id,
                 tracker_domain: "tracker1.com".to_string(),
@@ -569,7 +572,7 @@ async fn get_tracker_info_returns_correct_data() {
             .save(tx)
             .await?;
 
-            TrackingUrl {
+            MessageTrackerUrl {
                 id: None,
                 local_message_id: message_id,
                 tracker_domain: "tracker1.com".to_string(),
@@ -578,7 +581,7 @@ async fn get_tracker_info_returns_correct_data() {
             .save(tx)
             .await?;
 
-            TrackingUrl {
+            MessageTrackerUrl {
                 id: None,
                 local_message_id: message_id,
                 tracker_domain: "tracker2.com".to_string(),
@@ -592,36 +595,24 @@ async fn get_tracker_info_returns_correct_data() {
 
     let tracker_info = TrackerDetector::get_tracker_info(message_id, &tether)
         .await
+        .unwrap()
         .unwrap();
-    assert_eq!(tracker_info.status, TrackerStatus::Trackers);
+
     assert_eq!(tracker_info.trackers.len(), 2);
 
-    let tracker1 = tracker_info
-        .trackers
-        .iter()
-        .find(|t| t.name == "tracker1.com")
-        .unwrap();
+    let mut tracker_iter = tracker_info.trackers.iter();
+    let tracker1 = tracker_iter.next().unwrap();
+    assert_eq!(tracker1.name, "tracker1.com");
     assert_eq!(tracker1.urls.len(), 2);
-    assert!(
-        tracker1
-            .urls
-            .contains(&"https://tracker1.com/pixel1.gif".to_string())
-    );
-    assert!(
-        tracker1
-            .urls
-            .contains(&"https://tracker1.com/pixel2.gif".to_string())
-    );
+    let expected_urls1 = BTreeSet::from([
+        "https://tracker1.com/pixel1.gif".to_string(),
+        "https://tracker1.com/pixel2.gif".to_string(),
+    ]);
+    assert_eq!(tracker1.urls, expected_urls1);
 
-    let tracker2 = tracker_info
-        .trackers
-        .iter()
-        .find(|t| t.name == "tracker2.com")
-        .unwrap();
+    let tracker2 = tracker_iter.next().unwrap();
+    assert_eq!(tracker2.name, "tracker2.com");
     assert_eq!(tracker2.urls.len(), 1);
-    assert!(
-        tracker2
-            .urls
-            .contains(&"https://tracker2.com/beacon.png".to_string())
-    );
+    let expected_urls2 = BTreeSet::from(["https://tracker2.com/beacon.png".to_string()]);
+    assert_eq!(tracker2.urls, expected_urls2);
 }
