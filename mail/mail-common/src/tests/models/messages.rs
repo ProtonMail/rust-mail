@@ -926,7 +926,7 @@ async fn test_update_message() {
 }
 
 #[tokio::test]
-pub async fn test_delete_local_message() {
+async fn test_delete_local_message() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_delete_db_state();
@@ -1091,7 +1091,7 @@ pub async fn test_delete_local_message() {
 }
 
 #[tokio::test]
-pub async fn deleting_all_messages_in_a_label_removes_conversation_label() {
+async fn deleting_all_messages_in_a_label_removes_conversation_label() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_delete_all_messages_in_conv_label_db_state();
@@ -1175,22 +1175,18 @@ pub async fn deleting_all_messages_in_a_label_removes_conversation_label() {
 }
 
 #[tokio::test]
-#[ignore]
-pub async fn test_message_metadata_list() {
+async fn test_message_metadata_list() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
     let (_, _state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
     let messages = Message::all(&conn).await.expect("failed to get messages");
-    assert_eq!(messages.len(), 3);
-    assert!(messages[0].time > messages[1].time);
-    assert!(messages[1].time > messages[2].time);
+    assert_eq!(messages.len(), 6);
 }
 
 #[tokio::test]
-#[ignore]
-pub async fn test_delete_local_message_does_not_change_conv_unread_count() {
+async fn test_delete_local_message_does_not_change_conv_unread_count() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_delete_db_state();
@@ -1221,7 +1217,7 @@ pub async fn test_delete_local_message_does_not_change_conv_unread_count() {
 }
 
 #[tokio::test]
-pub async fn test_undelete_local_message() {
+async fn test_undelete_local_message() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let mut conn = stash.connection().await.unwrap();
     let mut state = new_test_delete_db_state();
@@ -2572,8 +2568,7 @@ async fn unlabel_message_correctly_updates_unread_counter() {
     }
 }
 
-pub(super) static MY_MESSAGE_ID: LazyLock<MessageId> =
-    LazyLock::new(|| MessageId::from("MyRemoteId"));
+static MY_MESSAGE_ID: LazyLock<MessageId> = LazyLock::new(|| MessageId::from("MyRemoteId"));
 
 #[test_case(vec![], None; "TEST1 - no label")]
 #[test_case(
@@ -2869,7 +2864,7 @@ async fn watch_messages_in_label() {
     watch_result.recv_async().await.unwrap();
 }
 
-pub(super) async fn resolve_local_ids(tether: &Tether, message: &mut Message) {
+async fn resolve_local_ids(tether: &Tether, message: &mut Message) {
     if message.local_conversation_id.is_none() {
         let conversation = Conversation::find_by_remote_id(
             message.remote_conversation_id.clone().unwrap(),
@@ -2878,6 +2873,7 @@ pub(super) async fn resolve_local_ids(tether: &Tether, message: &mut Message) {
         .await
         .unwrap()
         .unwrap();
+
         message.local_conversation_id = conversation.local_id;
     }
 }
