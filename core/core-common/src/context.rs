@@ -1,5 +1,3 @@
-//! Core context contains all the necessary information to retrieve or create new accounts and sessions.
-
 mod builder;
 mod registry;
 pub mod services;
@@ -11,6 +9,7 @@ use tokio::runtime;
 use tokio::sync::Mutex;
 use user_context_map::ActiveUserContextMap;
 
+pub use self::builder::ContextBuilder;
 use crate::action_queue::CoreActionError;
 use crate::app_events::{OnEnterForegroundEvent, OnExitForegroundEvent};
 use crate::auth_store::{AuthStore, DecryptExt};
@@ -23,18 +22,14 @@ use crate::db::migrations::{migrate_account_db, verify_account_db};
 use crate::device::DynDeviceInfoProvider;
 use crate::event_loop::EventPollMode;
 use crate::models::{AppSettings, ModelExtension};
-use crate::nuke_utils::{
-    drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files,
-};
+use crate::nuke;
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::pin_code::PinCode;
 use crate::services::issue_reporter_service::IssueReporterService;
-
 use crate::services::{ContextEventService, NetworkMonitorService};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Context as _, Error as AnyhowError, anyhow};
 use async_trait::async_trait;
-pub use builder::ContextBuilder;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::{self, Action, WriterGuardError};
@@ -740,7 +735,7 @@ impl Context {
             if let Ok(user_ctx) = self.user_context_from_session(&session).await {
                 let tether = user_ctx.stash().connection().await?;
 
-                if let Err(e) = drop_all_tables_in_database(tether).await {
+                if let Err(e) = nuke::drop_database_tables(tether).await {
                     tracing::error!("Could not clean user database, details: `{e}`");
                 }
             }
@@ -758,14 +753,18 @@ impl Context {
             .remove(&user_id, self.event_service());
 
         tracing::info!("Archive & try to remove user database");
-        let user_db_location = self.user_db_path(&user_id);
-        rename_database_files(&user_db_location).await;
-        remove_or_clear_dir_safe(&user_db_location).await;
+
+        let user_db_path = self.user_db_path(&user_id);
+
+        nuke::rename_database_files(&user_db_path).await;
+        nuke::remove_dir(&user_db_path).await;
 
         tracing::info!("Clear user associated caches");
+
         for cache_path in caches {
-            remove_or_clear_dir_safe(cache_path).await;
+            nuke::remove_dir(&cache_path).await;
         }
+
         Ok(())
     }
 

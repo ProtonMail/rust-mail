@@ -45,7 +45,7 @@ pub mod builder;
 pub mod event_loop;
 pub mod images_logo;
 mod keys;
-pub mod nuke_utils;
+pub mod nuke;
 pub mod services;
 
 #[async_trait::async_trait]
