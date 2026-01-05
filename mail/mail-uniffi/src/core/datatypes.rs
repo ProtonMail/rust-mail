@@ -69,7 +69,6 @@ use muon::env::EnvId;
 use proton_core_api::session::EnvIdExt;
 use proton_mail_api::services::proton::common::MessageId;
 use stash::orm::Model;
-use stash::stash::Tether;
 use tracing::error;
 
 use core::fmt;
@@ -104,15 +103,11 @@ use proton_core_common::datatypes::{
     UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
 };
-use proton_core_common::models::Label as RealLabel;
 use proton_core_common::models::{
-    Address as RealAddress, Contact as RealContact, ContactCard as RealContactCard,
-    ContactEmail as RealContactEmail, ModelIdExtension, Role as RealRole, User as RealUser,
+    Address as RealAddress, ContactCard as RealContactCard, Role as RealRole, User as RealUser,
     UserSettings as RealUserSettings,
 };
-use proton_core_common::utils::MapVec as _;
 use proton_crypto_account::contacts::ContactCardType as RealCardType;
-use proton_mail_common::AppError;
 use proton_mail_common::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -988,33 +983,6 @@ pub struct Contact {
     pub size: u64,
 }
 
-impl Contact {
-    /// Converts a [`RealContact`] into a [`Contact`].
-    pub async fn try_from_real(value: RealContact, tether: &Tether) -> Result<Self, AppError> {
-        let mut contact_emails = Vec::with_capacity(value.contact_emails.len());
-        for email in &value.contact_emails {
-            contact_emails.push(ContactEmail::try_from_real(email.clone(), tether).await?);
-        }
-
-        Ok(Self {
-            cards: value.cards.map_vec(),
-            contact_emails,
-            create_time: value.create_time,
-            label_ids: RealLabel::remote_ids_counterpart(
-                value.label_ids.into_inner().into_iter().collect(),
-                tether,
-            )
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect(),
-            modify_time: value.modify_time,
-            name: value.name,
-            size: value.size,
-        })
-    }
-}
-
 /// Represents a contact card.
 ///
 /// Contact cards contain information encoded as a v-card. Cards can be
@@ -1079,27 +1047,6 @@ pub struct ContactEmail {
 
     /// TODO: Document this field.
     pub name: String,
-}
-
-impl ContactEmail {
-    /// Converts a [`RealContactEmail`] into a [`ContactEmail`].
-    pub async fn try_from_real(value: RealContactEmail, tether: &Tether) -> Result<Self, AppError> {
-        Ok(Self {
-            canonical_email: value.canonical_email.into_clear_text_string(),
-            contact_type: value.contact_type.deref().clone(),
-            defaults: value.defaults.into(),
-            display_order: value.display_order,
-            email: value.email.into_clear_text_string(),
-            is_proton: value.is_proton,
-            label_ids: RealLabel::remote_ids_counterpart(value.label_ids.into_inner(), tether)
-                .await?
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            last_used_time: value.last_used_time.into(),
-            name: value.name,
-        })
-    }
 }
 
 /// TODO: Document this struct.
