@@ -10,7 +10,9 @@ use proton_core_common::UserContext;
 use proton_core_common::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
 use proton_core_common::event_loop::event_subscriber::CoreEventSubscriber;
 use proton_core_common::event_loop::v6::CoreEventCache;
-use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelIdExtension};
+use proton_core_common::models::{
+    Contact, ContactCard, ContactEmail, ModelExtension, ModelIdExtension,
+};
 use proton_core_common::test_utils::account::unlocked_user_key;
 use proton_core_common::test_utils::test_context::TestContext;
 use proton_crypto_account::contacts::ContactCardType;
@@ -99,7 +101,6 @@ async fn test_sync_and_load_contacts() {
         .expect("Failed to get contacts");
     for contact in &mut contacts {
         contact.cards(&conn).await.expect("Failed to query cards");
-        contact.emails(&conn).await.expect("Failed to query emails");
     }
     let expected_contacts = expected_local_contacts();
     prune_contacts!(contacts);
@@ -132,18 +133,17 @@ async fn test_sync_and_load_contacts_mixed() {
         .expect("Failed to load contact")
         .expect("contact should be found");
     contact.cards(&conn).await.expect("Failed to query cards");
-    contact.emails(&conn).await.expect("Failed to query emails");
     prune_contact!(contact);
     let expected_contact = create_test_local_full_contact();
 
     assert_eq!(contact, expected_contact);
 
+    let contact_emails = ContactEmail::all(&conn).await.unwrap();
+    assert_eq!(contact_emails.len(), 3);
+
     let mut contacts = Contact::find("LIMIT 100", vec![], &conn)
         .await
         .expect("Failed to load contacts");
-    for contact in &mut contacts {
-        contact.emails(&conn).await.expect("Failed to query emails");
-    }
     prune_contacts!(contacts);
     let expected_contacts = expected_local_contacts();
     assert_eq!(contacts, expected_contacts);
@@ -269,10 +269,6 @@ async fn test_sync_and_modify_event_contact() {
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
-    contact
-        .emails(&conn)
-        .await
-        .expect("Failed to query contact emails");
 
     assert_eq!(contact.modify_time, modified_contact.modify_time);
     assert_eq!(contact.size, modified_contact.size);

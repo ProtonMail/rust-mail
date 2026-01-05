@@ -104,10 +104,7 @@ async fn test_partial_contact() {
         contact.remote_id,
         Some(ContactId::from("a29olIjFv0rnXxBhSMw=="))
     );
-    assert_eq!(
-        contact.emails(&tether).await.unwrap().len(),
-        contact_emails.len()
-    );
+    assert_eq!(contact.contact_emails.len(), contact_emails.len());
 
     // Query specific contact.
     let mut contact_single = Contact::load(contact.id(), &tether)
@@ -118,10 +115,6 @@ async fn test_partial_contact() {
         .cards(&tether)
         .await
         .expect("failed to query cards");
-    contact_single
-        .emails(&tether)
-        .await
-        .expect("failed to query emails");
     assert_eq!(&contact_single, contact);
 }
 

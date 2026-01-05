@@ -10,7 +10,7 @@ use super::{InitializationError, InitializationWatcher, InitializedComponent, La
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{
     ContactGroupItem, ContactSuggestions, DeviceContact, GroupedContacts, InitializationKey,
-    LabelType, Labels, LocalContactId, LocalLabelId,
+    LabelType, Labels, LocalContactEmailId, LocalContactId, LocalLabelId,
 };
 use crate::event_loop::events::Action;
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
@@ -37,6 +37,7 @@ use proton_core_api::session::Session;
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::contacts::DecryptableVerifiableCard as _;
 use proton_crypto_account::keys::UnlockedUserKeys;
+use proton_sqlite3::rusqlite::Connection;
 use proton_vcard::vcard::{PropertyUid, VCard};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::Transaction;
@@ -44,7 +45,8 @@ use stash::macros::Model;
 use stash::orm::{DbRecord, Model, ModelHooks};
 use stash::params;
 use stash::rusqlite::params_from_iter;
-use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Bond, RunTransaction, Stash, StashError, StashResult, Tether, WatcherHandle};
+use stash::utils::placeholders;
 use tracing::{debug, error, info};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -263,21 +265,6 @@ impl Contact {
         Ok(merged)
     }
 
-    /// Returns the associated emails for a contact.
-    ///
-    /// This function retrieves the emails for a contact from the database,
-    /// stores them in the contact struct, and then returns them.
-    ///
-    pub async fn emails(&mut self, tether: &Tether) -> Result<&[ContactEmail], StashError> {
-        self.contact_emails = ContactEmail::find(
-            "WHERE remote_contact_id = ? ORDER BY display_order ASC",
-            params![self.remote_id.clone()],
-            tether,
-        )
-        .await?;
-        Ok(&self.contact_emails)
-    }
-
     /// Updates all user contacts including their emails without their cards.
     ///
     /// The result of this function MUST ONLY be used (as in [`SyncedContacts::store`]) after syncing contact labels.
@@ -379,13 +366,6 @@ impl Contact {
                 err
             })?;
 
-            for email in &mut contact_with_card.contact_emails {
-                email.save(tx).await.map_err(|e| {
-                    error!("Failed to update contact emails: {e:?}");
-                    e
-                })?;
-            }
-
             Ok(())
         })
         .await?;
@@ -427,14 +407,10 @@ impl Contact {
     #[tracing::instrument(skip_all)]
     pub async fn contact_list(tether: &Tether) -> Result<Vec<GroupedContacts>, StashError> {
         // TODO (ET-2028): Use pagination
-        let (mut contacts, contact_groups) = try_join!(
+        let (contacts, contact_groups) = try_join!(
             Contact::find("WHERE deleted = 0", vec![], tether),
             Label::find_by_kind(LabelType::ContactGroup, tether)
         )?;
-
-        for contact in &mut contacts {
-            contact.emails(tether).await?;
-        }
 
         Ok(GroupedContacts::from_contacts_and_groups(
             contacts,
@@ -498,14 +474,10 @@ impl Contact {
         tether: &Tether,
     ) -> Result<ContactSuggestions, StashError> {
         // TODO (ET-2028): Use pagination
-        let (mut contacts, contact_groups) = try_join!(
+        let (contacts, contact_groups) = try_join!(
             Contact::find("WHERE deleted = 0", vec![], tether),
             Label::find_by_kind(LabelType::ContactGroup, tether)
         )?;
-
-        for contact in &mut contacts {
-            contact.emails(tether).await?;
-        }
 
         Ok(ContactSuggestions::from_contacts_and_device_contacts(
             contacts,
@@ -633,10 +605,38 @@ impl ModelHooks for Contact {
             card.local_contact_id = self.local_id;
             card.remote_contact_id.clone_from(&self.remote_id);
         }
+
         for email in &mut self.contact_emails {
             email.local_contact_id = self.local_id;
             email.remote_contact_id.clone_from(&self.remote_id);
+            email
+                .save_sync(tx)
+                .inspect_err(|e| error!("Failed to save contact {:?}: {e}", email.remote_id))?;
         }
+
+        // DELETE all emails that are no longer valid
+        let local_email_contact_ids = self
+            .contact_emails
+            .iter()
+            .map(|e| e.local_id.expect("Should be set"))
+            .collect::<Vec<_>>();
+
+        let mut query = tx.prepare(&format!(
+            "DELETE FROM contact_emails WHERE local_id NOT IN ({placeholders}) AND local_contact_id=?",
+            placeholders = placeholders(&local_email_contact_ids)
+        ))?;
+
+        query
+            .execute(params_from_iter(
+                local_email_contact_ids
+                    .iter()
+                    .map(LocalContactEmailId::as_u64)
+                    .chain(std::iter::once(
+                        self.local_id.expect("Should be set").as_u64(),
+                    )),
+            ))
+            .inspect_err(|e| error!("Failed to delete contact emails: {e}"))?;
+
         tx.execute(
             "DELETE FROM contact_cards WHERE local_contact_id = ?",
             (self.local_id,),
@@ -648,6 +648,15 @@ impl ModelHooks for Contact {
                 e
             })?;
         }
+        Ok(())
+    }
+
+    fn after_load(&mut self, conn: &Connection) -> StashResult<()> {
+        self.contact_emails = ContactEmail::find_sync(
+            "WHERE local_contact_id = ? ORDER BY display_order ASC",
+            [self.local_id.expect("Should be set")],
+            conn,
+        )?;
         Ok(())
     }
 }

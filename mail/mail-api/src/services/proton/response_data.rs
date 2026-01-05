@@ -595,7 +595,6 @@ pub struct MailEvent {
 pub struct MailEventV5 {
     #[serde(flatten)]
     pub core: CoreEvent,
-    pub labels: Option<Vec<LabelEvent>>,
 
     pub conversation_counts: Option<Vec<ConversationCount>>,
 
@@ -616,7 +615,7 @@ impl From<MailEvent> for MailEventV5 {
             core: CoreEvent {
                 event_id: m.event_id,
                 addresses: None,
-                labels: None,
+                labels: m.labels,
                 product_used_space: None,
                 used_space: None,
                 user: None,
@@ -625,7 +624,6 @@ impl From<MailEvent> for MailEventV5 {
                 refresh: m.refresh,
                 has_more: m.has_more,
             },
-            labels: m.labels,
             conversation_counts: m.conversation_counts,
             conversations: m.conversations,
             incoming_defaults: m.incoming_defaults,

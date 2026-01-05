@@ -161,6 +161,10 @@ impl MailEventCache {
         self.labels.get_mut(label_id)
     }
 
+    pub fn get_label(&self, label_id: &LabelId) -> Option<&Label> {
+        self.labels.get(label_id)
+    }
+
     fn fetch_conversations(
         &mut self,
         tasks: &mut FuturesUnordered<FutureTask>,
