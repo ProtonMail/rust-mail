@@ -64,6 +64,80 @@ fn panic_payload_to_string(payload: &Box<dyn std::any::Any + Send>) -> String {
     }
 }
 
+/// Guard that ensures a blocking task completes before being dropped
+///
+/// This guard wraps a `JoinHandle` from `spawn_blocking` and ensures that even if
+/// the guard (and the future containing it) is dropped, the blocking thread will
+/// still complete and release any locks it holds.
+///
+/// This prevents the race condition where:
+/// 1. A future containing `index_message_body()` is dropped
+/// 2. The service-level `RwLock` guard is released
+/// 3. But the `spawn_blocking` thread continues running with the engine's internal lock held
+/// 4. A subsequent operation can acquire the service-level lock but fails on the engine's internal lock
+struct BlockingTaskGuard<T: Send + 'static> {
+    handle: Option<tokio::task::JoinHandle<Result<T, SearchError>>>,
+}
+
+impl<T: Send + 'static> BlockingTaskGuard<T> {
+    /// Create a new guard wrapping a JoinHandle
+    fn new(handle: tokio::task::JoinHandle<Result<T, SearchError>>) -> Self {
+        Self {
+            handle: Some(handle),
+        }
+    }
+
+    /// Await the blocking task and return its result
+    ///
+    /// This must be called to get the result. If the guard is dropped without
+    /// being awaited, the `Drop` implementation will ensure the blocking thread
+    /// completes in the background.
+    async fn wait(mut self) -> Result<T, SearchError> {
+        let handle = self
+            .handle
+            .take()
+            .expect("BlockingTaskGuard::await() called twice");
+        match handle.await {
+            Ok(Ok(result)) => Ok(result),
+            Ok(Err(e)) => Err(e),
+            Err(join_error) => {
+                let msg = if join_error.is_panic() {
+                    panic_payload_to_string(&join_error.into_panic())
+                } else {
+                    "Task cancelled".to_string()
+                };
+                Err(SearchError::Panic(format!(
+                    "Commit iterator task failed: {}",
+                    msg
+                )))
+            }
+        }
+    }
+}
+
+impl<T: Send + 'static> Drop for BlockingTaskGuard<T> {
+    fn drop(&mut self) {
+        // If the guard is dropped without being awaited, spawn a background task
+        // to await the blocking thread. This ensures the blocking thread completes
+        // and releases the engine's internal lock, even if the original future is dropped.
+        if let Some(join_handle) = self.handle.take() {
+            // Use Handle::try_current() to ensure we can spawn even if we're not in a tokio context
+            // This is safe because we're just ensuring the blocking thread completes
+            if let Ok(runtime_handle) = tokio::runtime::Handle::try_current() {
+                // Spawn a task to await the blocking thread
+                // The join_handle from spawn_blocking is Send, so this async block is Send
+                let _ = runtime_handle.spawn(async move {
+                    let _ = join_handle.await;
+                });
+            } else {
+                // If we're not in a tokio context, we can't spawn, but that's okay
+                // The blocking thread will complete on its own
+                // Note: In practice, this code always runs in a tokio context
+            }
+        }
+    }
+}
+
 /// Field names for the search index
 pub mod field {
     /// Body text field - the decrypted message content
@@ -174,7 +248,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         storage: S,
         serdes: SerDes,
         commit_iter_fn: impl FnOnce() -> Result<I, SearchError> + Send + 'static,
-    ) -> Result<Vec<(String, Vec<u8>)>, SearchError>
+    ) -> Result<BlockingTaskGuard<Vec<(String, Vec<u8>)>>, SearchError>
     where
         I: Iterator<Item = WriteEvent> + Send + 'static,
     {
@@ -204,7 +278,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         let load_tx_for_blocking = load_tx.clone();
 
         // Process iterator in spawn_blocking, but use channel for Load I/O
-        let result = tokio::task::spawn_blocking(move || {
+        let blocking_handle = tokio::task::spawn_blocking(move || {
             let commit_iter = commit_iter_fn()?;
             let mut save_ops = Vec::new();
 
@@ -251,8 +325,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
             }
 
             Ok::<_, SearchError>(save_ops)
-        })
-        .await;
+        });
 
         // Close load channel and wait for load task to finish
         drop(load_tx);
@@ -260,21 +333,8 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
             .await
             .map_err(|e| SearchError::Panic(format!("Load task failed: {}", e)))?;
 
-        match result {
-            Ok(Ok(save_ops)) => Ok(save_ops),
-            Ok(Err(e)) => Err(e),
-            Err(join_error) => {
-                let msg = if join_error.is_panic() {
-                    panic_payload_to_string(&join_error.into_panic())
-                } else {
-                    "Task cancelled".to_string()
-                };
-                Err(SearchError::Panic(format!(
-                    "Commit iterator task failed: {}",
-                    msg
-                )))
-            }
-        }
+        // Return a guard that ensures the blocking thread completes even if dropped
+        Ok(BlockingTaskGuard::new(blocking_handle))
     }
 
     /// Execute all Save operations atomically in a single transaction
@@ -353,7 +413,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         let serdes = self.serdes;
 
         // Use async I/O processing instead of blocking on I/O inside spawn_blocking
-        let save_operations = self
+        let save_operations_guard = self
             .process_commit_iterator_with_async_io(
                 storage,
                 serdes,
@@ -370,6 +430,10 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                 },
             )
             .await?;
+
+        // Await the blocking thread to complete and get the save operations
+        // This ensures the engine's internal lock is released before we proceed
+        let save_operations = save_operations_guard.wait().await?;
 
         // Execute all Save operations atomically in a transaction
         // This prevents orphaned blobs if the operation fails mid-way
@@ -403,7 +467,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         let serdes = self.serdes;
 
         // Use async I/O processing instead of blocking on I/O inside spawn_blocking
-        let save_operations = self
+        let save_operations_guard = self
             .process_commit_iterator_with_async_io(
                 storage,
                 serdes,
@@ -423,6 +487,10 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                 },
             )
             .await?;
+
+        // Await the blocking thread to complete and get the save operations
+        // This ensures the engine's internal lock is released before we proceed
+        let save_operations = save_operations_guard.wait().await?;
 
         // Execute all Save operations atomically in a transaction
         // This prevents orphaned blobs if the operation fails mid-way
@@ -456,7 +524,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         let doc_ids_owned: Vec<String> = doc_ids.iter().map(|s| (*s).to_string()).collect();
 
         // Use async I/O processing instead of blocking on I/O inside spawn_blocking
-        let save_operations = self
+        let save_operations_guard = self
             .process_commit_iterator_with_async_io(
                 storage,
                 serdes,
@@ -473,6 +541,10 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                 },
             )
             .await?;
+
+        // Await the blocking thread to complete and get the save operations
+        // This ensures the engine's internal lock is released before we proceed
+        let save_operations = save_operations_guard.wait().await?;
 
         // Execute all Save operations atomically in a transaction
         // This prevents orphaned blobs if the operation fails mid-way
