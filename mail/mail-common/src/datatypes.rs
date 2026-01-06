@@ -932,8 +932,13 @@ impl EncryptedMessageBody {
             .upgrade()
             .ok_or(MailContextError::MissingContext)?;
 
-        match self.decrypt(&pgp, &address_keys) {
-            Ok((decrypted_body, _)) => {
+        // TODO: The RawDecryptedBody is currently ignored, but would allow to verify signature.
+        //       We would need to adapt DecryptedMessageBody to allow signature verirification for locks.
+        match self
+            .decrypt(&pgp, &address_keys)
+            .and_then(|raw_decrypted_body| raw_decrypted_body.processed_body())
+        {
+            Ok(decrypted_body) => {
                 let mime_type =
                     MessageMimeType::from_api(self.metadata.mime_type, || match &decrypted_body {
                         DecryptedBody::Plain(_) => unreachable!(),

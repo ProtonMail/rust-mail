@@ -182,8 +182,8 @@ Sent with Proton Mail secure email.";
         .write_to(&mut data)
         .unwrap();
 
-    let (processed, _) = MimeProcessor::process_mime("message_id", &data).unwrap();
-    let (processed_expected, _) =
+    let processed = MimeProcessor::process_mime("message_id", &data).unwrap();
+    let processed_expected =
         MimeProcessor::process_mime("message_id", WEB_EXAMPLE.as_bytes()).unwrap();
     assert_eq!(processed.body, processed_expected.body);
     assert_eq!(
@@ -238,7 +238,7 @@ fn test_write_html() {
         .write_to(&mut data)
         .unwrap();
 
-    let (processed, _) = MimeProcessor::process_mime("message_id", &data).unwrap();
+    let processed = MimeProcessor::process_mime("message_id", &data).unwrap();
     assert_eq!(processed.body, html);
     assert_eq!(processed.mime_body_type, ProcessedBodyType::Html);
 
@@ -279,7 +279,7 @@ fn test_write_no_html() {
         .write_to(&mut data)
         .unwrap();
 
-    let (processed, _) = MimeProcessor::process_mime("message_id", &data).unwrap();
+    let processed = MimeProcessor::process_mime("message_id", &data).unwrap();
     assert_eq!(processed.body, text);
     assert_eq!(processed.mime_body_type, ProcessedBodyType::Text);
 

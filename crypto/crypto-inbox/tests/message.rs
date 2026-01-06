@@ -334,12 +334,14 @@ fn test_message_decrypt_and_verify() {
     let decryption_keys = get_test_address_keys(&pgp);
     let mut verification_keys = get_test_public_address_keys(&pgp);
     let test_message = TestMessage(false, TEST_MESSAGE_BODY.into());
-    let (decrypted_message, verifier) = test_message.decrypt(&pgp, &decryption_keys).unwrap();
-    assert_eq!(decrypted_message.as_ref(), TEST_EXPECTED_BODY);
-    let verification_result = verifier.verify_signature(&pgp, &verification_keys);
+    let decrypted_message = test_message.decrypt(&pgp, &decryption_keys).unwrap();
+    let decrypted_message_body = decrypted_message.processed_body().unwrap();
+    assert_eq!(decrypted_message_body.body(), TEST_EXPECTED_BODY);
+    let verification_result = decrypted_message.verify_signature(&pgp, &verification_keys);
     assert!(verification_result.is_ok());
     verification_keys.remove(0);
-    let verification_result_no_verifier = verifier.verify_signature(&pgp, &verification_keys);
+    let verification_result_no_verifier =
+        decrypted_message.verify_signature(&pgp, &verification_keys);
     assert!(matches!(
         verification_result_no_verifier.unwrap_err(),
         VerificationError::NoVerifier(_)
@@ -353,13 +355,14 @@ fn test_message_decrypt_and_verify_mime() {
     let verification_keys = get_test_public_address_key_source(&pgp, TEST_VERIFICATION_KEY_MIME);
 
     let test_message = TestMessage(true, TEST_MESSAGE_MIME.into());
-    let (decrypted_message, verifier) = test_message.decrypt(&pgp, &decryption_keys).unwrap();
-    assert_eq!(decrypted_message.body(), TEST_EXPECTED_BODY_MIME);
-    let verification_result = verifier.verify_signature(&pgp, &verification_keys);
+    let decrypted_message = test_message.decrypt(&pgp, &decryption_keys).unwrap();
+    let decrypted_message_body = decrypted_message.processed_body().unwrap();
+    assert_eq!(decrypted_message_body.body(), TEST_EXPECTED_BODY_MIME);
+    let verification_result = decrypted_message.verify_signature(&pgp, &verification_keys);
     assert!(verification_result.is_ok());
 
-    assert!(decrypted_message.is_mime());
-    let DecryptedBody::Mime(processed_messsage) = decrypted_message else {
+    assert!(decrypted_message_body.is_mime());
+    let DecryptedBody::Mime(processed_messsage) = decrypted_message_body else {
         panic!("Must be a mime body");
     };
 
@@ -389,13 +392,14 @@ fn test_message_decrypt_and_verify_mime_go() {
     let verification_keys = get_test_public_address_key_source(&pgp, TEST_VERIFICATION_KEY_GO);
 
     let test_message = TestMessage(true, TEST_MESSAGE_BODY_GO.into());
-    let (decrypted_message, verifier) = test_message.decrypt(&pgp, &decryption_keys).unwrap();
-    assert_eq!(decrypted_message.body(), TEST_EXPECTED_BODY_MIME_GO);
-    let verification_result = verifier.verify_signature(&pgp, &verification_keys);
+    let decrypted_message = test_message.decrypt(&pgp, &decryption_keys).unwrap();
+    let decrypted_message_body = decrypted_message.processed_body().unwrap();
+    assert_eq!(decrypted_message_body.body(), TEST_EXPECTED_BODY_MIME_GO);
+    let verification_result = decrypted_message.verify_signature(&pgp, &verification_keys);
     assert!(verification_result.is_ok());
 
-    assert!(decrypted_message.is_mime());
-    let DecryptedBody::Mime(processed_messsage) = decrypted_message else {
+    assert!(decrypted_message_body.is_mime());
+    let DecryptedBody::Mime(processed_messsage) = decrypted_message_body else {
         panic!("Must be a mime body");
     };
 
