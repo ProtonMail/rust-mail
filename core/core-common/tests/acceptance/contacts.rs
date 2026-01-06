@@ -6,7 +6,6 @@ use proton_core_api::services::proton::{
     ContactSendingPreferences as ApiContactSendingPreferences, CoreEvent, EventId,
 };
 use proton_core_api::services::proton::{ContactEmailId, ContactId, ContactUID, LabelId};
-use proton_core_common::UserContext;
 use proton_core_common::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
 use proton_core_common::event_loop::event_subscriber::CoreEventSubscriber;
 use proton_core_common::event_loop::v6::CoreEventCache;
@@ -15,6 +14,7 @@ use proton_core_common::models::{
 };
 use proton_core_common::test_utils::account::unlocked_user_key;
 use proton_core_common::test_utils::test_context::TestContext;
+use proton_core_common::{AddressKeysContactFetchPolicy, UserContext};
 use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::proton_crypto::crypto::AccessKeyInfo;
 use proton_crypto_account::proton_crypto::new_pgp_provider;
@@ -322,6 +322,7 @@ async fn test_contact_load_public_address_keys() {
             &mut tether,
             &unlocked_user_keys,
             contact_email.as_ref(),
+            AddressKeysContactFetchPolicy::AllowCachedFallback,
         )
         .await
         .expect("there should be no error or key extraction")
@@ -365,6 +366,7 @@ async fn test_contact_load_public_address_keys() {
             &mut tether,
             &unlocked_user_keys,
             contact_email.as_ref(),
+            AddressKeysContactFetchPolicy::AllowCachedFallback,
         )
         .await
         .expect("there should be no error or key extraction")

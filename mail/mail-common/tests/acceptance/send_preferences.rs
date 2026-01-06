@@ -1,4 +1,5 @@
 use proton_core_api::services::proton::PrivateEmailRef;
+use proton_core_common::AddressKeysContactFetchPolicy;
 use proton_crypto_inbox::keys::PackageCryptoType;
 use proton_crypto_inbox::message::packages::PackageMimeType;
 use proton_crypto_inbox::proton_crypto;
@@ -36,6 +37,7 @@ async fn load_sending_preferences() {
             PrivateEmailRef::new(recipient_email),
             mail_settings.crypto_mail_settings(),
             Default::default(),
+            AddressKeysContactFetchPolicy::RequireSync,
         )
         .await
         .unwrap();
@@ -75,6 +77,7 @@ async fn load_sending_preferences_for_self() {
             PrivateEmailRef::new(self_address),
             mail_settings.crypto_mail_settings(),
             Default::default(),
+            AddressKeysContactFetchPolicy::RequireSync,
         )
         .await
         .unwrap();
