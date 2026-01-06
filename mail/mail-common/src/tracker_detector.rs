@@ -5,8 +5,9 @@ use anyhow::Context;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::ModelExtension;
+use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
-use stash::stash::{StashError, Tether};
+use stash::stash::{StashError, WatcherHandle};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Weak;
 use std::time::Duration;
@@ -97,16 +98,19 @@ impl TrackerDetector {
     }
 
     pub async fn get_tracker_info(
+        &self,
         message_id: LocalMessageId,
-        tether: &Tether,
     ) -> Result<Option<TrackerInfo>, StashError> {
-        let Some(tracked) = MessageTracker::load(message_id, tether).await? else {
+        let ctx = self.ctx.upgrade().context("Could not find the context")?;
+        let tether = ctx.user_context().stash().connection().await?;
+
+        let Some(tracked) = MessageTracker::load(message_id, &tether).await? else {
             return Ok(None);
         };
 
         let last_checked_at = tracked.last_checked_at;
 
-        let tracking_urls = MessageTrackerUrl::find_by_message(message_id, tether).await?;
+        let tracking_urls = MessageTrackerUrl::find_by_message(message_id, &tether).await?;
 
         let mut domains: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
 
@@ -126,5 +130,37 @@ impl TrackerDetector {
             trackers,
             last_checked_at,
         }))
+    }
+
+    pub async fn watch(
+        &self,
+        message_id: LocalMessageId,
+    ) -> Result<(Option<TrackerInfo>, WatcherHandle), StashError> {
+        let ctx = self.ctx.upgrade().context("Could not find the context")?;
+        let info = self.get_tracker_info(message_id).await?;
+
+        let tether = ctx.user_context().stash().connection().await?;
+        let handle = tether.subscribe_to(move |sender| Box::new(TrackerWatcher { sender }))?;
+
+        Ok((info, handle))
+    }
+}
+
+pub struct TrackerWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for TrackerWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![
+            MessageTracker::table_name().to_string(),
+            MessageTrackerUrl::table_name().to_string(),
+        ]
+    }
+
+    fn on_tables_changed(&self, _tables: &BTreeSet<String>) {
+        if let Err(e) = self.sender.send(()) {
+            tracing::error!("Failed to send notification for tracker changes: {}", e);
+        }
     }
 }

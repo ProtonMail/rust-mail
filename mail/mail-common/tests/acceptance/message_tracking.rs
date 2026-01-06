@@ -531,7 +531,9 @@ async fn get_tracker_info_returns_correct_data() {
     let mut tether = user_ctx.user_stash().connection().await.unwrap();
     let message_id: LocalMessageId = 1.into();
 
-    let tracker_info = TrackerDetector::get_tracker_info(message_id, &tether)
+    let tracker_info = user_ctx
+        .get_service::<TrackerDetector>()
+        .get_tracker_info(message_id)
         .await
         .unwrap();
     assert!(tracker_info.is_none());
@@ -548,7 +550,9 @@ async fn get_tracker_info_returns_correct_data() {
         .await
         .unwrap();
 
-    let tracker_info = TrackerDetector::get_tracker_info(message_id, &tether)
+    let tracker_info = user_ctx
+        .get_service::<TrackerDetector>()
+        .get_tracker_info(message_id)
         .await
         .unwrap();
     assert!(tracker_info.unwrap().trackers.is_empty());
@@ -592,7 +596,9 @@ async fn get_tracker_info_returns_correct_data() {
         .await
         .unwrap();
 
-    let tracker_info = TrackerDetector::get_tracker_info(message_id, &tether)
+    let tracker_info = user_ctx
+        .get_service::<TrackerDetector>()
+        .get_tracker_info(message_id)
         .await
         .unwrap()
         .unwrap();

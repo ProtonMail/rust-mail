@@ -1,100 +1,90 @@
 use crate::core::datatypes::Id;
-use crate::errors::UserSessionError;
+use crate::errors::unexpected::UnexpectedError;
+use crate::errors::{ProtonError, UserSessionError};
 use crate::mail::datatypes::TrackerInfo;
 use crate::mail::user_session::MailUserSession;
-use crate::{AsyncLiveQueryCallback, WatchHandle, declare_live_query_tagger, uniffi_async};
-use proton_mail_common::ProtonMailError as RealProtonMailError;
+use crate::uniffi_async;
 use proton_mail_common::TrackerDetector;
-use proton_mail_common::datatypes::LocalMessageId;
-use proton_mail_common::models::{MessageTracker, MessageTrackerUrl};
-use sqlite_watcher::watcher::TableObserver;
-use stash::orm::Model;
-use std::collections::BTreeSet;
+use proton_mail_common::{MailContextError, ProtonMailError as RealProtonMailError};
+use stash::stash::WatcherHandle;
 use std::sync::Arc;
-
-declare_live_query_tagger!(WatchTrackerInfoMarker);
-
-#[derive(Clone, uniffi::Record)]
-pub struct WatchedTrackerInfo {
-    pub tracker_info: Option<TrackerInfo>,
-    pub watch_handle: Arc<WatchHandle>,
-}
+use tokio_util::sync::CancellationToken;
+use uniffi_runtime::async_runtime;
 
 #[uniffi_export]
 pub async fn get_tracker_info_for_message(
     session: &MailUserSession,
     message_id: Id,
 ) -> Result<Option<TrackerInfo>, UserSessionError> {
-    let stash = session.user_stash()?;
+    let ctx = session.ctx()?;
 
     uniffi_async::<_, RealProtonMailError, _>(async move {
-        let tether = stash.connection().await?;
-        Ok(
-            TrackerDetector::get_tracker_info(message_id.into(), &tether)
-                .await?
-                .map(Into::into),
-        )
+        let result = ctx
+            .user_context()
+            .get_service::<TrackerDetector>()
+            .get_tracker_info(message_id.into())
+            .await?
+            .map(Into::into);
+
+        Ok(result)
     })
     .await
     .map_err(UserSessionError::from)
 }
 
 #[uniffi_export]
-pub async fn watch_tracker_info_for_message(
+pub async fn watch_tracker_info_stream(
     session: &MailUserSession,
     message_id: Id,
-    callback: Arc<dyn AsyncLiveQueryCallback>,
-) -> Result<WatchedTrackerInfo, UserSessionError> {
+) -> Result<Arc<WatchTrackerInfoStream>, UserSessionError> {
     let ctx = session.ctx()?;
-    let stash = session.user_stash()?;
 
     uniffi_async(async move {
-        let tether = stash.connection().await?;
-
-        let info = TrackerDetector::get_tracker_info(message_id.into(), &tether).await?;
-
-        let local_message_id: LocalMessageId = message_id.into();
-        let handle = tether.subscribe_to(move |sender| {
-            Box::new(MessageTrackerObserver {
-                message_id: local_message_id,
-                sender,
-            })
-        })?;
-
-        let watch_handle = WatchTrackerInfoMarker::watch_channel_async(&*ctx, handle, callback);
-
-        Ok::<_, RealProtonMailError>(WatchedTrackerInfo {
-            tracker_info: info.map(Into::into),
-            watch_handle,
-        })
+        let (info, handle) = ctx
+            .user_context()
+            .get_service::<TrackerDetector>()
+            .watch(message_id.into())
+            .await?;
+        Ok::<_, RealProtonMailError>(Arc::new(WatchTrackerInfoStream {
+            initial_info: info.map(Into::into),
+            handle,
+            token: ctx.user_context().create_child_cancellation_token(),
+        }))
     })
     .await
     .map_err(UserSessionError::from)
 }
 
-struct MessageTrackerObserver {
-    message_id: LocalMessageId,
-    sender: flume::Sender<()>,
+#[derive(uniffi::Object)]
+pub struct WatchTrackerInfoStream {
+    initial_info: Option<TrackerInfo>,
+    handle: WatcherHandle,
+    token: CancellationToken,
 }
 
-impl TableObserver for MessageTrackerObserver {
-    fn tables(&self) -> Vec<String> {
-        vec![
-            MessageTracker::table_name().to_string(),
-            MessageTrackerUrl::table_name().to_string(),
-        ]
+#[uniffi_export]
+impl WatchTrackerInfoStream {
+    #[must_use]
+    pub fn initial_info(&self) -> Option<TrackerInfo> {
+        self.initial_info.clone()
     }
 
-    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
-        self.sender
-            .send(())
-            .inspect_err(|e| {
-                tracing::error!(
-                    "Failed to send notification for TrackerInfoTableObserver (message_id={}): {:?}",
-                    self.message_id,
-                    e
-                );
+    pub async fn next_async(self: Arc<Self>) -> Result<(), ProtonError> {
+        async_runtime()
+            .spawn(async move {
+                let future = self.handle.receiver.recv_async();
+                self.token
+                    .run_until_cancelled(future)
+                    .await
+                    .ok_or_else(|| RealProtonMailError::from(MailContextError::TaskCancelled))?
+                    .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))
             })
-            .ok();
+            .await
+            .map_err(RealProtonMailError::from)??;
+        Ok(())
+    }
+
+    pub fn cancel(&self) {
+        self.token.cancel();
     }
 }
