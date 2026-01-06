@@ -6,7 +6,7 @@ use bytes::Buf;
 use cache::{CachedAddressKey, CachedUserKey};
 mod manager;
 use crate::{
-    ContactError,
+    ContactError, CoreContextError,
     models::{Contact, ContactEmail},
 };
 use crate::{CoreContextResult, UserContext};
@@ -29,6 +29,7 @@ use stash::{
     stash::{StashError, Tether},
 };
 use thiserror::Error;
+use tracing::error;
 
 #[allow(clippy::module_name_repetitions)]
 type CachedUserKeys = Vec<CachedUserKey>;
@@ -151,6 +152,7 @@ impl UserContext {
         tx: &mut impl RunTransaction,
         unlocked_user_keys: &UnlockedUserKeys<P>,
         email: PrivateEmailRef<'_>,
+        fetch_policy: AddressKeysContactFetchPolicy,
     ) -> CoreContextResult<Option<PinnedPublicKeys<<P>::PublicKey>>>
     where
         P: PGPProviderSync,
@@ -168,7 +170,21 @@ impl UserContext {
                 ))?;
 
         // On success try to sync the most recent full contact including its v-cards from the BE.
-        Contact::force_sync_with_card(local_contact_id, self.session(), tx).await?;
+        if let Err(e) = Contact::force_sync_with_card(local_contact_id, self.session(), tx)
+            .await
+            .inspect_err(|e| error!("Failed to force sync contact: {e}"))
+        {
+            match e {
+                CoreContextError::Api(e) if e.is_network_failure() => {
+                    match fetch_policy {
+                        AddressKeysContactFetchPolicy::RequireSync => { //continue
+                        }
+                        AddressKeysContactFetchPolicy::AllowCachedFallback => return Err(e.into()),
+                    }
+                }
+                e => return Err(e),
+            }
+        }
 
         let mut contact = Contact::load(local_contact_id, tx.tether())
             .await?
@@ -176,6 +192,16 @@ impl UserContext {
 
         Ok(extract_pinned_keys(pgp, tx.tether(), unlocked_user_keys, &mut contact, email).await?)
     }
+}
+
+#[derive(Debug, Copy, Clone, Default)]
+pub enum AddressKeysContactFetchPolicy {
+    #[default]
+    // Always requires the contacts to be synced from the server, and will error out if
+    // the request fails.
+    RequireSync,
+    // If the request fails due to lack of network, attempt to load existing cached data.
+    AllowCachedFallback,
 }
 
 /// Helper function to extract pinned keys from a contact with cards.

@@ -16,6 +16,7 @@ use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{PrivateEmail, PrivateEmailRef};
 use proton_core_api::session::Session;
+use proton_core_common::AddressKeysContactFetchPolicy;
 use proton_core_common::models::{ModelExtension, PaidSubscription};
 use proton_core_common::services::NetworkMonitorService;
 use proton_crypto_account::keys::{
@@ -79,6 +80,7 @@ where
                 PrivateEmailRef::new(recipient.as_clear_text_str()),
                 crypto_mail_settings,
                 composer_preference,
+                AddressKeysContactFetchPolicy::RequireSync,
             )
             .await
             .map_err(|err| {

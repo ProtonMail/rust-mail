@@ -45,8 +45,8 @@ use proton_core_common::services::{
     EventLoopService, EventPollConfigService, NetworkMonitorService, UserIssueReporterService,
 };
 use proton_core_common::{
-    ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, Origin,
-    RebasableQueue, UserContext, services::UserMetricService,
+    AddressKeysContactFetchPolicy, ContactError, Context as CoreContext, CoreContextError,
+    KeyHandlingError, Origin, RebasableQueue, UserContext, services::UserMetricService,
 };
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
@@ -697,6 +697,7 @@ impl MailUserContext {
         email: PrivateEmailRef<'_>,
         settings: CryptoMailSettings,
         composer_preference: ComposerPreference,
+        fetch_policy: AddressKeysContactFetchPolicy,
     ) -> MailContextResult<SendPreferences<P::PublicKey>>
     where
         P: PGPProviderSync,
@@ -746,8 +747,13 @@ impl MailUserContext {
         let (api_keys_result, vcard_keys_result) = join!(
             self.user_context
                 .public_address_keys(pgp, email_cloned, false),
-            self.user_context
-                .public_address_keys_from_contacts(pgp, tx, &user_keys, email)
+            self.user_context.public_address_keys_from_contacts(
+                pgp,
+                tx,
+                &user_keys,
+                email,
+                fetch_policy
+            ),
         );
 
         // Handle error when loading contact keys, but ignore CardNotFound as it's valid to have no contact.
