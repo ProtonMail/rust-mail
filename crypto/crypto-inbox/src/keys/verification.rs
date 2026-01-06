@@ -11,7 +11,7 @@ use proton_crypto_account::{
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum KeyOwnership {
     /// The public keys are extracted from self owned keys.
-    Own,
+    SelfOwn,
     /// The public keys are from other users.
     Other,
 }
@@ -62,7 +62,7 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
             .map(|address_key| address_key.as_public_key().clone())
             .collect::<Vec<_>>();
         InboxVerificationPreferences {
-            ownership: KeyOwnership::Own,
+            ownership: KeyOwnership::SelfOwn,
             pinned_keys: Vec::default(),
             api_keys: active_address_keys,
             compromised_fingerprints,
@@ -144,6 +144,6 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
     /// Are the keys extract from self owned keys.
     #[must_use]
     pub fn self_owned_keys(&self) -> bool {
-        matches!(self.ownership, KeyOwnership::Own)
+        matches!(self.ownership, KeyOwnership::SelfOwn)
     }
 }
