@@ -21,6 +21,7 @@ use crate::intent::{LocalMessageId, SearchIndexIntent, SearchOperation};
 use crate::storage::StashBlobStorage;
 use crate::traits::MessageDataProvider;
 use crate::worker::SearchIndexWorker;
+use proton_task_service::TaskService;
 
 /// Error type for search service operations
 #[derive(Debug, thiserror::Error)]
@@ -66,11 +67,14 @@ impl MailSearchService {
     /// - Text index for trigram-based full-text search
     /// - Built-in processor for tokenization
     /// - Persistent blob storage via Stash
-    pub fn new(stash: Stash) -> Self {
+    ///
+    /// The `task_service` is used to spawn background tasks that can be paused
+    /// when the app goes into the background.
+    pub fn new(stash: Stash, task_service: Arc<TaskService>) -> Self {
         info!("Initializing Foundation Search engine with Stash");
 
         let storage = StashBlobStorage::new(stash.clone());
-        let engine = FoundationSearchEngine::new_with_stash(storage);
+        let engine = FoundationSearchEngine::new(storage, task_service);
 
         Self {
             engine: Arc::new(RwLock::new(engine)),

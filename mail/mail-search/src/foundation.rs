@@ -49,9 +49,9 @@ use tracing::{debug, error, info, warn};
 
 use crate::engine::{CleanupResult, IndexResult, SearchStats};
 use crate::error::SearchError;
-use crate::storage::StashBlobStorage;
 use crate::traits::BlobStorage;
-use stash::stash::Stash;
+use proton_task_service::{IntoNonPausableFuture, TaskService};
+use std::sync::Arc;
 
 /// Extract a human-readable message from a panic payload
 fn panic_payload_to_string(payload: &Box<dyn std::any::Any + Send>) -> String {
@@ -165,14 +165,16 @@ pub struct FoundationSearchEngine<S: BlobStorage> {
     serdes: SerDes,
     /// Blob storage backend
     storage: S,
-    /// Stash reference for transactional saves (if using StashBlobStorage)
-    /// This allows us to create transactions for atomic blob saves
-    stash: Option<Stash>,
+    /// Task service for spawning pausable background tasks
+    task_service: Arc<TaskService>,
 }
 
 impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
     /// Create a new Foundation Search engine with the given storage backend
-    pub fn new(storage: S) -> Self {
+    ///
+    /// The `task_service` is used to spawn background tasks that can be paused
+    /// when the app goes into the background.
+    pub fn new(storage: S, task_service: Arc<TaskService>) -> Self {
         info!("Initializing Foundation Search engine");
 
         let engine = Engine::builder()
@@ -184,29 +186,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
             engine,
             serdes: SerDes::Cbor,
             storage,
-            stash: None,
-        }
-    }
-}
-
-impl FoundationSearchEngine<StashBlobStorage> {
-    /// Create a new Foundation Search engine with StashBlobStorage
-    ///
-    /// This constructor stores a reference to the Stash for transactional saves.
-    pub fn new_with_stash(storage: StashBlobStorage) -> Self {
-        info!("Initializing Foundation Search engine with Stash");
-
-        let stash = storage.stash().clone();
-        let engine = Engine::builder()
-            .with_builtin_processor(Default::default())
-            .with_index(TextIndexSansIo::default())
-            .build();
-
-        Self {
-            engine,
-            serdes: SerDes::Cbor,
-            storage,
-            stash: Some(stash),
+            task_service,
         }
     }
 }
@@ -260,19 +240,26 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         )>();
         let storage_clone = storage.clone();
 
-        // Spawn async task to handle Load requests
-        let load_handle = tokio::spawn(async move {
-            while let Some((name, response_tx)) = load_rx.recv().await {
-                let blob_result = storage_clone
-                    .load(&name)
-                    .await
-                    .map_err(|e| {
-                        SearchError::BlobStorage(format!("Failed to load '{}': {}", name, e))
-                    })
-                    .map(|opt| opt.unwrap_or_default());
-                let _ = response_tx.send(blob_result);
+        // Spawn async task to handle Load requests using TaskService
+        // This task is marked as non-pausable because it's part of a critical indexing
+        // operation that must complete. If it gets paused, the blocking thread will
+        // hang waiting for load responses, causing the entire indexing operation to fail.
+        let task_service = Arc::clone(&self.task_service);
+        let load_handle = task_service.spawn(
+            async move {
+                while let Some((name, response_tx)) = load_rx.recv().await {
+                    let blob_result = storage_clone
+                        .load(&name)
+                        .await
+                        .map_err(|e| {
+                            SearchError::BlobStorage(format!("Failed to load '{}': {}", name, e))
+                        })
+                        .map(|opt| opt.unwrap_or_default());
+                    let _ = response_tx.send(blob_result);
+                }
             }
-        });
+            .into_non_pausable(),
+        );
 
         // Clone load_tx for use in spawn_blocking (we'll drop the original after)
         let load_tx_for_blocking = load_tx.clone();
@@ -329,64 +316,24 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
         // Close load channel and wait for load task to finish
         drop(load_tx);
-        load_handle
-            .await
-            .map_err(|e| SearchError::Panic(format!("Load task failed: {}", e)))?;
+        // Handle task completion or cancellation gracefully
+        // If the task was cancelled (e.g., during app shutdown), we should fail the operation
+        // rather than panic, as this is an expected condition during cancellation
+        if let Err(join_error) = load_handle.await {
+            let msg = if join_error.is_panic() {
+                panic_payload_to_string(&join_error.into_panic())
+            } else {
+                // Task was cancelled - this is expected during app lifecycle events
+                // Return an error that indicates the operation was cancelled
+                return Err(SearchError::Internal(
+                    "Indexing operation was cancelled".to_string(),
+                ));
+            };
+            return Err(SearchError::Panic(format!("Load task panicked: {}", msg)));
+        }
 
         // Return a guard that ensures the blocking thread completes even if dropped
         Ok(BlockingTaskGuard::new(blocking_handle))
-    }
-
-    /// Execute all Save operations atomically in a single transaction
-    ///
-    /// This ensures that either all blobs are saved or none are, preventing
-    /// orphaned blobs if the operation fails mid-way.
-    ///
-    /// For StashBlobStorage (when stash is available), uses a database transaction.
-    /// For other implementations, falls back to individual saves.
-    async fn execute_save_operations_atomically(
-        &self,
-        save_operations: Vec<(String, Vec<u8>)>,
-    ) -> Result<(), SearchError> {
-        if save_operations.is_empty() {
-            return Ok(());
-        }
-
-        // Use transactional save if we have a Stash reference (StashBlobStorage)
-        if let Some(stash) = &self.stash {
-            use stash::params;
-            use stash::stash::StashError as SE;
-
-            let mut tether = stash.connection().await.map_err(|e| {
-                SearchError::BlobStorage(format!("Failed to get connection: {}", e))
-            })?;
-
-            let timestamp = chrono::Utc::now().timestamp();
-            let count = save_operations.len();
-            tether
-                .tx::<_, (), SE>(async |bond| {
-                    for (name, data) in save_operations {
-                        bond.execute(
-                            "INSERT OR REPLACE INTO search_index_blobs (blob_name, blob_data, updated_at) 
-                             VALUES (?1, ?2, ?3)",
-                            params![name, data, timestamp],
-                        )
-                        .await?;
-                    }
-                    Ok(())
-                })
-                .await
-                .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {}", e)))?;
-
-            debug!("Saved {} blobs atomically in transaction", count);
-        } else {
-            // Fallback: save individually (non-transactional, but preserves existing behavior)
-            for (name, data) in save_operations {
-                self.storage.save(&name, &data).await?;
-            }
-        }
-
-        Ok(())
     }
 
     /// Index a document and commit
@@ -437,8 +384,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
         // Execute all Save operations atomically in a transaction
         // This prevents orphaned blobs if the operation fails mid-way
-        self.execute_save_operations_atomically(save_operations)
-            .await?;
+        self.storage.save_batch_atomic(save_operations).await?;
         Ok(IndexResult::needs_cleanup())
     }
 
@@ -494,8 +440,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
         // Execute all Save operations atomically in a transaction
         // This prevents orphaned blobs if the operation fails mid-way
-        self.execute_save_operations_atomically(save_operations)
-            .await?;
+        self.storage.save_batch_atomic(save_operations).await?;
         Ok(IndexResult::needs_cleanup())
     }
 
@@ -548,8 +493,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
         // Execute all Save operations atomically in a transaction
         // This prevents orphaned blobs if the operation fails mid-way
-        self.execute_save_operations_atomically(save_operations)
-            .await?;
+        self.storage.save_batch_atomic(save_operations).await?;
         Ok(IndexResult::needs_cleanup())
     }
 

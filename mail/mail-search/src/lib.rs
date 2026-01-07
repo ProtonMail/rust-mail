@@ -25,9 +25,11 @@
 //!
 //! ```ignore
 //! use proton_mail_search::{MailSearchService, SearchIndexWorker, MessageDataProvider};
+//! use proton_task_service::TaskService;
 //!
-//! // Create service with database connection
-//! let service = MailSearchService::new(stash);
+//! // Create service with database connection and task service
+//! let task_service = TaskService::new(tokio::runtime::Handle::current())?;
+//! let service = MailSearchService::new(stash, task_service);
 //!
 //! // Create worker with message data provider
 //! let worker = SearchIndexWorker::new(stash, service.clone(), data_provider);
@@ -151,7 +153,11 @@ mod tests {
     #[tokio::test]
     async fn test_foundation_engine_index_and_search_body() {
         let storage = InMemoryBlobStorage::new();
-        let mut engine = FoundationSearchEngine::new(storage.clone());
+        let task_service = std::sync::Arc::new(
+            proton_task_service::TaskService::new(tokio::runtime::Handle::current())
+                .expect("Failed to create TaskService"),
+        );
+        let mut engine = FoundationSearchEngine::new(storage.clone(), task_service);
 
         // Index body text (with default metadata for this test)
         let default_metadata = crate::traits::MessageMetadata::default();
@@ -302,7 +308,11 @@ mod tests {
         }
 
         // 2. Create MailSearchService
-        let search_service = MailSearchService::new(stash.clone());
+        let task_service = std::sync::Arc::new(
+            proton_task_service::TaskService::new(tokio::runtime::Handle::current())
+                .expect("Failed to create TaskService"),
+        );
+        let search_service = MailSearchService::new(stash.clone(), task_service);
 
         // 3. Create mock MessageDataProvider with 5 messages
         let data_provider = Arc::new(MockMessageDataProvider::new());
@@ -420,7 +430,11 @@ mod tests {
     #[tokio::test]
     async fn test_foundation_engine_stats() {
         let storage = InMemoryBlobStorage::new();
-        let engine = FoundationSearchEngine::new(storage);
+        let task_service = std::sync::Arc::new(
+            proton_task_service::TaskService::new(tokio::runtime::Handle::current())
+                .expect("Failed to create TaskService"),
+        );
+        let engine = FoundationSearchEngine::new(storage, task_service);
 
         let stats = engine.stats();
         assert_eq!(stats.documents_total, 0);
@@ -430,7 +444,11 @@ mod tests {
     #[tokio::test]
     async fn test_foundation_engine_cleanup_empty() {
         let storage = InMemoryBlobStorage::new();
-        let mut engine = FoundationSearchEngine::new(storage);
+        let task_service = std::sync::Arc::new(
+            proton_task_service::TaskService::new(tokio::runtime::Handle::current())
+                .expect("Failed to create TaskService"),
+        );
+        let mut engine = FoundationSearchEngine::new(storage, task_service);
 
         let result = engine.cleanup().await;
         assert!(result.is_ok());
@@ -440,7 +458,11 @@ mod tests {
     #[tokio::test]
     async fn test_foundation_engine_remove_nonexistent() {
         let storage = InMemoryBlobStorage::new();
-        let mut engine = FoundationSearchEngine::new(storage);
+        let task_service = std::sync::Arc::new(
+            proton_task_service::TaskService::new(tokio::runtime::Handle::current())
+                .expect("Failed to create TaskService"),
+        );
+        let mut engine = FoundationSearchEngine::new(storage, task_service);
 
         // Removing a message that was never indexed should succeed
         let result = engine.remove_message("nonexistent-msg").await;

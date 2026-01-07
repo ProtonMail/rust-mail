@@ -16,25 +16,6 @@ use crate::intent::{LocalMessageId, SearchIndexIntent, SearchOperation};
 use crate::service::MailSearchService;
 use crate::traits::MessageDataProvider;
 
-/// Macro helper for executing database operations within a transaction
-///
-/// This macro reduces boilerplate for the common pattern of getting a tether
-/// connection and running a transaction.
-///
-/// Usage:
-/// ```ignore
-/// with_transaction!(self, |bond| async move {
-///     // ... transaction code ...
-///     Ok(())
-/// }).await?;
-/// ```
-macro_rules! with_transaction {
-    ($self:expr, |$bond:ident| async move $body:block) => {{
-        let mut tether = $self.stash.connection().await?;
-        tether.tx::<_, (), StashError>(async |$bond| $body).await
-    }};
-}
-
 /// Worker-specific error types
 ///
 /// This enum provides type-safe error handling instead of string matching.
@@ -56,9 +37,6 @@ impl From<StashError> for WorkerError {
 
 /// Maximum number of retries before giving up on an intent
 const MAX_RETRY_COUNT: u64 = 3;
-
-/// Delay between processing attempts when queue is empty
-const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Delay after processing an intent (to avoid hammering the CPU)
 const PROCESSING_DELAY: Duration = Duration::from_millis(10);
@@ -121,14 +99,33 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
         }
     }
 
+    /// Wait for watcher notification
+    ///
+    /// Returns `true` if notification received, `false` if watcher closed (worker should exit)
+    async fn wait_for_watcher_notification(&self, context: &str) -> bool {
+        match self.watcher_handle.receiver.recv_async().await {
+            Ok(()) => {
+                debug!(
+                    "Worker woken up by table watcher notification ({})",
+                    context
+                );
+                true
+            }
+            Err(_) => {
+                // Watcher closed - database watcher has been closed, exit worker
+                error!("Database watcher closed ({}), exiting worker", context);
+                false
+            }
+        }
+    }
+
     /// Run the worker loop
     ///
     /// This method runs indefinitely, processing intents as they arrive.
     ///
     /// Uses database table watcher for event-driven notification: waits for changes
     /// to the `search_index_intents` table. The watcher only fires after transactions
-    /// commit, eliminating race conditions. Falls back to timeout-based polling if no
-    /// notification is received, ensuring cleanup runs periodically even when the queue is empty.
+    /// commit, eliminating race conditions. Cleanup runs when the queue is empty.
     pub async fn run(&self) {
         debug!("Search index worker started (table watcher)");
 
@@ -145,52 +142,18 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
                             error!("Cleanup failed: {}", e);
                         }
 
-                        // Wait for table change notification or timeout (whichever comes first)
-                        // This ensures we wake up immediately when intents are queued (after commit),
-                        // but also periodically check for cleanup even if no intents arrive
-                        let watcher_future = self.watcher_handle.receiver.recv_async();
-                        let timeout_future = sleep(POLL_INTERVAL);
-
-                        tokio::select! {
-                            result = watcher_future => {
-                                match result {
-                                    Ok(()) => {
-                                        // Table changed (new intent committed), process immediately
-                                        debug!("Worker woken up by table watcher notification");
-                                    }
-                                    Err(_) => {
-                                        // Watcher closed (shouldn't happen in normal operation)
-                                        warn!("Table watcher closed, falling back to polling");
-                                    }
-                                }
-                            }
-                            _ = timeout_future => {
-                                // Timeout reached, check for intents anyway (fallback polling)
-                                debug!("Worker timeout reached, checking for intents");
-                            }
+                        // Wait for table change notification
+                        // The watcher will notify us immediately when intents are queued (after commit)
+                        if !self.wait_for_watcher_notification("normal operation").await {
+                            return;
                         }
                     }
                 }
                 Err(e) => {
                     error!("Worker error: {}", e);
-                    // On error, wait for notification or timeout before retrying
-                    let watcher_future = self.watcher_handle.receiver.recv_async();
-                    let timeout_future = sleep(POLL_INTERVAL);
-
-                    tokio::select! {
-                        result = watcher_future => {
-                            match result {
-                                Ok(()) => {
-                                    debug!("Worker woken up after error");
-                                }
-                                Err(_) => {
-                                    warn!("Table watcher closed after error");
-                                }
-                            }
-                        }
-                        _ = timeout_future => {
-                            debug!("Worker timeout after error");
-                        }
+                    // On error, wait for notification before retrying
+                    if !self.wait_for_watcher_notification("after error").await {
+                        return;
                     }
                 }
             }
@@ -233,12 +196,15 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
 
         // Delete dead letter intents
         if !dead_letter_intents.is_empty() {
-            with_transaction!(self, |bond| async move {
-                for intent in &dead_letter_intents {
-                    intent.delete(bond).await?;
-                }
-                Ok(())
-            })?;
+            let mut tether = self.stash.connection().await?;
+            tether
+                .tx::<_, (), StashError>(async |bond| {
+                    for intent in &dead_letter_intents {
+                        intent.delete(bond).await?;
+                    }
+                    Ok(())
+                })
+                .await?;
         }
 
         // Process index intents in batch
@@ -273,14 +239,17 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
                 );
 
                 // Success - delete the intent (content_hash was already saved to separate table in index_message)
-                with_transaction!(self, |bond| async move {
-                    intent.delete(bond).await?;
-                    debug!(
-                        "Deleted intent: {} for message {}",
-                        intent.operation, intent.message_id
-                    );
-                    Ok(())
-                })?;
+                let mut tether = self.stash.connection().await?;
+                tether
+                    .tx::<_, (), StashError>(async |bond| {
+                        intent.delete(bond).await?;
+                        debug!(
+                            "Deleted intent: {} for message {}",
+                            intent.operation, intent.message_id
+                        );
+                        Ok(())
+                    })
+                    .await?;
 
                 info!(
                     "Completed: {} for message {}",
@@ -295,9 +264,12 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
                             "Deferring intent for message {} (no remote ID yet)",
                             intent.message_id
                         );
-                        with_transaction!(self, |bond| async move {
-                            intent.defer(bond, DEFER_DELAY_SECONDS).await
-                        })?;
+                        let mut tether = self.stash.connection().await?;
+                        tether
+                            .tx::<_, (), StashError>(async |bond| {
+                                intent.defer(bond, DEFER_DELAY_SECONDS).await
+                            })
+                            .await?;
                     }
                     WorkerError::Other(err) => {
                         // Other failures - increment retry count
@@ -307,10 +279,10 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
                         );
 
                         let mut intent = intent;
-                        with_transaction!(
-                            self,
-                            |bond| async move { intent.mark_failed(bond).await }
-                        )?;
+                        let mut tether = self.stash.connection().await?;
+                        tether
+                            .tx::<_, (), StashError>(async |bond| intent.mark_failed(bond).await)
+                            .await?;
                     }
                 }
             }
@@ -458,19 +430,25 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
                 }
                 PrepareIndexResult::SkipDuplicate => {
                     // Delete intent since content hasn't changed - no need to re-index
-                    with_transaction!(self, |bond| async move { intent.delete(bond).await })?;
+                    let mut tether = self.stash.connection().await?;
+                    tether
+                        .tx::<_, (), StashError>(async |bond| intent.delete(bond).await)
+                        .await?;
                 }
             }
         }
 
         // Defer intents without remote IDs (don't block the queue)
         if !intents_to_defer.is_empty() {
-            with_transaction!(self, |bond| async move {
-                for intent in &intents_to_defer {
-                    intent.defer(bond, DEFER_DELAY_SECONDS).await?;
-                }
-                Ok(())
-            })?;
+            let mut tether = self.stash.connection().await?;
+            tether
+                .tx::<_, (), StashError>(async |bond| {
+                    for intent in &intents_to_defer {
+                        intent.defer(bond, DEFER_DELAY_SECONDS).await?;
+                    }
+                    Ok(())
+                })
+                .await?;
         }
 
         let prep_elapsed = prep_start.elapsed().as_secs_f64();
@@ -514,17 +492,24 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
                     "Batch index succeeded for {} messages",
                     messages_to_index.len()
                 );
-                with_transaction!(self, |bond| async move {
-                    for (intent, _, _, _, content_hash) in &messages_to_index {
-                        // Save content hash to separate table before deleting intent
-                        // This persists the hash even after intent deletion, enabling
-                        // future duplicate detection
-                        SearchIndexIntent::save_content_hash(intent.message_id, content_hash, bond)
+                let mut tether = self.stash.connection().await?;
+                tether
+                    .tx::<_, (), StashError>(async |bond| {
+                        for (intent, _, _, _, content_hash) in &messages_to_index {
+                            // Save content hash to separate table before deleting intent
+                            // This persists the hash even after intent deletion, enabling
+                            // future duplicate detection
+                            SearchIndexIntent::save_content_hash(
+                                intent.message_id,
+                                content_hash,
+                                bond,
+                            )
                             .await?;
-                        intent.delete(bond).await?;
-                    }
-                    Ok(())
-                })?;
+                            intent.delete(bond).await?;
+                        }
+                        Ok(())
+                    })
+                    .await?;
 
                 let batch_elapsed = batch_start.elapsed();
                 info!(
@@ -541,12 +526,15 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
                     messages_to_index.len(),
                     e
                 );
-                with_transaction!(self, |bond| async move {
-                    for (mut intent, _, _, _, _) in messages_to_index {
-                        intent.mark_failed(bond).await?;
-                    }
-                    Ok(())
-                })?;
+                let mut tether = self.stash.connection().await?;
+                tether
+                    .tx::<_, (), StashError>(async |bond| {
+                        for (mut intent, _, _, _, _) in messages_to_index {
+                            intent.mark_failed(bond).await?;
+                        }
+                        Ok(())
+                    })
+                    .await?;
             }
         }
 
@@ -588,9 +576,12 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
 
                 // Save content hash to separate table after successful indexing
                 // This persists the hash even after intent deletion, enabling future duplicate detection
-                with_transaction!(self, |bond| async move {
-                    SearchIndexIntent::save_content_hash(message_id, &content_hash, bond).await
-                })?;
+                let mut tether = self.stash.connection().await?;
+                tether
+                    .tx::<_, (), StashError>(async |bond| {
+                        SearchIndexIntent::save_content_hash(message_id, &content_hash, bond).await
+                    })
+                    .await?;
 
                 Ok(())
             }
@@ -605,16 +596,19 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
             }
             PrepareIndexResult::SkipDuplicate => {
                 // Delete intent since content hasn't changed
-                with_transaction!(self, |bond| async move {
-                    SearchIndexIntent {
-                        message_id,
-                        operation: SearchOperation::Index,
-                        retry_count: 0,
-                        created_at: 0,
-                    }
-                    .delete(bond)
-                    .await
-                })?;
+                let mut tether = self.stash.connection().await?;
+                tether
+                    .tx::<_, (), StashError>(async |bond| {
+                        SearchIndexIntent {
+                            message_id,
+                            operation: SearchOperation::Index,
+                            retry_count: 0,
+                            created_at: 0,
+                        }
+                        .delete(bond)
+                        .await
+                    })
+                    .await?;
                 Ok(())
             }
         }
@@ -673,9 +667,12 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
         self.search_service.remove_message(&remote_id).await?;
 
         // Delete content hash when message is removed from index
-        with_transaction!(self, |bond| async move {
-            SearchIndexIntent::delete_content_hash(message_id, bond).await
-        })?;
+        let mut tether = self.stash.connection().await?;
+        tether
+            .tx::<_, (), StashError>(async |bond| {
+                SearchIndexIntent::delete_content_hash(message_id, bond).await
+            })
+            .await?;
 
         Ok(())
     }

@@ -135,4 +135,20 @@ pub trait BlobStorage: Send + Sync {
     /// Removes all stored blobs, effectively clearing the entire index.
     /// Used by the clear() method to reset the search index.
     async fn clear_all(&self) -> Result<(), SearchError>;
+
+    /// Save multiple blobs atomically in a single transaction
+    ///
+    /// This ensures that either all blobs are saved or none are, preventing
+    /// orphaned blobs if the operation fails mid-way.
+    ///
+    /// Implementations that support transactions should use them here.
+    /// Implementations that don't support transactions should fall back to
+    /// saving blobs individually (which may not be fully atomic).
+    async fn save_batch_atomic(&self, blobs: Vec<(String, Vec<u8>)>) -> Result<(), SearchError> {
+        // Default implementation: save individually (non-transactional fallback)
+        for (name, data) in blobs {
+            self.save(&name, &data).await?;
+        }
+        Ok(())
+    }
 }

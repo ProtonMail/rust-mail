@@ -18,6 +18,7 @@ chrono = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+proton-task-service = { workspace = true }
 
 # Database access (for intent/blob storage)
 stash = { workspace = true }

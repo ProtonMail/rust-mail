@@ -173,4 +173,9 @@ impl BlobStorage for StashBlobStorage {
         debug!("Cleared all {} blobs from storage", deleted_count);
         Ok(())
     }
+
+    async fn save_batch_atomic(&self, blobs: Vec<(String, Vec<u8>)>) -> Result<(), SearchError> {
+        // Use the existing implementation that provides transactional guarantees
+        StashBlobStorage::save_batch_atomic(self, blobs).await
+    }
 }
