@@ -128,12 +128,13 @@ impl UserContext {
         pgp: &P,
         email: PrivateEmailRef<'_>,
         internal_only: bool,
+        fetch_policy: PublicAddressKeyFetchPolicy,
     ) -> CoreContextResult<PublicAddressKeys<<P>::PublicKey>>
     where
         P: PGPProviderSync,
     {
         self.key_manager
-            .public_address_keys(pgp, email, internal_only, self)
+            .public_address_keys(pgp, email, internal_only, fetch_policy, self)
             .await
     }
 
@@ -202,6 +203,14 @@ pub enum AddressKeysContactFetchPolicy {
     RequireSync,
     // If the request fails due to lack of network, attempt to load existing cached data.
     AllowCachedFallback,
+}
+impl From<AddressKeysContactFetchPolicy> for PublicAddressKeyFetchPolicy {
+    fn from(value: AddressKeysContactFetchPolicy) -> Self {
+        match value {
+            AddressKeysContactFetchPolicy::RequireSync => Self::RequireSync,
+            AddressKeysContactFetchPolicy::AllowCachedFallback => Self::AllowCachedFallback,
+        }
+    }
 }
 
 /// Helper function to extract pinned keys from a contact with cards.

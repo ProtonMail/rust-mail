@@ -6,8 +6,8 @@ use non_empty_string::NonEmptyString;
 use proton_core_api::consts::CoreBundle;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{PrivateEmail, PrivateEmailRef, PrivateString};
-use proton_core_common::CoreContextError;
 use proton_core_common::models::ContactEmail;
+use proton_core_common::{CoreContextError, PublicAddressKeyFetchPolicy};
 use proton_crypto_account::keys::RecipientType;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
@@ -834,7 +834,12 @@ async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> Validat
     let pgp_provider = new_pgp_provider();
     let state = match ctx
         .user_context()
-        .public_address_keys(&pgp_provider, email.as_ref(), false)
+        .public_address_keys(
+            &pgp_provider,
+            email.as_ref(),
+            false,
+            PublicAddressKeyFetchPolicy::AllowCachedFallback,
+        )
         .await
     {
         Ok(keys) => ValidationState::Valid {

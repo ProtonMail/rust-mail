@@ -1,28 +1,30 @@
 use super::KeyHandlingError;
 use super::KeyHandlingResult;
 use super::LoadKeySecret;
-use crate::models::Address;
-use crate::models::{ModelIdExtension, User};
-use crate::{CoreContextError, CoreContextResult, UserContext};
-use parking_lot::RwLock;
-use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::services::proton::{AddressId, UserId};
-use proton_core_api::services::proton::{GetKeysAllOptions, PrivateEmailRef};
-use proton_crypto_account::keys::PublicAddressKeys;
-use proton_crypto_account::keys::{
-    UnlockedAddressKey, UnlockedAddressKeys, UnlockedUserKey, UnlockedUserKeys,
-};
-use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
-use stash::orm::Model;
-use stash::stash::Tether;
-use std::{collections::HashMap, time::Duration};
-
 use super::{
     CachedAddressKeys, CachedUserKeys,
     cache::{
         ADDRESS_KEY_LIFETIME, CacheOption, CachedAddressKey, CachedUserKey, USER_KEY_LIFETIME,
     },
 };
+use crate::models::Address;
+use crate::models::{ModelIdExtension, User};
+use crate::{CoreContextError, CoreContextResult, UserContext};
+use indoc::indoc;
+use parking_lot::RwLock;
+use proton_core_api::services::proton::ProtonCore;
+use proton_core_api::services::proton::{AddressId, UserId};
+use proton_core_api::services::proton::{GetKeysAllOptions, PrivateEmailRef};
+use proton_crypto_account::keys::{APIPublicAddressKeys, PublicAddressKeys};
+use proton_crypto_account::keys::{
+    UnlockedAddressKey, UnlockedAddressKeys, UnlockedUserKey, UnlockedUserKeys,
+};
+use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
+use serde::{Deserialize, Serialize};
+use stash::orm::Model;
+use stash::stash::{Bond, StashError, Tether};
+use stash::{params, sql_using_serde};
+use std::{collections::HashMap, time::Duration};
 
 /// Manages an caches the PGP keys.
 #[allow(clippy::module_name_repetitions)]
@@ -46,6 +48,13 @@ impl Default for CryptoKeyManager {
             address_keys: RwLock::new(HashMap::new()),
         }
     }
+}
+
+#[derive(Debug, Copy, Clone, Default)]
+pub enum PublicAddressKeyFetchPolicy {
+    #[default]
+    RequireSync,
+    AllowCachedFallback,
 }
 
 impl CryptoKeyManager {
@@ -122,21 +131,74 @@ impl CryptoKeyManager {
         pgp: &P,
         email: PrivateEmailRef<'_>,
         internal_only: bool,
+        fetch_policy: PublicAddressKeyFetchPolicy,
         user_context: &UserContext,
     ) -> CoreContextResult<PublicAddressKeys<<P>::PublicKey>>
     where
         P: PGPProviderSync,
     {
         // TODO: A limited TTL cache would make sense here for active keys.
-        let api_keys = user_context
+        let api_keys = match user_context
             .session()
             .get_keys_all(GetKeysAllOptions {
                 email: email.to_owned(),
                 internal_only: Some(internal_only),
             })
-            .await?;
+            .await
+        {
+            Ok(api_keys) => {
+                let mut tether = user_context.user_stash.connection().await?;
+                if let Err(e) = tether
+                    .tx(async |tx| {
+                        PublicAddressKeysResponseCache::store(
+                            email.as_clear_text_str().to_owned(),
+                            internal_only,
+                            api_keys.clone(),
+                            tx,
+                        )
+                        .await
+                    })
+                    .await
+                {
+                    tracing::error!("Failed to store response in cache: {e}");
+                }
+                api_keys
+            }
+            Err(e)
+                if matches!(
+                    fetch_policy,
+                    PublicAddressKeyFetchPolicy::AllowCachedFallback
+                ) && e.is_network_failure() =>
+            {
+                match async {
+                    let tether = user_context.user_stash.connection().await?;
+                    PublicAddressKeysResponseCache::get(
+                        email.as_clear_text_str().into(),
+                        internal_only,
+                        &tether,
+                    )
+                    .await
+                }
+                .await
+                {
+                    Ok(Some(api_keys)) => api_keys,
+                    Ok(None) => {
+                        tracing::warn!("No cached keys available");
+                        return Err(e.into());
+                    }
+                    Err(err) => {
+                        tracing::error!("Failed to load cached api keys: {err}");
+                        return Err(e.into());
+                    }
+                }
+            }
+            Err(e) => return Err(e.into()),
+        };
 
-        api_keys.import(pgp).map_err(|_| CoreContextError::Crypto)
+        api_keys.import(pgp).map_err(|e| {
+            tracing::error!("Failed to import public address keys: {e}");
+            CoreContextError::Crypto
+        })
     }
 
     /// Clears the user key cache.
@@ -334,5 +396,42 @@ impl CryptoKeyManager {
         self.update_user_key_cache(pgp, &unlock_result.unlocked_keys)?;
 
         Ok(unlock_result.unlocked_keys.into())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct PublicKeyResponseCacheValue(APIPublicAddressKeys);
+
+sql_using_serde!(PublicKeyResponseCacheValue);
+
+pub struct PublicAddressKeysResponseCache;
+
+impl PublicAddressKeysResponseCache {
+    pub async fn store(
+        email: String,
+        internal_only: bool,
+        response: APIPublicAddressKeys,
+        tx: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        tx.execute(
+            indoc! {"
+            INSERT INTO public_address_key_response_cache (email, internal_only, response)
+            VALUES (?,?,?)
+            ON CONFLICT (email, internal_only) DO UPDATE SET
+                response=excluded.response
+        "},
+            params![email, internal_only, PublicKeyResponseCacheValue(response)],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get(
+        email: String,
+        internal_only: bool,
+        tether: &Tether,
+    ) -> Result<Option<APIPublicAddressKeys>, StashError> {
+        tether.query_value_opt::<PublicKeyResponseCacheValue>("SELECT response FROM public_address_key_response_cache WHERE email=? AND internal_only=?",
+       params![email, internal_only]).await.map(|v| v.map(|v| v.0))
     }
 }

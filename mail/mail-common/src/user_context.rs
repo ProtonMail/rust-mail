@@ -835,8 +835,12 @@ impl MailUserContext {
         P: PGPProviderSync,
     {
         let (api_keys_res, vcard_keys_res) = join!(
-            self.user_context
-                .public_address_keys(pgp, email.clone(), internal_only),
+            self.user_context.public_address_keys(
+                pgp,
+                email.clone(),
+                internal_only,
+                fetch_policy.into()
+            ),
             self.user_context.public_address_keys_from_contacts(
                 pgp,
                 tx,
