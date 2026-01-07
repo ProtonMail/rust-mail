@@ -8,10 +8,20 @@ use proton_crypto_account::{
     },
 };
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum KeyOwnership {
+    /// The public keys are extracted from self owned keys.
+    SelfOwn,
+    /// The public keys are from other users.
+    Other,
+}
+
 /// A type that stores public keys to verify signatures and relevant
 /// key information to display.
 #[derive(Debug)]
 pub struct InboxVerificationPreferences<Pub: PublicKey> {
+    /// Where did the keys originated from.
+    pub ownership: KeyOwnership,
     /// Pinned public keys.
     pub pinned_keys: Vec<Pub>,
     /// API public keys.
@@ -25,6 +35,7 @@ pub struct InboxVerificationPreferences<Pub: PublicKey> {
 impl<Pub: PublicKey> Default for InboxVerificationPreferences<Pub> {
     fn default() -> Self {
         Self {
+            ownership: KeyOwnership::Other,
             pinned_keys: Vec::default(),
             api_keys: Vec::default(),
             compromised_fingerprints: HashSet::default(),
@@ -51,6 +62,7 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
             .map(|address_key| address_key.as_public_key().clone())
             .collect::<Vec<_>>();
         InboxVerificationPreferences {
+            ownership: KeyOwnership::SelfOwn,
             pinned_keys: Vec::default(),
             api_keys: active_address_keys,
             compromised_fingerprints,
@@ -95,6 +107,7 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
             Vec::default()
         };
         InboxVerificationPreferences {
+            ownership: KeyOwnership::Other,
             pinned_keys: pinned_keys_active,
             api_keys: inbox_keys_active,
             compromised_fingerprints,
@@ -126,5 +139,11 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
     #[must_use]
     pub fn is_compromised(&self, fingerprint: &OpenPGPFingerprint) -> bool {
         self.compromised_fingerprints.contains(fingerprint)
+    }
+
+    /// Are the keys extract from self owned keys.
+    #[must_use]
+    pub fn self_owned_keys(&self) -> bool {
+        matches!(self.ownership, KeyOwnership::SelfOwn)
     }
 }

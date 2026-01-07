@@ -48,7 +48,10 @@ use proton_core_common::{
     AddressKeysContactFetchPolicy, ContactError, Context as CoreContext, CoreContextError,
     KeyHandlingError, Origin, RebasableQueue, UserContext, services::UserMetricService,
 };
-use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
+use proton_crypto_account::keys::{PinnedPublicKeys, PublicAddressKeys};
+use proton_crypto_inbox::keys::{
+    ComposerPreference, CryptoMailSettings, InboxVerificationPreferences, SendPreferences,
+};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
@@ -705,75 +708,33 @@ impl MailUserContext {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
 
         // If the email is from an owned address by the user and the address is active, use the corresponding keys.
-        if let Some(address) = Address::by_email(email.as_clear_text_str(), tx.tether())
-            .await
-            .inspect_err(|err| {
-                error!("send preferences: failed to search address by email: {err:?}")
-            })?
+        if let Some((address, address_keys)) = self
+            .lookup_keys_from_self_owned_address(pgp, tx, email.clone())
+            .await?
         {
-            if address.status == AddressStatus::Enabled {
-                debug!("send preferences: loading from self-owned address");
+            debug!("send preferences: loading keys from self-owned address");
+            let send_preferences = SendPreferences::new_for_self(
+                address.address_type.is_external(),
+                &address_keys,
+                encryption_time,
+                settings,
+                composer_preference,
+            )
+            .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
 
-                let address_rid = address.remote_id.as_ref().ok_or_else(|| {
-                    MailContextError::App(AppError::AddressHasNoRemoteId(
-                        address.local_id.unwrap_or(LocalAddressId::from(0)),
-                    ))
-                })?;
-
-                let address_keys = self
-                    .unlocked_address_keys(pgp, tx.tether(), address_rid)
-                    .await
-                    .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
-
-                let send_preferences = SendPreferences::new_for_self(
-                    address.address_type.is_external(),
-                    &address_keys,
-                    encryption_time,
-                    settings,
-                    composer_preference,
-                )
-                .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
-
-                return Ok(send_preferences);
-            }
+            return Ok(send_preferences);
         }
 
-        debug!("send preferences: loading from contacts and key server");
+        debug!("send preferences: loading keys from contacts and key server");
 
         let user_keys = self.unlocked_user_keys(pgp, tx.tether()).await?;
 
-        let email_cloned = email.clone();
-        // Fetch API keys, and contact-pinned keys concurrently.
-        let (api_keys_result, vcard_keys_result) = join!(
-            self.user_context
-                .public_address_keys(pgp, email_cloned, false),
-            self.user_context.public_address_keys_from_contacts(
-                pgp,
-                tx,
-                &user_keys,
-                email,
-                fetch_policy
-            ),
-        );
-
-        // Handle error when loading contact keys, but ignore CardNotFound as it's valid to have no contact.
-        if let Err(e) = &vcard_keys_result
-            && !matches!(
-                e,
-                CoreContextError::ContactError(ContactError::CardNotFound(_))
-            )
-        {
-            error!(
-                "send preferences: failed to load contact pinned keys: {}",
-                e
-            );
-        }
-
-        // On error, we currently assume no pinned keys exists.
-        let vcard_keys = vcard_keys_result.ok().flatten();
+        let (api_keys, vcard_keys) = self
+            .lookup_keys_from_api_and_contact(pgp, tx, &user_keys, email, false, fetch_policy)
+            .await?;
 
         let send_preferences = SendPreferences::new(
-            api_keys_result?,
+            api_keys,
             vcard_keys,
             encryption_time,
             &settings,
@@ -782,6 +743,121 @@ impl MailUserContext {
         .inspect_err(|err| error!("send preferences: {err:?}"))?;
 
         Ok(send_preferences)
+    }
+
+    /// Loads the public keys required to verify a sender's cryptographic signature.
+    ///
+    /// Sender verification should be loaded when verifying signatures.
+    /// This method gathers the sender's public keys from both the API and stored contacts.
+    /// It then filters out any invalid keys according to Proton's key management policies,
+    /// ensuring only valid keys are available for verification. Further, the result includes
+    /// sender key information for potential UI indications.
+    pub async fn sender_verification_preferences<P>(
+        &self,
+        pgp: &P,
+        tx: &mut impl RunTransaction,
+        email: PrivateEmailRef<'_>,
+        fetch_policy: AddressKeysContactFetchPolicy,
+    ) -> MailContextResult<InboxVerificationPreferences<P::PublicKey>>
+    where
+        P: PGPProviderSync,
+    {
+        if let Some((_, address_keys)) = self
+            .lookup_keys_from_self_owned_address(pgp, tx, email.clone())
+            .await?
+        {
+            debug!("verification preferences: loading keys from self-owned address");
+            return Ok(InboxVerificationPreferences::from_unlocked_address_keys(
+                &address_keys,
+            ));
+        }
+
+        debug!("verification preferences: loading keys from contacts and key server");
+        let user_keys = self.unlocked_user_keys(pgp, tx.tether()).await?;
+        // Fetch API keys (internal), and contact-pinned keys concurrently.
+        // Untrusted WKD keys are not used for verification,
+        // and requesting WKD keys leaks to the sender's domain owner that the message has been read.
+        let (api_keys, vcard_keys) = self
+            .lookup_keys_from_api_and_contact(pgp, tx, &user_keys, email, true, fetch_policy)
+            .await?;
+
+        Ok(InboxVerificationPreferences::from_public_keys(
+            api_keys, vcard_keys,
+        ))
+    }
+
+    async fn lookup_keys_from_self_owned_address<P>(
+        &self,
+        pgp_provider: &P,
+        tx: &mut impl RunTransaction,
+        email: PrivateEmailRef<'_>,
+    ) -> MailContextResult<Option<(Address, UnlockedAddressKeys<P>)>>
+    where
+        P: PGPProviderSync,
+    {
+        if let Some(address) = Address::by_email(email.as_clear_text_str(), tx.tether())
+            .await
+            .inspect_err(|err| {
+                error!("cryptographic key fetch: failed to search address by email: {err}")
+            })?
+            && address.status == AddressStatus::Enabled
+        {
+            let address_rid = address.remote_id.as_ref().ok_or_else(|| {
+                MailContextError::App(AppError::AddressHasNoRemoteId(
+                    address.local_id.unwrap_or(LocalAddressId::from(0)),
+                ))
+            })?;
+            let address_keys = self
+                .unlocked_address_keys(pgp_provider, tx.tether(), address_rid)
+                .await?;
+            Ok(Some((address, address_keys)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn lookup_keys_from_api_and_contact<P>(
+        &self,
+        pgp: &P,
+        tx: &mut impl RunTransaction,
+        user_keys: &UnlockedUserKeys<P>,
+        email: PrivateEmailRef<'_>,
+        internal_only: bool,
+        fetch_policy: AddressKeysContactFetchPolicy,
+    ) -> MailContextResult<(
+        PublicAddressKeys<P::PublicKey>,
+        Option<PinnedPublicKeys<P::PublicKey>>,
+    )>
+    where
+        P: PGPProviderSync,
+    {
+        let (api_keys_res, vcard_keys_res) = join!(
+            self.user_context
+                .public_address_keys(pgp, email.clone(), internal_only),
+            self.user_context.public_address_keys_from_contacts(
+                pgp,
+                tx,
+                user_keys,
+                email,
+                fetch_policy
+            )
+        );
+
+        // Log non-CardNotFound errors for contacts
+        if let Err(err) = &vcard_keys_res
+            && !matches!(
+                err,
+                CoreContextError::ContactError(ContactError::CardNotFound(_))
+            )
+        {
+            error!("cryptographic key fetch: failed to load contact pinned keys: {err}");
+        }
+
+        let vcard_keys = vcard_keys_res.ok().flatten();
+        let api_keys = api_keys_res
+            .inspect_err(|err| error!("cryptographic key fetch: failed to load api keys: {err}"))?;
+
+        Ok((api_keys, vcard_keys))
     }
 
     pub async fn new_password_change_flow(&self) -> MailContextResult<PasswordFlow> {
