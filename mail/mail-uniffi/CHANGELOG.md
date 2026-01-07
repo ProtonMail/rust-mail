@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.2] - 2026-01-07
+
+### Features
+
+- [ET-5624] Add tracked messages and tracking url
+- [ET-5624] Expose message tracking live query
+
+
 ## [mail-uniffi-v0.161.1] - 2026-01-05
 
 ### Changed
