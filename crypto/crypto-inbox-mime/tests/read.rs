@@ -369,9 +369,9 @@ fn test_mime_process_message_verify_signature() {
         .with_decryption_key(&priv_key)
         .decrypt(TEST_GO_MIME_ENCRYPTED, DataEncoding::Armor)
         .unwrap();
-    let (_processed_message, signatures) =
+    let processed_message =
         MimeProcessor::process_mime("message_id", mime_body.as_bytes()).unwrap();
-    let sig = signatures.first().unwrap();
+    let sig = processed_message.signatures.first().unwrap();
     let body = String::from_utf8(sig.data_to_verify(mime_body.as_bytes()).to_vec())
         .unwrap()
         .replace("\r\n", "\n")
@@ -395,7 +395,7 @@ fn test_mime_process_message() {
         "publickey - kaykeytest3@protonmail.com - 0xE1DADAE3.asc",
     ];
     let expected_attachment_id_contains = ["46098e9b@protonmail.com", "@pmcrypto>"];
-    let (processed_message, _signatures) =
+    let processed_message =
         MimeProcessor::process_mime(MESSAGE_ID, TEST_GO_MIME.as_bytes()).unwrap();
     assert_eq!(&processed_message.body, TEST_GO_MIME_EXPECTED);
     assert_eq!(processed_message.attachments.len(), 2);

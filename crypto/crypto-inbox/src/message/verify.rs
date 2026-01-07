@@ -7,64 +7,7 @@ use proton_crypto_account::proton_crypto::utils::to_canonicalized_string;
 use proton_crypto_account::proton_crypto::CryptoInfoError;
 use proton_crypto_inbox_mime::MimeSignatureVerifier;
 
-/// Allows for lazy message body signature verification.
-#[derive(Debug, Clone)]
-pub struct VerifiableBody {
-    is_decrypted_mime: bool,
-    decrypted_raw: Vec<u8>,
-    signatures: Vec<u8>,
-    mime_signatures: Vec<MimeSignatureVerifier>,
-}
-
-impl VerifiableBody {
-    /// Allows to verify the signatures of the message after decryption.
-    ///
-    /// The signatures verification is separate because the fetch/verification
-    /// of the public keys might take longer.
-    /// Thus, the UI might show the decrypted body before the verification result is shown (e.g., with locks).
-    pub fn verify_signature<P>(
-        &self,
-        pgp: &P,
-        verification_keys: &[impl AsPublicKeyRef<P::PublicKey>],
-    ) -> VerificationResult
-    where
-        P: PGPProviderSync,
-    {
-        if self.is_decrypted_mime {
-            verify_mime(
-                pgp,
-                verification_keys,
-                &self.decrypted_raw,
-                &self.signatures,
-                &self.mime_signatures,
-            )
-        } else {
-            verify_normal(
-                pgp,
-                verification_keys,
-                &self.decrypted_raw,
-                &self.signatures,
-            )
-        }
-    }
-
-    #[must_use]
-    pub fn new(
-        is_decrypted_mime: bool,
-        decrypted_raw: Vec<u8>,
-        signatures: Vec<u8>,
-        mime_signatures: Vec<MimeSignatureVerifier>,
-    ) -> VerifiableBody {
-        VerifiableBody {
-            is_decrypted_mime,
-            decrypted_raw,
-            signatures,
-            mime_signatures,
-        }
-    }
-}
-
-fn verify_mime<P>(
+pub(crate) fn verify_mime<P>(
     pgp: &P,
     verification_keys: &[impl AsPublicKeyRef<P::PublicKey>],
     data: &[u8],
@@ -116,7 +59,7 @@ where
     }
 }
 
-fn verify_normal<P>(
+pub(crate) fn verify_normal<P>(
     pgp: &P,
     verification_keys: &[impl AsPublicKeyRef<P::PublicKey>],
     data: &[u8],

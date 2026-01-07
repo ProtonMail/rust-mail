@@ -71,6 +71,9 @@ pub struct ProcessedMessage {
 
     /// The mime type of the extracted body.
     pub mime_body_type: ProcessedBodyType,
+
+    /// The signatures extracted from the mime message.
+    pub signatures: Vec<MimeSignatureVerifier>,
 }
 
 /// Represents a processed message body from a mime message.
@@ -120,8 +123,7 @@ impl MimeSignatureVerifier {
 }
 
 /// The result of a mime to inbox message transformation.
-pub type ProcessedMimeResult =
-    Result<(ProcessedMessage, Vec<MimeSignatureVerifier>), ProcessMimeError>;
+pub type ProcessedMimeResult = Result<ProcessedMessage, ProcessMimeError>;
 
 /// Access to helper functions to transform mime messages into inbox messages.
 pub struct MimeProcessor {}
@@ -145,9 +147,10 @@ impl ProcessMime for MimeProcessor {
             attachments: processed_attachments,
             encrypted_subject,
             mime_body_type,
+            signatures: processed_signatures,
         };
 
-        Ok((processed_message, processed_signatures))
+        Ok(processed_message)
     }
 }
 

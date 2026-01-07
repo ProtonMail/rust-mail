@@ -487,16 +487,6 @@ mod send_request {
     use super::*;
 
     #[derive(Debug, Default, PartialEq, Eq, Clone)]
-    pub struct SendRequest {
-        pub expiration_time: u64,
-        pub expires_in: u64,
-        pub auto_save_contacts: u8,
-        pub delay_seconds: u64,
-        pub delivery_time: u64,
-        pub packages: Vec<SendPackage>,
-    }
-
-    #[derive(Debug, Default, PartialEq, Eq, Clone)]
     pub struct SendPackage {
         pub addresses: HashMap<String, SendAddress>,
         pub mime_type: PackageMimeType,
@@ -1060,7 +1050,8 @@ mod send_logic {
         P: PGPProviderSync,
     {
         let mut content = Vec::new();
-        let (body, _) = draft.decrypt(pgp, sender_keys).unwrap();
+        let raw_body = draft.decrypt(pgp, sender_keys).unwrap();
+        let body = raw_body.processed_body().unwrap();
 
         let DecryptedBody::Plain(plain_body) = body else {
             panic!("Mime body found in draft");
@@ -1141,7 +1132,7 @@ fn validate_decryption(
 
         match package.mime_type {
             PackageMimeType::Multipart => {
-                let (message, _) = MimeProcessor::process_mime("message_id", result.as_bytes())
+                let message = MimeProcessor::process_mime("message_id", result.as_bytes())
                     .expect("Failed to process mime messsage");
                 assert_eq!(&message.body, expected_message);
             }
@@ -1183,15 +1174,15 @@ fn validate_decryption(
             attachments: Vec::default(),
         };
 
-        let (body, verifier) = message
-            .decrypt(&pgp, &[validation_key.clone()])
+        let raw_body = message
+            .decrypt(&pgp, std::slice::from_ref(&validation_key))
             .expect("decryption should succeed");
 
-        verifier
+        raw_body
             .verify_signature(&pgp, &sender_keys)
             .expect("Signature verification failed");
 
-        match body {
+        match raw_body.processed_body().unwrap() {
             DecryptedBody::Plain(plain) => assert_eq!(&plain, expected_message),
             DecryptedBody::Mime(processed_message) => {
                 assert_eq!(&processed_message.body, expected_message);

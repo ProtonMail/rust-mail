@@ -304,8 +304,7 @@ Content-Transfer-Encoding: 8bit
 Import HTML cöntäct//Subjεέςτ//
 
 --------------cJMvmFk1NneB7MT4jwYHY7ap--"#;
-    let (processed_message, _signatures) =
-        MimeProcessor::process_mime("message_id", input.as_bytes()).unwrap();
+    let processed_message = MimeProcessor::process_mime("message_id", input.as_bytes()).unwrap();
 
     assert_eq!(&processed_message.body, "Import HTML cöntäct//Subjεέςτ//\n");
 }
@@ -329,58 +328,64 @@ fn verify_signature(raw_input: &str, signatures: &[MimeSignatureVerifier]) -> Ve
 
 #[test]
 fn test_process_multipart_signed_mime_messages_and_verify_signature() {
-    let (processed_message, signatures) =
+    let processed_message =
         MimeProcessor::process_mime("message_id", MULTIPART_SIGNED_MESSAGE.as_bytes()).unwrap();
 
     assert_eq!(&processed_message.body, MULTIPART_SIGNED_MESSAGE_BODY);
     assert!(processed_message.attachments.is_empty());
     assert!(processed_message.encrypted_subject.is_none());
-    assert!(!signatures.is_empty());
-    let verification_result = verify_signature(MULTIPART_SIGNED_MESSAGE, &signatures);
+    assert!(!processed_message.signatures.is_empty());
+    let verification_result =
+        verify_signature(MULTIPART_SIGNED_MESSAGE, &processed_message.signatures);
     assert!(verification_result.is_ok());
 }
 
 #[test]
 fn test_process_multipart_signed_mime_messages_and_verify_signature_with_extra_parts() {
-    let (processed_message, signatures) =
+    let processed_message =
         MimeProcessor::process_mime("message_id", EXTRA_MULTIPART_SIGNED_MESSAGE.as_bytes())
             .unwrap();
 
     assert_eq!(&processed_message.body, "hello");
     assert!(processed_message.attachments.is_empty());
-    assert!(!signatures.is_empty());
-    let verification_result = verify_signature(EXTRA_MULTIPART_SIGNED_MESSAGE, &signatures);
+    assert!(!processed_message.signatures.is_empty());
+    let verification_result = verify_signature(
+        EXTRA_MULTIPART_SIGNED_MESSAGE,
+        &processed_message.signatures,
+    );
     assert!(verification_result.is_ok());
 }
 
 #[test]
 fn test_does_not_verify_invalid_messages() {
-    let (processed_message, signatures) =
+    let processed_message =
         MimeProcessor::process_mime("message_id", INVALID_MULTIPART_SIGNED_MESSAGE.as_bytes())
             .unwrap();
 
     assert_eq!(&processed_message.body, "message with missing signature");
-    assert!(signatures.is_empty());
+    assert!(processed_message.signatures.is_empty());
 }
 
 #[test]
 fn test_can_parse_messages_with_special_characters_in_boundary() {
-    let (processed_message, signatures) = MimeProcessor::process_mime(
+    let processed_message = MimeProcessor::process_mime(
         "message_id",
         MULTIPART_MESSAGE_WITH_SPECIAL_CHARACTER.as_bytes(),
     )
     .unwrap();
 
-    assert!(!signatures.is_empty());
+    assert!(!processed_message.signatures.is_empty());
     assert_eq!(&processed_message.body, "hello");
-    let verification_result =
-        verify_signature(MULTIPART_MESSAGE_WITH_SPECIAL_CHARACTER, &signatures);
+    let verification_result = verify_signature(
+        MULTIPART_MESSAGE_WITH_SPECIAL_CHARACTER,
+        &processed_message.signatures,
+    );
     assert!(verification_result.is_ok());
 }
 
 #[test]
 fn test_can_parse_message_with_empty_body() {
-    let (processed_message, _signatures) =
+    let processed_message =
         MimeProcessor::process_mime("message_id", MESSAGE_WITH_EMPTY_BODY.as_bytes()).unwrap();
 
     assert_eq!(processed_message.body, "");
@@ -388,11 +393,11 @@ fn test_can_parse_message_with_empty_body() {
 
 #[test]
 fn test_can_parse_message_with_text_attachment() {
-    let (processed_message, signatures) =
+    let processed_message =
         MimeProcessor::process_mime("message_id", MULTIPART_MESSAGE_WITH_ATTACHMENT.as_bytes())
             .unwrap();
 
-    assert!(signatures.is_empty());
+    assert!(processed_message.signatures.is_empty());
     assert_eq!(&processed_message.body, "this is the body text\n");
     assert_eq!(processed_message.attachments.len(), 1);
 
@@ -404,24 +409,26 @@ fn test_can_parse_message_with_text_attachment() {
 
 #[test]
 fn test_can_parse_message_with_encrypted_subject() {
-    let (processed_message, signatures) = MimeProcessor::process_mime(
+    let processed_message = MimeProcessor::process_mime(
         "message_id",
         MULTIPART_MESSAGE_WITH_ENCRYPTED_SUBJECT.as_bytes(),
     )
     .unwrap();
     // TODO: Encrypted subject not yet implemented in lower level.
     // assert_eq!(encrypted_subject, "Encrypted subject");
-    assert_eq!(signatures.len(), 1);
+    assert_eq!(processed_message.signatures.len(), 1);
     assert_eq!(&processed_message.body, "hello");
 
-    let verification_result =
-        verify_signature(MULTIPART_MESSAGE_WITH_ENCRYPTED_SUBJECT, &signatures);
+    let verification_result = verify_signature(
+        MULTIPART_MESSAGE_WITH_ENCRYPTED_SUBJECT,
+        &processed_message.signatures,
+    );
     matches!(verification_result, Err(VerificationError::Failed(_, _)));
 }
 
 #[test]
 fn test_generates_different_filenames_for_multiple_attachments_with_empty_names() {
-    let (processed_message, _signatures) = MimeProcessor::process_mime(
+    let processed_message = MimeProcessor::process_mime(
         "message_id",
         MULTIPART_MESSAGE_WITH_UNNAMED_ATTACHMENTS.as_bytes(),
     )
@@ -438,7 +445,7 @@ fn test_generates_different_filenames_for_multiple_attachments_with_empty_names(
 
 #[test]
 fn test_can_parse_message_with_encrypted_subject_containing_non_ascii_chars() {
-    let (processed_message, _signatures) = MimeProcessor::process_mime(
+    let processed_message = MimeProcessor::process_mime(
         "message_id",
         MULTIPART_MESSAGE_WITH_ENCRYPTED_SUBJECT_UTF8.as_bytes(),
     )

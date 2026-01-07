@@ -95,7 +95,7 @@ fn test_encrypt_and_decrypt_draft() {
         .decrypt(&pgp, &unlocked_address_keys)
         .unwrap();
 
-    assert_eq!(plain_text.0.body(), message);
+    assert_eq!(plain_text.processed_body().unwrap().as_ref(), message);
 }
 
 #[test]
@@ -129,9 +129,9 @@ fn test_encrypt_and_decrypt_draft_v6() {
         .decrypt(&pgp, &unlocked_address_keys)
         .unwrap();
     let primary_key_v4 = unlocked_address_keys.primary_default().unwrap();
-    let signature_verification_v4 = plain_text.1.verify_signature(&pgp, &[primary_key_v4]);
+    let signature_verification_v4 = plain_text.verify_signature(&pgp, &[primary_key_v4]);
 
-    assert_eq!(plain_text.0.body(), message);
+    assert_eq!(plain_text.processed_body().unwrap().as_ref(), message);
     assert!(
         signature_verification_v4.is_ok(),
         "signature should verify with a v4 key"

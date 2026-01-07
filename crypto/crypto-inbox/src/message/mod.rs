@@ -8,7 +8,7 @@ mod decrypt;
 pub use decrypt::*;
 
 mod verify;
-pub use verify::*;
+pub(crate) use verify::*;
 
 mod utils;
 pub use utils::*;
