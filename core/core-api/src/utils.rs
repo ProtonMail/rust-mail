@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::services::proton::muon::http::HttpReq;
-use muon::common::RetryPolicy;
+use muon::{common::RetryPolicy, http::Headers};
 
 pub trait HttpReqExt: Sized {
     #[must_use]
@@ -23,5 +23,18 @@ impl HttpReqExt for HttpReq {
             return self.retry_policy(policy);
         }
         self
+    }
+}
+
+pub trait HeadersExt: Sized {
+    #[must_use]
+    fn get_string(&self, key: &str) -> Option<String>;
+}
+
+impl HeadersExt for Headers {
+    fn get_string(&self, key: &str) -> Option<String> {
+        self.get(key)
+            .and_then(|v| v.to_str().ok())
+            .map(ToString::to_string)
     }
 }
