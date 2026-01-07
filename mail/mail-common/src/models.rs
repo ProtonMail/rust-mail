@@ -38,6 +38,8 @@ mod mail_scroller;
 mod mail_settings;
 mod mailbox_labels;
 mod message;
+mod message_tracker;
+mod message_tracker_url;
 mod network;
 mod rollback_item;
 
@@ -52,5 +54,7 @@ pub use self::mail_scroller::*;
 pub use self::mail_settings::*;
 pub use self::mailbox_labels::*;
 pub use self::message::*;
+pub use self::message_tracker::*;
+pub use self::message_tracker_url::*;
 pub use self::network::*;
 pub use self::rollback_item::*;

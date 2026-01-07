@@ -5,6 +5,7 @@ pub(crate) mod labels;
 mod snooze;
 mod system_folder;
 mod system_label;
+mod trackers;
 
 use crate::core::datatypes::{AvatarInformation, Id, UnixTimestamp};
 use crate::errors::ActionError;
@@ -53,6 +54,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 pub use system_label::*;
 use tracing::warn;
+pub use trackers::*;
 use uniffi_runtime::uniffi_async;
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]

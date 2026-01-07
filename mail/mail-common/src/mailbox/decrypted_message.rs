@@ -2,6 +2,7 @@
 
 //! Everything related to processing a decrypted message.
 use crate::ImagePolicy;
+use crate::TrackerDetector;
 use crate::actions::messages::UnsubscribeNewsletter;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
@@ -25,7 +26,7 @@ use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
 use stash::orm::Model;
 use stash::stash::Tether;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::fs;
 use tokio::task::JoinHandle;
@@ -356,6 +357,7 @@ impl DecryptedMessageBody {
         &self,
         sender: &str,
         opts: TransformOpts,
+        ctx: &MailUserContext,
         tether: &Tether,
     ) -> BodyOutput {
         let resolved = opts.resolve(tether).await;
@@ -373,7 +375,7 @@ impl DecryptedMessageBody {
             banners.push(MessageBanner::UnableToDecrypt);
         }
 
-        transform_html_with_banners(
+        let output = transform_html_with_banners(
             sender,
             // At this point in time we do not have a list of trusted senders.
             // We also do not store that in the database as there is no syncing with the server.
@@ -382,7 +384,22 @@ impl DecryptedMessageBody {
             resolved,
             self.mime_type,
             banners,
-        )
+        );
+
+        if let Some(message_id) = self.metadata.local_message_id {
+            let urls_clone = output.remote_urls.clone();
+            ctx.spawn_ex(move |ctx_clone| async move {
+                let tracker_detector = ctx_clone.get_service::<TrackerDetector>();
+                if let Err(e) = tracker_detector
+                    .check_message_trackers(message_id, urls_clone)
+                    .await
+                {
+                    tracing::error!("Could not update tracker information: {e}");
+                }
+            });
+        }
+
+        output
     }
 
     /// Checks if this mail contains an invitation and, if so, returns its
@@ -498,11 +515,8 @@ pub struct BodyOutput {
     /// How many UTM tracking params it has removed.
     pub utm_stripped: u64,
 
-    /// How many html tags it has removed.
-    pub remote_images_disabled: u64,
-
-    /// How many embedded images it has disabled.
-    pub embedded_images_disabled: u64,
+    /// Set of remote URLs that were found
+    pub remote_urls: HashSet<String>,
 
     /// The transform opts that were used. All fields are actually Some.
     pub transform_opts: TransformOpts,
@@ -568,8 +582,8 @@ mime_type: {mime_type:?}"
     let tags_stripped = transformer.strip_whitelist(StripStyleSheets::No);
     let utm_stripped = transformer.strip_utm();
 
-    let (mut remote_images_count, mut embedded_images_count) =
-        transformer.disable_content(hide_remote_images, hide_embedded_images);
+    let disable_output = transformer.disable_content(hide_remote_images, hide_embedded_images);
+    let remote_urls = disable_output.remote_urls;
 
     let had_blockquote = if !show_block_quote {
         transformer.strip_blockquote()
@@ -595,18 +609,12 @@ mime_type: {mime_type:?}"
 
     transformer.inject_common_css();
 
-    if opts.hide_remote_images && remote_images_count > 0 {
+    if opts.hide_remote_images && !remote_urls.is_empty() {
         banners.push(MessageBanner::RemoteContent);
-
-        // So that they don't show up in the stats later on
-        remote_images_count = 0;
     }
 
-    if opts.hide_embedded_images && embedded_images_count > 0 {
+    if opts.hide_embedded_images && !disable_output.embedded_urls.is_empty() {
         banners.push(MessageBanner::EmbeddedImages);
-
-        // So that they don't show up in the stats later on
-        embedded_images_count = 0;
     }
 
     banners.sort_unstable();
@@ -616,8 +624,7 @@ mime_type: {mime_type:?}"
         had_blockquote,
         tags_stripped,
         utm_stripped,
-        remote_images_disabled: remote_images_count,
-        embedded_images_disabled: embedded_images_count,
+        remote_urls,
         transform_opts: opts.into(),
         body_banners: banners,
     };

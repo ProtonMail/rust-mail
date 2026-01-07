@@ -1052,7 +1052,7 @@ impl DecryptedMessage {
         let sender = msg.sender.address.clone();
 
         let body_output = body
-            .transformed(&sender, TransformOpts::default(), &tether)
+            .transformed(&sender, TransformOpts::default(), ctx, &tether)
             .await;
 
         if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {

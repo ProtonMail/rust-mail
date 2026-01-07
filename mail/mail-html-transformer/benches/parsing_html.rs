@@ -59,10 +59,10 @@ pub fn parse(c: &mut Criterion) {
             })
         });
 
-        c.bench_function("disable content", |b| {
+        c.bench_function("remote content", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                remote_content::disable_content(&tr.document(), true, true);
+                remote_content::remote_content(&tr.document(), true, true);
             })
         });
 

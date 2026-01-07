@@ -189,10 +189,12 @@ pub trait LiveQueryCallback: Send + Sync {
     fn on_update(&self);
 }
 
-/// An async callback interface for live queries.
-///
-/// This interface is used to notify the client when observed data has been
-/// updated.
+// deprecated attribute seems to be incompatible with uniffi exporting.
+/// > [!WARNING]
+/// >
+/// > This interface is soft-deprecated. It tends to cause issues on android. Use `...Stream` pattern instead.
+/// >
+/// > See for example [`WatchUserStream`].
 ///
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
