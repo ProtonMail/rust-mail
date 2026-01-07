@@ -16,6 +16,7 @@ use proton_mail_common::{
     api_conversation, api_label, api_message_meta, conversation, label, message,
     test_utils::utils::create_address,
 };
+use serde_json::json;
 use test_case::test_case;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -376,4 +377,94 @@ async fn mock_label(mock_server: &MockServer, items: Vec<RollbackItem>) {
         .named(function_name!())
         .mount(mock_server)
         .await;
+}
+
+#[tokio::test]
+async fn test_rollback_skips_nonexistent_conversation() {
+    let (stash, _tempdir) = new_test_connection_file().await;
+    let mut tether = stash.connection().await.unwrap();
+
+    let existing_conv_id = "existing_conv_123";
+    let deleted_conv_id = "deleted_conv_456";
+    let another_existing_id = "existing_conv_789";
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            RollbackItem::new(existing_conv_id.to_string(), RollbackItemType::Conversation)
+                .save(tx)
+                .await
+                .unwrap();
+            RollbackItem::new(deleted_conv_id.to_string(), RollbackItemType::Conversation)
+                .save(tx)
+                .await
+                .unwrap();
+            RollbackItem::new(
+                another_existing_id.to_string(),
+                RollbackItemType::Conversation,
+            )
+            .save(tx)
+            .await
+            .unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let items = RollbackItem::all(&tether).await.unwrap();
+    assert_eq!(items.len(), 3);
+
+    let mock_server = MockServer::start().await;
+    mock_auth_endpoints(&mock_server).await;
+
+    let api = {
+        let config = Config {
+            env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
+            ..Default::default()
+        };
+        Session::builder()
+            .with_config(config)
+            .build()
+            .await
+            .unwrap()
+    };
+
+    for conv_id in [existing_conv_id, another_existing_id] {
+        let conv = api_conversation!(id: conv_id.to_string().into());
+        Mock::given(method("GET"))
+            .and(path(format!("/api/mail/v4/conversations/{conv_id}")))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetConversationResponse {
+                    conversation: conv,
+                    messages: vec![],
+                }),
+            )
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+    }
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/api/mail/v4/conversations/{deleted_conv_id}"
+        )))
+        .respond_with(ResponseTemplate::new(422).set_body_json(json!({
+            "Code": 20052,
+            "Error": "Conversation does not exist",
+            "Details": {
+                "ID": deleted_conv_id
+            }
+        })))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let result = RollbackItem::sync_all(&api, &mut tether, None, &RebasableQueue::default()).await;
+    assert!(result.is_ok(), "sync_all should succeed: {result:?}");
+
+    let remaining = RollbackItem::all(&tether).await.unwrap();
+    assert_eq!(
+        remaining.len(),
+        0,
+        "All rollback items should be deleted after sync"
+    );
 }
