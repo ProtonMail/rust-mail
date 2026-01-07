@@ -125,7 +125,7 @@ impl Label {
     }
 
     #[instrument(skip_all)]
-    async fn fetch_labels<API>(
+    pub async fn fetch_labels<API>(
         api: &API,
         label_types: &[LabelType],
     ) -> Result<Vec<Label>, LabelError>
