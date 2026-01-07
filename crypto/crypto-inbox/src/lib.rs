@@ -3,6 +3,7 @@
 pub mod attachment;
 pub mod eo;
 pub mod keys;
+pub mod lock_icon;
 pub mod message;
 mod utils;
 
