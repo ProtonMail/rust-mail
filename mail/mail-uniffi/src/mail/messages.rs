@@ -10,6 +10,7 @@ use crate::errors::{
     ActionError, AttachmentDataError, AttachmentDataResult, BodyOutputResult, MobileActionsResult,
     ProtonError, VoidActionResult,
 };
+use crate::mail::datatypes::privacy_lock::PrivacyLock;
 use crate::mail::datatypes::{LabelAsOutput, Undo};
 use crate::mail::mail_scroller::{
     MessageScroller, MessageScrollerLiveQueryCallback, SearchScroller,
@@ -42,6 +43,7 @@ use proton_mail_common::{
 use stash::orm::Model as _;
 use std::sync::Arc;
 use tracing::warn;
+use uniffi_runtime::async_runtime;
 
 #[derive(uniffi::Object)]
 pub struct DecryptedMessage {
@@ -192,6 +194,25 @@ impl DecryptedMessage {
         .map_err(|err: RealProtonMailError| warn!(?err, "Couldn't identify RSVP"))
         .ok()
         .flatten()
+    }
+
+    /// Calculate the privacy lock for this message.
+    ///
+    /// Note: this is an expensive operation and should e launched on a background
+    /// task.
+    pub async fn privacy_lock(self: Arc<Self>, mailbox: &Mailbox) -> PrivacyLock {
+        let label_id = mailbox.mbox().label_id();
+        async_runtime()
+            .spawn(async move {
+                let ctx = self.ctx()?;
+                let tether = ctx.user_stash().connection().await?;
+                let builder = self.body.privacy_lock(label_id, &tether).await;
+                Ok(builder.build().await)
+            })
+            .await
+            .map(|r: Result<_, RealProtonMailError>| r.unwrap_or_default())
+            .unwrap_or_default()
+            .into()
     }
 }
 

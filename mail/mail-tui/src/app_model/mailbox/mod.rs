@@ -17,10 +17,12 @@ use chrono::{DateTime, Local};
 use messages::BlockOrUnblock;
 pub use model::MailboxModel;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId, Refresh, UnixTimestamp};
+use proton_crypto_inbox::lock_icon::UiLock;
 use proton_mail_api::proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
 };
+use proton_mail_common::decrypted_message::PrivacyLockBuilder;
 use proton_mail_common::draft::attachments::DraftAttachment;
 use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::{MailUserContext, Mailbox, RsvpEvent};
@@ -103,7 +105,7 @@ impl From<ConversationMessage> for Messages {
 /// Messages related to message actions.
 pub enum MessageMessage {
     OpenBody { show_loading: bool },
-    OpenBodyResult(anyhow::Result<Box<DecryptedMessage>>),
+    OpenBodyResult(anyhow::Result<(Box<DecryptedMessage>, PrivacyLockBuilder)>),
     CloseBody,
     ReplaceFrom(usize, Vec<MailMessage>),
     ReplaceBefore(usize, Vec<MailMessage>),
@@ -124,6 +126,7 @@ pub enum MessageMessage {
     UpdateRsvp(Box<RsvpEvent>),
     ScrollerFetchNewStart,
     ScrollerFetchNewEnd,
+    UpdatePrivacyLock(UiLock),
 }
 
 impl<I: Into<Messages>> From<I> for Command<Messages> {

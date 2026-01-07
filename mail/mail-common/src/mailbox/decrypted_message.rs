@@ -7,7 +7,7 @@ use crate::actions::messages::UnsubscribeNewsletter;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::theme::MailTheme;
-use crate::datatypes::{Disposition, LocalAttachmentId, ParsedHeaderValue};
+use crate::datatypes::{Disposition, LocalAttachmentId, ParsedHeaderValue, SystemLabelId};
 use crate::models::{
     Attachment, AttachmentData, AttachmentType, MailSettings, Message, MessageBodyMetadata,
     MessageMimeType,
@@ -18,8 +18,10 @@ use anyhow::Context;
 use parking_lot::Mutex;
 use proton_action_queue::action::ActionId;
 use proton_calendar_common::{self as cal, RsvpError};
-use proton_core_api::services::proton::AddressId;
-use proton_core_common::models::{Address, ModelIdExtension};
+use proton_core_api::services::proton::{AddressId, LabelId};
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::{Address, Label, ModelIdExtension};
+use proton_crypto_inbox::lock_icon::{UiLock, XPmContentEncryption, XPmRecipientEncryption};
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::sanitizer::StripStyleSheets;
 use proton_mail_html_transformer::transforms::ColorMode;
@@ -27,6 +29,7 @@ use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, Incl
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::task::JoinHandle;
@@ -494,6 +497,99 @@ impl DecryptedMessageBody {
 
     pub fn failed_to_decrypt(&self) -> bool {
         self.decryption_error.is_some()
+    }
+
+    pub async fn privacy_lock(
+        &self,
+        display_label: LocalLabelId,
+        tether: &Tether,
+    ) -> PrivacyLockBuilder {
+        let Ok(Some(local_sent_label_id)) =
+            Label::remote_id_counterpart(LabelId::sent(), tether).await
+        else {
+            tracing::error!("Could not resolve local sent label id");
+            return PrivacyLockBuilder::None;
+        };
+
+        let Ok(Some(local_draft_label_id)) =
+            Label::remote_id_counterpart(LabelId::drafts(), tether).await
+        else {
+            tracing::error!("Could not resolve local sent label id");
+            return PrivacyLockBuilder::None;
+        };
+
+        if display_label == local_sent_label_id || display_label == local_draft_label_id {
+            PrivacyLockBuilder::DraftOrSent {
+                content_encryption_header: self
+                    .metadata
+                    .parsed_header_value(XPmContentEncryption::header_key()),
+                recipient_encryption_header: self
+                    .metadata
+                    .parsed_header_value(XPmRecipientEncryption::header_key()),
+            }
+        } else {
+            PrivacyLockBuilder::Default
+        }
+    }
+}
+
+// Calculating the privacy lock icon can be an expensive process, so we delegate all
+// the work to this type tha can be invoked in the background as required.
+pub enum PrivacyLockBuilder {
+    None,
+    DraftOrSent {
+        content_encryption_header: Option<ParsedHeaderValue>,
+        recipient_encryption_header: Option<ParsedHeaderValue>,
+    },
+    //TODO(ET-5688)
+    Default,
+}
+
+impl PrivacyLockBuilder {
+    #[tracing::instrument(skip_all)]
+    pub async fn build(self) -> UiLock {
+        match self {
+            PrivacyLockBuilder::None => UiLock::default(),
+            PrivacyLockBuilder::DraftOrSent {
+                content_encryption_header,
+                recipient_encryption_header,
+            } => Self::build_draft_or_sent(content_encryption_header, recipient_encryption_header),
+            PrivacyLockBuilder::Default => {
+                //TODO(ET-5688)
+                UiLock::default()
+            }
+        }
+    }
+    fn build_draft_or_sent(
+        content_encryption_header: Option<ParsedHeaderValue>,
+        recipient_encryption_header: Option<ParsedHeaderValue>,
+    ) -> UiLock {
+        let Some(ParsedHeaderValue::String(content_encryption)) = content_encryption_header else {
+            warn!("X-Pm-Content-Encryption header missing or not a string");
+            return UiLock::default();
+        };
+
+        let Some(ParsedHeaderValue::String(recipient_encryption)) = recipient_encryption_header
+        else {
+            warn!("X-Pm-Recipient-Encryption header missing or not a string");
+            return UiLock::default();
+        };
+
+        let Ok(recipient_encryption) = XPmRecipientEncryption::from_header(&recipient_encryption)
+            .inspect_err(|e| {
+                warn!(?e, "Could not parse XPmRecipientEncryption");
+            })
+        else {
+            return UiLock::default();
+        };
+
+        let Ok(content_encryption) = XPmContentEncryption::from_str(&content_encryption)
+            .inspect_err(|e| warn!("X-Pm-Content-Encryption has invalid value: {e}"))
+        else {
+            return UiLock::default();
+        };
+
+        UiLock::for_sent_inbox(content_encryption, &recipient_encryption)
     }
 }
 

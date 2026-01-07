@@ -26,6 +26,7 @@ proton-calendar-common = { workspace = true }
 proton-core-api = { workspace = true }
 proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
+proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-mail-api = { workspace = true }
 proton-mail-common = { workspace = true, features = ["proton_mail_error_log"] }

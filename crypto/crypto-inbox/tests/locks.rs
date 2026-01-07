@@ -55,7 +55,7 @@ fn composer_lock_icon_internal_pinned() {
         UiLock {
             icon: LockIcon::ClosedLockWithTick,
             color: LockColor::Blue,
-            tooltip: LockTooltip::SendE2EVerifedRecipient,
+            tooltip: LockTooltip::SendE2EVerifiedRecipient,
         },
     );
 }
@@ -121,7 +121,7 @@ fn composer_lock_external_e2e_pinned() {
         UiLock {
             icon: LockIcon::ClosedLockWithTick,
             color: LockColor::Green,
-            tooltip: LockTooltip::SendE2EVerifedRecipient,
+            tooltip: LockTooltip::SendE2EVerifiedRecipient,
         },
     );
 }
@@ -227,7 +227,7 @@ fn recipient_lock_icon_internal_e2e_pinned() {
         UiLock {
             icon: LockIcon::ClosedLockWithTick,
             color: LockColor::Blue,
-            tooltip: LockTooltip::ReceiveE2EVerifedRecipient,
+            tooltip: LockTooltip::ReceiveE2EVerifiedRecipient,
         },
     );
 }
@@ -267,7 +267,7 @@ fn recipient_lock_icon_internal_e2e_pinned_not_signed() {
         UiLock {
             icon: LockIcon::ClosedLockWarning,
             color: LockColor::Blue,
-            tooltip: LockTooltip::ReceiveE2EVerificationFailedNoSinature,
+            tooltip: LockTooltip::ReceiveE2EVerificationFailedNoSignature,
         },
     );
 }
@@ -307,7 +307,7 @@ fn recipient_lock_icon_external_e2e_pinned() {
         UiLock {
             icon: LockIcon::ClosedLockWithTick,
             color: LockColor::Green,
-            tooltip: LockTooltip::ReceiveE2EVerifedRecipient,
+            tooltip: LockTooltip::ReceiveE2EVerifiedRecipient,
         },
     );
 }
@@ -367,7 +367,7 @@ fn recipient_lock_icon_external_sign_only_pinned() {
         UiLock {
             icon: LockIcon::OpenLockWithTick,
             color: LockColor::Green,
-            tooltip: LockTooltip::ReceiveSignOnlyVerifedRecipient,
+            tooltip: LockTooltip::ReceiveSignOnlyVerifiedRecipient,
         },
     );
 }
