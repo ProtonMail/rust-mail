@@ -233,6 +233,7 @@ impl Draft {
                 debug!("Failed to sync draft from server, attempting to load from cache.");
 
                 let Some(d) = Message::load_decrypted_message_from_cache(
+                    context.as_arc(),
                     message.id(),
                     &message.remote_address_id,
                     tether,
@@ -709,8 +710,9 @@ impl Draft {
         message_body: &str,
         draft_reply_or_forward_params: Option<DraftReplyOrForwardParams>,
         tether: &Tether,
-    ) -> Result<ApiMessage, MailContextError> {
-        let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
+    ) -> Result<(ApiMessage, Vec<u8>), MailContextError> {
+        let (encrypted, signatures) =
+            encrypt_draft_body(context, &address_id, message_body).await?;
         let params = save_action.crate_draft_params(encrypted);
 
         let force_re_encrypt = draft_reply_or_forward_params.is_some();
@@ -731,7 +733,7 @@ impl Draft {
             )
             .await?;
 
-        Ok(response.message)
+        Ok((response.message, signatures))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -745,8 +747,9 @@ impl Draft {
         attachments: &[Attachment],
         message_body: &str,
         tether: &Tether,
-    ) -> Result<ApiMessage, MailContextError> {
-        let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
+    ) -> Result<(ApiMessage, Vec<u8>), MailContextError> {
+        let (encrypted, signatures) =
+            encrypt_draft_body(context, &address_id, message_body).await?;
         let params = save_action.crate_draft_params(encrypted);
 
         let attachment_key_packets =
@@ -770,7 +773,7 @@ impl Draft {
                 Err(e.into())
             }
 
-            Ok(response) => Ok(response.message),
+            Ok(response) => Ok((response.message, signatures)),
         }
     }
 

@@ -37,7 +37,7 @@ use crate::actions::messages::UnsubscribeNewsletter;
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::MaybeEmptyString;
 use crate::models::{
-    Attachment, AttachmentType, MailSettings, MessageBodyMetadata, MessageMimeType,
+    Attachment, AttachmentType, MailSettings, MessageBodyMetadata, MessageMimeType, RawMessageBody,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use attachment::{ContentId, MimeTypeCategory};
@@ -56,7 +56,7 @@ use proton_crypto_inbox::attachment::{
 use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody, GettablePGPMessage};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_inbox_mime::{
-    Disposition as CryptoDisposition, ProcessedBodyType, ProcessedMessage,
+    Disposition as CryptoDisposition, ProcessedMessage,
 };
 use proton_mail_api::services::proton::common::AttachmentId;
 use proton_mail_api::services::proton::request_data::PutMobileSettings;
@@ -918,7 +918,21 @@ pub struct EncryptedMessageBody {
 }
 
 impl EncryptedMessageBody {
-    pub async fn into_decrypted_message<P>(
+    fn as_raw_decrypted_body<P>(
+        &self,
+        address_keys: UnlockedAddressKeys<P>,
+        pgp: P,
+    ) -> RawMessageBody
+    where
+        P: PGPProviderSync,
+    {
+        match self.decrypt(&pgp, &address_keys) {
+            Ok(body) => RawMessageBody::ok(body),
+            Err(e) => RawMessageBody::error(self.encrypted_body.as_bytes().to_vec(), e.to_string()),
+        }
+    }
+
+    pub async fn decrypt_and_store<P>(
         mut self,
         ctx: &MailUserContext,
         address_id: &AddressId,
@@ -934,125 +948,92 @@ impl EncryptedMessageBody {
             .upgrade()
             .ok_or(MailContextError::MissingContext)?;
 
-        // TODO: The RawDecryptedBody is currently ignored, but would allow to verify signature.
-        //       We would need to adapt DecryptedMessageBody to allow signature verirification for locks.
-        match self
-            .decrypt(&pgp, &address_keys)
-            .and_then(|raw_decrypted_body| raw_decrypted_body.processed_body())
-        {
-            Ok(decrypted_body) => {
-                let mime_type =
-                    MessageMimeType::from_api(self.metadata.mime_type, || match &decrypted_body {
-                        DecryptedBody::Plain(_) => unreachable!(),
-                        DecryptedBody::Mime(msg) => match msg.mime_body_type {
-                            ProcessedBodyType::Text => MessageMimeType::TextPlain,
-                            ProcessedBodyType::Html | ProcessedBodyType::Empty => {
-                                MessageMimeType::TextHtml
+        let raw_decrypted_body = self.as_raw_decrypted_body(address_keys, pgp);
+
+        let mut tether = ctx.user_stash().connection().await?;
+        match raw_decrypted_body.clone().into_raw_decrypted_body() {
+            Ok(raw_body) => {
+                let decrypted_body = raw_body.processed_body().map_err(|e| {
+                    error!("Failed to process message body: {e}");
+                    MailContextError::Crypto
+                })?;
+                tether
+                    .tx::<_, _, MailContextError>(async |tx| {
+                        raw_decrypted_body
+                            .store_and_consume(
+                                self.metadata.local_message_id.expect("Should be set"),
+                                tx,
+                            )
+                            .await?;
+                        if let DecryptedBody::Mime(ProcessedMessage {
+                            // We store the pgp attachments as normal attachments
+                            attachments: pgp_attachments,
+                            ..
+                        }) = &decrypted_body
+                        {
+                            tracing::info!(
+                                "Message is PGP Encrypted with {} PGP attachment",
+                                pgp_attachments.len()
+                            );
+                            for att in pgp_attachments {
+                                let mut attachment = Attachment {
+                                    attachment_type: AttachmentType::Pgp,
+                                    content_id: Some(ContentId::from(att.content_id.clone())),
+                                    disposition: att.disposition.into(),
+                                    filename: att.name.clone(),
+                                    size: att.size as u64,
+                                    mime_type: attachment::MimeType::from_str(&att.mime_type)
+                                        .unwrap_or_default(),
+                                    local_message_id: self.metadata.local_message_id,
+                                    remote_message_id: self.metadata.remote_message_id.clone(),
+                                    ..Default::default()
+                                };
+
+                                attachment.save(tx).await.inspect_err(|e| {
+                                    error!("Failed to store PGP attachment: {e}")
+                                })?;
+                                Attachment::store_in_cache(
+                                    &ctx,
+                                    &attachment.filename,
+                                    attachment.id(),
+                                    att.data.clone(),
+                                    tx,
+                                )
+                                .await
+                                .inspect_err(|e| {
+                                    tracing::error!("Failed to store PGP attachment in cache: {e}")
+                                })?;
+                                self.metadata.attachments.push(attachment)
                             }
-                        },
-                    });
-
-                // TODO: Verify signature.
-                match decrypted_body {
-                    DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
-                        DecryptedMessageBody::new_prefetching(
-                            body,
-                            self.metadata,
-                            mime_type,
-                            None,
-                            address_id.clone(),
-                            None,
-                            ctx,
-                        )
-                    } else {
-                        DecryptedMessageBody::new_without_prefetching(
-                            body,
-                            self.metadata,
-                            mime_type,
-                            None,
-                            address_id.clone(),
-                            None,
-                        )
-                    }),
-
-                    DecryptedBody::Mime(ProcessedMessage {
-                        body,
-                        // We store the pgp attachments as normal attachments
-                        attachments: pgp_attachments,
-                        encrypted_subject,
-                        ..
-                    }) => {
-                        tracing::info!(
-                            "Message is PGP Encrypted with {} PGP attachment",
-                            pgp_attachments.len()
-                        );
-                        // We create the models first to keep the tx open for less time.
-                        let mut model_attachments = vec![];
-                        for att in pgp_attachments {
-                            let model_att = Attachment {
-                                attachment_type: AttachmentType::Pgp,
-                                content_id: Some(ContentId::from(att.content_id)),
-                                disposition: att.disposition.into(),
-                                filename: att.name,
-                                size: att.size as u64,
-                                mime_type: attachment::MimeType::from_str(&att.mime_type)
-                                    .unwrap_or_default(),
-                                local_message_id: self.metadata.local_message_id,
-                                remote_message_id: self.metadata.remote_message_id.clone(),
-                                ..Default::default()
-                            };
-                            model_attachments.push((model_att, att.data));
                         }
 
-                        let mut tether = ctx.user_stash().connection().await?;
-                        tether
-                            .tx::<_, _, MailContextError>(async |tx| {
-                                for (mut att, data) in model_attachments {
-                                    att.save(tx).await?;
-                                    Attachment::store_in_cache(
-                                        &ctx,
-                                        &att.filename,
-                                        att.id(),
-                                        data,
-                                        tx,
-                                    )
-                                    .await?;
-                                    tracing::info!("Created PGP attachment {:?}", att.id());
-                                    self.metadata.attachments.push(att);
-                                }
-                                Ok(self.metadata.save(tx).await?)
-                            })
-                            .await?;
+                        Ok(self.metadata.save(tx).await?)
+                    })
+                    .await?;
 
-                        Ok(if with_attachment_prefetch {
-                            DecryptedMessageBody::new_prefetching(
-                                body,
-                                self.metadata,
-                                mime_type,
-                                encrypted_subject,
-                                address_id.clone(),
-                                None,
-                                ctx,
-                            )
-                        } else {
-                            DecryptedMessageBody::new_without_prefetching(
-                                body,
-                                self.metadata,
-                                mime_type,
-                                encrypted_subject,
-                                address_id.clone(),
-                                None,
-                            )
-                        })
-                    }
-                }
+                Ok(DecryptedMessageBody::from_decrypted_body(
+                    ctx,
+                    self.metadata,
+                    address_id.clone(),
+                    decrypted_body,
+                    with_attachment_prefetch,
+                ))
             }
-
-            Err(e) => {
+            Err(error) => {
                 error!(
-                    "Failed to decrypt message body ({:?}): {e:?}",
-                    self.metadata.remote_message_id,
+                    "Failed to decrypt message body ({:?}): {}",
+                    self.metadata.remote_message_id, error.error
                 );
+                tether
+                    .tx(async move |tx| {
+                        raw_decrypted_body
+                            .store_and_consume(
+                                self.metadata.local_message_id.expect("Should be set"),
+                                tx,
+                            )
+                            .await
+                    })
+                    .await?;
 
                 // In the `Ok` code path we extract message's mime type from the
                 // decrypted body - since in this case we've got no decrypted
@@ -1074,13 +1055,12 @@ impl EncryptedMessageBody {
                 let mime_type = MessageMimeType::from_api(self.metadata.mime_type, || {
                     MessageMimeType::TextPlain
                 });
-
                 Ok(DecryptedMessageBody::not_decryptable(
-                    self.encrypted_body,
+                    error.body,
                     self.metadata,
                     mime_type,
                     address_id.clone(),
-                    e.to_string(),
+                    error.error,
                 ))
             }
         }

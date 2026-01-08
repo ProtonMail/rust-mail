@@ -1,6 +1,7 @@
 ---
 source: mail/mail-common/tests/acceptance/message_body.rs
 expression: body_output.body
+snapshot_kind: text
 ---
 <html data-protonmail-message="true"><head><style type="text/css">mark {
     background-color: var(--bgcolor-mark, #ff0);
@@ -264,4 +265,4 @@ body:not([class])>pre:first-child {
         -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans,
         Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
 }
-</style></head><body>RANDOM CONTENT -- WON'T DECRYPT</body></html>
+</style></head><body><pre>RANDOM CONTENT -- WON'T DECRYPT</pre></body></html>

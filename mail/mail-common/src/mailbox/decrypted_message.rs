@@ -10,7 +10,7 @@ use crate::datatypes::theme::MailTheme;
 use crate::datatypes::{Disposition, LocalAttachmentId, ParsedHeaderValue, SystemLabelId};
 use crate::models::{
     Attachment, AttachmentData, AttachmentType, MailSettings, Message, MessageBodyMetadata,
-    MessageMimeType,
+    MessageMimeType, RawMessageBody,
 };
 use crate::rsvp::RsvpEventId;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
@@ -23,6 +23,8 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Address, Label, ModelIdExtension};
 use proton_crypto_inbox::lock_icon::XPmOrigin;
 use proton_crypto_inbox::lock_icon::{UiLock, XPmContentEncryption, XPmRecipientEncryption};
+use proton_crypto_inbox::message::DecryptedBody;
+use proton_crypto_inbox::proton_crypto_inbox_mime::{ProcessedBodyType, ProcessedMessage};
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::sanitizer::StripStyleSheets;
 use proton_mail_html_transformer::transforms::ColorMode;
@@ -247,6 +249,103 @@ impl DecryptedMessageBody {
             address_id,
             in_flight: Default::default(),
             decryption_error,
+        }
+    }
+
+    pub fn from_raw_message_body(
+        ctx: Arc<MailUserContext>,
+        metadata: MessageBodyMetadata,
+        address_id: AddressId,
+        raw_body: RawMessageBody,
+    ) -> Self {
+        match raw_body.into_raw_decrypted_body() {
+            Ok(raw_decrypted_body) => match raw_decrypted_body.processed_body() {
+                Ok(decrypted_body) => {
+                    Self::from_decrypted_body(ctx, metadata, address_id, decrypted_body, false)
+                }
+                Err(e) => Self::not_decryptable(
+                    String::from("Unable to decrypt"),
+                    metadata,
+                    MessageMimeType::TextPlain,
+                    address_id,
+                    e.to_string(),
+                ),
+            },
+            Err(error) => Self::not_decryptable(
+                error.body,
+                metadata,
+                MessageMimeType::TextPlain,
+                address_id,
+                error.error,
+            ),
+        }
+    }
+
+    pub fn from_decrypted_body(
+        ctx: Arc<MailUserContext>,
+        metadata: MessageBodyMetadata,
+        address_id: AddressId,
+        decrypted_body: DecryptedBody,
+        with_attachment_prefetch: bool,
+    ) -> Self {
+        let mime_type = MessageMimeType::from_api(metadata.mime_type, || match &decrypted_body {
+            DecryptedBody::Plain(_) => unreachable!(),
+            DecryptedBody::Mime(msg) => match msg.mime_body_type {
+                ProcessedBodyType::Text => MessageMimeType::TextPlain,
+                ProcessedBodyType::Html | ProcessedBodyType::Empty => MessageMimeType::TextHtml,
+            },
+        });
+
+        match decrypted_body {
+            DecryptedBody::Plain(body) => {
+                if with_attachment_prefetch {
+                    DecryptedMessageBody::new_prefetching(
+                        body,
+                        metadata,
+                        mime_type,
+                        None,
+                        address_id.clone(),
+                        None,
+                        ctx,
+                    )
+                } else {
+                    DecryptedMessageBody::new_without_prefetching(
+                        body,
+                        metadata,
+                        mime_type,
+                        None,
+                        address_id.clone(),
+                        None,
+                    )
+                }
+            }
+
+            DecryptedBody::Mime(ProcessedMessage {
+                body,
+                encrypted_subject,
+                ..
+            }) => {
+                if with_attachment_prefetch {
+                    DecryptedMessageBody::new_prefetching(
+                        body,
+                        metadata,
+                        mime_type,
+                        encrypted_subject,
+                        address_id.clone(),
+                        None,
+                        ctx,
+                    )
+                } else {
+                    DecryptedMessageBody::new_without_prefetching(
+                        body,
+                        metadata,
+                        mime_type,
+                        encrypted_subject,
+                        address_id.clone(),
+                        None,
+                    )
+                }
+            }
         }
     }
 

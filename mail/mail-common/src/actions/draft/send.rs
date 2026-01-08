@@ -11,8 +11,8 @@ use crate::draft::{
 };
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
-    DraftSendResultOrigin, MailSettings, Message, MessageBody, MessageCounter, MessageMimeType,
-    MetadataId, RollbackItem,
+    DraftSendResultOrigin, MailSettings, Message, MessageCounter, MessageMimeType, MetadataId,
+    RawMessageBody, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use chrono::{DateTime, Local};
@@ -397,7 +397,7 @@ impl Send {
 
         // Load body - it is not encrypted.
         let Some(stored_message_body) =
-            MessageBody::load(message_metadata.id(), guard.tether()).await?
+            RawMessageBody::load(message_metadata.id(), guard.tether()).await?
         else {
             return Err(SendError::MessageBodyMissing(message_metadata.id()).into());
         };
@@ -420,7 +420,7 @@ impl Send {
         // Composer preference to compute the recipent send preference from.
         let composer_preference = ComposerPreference {
             encrypt_to_outside: eo_data.is_some(),
-            composer_body_mime_type: stored_message_body.mime_type.into(),
+            composer_body_mime_type: action.mime_type.into(),
         };
 
         // Load send preferences for each recipient of the message.
@@ -453,7 +453,10 @@ impl Send {
             &address_keys,
             send_preferences,
             action.mime_type.into(),
-            &stored_message_body.body,
+            str::from_utf8(stored_message_body.body()).map_err(|e| {
+                error!("Failed to convert message body to uf8: {e}");
+                SendError::MessageBodyMissing(message_metadata.id())
+            })?,
             &attachments,
             eo_data,
             guard,

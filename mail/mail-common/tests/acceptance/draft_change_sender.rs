@@ -7,7 +7,8 @@ use proton_mail_common::actions::draft::AttachmentRemove;
 use proton_mail_common::datatypes::{MessageFlags, ParsedHeaders};
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::models::{
-    DraftAttachmentMetadata, DraftAttachmentUploadState, Message, MessageBody, MessageBodyMetadata,
+    DraftAttachmentMetadata, DraftAttachmentUploadState, Message, MessageBodyMetadata,
+    RawMessageBody,
 };
 use proton_mail_common::test_utils::message_body::{
     TEST_USER_ID, generate_new_api_address, message_body_test_user_secret,
@@ -181,7 +182,7 @@ async fn change_sender_address_with_alias() {
         local_message_id: None,
         remote_message_id: message.remote_id.clone(),
         header: "".to_string(),
-        mime_type: Default::default(),
+        mime_type: MimeType::TextHtml.into(),
         parsed_headers: ParsedHeaders {
             headers: HashMap::from([(
                 "X-Original-To".to_owned(),
@@ -198,7 +199,7 @@ async fn change_sender_address_with_alias() {
             message.save(tx).await.unwrap();
             message_body_metadata.save(tx).await.unwrap();
 
-            MessageBody::html("Hello world")
+            RawMessageBody::local_draft("Hello world")
                 .store(message.id(), tx)
                 .await
         })

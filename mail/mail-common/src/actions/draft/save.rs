@@ -13,8 +13,8 @@ use crate::draft::recipients::RecipientList;
 use crate::draft::{Draft, ReplyMode, SaveError, compose, draft_v1};
 use crate::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
-    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBody,
-    MessageBodyMetadata, MessageMimeType, MetadataId, RollbackItem,
+    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata,
+    MessageMimeType, MetadataId, RawMessageBody, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use indoc::indoc;
@@ -353,8 +353,8 @@ impl Handler for SaveHandler {
             message
         };
 
-        MessageBody::ok(&action.body, action.mime_type)
-            .store(message.id(), bond)
+        RawMessageBody::local_draft(&action.body)
+            .store_and_consume(message.id(), bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to store draft body in cache :{e:?}");
@@ -516,7 +516,7 @@ impl Save {
                 .collect::<Vec<_>>();
 
         // Create draft on the server.
-        let new_message = if let Some(remote_message_id) = remote_message_id.clone() {
+        let (new_message, signatures) = if let Some(remote_message_id) = remote_message_id.clone() {
             info!("Updating draft {:?}", remote_message_id);
             let result = Draft::remote_update(
                 ctx,
@@ -583,7 +583,7 @@ impl Save {
             result?
         } else {
             info!("Creating new draft");
-            let message = Draft::remote_create(
+            let (message, signatures) = Draft::remote_create(
                 ctx,
                 session,
                 action.address_id.clone(),
@@ -598,11 +598,9 @@ impl Save {
                 error!("Failed to create draft on remote: {e:?}");
             })?;
             info!("Draft created with {:?}", message.metadata.id);
-            message
+            (message, signatures)
         };
 
-        // Note: This section will be generalized as part of ET-1353 when
-        // we implement draft updates.
         guard
             .tx::<_, _, <Self as Action>::Error>(async |bond| {
                 // There is a small chance that, some rogue event or state update could have
@@ -851,6 +849,11 @@ impl Save {
                     .inspect_err(|e| {
                         error!("Failed to update message body metadata: {e:?}");
                     })?;
+
+                RawMessageBody::update_signatures(local_message_id, signatures, bond).await.inspect_err(|e| {
+                    error!("Failed to update message body signature: {e}");
+                })?;
+
                 Ok(())
             }).await
     }

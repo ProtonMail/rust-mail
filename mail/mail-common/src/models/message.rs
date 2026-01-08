@@ -86,6 +86,7 @@ use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandl
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
+use std::sync::Arc;
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq, ScrollerEq)]
@@ -1055,9 +1056,13 @@ impl Message {
         with_attachment_prefetching: bool,
         with_network_check: bool,
     ) -> Result<DecryptedMessageBody, MailContextError> {
-        if let Some(decrypted) =
-            Self::load_decrypted_message_from_cache(self.id(), &self.remote_address_id, tx.tether())
-                .await?
+        if let Some(decrypted) = Self::load_decrypted_message_from_cache(
+            ctx.as_arc(),
+            self.id(),
+            &self.remote_address_id,
+            tx.tether(),
+        )
+        .await?
         {
             debug!("Found message body in cache.");
             return Ok(decrypted);
@@ -1093,22 +1098,6 @@ impl Message {
             with_attachment_prefetching,
         )
         .await?;
-
-        trace!("Message successfully decrypted. Caching...");
-
-        tx.run_tx(async |tx| {
-            MessageBody {
-                body: decrypted.body.clone(),
-                mime_type: decrypted.mime_type,
-                decryption_error: decrypted.decryption_error.clone(),
-            }
-            .store(self.id(), tx)
-            .await?;
-
-            Ok(())
-        })
-        .await
-        .map_err(MailContextError::Other)?;
 
         info!("Message successfully synced.");
         Ok(decrypted)
@@ -1592,18 +1581,6 @@ impl Message {
         )
         .await?;
 
-        tether
-            .tx(async |tx| {
-                MessageBody {
-                    body: decrypted.body.clone(),
-                    mime_type: decrypted.mime_type,
-                    decryption_error: decrypted.decryption_error.clone(),
-                }
-                .store(message.id(), tx)
-                .await
-            })
-            .await?;
-
         Ok((message, decrypted))
     }
 
@@ -1667,12 +1644,13 @@ impl Message {
         let address_keys = ctx.unlocked_address_keys(&pgp, tether, address_id).await?;
 
         encrypted_message_body
-            .into_decrypted_message(ctx, address_id, address_keys, pgp, attachment_prefetch)
+            .decrypt_and_store(ctx, address_id, address_keys, pgp, attachment_prefetch)
             .await
     }
 
-    #[tracing::instrument(skip(tether))]
+    #[tracing::instrument(skip(ctx, tether))]
     pub(crate) async fn load_decrypted_message_from_cache(
+        ctx: Arc<MailUserContext>,
         local_id: LocalMessageId,
         address_id: &AddressId,
         tether: &Tether,
@@ -1684,20 +1662,18 @@ impl Message {
             return Ok(None);
         };
 
-        let Some(msg) = MessageBody::load(local_id, tether)
+        let Some(msg) = RawMessageBody::load(local_id, tether)
             .await
             .context("Failed to retrieve decrypted message body from db")?
         else {
             return Ok(None);
         };
 
-        Ok(Some(DecryptedMessageBody::new_without_prefetching(
-            msg.body,
+        Ok(Some(DecryptedMessageBody::from_raw_message_body(
+            ctx,
             metadata,
-            msg.mime_type,
-            None,
             address_id.clone(),
-            msg.decryption_error,
+            msg,
         )))
     }
 
@@ -2034,7 +2010,7 @@ impl Message {
         if (event_action == Some(Action::Update) || is_stale_draft)
             && let Some(local_id) = Message::remote_id_counterpart(metadata.id.clone(), tx).await?
         {
-            _ = MessageBody::delete(local_id, tx).await;
+            _ = RawMessageBody::delete(local_id, tx).await;
         }
 
         Ok(MessageSyncDecision::Apply)

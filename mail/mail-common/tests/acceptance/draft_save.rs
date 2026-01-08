@@ -29,7 +29,7 @@ use proton_mail_common::draft::{
 };
 use proton_mail_common::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
-    DraftSendResult, DraftSendResultOrigin, Message, MessageBody, MessageBodyMetadata,
+    DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata, RawMessageBody,
     RollbackItem,
 };
 use proton_mail_common::test_utils::message_body::*;
@@ -1506,7 +1506,7 @@ async fn open_draft_detects_sender_alias() {
         local_message_id: None,
         remote_message_id: message.remote_id.clone(),
         header: "".to_string(),
-        mime_type: Default::default(),
+        mime_type: MimeType::TextHtml,
         parsed_headers: ParsedHeaders {
             headers: HashMap::from([(
                 "X-Original-To".to_owned(),
@@ -1523,7 +1523,7 @@ async fn open_draft_detects_sender_alias() {
             message.save(tx).await.unwrap();
             message_body_metadata.save(tx).await.unwrap();
 
-            MessageBody::html("Hello world")
+            RawMessageBody::local_draft("Hello world")
                 .store(message.id(), tx)
                 .await
         })
