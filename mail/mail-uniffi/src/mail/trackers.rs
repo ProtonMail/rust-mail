@@ -20,7 +20,6 @@ pub async fn get_tracker_info_for_message(
 
     uniffi_async::<_, RealProtonMailError, _>(async move {
         let result = ctx
-            .user_context()
             .get_service::<TrackerDetector>()
             .get_tracker_info(message_id.into())
             .await?
@@ -41,7 +40,6 @@ pub async fn watch_tracker_info_stream(
 
     uniffi_async(async move {
         let (info, handle) = ctx
-            .user_context()
             .get_service::<TrackerDetector>()
             .watch(message_id.into())
             .await?;
