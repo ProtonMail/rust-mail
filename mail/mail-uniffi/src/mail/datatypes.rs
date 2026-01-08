@@ -2,6 +2,7 @@ mod attachment;
 mod available_action;
 mod folder_banner;
 pub(crate) mod labels;
+pub mod privacy_lock;
 mod snooze;
 mod system_folder;
 mod system_label;

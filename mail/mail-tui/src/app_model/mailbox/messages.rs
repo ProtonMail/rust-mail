@@ -23,13 +23,16 @@ use proton_calendar_api::CalendarAttendeeStatus;
 use proton_calendar_common::{RsvpAnswer, RsvpOccurrence, RsvpProgress, RsvpRecency, RsvpRelation};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
+use proton_crypto_inbox::lock_icon::{LockColor, LockIcon, UiLock};
 use proton_mail_api::proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{
     ContextualConversation, ConversationViewOptions, IncludeSwitch, LocalConversationId,
     LocalMessageId, MessageRecipientDisplayMode, SearchOptions,
 };
-use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
+use proton_mail_common::decrypted_message::{
+    DecryptedMessageBody, PrivacyLockBuilder, TransformOpts,
+};
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::models::{
     Attachment, IncomingDefault, LabelWithCounters, Message as MailMessage, MessageBodyMetadata,
@@ -328,6 +331,7 @@ impl MessagesState {
         &mut self,
         ctx: Arc<MailUserContext>,
         show_loading: bool,
+        active_label_id: LocalLabelId,
     ) -> Command<Messages> {
         let Some(metadata) = self.selected_message() else {
             tracing::warn!("No message selected");
@@ -338,7 +342,7 @@ impl MessagesState {
             self.open_message = DecryptedMessageStatus::Loading(ThrobberState::default());
         }
 
-        Command::task(async {
+        Command::task(async move {
             #[allow(clippy::redundant_closure_call)] // Poor's man try blocks
             let c: Result<_> = (|| async move {
                 let stash = ctx.user_stash();
@@ -349,9 +353,10 @@ impl MessagesState {
                     .await
                     .context("Failed to get message body")?;
 
-                Ok(Box::new(
-                    DecryptedMessage::new(metadata, decrypted, &ctx, tether).await?,
-                ))
+                let (msg, builder) =
+                    DecryptedMessage::new(&ctx, metadata, decrypted, active_label_id, tether)
+                        .await?;
+                Ok((Box::new(msg), builder))
             })()
             .await;
 
@@ -359,11 +364,21 @@ impl MessagesState {
         })
     }
 
-    fn display_message(&mut self, message: Result<Box<DecryptedMessage>>) {
-        self.open_message = match message {
-            Ok(message) => DecryptedMessageStatus::Success(message),
-            Err(e) => DecryptedMessageStatus::Error(e),
-        }
+    fn display_message(
+        &mut self,
+        message: Result<(Box<DecryptedMessage>, PrivacyLockBuilder)>,
+    ) -> Command<Messages> {
+        let (open_message, command) = match message {
+            Ok((message, builder)) => (
+                DecryptedMessageStatus::Success(message),
+                Command::task(async move {
+                    Command::message(MessageMessage::UpdatePrivacyLock(builder.build().await))
+                }),
+            ),
+            Err(e) => (DecryptedMessageStatus::Error(e), Command::none()),
+        };
+        self.open_message = open_message;
+        command
     }
 
     fn close_message(&mut self) {
@@ -756,10 +771,15 @@ impl MessagesState {
 
         match message {
             MessageMessage::OpenBody { show_loading } => {
-                return self.open_message_body(user_ctx.to_owned(), show_loading);
+                return self.open_message_body(user_ctx.to_owned(), show_loading, mbox.label_id());
             }
             MessageMessage::OpenBodyResult(r) => {
-                self.display_message(r);
+                return self.display_message(r);
+            }
+            MessageMessage::UpdatePrivacyLock(lock) => {
+                if let DecryptedMessageStatus::Success(ref mut msg) = self.open_message {
+                    msg.lock = lock;
+                }
             }
             MessageMessage::CloseBody => {
                 self.close_message();
@@ -964,6 +984,7 @@ pub struct DecryptedMessage {
     labels: String,
     banners: Vec<MessageBanner>,
     rsvp: Rsvp,
+    lock: UiLock,
 }
 
 enum Rsvp {
@@ -1044,11 +1065,12 @@ impl DecryptedMessageStatus {
 
 impl DecryptedMessage {
     pub async fn new(
+        ctx: &Arc<MailUserContext>,
         msg: MailMessage,
         body: DecryptedMessageBody,
-        ctx: &Arc<MailUserContext>,
+        active_label_id: LocalLabelId,
         mut tether: Tether,
-    ) -> Result<Self> {
+    ) -> Result<(Self, PrivacyLockBuilder)> {
         let sender = msg.sender.address.clone();
 
         let body_output = body
@@ -1104,6 +1126,7 @@ impl DecryptedMessage {
         let cc = format_recipients(&msg.cc_list);
         let bcc = format_recipients(&msg.bcc_list);
         let labels = msg.custom_labels.iter().map(|l| &l.name).join(", ");
+        let lock_builder = body.privacy_lock(active_label_id, &tether).await;
 
         let rsvp = match body.identify_rsvp(ctx).await {
             Ok(Some(rsvp)) => {
@@ -1125,20 +1148,24 @@ impl DecryptedMessage {
             Err(err) => Rsvp::Error(err.to_string()),
         };
 
-        Ok(Self {
-            body,
-            msg,
-            content,
-            content_scroll,
-            date,
-            from,
-            to,
-            cc,
-            bcc,
-            labels,
-            banners: body_output.body_banners,
-            rsvp,
-        })
+        Ok((
+            Self {
+                body,
+                msg,
+                content,
+                content_scroll,
+                date,
+                from,
+                to,
+                cc,
+                bcc,
+                labels,
+                banners: body_output.body_banners,
+                rsvp,
+                lock: UiLock::default(),
+            },
+            lock_builder,
+        ))
     }
 
     pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
@@ -1162,6 +1189,30 @@ impl DecryptedMessage {
     }
 
     fn draw_headers(&self, frame: &mut Frame, area: Rect) {
+        let lock_str = match self.lock.icon {
+            LockIcon::None => "??",
+            LockIcon::ClosedLock => "CL",
+            LockIcon::ClosedLockWithTick => "CT",
+            LockIcon::ClosedLockWithPen => "CP",
+            LockIcon::ClosedLockWarning => "CW",
+            LockIcon::OpenLockWithPen => "OP",
+            LockIcon::OpenLockWithTick => "OT",
+            LockIcon::OpenLockWarning => "OW",
+        };
+
+        let lock_style = match self.lock.color {
+            LockColor::Black => Style::default(),
+            LockColor::Green => Style::default().bg(Color::Green).fg(Color::White),
+            LockColor::Blue => Style::default().bg(Color::Blue).fg(Color::White),
+        }
+        .bold();
+
+        let from_text = Text::from(Line::from(vec![
+            Span::from(lock_str).style(lock_style),
+            Span::from(" "),
+            Span::from(self.from.as_str()),
+        ]));
+
         let headers = vec![
             Row::new([
                 Cell::from("Subject:"),
@@ -1169,7 +1220,7 @@ impl DecryptedMessage {
             ])
             .bold(),
             Row::new([Cell::from("Date:").bold(), Cell::from(self.date.as_str())]),
-            Row::new([Cell::from("From:").bold(), Cell::from(self.from.as_str())]),
+            Row::new([Cell::from("From:").bold(), Cell::from(from_text)]),
             Row::new([Cell::from("To:").bold(), Cell::from(self.to.as_str())]),
             Row::new([Cell::from("CC:").bold(), Cell::from(self.cc.as_str())]),
             Row::new([Cell::from("BCC:").bold(), Cell::from(self.bcc.as_str())]),

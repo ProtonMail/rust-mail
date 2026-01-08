@@ -33,7 +33,7 @@ pub enum LockTooltip {
     None,
 
     SendE2E,
-    SendE2EVerifedRecipient,
+    SendE2EVerifiedRecipient,
     SendSignOnly,
     SendZeroAccessEncryptionDisabled,
 
@@ -41,10 +41,10 @@ pub enum LockTooltip {
     ZeroAccessSentByProton,
 
     ReceiveE2E,
-    ReceiveE2EVerifedRecipient,
+    ReceiveE2EVerifiedRecipient,
     ReceiveE2EVerificationFailed,
-    ReceiveE2EVerificationFailedNoSinature,
-    ReceiveSignOnlyVerifedRecipient,
+    ReceiveE2EVerificationFailedNoSignature,
+    ReceiveSignOnlyVerifiedRecipient,
     ReceiveSignOnlyVerificationFailed,
 
     SentE2EVerifiedRecipients,
@@ -67,16 +67,16 @@ impl Display for LockTooltip {
         match self {
             LockTooltip::None => f.write_str(""),
             LockTooltip::SendE2E | LockTooltip::SentRecipientE2E => f.write_str("End-to-end encrypted"),
-            LockTooltip::SendE2EVerifedRecipient | LockTooltip::SentRecipientE2EVerifiedRecipient => f.write_str("End-to-end encrypted to verified recipient"),
+            LockTooltip::SendE2EVerifiedRecipient | LockTooltip::SentRecipientE2EVerifiedRecipient => f.write_str("End-to-end encrypted to verified recipient"),
             LockTooltip::SendZeroAccessEncryptionDisabled => f.write_str("Zero-access encrypted. Recipient has disabled end-to-end encryption on their account."),
             LockTooltip::SendSignOnly | LockTooltip::SentRecipientPGPSigned => f.write_str("PGP-signed"),
             LockTooltip::ReceiveE2E => f.write_str("End-to-end encrypted message"),
-            LockTooltip::ReceiveE2EVerifedRecipient => f.write_str("End-to-end encrypted message from verified recipient"),
+            LockTooltip::ReceiveE2EVerifiedRecipient => f.write_str("End-to-end encrypted message from verified recipient"),
             LockTooltip::ReceiveE2EVerificationFailed => f.write_str("Sender verification failed"),
-            LockTooltip::ReceiveE2EVerificationFailedNoSinature => f.write_str("Sender could not be verified: Message not signed"),
+            LockTooltip::ReceiveE2EVerificationFailedNoSignature => f.write_str("Sender could not be verified: Message not signed"),
             LockTooltip::ReceiveSignOnlyVerificationFailed => f.write_str("PGP-signed message. Sender verification failed"),
             LockTooltip::ZeroAccessSentByProton => f.write_str("Sent by ProtonMail with zero-access encryption"),
-            LockTooltip::ReceiveSignOnlyVerifedRecipient => f.write_str("PGP-signed message from verified sender"),
+            LockTooltip::ReceiveSignOnlyVerifiedRecipient => f.write_str("PGP-signed message from verified sender"),
             LockTooltip::ZeroAccess => f.write_str("Stored with zero-access encryption"),
             LockTooltip::SentE2EVerifiedRecipients => f.write_str("Sent by you with end-to-end encryption to verified recipients"),
             LockTooltip::SentProtonVerifiedRecipients => f.write_str("Sent by ProtonMail with zero-access encryption to verified recipients"),
@@ -152,6 +152,13 @@ pub enum XPmContentEncryption {
     OnDelivery,
 }
 
+impl XPmContentEncryption {
+    #[must_use]
+    pub fn header_key() -> &'static str {
+        "X-Pm-Content-Encryption"
+    }
+}
+
 impl FromStr for XPmContentEncryption {
     type Err = &'static str;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -177,6 +184,24 @@ pub enum XPmRecipientAuthentication {
     PgpMime,
     PgpEo,
     PgpPm,
+}
+
+impl XPmRecipientAuthentication {
+    /// Attempt to parse an X-Pm-Recipient-Authentication header string.
+    ///
+    /// E.g.:
+    /// ```ignore
+    /// foo%40proton.me=pgp-pm;
+    ///  bar%40protonmail.com=pgp-pm
+    /// ```
+    pub fn from_header(value: &str) -> Result<Vec<Self>, &'static str> {
+        parse_and_map_header::<Self>(value)
+    }
+
+    #[must_use]
+    pub fn header_key() -> &'static str {
+        "X-Pm-Recipient-Authentication"
+    }
 }
 
 impl std::str::FromStr for XPmRecipientAuthentication {
@@ -211,6 +236,24 @@ pub enum XPmRecipientEncryption {
     PgpEo,
     PgpPm,
     PgpPmPinned,
+}
+
+impl XPmRecipientEncryption {
+    /// Attempt to parse an X-Pm-Recipient-Encryption header string.
+    ///
+    /// E.g.:
+    /// ```ignore
+    /// foo%40proton.me=pgp-pm;
+    ///  bar%40protonmail.com=pgp-pm
+    /// ```
+    pub fn from_header(value: &str) -> Result<Vec<Self>, &'static str> {
+        parse_and_map_header::<Self>(value)
+    }
+
+    #[must_use]
+    pub fn header_key() -> &'static str {
+        "X-Pm-Recipient-Encryption"
+    }
 }
 
 impl std::str::FromStr for XPmRecipientEncryption {
@@ -402,12 +445,12 @@ where
                     NotSigned => UiLock {
                         icon: LockIcon::ClosedLockWarning,
                         color,
-                        tooltip: LockTooltip::ReceiveE2EVerificationFailedNoSinature,
+                        tooltip: LockTooltip::ReceiveE2EVerificationFailedNoSignature,
                     },
                     SignedAndValid => UiLock {
                         icon: LockIcon::ClosedLockWithTick,
                         color,
-                        tooltip: LockTooltip::ReceiveE2EVerifedRecipient,
+                        tooltip: LockTooltip::ReceiveE2EVerifiedRecipient,
                     },
                     SignedAndInvalid => UiLock {
                         icon: LockIcon::ClosedLockWarning,
@@ -440,7 +483,7 @@ where
                     SignedAndValid => UiLock {
                         icon: LockIcon::ClosedLockWithTick,
                         color,
-                        tooltip: LockTooltip::ReceiveE2EVerifedRecipient,
+                        tooltip: LockTooltip::ReceiveE2EVerifiedRecipient,
                     },
                     SignedAndInvalid => UiLock {
                         icon: LockIcon::ClosedLockWarning,
@@ -467,7 +510,7 @@ where
                     SignedAndValid => UiLock {
                         icon: LockIcon::OpenLockWithTick,
                         color: LockColor::Green,
-                        tooltip: LockTooltip::ReceiveSignOnlyVerifedRecipient,
+                        tooltip: LockTooltip::ReceiveSignOnlyVerifiedRecipient,
                     },
                     SignedAndInvalid => UiLock {
                         icon: LockIcon::OpenLockWarning,
@@ -623,8 +666,70 @@ fn determine_sent_lock_icon_for_recipient(
 fn tooltip_composer(lock: LockIcon) -> LockTooltip {
     match lock {
         LockIcon::ClosedLock => LockTooltip::SendE2E,
-        LockIcon::ClosedLockWithTick => LockTooltip::SendE2EVerifedRecipient,
+        LockIcon::ClosedLockWithTick => LockTooltip::SendE2EVerifiedRecipient,
         LockIcon::OpenLockWithPen => LockTooltip::SendSignOnly,
         _ => LockTooltip::None,
+    }
+}
+
+fn parse_and_map_header<T>(value: &str) -> Result<Vec<T>, <T as FromStr>::Err>
+where
+    T: FromStr<Err = &'static str> + 'static,
+{
+    value
+        .split(';')
+        .filter_map(|item| {
+            let trimmed = item.trim();
+            (!trimmed.is_empty()).then_some(trimmed)
+        })
+        .map(|item| {
+            let (_, value) = item.rsplit_once('=').ok_or("Invalid format")?;
+            T::from_str(value)
+        })
+        .collect::<Result<Vec<_>, &'static str>>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_x_pm_recipient_encryption_single() {
+        let value = "foo%40proton.me=pgp-pm";
+        let parsed = XPmRecipientEncryption::from_header(value).unwrap();
+        assert_eq!(parsed, vec![XPmRecipientEncryption::PgpPm]);
+    }
+
+    #[test]
+    fn parse_x_pm_recipient_encryption_list() {
+        let value = "foo%40proton.me=pgp-pm;\n bar%40protonmail.com=pgp-mime";
+        let parsed = XPmRecipientEncryption::from_header(value).unwrap();
+        assert_eq!(
+            parsed,
+            vec![
+                XPmRecipientEncryption::PgpPm,
+                XPmRecipientEncryption::PgpMime
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_x_pm_recipient_authentication_single() {
+        let value = "foo%40proton.me=pgp-pm";
+        let parsed = XPmRecipientAuthentication::from_header(value).unwrap();
+        assert_eq!(parsed, vec![XPmRecipientAuthentication::PgpPm]);
+    }
+
+    #[test]
+    fn parse_x_pm_recipient_authentication_list() {
+        let value = "foo%40proton.me=pgp-pm;\n bar%40protonmail.com=pgp-mime";
+        let parsed = XPmRecipientAuthentication::from_header(value).unwrap();
+        assert_eq!(
+            parsed,
+            vec![
+                XPmRecipientAuthentication::PgpPm,
+                XPmRecipientAuthentication::PgpMime
+            ]
+        );
     }
 }
