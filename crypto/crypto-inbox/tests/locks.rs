@@ -419,6 +419,7 @@ fn sent_lock_icon_aggregated_all_external() {
         XPmRecipientEncryption::PgpMime,
     ];
     perform_sent_lock_icon_test(
+        XPmOrigin::External,
         XPmContentEncryption::EndToEnd,
         &per_recipient_encryption,
         UiLock {
@@ -436,6 +437,7 @@ fn sent_lock_icon_aggregated_all_external_pinned() {
         XPmRecipientEncryption::PgpMimePinned,
     ];
     perform_sent_lock_icon_test(
+        XPmOrigin::External,
         XPmContentEncryption::EndToEnd,
         &per_recipient_encryption,
         UiLock {
@@ -453,6 +455,7 @@ fn sent_lock_icon_aggregated_all_external_pinned_proton() {
         XPmRecipientEncryption::PgpMimePinned,
     ];
     perform_sent_lock_icon_test(
+        XPmOrigin::External,
         XPmContentEncryption::OnDelivery,
         &per_recipient_encryption,
         UiLock {
@@ -470,6 +473,7 @@ fn sent_lock_icon_aggregated_all_external_proton() {
         XPmRecipientEncryption::PgpMimePinned,
     ];
     perform_sent_lock_icon_test(
+        XPmOrigin::External,
         XPmContentEncryption::OnDelivery,
         &per_recipient_encryption,
         UiLock {
@@ -487,6 +491,7 @@ fn sent_lock_icon_aggregated_internal() {
         XPmRecipientEncryption::PgpMimePinned,
     ];
     perform_sent_lock_icon_test(
+        XPmOrigin::Internal,
         XPmContentEncryption::EndToEnd,
         &per_recipient_encryption,
         UiLock {
@@ -504,6 +509,7 @@ fn sent_lock_icon_aggregated_internal_porotn() {
         XPmRecipientEncryption::PgpMimePinned,
     ];
     perform_sent_lock_icon_test(
+        XPmOrigin::Internal,
         XPmContentEncryption::OnDelivery,
         &per_recipient_encryption,
         UiLock {
@@ -521,6 +527,7 @@ fn sent_lock_icon_aggregated_internal_pinned() {
         XPmRecipientEncryption::PgpMimePinned,
     ];
     perform_sent_lock_icon_test(
+        XPmOrigin::Internal,
         XPmContentEncryption::EndToEnd,
         &per_recipient_encryption,
         UiLock {
@@ -538,6 +545,7 @@ fn sent_lock_icon_aggregated_internal_pinned_proton() {
         XPmRecipientEncryption::PgpMimePinned,
     ];
     perform_sent_lock_icon_test(
+        XPmOrigin::Internal,
         XPmContentEncryption::OnDelivery,
         &per_recipient_encryption,
         UiLock {
@@ -555,6 +563,25 @@ fn sent_lock_icon_aggregated_no_encrpytion() {
         XPmRecipientEncryption::PgpMimePinned,
     ];
     perform_sent_lock_icon_test(
+        XPmOrigin::External,
+        XPmContentEncryption::EndToEnd,
+        &per_recipient_encryption,
+        UiLock {
+            icon: LockIcon::ClosedLock,
+            color: LockColor::Blue,
+            tooltip: LockTooltip::ZeroAccess,
+        },
+    );
+}
+
+#[test]
+fn sent_lock_icon_aggregated_no_encrpytion_imported() {
+    let per_recipient_encryption = vec![
+        XPmRecipientEncryption::None,
+        XPmRecipientEncryption::PgpMimePinned,
+    ];
+    perform_sent_lock_icon_test(
+        XPmOrigin::Import,
         XPmContentEncryption::EndToEnd,
         &per_recipient_encryption,
         UiLock {
@@ -796,11 +823,13 @@ fn perform_recipient_lock_icon_test<Pub>(
 }
 
 fn perform_sent_lock_icon_test(
+    origin_header: XPmOrigin,
     content_encryption: XPmContentEncryption,
     per_recipient_encryption: &[XPmRecipientEncryption],
     expected_output: UiLock,
 ) {
-    let lock_icon = UiLock::for_sent_inbox(content_encryption, per_recipient_encryption);
+    let lock_icon =
+        UiLock::for_sent_inbox(origin_header, content_encryption, per_recipient_encryption);
     assert_eq!(
         lock_icon, expected_output,
         "Expected {expected_output:?}, got {lock_icon:?}"

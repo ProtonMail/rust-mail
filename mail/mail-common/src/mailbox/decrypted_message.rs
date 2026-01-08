@@ -21,6 +21,7 @@ use proton_calendar_common::{self as cal, RsvpError};
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Address, Label, ModelIdExtension};
+use proton_crypto_inbox::lock_icon::XPmOrigin;
 use proton_crypto_inbox::lock_icon::{UiLock, XPmContentEncryption, XPmRecipientEncryption};
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::sanitizer::StripStyleSheets;
@@ -520,6 +521,7 @@ impl DecryptedMessageBody {
 
         if display_label == local_sent_label_id || display_label == local_draft_label_id {
             PrivacyLockBuilder::DraftOrSent {
+                origin_header: self.metadata.parsed_header_value(XPmOrigin::header_key()),
                 content_encryption_header: self
                     .metadata
                     .parsed_header_value(XPmContentEncryption::header_key()),
@@ -538,6 +540,7 @@ impl DecryptedMessageBody {
 pub enum PrivacyLockBuilder {
     None,
     DraftOrSent {
+        origin_header: Option<ParsedHeaderValue>,
         content_encryption_header: Option<ParsedHeaderValue>,
         recipient_encryption_header: Option<ParsedHeaderValue>,
     },
@@ -551,9 +554,14 @@ impl PrivacyLockBuilder {
         match self {
             PrivacyLockBuilder::None => UiLock::default(),
             PrivacyLockBuilder::DraftOrSent {
+                origin_header,
                 content_encryption_header,
                 recipient_encryption_header,
-            } => Self::build_draft_or_sent(content_encryption_header, recipient_encryption_header),
+            } => Self::build_draft_or_sent(
+                origin_header,
+                content_encryption_header,
+                recipient_encryption_header,
+            ),
             PrivacyLockBuilder::Default => {
                 //TODO(ET-5688)
                 UiLock::default()
@@ -561,9 +569,15 @@ impl PrivacyLockBuilder {
         }
     }
     fn build_draft_or_sent(
+        origin_header: Option<ParsedHeaderValue>,
         content_encryption_header: Option<ParsedHeaderValue>,
         recipient_encryption_header: Option<ParsedHeaderValue>,
     ) -> UiLock {
+        let Some(ParsedHeaderValue::String(origin)) = origin_header else {
+            warn!("X-Pm-Origin header missing or not a string");
+            return UiLock::default();
+        };
+
         let Some(ParsedHeaderValue::String(content_encryption)) = content_encryption_header else {
             warn!("X-Pm-Content-Encryption header missing or not a string");
             return UiLock::default();
@@ -575,9 +589,15 @@ impl PrivacyLockBuilder {
             return UiLock::default();
         };
 
+        let Ok(origin) = XPmOrigin::from_str(&origin).inspect_err(|e| {
+            warn!(?e, "Could not parse X-Pm-Origin");
+        }) else {
+            return UiLock::default();
+        };
+
         let Ok(recipient_encryption) = XPmRecipientEncryption::from_header(&recipient_encryption)
             .inspect_err(|e| {
-                warn!(?e, "Could not parse XPmRecipientEncryption");
+                warn!(?e, "Could not parse X-Pm-Recipient-Encryption");
             })
         else {
             return UiLock::default();
@@ -589,7 +609,7 @@ impl PrivacyLockBuilder {
             return UiLock::default();
         };
 
-        UiLock::for_sent_inbox(content_encryption, &recipient_encryption)
+        UiLock::for_sent_inbox(origin, content_encryption, &recipient_encryption)
     }
 }
 
