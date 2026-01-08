@@ -4,6 +4,7 @@ use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::models::{Conversation, Message, MessageSyncDecision};
 use futures::stream::{FuturesOrdered, FuturesUnordered, StreamExt};
 use proton_action_queue::rebase::RebaseChangeSet;
+use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
@@ -19,7 +20,7 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, RunTransaction, StashError, Tether};
 use std::fmt::Display;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 #[cfg(test)]
 #[path = "../tests/models/rollback_item.rs"]
@@ -372,7 +373,20 @@ impl RollbackHandler for ConversationRollbackHandler {
 
         let mut result = Vec::with_capacity(remote_ids.len());
         while let Some(output) = tasks.next().await {
-            result.push(output?);
+            match output {
+                Ok(conversation) => result.push(conversation),
+                Err(ApiServiceError::UnprocessableEntity(_, Some(ref info)))
+                    if info.code == Mail::ConversationDoesNotExist as u32 =>
+                {
+                    // Conversation doesn't exist anymore - skip it.
+                    // It will be cleaned up by the event loop when it processes the deletion event.
+                    warn!(
+                        "Conversation does not exist, skipping rollback: {:?}",
+                        info.details
+                    );
+                }
+                Err(e) => return Err(e),
+            }
         }
 
         Ok(result)
