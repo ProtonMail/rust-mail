@@ -16,23 +16,23 @@ use url::Url;
 const CHECK_INTERVAL: Duration =
     Duration::from_secs(60 /*s*/ * 60 /*m*/ * 24 /*h*/ * 3 /*d */);
 
-pub struct TrackerDetector {
+pub struct TrackerService {
     ctx: Weak<MailUserContext>,
 }
 
-impl TrackerDetector {
+impl TrackerService {
     pub fn new(ctx: Weak<MailUserContext>) -> Self {
         Self { ctx }
     }
 
-    pub async fn check_url(&self, url: &str) -> anyhow::Result<Option<String>> {
+    async fn check_url(&self, url: &str) -> anyhow::Result<Option<String>> {
         let ctx = self.ctx.upgrade().context("Could not find the context")?;
         let url = Url::parse(url)?;
         let response = ctx.session().proxy_img(&url, true).await?;
         Ok(response.tracker_provider)
     }
 
-    pub async fn check_message_trackers(
+    pub async fn update(
         &self,
         message_id: LocalMessageId,
         urls: HashSet<String>,

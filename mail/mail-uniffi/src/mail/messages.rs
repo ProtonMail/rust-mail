@@ -226,9 +226,6 @@ pub struct BodyOutput {
     /// How many html tags it has removed.
     pub tags_stripped: u64,
 
-    /// How many UTM tracking params it has removed.
-    pub utm_stripped: u64,
-
     /// The transform opts that were used. All fields are actually Some.
     pub transform_opts: TransformOpts,
 
@@ -242,7 +239,6 @@ impl From<RealBodyOutput> for BodyOutput {
             body: output.body,
             had_blockquote: output.had_blockquote,
             tags_stripped: output.tags_stripped,
-            utm_stripped: output.utm_stripped,
             transform_opts: output.transform_opts.into(),
             body_banners: output.body_banners.into_iter().map(Into::into).collect(),
         }

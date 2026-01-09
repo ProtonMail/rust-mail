@@ -11,7 +11,7 @@ use proton_mail_common::models::{MessageTracker, MessageTrackerUrl};
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
 use proton_mail_common::test_utils::test_context::MailTestContext;
-use proton_mail_common::{Mailbox, TrackerDetector};
+use proton_mail_common::{Mailbox, TrackerService};
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use std::collections::{BTreeSet, HashSet};
@@ -149,14 +149,11 @@ async fn check_message_trackers_with_empty_urls() {
         .subscribe_to(move |_| Box::new(watcher.clone()))
         .unwrap();
 
-    let tracker_detector = user_ctx.get_service::<TrackerDetector>();
+    let tracker_detector = user_ctx.get_service::<TrackerService>();
     let message_id: LocalMessageId = 1.into();
     let urls = HashSet::new();
 
-    tracker_detector
-        .check_message_trackers(message_id, urls)
-        .await
-        .unwrap();
+    tracker_detector.update(message_id, urls).await.unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -215,16 +212,13 @@ async fn check_message_trackers_with_non_tracker_urls() {
         .subscribe_to(move |_| Box::new(watcher.clone()))
         .unwrap();
 
-    let tracker_detector = user_ctx.get_service::<TrackerDetector>();
+    let tracker_detector = user_ctx.get_service::<TrackerService>();
     let message_id: LocalMessageId = 1.into();
     let mut urls = HashSet::new();
     urls.insert("https://safe-image.example.com/logo.png".to_string());
     urls.insert("https://example.com/image.jpg".to_string());
 
-    tracker_detector
-        .check_message_trackers(message_id, urls)
-        .await
-        .unwrap();
+    tracker_detector.update(message_id, urls).await.unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -284,15 +278,12 @@ async fn check_message_trackers_with_single_tracker() {
         .subscribe_to(move |_| Box::new(watcher.clone()))
         .unwrap();
 
-    let tracker_detector = user_ctx.get_service::<TrackerDetector>();
+    let tracker_detector = user_ctx.get_service::<TrackerService>();
     let message_id: LocalMessageId = 1.into();
     let mut urls = HashSet::new();
     urls.insert("https://tracker.example.com/pixel.gif".to_string());
 
-    tracker_detector
-        .check_message_trackers(message_id, urls)
-        .await
-        .unwrap();
+    tracker_detector.update(message_id, urls).await.unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -361,16 +352,13 @@ async fn check_message_trackers_with_mixed_urls() {
         .subscribe_to(move |_| Box::new(watcher.clone()))
         .unwrap();
 
-    let tracker_detector = user_ctx.get_service::<TrackerDetector>();
+    let tracker_detector = user_ctx.get_service::<TrackerService>();
     let message_id: LocalMessageId = 1.into();
     let mut urls = HashSet::new();
     urls.insert("https://tracker.example.com/pixel.gif".to_string());
     urls.insert("https://safe-image.example.com/logo.png".to_string());
 
-    tracker_detector
-        .check_message_trackers(message_id, urls)
-        .await
-        .unwrap();
+    tracker_detector.update(message_id, urls).await.unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -447,17 +435,14 @@ async fn check_message_trackers_with_multiple_trackers() {
         .subscribe_to(move |_| Box::new(watcher.clone()))
         .unwrap();
 
-    let tracker_detector = user_ctx.get_service::<TrackerDetector>();
+    let tracker_detector = user_ctx.get_service::<TrackerService>();
     let message_id: LocalMessageId = 1.into();
     let mut urls = HashSet::new();
     urls.insert("https://tracker1.example.com/pixel.gif".to_string());
     urls.insert("https://tracker2.example.com/beacon.png".to_string());
     urls.insert("https://tracker1.example.com/another.gif".to_string());
 
-    tracker_detector
-        .check_message_trackers(message_id, urls)
-        .await
-        .unwrap();
+    tracker_detector.update(message_id, urls).await.unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -532,7 +517,7 @@ async fn get_tracker_info_returns_correct_data() {
     let message_id: LocalMessageId = 1.into();
 
     let tracker_info = user_ctx
-        .get_service::<TrackerDetector>()
+        .get_service::<TrackerService>()
         .get_tracker_info(message_id)
         .await
         .unwrap();
@@ -551,7 +536,7 @@ async fn get_tracker_info_returns_correct_data() {
         .unwrap();
 
     let tracker_info = user_ctx
-        .get_service::<TrackerDetector>()
+        .get_service::<TrackerService>()
         .get_tracker_info(message_id)
         .await
         .unwrap();
@@ -597,7 +582,7 @@ async fn get_tracker_info_returns_correct_data() {
         .unwrap();
 
     let tracker_info = user_ctx
-        .get_service::<TrackerDetector>()
+        .get_service::<TrackerService>()
         .get_tracker_info(message_id)
         .await
         .unwrap()

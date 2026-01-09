@@ -4,7 +4,7 @@ use crate::errors::{ProtonError, UserSessionError};
 use crate::mail::datatypes::TrackerInfo;
 use crate::mail::user_session::MailUserSession;
 use crate::uniffi_async;
-use proton_mail_common::TrackerDetector;
+use proton_mail_common::TrackerService;
 use proton_mail_common::{MailContextError, ProtonMailError as RealProtonMailError};
 use stash::stash::WatcherHandle;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ pub async fn get_tracker_info_for_message(
 
     uniffi_async::<_, RealProtonMailError, _>(async move {
         let result = ctx
-            .get_service::<TrackerDetector>()
+            .get_service::<TrackerService>()
             .get_tracker_info(message_id.into())
             .await?
             .map(Into::into);
@@ -40,7 +40,7 @@ pub async fn watch_tracker_info_stream(
 
     uniffi_async(async move {
         let (info, handle) = ctx
-            .get_service::<TrackerDetector>()
+            .get_service::<TrackerService>()
             .watch(message_id.into())
             .await?;
         Ok::<_, RealProtonMailError>(Arc::new(WatchTrackerInfoStream {
