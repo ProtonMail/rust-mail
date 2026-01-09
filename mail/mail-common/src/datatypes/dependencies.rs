@@ -11,7 +11,7 @@ use proton_mail_api::services::proton::response_data::{
 };
 use stash::orm::Model;
 use stash::stash::{RunTransaction, StashError, Tether};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use tracing::info;
 
 #[derive(Default)]
@@ -199,11 +199,8 @@ impl MessageOrConversationDependencyFetcher {
                     .await?;
 
                 if missing_ancestry.is_empty() {
-                    // already unique, reversing order for `local_parent_id` calculation restriction
-                    missing_labels = missing_parents
-                        .into_iter()
-                        .chain(missing_labels)
-                        .collect_vec();
+                    missing_labels.extend(missing_parents);
+                    missing_labels = Label::topo_sort(missing_labels);
                 } else {
                     let selected_types = missing_labels
                         .iter()
@@ -211,6 +208,7 @@ impl MessageOrConversationDependencyFetcher {
                             l.remote_parent_id.as_ref()?;
                             Some(l.label_type)
                         })
+                        .unique()
                         .collect_vec();
                     tracing::info!(
                         "Detected missing label's ancestry lineage, fetching by types instead: {:?}",
@@ -226,18 +224,7 @@ impl MessageOrConversationDependencyFetcher {
                     let missing_ancestry = all_labels_in_selected_types
                         .into_iter()
                         .filter(|al| missing_ancestry_ids.contains(al.remote_id.as_ref().unwrap()));
-                    // BTree was chosen to preserve API ordering,
-                    // this is needed for setting `local_parent_id` field correctly.
-                    let mut uniques: BTreeMap<LabelId, Label> = BTreeMap::new();
-                    for label in missing_ancestry.chain(missing_labels) {
-                        uniques
-                            .entry(label.remote_id.clone().unwrap())
-                            .or_insert(label);
-                    }
-                    let missing_rids = uniques.keys().collect_vec();
-                    tracing::debug!("Established missing labels: {:?}", missing_rids);
-
-                    missing_labels = uniques.into_values().collect();
+                    missing_labels = Label::topo_sort(missing_ancestry.chain(missing_labels));
                 }
             }
         }
