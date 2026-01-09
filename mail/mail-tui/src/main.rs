@@ -80,6 +80,9 @@ struct CliArgs {
 
     #[arg(long, default_value = "false")]
     trace_logs: bool,
+
+    #[arg(long, default_value = "true")]
+    use_emoji: bool,
 }
 
 impl CliArgs {

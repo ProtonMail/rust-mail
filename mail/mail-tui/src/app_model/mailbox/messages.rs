@@ -1170,7 +1170,7 @@ impl DecryptedMessage {
 
     pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
         let [headers_area, banners_area, rsvp_area, content_area] = Layout::vertical([
-            Constraint::Length(Self::lay_headers()),
+            Constraint::Length(self.lay_headers()),
             Constraint::Length(self.lay_banners()),
             Constraint::Length(self.lay_rsvp()),
             Constraint::Fill(1),
@@ -1184,20 +1184,33 @@ impl DecryptedMessage {
         self.draw_content(frame, content_area);
     }
 
-    fn lay_headers() -> u16 {
-        7
+    fn lay_headers(&self) -> u16 {
+        if self.lock.icon == LockIcon::None {
+            7
+        } else {
+            8
+        }
     }
 
     fn draw_headers(&self, frame: &mut Frame, area: Rect) {
-        let lock_str = match self.lock.icon {
-            LockIcon::None => "??",
-            LockIcon::ClosedLock => "CL",
-            LockIcon::ClosedLockWithTick => "CT",
-            LockIcon::ClosedLockWithPen => "CP",
-            LockIcon::ClosedLockWarning => "CW",
-            LockIcon::OpenLockWithPen => "OP",
-            LockIcon::OpenLockWithTick => "OT",
-            LockIcon::OpenLockWarning => "OW",
+        let app_config = &CLI_ARGS;
+        let use_emoji = app_config.use_emoji;
+        let lock_str = match (self.lock.icon, use_emoji) {
+            (LockIcon::None, _) => "??",
+            (LockIcon::ClosedLock, true) => "🔒",
+            (LockIcon::ClosedLock, false) => "CL",
+            (LockIcon::ClosedLockWithTick, true) => "🔒✔",
+            (LockIcon::ClosedLockWithTick, false) => "CT",
+            (LockIcon::ClosedLockWithPen, true) => "🔒✏",
+            (LockIcon::ClosedLockWithPen, false) => "CP",
+            (LockIcon::ClosedLockWarning, true) => "🔒⚠",
+            (LockIcon::ClosedLockWarning, false) => "CW",
+            (LockIcon::OpenLockWithPen, true) => "🔓✏",
+            (LockIcon::OpenLockWithPen, false) => "OP",
+            (LockIcon::OpenLockWithTick, true) => "🔓✔",
+            (LockIcon::OpenLockWithTick, false) => "OT",
+            (LockIcon::OpenLockWarning, true) => "🔓⚠",
+            (LockIcon::OpenLockWarning, false) => "OW",
         };
 
         let lock_style = match self.lock.color {
@@ -1213,7 +1226,7 @@ impl DecryptedMessage {
             Span::from(self.from.as_str()),
         ]));
 
-        let headers = vec![
+        let mut headers = vec![
             Row::new([
                 Cell::from("Subject:"),
                 Cell::from(self.msg.subject.as_str()),
@@ -1229,6 +1242,13 @@ impl DecryptedMessage {
                 Cell::from(self.labels.as_str()),
             ]),
         ];
+
+        if self.lock.icon != LockIcon::None {
+            headers.push(Row::new([
+                Cell::from("Privacy:").bold(),
+                Cell::from(self.lock.tooltip.to_string()),
+            ]));
+        }
 
         let widths = [Constraint::Length(10), Constraint::Fill(1)];
         let table = Table::new(headers, widths).column_spacing(1);
