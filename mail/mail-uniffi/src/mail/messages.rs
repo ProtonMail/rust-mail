@@ -20,6 +20,7 @@ use crate::{LiveQueryCallback, WatchHandle, uniffi_async};
 use crate::{PaginatorSearchOptions, declare_live_query_tagger};
 use itertools::Itertools as _;
 use proton_core_api::services::proton::PrivateEmail;
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_api::services::proton::common::MessageId;
@@ -50,6 +51,7 @@ pub struct DecryptedMessage {
     pub(crate) ctx: MailUserContextPtr,
     pub(crate) sender: PrivateEmail,
     pub(crate) body: DecryptedMessageBody,
+    active_label_id: LocalLabelId,
 }
 
 impl DecryptedMessage {
@@ -200,13 +202,12 @@ impl DecryptedMessage {
     ///
     /// Note: this is an expensive operation and should e launched on a background
     /// task.
-    pub async fn privacy_lock(self: Arc<Self>, mailbox: &Mailbox) -> PrivacyLock {
-        let label_id = mailbox.mbox().label_id();
+    pub async fn privacy_lock(self: Arc<Self>) -> PrivacyLock {
         async_runtime()
             .spawn(async move {
                 let ctx = self.ctx()?;
                 let tether = ctx.user_stash().connection().await?;
-                let builder = self.body.privacy_lock(label_id, &tether).await;
+                let builder = self.body.privacy_lock(self.active_label_id, &tether).await;
                 Ok(builder.build(&ctx).await)
             })
             .await
@@ -652,11 +653,17 @@ pub async fn get_message_body(
     let ctx = mbox.ctx_ptr();
     // We upgrade context to strong reference **temporarily**. The return type of this function is a weak pointer
     // to avoid memory leak
+    let active_label_id = mbox.mbox().label_id();
     let strong_ctx = mbox.ctx()?;
     uniffi_async(async move {
         let (sender, body) =
             models::Message::message_body_with_sender(&strong_ctx, id.into()).await?;
-        Ok::<_, RealProtonMailError>(Arc::new(DecryptedMessage { ctx, sender, body }))
+        Ok::<_, RealProtonMailError>(Arc::new(DecryptedMessage {
+            ctx,
+            sender,
+            body,
+            active_label_id,
+        }))
     })
     .await
     .map_err(ActionError::from)
