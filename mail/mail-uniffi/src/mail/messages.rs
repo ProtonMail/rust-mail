@@ -207,7 +207,7 @@ impl DecryptedMessage {
                 let ctx = self.ctx()?;
                 let tether = ctx.user_stash().connection().await?;
                 let builder = self.body.privacy_lock(label_id, &tether).await;
-                Ok(builder.build().await)
+                Ok(builder.build(&ctx).await)
             })
             .await
             .map(|r: Result<_, RealProtonMailError>| r.unwrap_or_default())

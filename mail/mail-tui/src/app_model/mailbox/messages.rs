@@ -366,13 +366,14 @@ impl MessagesState {
 
     fn display_message(
         &mut self,
+        ctx: Arc<MailUserContext>,
         message: Result<(Box<DecryptedMessage>, PrivacyLockBuilder)>,
     ) -> Command<Messages> {
         let (open_message, command) = match message {
             Ok((message, builder)) => (
                 DecryptedMessageStatus::Success(message),
                 Command::task(async move {
-                    Command::message(MessageMessage::UpdatePrivacyLock(builder.build().await))
+                    Command::message(MessageMessage::UpdatePrivacyLock(builder.build(&ctx).await))
                 }),
             ),
             Err(e) => (DecryptedMessageStatus::Error(e), Command::none()),
@@ -774,7 +775,7 @@ impl MessagesState {
                 return self.open_message_body(user_ctx.to_owned(), show_loading, mbox.label_id());
             }
             MessageMessage::OpenBodyResult(r) => {
-                return self.display_message(r);
+                return self.display_message(user_ctx.clone(), r);
             }
             MessageMessage::UpdatePrivacyLock(lock) => {
                 if let DecryptedMessageStatus::Success(ref mut msg) = self.open_message {
