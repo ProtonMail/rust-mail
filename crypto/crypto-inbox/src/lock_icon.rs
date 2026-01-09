@@ -130,6 +130,7 @@ pub enum XPmOrigin {
     None,
     Internal,
     External,
+    Import,
 }
 
 impl FromStr for XPmOrigin {
@@ -138,9 +139,17 @@ impl FromStr for XPmOrigin {
         match s.to_lowercase().trim() {
             "internal" => Ok(XPmOrigin::Internal),
             "external" => Ok(XPmOrigin::External),
+            "import" => Ok(XPmOrigin::Import),
             "none" => Ok(XPmOrigin::None),
             _ => Err("Invalid origin"),
         }
+    }
+}
+
+impl XPmOrigin {
+    #[must_use]
+    pub fn header_key() -> &'static str {
+        "X-Pm-Origin"
     }
 }
 
@@ -150,6 +159,7 @@ pub enum XPmContentEncryption {
     None,
     EndToEnd,
     OnDelivery,
+    OnCompose,
 }
 
 impl XPmContentEncryption {
@@ -165,6 +175,7 @@ impl FromStr for XPmContentEncryption {
         match s.to_lowercase().trim() {
             "end-to-end" => Ok(XPmContentEncryption::EndToEnd),
             "on-delivery" => Ok(XPmContentEncryption::OnDelivery),
+            "on-compose" => Ok(XPmContentEncryption::OnCompose),
             "none" => Ok(XPmContentEncryption::None),
             _ => Err("Invalid content encryption"),
         }
@@ -342,10 +353,15 @@ impl UiLock {
     /// `per_recipient_encryption` contains the message header for each recipient of the email.
     #[must_use]
     pub fn for_sent_inbox(
+        origin_header: XPmOrigin,
         content_encryption: XPmContentEncryption,
         per_recipient_encryption: &[XPmRecipientEncryption],
     ) -> UiLock {
-        determine_sent_lock_icon_aggregated(content_encryption, per_recipient_encryption)
+        determine_sent_lock_icon_aggregated(
+            origin_header,
+            content_encryption,
+            per_recipient_encryption,
+        )
     }
 
     /// Determines a per-recipient lock icon for a message that was sent by the user.
@@ -536,6 +552,7 @@ where
 
 #[must_use]
 fn determine_sent_lock_icon_aggregated(
+    origin_header: XPmOrigin,
     content_encryption: XPmContentEncryption,
     per_recipient_encryption: &[XPmRecipientEncryption],
 ) -> UiLock {
@@ -579,9 +596,14 @@ fn determine_sent_lock_icon_aggregated(
             tooltip,
         };
     }
+    let color = if origin_header == XPmOrigin::Import {
+        LockColor::Black
+    } else {
+        LockColor::Blue
+    };
     UiLock {
         icon: LockIcon::ClosedLock,
-        color: LockColor::Black,
+        color,
         tooltip: LockTooltip::ZeroAccess,
     }
 }
@@ -630,27 +652,35 @@ fn determine_sent_lock_icon_for_recipient(
         (LockIcon::ClosedLockWithTick, LockColor::Blue, XPmContentEncryption::EndToEnd) => {
             LockTooltip::SentRecipientE2EVerifiedRecipient
         }
-        (LockIcon::ClosedLockWithTick, LockColor::Blue, XPmContentEncryption::OnDelivery) => {
-            LockTooltip::SentRecipientProtonMailVerifiedRecipient
-        }
+        (
+            LockIcon::ClosedLockWithTick,
+            LockColor::Blue,
+            XPmContentEncryption::OnDelivery | XPmContentEncryption::OnCompose,
+        ) => LockTooltip::SentRecipientProtonMailVerifiedRecipient,
         (LockIcon::ClosedLock, LockColor::Blue, XPmContentEncryption::EndToEnd) => {
             LockTooltip::SentRecipientE2E
         }
-        (LockIcon::ClosedLock, LockColor::Blue, XPmContentEncryption::OnDelivery) => {
-            LockTooltip::SentRecipientProtonMail
-        }
+        (
+            LockIcon::ClosedLock,
+            LockColor::Blue,
+            XPmContentEncryption::OnDelivery | XPmContentEncryption::OnCompose,
+        ) => LockTooltip::SentRecipientProtonMail,
         (LockIcon::ClosedLockWithTick, LockColor::Green, XPmContentEncryption::EndToEnd) => {
             LockTooltip::SentRecipientE2EPgpVerifiedRecipient
         }
-        (LockIcon::ClosedLockWithTick, LockColor::Green, XPmContentEncryption::OnDelivery) => {
-            LockTooltip::SentRecipientProtonMailPgpVerifiedRecipient
-        }
+        (
+            LockIcon::ClosedLockWithTick,
+            LockColor::Green,
+            XPmContentEncryption::OnDelivery | XPmContentEncryption::OnCompose,
+        ) => LockTooltip::SentRecipientProtonMailPgpVerifiedRecipient,
         (LockIcon::ClosedLock, LockColor::Green, XPmContentEncryption::EndToEnd) => {
             LockTooltip::SentRecipientE2EPgpRecipient
         }
-        (LockIcon::ClosedLock, LockColor::Green, XPmContentEncryption::OnDelivery) => {
-            LockTooltip::SentRecipientProtonMailPgpRecipient
-        }
+        (
+            LockIcon::ClosedLock,
+            LockColor::Green,
+            XPmContentEncryption::OnDelivery | XPmContentEncryption::OnCompose,
+        ) => LockTooltip::SentRecipientProtonMailPgpRecipient,
         (LockIcon::OpenLockWithPen, LockColor::Green, XPmContentEncryption::EndToEnd) => {
             LockTooltip::SentRecipientPGPSigned
         }
