@@ -460,10 +460,13 @@ where
     let pinned =
         verification_preferences_opt.is_some_and(InboxVerificationPreferences::uses_pinned_keys);
 
+    let self_owned_keys =
+        verification_preferences_opt.is_some_and(InboxVerificationPreferences::self_owned_keys);
+
     match (origin_header, content_encryption_header) {
         (XPmOrigin::Internal, XPmContentEncryption::EndToEnd) => {
             let color = LockColor::Blue;
-            if pinned {
+            if pinned || self_owned_keys {
                 match message_verification_status {
                     NotVerified | SignedNoPublicKey => UiLock {
                         icon: LockIcon::ClosedLock,
