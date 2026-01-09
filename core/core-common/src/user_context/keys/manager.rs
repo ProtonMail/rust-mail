@@ -12,10 +12,14 @@ use crate::models::{ModelIdExtension, User};
 use crate::{CoreContextError, CoreContextResult, UserContext};
 use indoc::indoc;
 use parking_lot::RwLock;
+use proton_core_api::consts::CoreBundle;
+use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{AddressId, UserId};
 use proton_core_api::services::proton::{GetKeysAllOptions, PrivateEmailRef};
-use proton_crypto_account::keys::{APIPublicAddressKeys, PublicAddressKeys};
+use proton_crypto_account::keys::{
+    APIPublicAddressKeyGroup, APIPublicAddressKeys, PublicAddressKeys,
+};
 use proton_crypto_account::keys::{
     UnlockedAddressKey, UnlockedAddressKeys, UnlockedUserKey, UnlockedUserKeys,
 };
@@ -190,6 +194,21 @@ impl CryptoKeyManager {
                         tracing::error!("Failed to load cached api keys: {err}");
                         return Err(e.into());
                     }
+                }
+            }
+            // We need treat these specific errors when doing internal only queries as
+            // if they have no keys.
+            Err(ApiServiceError::UnprocessableEntity(_, Some(error)))
+                if internal_only && error.code == CoreBundle::KeyGetAddressMissing as u32
+                    || error.code == CoreBundle::KeyGetDomainExternal as u32 =>
+            {
+                APIPublicAddressKeys {
+                    address_keys: APIPublicAddressKeyGroup::default(),
+                    catch_all_keys: None,
+                    unverified_keys: None,
+                    warnings: vec![],
+                    proton_mx: false,
+                    is_proton: false,
                 }
             }
             Err(e) => return Err(e.into()),
