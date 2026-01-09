@@ -125,7 +125,7 @@ impl Label {
     }
 
     #[instrument(skip_all)]
-    async fn fetch_labels<API>(
+    pub async fn fetch_labels<API>(
         api: &API,
         label_types: &[LabelType],
     ) -> Result<Vec<Label>, LabelError>
@@ -149,30 +149,30 @@ impl Label {
             .into_iter()
             .flat_map(|res| res.labels);
 
-        Ok(Self::collect(labels))
+        Ok(Self::topo_sort(labels))
     }
 
-    fn collect(labels: impl IntoIterator<Item = ApiLabel>) -> Vec<Label> {
+    pub fn topo_sort<L: Into<Label>>(labels: impl IntoIterator<Item = L>) -> Vec<Label> {
         let mut ids = TopologicalSort::<LabelId>::new();
         let mut objs = BTreeMap::new();
 
         for label in labels {
-            if let Some(parent_id) = &label.parent_id {
-                ids.add_dependency(parent_id.clone(), label.id.clone());
+            let label = label.into();
+            let rid = label.remote_id.clone().unwrap();
+            if let Some(parent_id) = &label.remote_parent_id {
+                ids.add_dependency(parent_id.clone(), rid.clone());
             } else {
-                ids.insert(label.id.clone());
+                ids.insert(rid.clone());
             }
 
-            objs.insert(label.id.clone(), label);
+            objs.entry(rid).or_insert(label);
         }
-
-        // ---
 
         let mut labels = Vec::new();
 
         while let Some(id) = ids.pop() {
             if let Some(obj) = objs.remove(&id) {
-                labels.push(obj.into());
+                labels.push(obj);
             }
         }
 
@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn collect() {
-        let labels = Label::collect([
+        let labels = Label::topo_sort([
             api_label("a", None),
             api_label("b", Some("a")),
             api_label("c", Some("d")),

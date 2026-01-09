@@ -2,6 +2,7 @@ use crate::MailContextError;
 use crate::datatypes::{ConversationLabelsCount, MessageLabelsCount};
 use crate::models::{Conversation, Message};
 use anyhow::Context;
+use itertools::Itertools;
 use proton_core_api::services::proton::{AddressId, LabelId, ProtonCore};
 use proton_core_api::session::Session;
 use proton_core_common::models::{Address, Label, ModelIdExtension};
@@ -82,28 +83,24 @@ impl MessageOrConversationDependencyFetcher {
         tx: &mut impl RunTransaction,
     ) -> Result<(), MailContextError> {
         if !self.label_ids.is_empty() {
-            info!("Syncing missing labels: {:?}", self.label_ids);
-            let missing_labels =
-                Label::get_labels_by_ids(api, self.label_ids.iter().cloned().collect()).await?;
+            let missing_labels = self.fetch_missing_labels(api, tx).await?;
+
             tx.run_tx(async |tx| {
-                Label::store_labels_async(tx, missing_labels)
+                Label::store_labels_async(tx, missing_labels.clone())
                     .await
                     .context("Failed to store missing labels")?;
-                // Create missing counters
-                let message_counts = self
-                    .label_ids
+                let message_counts = missing_labels
                     .iter()
                     .map(|v| MessageLabelsCount {
-                        label_id: v.clone(),
+                        label_id: v.remote_id.clone().unwrap(),
                         total: 0,
                         unread: 0,
                     })
                     .collect::<Vec<_>>();
-                let conversation_counts = self
-                    .label_ids
+                let conversation_counts = missing_labels
                     .iter()
                     .map(|v| ConversationLabelsCount {
-                        label_id: v.clone(),
+                        label_id: v.remote_id.clone().unwrap(),
                         total: 0,
                         unread: 0,
                     })
@@ -152,12 +149,10 @@ impl MessageOrConversationDependencyFetcher {
         label_id: &LabelId,
         tether: &Tether,
     ) -> Result<(), StashError> {
-        if Label::remote_id_counterpart(label_id.clone(), tether)
-            .await?
-            .is_none()
-        {
+        if self.label_is_missing(label_id, tether).await? {
             self.label_ids.insert(label_id.clone());
         }
+
         Ok(())
     }
 
@@ -173,5 +168,105 @@ impl MessageOrConversationDependencyFetcher {
             self.address_ids.insert(address_id.clone());
         }
         Ok(())
+    }
+
+    async fn fetch_missing_labels(
+        &self,
+        api: &Session,
+        tx: &mut impl RunTransaction,
+    ) -> Result<Vec<Label>, MailContextError> {
+        info!("Syncing missing labels: {:?}", self.label_ids);
+        let mut missing_labels =
+            Label::get_labels_by_ids(api, self.label_ids.iter().cloned().collect()).await?;
+        let parent_label_ids = self.create_parent_ids_set_excluding_self_label_ids(&missing_labels);
+
+        if !parent_label_ids.is_empty() {
+            tracing::info!("Missing labels have parents: {:?}", parent_label_ids);
+
+            let tether = tx.tether();
+            let missing_parents_ids = self.find_missing_labels(parent_label_ids, tether).await?;
+
+            if !missing_parents_ids.is_empty() {
+                tracing::debug!(
+                    "Detected missing parent labels among fetched dependencies: {:?}",
+                    missing_parents_ids
+                );
+                let missing_parents = Label::get_labels_by_ids(api, missing_parents_ids).await?;
+                let grandparent_label_ids =
+                    self.create_parent_ids_set_excluding_self_label_ids(&missing_parents);
+                let missing_ancestry = self
+                    .find_missing_labels(grandparent_label_ids, tether)
+                    .await?;
+
+                if missing_ancestry.is_empty() {
+                    missing_labels.extend(missing_parents);
+                    missing_labels = Label::topo_sort(missing_labels);
+                } else {
+                    let selected_types = missing_labels
+                        .iter()
+                        .filter_map(|l| {
+                            l.remote_parent_id.as_ref()?;
+                            Some(l.label_type)
+                        })
+                        .unique()
+                        .collect_vec();
+                    tracing::info!(
+                        "Detected missing label's ancestry lineage, fetching by types instead: {:?}",
+                        selected_types
+                    );
+                    let all_labels_in_selected_types =
+                        Label::fetch_labels(api, &selected_types).await?;
+                    let label_ids = all_labels_in_selected_types
+                        .iter()
+                        .filter_map(|l| l.remote_id.clone())
+                        .collect_vec();
+                    let missing_ancestry_ids = self.find_missing_labels(label_ids, tether).await?;
+                    let missing_ancestry = all_labels_in_selected_types
+                        .into_iter()
+                        .filter(|al| missing_ancestry_ids.contains(al.remote_id.as_ref().unwrap()));
+                    missing_labels = Label::topo_sort(missing_ancestry.chain(missing_labels));
+                }
+            }
+        }
+
+        Ok(missing_labels)
+    }
+
+    fn create_parent_ids_set_excluding_self_label_ids<'a>(
+        &self,
+        labels: impl IntoIterator<Item = &'a Label>,
+    ) -> HashSet<LabelId> {
+        labels
+            .into_iter()
+            .filter_map(|l| l.remote_parent_id.as_ref())
+            .filter(|rid| !self.label_ids.contains(rid))
+            .cloned()
+            .collect()
+    }
+
+    async fn find_missing_labels(
+        &self,
+        label_ids: impl IntoIterator<Item = LabelId>,
+        tether: &Tether,
+    ) -> Result<Vec<LabelId>, StashError> {
+        let mut missing = vec![];
+
+        for label_id in label_ids {
+            if self.label_is_missing(&label_id, tether).await? {
+                missing.push(label_id)
+            }
+        }
+
+        Ok(missing)
+    }
+
+    async fn label_is_missing(
+        &self,
+        label_id: &LabelId,
+        tether: &Tether,
+    ) -> Result<bool, StashError> {
+        Ok(Label::remote_id_counterpart(label_id.clone(), tether)
+            .await?
+            .is_none())
     }
 }
