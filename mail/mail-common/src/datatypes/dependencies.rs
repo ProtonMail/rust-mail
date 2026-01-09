@@ -178,10 +178,7 @@ impl MessageOrConversationDependencyFetcher {
         info!("Syncing missing labels: {:?}", self.label_ids);
         let mut missing_labels =
             Label::get_labels_by_ids(api, self.label_ids.iter().cloned().collect()).await?;
-        let parent_label_ids = missing_labels
-            .iter()
-            .filter_map(|l| l.remote_parent_id.clone())
-            .collect_vec();
+        let parent_label_ids = self.create_parent_ids_set_excluding_self_label_ids(&missing_labels);
 
         if !parent_label_ids.is_empty() {
             tracing::info!("Missing labels have parents: {:?}", parent_label_ids);
@@ -195,16 +192,18 @@ impl MessageOrConversationDependencyFetcher {
                     missing_parents_ids
                 );
                 let missing_parents = Label::get_labels_by_ids(api, missing_parents_ids).await?;
-                let grandparent_label_ids = missing_parents
-                    .iter()
-                    .filter_map(|l| l.remote_parent_id.clone())
-                    .collect_vec();
+                let grandparent_label_ids =
+                    self.create_parent_ids_set_excluding_self_label_ids(&missing_parents);
                 let missing_ancestry = self
                     .find_missing_labels(grandparent_label_ids, tether)
                     .await?;
 
                 if missing_ancestry.is_empty() {
-                    missing_labels.extend(missing_parents);
+                    // already unique, reversing order for `local_parent_id` calculation restriction
+                    missing_labels = missing_parents
+                        .into_iter()
+                        .chain(missing_labels)
+                        .collect_vec();
                 } else {
                     let selected_types = missing_labels
                         .iter()
@@ -235,19 +234,27 @@ impl MessageOrConversationDependencyFetcher {
                             .entry(label.remote_id.clone().unwrap())
                             .or_insert(label);
                     }
+                    let missing_rids = uniques.keys().collect_vec();
+                    tracing::debug!("Established missing labels: {:?}", missing_rids);
+
                     missing_labels = uniques.into_values().collect();
-                    tracing::debug!(
-                        "Established missing labels: {:?}",
-                        missing_labels
-                            .iter()
-                            .filter_map(|l| l.remote_id.as_ref())
-                            .collect_vec()
-                    )
                 }
             }
         }
 
         Ok(missing_labels)
+    }
+
+    fn create_parent_ids_set_excluding_self_label_ids<'a>(
+        &self,
+        labels: impl IntoIterator<Item = &'a Label>,
+    ) -> HashSet<LabelId> {
+        labels
+            .into_iter()
+            .filter_map(|l| l.remote_parent_id.as_ref())
+            .filter(|rid| !self.label_ids.contains(rid))
+            .cloned()
+            .collect()
     }
 
     async fn find_missing_labels(
