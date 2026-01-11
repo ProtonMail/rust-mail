@@ -2,11 +2,11 @@ mod attachment;
 mod available_action;
 mod folder_banner;
 pub(crate) mod labels;
+mod privacy;
 pub mod privacy_lock;
 mod snooze;
 mod system_folder;
 mod system_label;
-mod trackers;
 
 use crate::core::datatypes::{AvatarInformation, Id, UnixTimestamp};
 use crate::errors::ActionError;
@@ -18,6 +18,7 @@ use core::fmt;
 pub use folder_banner::*;
 use itertools::Itertools;
 use parking_lot::Mutex;
+pub use privacy::*;
 use proton_core_common::datatypes::{
     AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
     LabelType as RealLabelType,
@@ -55,7 +56,6 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 pub use system_label::*;
 use tracing::warn;
-pub use trackers::*;
 use uniffi_runtime::uniffi_async;
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]

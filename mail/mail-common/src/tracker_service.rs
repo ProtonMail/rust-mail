@@ -1,13 +1,16 @@
 use crate::MailUserContext;
-use crate::datatypes::{LocalMessageId, TrackerDomain, TrackerInfo};
-use crate::models::{MessageTracker, MessageTrackerUrl};
+use crate::datatypes::{
+    LocalMessageId, PrivacyInfo, StrippedUTMInfo, TrackerDomain, TrackerInfo, UTMLink,
+};
+use crate::models::{MessageTracker, MessageTrackerUrl, MessageUtmLink, MessageUtmLinkUrl};
 use anyhow::Context;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::ModelExtension;
+use proton_mail_html_transformer::utm::StrippedUTM;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
-use stash::stash::{StashError, WatcherHandle};
+use stash::stash::{StashError, Tether, WatcherHandle};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Weak;
 use std::time::Duration;
@@ -15,6 +18,11 @@ use url::Url;
 
 const CHECK_INTERVAL: Duration =
     Duration::from_secs(60 /*s*/ * 60 /*m*/ * 24 /*h*/ * 3 /*d */);
+
+pub struct PrivacyWatchData {
+    pub initial: PrivacyInfo,
+    pub handle: WatcherHandle,
+}
 
 pub struct TrackerService {
     ctx: Weak<MailUserContext>,
@@ -36,6 +44,7 @@ impl TrackerService {
         &self,
         message_id: LocalMessageId,
         urls: HashSet<String>,
+        utm_stripped: BTreeSet<StrippedUTM>,
     ) -> Result<(), StashError> {
         let ctx = self.ctx.upgrade().context("Could not find the context")?;
         let mut tether = ctx.user_stash().connection().await?;
@@ -94,23 +103,65 @@ impl TrackerService {
             })
             .await?;
 
+        if !utm_stripped.is_empty() && MessageUtmLink::load(message_id, &tether).await?.is_none() {
+            tether
+                .tx(async |tx| {
+                    MessageUtmLink {
+                        local_message_id: message_id,
+                    }
+                    .save(tx)
+                    .await?;
+
+                    for utm in utm_stripped {
+                        MessageUtmLinkUrl {
+                            id: None,
+                            local_message_id: message_id,
+                            original_url: utm.original.to_string(),
+                            cleaned_url: utm.cleaned.to_string(),
+                        }
+                        .save(tx)
+                        .await?;
+                    }
+
+                    Ok::<_, StashError>(())
+                })
+                .await?;
+        }
+
         Ok(())
     }
 
-    pub async fn get_tracker_info(
-        &self,
-        message_id: LocalMessageId,
-    ) -> Result<Option<TrackerInfo>, StashError> {
+    pub async fn get_info(&self, message_id: LocalMessageId) -> Result<PrivacyInfo, StashError> {
         let ctx = self.ctx.upgrade().context("Could not find the context")?;
         let tether = ctx.user_context().stash().connection().await?;
 
-        let Some(tracked) = MessageTracker::load(message_id, &tether).await? else {
+        Self::get_info_inner(&tether, message_id).await
+    }
+
+    async fn get_info_inner(
+        tether: &Tether,
+        message_id: LocalMessageId,
+    ) -> Result<PrivacyInfo, StashError> {
+        let trackers = Self::get_tracker_info(tether, message_id).await?;
+        let utm_links = Self::get_utm_info(tether, message_id).await?;
+
+        Ok(PrivacyInfo {
+            trackers,
+            utm_links,
+        })
+    }
+
+    async fn get_tracker_info(
+        tether: &Tether,
+        message_id: LocalMessageId,
+    ) -> Result<Option<TrackerInfo>, StashError> {
+        let Some(tracked) = MessageTracker::load(message_id, tether).await? else {
             return Ok(None);
         };
 
         let last_checked_at = tracked.last_checked_at;
 
-        let tracking_urls = MessageTrackerUrl::find_by_message(message_id, &tether).await?;
+        let tracking_urls = MessageTrackerUrl::find_by_message(message_id, tether).await?;
 
         let mut domains: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
 
@@ -132,29 +183,49 @@ impl TrackerService {
         }))
     }
 
-    pub async fn watch(
-        &self,
+    pub async fn get_utm_info(
+        tether: &Tether,
         message_id: LocalMessageId,
-    ) -> Result<(Option<TrackerInfo>, WatcherHandle), StashError> {
+    ) -> Result<Option<StrippedUTMInfo>, StashError> {
+        if MessageUtmLink::load(message_id, tether).await?.is_none() {
+            return Ok(None);
+        }
+
+        let utm_urls = MessageUtmLinkUrl::find_by_message(message_id, tether).await?;
+
+        let links = utm_urls
+            .into_iter()
+            .map(|url| UTMLink {
+                original_url: url.original_url,
+                cleaned_url: url.cleaned_url,
+            })
+            .collect();
+
+        Ok(Some(StrippedUTMInfo { links }))
+    }
+
+    pub async fn watch(&self, message_id: LocalMessageId) -> Result<PrivacyWatchData, StashError> {
         let ctx = self.ctx.upgrade().context("Could not find the context")?;
-        let info = self.get_tracker_info(message_id).await?;
-
         let tether = ctx.user_context().stash().connection().await?;
-        let handle = tether.subscribe_to(move |sender| Box::new(TrackerWatcher { sender }))?;
+        let initial = Self::get_info_inner(&tether, message_id).await?;
 
-        Ok((info, handle))
+        let handle = tether.subscribe_to(move |sender| Box::new(PrivacyDataWatcher { sender }))?;
+
+        Ok(PrivacyWatchData { initial, handle })
     }
 }
 
-pub struct TrackerWatcher {
+pub struct PrivacyDataWatcher {
     sender: flume::Sender<()>,
 }
 
-impl TableObserver for TrackerWatcher {
+impl TableObserver for PrivacyDataWatcher {
     fn tables(&self) -> Vec<String> {
         vec![
             MessageTracker::table_name().to_string(),
             MessageTrackerUrl::table_name().to_string(),
+            MessageUtmLink::table_name().to_string(),
+            MessageUtmLinkUrl::table_name().to_string(),
         ]
     }
 

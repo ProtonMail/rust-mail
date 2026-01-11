@@ -482,7 +482,7 @@ impl DecryptedMessageBody {
             banners.push(MessageBanner::UnableToDecrypt);
         }
 
-        let output = transform_html_with_banners(
+        let mut output = transform_html_with_banners(
             sender,
             // At this point in time we do not have a list of trusted senders.
             // We also do not store that in the database as there is no syncing with the server.
@@ -495,9 +495,14 @@ impl DecryptedMessageBody {
 
         if let Some(message_id) = self.metadata.local_message_id {
             let urls_clone = output.remote_urls.clone();
+            // We are not using that field outside of this function
+            let utm_stripped = std::mem::take(&mut output.utm_stripped);
             ctx.spawn_ex(move |ctx_clone| async move {
                 let tracker_service = ctx_clone.get_service::<TrackerService>();
-                if let Err(e) = tracker_service.update(message_id, urls_clone).await {
+                if let Err(e) = tracker_service
+                    .update(message_id, urls_clone, utm_stripped)
+                    .await
+                {
                     tracing::error!("Could not update tracker information: {e}");
                 }
             });

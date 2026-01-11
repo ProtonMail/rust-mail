@@ -153,7 +153,10 @@ async fn check_message_trackers_with_empty_urls() {
     let message_id: LocalMessageId = 1.into();
     let urls = HashSet::new();
 
-    tracker_detector.update(message_id, urls).await.unwrap();
+    tracker_detector
+        .update(message_id, urls, BTreeSet::new())
+        .await
+        .unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -218,7 +221,10 @@ async fn check_message_trackers_with_non_tracker_urls() {
     urls.insert("https://safe-image.example.com/logo.png".to_string());
     urls.insert("https://example.com/image.jpg".to_string());
 
-    tracker_detector.update(message_id, urls).await.unwrap();
+    tracker_detector
+        .update(message_id, urls, BTreeSet::new())
+        .await
+        .unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -283,7 +289,10 @@ async fn check_message_trackers_with_single_tracker() {
     let mut urls = HashSet::new();
     urls.insert("https://tracker.example.com/pixel.gif".to_string());
 
-    tracker_detector.update(message_id, urls).await.unwrap();
+    tracker_detector
+        .update(message_id, urls, BTreeSet::new())
+        .await
+        .unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -358,7 +367,10 @@ async fn check_message_trackers_with_mixed_urls() {
     urls.insert("https://tracker.example.com/pixel.gif".to_string());
     urls.insert("https://safe-image.example.com/logo.png".to_string());
 
-    tracker_detector.update(message_id, urls).await.unwrap();
+    tracker_detector
+        .update(message_id, urls, BTreeSet::new())
+        .await
+        .unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -442,7 +454,10 @@ async fn check_message_trackers_with_multiple_trackers() {
     urls.insert("https://tracker2.example.com/beacon.png".to_string());
     urls.insert("https://tracker1.example.com/another.gif".to_string());
 
-    tracker_detector.update(message_id, urls).await.unwrap();
+    tracker_detector
+        .update(message_id, urls, BTreeSet::new())
+        .await
+        .unwrap();
 
     wait_for_tracker_tables(&receiver, Duration::from_secs(5))
         .await
@@ -518,9 +533,10 @@ async fn get_tracker_info_returns_correct_data() {
 
     let tracker_info = user_ctx
         .get_service::<TrackerService>()
-        .get_tracker_info(message_id)
+        .get_info(message_id)
         .await
-        .unwrap();
+        .unwrap()
+        .trackers;
     assert!(tracker_info.is_none());
 
     tether
@@ -537,9 +553,10 @@ async fn get_tracker_info_returns_correct_data() {
 
     let tracker_info = user_ctx
         .get_service::<TrackerService>()
-        .get_tracker_info(message_id)
+        .get_info(message_id)
         .await
-        .unwrap();
+        .unwrap()
+        .trackers;
     assert!(tracker_info.unwrap().trackers.is_empty());
 
     tether
@@ -583,9 +600,10 @@ async fn get_tracker_info_returns_correct_data() {
 
     let tracker_info = user_ctx
         .get_service::<TrackerService>()
-        .get_tracker_info(message_id)
+        .get_info(message_id)
         .await
         .unwrap()
+        .trackers
         .unwrap();
 
     assert_eq!(tracker_info.trackers.len(), 2);

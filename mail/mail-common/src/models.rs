@@ -40,6 +40,8 @@ mod mailbox_labels;
 mod message;
 mod message_tracker;
 mod message_tracker_url;
+mod message_utm_link;
+mod message_utm_link_url;
 mod network;
 mod rollback_item;
 
@@ -56,5 +58,7 @@ pub use self::mailbox_labels::*;
 pub use self::message::*;
 pub use self::message_tracker::*;
 pub use self::message_tracker_url::*;
+pub use self::message_utm_link::*;
+pub use self::message_utm_link_url::*;
 pub use self::network::*;
 pub use self::rollback_item::*;
