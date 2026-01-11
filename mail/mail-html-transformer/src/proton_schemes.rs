@@ -5,8 +5,6 @@
 mod tests;
 
 use crate::css_parser::{parse_style_attribute, parse_stylesheet};
-use html5ever::namespace_url;
-use html5ever::ns;
 use kuchikiki::iter::NodeEdge;
 use kuchikiki::{ExpandedName, NodeData, NodeRef};
 use lightningcss::printer::PrinterOptions;
@@ -18,17 +16,19 @@ use tracing::warn;
 
 static IMAGE_ATTRIBUTES: LazyLock<[ExpandedName; 5]> = LazyLock::new(|| {
     [
-        ExpandedName::new("", "src"),
-        ExpandedName::new("", "srcset"),
-        ExpandedName::new("", "background"),
-        ExpandedName::new("", "poster"),
-        ExpandedName::new("", "data-src"),
+        crate::utils::attribute_name("src"),
+        crate::utils::attribute_name("srcset"),
+        crate::utils::attribute_name("background"),
+        crate::utils::attribute_name("poster"),
+        crate::utils::attribute_name("data-src"),
     ]
 });
 
 /// Transform image URLs from HTTP/HTTPS to proton-http/proton-https schemes.
 pub fn transform_to_proton_schemes(document: NodeRef) -> u64 {
     let mut count = 0;
+
+    let style_attr = crate::utils::attribute_name("style");
 
     for node in document.traverse_inclusive() {
         let NodeEdge::Start(node_ref) = node else {
@@ -58,7 +58,7 @@ pub fn transform_to_proton_schemes(document: NodeRef) -> u64 {
             }
         }
 
-        if let Some(attr) = attributes.map.get_mut(&ExpandedName::new(ns!(), "style")) {
+        if let Some(attr) = attributes.map.get_mut(&style_attr) {
             count += transform_style_attribute_to_proton(&mut attr.value);
         }
     }
@@ -69,6 +69,7 @@ pub fn transform_to_proton_schemes(document: NodeRef) -> u64 {
 /// Transform image URLs from proton-http/proton-https schemes back to HTTP/HTTPS.
 pub fn transform_from_proton_schemes(document: NodeRef) -> u64 {
     let mut count = 0;
+    let style_attr = crate::utils::attribute_name("style");
 
     for node in document.traverse_inclusive() {
         let NodeEdge::Start(node_ref) = node else {
@@ -98,7 +99,7 @@ pub fn transform_from_proton_schemes(document: NodeRef) -> u64 {
             }
         }
 
-        if let Some(attr) = attributes.map.get_mut(&ExpandedName::new(ns!(), "style")) {
+        if let Some(attr) = attributes.map.get_mut(&style_attr) {
             count += transform_style_attribute_from_proton(&mut attr.value);
         }
     }

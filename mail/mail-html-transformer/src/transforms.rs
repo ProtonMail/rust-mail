@@ -5,18 +5,12 @@ mod tests;
 
 pub mod styles;
 
-use html5ever::{LocalName, QualName, namespace_url, tendril::TendrilSink};
 use itertools::Itertools;
-use kuchikiki::{Attribute, ExpandedName, NodeData, NodeRef, iter::NodeEdge};
+use kuchikiki::{Attribute, NodeData, NodeRef, iter::NodeEdge};
 use std::fmt::Write;
 use url::Url;
 
-use crate::utm::strip_from_url;
-
-fn node_ref_from_str(html: &str, tag: &str) -> NodeRef {
-    let qual_name = QualName::new(None, html5ever::ns!(html), LocalName::from(tag));
-    kuchikiki::parse_fragment(qual_name, vec![]).one(html)
-}
+use crate::{utils::node_ref_from_str, utm::strip_from_url};
 
 /// Determines which stylesheet hardcoded into the binary should be injected into HTML body of the message
 ///
@@ -51,7 +45,7 @@ pub fn move_styles_to_body(document: NodeRef) {
 ///
 /// See [this article](https://mathiasbynens.github.io/rel-noopener/) to see how the lack of it could be abused
 pub fn add_noreferrer(document: NodeRef) {
-    let exp_name = ExpandedName::new(html5ever::namespace_url!(""), "rel");
+    let exp_name = crate::utils::attribute_name("rel");
     let attr = Attribute {
         prefix: None,
         value: "noreferrer".to_string(),

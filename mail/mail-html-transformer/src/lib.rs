@@ -34,6 +34,9 @@
 //! ```
 //!
 
+use crate::replace_inner::InvalidSelectorError;
+use crate::transforms::styles::{IncludeFullStaticCss, InjectDarkModeOptions};
+pub use html2text::Html2TextOptions;
 use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
 use message_detector::SplitDoc;
@@ -48,6 +51,7 @@ pub mod ios;
 pub mod message_detector;
 pub mod proton_schemes;
 pub mod remote_content;
+mod replace_inner;
 pub mod sanitizer;
 pub mod transforms;
 pub mod utm;
@@ -55,14 +59,10 @@ pub mod utm;
 mod html2text;
 mod text2html;
 
-use crate::replace_inner::InvalidSelectorError;
-use crate::transforms::styles::{IncludeFullStaticCss, InjectDarkModeOptions};
-pub use html2text::Html2TextOptions;
-
-mod replace_inner;
 #[cfg(test)]
 #[path = "tests/lib.rs"]
 mod tests;
+mod utils;
 
 /// HTML content transformer.
 ///
@@ -219,17 +219,9 @@ impl Transformer {
     ///
     /// Supplement CSS are not injected, instead the function returns the head of the new document.
     pub fn inject_dark_mode_to_another_target(&mut self, options: InjectDarkModeOptions) -> String {
-        use html5ever::namespace_url;
         let source = self.document.clone();
         let target = NodeRef::new_document();
-        let head = NodeRef::new_element(
-            html5ever::QualName::new(
-                None,
-                html5ever::ns!(html),
-                html5ever::LocalName::from("head"),
-            ),
-            vec![],
-        );
+        let head = crate::utils::new_element::<&str, &str>("head", []);
         target.append(head.clone());
 
         transforms::styles::inject_dark_mode(source, target.clone(), options);
