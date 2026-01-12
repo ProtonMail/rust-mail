@@ -674,6 +674,17 @@ impl Context {
             info!("logged out session {}", session.remote_id);
         }
 
+        self.force_logout_account_locally(user_id.clone()).await?;
+        info!("logged out all sessions for account {user_id}");
+        Ok(())
+    }
+
+    /// Force-logout an account **locally** by deleting all stored sessions for the account.
+    ///
+    /// This is intended for cases where the server-side session has already been invalidated
+    /// (e.g. "log out from all devices"), so API calls start returning 401 and we need to
+    /// immediately stop allowing access to cached/decrypted data.
+    pub async fn force_logout_account_locally(&self, user_id: UserId) -> CoreContextResult<()> {
         let orphaned_sessions = self
             .get_account_sessions(user_id.clone())
             .await?
@@ -699,8 +710,6 @@ impl Context {
                 .await
                 .map_err(|e| anyhow!("Could not remove PIN, details: `{e}`"))?;
         }
-
-        info!("logged out all sessions for account {user_id}");
 
         Ok(())
     }
