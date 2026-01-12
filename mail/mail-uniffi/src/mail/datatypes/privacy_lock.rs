@@ -1,6 +1,6 @@
 use proton_crypto_inbox::lock_icon::{LockColor, LockIcon, LockTooltip, UiLock};
 
-#[derive(uniffi::Record)]
+#[derive(Clone, uniffi::Record)]
 pub struct PrivacyLock {
     pub icon: PrivacyLockIcon,
     pub color: PrivacyLockColor,
@@ -17,7 +17,7 @@ impl From<UiLock> for PrivacyLock {
     }
 }
 
-#[derive(uniffi::Enum)]
+#[derive(uniffi::Enum, Copy, Clone)]
 pub enum PrivacyLockIcon {
     None,
     ClosedLock,
@@ -44,7 +44,7 @@ impl From<LockIcon> for PrivacyLockIcon {
     }
 }
 
-#[derive(uniffi::Enum)]
+#[derive(uniffi::Enum, Copy, Clone)]
 pub enum PrivacyLockColor {
     Black,
     Green,
@@ -61,7 +61,7 @@ impl From<LockColor> for PrivacyLockColor {
     }
 }
 
-#[derive(uniffi::Enum)]
+#[derive(uniffi::Enum, Copy, Clone)]
 pub enum PrivacyLockTooltip {
     None,
     SendE2E,

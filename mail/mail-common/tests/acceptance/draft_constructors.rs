@@ -59,7 +59,9 @@ mod mailto {
     use proton_core_api::services::proton::{LabelId, UserId};
     use proton_mail_common::MailUserContext;
     use proton_mail_common::datatypes::{MimeType, SystemLabelId};
-    use proton_mail_common::draft::recipients::{Recipient, SingleRecipient, ValidationState};
+    use proton_mail_common::draft::recipients::{
+        PrivacyLockState, Recipient, SingleRecipient, ValidationState,
+    };
     use proton_mail_common::draft::{Draft, DraftActor, DraftActorOptions, RecipientGroupId};
     use proton_mail_common::models::MailSettings;
     use proton_mail_common::test_utils::message_body::{
@@ -118,6 +120,7 @@ mod mailto {
                 display_name: None,
                 email: "kim@proton".into(),
                 state: ValidationState::InvalidEmail,
+                privacy_lock: PrivacyLockState::default(),
             })],
             draft.recipients(RecipientGroupId::To).await.unwrap(),
         );
@@ -127,6 +130,7 @@ mod mailto {
                 display_name: None,
                 email: "mike@proton".into(),
                 state: ValidationState::InvalidEmail,
+                privacy_lock: PrivacyLockState::default(),
             })],
             draft.recipients(RecipientGroupId::Cc).await.unwrap(),
         );
@@ -136,6 +140,7 @@ mod mailto {
                 display_name: None,
                 email: "chuck@proton".into(),
                 state: ValidationState::InvalidEmail,
+                privacy_lock: PrivacyLockState::default(),
             })],
             draft.recipients(RecipientGroupId::Bcc).await.unwrap(),
         );

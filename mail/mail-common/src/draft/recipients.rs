@@ -1,6 +1,6 @@
 use crate::MailUserContext;
 use crate::datatypes::MessageRecipient;
-use crate::models::MessageReplyTo;
+use crate::models::{DraftMetadata, MailSettings, MessageReplyTo, MetadataId};
 use email_address::EmailAddress;
 use non_empty_string::NonEmptyString;
 use proton_core_api::consts::CoreBundle;
@@ -8,16 +8,19 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{PrivateEmail, PrivateEmailRef, PrivateString};
 use proton_core_common::models::ContactEmail;
 use proton_core_common::{CoreContextError, PublicAddressKeyFetchPolicy};
-use proton_crypto_account::keys::RecipientType;
+use proton_crypto_account::keys::{EmailMimeType, RecipientType};
+use proton_crypto_inbox::keys::ComposerPreference;
+use proton_crypto_inbox::lock_icon::UiLock;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
+use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::HashSet;
 use std::future::Future;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tracing::error;
+use tracing::{error, warn};
 
 #[cfg(test)]
 #[path = "../tests/draft/recipients.rs"]
@@ -59,6 +62,30 @@ pub enum ValidationState {
     Unknown,
 }
 
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
+pub enum PrivacyLockState {
+    #[default]
+    Default,
+    Calculating,
+    Calculated(UiLock),
+}
+
+impl PrivacyLockState {
+    #[must_use]
+    pub fn should_recalculate(&self) -> bool {
+        matches!(self, Self::Default)
+    }
+}
+
+impl From<PrivacyLockState> for UiLock {
+    fn from(value: PrivacyLockState) -> Self {
+        match value {
+            PrivacyLockState::Default | PrivacyLockState::Calculating => UiLock::default(),
+            PrivacyLockState::Calculated(lock) => lock,
+        }
+    }
+}
+
 impl From<ApiServiceError> for ValidationState {
     fn from(value: ApiServiceError) -> Self {
         Self::from(&value)
@@ -85,14 +112,16 @@ impl From<&ApiServiceError> for ValidationState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SingleRecipient {
     pub display_name: Option<PrivateString>,
     pub email: PrivateEmail,
     pub state: ValidationState,
+    #[serde(skip)] // TODO(@Leander): Decouple draft action types from this list
+    pub privacy_lock: PrivacyLockState,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupRecipient {
     pub recipients: Vec<SingleRecipient>,
     pub group_name: NonEmptyString,
@@ -105,7 +134,7 @@ pub enum RecipientError {
     DuplicateAddress(PrivateEmail),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Recipient {
     Single(SingleRecipient),
     Group(GroupRecipient),
@@ -239,7 +268,7 @@ impl ExpirationFeatureSupportReport {
 /// recipients are valid. If the recipient is a proton address, we will
 /// also check whether the address actually exists.
 ///
-#[derive(Debug, Default, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RecipientList {
     recipients: Vec<Recipient>,
 }
@@ -334,6 +363,7 @@ impl RecipientList {
             display_name: entry.name,
             email: entry.email,
             state,
+            privacy_lock: PrivacyLockState::default(),
         }));
 
         match self
@@ -409,6 +439,7 @@ impl RecipientList {
                 display_name: recipient.name,
                 email: recipient.email,
                 state,
+                privacy_lock: PrivacyLockState::default(),
             });
         }
 
@@ -568,6 +599,16 @@ impl RecipientList {
         }
     }
 
+    fn update_recipient_privacy_lock(
+        &mut self,
+        email: PrivateEmailRef,
+        privacy_lock: PrivacyLockState,
+    ) {
+        if let Some(recipient) = self.find_recipient_by_email_mut(email) {
+            recipient.privacy_lock = privacy_lock;
+        }
+    }
+
     pub fn contains_email<'e>(&self, email: impl Into<PrivateEmailRef<'e>>) -> bool {
         self.find_recipient_by_email(email.into()).is_some()
     }
@@ -676,6 +717,19 @@ impl RecipientValidationUpdate {
     }
 }
 
+#[derive(Default)]
+pub struct RecipientPrivacyLockUpdate {
+    updates: Vec<(PrivateEmail, PrivacyLockState)>,
+}
+
+impl RecipientPrivacyLockUpdate {
+    pub fn apply(self, list: &mut RecipientList) {
+        for (email, lock) in self.updates {
+            list.update_recipient_privacy_lock(email.as_ref(), lock);
+        }
+    }
+}
+
 pub trait OnBackgroundValidationComplete: Send + Sync + Clone + 'static {
     fn recipients_validation_state_updated(
         &self,
@@ -683,20 +737,11 @@ pub trait OnBackgroundValidationComplete: Send + Sync + Clone + 'static {
     ) -> impl Future<Output = ()> + Send;
 }
 
-#[derive(Clone)]
-pub struct ChannelBackgroundValidationComplete(flume::Sender<RecipientValidationUpdate>);
-
-impl ChannelBackgroundValidationComplete {
-    pub fn new(capacity: usize) -> (Self, flume::Receiver<RecipientValidationUpdate>) {
-        let (sender, receiver) = flume::bounded(capacity);
-        (Self(sender), receiver)
-    }
-}
-
-impl OnBackgroundValidationComplete for ChannelBackgroundValidationComplete {
-    async fn recipients_validation_state_updated(&self, updates: RecipientValidationUpdate) {
-        let _ = self.0.send_async(updates).await;
-    }
+pub trait OnPrivacyLockUpdate: Send + Sync + Clone + 'static {
+    fn recipient_privacy_lock_updated(
+        &self,
+        updates: RecipientPrivacyLockUpdate,
+    ) -> impl Future<Output = ()> + Send;
 }
 
 /// This version of a recipient list validates recipient addresses in the background when
@@ -708,32 +753,44 @@ impl OnBackgroundValidationComplete for ChannelBackgroundValidationComplete {
 ///
 /// This type exists so that the UI layer can defer the validation of the addresses as the user
 /// types them.
-pub struct ValidatingRecipientList<'l, T: OnBackgroundValidationComplete> {
+pub struct ValidatingRecipientList<'l, T: OnBackgroundValidationComplete + OnPrivacyLockUpdate> {
     list: &'l mut RecipientList,
     cancellation_token: CancellationToken,
     cb: T,
+    draft_id: MetadataId,
+    mime_type: EmailMimeType,
 }
 
-impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
+impl<'l, T: OnBackgroundValidationComplete + OnPrivacyLockUpdate> ValidatingRecipientList<'l, T> {
     pub fn new(
         cancellation_token: CancellationToken,
         list: &'l mut RecipientList,
         on_updated: T,
+        draft_id: MetadataId,
+        mime_type: EmailMimeType,
     ) -> Self {
         Self {
             list,
             cb: on_updated,
             cancellation_token,
+            draft_id,
+            mime_type,
         }
     }
 
     pub fn check_all(&mut self, ctx: &MailUserContext) {
         let mut emails_to_validate = Vec::new();
+        let mut locks_to_calculate = Vec::new();
 
         let mut check_recipient = |recipient: &mut SingleRecipient| {
             if recipient.state == ValidationState::Unchecked {
                 recipient.state = ValidationState::Validating;
                 emails_to_validate.push(recipient.email.clone());
+            }
+
+            if recipient.privacy_lock.should_recalculate() {
+                recipient.privacy_lock = PrivacyLockState::Calculating;
+                locks_to_calculate.push(recipient.email.clone());
             }
         };
 
@@ -751,6 +808,31 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
         }
 
         self.validate_addresses(ctx, emails_to_validate);
+        self.calculate_privacy_locks(ctx, locks_to_calculate);
+    }
+
+    pub fn recalculate_all_privacy_locks(&mut self, ctx: &MailUserContext) {
+        let mut locks_to_calculate = Vec::new();
+
+        let mut check_recipient = |recipient: &mut SingleRecipient| {
+            recipient.privacy_lock = PrivacyLockState::Calculating;
+            locks_to_calculate.push(recipient.email.clone());
+        };
+
+        for recipient in &mut self.list.recipients {
+            match recipient {
+                Recipient::Single(recipient) => {
+                    check_recipient(recipient);
+                }
+                Recipient::Group(group) => {
+                    for recipient in &mut group.recipients {
+                        check_recipient(recipient);
+                    }
+                }
+            }
+        }
+
+        self.calculate_privacy_locks(ctx, locks_to_calculate);
     }
 
     pub fn add_single(
@@ -765,7 +847,16 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
         } else {
             vec![]
         };
+
+        let to_calculate = if entry.privacy_lock.should_recalculate() {
+            entry.privacy_lock = PrivacyLockState::Calculating;
+            vec![entry.email.clone()]
+        } else {
+            vec![]
+        };
+
         self.validate_addresses(ctx, emails);
+        self.calculate_privacy_locks(ctx, to_calculate);
 
         Ok(())
     }
@@ -792,7 +883,21 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
             })
             .collect::<Vec<_>>();
 
+        let to_calculate = group
+            .recipients
+            .iter_mut()
+            .filter_map(|r| {
+                if r.privacy_lock.should_recalculate() {
+                    r.privacy_lock = PrivacyLockState::Calculating;
+                    Some(r.email.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
         self.validate_addresses(ctx, to_validate);
+        self.calculate_privacy_locks(ctx, to_calculate);
 
         duplicates
     }
@@ -822,6 +927,28 @@ impl<'l, T: OnBackgroundValidationComplete> ValidatingRecipientList<'l, T> {
                     updates: update_statuses,
                 })
                 .await;
+            });
+    }
+
+    fn calculate_privacy_locks(&self, ctx: &MailUserContext, to_calculate: Vec<PrivateEmail>) {
+        if to_calculate.is_empty() {
+            return;
+        }
+
+        let cb = self.cb.clone();
+        let ctx = ctx.as_arc();
+        let ctx_cloned = Arc::clone(&ctx);
+        let draft_id = self.draft_id;
+        let mime_type = self.mime_type;
+
+        ctx_cloned
+            .mail_context()
+            .core_context()
+            .task_service()
+            .spawn_cancellable(self.cancellation_token.clone(), async move {
+                let updates =
+                    calculate_privacy_locks(&ctx, draft_id, mime_type, to_calculate).await;
+                cb.recipient_privacy_lock_updated(updates).await;
             });
     }
 }
@@ -862,6 +989,83 @@ async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> Validat
 
     tracing::debug!("Validation state updated for {email}: {state:?}");
     state
+}
+
+async fn calculate_privacy_locks(
+    ctx: &MailUserContext,
+    draft_id: MetadataId,
+    mime_type: EmailMimeType,
+    emails: Vec<PrivateEmail>,
+) -> RecipientPrivacyLockUpdate {
+    let Ok(mut tether) = ctx.user_stash().connection().await else {
+        warn!("Failed to acquire db connection");
+        return RecipientPrivacyLockUpdate {
+            updates: emails
+                .into_iter()
+                .map(|email| (email, PrivacyLockState::default()))
+                .collect(),
+        };
+    };
+
+    let Ok(Some(metadata)) = DraftMetadata::load(draft_id, &tether).await else {
+        warn!("Failed to load draft metadata");
+        return RecipientPrivacyLockUpdate {
+            updates: emails
+                .into_iter()
+                .map(|email| (email, PrivacyLockState::default()))
+                .collect(),
+        };
+    };
+
+    let mail_settings = MailSettings::get_or_default(&tether).await;
+
+    let composer_preference = ComposerPreference {
+        encrypt_to_outside: metadata.password.is_some(),
+        composer_body_mime_type: mime_type,
+    };
+
+    let mut updates = Vec::with_capacity(emails.len());
+    for email in emails {
+        let lock = calculate_privacy_lock(
+            ctx,
+            email.as_ref(),
+            &mail_settings,
+            composer_preference,
+            &mut tether,
+        )
+        .await;
+
+        updates.push((email, lock));
+    }
+
+    RecipientPrivacyLockUpdate { updates }
+}
+
+async fn calculate_privacy_lock(
+    ctx: &MailUserContext,
+    email: PrivateEmailRef<'_>,
+    mail_settings: &MailSettings,
+    composer_preference: ComposerPreference,
+    tether: &mut Tether,
+) -> PrivacyLockState {
+    let pgp_provider = new_pgp_provider();
+    match ctx
+        .recipient_send_preferences(
+            &pgp_provider,
+            tether,
+            email,
+            mail_settings.crypto_mail_settings(),
+            composer_preference,
+            proton_core_common::AddressKeysContactFetchPolicy::AllowCachedFallback,
+        )
+        .await
+    {
+        Ok(send_prefs) => PrivacyLockState::Calculated(UiLock::for_composer(&send_prefs)),
+        Err(e) => {
+            warn!("Failed to fetch sender preferences: {e}");
+            PrivacyLockState::Default
+        }
+    }
 }
 
 const PROTON_EMAIL_DOMAINS: [&str; 6] = [
