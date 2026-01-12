@@ -151,21 +151,8 @@ impl CryptoKeyManager {
             .await
         {
             Ok(api_keys) => {
-                let mut tether = user_context.user_stash.connection().await?;
-                if let Err(e) = tether
-                    .tx(async |tx| {
-                        PublicAddressKeysResponseCache::store(
-                            email.as_clear_text_str().to_owned(),
-                            internal_only,
-                            api_keys.clone(),
-                            tx,
-                        )
-                        .await
-                    })
-                    .await
-                {
-                    tracing::error!("Failed to store response in cache: {e}");
-                }
+                Self::store_public_key_request(user_context, &email, internal_only, &api_keys)
+                    .await;
                 api_keys
             }
             Err(e)
@@ -202,14 +189,17 @@ impl CryptoKeyManager {
                 if internal_only && error.code == CoreBundle::KeyGetAddressMissing as u32
                     || error.code == CoreBundle::KeyGetDomainExternal as u32 =>
             {
-                APIPublicAddressKeys {
+                let response = APIPublicAddressKeys {
                     address_keys: APIPublicAddressKeyGroup::default(),
                     catch_all_keys: None,
                     unverified_keys: None,
                     warnings: vec![],
                     proton_mx: false,
                     is_proton: false,
-                }
+                };
+                Self::store_public_key_request(user_context, &email, internal_only, &response)
+                    .await;
+                response
             }
             Err(e) => return Err(e.into()),
         };
@@ -240,6 +230,33 @@ impl CryptoKeyManager {
     pub fn clear_cache(&self) {
         self.clear_user_key_cache();
         self.clear_address_key_cache();
+    }
+
+    // Helper for storing a PublicAddressKeys API response in the cache
+    async fn store_public_key_request(
+        user_context: &UserContext,
+        email: &PrivateEmailRef<'_>,
+        internal_only: bool,
+        response: &APIPublicAddressKeys,
+    ) {
+        if let Ok(mut tether) = user_context.user_stash.connection().await {
+            if let Err(e) = tether
+                .tx(async |tx| {
+                    PublicAddressKeysResponseCache::store(
+                        email.as_clear_text_str().to_owned(),
+                        internal_only,
+                        response.clone(),
+                        tx,
+                    )
+                    .await
+                })
+                .await
+            {
+                tracing::error!("Failed to store response in cache: {e}");
+            }
+        } else {
+            tracing::error!("Failed to get connection to store API key response in cache");
+        }
     }
 
     /// Helper function to update the user keys in the internal cache.
