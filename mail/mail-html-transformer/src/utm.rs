@@ -71,9 +71,8 @@ pub fn strip(document: NodeRef) -> BTreeSet<StrippedUTM> {
 /// use proton_mail_html_transformer::utm::strip_from_url;
 ///
 /// if let Ok(url) = Url::parse("https://example.com/?utm_source=example") {
-///     let (new_url, count) = strip_from_url(&url);
+///     let new_url  = strip_from_url(url);
 ///     assert_eq!(new_url.as_str(), "https://example.com/");
-///     assert_eq!(count, 1);
 /// }
 /// ```
 ///
