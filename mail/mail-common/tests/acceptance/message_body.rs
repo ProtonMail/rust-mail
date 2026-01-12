@@ -1,12 +1,11 @@
-use indoc::formatdoc;
 use itertools::Itertools;
 use proton_core_api::services::proton::{LabelId, UserId};
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::attachment::MimeType;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{AttachmentMetadata, SystemLabelId};
-use proton_mail_common::models::MessageMimeType;
 use proton_mail_common::models::{Attachment, Message};
+use proton_mail_common::models::{MessageMimeType, RawMessageBody};
 use proton_mail_common::test_utils::message_body::{
     TEST_MESSAGE_BODY_DECRYPTED, TEST_MESSAGE_BODY_MIME_DECRYPTED,
     TEST_MESSAGE_BODY_MIME_SIGNATURE, TEST_USER_ID, message_body_test_message_mime,
@@ -73,28 +72,24 @@ async fn mailbox_message_body_simple() {
         .await
         .unwrap();
 
+    let raw_message_body = RawMessageBody::load(saved_message.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
     let decrypted_body2 = saved_message
         .fetch_message_body(&user_ctx, &mut tether)
         .await
         .unwrap();
 
-    let body = tether
-        .query_value::<_, String>(
-            formatdoc!(
-                "
-            SELECT body FROM message_body WHERE
-                message_id = {}
-    ",
-                saved_message.id()
-            ),
-            vec![],
-        )
+    let raw_message_body2 = RawMessageBody::load(saved_message.id(), &tether)
         .await
+        .unwrap()
         .unwrap();
 
-    assert_eq!(decrypted_body.body, body);
     assert_eq!(decrypted_body.body, TEST_MESSAGE_BODY_DECRYPTED);
-    assert_eq!(decrypted_body2.body, decrypted_body.body);
+    assert_eq!(decrypted_body2.body, TEST_MESSAGE_BODY_DECRYPTED);
+    assert_eq!(raw_message_body.body(), raw_message_body2.body());
 }
 
 #[tokio::test]
@@ -461,7 +456,7 @@ async fn message_body_failed_to_decrypt() {
         .unwrap();
 
     assert_eq!(decrypted_body.body, message.body.body);
-    assert_eq!(decrypted_body.mime_type, MessageMimeType::TextHtml);
+    assert_eq!(decrypted_body.mime_type, MessageMimeType::TextPlain);
     assert!(decrypted_body.failed_to_decrypt());
 
     let body_output = decrypted_body

@@ -9,6 +9,7 @@ use crate::models::{
     MessageBodyMetadata, MessageMimeType, MetadataId,
 };
 use crate::{MailContextError, MailContextResult, MailUserContext};
+use anyhow::anyhow;
 use chrono::DateTime;
 use derive_more::Display;
 use proton_canonical_email::CanonicalEmail;
@@ -16,7 +17,9 @@ use proton_core_api::services::proton::AddressId;
 use proton_core_common::Platform;
 use proton_core_common::datatypes::{AddressStatus, UnixTimestamp};
 use proton_core_common::models::{Address, ModelIdExtension, PaidSubscription, User};
-use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
+use proton_crypto_inbox::message::{
+    DecryptableMessage, EncryptableDraft, EncryptedDraft, GettablePGPMessage, RawDecryptedBody,
+};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
 use proton_mail_html_transformer::sanitizer::StripStyleSheets;
@@ -252,11 +255,12 @@ impl EncryptableDraft for DraftBody<'_> {
     }
 }
 
+// Returns the encrypted body and the verification signatures
 pub(super) async fn encrypt_draft_body(
     ctx: &MailUserContext,
     address_id: &AddressId,
     body: &str,
-) -> Result<EncryptedDraft, MailContextError> {
+) -> Result<(EncryptedDraft, Vec<u8>), MailContextError> {
     let draft_body = DraftBody { body };
     let pgp = new_pgp_provider();
 
@@ -272,12 +276,52 @@ pub(super) async fn encrypt_draft_body(
             SaveError::AddressWithoutPrimaryKey(address_id.clone())
         })?;
 
-    draft_body
+    let encrypted = draft_body
         .encrypt_draft_body(&pgp, &draft_encryption_key)
         .map_err(|e| {
             error!("Failed to encrypt draft: {e:?}");
             MailContextError::Crypto
-        })
+        })?;
+
+    // To do proper signature verification if the user sends a message to themselves, we
+    // need to store the draft signature with the draft.
+    // Unfortunately, this means that we need to decrypt the message right after
+    // encrypting.
+    let encrypted_draft = EncryptedDraftMessage { body: &encrypted };
+
+    let RawDecryptedBody::Plain { signatures, .. } =
+        encrypted_draft.decrypt(&pgp, &unlocked_keys).map_err(|e| {
+            error!("Failed to decrypt draft: {e:?}");
+            MailContextError::Crypto
+        })?
+    else {
+        error!("Saved draft message was not of plain type");
+        return Err(MailContextError::Other(anyhow!("Unexpected draft state")));
+    };
+
+    Ok((encrypted, signatures))
+}
+
+struct EncryptedDraftMessage<'a> {
+    body: &'a EncryptedDraft,
+}
+
+impl GettablePGPMessage for EncryptedDraftMessage<'_> {
+    /// Return the encrypted body of the message, this is a PGP message which
+    /// may then go on to be decrypted
+    fn pgp_message(&self) -> &[u8] {
+        self.body.as_bytes()
+    }
+}
+
+impl DecryptableMessage for EncryptedDraftMessage<'_> {
+    fn message_id(&self) -> Option<&str> {
+        None
+    }
+
+    fn message_is_mime(&self) -> bool {
+        false
+    }
 }
 
 pub(super) fn prepare_html_reply(

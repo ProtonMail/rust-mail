@@ -4,18 +4,17 @@ use proton_core_common::models::ModelExtension as _;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::response_data::IncomingDefault as ApiIncomingDefault;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
-use proton_mail_common::datatypes::MessageFlags;
 use proton_mail_common::datatypes::ParsedHeaders;
 use proton_mail_common::datatypes::SystemLabelId as _;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
+use proton_mail_common::datatypes::{MessageFlags, MimeType};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
-use proton_mail_common::models::Conversation;
 use proton_mail_common::models::IncomingDefault;
 use proton_mail_common::models::IncomingDefaultLocation;
 use proton_mail_common::models::MailSettings;
-use proton_mail_common::models::MessageBody;
 use proton_mail_common::models::MessageBodyMetadata;
 use proton_mail_common::models::MessageMimeType;
+use proton_mail_common::models::{Conversation, RawMessageBody};
 
 use proton_mail_common::test_utils::init::Params;
 use stash::orm::Model;
@@ -257,13 +256,14 @@ async fn banners() {
             MessageBodyMetadata {
                 local_message_id: msg_normal.local_id,
                 remote_message_id: msg_normal.remote_id.clone(),
+                mime_type: MimeType::TextHtml,
                 ..Default::default()
             }
             .save(tx)
             .await
             .unwrap();
 
-            MessageBody::html("im a nigerian prince, click this link")
+            RawMessageBody::local_draft("im a nigerian prince, click this link")
                 .store(msg_normal.id(), tx)
                 .await
                 .unwrap();

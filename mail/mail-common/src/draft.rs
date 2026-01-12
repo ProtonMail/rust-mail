@@ -1257,7 +1257,7 @@ impl DraftActor {
         message_body: &str,
         draft_reply_or_forward_params: Option<DraftReplyOrForwardParams>,
         tether: &Tether,
-    ) -> Result<ApiMessage, MailContextError> {
+    ) -> Result<(ApiMessage, Vec<u8>), MailContextError> {
         draft_v1::Draft::remote_create(
             context,
             session,
@@ -1282,7 +1282,7 @@ impl DraftActor {
         attachments: &[Attachment],
         message_body: &str,
         tether: &Tether,
-    ) -> Result<ApiMessage, MailContextError> {
+    ) -> Result<(ApiMessage, Vec<u8>), MailContextError> {
         draft_v1::Draft::remote_update(
             context,
             session,
