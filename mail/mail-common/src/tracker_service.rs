@@ -103,7 +103,7 @@ impl TrackerService {
             })
             .await?;
 
-        if !utm_stripped.is_empty() && MessageUtmLink::load(message_id, &tether).await?.is_none() {
+        if MessageUtmLink::load(message_id, &tether).await?.is_none() {
             tether
                 .tx(async |tx| {
                     MessageUtmLink {
