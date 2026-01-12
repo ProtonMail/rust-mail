@@ -71,7 +71,7 @@ impl Display for LockTooltip {
             LockTooltip::SendZeroAccessEncryptionDisabled => f.write_str("Zero-access encrypted. Recipient has disabled end-to-end encryption on their account."),
             LockTooltip::SendSignOnly | LockTooltip::SentRecipientPGPSigned => f.write_str("PGP-signed"),
             LockTooltip::ReceiveE2E => f.write_str("End-to-end encrypted message"),
-            LockTooltip::ReceiveE2EVerifiedRecipient => f.write_str("End-to-end encrypted message from verified recipient"),
+            LockTooltip::ReceiveE2EVerifiedRecipient => f.write_str("End-to-end encrypted message from verified sender"),
             LockTooltip::ReceiveE2EVerificationFailed => f.write_str("Sender verification failed"),
             LockTooltip::ReceiveE2EVerificationFailedNoSignature => f.write_str("Sender could not be verified: Message not signed"),
             LockTooltip::ReceiveSignOnlyVerificationFailed => f.write_str("PGP-signed message. Sender verification failed"),
