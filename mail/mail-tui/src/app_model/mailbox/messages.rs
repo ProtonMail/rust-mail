@@ -331,7 +331,6 @@ impl MessagesState {
         &mut self,
         ctx: Arc<MailUserContext>,
         show_loading: bool,
-        active_label_id: LocalLabelId,
     ) -> Command<Messages> {
         let Some(metadata) = self.selected_message() else {
             tracing::warn!("No message selected");
@@ -354,8 +353,7 @@ impl MessagesState {
                     .context("Failed to get message body")?;
 
                 let (msg, builder) =
-                    DecryptedMessage::new(&ctx, metadata, decrypted, active_label_id, tether)
-                        .await?;
+                    DecryptedMessage::new(&ctx, metadata, decrypted, tether).await?;
                 Ok((Box::new(msg), builder))
             })()
             .await;
@@ -772,7 +770,7 @@ impl MessagesState {
 
         match message {
             MessageMessage::OpenBody { show_loading } => {
-                return self.open_message_body(user_ctx.to_owned(), show_loading, mbox.label_id());
+                return self.open_message_body(user_ctx.to_owned(), show_loading);
             }
             MessageMessage::OpenBodyResult(r) => {
                 return self.display_message(user_ctx.clone(), r);
@@ -1069,7 +1067,6 @@ impl DecryptedMessage {
         ctx: &Arc<MailUserContext>,
         msg: MailMessage,
         body: DecryptedMessageBody,
-        active_label_id: LocalLabelId,
         mut tether: Tether,
     ) -> Result<(Self, PrivacyLockBuilder)> {
         let sender = msg.sender.address.clone();
@@ -1127,7 +1124,7 @@ impl DecryptedMessage {
         let cc = format_recipients(&msg.cc_list);
         let bcc = format_recipients(&msg.bcc_list);
         let labels = msg.custom_labels.iter().map(|l| &l.name).join(", ");
-        let lock_builder = body.privacy_lock(active_label_id, &tether).await;
+        let lock_builder = body.privacy_lock(&tether).await;
 
         let rsvp = match body.identify_rsvp(ctx).await {
             Ok(Some(rsvp)) => {

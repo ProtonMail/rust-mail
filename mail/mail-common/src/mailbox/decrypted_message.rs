@@ -7,9 +7,7 @@ use crate::actions::messages::UnsubscribeNewsletter;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::theme::MailTheme;
-use crate::datatypes::{
-    Disposition, LocalAttachmentId, LocalMessageId, ParsedHeaderValue, SystemLabelId,
-};
+use crate::datatypes::{Disposition, LocalAttachmentId, ParsedHeaderValue};
 use crate::models::{
     Attachment, AttachmentData, AttachmentType, MailSettings, Message, MessageBodyMetadata,
     MessageMimeType, RawMessageBody,
@@ -20,10 +18,9 @@ use anyhow::Context;
 use parking_lot::Mutex;
 use proton_action_queue::action::ActionId;
 use proton_calendar_common::{self as cal, RsvpError};
-use proton_core_api::services::proton::{AddressId, LabelId};
+use proton_core_api::services::proton::AddressId;
 use proton_core_common::AddressKeysContactFetchPolicy;
-use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_account::proton_crypto::new_pgp_provider;
 use proton_crypto_inbox::lock_icon::{MailVerificationStatus, XPmOrigin};
 use proton_crypto_inbox::lock_icon::{UiLock, XPmContentEncryption, XPmRecipientEncryption};
@@ -604,20 +601,12 @@ impl DecryptedMessageBody {
         self.decryption_error.is_some()
     }
 
-    pub async fn privacy_lock(
-        &self,
-        display_label: LocalLabelId,
-        tether: &Tether,
-    ) -> PrivacyLockBuilder {
-        let Ok(Some(local_sent_label_id)) =
-            Label::remote_id_counterpart(LabelId::sent(), tether).await
-        else {
-            tracing::error!("Could not resolve local sent label id");
-            return PrivacyLockBuilder::None;
-        };
-
-        let Ok(Some(local_draft_label_id)) =
-            Label::remote_id_counterpart(LabelId::drafts(), tether).await
+    pub async fn privacy_lock(&self, tether: &Tether) -> PrivacyLockBuilder {
+        let Ok(Some(message)) = Message::find_by_id(
+            self.metadata.local_message_id.expect("should be set"),
+            tether,
+        )
+        .await
         else {
             tracing::error!("Could not resolve local sent label id");
             return PrivacyLockBuilder::None;
@@ -627,7 +616,7 @@ impl DecryptedMessageBody {
         let content_encryption_header = self
             .metadata
             .parsed_header_value(XPmContentEncryption::header_key());
-        if display_label == local_sent_label_id || display_label == local_draft_label_id {
+        if message.flags.is_draft() || message.flags.is_sent() || message.flags.is_schedule_send() {
             PrivacyLockBuilder::DraftOrSent {
                 origin_header,
                 content_encryption_header,
@@ -639,7 +628,7 @@ impl DecryptedMessageBody {
             PrivacyLockBuilder::Default {
                 origin_header,
                 content_encryption_header,
-                message_id: self.metadata.local_message_id.expect("Should be set"),
+                message: Box::new(message),
             }
         }
     }
@@ -657,7 +646,7 @@ pub enum PrivacyLockBuilder {
     Default {
         origin_header: Option<ParsedHeaderValue>,
         content_encryption_header: Option<ParsedHeaderValue>,
-        message_id: LocalMessageId,
+        message: Box<Message>,
     },
 }
 
@@ -678,10 +667,8 @@ impl PrivacyLockBuilder {
             PrivacyLockBuilder::Default {
                 origin_header,
                 content_encryption_header,
-                message_id,
-            } => {
-                Self::build_default(ctx, origin_header, content_encryption_header, message_id).await
-            }
+                message,
+            } => Self::build_default(ctx, origin_header, content_encryption_header, message).await,
         }
     }
     fn build_draft_or_sent(
@@ -732,7 +719,7 @@ impl PrivacyLockBuilder {
         ctx: &MailUserContext,
         origin_header: Option<ParsedHeaderValue>,
         content_encryption_header: Option<ParsedHeaderValue>,
-        message_id: LocalMessageId,
+        message: Box<Message>,
     ) -> UiLock {
         let Some(ParsedHeaderValue::String(origin)) = origin_header else {
             warn!("X-Pm-Origin header missing or not a string");
@@ -758,11 +745,6 @@ impl PrivacyLockBuilder {
 
         let Ok(mut tether) = ctx.user_stash().connection().await else {
             warn!("Could not acquire db connection");
-            return UiLock::default_incoming();
-        };
-
-        let Ok(Some(message)) = Message::find_by_id(message_id, &tether).await else {
-            warn!("Could not find {message_id:?}");
             return UiLock::default_incoming();
         };
 
@@ -792,13 +774,13 @@ impl PrivacyLockBuilder {
             );
         }
 
-        let Ok(Some(raw_message)) = RawMessageBody::load(message_id, &tether).await else {
-            warn!("Could not find {message_id:?} body");
+        let Ok(Some(raw_message)) = RawMessageBody::load(message.id(), &tether).await else {
+            warn!("Could not find {:?} body", message.id());
             return UiLock::default_incoming();
         };
 
         let Ok(raw_decrypted_message) = raw_message.into_raw_decrypted_body() else {
-            warn!("{message_id:?} does not have a valid message body");
+            warn!("{:?} does not have a valid message body", message.id());
             return UiLock::default_incoming();
         };
 
@@ -810,7 +792,10 @@ impl PrivacyLockBuilder {
                         // This happens very frequently, should not be logged.
                         VerificationError::NotSigned(_) => {}
                         e => {
-                            tracing::error!("Failed to verify signature for {message_id:?}: {e}")
+                            tracing::error!(
+                                "Failed to verify signature for {:?}: {e}",
+                                message.id()
+                            );
                         }
                     }
                 });
