@@ -52,6 +52,30 @@ impl TrackerService {
         let mut found_trackers = Vec::new();
         let now = UnixTimestamp::now();
 
+        if MessageUtmLink::load(message_id, &tether).await?.is_none() {
+            tether
+                .tx(async |tx| {
+                    MessageUtmLink {
+                        local_message_id: message_id,
+                    }
+                    .save(tx)
+                    .await?;
+
+                    for utm in utm_stripped {
+                        MessageUtmLinkUrl {
+                            id: None,
+                            local_message_id: message_id,
+                            original_url: utm.original.to_string(),
+                            cleaned_url: utm.cleaned.to_string(),
+                        }
+                        .save(tx)
+                        .await?;
+                    }
+
+                    Ok::<_, StashError>(())
+                })
+                .await?;
+        }
         if let Some(tracker) = MessageTracker::find_by_id(message_id, &tether).await? {
             let last_checked_at = tracker.last_checked_at.to_date_time_utc();
             let now_utc = now.to_date_time_utc();
@@ -102,31 +126,6 @@ impl TrackerService {
                 Ok::<_, StashError>(())
             })
             .await?;
-
-        if MessageUtmLink::load(message_id, &tether).await?.is_none() {
-            tether
-                .tx(async |tx| {
-                    MessageUtmLink {
-                        local_message_id: message_id,
-                    }
-                    .save(tx)
-                    .await?;
-
-                    for utm in utm_stripped {
-                        MessageUtmLinkUrl {
-                            id: None,
-                            local_message_id: message_id,
-                            original_url: utm.original.to_string(),
-                            cleaned_url: utm.cleaned.to_string(),
-                        }
-                        .save(tx)
-                        .await?;
-                    }
-
-                    Ok::<_, StashError>(())
-                })
-                .await?;
-        }
 
         Ok(())
     }
