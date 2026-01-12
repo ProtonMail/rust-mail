@@ -7,7 +7,7 @@ pub use capabilities::BrowserCapabilities;
 
 use crate::css_parser::{parse_style_attribute, parse_stylesheet};
 use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
-use html5ever::{LocalName, QualName, namespace_url};
+use html5ever::{LocalName, QualName, namespace_url, ns};
 use itertools::Itertools;
 use kuchikiki::{Attribute, Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
 use lightningcss::traits::{Parse, ToCss};
@@ -670,9 +670,17 @@ fn sanitize_dark_mode_in_inline_attribute(
 }
 
 fn inject_style(document: &NodeRef, style_text: &str) {
-    let element = document.select_first("head").unwrap(); // kuckikiki always adds it
+    let element = document.select_first("head").unwrap_or_else(|()| {
+        let head = NodeRef::new_element(
+            QualName::new(None, ns!(html), "head".into()),
+            std::iter::empty(),
+        );
+        document.append(head.clone());
+        // SAFETY: We just created it using new_element, so it's safe to unwrap.
+        head.into_element_ref().unwrap()
+    });
 
-    let qual_name = QualName::new(None, html5ever::ns!(html), LocalName::from("style"));
+    let qual_name = QualName::new(None, ns!(html), LocalName::from("style"));
 
     #[allow(clippy::default_trait_access)]
     let element_data = ElementData {

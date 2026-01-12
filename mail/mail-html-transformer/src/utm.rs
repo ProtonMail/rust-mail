@@ -25,7 +25,10 @@ pub enum Error {
 #[must_use]
 /// Strip UTM trackers from all HTML links in the given `document`.
 pub fn strip(document: NodeRef) -> u64 {
-    let select = document.select("[href]").unwrap();
+    let Ok(select) = document.select("[href]") else {
+        tracing::warn!("Could not select [href] elements");
+        return 0;
+    };
 
     let mut acc = 0;
     for element in select {

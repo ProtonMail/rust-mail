@@ -6,8 +6,7 @@
 mod tests;
 
 use html5ever::{QualName, namespace_url, ns};
-use kuchikiki::{Attributes, ElementData, NodeData, NodeRef};
-use std::cell::RefCell;
+use kuchikiki::{Attribute, ExpandedName, NodeRef};
 
 /// This pass injects a `meta` element into the HTML `head` element.
 ///
@@ -20,26 +19,35 @@ use std::cell::RefCell;
 /// <meta name="viewport" content="width=device-width, initial-scale=1.0">
 /// ```
 pub fn inject_content_size(document: NodeRef) {
-    let element = document.select_first("head").unwrap(); // kuckikiki always adds it
+    let element = document.select_first("head").unwrap_or_else(|()| {
+        let head = NodeRef::new_element(
+            QualName::new(None, ns!(html), "head".into()),
+            std::iter::empty(),
+        );
+        document.append(head.clone());
+        // SAFETY: We just created it using new_element, so it's safe to unwrap.
+        head.into_element_ref().unwrap()
+    });
 
-    let mut attributes = Attributes {
-        // need to include another crate otherwise.
-        #[allow(clippy::default_trait_access)]
-        map: Default::default(),
-    };
-    attributes.insert("name", "viewport".to_owned());
-    attributes.insert(
-        "content",
-        "width=device-width, initial-scale=1.0".to_owned(),
+    let meta = NodeRef::new_element(
+        QualName::new(None, ns!(html), "meta".into()),
+        [
+            (
+                ExpandedName::new(ns!(), "name"),
+                Attribute {
+                    prefix: None,
+                    value: "viewport".into(),
+                },
+            ),
+            (
+                ExpandedName::new(ns!(), "content"),
+                Attribute {
+                    prefix: None,
+                    value: "width=device-width, initial-scale=1.0".into(),
+                },
+            ),
+        ],
     );
 
-    let data = ElementData {
-        name: QualName::new(None, ns!(), "meta".into()),
-        attributes: RefCell::new(attributes),
-        template_contents: None,
-    };
-
-    element
-        .as_node()
-        .append(NodeRef::new(NodeData::Element(data)));
+    element.as_node().append(meta);
 }

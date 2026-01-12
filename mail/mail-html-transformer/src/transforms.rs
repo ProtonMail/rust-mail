@@ -57,7 +57,10 @@ pub fn add_noreferrer(document: NodeRef) {
         value: "noreferrer".to_string(),
     };
 
-    let anchors = document.select("a").unwrap();
+    let Ok(anchors) = document.select("a") else {
+        tracing::warn!("Could not select <a> elements");
+        return;
+    };
 
     for anchor in anchors {
         let mut attrs = anchor.attributes.borrow_mut();
