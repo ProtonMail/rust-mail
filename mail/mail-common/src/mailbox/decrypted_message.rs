@@ -758,7 +758,10 @@ impl PrivacyLockBuilder {
             )
             .await
         {
-            Ok(prefs) => prefs,
+            Ok(prefs) => {
+                debug!("Keys for signature verification: {prefs}");
+                prefs
+            }
             Err(e) => {
                 warn!(?e, "Could not get sender verification preferences");
                 return UiLock::default_incoming();

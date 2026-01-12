@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, fmt};
 
 use proton_crypto_account::{
     keys::{DecryptedAddressKey, PinnedPublicKeys, PublicAddressKeys},
@@ -30,6 +30,27 @@ pub struct InboxVerificationPreferences<Pub: PublicKey> {
     pub compromised_fingerprints: HashSet<OpenPGPFingerprint>,
     /// Key transparency verification result.
     pub key_transparency_verification: KTVerificationResult,
+}
+
+impl<Pub: PublicKey> fmt::Display for InboxVerificationPreferences<Pub> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let pinned_key_ids = self
+            .pinned_keys
+            .iter()
+            .map(|key| key.key_id().to_hex())
+            .collect::<Vec<_>>();
+        let api_key_ids = self
+            .api_keys
+            .iter()
+            .map(|key| key.key_id().to_hex())
+            .collect::<Vec<_>>();
+        write!(f, "InboxVerificationPreferences {{ ")?;
+        write!(f, "ownership: {:?}, ", self.ownership)?;
+        write!(f, "pinned_keys: {pinned_key_ids:?}, ")?;
+        write!(f, "api_keys: {api_key_ids:?}, ")?;
+        write!(f, "}}")?;
+        Ok(())
+    }
 }
 
 impl<Pub: PublicKey> Default for InboxVerificationPreferences<Pub> {
