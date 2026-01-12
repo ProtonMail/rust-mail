@@ -11,6 +11,7 @@ pub struct IndexResult {
 
 impl IndexResult {
     /// Create result indicating cleanup is needed
+    #[must_use]
     pub fn needs_cleanup() -> Self {
         Self {
             cleanup_needed: true,
@@ -18,6 +19,7 @@ impl IndexResult {
     }
 
     /// Create result indicating no cleanup needed
+    #[must_use]
     pub fn no_cleanup() -> Self {
         Self {
             cleanup_needed: false,

@@ -110,25 +110,30 @@ impl BlobStorage for StashBlobStorage {
 
     async fn save(&self, name: &str, data: &[u8]) -> Result<(), SearchError> {
         use stash::params;
+        use stash::stash::StashError as SE;
 
         let data_len = data.len();
         let name_owned = name.to_owned();
         let data_owned = data.to_vec();
         let timestamp = chrono::Utc::now().timestamp();
 
-        let tether =
+        let mut tether =
             self.stash.connection().await.map_err(|e| {
                 SearchError::BlobStorage(format!("Failed to get connection: {}", e))
             })?;
 
         tether
-            .execute(
-                "INSERT OR REPLACE INTO search_index_blobs (blob_name, blob_data, updated_at) 
-                 VALUES (?1, ?2, ?3)",
-                params![name_owned, data_owned, timestamp],
-            )
+            .tx::<_, (), SE>(async |bond| {
+                bond.execute(
+                    "INSERT OR REPLACE INTO search_index_blobs (blob_name, blob_data, updated_at) 
+                     VALUES (?1, ?2, ?3)",
+                    params![name_owned, data_owned, timestamp],
+                )
+                .await?;
+                Ok(())
+            })
             .await
-            .map_err(|e| SearchError::BlobStorage(format!("Failed to save blob: {}", e)))?;
+            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {}", e)))?;
 
         debug!("Saved blob '{}' ({} bytes)", name, data_len);
         Ok(())
@@ -136,39 +141,52 @@ impl BlobStorage for StashBlobStorage {
 
     async fn delete(&self, name: &str) -> Result<bool, SearchError> {
         use stash::params;
+        use stash::stash::StashError as SE;
 
         let name_owned = name.to_owned();
 
-        let tether =
+        let mut tether =
             self.stash.connection().await.map_err(|e| {
                 SearchError::BlobStorage(format!("Failed to get connection: {}", e))
             })?;
 
-        let rows = tether
-            .execute(
-                "DELETE FROM search_index_blobs WHERE blob_name = ?1",
-                params![name_owned],
-            )
+        let deleted = tether
+            .tx::<_, bool, SE>(async |bond| {
+                let rows = bond
+                    .execute(
+                        "DELETE FROM search_index_blobs WHERE blob_name = ?1",
+                        params![name_owned],
+                    )
+                    .await?;
+                Ok(rows > 0)
+            })
             .await
-            .map_err(|e| SearchError::BlobStorage(format!("Failed to delete blob: {}", e)))?;
+            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {}", e)))?;
 
-        if rows > 0 {
+        if deleted {
             debug!("Deleted blob '{}'", name);
         }
 
-        Ok(rows > 0)
+        Ok(deleted)
     }
 
     async fn clear_all(&self) -> Result<(), SearchError> {
-        let tether =
+        use stash::stash::StashError as SE;
+
+        let mut tether =
             self.stash.connection().await.map_err(|e| {
                 SearchError::BlobStorage(format!("Failed to get connection: {}", e))
             })?;
 
         let deleted_count = tether
-            .execute("DELETE FROM search_index_blobs", vec![])
+            .tx::<_, usize, SE>(async |bond| {
+                let count = bond
+                    .execute("DELETE FROM search_index_blobs", vec![])
+                    .await?;
+                Ok(count)
+            })
             .await
-            .map_err(|e| SearchError::BlobStorage(format!("Failed to clear all blobs: {}", e)))?;
+            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {}", e)))?;
 
         debug!("Cleared all {} blobs from storage", deleted_count);
         Ok(())

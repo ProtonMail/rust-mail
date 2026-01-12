@@ -16,7 +16,7 @@ use crate::error::SearchError;
 ///
 /// This trait is implemented by mail-common to provide access to message
 /// bodies and remote IDs without mail-search needing to know about the
-/// Message or MessageBody models.
+/// `Message` or `MessageBody` models.
 #[async_trait]
 pub trait MessageDataProvider: Send + Sync {
     /// Error type for data provider operations
@@ -92,6 +92,7 @@ impl MessageMetadata {
     ///
     /// This hash represents the searchable content of a message (body + metadata).
     /// If the hash matches a previously indexed message, we can skip re-indexing.
+    #[must_use]
     pub fn compute_content_hash(body: &str, metadata: Option<&Self>) -> String {
         use sha2::{Digest, Sha256};
         use std::hash::{Hash, Hasher};

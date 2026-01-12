@@ -15,7 +15,7 @@ use tracing::{debug, warn};
 
 /// Local message ID type (u64 wrapped for type safety)
 ///
-/// This is a copy of LocalMessageId from mail-common to avoid circular dependencies.
+/// This is a copy of `LocalMessageId` from mail-common to avoid circular dependencies.
 pub type LocalMessageId = u64;
 
 /// The operation to perform on the search index
@@ -28,7 +28,7 @@ pub enum SearchOperation {
 }
 
 impl SearchOperation {
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Self::Index => "index",
             Self::Remove => "remove",
@@ -64,8 +64,8 @@ impl FromSql for SearchOperation {
 
 /// A search index intent - a persistent record of work to be done
 ///
-/// Uses composite primary key (message_id, operation) instead of artificial id.
-/// Content hashes are stored in a separate search_index_content_hashes table.
+/// Uses composite primary key (`message_id`, operation) instead of artificial id.
+/// Content hashes are stored in a separate `search_index_content_hashes` table.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SearchIndexIntent {
     pub message_id: LocalMessageId,
@@ -77,10 +77,10 @@ pub struct SearchIndexIntent {
 impl SearchIndexIntent {
     /// Create or update an intent (upsert)
     ///
-    /// Uses INSERT OR IGNORE to handle the PRIMARY KEY constraint on (message_id, operation).
+    /// Uses INSERT OR IGNORE to handle the PRIMARY KEY constraint on (`message_id`, operation).
     /// If an intent already exists for this message+operation, no new row is created.
     ///
-    /// If `content_hash` is provided, it will be stored. The content_hash check for duplicate
+    /// If `content_hash` is provided, it will be stored. The `content_hash` check for duplicate
     /// detection happens in the worker when processing the intent, not here.
     ///
     /// Returns `true` if a new intent was created or updated, `false` if an intent already
@@ -122,7 +122,7 @@ impl SearchIndexIntent {
 
     /// Create or update multiple intents in a single batch operation
     ///
-    /// Uses INSERT OR IGNORE to handle the PRIMARY KEY constraint on (message_id, operation).
+    /// Uses INSERT OR IGNORE to handle the PRIMARY KEY constraint on (`message_id`, operation).
     /// If an intent already exists for a message+operation, no new row is created.
     ///
     /// This is more efficient than calling `create_or_ignore` multiple times
@@ -132,15 +132,15 @@ impl SearchIndexIntent {
         operation: SearchOperation,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
+        // Build a batch INSERT statement with multiple VALUES clauses
+        // SQLite supports up to 999 parameters, so we need to batch if needed
+        const BATCH_SIZE: usize = 300; // 300 * 3 params = 900 params (safe limit)
+
         if message_ids.is_empty() {
             return Ok(());
         }
 
         let timestamp = chrono::Utc::now().timestamp();
-
-        // Build a batch INSERT statement with multiple VALUES clauses
-        // SQLite supports up to 999 parameters, so we need to batch if needed
-        const BATCH_SIZE: usize = 300; // 300 * 3 params = 900 params (safe limit)
 
         for chunk in message_ids.chunks(BATCH_SIZE) {
             let placeholders: Vec<String> = (0..chunk.len())
@@ -208,6 +208,9 @@ impl SearchIndexIntent {
     /// Returns up to `limit` intents without removing them.
     /// Deletion happens after successful processing via `delete()`.
     pub async fn get_pending_batch(tether: &Tether, limit: usize) -> Result<Vec<Self>, StashError> {
+        // Safe cast: usize to i64 for SQLite LIMIT clause
+        // In practice, limit will be much smaller than i64::MAX
+        #[allow(clippy::cast_possible_wrap)]
         let limit_i64 = limit as i64;
         tether
             .sync_query(move |conn| {
@@ -242,6 +245,9 @@ impl SearchIndexIntent {
     pub async fn mark_failed(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         use stash::utils::ConnectionExt;
 
+        // Safe cast: LocalMessageId (u64) to i64 for SQLite
+        // In practice, message IDs will be much smaller than i64::MAX
+        #[allow(clippy::cast_possible_wrap)]
         let message_id = self.message_id as i64;
         let operation = self.operation.as_str();
 
@@ -299,7 +305,7 @@ impl SearchIndexIntent {
         Ok(count > 0)
     }
 
-    /// Defer this intent by updating its created_at timestamp to a future time
+    /// Defer this intent by updating its `created_at` timestamp to a future time
     ///
     /// This pushes the intent to the back of the queue, allowing other intents
     /// to be processed first. Useful when an intent can't be processed yet but
@@ -307,6 +313,9 @@ impl SearchIndexIntent {
     pub async fn defer(&self, bond: &Bond<'_>, delay_seconds: i64) -> Result<(), StashError> {
         use stash::params;
 
+        // Safe cast: LocalMessageId (u64) to i64 for SQLite
+        // In practice, message IDs will be much smaller than i64::MAX
+        #[allow(clippy::cast_possible_wrap)]
         let message_id = self.message_id as i64;
         let operation = self.operation.as_str();
         let new_timestamp = chrono::Utc::now().timestamp() + delay_seconds;
@@ -355,7 +364,7 @@ impl SearchIndexIntent {
 
     /// Get the content hash for a message, if it exists
     ///
-    /// Returns the stored content hash for the given message_id, or None
+    /// Returns the stored content hash for the given `message_id`, or None
     /// if no hash has been stored yet.
     pub async fn get_content_hash(
         message_id: LocalMessageId,
@@ -366,7 +375,7 @@ impl SearchIndexIntent {
             .sync_query(move |conn| {
                 conn.query_row(
                     "SELECT content_hash FROM search_index_content_hashes WHERE message_id = ?1",
-                    [message_id as i64],
+                    (message_id,),
                     |row| row.get::<_, String>(0),
                 )
                 .optional()
@@ -386,10 +395,7 @@ impl SearchIndexIntent {
         tether: &Tether,
     ) -> Result<bool, StashError> {
         let stored_hash = Self::get_content_hash(message_id, tether).await?;
-        Ok(stored_hash
-            .as_ref()
-            .map(|h| h == content_hash)
-            .unwrap_or(false))
+        Ok(stored_hash.is_some_and(|h| h == content_hash))
     }
 
     /// Delete the content hash for a message

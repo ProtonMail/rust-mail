@@ -42,5 +42,8 @@ hex = { workspace = true }
 # Foundation Search (optional, behind feature flag)
 proton-foundation-search = { workspace = true, optional = true }
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
