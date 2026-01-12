@@ -4,7 +4,6 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_common::models::ModelExtension;
 use proton_core_common::test_utils::test_context::TestContext;
 use serde::{Deserialize, Serialize};
-use stash::orm::Model as _;
 use tokio::sync::watch;
 
 // To break cyclic dependency
@@ -143,7 +142,11 @@ async fn skip_registration_when_session_rotated_but_old_context_still_alive() {
     let new_session_id = SessionId::from("NEW_UID");
 
     let db_key = core_ctx.get_encryption_key().unwrap();
-    let tokens = proton_core_api::auth::Tokens::access("NEWACCESSTOKEN", "NEWREFRESHTOKEN", vec![]);
+    let tokens = proton_core_api::auth::Tokens::access(
+        "NEWACCESSTOKEN",
+        "NEWREFRESHTOKEN",
+        Vec::<&str>::new(),
+    );
 
     let mut tether = core_ctx.account_stash().connection().await.unwrap();
     tether

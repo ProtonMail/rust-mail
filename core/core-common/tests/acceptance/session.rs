@@ -6,8 +6,6 @@ use proton_core_common::services::SessionObserverService;
 use proton_core_common::test_utils::test_context::TestContext;
 use stash::stash::{Bond, StashError};
 use std::time::Duration;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 #[allow(unused_variables)]
@@ -96,38 +94,6 @@ async fn test_force_logout_account_locally_deletes_sessions() {
         .await
         .unwrap();
 
-    let tether = ctx.context().account_stash().connection().await.unwrap();
-    assert_eq!(
-        CoreSession::find_by_user_id(user_id.clone(), &tether)
-            .await
-            .unwrap()
-            .len(),
-        0
-    );
-}
-
-#[tokio::test]
-async fn test_event_poll_forbidden_forces_local_logout() {
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
-    let user_id = user_ctx.user_id().clone();
-
-    // Simulate production failure:
-    // Forbidden: 403 Forbidden. Some(ApiErrorInfo { code: 9106, error: "Access token does not have sufficient scope", details: {"MissingScopes":["user"]} })
-    Mock::given(method("GET"))
-        .and(path("/api/core/v6/events/latest"))
-        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
-            "Code": 9106,
-            "Error": "Access token does not have sufficient scope",
-            "Details": { "MissingScopes": ["user"] }
-        })))
-        .mount(ctx.mock_server())
-        .await;
-
-    let _ = user_ctx.poll_event_loop_impl().await;
-
-    // Regardless of the poll result, we must have forced a local logout,
-    // meaning no sessions remain for the account.
     let tether = ctx.context().account_stash().connection().await.unwrap();
     assert_eq!(
         CoreSession::find_by_user_id(user_id.clone(), &tether)

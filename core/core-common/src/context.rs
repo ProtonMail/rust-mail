@@ -714,6 +714,22 @@ impl Context {
         Ok(())
     }
 
+    /// Force-invalidate a user session locally.
+    ///
+    /// This is intended for auth failures where the server-side session was invalidated remotely
+    /// (e.g. "log out from all devices") and we must immediately lock down local access by:
+    /// - cancelling background work for that user
+    /// - removing the active in-memory `UserContext` from the context map
+    /// - deleting stored sessions from the account DB
+    pub async fn invalidate_user_session(&self, user_id: UserId) -> CoreContextResult<()> {
+        self.cancel_user_tasks(&user_id).await;
+        self.active_user_contexts
+            .lock()
+            .await
+            .remove(&user_id, self.event_service());
+        self.force_logout_account_locally(user_id).await
+    }
+
     /// Log out and delete all associated user data.
     ///
     /// Unlike [`delete_account()`] it preserve the account metadata so that it still available

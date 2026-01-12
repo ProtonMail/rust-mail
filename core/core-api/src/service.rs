@@ -187,6 +187,18 @@ impl ApiServiceError {
         )
     }
 
+    /// Check if the error is an authentication/authorization failure.
+    ///
+    /// This typically means the session is no longer usable (e.g. revoked remotely),
+    /// and callers should stop exposing decrypted/cached user data until re-auth.
+    #[must_use]
+    pub fn is_auth_failure(&self) -> bool {
+        matches!(
+            self,
+            ApiServiceError::Unauthorized(..) | ApiServiceError::Forbidden(..)
+        )
+    }
+
     /// Check if the error is the result of the server being unreachable.
     ///
     /// An error is considered a server unreachable when the server replies with 429/5xx HTTP status codes.

@@ -15,7 +15,8 @@ use proton_mail_api::services::proton::response_data::{MailEvent, MessageEvent, 
 use proton_mail_common::models::LabelWithCounters;
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
-use wiremock::matchers::query_param;
+use wiremock::matchers::{method, path, query_param};
+use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 async fn event_fetches_missing_dependencies() {
@@ -185,6 +186,42 @@ async fn event_fetches_missing_dependencies() {
             .iter()
             .any(|l| l.local_id.unwrap() == local_label_id2)
     );
+}
+
+#[tokio::test]
+async fn test_event_poll_forbidden_forces_local_logout() {
+    let ctx = MailTestContext::new().await;
+    let mut params = Params::default_basic();
+    params.last_event_id = Some(EventId::from("1"));
+    ctx.setup_user(params).await;
+
+    // Simulate production failure on event fetch:
+    // Forbidden: 403 Forbidden. Some(ApiErrorInfo { code: 9106, error: "...", details: {"MissingScopes":["user"]} })
+    Mock::given(method("GET"))
+        .and(path("/api/core/v5/events/1"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+            "Code": 9106,
+            "Error": "Access token does not have sufficient scope",
+            "Details": { "MissingScopes": ["user"] }
+        })))
+        .mount(ctx.mock_server())
+        .await;
+
+    let mail_user_ctx = ctx.mail_user_context().await;
+    let user_id = mail_user_ctx.user_id().clone();
+
+    // Trigger the event loop via the action queue (as other acceptance tests do).
+    mail_user_ctx.poll_event_loop().await.unwrap();
+
+    // Event polling is expected to fail (403), but must still invalidate the local session.
+    let _ = mail_user_ctx.execute_all_actions().await;
+
+    let acc_sessions = ctx
+        .context
+        .get_account_sessions(user_id.clone())
+        .await
+        .unwrap();
+    assert_eq!(acc_sessions.len(), 0);
 }
 
 #[tokio::test]

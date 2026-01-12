@@ -102,6 +102,13 @@ impl EventSubscriberError for CoreEventSubscriberError {
         }
     }
 
+    fn is_auth_failure(&self) -> bool {
+        match self {
+            CoreEventSubscriberError::Api(e) => e.is_auth_failure(),
+            CoreEventSubscriberError::Stash(_) | CoreEventSubscriberError::Other(_) => false,
+        }
+    }
+
     fn is_retryable(&self) -> bool {
         match self {
             CoreEventSubscriberError::Api(e) => e.is_network_failure() || e.is_server_failure(),
@@ -374,22 +381,20 @@ impl UserContext {
                 // If the session was invalidated remotely (e.g. "log out from all devices"),
                 // API calls start failing with 401. In that case, immediately force-logout
                 // locally so the app stops exposing cached/decrypted data.
-                if let Some(api_err) = api_service_error_from_event_loop_error(&err)
-                    && is_session_invalid_api_error(api_err)
-                {
+                if is_auth_failure_event_loop_error(&err) {
                     warn!(
                         user_id = %self.user_id(),
                         session_id = %self.session_id(),
-                        api_error = %api_err,
+                        api_error = %err.to_string(),
                         "Auth failure while polling event loop; forcing local logout"
                     );
 
                     if let Err(e) = self
                         .context
-                        .force_logout_account_locally(self.user_id().clone())
+                        .invalidate_user_session(self.user_id().clone())
                         .await
                     {
-                        error!("Failed to force local logout after unauthorized: {e:?}");
+                        error!("Failed to invalidate user session after auth failure: {e:?}");
                     }
                 }
 
@@ -432,34 +437,12 @@ impl UserContext {
     }
 }
 
-fn api_service_error_from_event_loop_error(err: &EventLoopError) -> Option<&ApiServiceError> {
+fn is_auth_failure_event_loop_error(err: &EventLoopError) -> bool {
     match err {
-        EventLoopError::Provider(e) => find_api_service_error(e.as_ref()),
-        EventLoopError::Subscriber(_, e) | EventLoopError::Refresh(_, e) => {
-            find_api_service_error(e.as_ref())
-        }
-        _ => None,
+        EventLoopError::Provider(e) => e.is_auth_failure(),
+        EventLoopError::Subscriber(_, e) | EventLoopError::Refresh(_, e) => e.is_auth_failure(),
+        _ => false,
     }
-}
-
-fn is_session_invalid_api_error(err: &ApiServiceError) -> bool {
-    matches!(
-        err,
-        ApiServiceError::Unauthorized(..) | ApiServiceError::Forbidden(..)
-    )
-}
-
-fn find_api_service_error<'a>(
-    err: &'a (dyn std::error::Error + 'static),
-) -> Option<&'a ApiServiceError> {
-    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(err);
-    while let Some(e) = current {
-        if let Some(api) = e.downcast_ref::<ApiServiceError>() {
-            return Some(api);
-        }
-        current = e.source();
-    }
-    None
 }
 
 async fn handle_address_event(

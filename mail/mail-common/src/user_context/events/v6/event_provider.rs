@@ -19,6 +19,13 @@ impl EventProviderError for MailEventProviderError {
             MailEventProviderError::Other(_) => false,
         }
     }
+
+    fn is_auth_failure(&self) -> bool {
+        match self {
+            MailEventProviderError::Api(e) => e.is_auth_failure(),
+            MailEventProviderError::Other(_) => false,
+        }
+    }
 }
 
 #[async_trait]
