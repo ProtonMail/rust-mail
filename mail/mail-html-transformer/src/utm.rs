@@ -53,6 +53,9 @@ pub fn strip(document: NodeRef) -> BTreeSet<StrippedUTM> {
 
         let original = url.clone();
         let cleaned = strip_from_url(url);
+        if cleaned == original {
+            continue;
+        }
         *value = cleaned.to_string();
         res.insert(StrippedUTM { original, cleaned });
     }

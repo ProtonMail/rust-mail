@@ -17,3 +17,18 @@ fn preserve_params_without_values() {
     let new_url = strip_from_string(url).unwrap();
     assert_eq!(new_url.as_str(), "https://example.com/?foo&bar=1");
 }
+
+#[test]
+fn test_transformer_utm() {
+    let body = r#"
+        <a href="https://example.com?foo=1">Example</a>
+        <a href="https://example.com/?utm_source=example&utm_medium=example&utm_campaign=example">Tracker Example</a>
+    "#;
+
+    let mut transformer = crate::Transformer::new(body);
+    let results = transformer.strip_utm();
+    let body = transformer.extract_body();
+
+    insta::assert_snapshot!(body);
+    insta::assert_debug_snapshot!(results);
+}
