@@ -99,6 +99,17 @@ pub struct UiLock {
     pub tooltip: LockTooltip,
 }
 
+impl UiLock {
+    #[must_use]
+    pub fn default_incoming() -> Self {
+        Self {
+            icon: LockIcon::ClosedLock,
+            color: LockColor::Black,
+            tooltip: LockTooltip::ZeroAccess,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MailVerificationStatus {
     NotVerified,
@@ -327,9 +338,10 @@ impl UiLock {
         determine_composer_lock_icon(send_prefs)
     }
 
-    /// Determines the lock icon for a message reveived in the inbox that is not in the sent forlder.
+    /// Determines the lock icon for a message received in the inbox that is not in the sent folder.
     ///
-    /// The [`MailVerificationStatus`] can be created from a [`VerificationResult`], which is the ouput of the signatyre verifiation.
+    /// The [`MailVerificationStatus`] can be created from a [`VerificationResult`], which is the
+    /// output of the signature verification.
     #[must_use]
     pub fn for_receive_inbox<Pub>(
         origin_header: XPmOrigin,
@@ -348,7 +360,7 @@ impl UiLock {
         )
     }
 
-    /// Determines the aggreagted lock icon for a message that was sent by the user.
+    /// Determines the aggregated lock icon for a message that was sent by the user.
     ///
     /// `per_recipient_encryption` contains the message header for each recipient of the email.
     #[must_use]
@@ -448,10 +460,13 @@ where
     let pinned =
         verification_preferences_opt.is_some_and(InboxVerificationPreferences::uses_pinned_keys);
 
+    let self_owned_keys =
+        verification_preferences_opt.is_some_and(InboxVerificationPreferences::self_owned_keys);
+
     match (origin_header, content_encryption_header) {
         (XPmOrigin::Internal, XPmContentEncryption::EndToEnd) => {
             let color = LockColor::Blue;
-            if pinned {
+            if pinned || self_owned_keys {
                 match message_verification_status {
                     NotVerified | SignedNoPublicKey => UiLock {
                         icon: LockIcon::ClosedLock,

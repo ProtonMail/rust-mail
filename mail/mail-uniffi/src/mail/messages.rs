@@ -200,14 +200,13 @@ impl DecryptedMessage {
     ///
     /// Note: this is an expensive operation and should e launched on a background
     /// task.
-    pub async fn privacy_lock(self: Arc<Self>, mailbox: &Mailbox) -> PrivacyLock {
-        let label_id = mailbox.mbox().label_id();
+    pub async fn privacy_lock(self: Arc<Self>) -> PrivacyLock {
         async_runtime()
             .spawn(async move {
                 let ctx = self.ctx()?;
                 let tether = ctx.user_stash().connection().await?;
-                let builder = self.body.privacy_lock(label_id, &tether).await;
-                Ok(builder.build().await)
+                let builder = self.body.privacy_lock(&tether).await;
+                Ok(builder.build(&ctx).await)
             })
             .await
             .map(|r: Result<_, RealProtonMailError>| r.unwrap_or_default())
