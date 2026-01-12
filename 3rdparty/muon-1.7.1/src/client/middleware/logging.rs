@@ -1,5 +1,6 @@
 use crate::common::{BoxFut, Sender, SenderLayer};
 use crate::http::{HttpReq, HttpRes};
+use crate::middleware::Tag;
 use crate::Result;
 use tracing::Level;
 
@@ -16,15 +17,40 @@ macro_rules! dyn_event {
     };
 }
 
+#[derive(Debug)]
+struct Logger(Level);
+
+impl Logger {
+    fn new(level: impl Into<Level>) -> Self {
+        Logger(level.into())
+    }
+
+    fn log_req(&self, req: &str, tag: Option<Tag>) {
+        if let Some(tag) = tag {
+            dyn_event!(self.0, %tag, req, "sending request");
+        } else {
+            dyn_event!(self.0, req, "sending request");
+        }
+    }
+
+    fn log_res(&self, res: &str, tag: Option<Tag>) {
+        if let Some(tag) = tag {
+            dyn_event!(self.0, %tag, res, "received response");
+        } else {
+            dyn_event!(self.0, res, "received response");
+        }
+    }
+}
+
 /// A layer that logs requests and responses using the `tracing` crate.
 #[must_use]
 #[derive(Debug)]
-pub struct DebugLogger(Level);
+pub struct DebugLogger(Logger);
 
 impl DebugLogger {
     /// Create a new tracing logger layer.
     pub fn new(level: impl Into<Level>) -> Self {
-        DebugLogger(level.into())
+        DebugLogger(Logger::new(level))
     }
 
     /// Create a new `TRACE` tracing logger layer.
@@ -43,11 +69,13 @@ impl DebugLogger {
     }
 
     async fn on_send(&self, inner: &dyn Sender<HttpReq, HttpRes>, req: HttpReq) -> Result<HttpRes> {
-        dyn_event!(self.0, ?req, "sending request");
+        let tag = Tag::get(&req).copied();
+        let req_str = format!("{req:?}");
+        self.0.log_req(&req_str, tag);
 
         let res = inner.send(req).await?;
-
-        dyn_event!(self.0, ?res, "received response");
+        let res_str = format!("{res:?}");
+        self.0.log_res(&res_str, tag);
 
         Ok(res)
     }
@@ -66,12 +94,12 @@ impl SenderLayer<HttpReq, HttpRes> for DebugLogger {
 /// A layer that logs requests and responses using the `tracing` crate.
 #[must_use]
 #[derive(Debug)]
-pub struct DisplayLogger(Level);
+pub struct DisplayLogger(Logger);
 
 impl DisplayLogger {
     /// Create a new tracing logger layer.
     pub fn new(level: impl Into<Level>) -> Self {
-        DisplayLogger(level.into())
+        DisplayLogger(Logger::new(level))
     }
 
     /// Create a new `TRACE` tracing logger layer.
@@ -90,11 +118,13 @@ impl DisplayLogger {
     }
 
     async fn on_send(&self, inner: &dyn Sender<HttpReq, HttpRes>, req: HttpReq) -> Result<HttpRes> {
-        dyn_event!(self.0, %req, "sending request");
+        let tag = Tag::get(&req).copied();
+        let req_str = format!("{req}");
+        self.0.log_req(&req_str, tag);
 
         let res = inner.send(req).await?;
-
-        dyn_event!(self.0, %res, "received response");
+        let res_str = format!("{res}");
+        self.0.log_res(&res_str, tag);
 
         Ok(res)
     }

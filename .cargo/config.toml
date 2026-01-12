@@ -21,9 +21,9 @@ replace-with = "vendored-sources"
 registry = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
 replace-with = "vendored-sources"
 
-[source."git+https://gitlab.protontech.ch/jhoulahan/muon.git?rev=830f4bcf997ed8ad0f1f2a82e2b668d109d75b2f"]
+[source."git+https://gitlab.protontech.ch/jhoulahan/muon.git?rev=4e410705f7becc18f1621eccc111211bc6c25345"]
 git = "https://gitlab.protontech.ch/jhoulahan/muon.git"
-rev = "830f4bcf997ed8ad0f1f2a82e2b668d109d75b2f"
+rev = "4e410705f7becc18f1621eccc111211bc6c25345"
 replace-with = "vendored-sources"
 
 [source.vendored-sources]

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use muon::rt::{AsyncSpawner, PollWith, TokioDialer, TokioResolver, TokioSpawner};
+use muon::rt::{AsyncSpawner, PollWith};
 use muon::test::server::Server;
 use muon::GET;
 use std::sync::Arc;
@@ -38,7 +38,10 @@ async fn test_runtime_dispatcher_poll_with(s: Arc<Server>) -> Result<()> {
 }
 
 #[muon::test]
+#[cfg(feature = "rt-tokio")]
 async fn test_runtime_tokio(s: Arc<Server>) -> Result<()> {
+    use muon::rt::{TokioDialer, TokioResolver, TokioSpawner};
+
     // Create a client using the tokio runtime components.
     let c = s
         .builder()

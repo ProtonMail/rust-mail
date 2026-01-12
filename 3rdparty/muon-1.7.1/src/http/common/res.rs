@@ -50,7 +50,6 @@ impl<B> HttpRes<B> {
 
 impl HttpRes {
     /// Get the server that sent the response.
-    #[must_use]
     pub fn server(&self) -> &Server {
         &self.server
     }

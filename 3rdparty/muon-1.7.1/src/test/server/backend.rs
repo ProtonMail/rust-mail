@@ -121,9 +121,7 @@ impl Backend {
         info!("creating new SRP session");
 
         // Start dummy login with the verifier from the client above
-        let server_client_verifier = ServerClientVerifier::try_from(&verifier)
-            .map_err(Into::into)
-            .map_err(ServerErr::Server)?;
+        let server_client_verifier = ServerClientVerifier::from(&verifier);
 
         let mut server = ServerInteraction::new_with_modulus_extractor(
             &RPGPVerifier::default(),

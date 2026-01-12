@@ -1,6 +1,6 @@
 use crate::atlas::new_builder;
 use anyhow::Result;
-use muon::rt::{PollWith, TokioDialer, TokioResolver, TokioSpawner};
+use muon::rt::PollWith;
 use muon::GET;
 
 #[tokio::test]
@@ -41,7 +41,10 @@ async fn test_runtime_dispatcher_poll_with() -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(feature = "rt-tokio")]
 async fn test_runtime_tokio() -> Result<()> {
+    use muon::rt::{TokioDialer, TokioResolver, TokioSpawner};
+
     let c = new_builder()
         .resolver(TokioResolver)
         .dialer(TokioDialer)

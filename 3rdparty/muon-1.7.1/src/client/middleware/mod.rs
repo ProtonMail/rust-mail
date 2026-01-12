@@ -1,3 +1,4 @@
+#[allow(unused_imports)] // Seems to be used below
 use crate::export;
 
 export! {
