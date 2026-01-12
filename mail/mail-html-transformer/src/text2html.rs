@@ -1,10 +1,9 @@
-use html5ever::{QualName, namespace_url, ns};
 use kuchikiki::NodeRef;
 use std::iter::empty;
 
 pub fn text2html(text: &str) -> NodeRef {
     let document = NodeRef::new_document();
-    let body = new_element("body");
+    let body = crate::utils::new_element::<&str, &str>("body", empty());
     document.append(body.clone());
 
     let mut lines = text.lines().map(str::trim);
@@ -15,7 +14,7 @@ pub fn text2html(text: &str) -> NodeRef {
         body.append(process_line(first_line));
     }
     for line in lines {
-        let div = new_element("div");
+        let div = crate::utils::new_element::<&str, &str>("div", empty());
         div.append(process_line(line));
         body.append(div);
     }
@@ -26,16 +25,12 @@ pub fn text2html(text: &str) -> NodeRef {
 // Matching behaviour of ProtonMail Web
 fn process_line(line: &str) -> NodeRef {
     if line.is_empty() {
-        return new_element("br");
+        return crate::utils::new_element::<&str, &str>("br", empty());
     }
 
-    let span = new_element("span");
+    let span = crate::utils::new_element::<&str, &str>("span", empty());
     span.append(NodeRef::new_text(line));
     span
-}
-
-fn new_element(name: &str) -> NodeRef {
-    NodeRef::new_element(QualName::new(None, ns!(html), name.into()), empty())
 }
 
 #[cfg(test)]

@@ -5,8 +5,7 @@
 #[path = "tests/ios.rs"]
 mod tests;
 
-use html5ever::{QualName, namespace_url, ns};
-use kuchikiki::{Attribute, ExpandedName, NodeRef};
+use kuchikiki::NodeRef;
 
 /// This pass injects a `meta` element into the HTML `head` element.
 ///
@@ -19,33 +18,13 @@ use kuchikiki::{Attribute, ExpandedName, NodeRef};
 /// <meta name="viewport" content="width=device-width, initial-scale=1.0">
 /// ```
 pub fn inject_content_size(document: NodeRef) {
-    let element = document.select_first("head").unwrap_or_else(|()| {
-        let head = NodeRef::new_element(
-            QualName::new(None, ns!(html), "head".into()),
-            std::iter::empty(),
-        );
-        document.append(head.clone());
-        // SAFETY: We just created it using new_element, so it's safe to unwrap.
-        head.into_element_ref().unwrap()
-    });
+    let element = crate::utils::upsert_head(&document);
 
-    let meta = NodeRef::new_element(
-        QualName::new(None, ns!(html), "meta".into()),
+    let meta = crate::utils::new_element(
+        "meta",
         [
-            (
-                ExpandedName::new(ns!(), "name"),
-                Attribute {
-                    prefix: None,
-                    value: "viewport".into(),
-                },
-            ),
-            (
-                ExpandedName::new(ns!(), "content"),
-                Attribute {
-                    prefix: None,
-                    value: "width=device-width, initial-scale=1.0".into(),
-                },
-            ),
+            ("name", "viewport"),
+            ("content", "width=device-width, initial-scale=1.0"),
         ],
     );
 

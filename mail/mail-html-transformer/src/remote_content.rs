@@ -7,9 +7,9 @@ mod tests;
 use crate::css_parser::{parse_style_attribute, parse_stylesheet};
 use html5ever::namespace_url;
 use html5ever::ns;
+use kuchikiki::NodeData;
 use kuchikiki::iter::NodeEdge;
 use kuchikiki::{Attribute, NodeRef};
-use kuchikiki::{ExpandedName, NodeData};
 use lightningcss::printer::PrinterOptions;
 use lightningcss::properties::custom::Function;
 use lightningcss::values::url::Url;
@@ -43,21 +43,21 @@ pub fn remote_content(
     let mut embedded_urls = HashSet::new();
     let should_check_css = hide_remote || hide_embedded;
 
-    let style_attribute = ExpandedName::new("", "style");
+    let style_attribute = crate::utils::attribute_name("style");
 
     let attrs = [
-        ExpandedName::new("", "url"),
-        ExpandedName::new("", "src"),
-        ExpandedName::new("", "srcset"),
-        ExpandedName::new("", "svg"),
-        ExpandedName::new("", "background"),
-        ExpandedName::new("", "poster"),
-        ExpandedName::new("", "data-src"),
-        ExpandedName::new("", "href"),
-        ExpandedName::new("", "action"),
-        ExpandedName::new("", "formaction"),
-        ExpandedName::new("", "cite"),
-        ExpandedName::new(ns!(xlink), "href"),
+        crate::utils::attribute_name("url"),
+        crate::utils::attribute_name("src"),
+        crate::utils::attribute_name("srcset"),
+        crate::utils::attribute_name("svg"),
+        crate::utils::attribute_name("background"),
+        crate::utils::attribute_name("poster"),
+        crate::utils::attribute_name("data-src"),
+        crate::utils::attribute_name("href"),
+        crate::utils::attribute_name("action"),
+        crate::utils::attribute_name("formaction"),
+        crate::utils::attribute_name("cite"),
+        crate::utils::attribute_name_ex(ns!(xlink), "href"),
     ];
 
     // Unfortunately the selector library does not allow use to query attributes that are not part
@@ -141,6 +141,7 @@ fn is_embedded_url_str(uri: &str) -> Result<bool, url::ParseError> {
         // If at some point we treat PGP inline attachments different revisit this.
         scheme.eq_ignore_ascii_case("data"))
 }
+
 fn handle_style_sheet(
     css: &mut String,
     disable_remote: bool,

@@ -1,15 +1,16 @@
+use std::collections::BTreeMap;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::sync::LazyLock;
-use std::{cell::RefCell, collections::BTreeMap};
 
 pub use capabilities::BrowserCapabilities;
 
 use crate::css_parser::{parse_style_attribute, parse_stylesheet};
+use crate::utils::{select_all_with_any_attribute, select_all_with_attribute};
 use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
-use html5ever::{LocalName, QualName, namespace_url, ns};
+use html5ever::LocalName;
 use itertools::Itertools;
-use kuchikiki::{Attribute, Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
+use kuchikiki::{Attribute, ElementData, NodeDataRef, NodeRef};
 use lightningcss::traits::{Parse, ToCss};
 use lightningcss::values::color::{CssColor, HSL};
 use lightningcss::{
@@ -421,7 +422,7 @@ fn sanitize_dark_mode_in_inline_attributes(
     document: &NodeRef,
     root_selector: &str,
 ) -> Option<String> {
-    let Ok(styles) = all_with_attribute(document, "style") else {
+    let Ok(styles) = select_all_with_attribute(document, "style") else {
         return None;
     };
 
@@ -491,7 +492,7 @@ fn sanitize_dark_mode_in_deprecated_attributes(
     document: &NodeRef,
     root_selector: &str,
 ) -> Option<String> {
-    let Ok(nodes) = all_with_any_attribute(document, DEPRECATED_ATTRIBUTES) else {
+    let Ok(nodes) = select_all_with_any_attribute(document, DEPRECATED_ATTRIBUTES) else {
         return None;
     };
 
@@ -670,33 +671,8 @@ fn sanitize_dark_mode_in_inline_attribute(
 }
 
 fn inject_style(document: &NodeRef, style_text: &str) {
-    let element = document.select_first("head").unwrap_or_else(|()| {
-        let head = NodeRef::new_element(
-            QualName::new(None, ns!(html), "head".into()),
-            std::iter::empty(),
-        );
-        document.append(head.clone());
-        // SAFETY: We just created it using new_element, so it's safe to unwrap.
-        head.into_element_ref().unwrap()
-    });
-
-    let qual_name = QualName::new(None, ns!(html), LocalName::from("style"));
-
-    #[allow(clippy::default_trait_access)]
-    let element_data = ElementData {
-        name: qual_name,
-        attributes: RefCell::new(Attributes {
-            map: Default::default(),
-        }),
-        template_contents: None,
-    };
-
-    element_data
-        .attributes
-        .borrow_mut()
-        .insert("type", "text/css".to_owned());
-
-    let style_node = NodeRef::new(NodeData::Element(element_data));
+    let element = crate::utils::upsert_head(document);
+    let style_node = crate::utils::new_element("style", [("type", "text/css")]);
     let text_node = NodeRef::new_text(style_text);
 
     style_node.append(text_node);
@@ -713,45 +689,6 @@ fn inject_style(document: &NodeRef, style_text: &str) {
 ///
 /// Joined together without delimiter
 type InlineSelector = String;
-
-/// Content of the style attribute. From `style="color: #fff"` is the `color: #fff`
-type AttributeContent = String;
-
-fn all_with_attribute(
-    document: &NodeRef,
-    attribute_name: &str,
-) -> Result<impl Iterator<Item = (NodeDataRef<ElementData>, AttributeContent)>, ()> {
-    let res = document
-        .select(&format!("[{attribute_name}]"))
-        .inspect_err(|()| {
-            tracing::error!("Could not select nodes with {attribute_name} attribute");
-        })?;
-
-    Ok(res.map(move |element| {
-        // SAFETY: unwrap is fine, the `.select()` ensures that the attribute exists
-        let attribute = element
-            .attributes
-            .borrow()
-            .get(attribute_name)
-            .unwrap()
-            .into();
-        (element, attribute)
-    }))
-}
-
-fn all_with_any_attribute(
-    document: &NodeRef,
-    attribute_names: &[&str],
-) -> Result<impl Iterator<Item = NodeDataRef<ElementData>>, ()> {
-    let selector = attribute_names
-        .iter()
-        .map(|attr| format!("[{attr}]"))
-        .join(",");
-
-    document.select(&selector).inspect_err(|()| {
-        tracing::error!("Could not select nodes with any of the attributes");
-    })
-}
 
 #[cfg(test)]
 mod tests {
@@ -851,72 +788,6 @@ mod tests {
         let html = document.to_string();
 
         insta::assert_snapshot!(html);
-    }
-
-    #[test]
-    fn fetching_all_style_attributes() {
-        let html = r#"
-            <html>
-            <head>
-            </head>
-            <body style="color: red">
-                <div>
-                    <span>
-                        <a href="http://wikipedia.com" style="background-color: yellow; color: black"> Wiki </a>
-                    </span>
-                </div>
-            </body>
-            </html>
-        "#;
-
-        let document = kuchikiki::parse_html().one(html);
-
-        let result = all_with_attribute(&document, "style")
-            .unwrap()
-            .map(|(tag, style)| (tag.name.local.to_string(), style))
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            vec![
-                ("body".to_string(), "color: red".to_string()),
-                (
-                    "a".to_string(),
-                    "background-color: yellow; color: black".to_string()
-                )
-            ],
-            result
-        );
-    }
-
-    #[test]
-    fn fetching_all_deprecated_attributes() {
-        let html = r#"
-            <html>
-            <head>
-            </head>
-            <body style="color: red">
-                <div>
-                    <span>
-                        <a bgcolor="yellow"></a>
-                        <span text="black"></span>
-                        <marquee bgcolor="red" text="white"></marquee>
-                    </span>
-                </div>
-            </body>
-            </html>
-        "#;
-
-        let document = kuchikiki::parse_html().one(html);
-
-        let result = all_with_any_attribute(&document, &["bgcolor", "text"])
-            .unwrap()
-            .map(|tag| tag.name.local.to_string())
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            vec!["a".to_string(), "span".to_string(), "marquee".to_string(),],
-            result
-        );
     }
 
     #[test]
