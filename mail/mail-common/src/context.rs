@@ -375,6 +375,9 @@ impl MailContext {
 
                     tracing::info!("Removing `{user_id}`, from active contexts");
                     ctx.active_user_contexts.lock().await.remove(&user_id);
+                    if let Err(e) = ctx.core_context.invalidate_user_session(user_id).await {
+                        tracing::error!("Failed to invalidate user session: {e:?}");
+                    }
 
                     OnSessionDeletedResponse::Continue
                 }
