@@ -2,6 +2,7 @@ mod backdrop;
 mod centered_throbber;
 mod conversations;
 mod labels;
+pub mod lock_icon;
 pub mod messages;
 mod scrollable_list;
 mod scrollable_paragraph;

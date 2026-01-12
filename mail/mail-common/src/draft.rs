@@ -1612,7 +1612,7 @@ enum DraftActorMessage {
     },
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RecipientGroupId {
     To,
     Cc,

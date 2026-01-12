@@ -110,7 +110,7 @@ pub struct ComposerRecipientSingle {
 }
 
 impl From<SingleRecipient> for ComposerRecipientSingle {
-    fn from(value: SingleReciient) -> Self {
+    fn from(value: SingleRecipient) -> Self {
         Self {
             display_name: value
                 .display_name

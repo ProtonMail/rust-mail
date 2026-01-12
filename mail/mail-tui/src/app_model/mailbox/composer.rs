@@ -1,6 +1,7 @@
 mod address_list;
 mod expiration_time;
 mod password_protect;
+pub mod recipient_list;
 mod schedule_send;
 
 use crate::app::Command;
@@ -24,8 +25,8 @@ use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentSta
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::draft::recipients::RecipientList;
 use proton_mail_common::draft::{
-    AttachmentDispositionSwapError, Draft, DraftExpirationTime, DraftSyncStatus, ReplyMode,
-    recipients,
+    AttachmentDispositionSwapError, Draft, DraftActorOptions, DraftEvent, DraftExpirationTime,
+    DraftSyncStatus, RecipientGroupId, ReplyMode,
 };
 use proton_mail_common::models::{Attachment, MessageMimeType, MetadataId};
 use proton_mail_common::{MailContextError, MailUserContext, Mailbox};
@@ -35,6 +36,7 @@ use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, List};
+use recipient_list::TuiRecipientList;
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::{Stash, StashError, Tether};
 use std::path::PathBuf;
@@ -42,6 +44,8 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::error;
 use tui_textarea::TextArea;
+
+use super::RecipientListMessage;
 
 /// Composer to edit and view drafts.
 pub struct Composer {
@@ -58,6 +62,7 @@ pub struct Composer {
     draft_sync_status: Option<DraftSyncStatus>,
     // for table observer.
     _observer_cancellation_token: CancellationToken,
+    recipient_view: Option<TuiRecipientList>,
 }
 
 impl Composer {
@@ -70,7 +75,7 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::empty(&ctx).await {
+                    match Draft::empty_ex(&ctx, draft_options()).await {
                         Ok(draft) => Composer::create(draft, None, ctx.user_stash().clone()).await,
                         Err(e) => {
                             error!("Failed to create new draft:{e:?}");
@@ -97,7 +102,9 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::reply(&context, message_id, reply_mode, false).await {
+                    match Draft::reply_ex(&context, message_id, reply_mode, false, draft_options())
+                        .await
+                    {
                         Ok(draft) => {
                             Composer::create(draft, None, context.user_stash().clone()).await
                         }
@@ -125,7 +132,7 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::open(&context, message_id).await {
+                    match Draft::open_ex(&context, message_id, draft_options()).await {
                         Ok((draft, sync_status)) => {
                             Composer::create(draft, Some(sync_status), context.user_stash().clone())
                                 .await
@@ -146,15 +153,7 @@ impl Composer {
     /// Save a draft.
     fn save(&mut self) -> Command<Messages> {
         let draft = self.draft.clone();
-        let composer_state = match self.to_composer_draft_state() {
-            Ok(state) => state,
-            Err(err) => {
-                return Command::message(Messages::DisplayError(
-                    Some("Invalid recipient".to_owned()),
-                    err.into(),
-                ));
-            }
-        };
+        let composer_state = self.to_composer_draft_state();
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Saving draft...".to_owned(),
@@ -174,28 +173,16 @@ impl Composer {
         ])
     }
 
-    #[allow(clippy::result_large_err)]
-    fn to_composer_draft_state(&self) -> Result<ComposerDraftState, MailContextError> {
-        Ok(ComposerDraftState {
+    fn to_composer_draft_state(&self) -> ComposerDraftState {
+        ComposerDraftState {
             subject: self.subject_input_state.value().to_owned(),
             body: self.text_area.lines().join("\n"),
-            to: recipients_value_to_list(self.to_input_state.value())?,
-            cc: recipients_value_to_list(self.cc_input_state.value())?,
-            bcc: recipients_value_to_list(self.bcc_input_state.value())?,
-        })
+        }
     }
 
     /// Send the draft.
     fn send(&mut self, scheduled_time: Option<DateTime<Local>>) -> Command<Messages> {
-        let composer_state = match self.to_composer_draft_state() {
-            Ok(state) => state,
-            Err(err) => {
-                return Command::message(Messages::DisplayError(
-                    Some("Invalid recipient".to_owned()),
-                    err.into(),
-                ));
-            }
-        };
+        let composer_state = self.to_composer_draft_state();
         let draft = self.draft.clone();
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
@@ -257,6 +244,7 @@ impl Composer {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn new_impl(
         draft: Draft,
         sync_status: Option<DraftSyncStatus>,
@@ -290,6 +278,62 @@ impl Composer {
         let mut observer = DraftAttachmentObserver::new(draft.metadata_id, stash).await?;
         let cancellation_token = CancellationToken::new();
         let cancellation_token_cloned = cancellation_token.clone();
+
+        let mut draft_subscriber = draft.subscribe();
+        let dract_subscriber_token = cancellation_token.clone();
+
+        let recipient_background_command = Command::background_task(move |sender| {
+            async move {
+                dract_subscriber_token
+                    .run_until_cancelled_owned(async {
+                        while let Ok(event) = draft_subscriber.recv().await {
+                            match event {
+                                DraftEvent::RecipientListUpdated { group, list } => {
+                                    let _ = sender
+                                        .send_async(
+                                            RecipientListMessage::UpdateRecipients(group, list)
+                                                .into(),
+                                        )
+                                        .await;
+                                }
+                                DraftEvent::RecipientListsUpdated { to, cc, bcc } => {
+                                    let _ = sender
+                                        .send_async(
+                                            RecipientListMessage::UpdateRecipients(
+                                                RecipientGroupId::To,
+                                                to,
+                                            )
+                                            .into(),
+                                        )
+                                        .await;
+                                    let _ = sender
+                                        .send_async(
+                                            RecipientListMessage::UpdateRecipients(
+                                                RecipientGroupId::Cc,
+                                                cc,
+                                            )
+                                            .into(),
+                                        )
+                                        .await;
+                                    let _ = sender
+                                        .send_async(
+                                            RecipientListMessage::UpdateRecipients(
+                                                RecipientGroupId::Bcc,
+                                                bcc,
+                                            )
+                                            .into(),
+                                        )
+                                        .await;
+                                }
+                                DraftEvent::Sent | DraftEvent::Discarded => {}
+                            }
+                        }
+                    })
+                    .await;
+            }
+            .boxed()
+        });
+
         let background_cmd = Command::background_task(move |sender| {
             async move {
             loop {
@@ -325,8 +369,9 @@ impl Composer {
                 attachment_infos,
                 draft_sync_status: sync_status,
                 _observer_cancellation_token: cancellation_token,
+                recipient_view: None,
             },
-            background_cmd,
+            Command::batch([background_cmd, recipient_background_command]),
         ))
     }
 
@@ -653,6 +698,11 @@ impl Composer {
         frame.render_widget(Clear {}, area);
         frame.render_widget(Block::new().title("Composer").borders(Borders::ALL), area);
 
+        if let Some(recipient_list) = &mut self.recipient_view {
+            recipient_list.view(frame, area);
+            return;
+        }
+
         let area = area.inner(Margin {
             horizontal: 1,
             vertical: 1,
@@ -814,6 +864,10 @@ impl Composer {
         _: &Mailbox,
         event: Event,
     ) -> Command<Messages> {
+        if let Some(recipient_view) = &mut self.recipient_view {
+            return recipient_view.handle_event(&event);
+        }
+
         if let Event::Key(key) = &event {
             match key.code {
                 KeyCode::Esc => return Command::message(Message::CloseComposer),
@@ -929,13 +983,25 @@ impl Composer {
         }
         match self.selected_input {
             SelectedInput::To => {
-                self.to_input_state.handle_event(&event);
+                if matches!(event, Event::Key(_)) {
+                    return Command::message(ComposerMessage::OpenRecipientList(
+                        RecipientGroupId::To,
+                    ));
+                }
             }
             SelectedInput::Cc => {
-                self.cc_input_state.handle_event(&event);
+                if matches!(event, Event::Key(_)) {
+                    return Command::message(ComposerMessage::OpenRecipientList(
+                        RecipientGroupId::Cc,
+                    ));
+                }
             }
             SelectedInput::Bcc => {
-                self.bcc_input_state.handle_event(&event);
+                if matches!(event, Event::Key(_)) {
+                    return Command::message(ComposerMessage::OpenRecipientList(
+                        RecipientGroupId::Bcc,
+                    ));
+                }
             }
             SelectedInput::Subject => {
                 self.subject_input_state.handle_event(&event);
@@ -993,6 +1059,36 @@ impl Composer {
             ComposerMessage::SwapDisposition(id) => {
                 self.swap_attachment_disposition(user_ctx.to_owned(), id)
             }
+            ComposerMessage::OpenRecipientList(recipient_group_id) => {
+                TuiRecipientList::open(self.draft.clone(), recipient_group_id)
+            }
+            ComposerMessage::ShowRecipientList(tui_recipient_list) => {
+                self.recipient_view = Some(tui_recipient_list);
+                Command::none()
+            }
+            ComposerMessage::RecipientList(recipient_list_message) => {
+                if let RecipientListMessage::UpdateRecipients(group, recipients) =
+                    &recipient_list_message
+                {
+                    let value =
+                        TextInputState::with_value(recipient_list_to_display_value(recipients));
+
+                    match *group {
+                        RecipientGroupId::To => self.to_input_state = value,
+                        RecipientGroupId::Cc => self.cc_input_state = value,
+                        RecipientGroupId::Bcc => self.bcc_input_state = value,
+                    }
+                }
+                if let Some(recipient_list) = &mut self.recipient_view {
+                    recipient_list.update(recipient_list_message)
+                } else {
+                    Command::none()
+                }
+            }
+            ComposerMessage::CloseRecipientList => {
+                self.recipient_view = None;
+                Command::None
+            }
         }
     }
 
@@ -1018,17 +1114,6 @@ enum SelectedInput {
     Attachments,
 }
 
-fn recipients_value_to_list(recipients: &str) -> Result<RecipientList, recipients::RecipientError> {
-    let mut list = RecipientList::default();
-    for addr in recipients.split(',') {
-        list.add_single(recipients::RecipientEntry {
-            email: addr.into(),
-            name: None,
-        })?;
-    }
-    Ok(list)
-}
-
 fn recipient_list_to_display_value(list: &RecipientList) -> String {
     list.to_message_recipients()
         .into_iter()
@@ -1040,9 +1125,6 @@ fn recipient_list_to_display_value(list: &RecipientList) -> String {
 struct ComposerDraftState {
     subject: String,
     body: String,
-    to: RecipientList,
-    cc: RecipientList,
-    bcc: RecipientList,
 }
 
 impl ComposerDraftState {
@@ -1051,8 +1133,14 @@ impl ComposerDraftState {
         draft.set_mime_type(MessageMimeType::TextPlain).await?;
         draft.set_subject(self.subject).await?;
         draft.set_body(self.body).await?;
-        draft.set_recipients(self.to, self.cc, self.bcc).await?;
         draft.save().await?;
         Ok(())
+    }
+}
+
+fn draft_options() -> DraftActorOptions {
+    DraftActorOptions {
+        address_validation_enabled: true,
+        auto_save_every: None,
     }
 }

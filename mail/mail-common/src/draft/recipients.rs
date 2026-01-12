@@ -278,6 +278,12 @@ impl RecipientList {
         Self::default()
     }
 
+    pub fn with(recipients: impl IntoIterator<Item = Recipient>) -> Self {
+        Self {
+            recipients: recipients.into_iter().collect(),
+        }
+    }
+
     pub async fn from_message_recipients(
         contact_group_resolver: &impl ContactGroupResolver,
         recipients: impl IntoIterator<Item = MessageRecipient>,
@@ -742,6 +748,22 @@ pub trait OnPrivacyLockUpdate: Send + Sync + Clone + 'static {
         &self,
         updates: RecipientPrivacyLockUpdate,
     ) -> impl Future<Output = ()> + Send;
+}
+
+#[derive(Clone)]
+pub struct ChannelBackgroundValidationComplete(flume::Sender<RecipientValidationUpdate>);
+
+impl ChannelBackgroundValidationComplete {
+    pub fn new(capacity: usize) -> (Self, flume::Receiver<RecipientValidationUpdate>) {
+        let (sender, receiver) = flume::bounded(capacity);
+        (Self(sender), receiver)
+    }
+}
+
+impl OnBackgroundValidationComplete for ChannelBackgroundValidationComplete {
+    async fn recipients_validation_state_updated(&self, updates: RecipientValidationUpdate) {
+        let _ = self.0.send_async(updates).await;
+    }
 }
 
 /// This version of a recipient list validates recipient addresses in the background when

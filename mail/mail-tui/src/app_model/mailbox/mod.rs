@@ -14,6 +14,7 @@ use crate::app_model::watcher::TuiWatchHandle;
 use crate::messages::Messages;
 use anyhow::Context;
 use chrono::{DateTime, Local};
+use composer::recipient_list::TuiRecipientList;
 use messages::BlockOrUnblock;
 pub use model::MailboxModel;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId, Refresh, UnixTimestamp};
@@ -23,7 +24,9 @@ use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
 };
 use proton_mail_common::decrypted_message::PrivacyLockBuilder;
+use proton_mail_common::draft::RecipientGroupId;
 use proton_mail_common::draft::attachments::DraftAttachment;
+use proton_mail_common::draft::recipients::{Recipient, RecipientList};
 use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::{MailUserContext, Mailbox, RsvpEvent};
 use search::{Search, SearchStatusBar};
@@ -159,11 +162,28 @@ pub enum ComposerMessage {
     FinishChangeAddress { sender: String, body: String },
     SetPasswordProtection(SecretString, Option<String>),
     SetExpirationTime(DateTime<Local>),
+    OpenRecipientList(RecipientGroupId),
+    ShowRecipientList(TuiRecipientList),
+    RecipientList(RecipientListMessage),
+    CloseRecipientList,
 }
 
 impl From<ComposerMessage> for Messages {
     fn from(value: ComposerMessage) -> Self {
         Message::Composer(value).into()
+    }
+}
+
+pub enum RecipientListMessage {
+    ChangeSelection,
+    AddRecipient(String),
+    DeleteRecipient(Recipient),
+    UpdateRecipients(RecipientGroupId, RecipientList),
+}
+
+impl From<RecipientListMessage> for Messages {
+    fn from(value: RecipientListMessage) -> Self {
+        Message::Composer(ComposerMessage::RecipientList(value)).into()
     }
 }
 

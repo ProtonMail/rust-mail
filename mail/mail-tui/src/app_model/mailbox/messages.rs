@@ -8,6 +8,7 @@ use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Items, Message,
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::app_model::{ChoosePopup, YesNoPopup};
 use crate::messages::Messages;
+use crate::widgets::lock_icon::lock_icon_to_text;
 use crate::widgets::utils::{
     ScrollableState, date_from_timestamp, format_recipients, format_sender,
 };
@@ -23,7 +24,7 @@ use proton_calendar_api::CalendarAttendeeStatus;
 use proton_calendar_common::{RsvpAnswer, RsvpOccurrence, RsvpProgress, RsvpRecency, RsvpRelation};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
-use proton_crypto_inbox::lock_icon::{LockColor, LockIcon, UiLock};
+use proton_crypto_inbox::lock_icon::{LockIcon, UiLock};
 use proton_mail_api::proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{
@@ -1191,32 +1192,7 @@ impl DecryptedMessage {
     }
 
     fn draw_headers(&self, frame: &mut Frame, area: Rect) {
-        let app_config = &CLI_ARGS;
-        let use_emoji = app_config.use_emoji;
-        let lock_str = match (self.lock.icon, use_emoji) {
-            (LockIcon::None, _) => "??",
-            (LockIcon::ClosedLock, true) => "🔒",
-            (LockIcon::ClosedLock, false) => "CL",
-            (LockIcon::ClosedLockWithTick, true) => "🔒✔",
-            (LockIcon::ClosedLockWithTick, false) => "CT",
-            (LockIcon::ClosedLockWithPen, true) => "🔒✏",
-            (LockIcon::ClosedLockWithPen, false) => "CP",
-            (LockIcon::ClosedLockWarning, true) => "🔒⚠",
-            (LockIcon::ClosedLockWarning, false) => "CW",
-            (LockIcon::OpenLockWithPen, true) => "🔓✏",
-            (LockIcon::OpenLockWithPen, false) => "OP",
-            (LockIcon::OpenLockWithTick, true) => "🔓✔",
-            (LockIcon::OpenLockWithTick, false) => "OT",
-            (LockIcon::OpenLockWarning, true) => "🔓⚠",
-            (LockIcon::OpenLockWarning, false) => "OW",
-        };
-
-        let lock_style = match self.lock.color {
-            LockColor::Black => Style::default(),
-            LockColor::Green => Style::default().bg(Color::Green).fg(Color::White),
-            LockColor::Blue => Style::default().bg(Color::Blue).fg(Color::White),
-        }
-        .bold();
+        let (lock_str, lock_style) = lock_icon_to_text(self.lock);
 
         let from_text = Text::from(Line::from(vec![
             Span::from(lock_str).style(lock_style),
