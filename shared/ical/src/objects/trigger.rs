@@ -181,6 +181,7 @@ mod php {
 
     impl IntoPhpZval for Trigger {
         const TYPE: PhpDataType = <PhpTrigger as IntoPhpZval>::TYPE;
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             PhpTrigger::from(self).set_zval(zval, persistent)
@@ -201,6 +202,7 @@ mod php {
 
     impl IntoPhpZval for TriggerEdge {
         const TYPE: PhpDataType = PhpDataType::String;
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             zval.set_string(&format!("{self:?}"), persistent)

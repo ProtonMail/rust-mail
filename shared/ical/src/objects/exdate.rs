@@ -182,6 +182,7 @@ mod php {
 
     impl IntoPhpZval for ExDate {
         const TYPE: PhpDataType = PhpDataType::Object(None);
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             PhpExDate::from(self).set_zval(zval, persistent)

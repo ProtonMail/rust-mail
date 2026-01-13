@@ -128,6 +128,7 @@ mod php {
 
     impl IntoPhpZval for Date {
         const TYPE: PhpDataType = PhpDataType::Object(None);
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zv: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             DateTime {

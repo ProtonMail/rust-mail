@@ -61,6 +61,7 @@ mod php {
 
     impl IntoPhpZval for Role {
         const TYPE: PhpDataType = PhpDataType::String;
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             zval.set_string(&format!("{self:?}"), persistent)

@@ -29,6 +29,7 @@ macro_rules! impls {
         #[cfg(feature = "php")]
         impl IntoPhpZval for $ty {
             const TYPE: PhpDataType = PhpDataType::Long;
+            const NULLABLE: bool = false;
 
             fn set_zval(self, zval: &mut PhpZval, _: bool) -> PhpResult<()> {
                 zval.set_long(self.0);
@@ -363,6 +364,7 @@ impl<'a> FromPhpZval<'a> for Weekday {
 #[cfg(feature = "php")]
 impl IntoPhpZval for Weekday {
     const TYPE: PhpDataType = PhpDataType::String;
+    const NULLABLE: bool = false;
 
     fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
         zval.set_string(&format!("{self:?}"), persistent)
