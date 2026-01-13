@@ -316,7 +316,7 @@ async fn test_contact_load_public_address_keys() {
     let unlocked_user_keys = unlocked_user_key(&pgp);
     let mut tether = user_ctx.stash().connection().await.unwrap();
 
-    let keys = user_ctx
+    let keys_first_call = user_ctx
         .public_address_keys_from_contacts(
             &pgp,
             &mut tether,
@@ -328,10 +328,35 @@ async fn test_contact_load_public_address_keys() {
         .expect("there should be no error or key extraction")
         .expect("key must be found");
 
-    assert_eq!(keys.pinned_keys.len(), 2);
-    assert!(keys.sign.unwrap());
-    assert!(keys.encrypt_to_pinned.unwrap());
-    let preferred_fingerprint_1 = keys.pinned_keys.first().unwrap().key_fingerprint();
+    let keys_second_call = user_ctx
+        .public_address_keys_from_contacts(
+            &pgp,
+            &mut tether,
+            &unlocked_user_keys,
+            contact_email.as_ref(),
+            AddressKeysContactFetchPolicy::AllowCachedFallback,
+        )
+        .await
+        .expect("there should be no error or key extraction")
+        .expect("key must be found");
+
+    assert_eq!(keys_first_call.pinned_keys.len(), 2);
+    assert_eq!(keys_second_call.pinned_keys.len(), 2);
+    assert!(keys_first_call.sign.unwrap());
+    assert!(keys_second_call.sign.unwrap());
+    assert!(keys_first_call.encrypt_to_pinned.unwrap());
+    assert!(keys_second_call.encrypt_to_pinned.unwrap());
+    let preferred_fingerprint_1 = keys_first_call
+        .pinned_keys
+        .first()
+        .unwrap()
+        .key_fingerprint();
+    let preferred_fingerprint_2 = keys_second_call
+        .pinned_keys
+        .first()
+        .unwrap()
+        .key_fingerprint();
+    assert_eq!(preferred_fingerprint_1, preferred_fingerprint_2);
 
     let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context().await;
@@ -366,7 +391,7 @@ async fn test_contact_load_public_address_keys() {
             &mut tether,
             &unlocked_user_keys,
             contact_email.as_ref(),
-            AddressKeysContactFetchPolicy::AllowCachedFallback,
+            AddressKeysContactFetchPolicy::RequireSync,
         )
         .await
         .expect("there should be no error or key extraction")
