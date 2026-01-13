@@ -41,9 +41,11 @@ use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
 use message_detector::SplitDoc;
 use sanitizer::StripStyleSheets;
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 use transforms::{ColorMode, keep_spaces_and_escape_gt_and_lt, styles::BrowserCapabilities};
+use utm::StrippedUTM;
 
 // NOTE: each new transformation pass should be its own module.
 pub mod css_parser;
@@ -133,7 +135,7 @@ impl Transformer {
     /// See [`utm::strip()`] for more details.
     /// Returns how many tracking codes it removed.
     #[tracing::instrument(skip_all)]
-    pub fn strip_utm(&mut self) -> u64 {
+    pub fn strip_utm(&mut self) -> BTreeSet<StrippedUTM> {
         utm::strip(self.document.clone())
     }
 

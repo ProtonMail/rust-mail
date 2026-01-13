@@ -2,7 +2,7 @@
 
 //! Everything related to processing a decrypted message.
 use crate::ImagePolicy;
-use crate::TrackerDetector;
+use crate::TrackerService;
 use crate::actions::messages::UnsubscribeNewsletter;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
@@ -31,8 +31,10 @@ use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::sanitizer::StripStyleSheets;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
+use proton_mail_html_transformer::utm::StrippedUTM;
 use stash::orm::Model;
 use stash::stash::Tether;
+use std::collections::BTreeSet;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -480,7 +482,7 @@ impl DecryptedMessageBody {
             banners.push(MessageBanner::UnableToDecrypt);
         }
 
-        let output = transform_html_with_banners(
+        let mut output = transform_html_with_banners(
             sender,
             // At this point in time we do not have a list of trusted senders.
             // We also do not store that in the database as there is no syncing with the server.
@@ -493,10 +495,12 @@ impl DecryptedMessageBody {
 
         if let Some(message_id) = self.metadata.local_message_id {
             let urls_clone = output.remote_urls.clone();
+            // We are not using that field outside of this function
+            let utm_stripped = std::mem::take(&mut output.utm_stripped);
             ctx.spawn_ex(move |ctx_clone| async move {
-                let tracker_detector = ctx_clone.get_service::<TrackerDetector>();
-                if let Err(e) = tracker_detector
-                    .check_message_trackers(message_id, urls_clone)
+                let tracker_service = ctx_clone.get_service::<TrackerService>();
+                if let Err(e) = tracker_service
+                    .update(message_id, urls_clone, utm_stripped)
                     .await
                 {
                     tracing::error!("Could not update tracker information: {e}");
@@ -834,8 +838,8 @@ pub struct BodyOutput {
     /// How many html tags it has removed.
     pub tags_stripped: u64,
 
-    /// How many UTM tracking params it has removed.
-    pub utm_stripped: u64,
+    /// Set of UTM tracking params that were removed.
+    pub utm_stripped: BTreeSet<StrippedUTM>,
 
     /// Set of remote URLs that were found
     pub remote_urls: HashSet<String>,

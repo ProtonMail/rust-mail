@@ -29,8 +29,8 @@ mod acceptance {
     mod message_label_as;
     mod message_mail_scroller;
     mod message_move;
+    mod message_privacy;
     mod message_read_unread;
-    mod message_tracking;
     mod mobile_settings_actions;
     mod mock;
     mod next_message_on_move_actions;

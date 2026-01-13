@@ -12,7 +12,7 @@
 mod tests;
 
 use kuchikiki::NodeRef;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::LazyLock;
 use url::Url;
 
@@ -22,15 +22,20 @@ pub enum Error {
     Url(#[from] url::ParseError),
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone)]
+pub struct StrippedUTM {
+    pub original: Url,
+    pub cleaned: Url,
+}
+
 #[must_use]
 /// Strip UTM trackers from all HTML links in the given `document`.
-pub fn strip(document: NodeRef) -> u64 {
+pub fn strip(document: NodeRef) -> BTreeSet<StrippedUTM> {
     let Ok(select) = document.select("[href]") else {
-        tracing::warn!("Could not select [href] elements");
-        return 0;
+        return BTreeSet::default();
     };
 
-    let mut acc = 0;
+    let mut res = BTreeSet::new();
     for element in select {
         let mut attributes = element.attributes.borrow_mut();
         let Some(value) = attributes.get_mut("href") else {
@@ -42,12 +47,19 @@ pub fn strip(document: NodeRef) -> u64 {
         // We don't throw the error back because the transformer doesn't care if the HTML
         // contains invalid links (how is it supposed to recover?)
         // We also don't error because that would short circuit and leave some tags unstripped.
-        if let Ok((new_value, count)) = strip_from_string(value) {
-            *value = new_value.to_string();
-            acc += count;
+        let Ok(url) = Url::parse(value) else {
+            continue;
+        };
+
+        let original = url.clone();
+        let cleaned = strip_from_url(url);
+        if cleaned == original {
+            continue;
         }
+        *value = cleaned.to_string();
+        res.insert(StrippedUTM { original, cleaned });
     }
-    acc
+    res
 }
 
 /// Removes UTM parameters from a given `url`.
@@ -59,14 +71,13 @@ pub fn strip(document: NodeRef) -> u64 {
 /// use proton_mail_html_transformer::utm::strip_from_url;
 ///
 /// if let Ok(url) = Url::parse("https://example.com/?utm_source=example") {
-///     let (new_url, count) = strip_from_url(&url);
+///     let new_url  = strip_from_url(url);
 ///     assert_eq!(new_url.as_str(), "https://example.com/");
-///     assert_eq!(count, 1);
 /// }
 /// ```
 ///
 #[must_use]
-pub fn strip_from_url(url: &Url) -> (Url, u64) {
+pub fn strip_from_url(url: Url) -> Url {
     // TODO: [ET-84] We should not clone the URL, but we need to do it for now.
     let mut stripped_url = url.clone();
     stripped_url.set_query(None);
@@ -83,15 +94,13 @@ pub fn strip_from_url(url: &Url) -> (Url, u64) {
         }
     }
 
-    let count = url.query_pairs().count() - stripped_url.query_pairs().count();
-
-    (stripped_url, count as u64)
+    stripped_url
 }
 
 /// Removes UTM parameters from an `url` defined as a string.
-pub fn strip_from_string(url: &str) -> Result<(Url, u64), url::ParseError> {
+pub fn strip_from_string(url: &str) -> Result<Url, url::ParseError> {
     let url = Url::parse(url)?;
-    Ok(strip_from_url(&url))
+    Ok(strip_from_url(url))
 }
 
 static GLOBAL_RULES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
