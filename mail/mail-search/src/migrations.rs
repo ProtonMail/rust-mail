@@ -1,18 +1,49 @@
 //! Database migrations for mail-search crate
 //!
 //! This module defines migrations for search-related database tables.
-//! Migrations are applied via `mail-common` which calls `search_migrations()`.
+//!
+//! ## Usage
+//!
+//! Applications that want to use mail-search functionality should call
+//! `run()` after initializing their databse context:
+//!
+//! ```rust,ignore
+//! // After creating MailContext and getting a user stash
+//! proton_mail_search::migrations::run(&user_stash).await?;
+//! ```
+//!
+//! ## Migration Versioning
+//!
+//! Mail-search uses a separate migration version table (`proton_mail_search_version`)
+//! which allows it to maintain its own migration numbering sequence
+//! independent of mail-common's migrations. This prevents version conflicts and maintains isolation.
 
 use include_dir::{Dir, include_dir};
-use proton_sqlite3::file::embedded_migrations;
+use proton_sqlite3::{Migrator, MigratorError, file::embedded_migrations};
+use stash::stash::Stash;
 
-/// Get search-related migrations
+/// Run search-related database migrations
 ///
-/// This function returns migrations for search index tables.
-/// These migrations should be merged into the main migration sequence
-/// in `mail-common/src/db/offline_migrations.rs`.
-#[must_use]
-pub fn search_migrations() -> Vec<Box<dyn proton_sqlite3::Migration + 'static>> {
+/// Applications using mail-search should call this function after
+/// initializing the user database.
+pub async fn run(stash: &Stash) -> Result<usize, MigratorError> {
+    const TABLE: &str = "proton_mail_search_version";
     const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/migrations");
-    embedded_migrations(&MIGRATIONS)
+
+    let migrations = embedded_migrations(&MIGRATIONS);
+    let mut tether = stash.connection().await?;
+
+    Migrator::new(TABLE, migrations).migrate(&mut tether).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use stash::stash::StashConfiguration;
+
+    #[tokio::test]
+    async fn smoke() {
+        let stash = Stash::new(StashConfiguration::test()).unwrap();
+        run(&stash).await.unwrap();
+    }
 }

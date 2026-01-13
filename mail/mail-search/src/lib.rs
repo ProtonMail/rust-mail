@@ -291,21 +291,8 @@ mod tests {
         use stash::stash::{Stash, StashConfiguration};
 
         // 1. Set up Stash with migrations
-        // Note: In a real scenario, migrations would be run by mail-search
-        // For this test, we need to run migrations manually
         let stash = Stash::new(StashConfiguration::test()).unwrap();
-        let migrations = crate::migrations::search_migrations();
-        let mut tether = stash.connection().await.unwrap();
-        use stash::stash::StashError;
-        for migration in migrations {
-            tether
-                .tx::<_, (), StashError>(async |bond| {
-                    migration.migrate(&bond).await?;
-                    Ok(())
-                })
-                .await
-                .unwrap();
-        }
+        crate::migrations::run(&stash).await.unwrap();
 
         // 2. Create MailSearchService
         let task_service = std::sync::Arc::new(
