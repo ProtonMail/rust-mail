@@ -24,7 +24,7 @@ use proton_calendar_api::CalendarAttendeeStatus;
 use proton_calendar_common::{RsvpAnswer, RsvpOccurrence, RsvpProgress, RsvpRecency, RsvpRelation};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
-use proton_crypto_inbox::lock_icon::{LockIcon, UiLock};
+use proton_crypto_inbox::lock_icon::UiLock;
 use proton_mail_api::proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{
@@ -984,7 +984,7 @@ pub struct DecryptedMessage {
     labels: String,
     banners: Vec<MessageBanner>,
     rsvp: Rsvp,
-    lock: UiLock,
+    lock: Option<UiLock>,
 }
 
 enum Rsvp {
@@ -1161,7 +1161,7 @@ impl DecryptedMessage {
                 labels,
                 banners: body_output.body_banners,
                 rsvp,
-                lock: UiLock::default(),
+                lock: None,
             },
             lock_builder,
         ))
@@ -1184,11 +1184,7 @@ impl DecryptedMessage {
     }
 
     fn lay_headers(&self) -> u16 {
-        if self.lock.icon == LockIcon::None {
-            7
-        } else {
-            8
-        }
+        if self.lock.is_none() { 7 } else { 8 }
     }
 
     fn draw_headers(&self, frame: &mut Frame, area: Rect) {
@@ -1217,10 +1213,10 @@ impl DecryptedMessage {
             ]),
         ];
 
-        if self.lock.icon != LockIcon::None {
+        if let Some(lock) = self.lock {
             headers.push(Row::new([
                 Cell::from("Privacy:").bold(),
-                Cell::from(self.lock.tooltip.to_string()),
+                Cell::from(lock.tooltip.to_string()),
             ]));
         }
 

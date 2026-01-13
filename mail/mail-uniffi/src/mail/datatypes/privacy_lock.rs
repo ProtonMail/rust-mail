@@ -19,7 +19,6 @@ impl From<UiLock> for PrivacyLock {
 
 #[derive(uniffi::Enum, Copy, Clone)]
 pub enum PrivacyLockIcon {
-    None,
     ClosedLock,
     ClosedLockWithTick,
     ClosedLockWithPen,
@@ -32,7 +31,6 @@ pub enum PrivacyLockIcon {
 impl From<LockIcon> for PrivacyLockIcon {
     fn from(value: LockIcon) -> Self {
         match value {
-            LockIcon::None => Self::None,
             LockIcon::ClosedLock => Self::ClosedLock,
             LockIcon::ClosedLockWithTick => Self::ClosedLockWithTick,
             LockIcon::ClosedLockWithPen => Self::ClosedLockWithPen,

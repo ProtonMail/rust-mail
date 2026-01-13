@@ -67,7 +67,7 @@ pub enum PrivacyLockState {
     #[default]
     Default,
     Calculating,
-    Calculated(UiLock),
+    Calculated(Option<UiLock>),
 }
 
 impl PrivacyLockState {
@@ -75,13 +75,12 @@ impl PrivacyLockState {
     pub fn should_recalculate(&self) -> bool {
         matches!(self, Self::Default)
     }
-}
 
-impl From<PrivacyLockState> for UiLock {
-    fn from(value: PrivacyLockState) -> Self {
-        match value {
-            PrivacyLockState::Default | PrivacyLockState::Calculating => UiLock::default(),
-            PrivacyLockState::Calculated(lock) => lock,
+    #[must_use]
+    pub fn as_ui_lock(&self) -> Option<UiLock> {
+        match self {
+            PrivacyLockState::Default | PrivacyLockState::Calculating => None,
+            PrivacyLockState::Calculated(lock) => *lock,
         }
     }
 }

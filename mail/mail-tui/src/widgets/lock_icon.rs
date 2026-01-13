@@ -3,11 +3,13 @@ use ratatui::style::{Color, Style, Stylize};
 
 use crate::CLI_ARGS;
 
-pub fn lock_icon_to_text(lock: UiLock) -> (&'static str, Style) {
+pub fn lock_icon_to_text(lock: Option<UiLock>) -> (&'static str, Style) {
+    let Some(lock) = lock else {
+        return ("", Style::default());
+    };
     let app_config = &CLI_ARGS;
     let use_emoji = app_config.use_emoji;
     let lock_str = match (lock.icon, use_emoji) {
-        (LockIcon::None, _) => "??",
         (LockIcon::ClosedLock, true) => "🔒",
         (LockIcon::ClosedLock, false) => "CL",
         (LockIcon::ClosedLockWithTick, true) => "🔒✔",

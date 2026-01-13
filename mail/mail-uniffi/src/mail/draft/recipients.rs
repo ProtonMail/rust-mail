@@ -5,7 +5,6 @@ use crate::mail::draft::CachedDraftData;
 use itertools::Itertools;
 use non_empty_string::NonEmptyString;
 use proton_core_api::services::proton::PrivateString;
-use proton_crypto_inbox::lock_icon::UiLock;
 use proton_mail_common::MailContextError;
 use proton_mail_common::ProtonMailError;
 use proton_mail_common::draft::recipients::{
@@ -106,7 +105,7 @@ pub struct ComposerRecipientSingle {
     pub display_name: Option<String>,
     pub address: String,
     pub valid_state: ComposerRecipientValidState,
-    pub privacy_lock: PrivacyLock,
+    pub privacy_lock: Option<PrivacyLock>,
 }
 
 impl From<SingleRecipient> for ComposerRecipientSingle {
@@ -117,7 +116,7 @@ impl From<SingleRecipient> for ComposerRecipientSingle {
                 .map(PrivateString::into_clear_text_string),
             address: value.email.into_clear_text_string(),
             valid_state: value.state.into(),
-            privacy_lock: UiLock::from(value.privacy_lock).into(),
+            privacy_lock: value.privacy_lock.as_ui_lock().map(Into::into),
         }
     }
 }

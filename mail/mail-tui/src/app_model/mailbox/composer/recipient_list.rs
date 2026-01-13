@@ -208,7 +208,7 @@ impl TuiRecipientList {
                             };
 
                             let (lock_str, lock_style) =
-                                lock_icon_to_text(single.privacy_lock.into());
+                                lock_icon_to_text(single.privacy_lock.as_ui_lock());
 
                             let text = Text::from(Line::from(vec![
                                 Span::from(lock_str).style(lock_style),

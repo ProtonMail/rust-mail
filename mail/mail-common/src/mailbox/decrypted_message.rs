@@ -656,9 +656,9 @@ pub enum PrivacyLockBuilder {
 
 impl PrivacyLockBuilder {
     #[tracing::instrument(skip_all)]
-    pub async fn build(self, ctx: &MailUserContext) -> UiLock {
+    pub async fn build(self, ctx: &MailUserContext) -> Option<UiLock> {
         match self {
-            PrivacyLockBuilder::None => UiLock::default(),
+            PrivacyLockBuilder::None => None,
             PrivacyLockBuilder::DraftOrSent {
                 origin_header,
                 content_encryption_header,
@@ -672,34 +672,36 @@ impl PrivacyLockBuilder {
                 origin_header,
                 content_encryption_header,
                 message,
-            } => Self::build_default(ctx, origin_header, content_encryption_header, message).await,
+            } => Some(
+                Self::build_default(ctx, origin_header, content_encryption_header, message).await,
+            ),
         }
     }
     fn build_draft_or_sent(
         origin_header: Option<ParsedHeaderValue>,
         content_encryption_header: Option<ParsedHeaderValue>,
         recipient_encryption_header: Option<ParsedHeaderValue>,
-    ) -> UiLock {
+    ) -> Option<UiLock> {
         let Some(ParsedHeaderValue::String(origin)) = origin_header else {
             warn!("X-Pm-Origin header missing or not a string");
-            return UiLock::default();
+            return None;
         };
 
         let Some(ParsedHeaderValue::String(content_encryption)) = content_encryption_header else {
             warn!("X-Pm-Content-Encryption header missing or not a string");
-            return UiLock::default();
+            return None;
         };
 
         let Some(ParsedHeaderValue::String(recipient_encryption)) = recipient_encryption_header
         else {
             warn!("X-Pm-Recipient-Encryption header missing or not a string");
-            return UiLock::default();
+            return None;
         };
 
         let Ok(origin) = XPmOrigin::from_str(&origin).inspect_err(|e| {
             warn!(?e, "Could not parse X-Pm-Origin");
         }) else {
-            return UiLock::default();
+            return None;
         };
 
         let Ok(recipient_encryption) = XPmRecipientEncryption::from_header(&recipient_encryption)
@@ -707,16 +709,20 @@ impl PrivacyLockBuilder {
                 warn!(?e, "Could not parse X-Pm-Recipient-Encryption");
             })
         else {
-            return UiLock::default();
+            return None;
         };
 
         let Ok(content_encryption) = XPmContentEncryption::from_str(&content_encryption)
             .inspect_err(|e| warn!("X-Pm-Content-Encryption has invalid value: {e}"))
         else {
-            return UiLock::default();
+            return None;
         };
 
-        UiLock::for_sent_inbox(origin, content_encryption, &recipient_encryption)
+        Some(UiLock::for_sent_inbox(
+            origin,
+            content_encryption,
+            &recipient_encryption,
+        ))
     }
 
     async fn build_default(

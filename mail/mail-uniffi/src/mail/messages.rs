@@ -200,7 +200,7 @@ impl DecryptedMessage {
     ///
     /// Note: this is an expensive operation and should e launched on a background
     /// task.
-    pub async fn privacy_lock(self: Arc<Self>) -> PrivacyLock {
+    pub async fn privacy_lock(self: Arc<Self>) -> Option<PrivacyLock> {
         async_runtime()
             .spawn(async move {
                 let ctx = self.ctx()?;
@@ -211,7 +211,7 @@ impl DecryptedMessage {
             .await
             .map(|r: Result<_, RealProtonMailError>| r.unwrap_or_default())
             .unwrap_or_default()
-            .into()
+            .map(Into::into)
     }
 }
 

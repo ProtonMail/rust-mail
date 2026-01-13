@@ -6,18 +6,15 @@ use proton_crypto_account::proton_crypto::crypto::{
 
 use crate::keys::{InboxVerificationPreferences, PackageCryptoType, SendPreferences};
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LockColor {
-    #[default]
     Black,
     Green,
     Blue,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LockIcon {
-    #[default]
-    None,
     ClosedLock,
     ClosedLockWithTick,
     ClosedLockWithPen,
@@ -27,11 +24,9 @@ pub enum LockIcon {
     OpenLockWarning,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LockTooltip {
-    #[default]
     None,
-
     SendE2E,
     SendE2EVerifiedRecipient,
     SendSignOnly,
@@ -65,7 +60,7 @@ pub enum LockTooltip {
 impl Display for LockTooltip {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LockTooltip::None => f.write_str(""),
+            LockTooltip::None=> Ok(()),
             LockTooltip::SendE2E | LockTooltip::SentRecipientE2E => f.write_str("End-to-end encrypted"),
             LockTooltip::SendE2EVerifiedRecipient | LockTooltip::SentRecipientE2EVerifiedRecipient => f.write_str("End-to-end encrypted to verified recipient"),
             LockTooltip::SendZeroAccessEncryptionDisabled => f.write_str("Zero-access encrypted. Recipient has disabled end-to-end encryption on their account."),
@@ -92,7 +87,7 @@ impl Display for LockTooltip {
 }
 
 /// The lock icon to display.
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UiLock {
     pub icon: LockIcon,
     pub color: LockColor,
@@ -331,7 +326,7 @@ impl XPmRecipientEncryption {
 impl UiLock {
     /// Determines the lock icon for a message that is sent from the composer.
     #[must_use]
-    pub fn for_composer<Pub>(send_prefs: &SendPreferences<Pub>) -> Self
+    pub fn for_composer<Pub>(send_prefs: &SendPreferences<Pub>) -> Option<Self>
     where
         Pub: PublicKey,
     {
@@ -391,16 +386,16 @@ impl UiLock {
     }
 }
 
-fn determine_composer_lock_icon<Pub>(send_prefs: &SendPreferences<Pub>) -> UiLock
+fn determine_composer_lock_icon<Pub>(send_prefs: &SendPreferences<Pub>) -> Option<UiLock>
 where
     Pub: PublicKey,
 {
     if send_prefs.encryption_disabled {
-        return UiLock {
+        return Some(UiLock {
             icon: LockIcon::ClosedLock,
             color: LockColor::Black,
             tooltip: LockTooltip::SendZeroAccessEncryptionDisabled,
-        };
+        });
     }
     let (icon, color) = match send_prefs.pgp_scheme {
         PackageCryptoType::ProtonMail => {
@@ -410,12 +405,12 @@ where
             } else if send_prefs.encrypt {
                 LockIcon::ClosedLock
             } else {
-                LockIcon::None
+                return None;
             };
             (lock_icon, color)
         }
         PackageCryptoType::EncryptedOutside => (LockIcon::ClosedLock, LockColor::Blue),
-        PackageCryptoType::Cleartext => (LockIcon::None, LockColor::Black),
+        PackageCryptoType::Cleartext => return None,
         PackageCryptoType::PgpInline
         | PackageCryptoType::PgpMime
         | PackageCryptoType::ClearMime => {
@@ -431,16 +426,16 @@ where
                 (false, true, true) => LockIcon::OpenLockWithTick,
                 (false, true, false) => LockIcon::OpenLockWithPen,
                 (true, _, _) => LockIcon::ClosedLock,
-                (false, _, _) => LockIcon::None,
+                (false, _, _) => return None,
             };
             (icon, color)
         }
     };
-    UiLock {
+    Some(UiLock {
         icon,
         color,
         tooltip: tooltip_composer(icon),
-    }
+    })
 }
 
 #[must_use]

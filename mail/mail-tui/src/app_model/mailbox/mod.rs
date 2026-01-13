@@ -129,7 +129,7 @@ pub enum MessageMessage {
     UpdateRsvp(Box<RsvpEvent>),
     ScrollerFetchNewStart,
     ScrollerFetchNewEnd,
-    UpdatePrivacyLock(UiLock),
+    UpdatePrivacyLock(Option<UiLock>),
 }
 
 impl<I: Into<Messages>> From<I> for Command<Messages> {

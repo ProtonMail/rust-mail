@@ -30,11 +30,11 @@ fn composer_lock_icon_internal() {
     );
     perform_composer_lock_icon_test(
         &send_prefs,
-        UiLock {
+        Some(UiLock {
             icon: LockIcon::ClosedLock,
             color: LockColor::Blue,
             tooltip: LockTooltip::SendE2E,
-        },
+        }),
     );
 }
 
@@ -52,11 +52,11 @@ fn composer_lock_icon_internal_pinned() {
     );
     perform_composer_lock_icon_test(
         &send_prefs,
-        UiLock {
+        Some(UiLock {
             icon: LockIcon::ClosedLockWithTick,
             color: LockColor::Blue,
             tooltip: LockTooltip::SendE2EVerifiedRecipient,
-        },
+        }),
     );
 }
 
@@ -74,11 +74,11 @@ fn composer_lock_icon_internal_encryption_disabled() {
     );
     perform_composer_lock_icon_test(
         &send_prefs,
-        UiLock {
+        Some(UiLock {
             icon: LockIcon::ClosedLock,
             color: LockColor::Black,
             tooltip: LockTooltip::SendZeroAccessEncryptionDisabled,
-        },
+        }),
     );
 }
 
@@ -96,11 +96,11 @@ fn composer_lock_external_e2e() {
     );
     perform_composer_lock_icon_test(
         &send_prefs,
-        UiLock {
+        Some(UiLock {
             icon: LockIcon::ClosedLock,
             color: LockColor::Green,
             tooltip: LockTooltip::SendE2E,
-        },
+        }),
     );
 }
 
@@ -118,11 +118,11 @@ fn composer_lock_external_e2e_pinned() {
     );
     perform_composer_lock_icon_test(
         &send_prefs,
-        UiLock {
+        Some(UiLock {
             icon: LockIcon::ClosedLockWithTick,
             color: LockColor::Green,
             tooltip: LockTooltip::SendE2EVerifiedRecipient,
-        },
+        }),
     );
 }
 
@@ -140,11 +140,11 @@ fn composer_lock_external_sign_only() {
     );
     perform_composer_lock_icon_test(
         &send_prefs,
-        UiLock {
+        Some(UiLock {
             icon: LockIcon::OpenLockWithPen,
             color: LockColor::Green,
             tooltip: LockTooltip::SendSignOnly,
-        },
+        }),
     );
 }
 
@@ -162,11 +162,11 @@ fn composer_lock_encrypt_to_outside() {
     );
     perform_composer_lock_icon_test(
         &send_prefs,
-        UiLock {
+        Some(UiLock {
             icon: LockIcon::ClosedLock,
             color: LockColor::Blue,
             tooltip: LockTooltip::SendE2E,
-        },
+        }),
     );
 }
 
@@ -182,14 +182,7 @@ fn composer_lock_no_encryption() {
         false,
         false,
     );
-    perform_composer_lock_icon_test(
-        &send_prefs,
-        UiLock {
-            icon: LockIcon::None,
-            color: LockColor::default(),
-            tooltip: LockTooltip::None,
-        },
-    );
+    perform_composer_lock_icon_test(&send_prefs, None);
 }
 
 #[test]
@@ -748,8 +741,10 @@ where
     }
 }
 
-fn perform_composer_lock_icon_test<Pub>(send_prefs: &SendPreferences<Pub>, expected_output: UiLock)
-where
+fn perform_composer_lock_icon_test<Pub>(
+    send_prefs: &SendPreferences<Pub>,
+    expected_output: Option<UiLock>,
+) where
     Pub: PublicKey,
 {
     let output = UiLock::for_composer(send_prefs);
