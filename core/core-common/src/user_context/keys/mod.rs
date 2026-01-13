@@ -7,7 +7,7 @@ use cache::{CachedAddressKey, CachedUserKey};
 mod manager;
 use crate::{
     ContactError, CoreContextError,
-    models::{Contact, ContactEmail},
+    models::{Contact, ContactCard, ContactEmail},
 };
 use crate::{CoreContextResult, UserContext};
 use ical::{VcardParser, parser::ParserError};
@@ -29,7 +29,7 @@ use stash::{
     stash::{StashError, Tether},
 };
 use thiserror::Error;
-use tracing::error;
+use tracing::{debug, error};
 
 #[allow(clippy::module_name_repetitions)]
 type CachedUserKeys = Vec<CachedUserKey>;
@@ -170,6 +170,36 @@ impl UserContext {
                     email.to_owned(),
                 ))?;
 
+        // If a contact exists and has linked vCards, attempt to extract pinned keys from them.
+        // vCards should be current if they were synced at least once
+        // since they would be updated via update events.
+        match fetch_policy {
+            AddressKeysContactFetchPolicy::AllowCachedFallback => {
+                match Contact::load(local_contact_id, tx.tether()).await {
+                    Ok(Some(mut contact)) => {
+                        if let Ok(cards) = contact.cards(tx.tether()).await
+                            && !cards.is_empty()
+                        {
+                            debug!(
+                                "Use local contact {local_contact_id} for pinned keys extraction"
+                            );
+                            return Ok(extract_pinned_keys(
+                                pgp,
+                                unlocked_user_keys,
+                                cards,
+                                &email,
+                            )?);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to load contact for pinned keys extraction: {e}");
+                    }
+                    _ => {}
+                }
+            }
+            AddressKeysContactFetchPolicy::RequireSync => {} // continue
+        }
+
         // On success try to sync the most recent full contact including its v-cards from the BE.
         if let Err(e) = Contact::force_sync_with_card(local_contact_id, self.session(), tx)
             .await
@@ -188,7 +218,9 @@ impl UserContext {
             .await?
             .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
 
-        Ok(extract_pinned_keys(pgp, tx.tether(), unlocked_user_keys, &mut contact, email).await?)
+        let cards = contact.cards(tx.tether()).await?;
+
+        Ok(extract_pinned_keys(pgp, unlocked_user_keys, cards, &email)?)
     }
 }
 
@@ -211,20 +243,17 @@ impl From<AddressKeysContactFetchPolicy> for PublicAddressKeyFetchPolicy {
 }
 
 /// Helper function to extract pinned keys from a contact with cards.
-async fn extract_pinned_keys<P>(
+fn extract_pinned_keys<P>(
     pgp: &P,
-    db: &Tether,
     unlocked_user_keys: &UnlockedUserKeys<P>,
-    full_contact: &mut Contact,
-    email: PrivateEmailRef<'_>,
+    cards: &[ContactCard],
+    email: &PrivateEmailRef<'_>,
 ) -> Result<Option<PinnedPublicKeys<<P>::PublicKey>>, KeyHandlingError>
 where
     P: PGPProviderSync,
 {
     // The pinned key information can be found in the signed v-card.
-    let signed_card_opt = full_contact
-        .cards(db)
-        .await?
+    let signed_card_opt = cards
         .iter()
         .find(|card| card.card_type == ContactCardType::Signed);
 
@@ -249,5 +278,5 @@ where
 
     let vcard = VCard::try_from(vcard_contact)?;
 
-    Ok(vcard_crypto::pinned_keys_for_mail(&vcard, pgp, &email))
+    Ok(vcard_crypto::pinned_keys_for_mail(&vcard, pgp, email))
 }
