@@ -22,14 +22,14 @@ $ cd shared/ical
 $ RUSTFLAGS="-C link-arg=-Wl,-undefined,dynamic_lookup" cargo build -p proton-ical --release --features php
 
 # on Linux
-$ php -d extension=../../target/release/libical.so examples/php/parse.php
-$ php -d extension=../../target/release/libical.so examples/php/print.php
-$ php -d extension=../../target/release/libical.so examples/php/trip.php
+$ php -d extension=../../target/release/libproton_ical.so examples/php/parse.php
+$ php -d extension=../../target/release/libproton_ical.so examples/php/print.php
+$ php -d extension=../../target/release/libproton_ical.so examples/php/trip.php
 
 # on Mac
-$ php -d extension=../../target/release/libical.dylib examples/php/parse.php
-$ php -d extension=../../target/release/libical.dylib examples/php/print.php
-$ php -d extension=../../target/release/libical.dylib examples/php/trip.php
+$ php -d extension=../../target/release/libproton_ical.dylib examples/php/parse.php
+$ php -d extension=../../target/release/libproton_ical.dylib examples/php/print.php
+$ php -d extension=../../target/release/libproton_ical.dylib examples/php/trip.php
 ```
 
 ## Fuzzing

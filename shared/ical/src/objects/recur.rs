@@ -457,6 +457,7 @@ mod php {
 
     impl IntoPhpZval for Freq {
         const TYPE: PhpDataType = PhpDataType::String;
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             zval.set_string(&format!("{self:?}"), persistent)
@@ -502,6 +503,7 @@ mod php {
 
     impl IntoPhpZval for ByDay {
         const TYPE: PhpDataType = PhpDataType::Object(None);
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             PhpByDay::from(self).set_zval(zval, persistent)

@@ -98,6 +98,7 @@ mod php {
 
     impl IntoPhpZval for Priority {
         const TYPE: PhpDataType = PhpDataType::Long;
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, _: bool) -> PhpResult<()> {
             zval.set_long(self.value);

@@ -68,7 +68,7 @@ cookie = "0.18.1"
 derivative = "=2.2.0"
 non-empty-string = { version = "0.2.5", features = ["serde"] }
 derive_more = { version = "2.0", features = ["full"] }
-ext-php-rs = "0.13.1"
+ext-php-rs = "0.15.3"
 fancy-regex = "0.14.0"
 flume = "0.11"
 futures = "0.3.31"

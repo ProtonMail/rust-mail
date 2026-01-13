@@ -118,6 +118,7 @@ mod php {
         DateTime<F>: TryInto<JiffZoned, Error = DateTimeError>,
     {
         const TYPE: PhpDataType = PhpDataType::Object(Some("DateTimeImmutable"));
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             // TODO avoid unwrapping

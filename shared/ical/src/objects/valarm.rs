@@ -356,6 +356,7 @@ mod php {
 
     impl IntoPhpZval for VAlarm {
         const TYPE: PhpDataType = PhpDataType::Object(None);
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             let kind = match self {

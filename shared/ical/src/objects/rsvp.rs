@@ -65,6 +65,7 @@ mod php {
 
     impl IntoPhpZval for Rsvp {
         const TYPE: PhpDataType = PhpDataType::Bool;
+        const NULLABLE: bool = false;
 
         fn set_zval(self, zval: &mut PhpZval, _: bool) -> PhpResult<()> {
             zval.set_bool(self.0);

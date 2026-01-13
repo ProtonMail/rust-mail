@@ -474,6 +474,11 @@ mod php {
     #[php_module]
     fn get_module(module: ModuleBuilder) -> ModuleBuilder {
         module
+            .function(wrap_function!(ical_new))
+            .function(wrap_function!(ical_new_event))
+            .function(wrap_function!(ical_parse))
+            .function(wrap_function!(ical_print))
+            .function(wrap_function!(ical_sanitize))
     }
 }
 
