@@ -5549,7 +5549,6 @@ dependencies = [
  "derivative",
  "derive_more 2.0.1",
  "email_address",
- "fallible-iterator",
  "file-format",
  "flume",
  "function_name",

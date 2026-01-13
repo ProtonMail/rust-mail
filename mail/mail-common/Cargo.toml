@@ -40,7 +40,6 @@ non-empty-string = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }
 file-format = { workspace = true }
-fallible-iterator = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
