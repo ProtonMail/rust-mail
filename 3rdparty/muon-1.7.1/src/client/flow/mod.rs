@@ -438,7 +438,14 @@ mod errors {
     impl From<FlowErr> for Error {
         fn from(err: FlowErr) -> Self {
             if let FlowErr::Inner(err) = err {
-                err.map_kind(ErrorKind::Auth)
+                match err.kind() {
+                    ErrorKind::Tls
+                    | ErrorKind::Resolve
+                    | ErrorKind::Dial
+                    | ErrorKind::Connect
+                    | ErrorKind::Send => err,
+                    _ => err.map_kind(ErrorKind::Auth),
+                }
             } else {
                 ErrorKind::auth(err)
             }

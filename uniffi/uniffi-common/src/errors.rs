@@ -38,8 +38,8 @@ pub enum UserApiServiceError {
     /// Any other HTTP error which is not currently handled.
     OtherHttpError(u16, String),
 
-    /// Any other network error which is not currently handled.
-    OtherNetwork(String),
+    /// Network error usually caused by lack of internet connection.
+    NetworkFailure(String),
 
     /// Any other error which is not currently handled.
     Internal(String),
@@ -101,7 +101,7 @@ impl From<ApiServiceError> for UserApiServiceError {
             ),
 
             ConnectionError(_) | NetworkError(_) | Redirect(_, _) | Timeout(_) => {
-                Self::OtherNetwork(error.to_string())
+                Self::NetworkFailure(error.to_string())
             }
 
             QueryStringError(_) | RequestError(_) | ResponseError(_) | Utf8DecodingError(_)

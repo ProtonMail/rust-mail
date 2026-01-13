@@ -75,23 +75,22 @@ struct FallibleFileStore {
 impl FallibleFileStore {
     /// Create a prod file storage, it mostly create the initial file with
     /// Auth::none in it
-    pub fn prod(err_handler: StoreErrorHandler) -> std::io::Result<Self> {
-        tempfile::tempdir().and_then(|dir| {
-            info!("Persistence storage in {:?}", dir.path());
-            let path = dir.path().join("auth");
-            let _ = File::options()
-                .write(true)
-                .truncate(true)
-                .create(true)
-                .open(path)?;
-            let mut store = Self {
-                env: EnvId::new_atlas(),
-                dir: dir.into(),
-                err_handler,
-            };
-            let _ = store.set_auth(Auth::None);
-            Ok(store)
-        })
+    pub async fn prod(err_handler: StoreErrorHandler) -> std::io::Result<Self> {
+        let dir = tempfile::tempdir()?;
+        info!("Persistence storage in {:?}", dir.path());
+        let path = dir.path().join("auth");
+        let _ = File::options()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(path)?;
+        let mut store = Self {
+            env: EnvId::new_atlas(),
+            dir: dir.into(),
+            err_handler,
+        };
+        let _ = store.set_auth(Auth::None).await;
+        Ok(store)
     }
 
     pub fn auth_file_path(&self) -> impl AsRef<Path> {
@@ -190,7 +189,7 @@ async fn main() -> Result<()> {
     // A store is tied to a specific environment; a prod store holds prod tokens,
     // an atlas store holds atlas tokens, etc.
     let store_error_handler = StoreErrorHandler(vec![gui_error_handler]);
-    let store = FallibleFileStore::prod(store_error_handler)?;
+    let store = FallibleFileStore::prod(store_error_handler).await?;
 
     // get a new connected client: this should work as the store is empty for now...
     // Finally, create the client. The client will be configured to connect to the

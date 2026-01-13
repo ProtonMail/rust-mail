@@ -11,7 +11,6 @@
 use crate::common::prelude::*;
 use crate::http::common::util::JsonExt;
 use crate::http::{Body, ContentType, HttpRes};
-use crate::middleware::Tag;
 use crate::util::With;
 use crate::{ErrorKind, Result};
 use common_multipart_rfc7578::client::multipart::{self, Form};
@@ -414,13 +413,7 @@ impl HttpReq {
 
 impl Display for HttpReq {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        if let Some(tag) = Tag::get(self) {
-            write!(f, "{} {} (#{tag})", self.method, self.path.join("/"))?;
-        } else {
-            write!(f, "{} {}", self.method, self.path.join("/"))?;
-        };
-
-        Ok(())
+        write!(f, "{} {}", self.method, self.path.join("/"))
     }
 }
 

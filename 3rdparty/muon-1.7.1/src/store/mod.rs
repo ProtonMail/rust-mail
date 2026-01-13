@@ -110,7 +110,7 @@
 //!             FallibleFileStoreErrors::Full => ask_to_free_disk_space(),
 //!             FallibleFileStoreErrors::Corrupted => ask_to_clear_cache(),
 //!             FallibleFileStoreErrors::NotFound => recreate_storage_file(),
-//!             FallibleFileStoreErrors::Other(e) => display_error_modal(e),         
+//!             FallibleFileStoreErrors::Other(e) => display_error_modal(e),
 //!         }
 //!     }
 //! }
@@ -172,6 +172,7 @@
 use crate::auth::Auth;
 use crate::common::IntoDyn;
 use crate::env::EnvId;
+#[allow(unused_imports)] // Seems to be used below
 use crate::export;
 use async_trait::async_trait;
 use muon_proc::{autoimpl, derive_dyn};

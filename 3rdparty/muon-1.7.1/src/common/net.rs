@@ -398,7 +398,7 @@ impl Server {
         self.host().is_indirect()
     }
 
-    /// Ensure this server is direct, converting indirect hosts to direct hosts.
+    /// Ensure this server is direct, making indirect hosts direct.
     #[must_use]
     pub fn to_direct(&self) -> Option<Self> {
         Some(Self {
@@ -407,9 +407,7 @@ impl Server {
         })
     }
 
-    /// Ensure this server is indirect, converting direct hosts to indirect
-    /// hosts.
-    #[must_use]
+    /// Ensure this server is indirect, making direct hosts indirect.
     pub fn to_indirect(&self) -> Self {
         Self {
             endpoint: self.endpoint.to_indirect(),
