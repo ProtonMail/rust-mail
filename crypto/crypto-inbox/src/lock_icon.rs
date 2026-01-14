@@ -26,7 +26,6 @@ pub enum LockIcon {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LockTooltip {
-    None,
     SendE2E,
     SendE2EVerifiedRecipient,
     SendSignOnly,
@@ -60,7 +59,6 @@ pub enum LockTooltip {
 impl Display for LockTooltip {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LockTooltip::None=> Ok(()),
             LockTooltip::SendE2E | LockTooltip::SentRecipientE2E => f.write_str("End-to-end encrypted"),
             LockTooltip::SendE2EVerifiedRecipient | LockTooltip::SentRecipientE2EVerifiedRecipient => f.write_str("End-to-end encrypted to verified recipient"),
             LockTooltip::SendZeroAccessEncryptionDisabled => f.write_str("Zero-access encrypted. Recipient has disabled end-to-end encryption on their account."),
@@ -423,18 +421,18 @@ where
             ) {
                 (true, true, true) => LockIcon::ClosedLockWithTick,
                 (true, true, false) => LockIcon::ClosedLock,
-                (false, true, true) => LockIcon::OpenLockWithTick,
-                (false, true, false) => LockIcon::OpenLockWithPen,
+                (false, true, _) => LockIcon::OpenLockWithPen,
                 (true, _, _) => LockIcon::ClosedLock,
                 (false, _, _) => return None,
             };
             (icon, color)
         }
     };
+
     Some(UiLock {
         icon,
         color,
-        tooltip: tooltip_composer(icon),
+        tooltip: tooltip_composer(icon)?,
     })
 }
 
@@ -703,12 +701,12 @@ fn determine_sent_lock_icon_for_recipient(
     }
 }
 
-fn tooltip_composer(lock: LockIcon) -> LockTooltip {
+fn tooltip_composer(lock: LockIcon) -> Option<LockTooltip> {
     match lock {
-        LockIcon::ClosedLock => LockTooltip::SendE2E,
-        LockIcon::ClosedLockWithTick => LockTooltip::SendE2EVerifiedRecipient,
-        LockIcon::OpenLockWithPen => LockTooltip::SendSignOnly,
-        _ => LockTooltip::None,
+        LockIcon::ClosedLock => Some(LockTooltip::SendE2E),
+        LockIcon::ClosedLockWithTick => Some(LockTooltip::SendE2EVerifiedRecipient),
+        LockIcon::OpenLockWithPen => Some(LockTooltip::SendSignOnly),
+        _ => None,
     }
 }
 
