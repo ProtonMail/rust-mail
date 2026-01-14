@@ -61,7 +61,6 @@ impl From<LockColor> for PrivacyLockColor {
 
 #[derive(uniffi::Enum, Copy, Clone)]
 pub enum PrivacyLockTooltip {
-    None,
     SendE2E,
     SendE2EVerifiedRecipient,
     SendSignOnly,
@@ -91,7 +90,6 @@ pub enum PrivacyLockTooltip {
 impl From<LockTooltip> for PrivacyLockTooltip {
     fn from(value: LockTooltip) -> Self {
         match value {
-            LockTooltip::None => Self::None,
             LockTooltip::SendE2E => Self::SendE2E,
             LockTooltip::SendE2EVerifiedRecipient => Self::SendE2EVerifiedRecipient,
             LockTooltip::SendSignOnly => Self::SendSignOnly,
