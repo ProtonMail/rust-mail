@@ -777,25 +777,31 @@ impl OnBackgroundValidationComplete for ChannelBackgroundValidationComplete {
 pub struct ValidatingRecipientList<'l, T: OnBackgroundValidationComplete + OnPrivacyLockUpdate> {
     list: &'l mut RecipientList,
     cancellation_token: CancellationToken,
+    lock_cancellation_token: CancellationToken,
     cb: T,
     draft_id: MetadataId,
     mime_type: EmailMimeType,
+    is_byoe: bool,
 }
 
 impl<'l, T: OnBackgroundValidationComplete + OnPrivacyLockUpdate> ValidatingRecipientList<'l, T> {
     pub fn new(
         cancellation_token: CancellationToken,
+        lock_cancellation_token: CancellationToken,
         list: &'l mut RecipientList,
         on_updated: T,
         draft_id: MetadataId,
         mime_type: EmailMimeType,
+        is_byoe: bool,
     ) -> Self {
         Self {
             list,
             cb: on_updated,
             cancellation_token,
+            lock_cancellation_token,
             draft_id,
             mime_type,
+            is_byoe,
         }
     }
 
@@ -958,19 +964,36 @@ impl<'l, T: OnBackgroundValidationComplete + OnPrivacyLockUpdate> ValidatingReci
 
         let cb = self.cb.clone();
         let ctx = ctx.as_arc();
-        let ctx_cloned = Arc::clone(&ctx);
-        let draft_id = self.draft_id;
-        let mime_type = self.mime_type;
 
-        ctx_cloned
-            .mail_context()
-            .core_context()
-            .task_service()
-            .spawn_cancellable(self.cancellation_token.clone(), async move {
-                let updates =
-                    calculate_privacy_locks(&ctx, draft_id, mime_type, to_calculate).await;
-                cb.recipient_privacy_lock_updated(updates).await;
-            });
+        // When using byoe we don't display any privacy locks
+        if self.is_byoe {
+            ctx.mail_context()
+                .core_context()
+                .task_service()
+                .spawn_cancellable(self.lock_cancellation_token.clone(), async move {
+                    let updates = RecipientPrivacyLockUpdate {
+                        updates: to_calculate
+                            .into_iter()
+                            .map(|e| (e, PrivacyLockState::Calculated(None)))
+                            .collect(),
+                    };
+                    cb.recipient_privacy_lock_updated(updates).await;
+                });
+        } else {
+            let ctx_cloned = Arc::clone(&ctx);
+            let draft_id = self.draft_id;
+            let mime_type = self.mime_type;
+
+            ctx_cloned
+                .mail_context()
+                .core_context()
+                .task_service()
+                .spawn_cancellable(self.lock_cancellation_token.clone(), async move {
+                    let updates =
+                        calculate_privacy_locks(&ctx, draft_id, mime_type, to_calculate).await;
+                    cb.recipient_privacy_lock_updated(updates).await;
+                });
+        }
     }
 }
 
