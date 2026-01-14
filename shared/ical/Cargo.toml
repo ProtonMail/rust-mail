@@ -1,6 +1,6 @@
 [package]
 name = "proton-ical"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 rust-version = "1.85.0"
 
