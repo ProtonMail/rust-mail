@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.6] - 2026-01-14
+
+### Changed
+
+- [ET-5689] Privacy Lock Refactor
+
+### Features
+
+- [ET-5689] Privacy Locks for composer recipients
+
+
 ## [mail-uniffi-v0.161.5] - 2026-01-13
 
 ### Features
@@ -1287,20 +1298,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Filter out unnecessary mobile actions in uniffi
 - Resolver trait now must return an error
 
 ### Features
 
+- Add uniffi bindings to restore default action lists
+
+### Fixes
+
+- Correct expected input json for PUT /mobilesettings
+- remote images correctly get proxied
+- Excessive Ping
+
+
+## [mail-uniffi-v0.138.0] - 2025-08-22
+
+### Changed
+
+- Extend MobileActions implementation with methods allowing to access any toolbar settings available
+- (breaking) Change `all_available_bottom_bar_actions_for_xyz` to `all_available_list_actions_for_xyz`
+- uniffi: Remove unused `label_type` argument for `watch_labels()`
+- Filter out unnecessary mobile actions in uniffi
+
+### Features
+
+- [ET-4017] Run post login validations after signup too
+- Unsubscribe to newsletter via HTTP request
+- [breaking change] Use load_image instead of load_embedded_attachment and force remote images to use https
+- Introduce `generate_csp_nonce()`
+- Add AllConversationActions and ConversationActionSheet types & methods analogical to the message features
+- Add `AllMessageActions` mechanism based upon `AllListActions`
+- Add MessageActionSheet type build in the same way as message toolbars are
+- Add API integration for changing API settings
+- Add UpdateMobileActions action and all uniffi bindings required to customize toolbar feature to work
+- Bye Bye PDFs
+- [ET-1307] Introduce Unleash API endpoint to mail-api
 - Expose context builder when building context in mail app
 - [ET-4397] Expose HTTP 403 Forbidden errors.
 - [ET-1307] Introduce Unleash feature flags service
 - [ET-4397] Fixed failing test, assert new Forbidden error.
 - [ET-4374] expose `remote_id` in UniFFI in `ContactDetailCard`
-- Add uniffi bindings to restore default action lists
 
 ### Fixes
 
+- [ET-4235] Stanitize and hide css remote/embedded content
+- [ET-4235] Best attempt at sanitizing  css variables
+- [ET-4235] Only convert http and https links to href
+- [ET-4328] Ensure LabelAs and Move work correctly offline
+- [ET-4298] Fix mime type inference for replies
+- [ET-4260] Improve alternative routing for Human Verification
+- Correct resolved host for challenge server
+- [ET-4298] Parse X-PM-MIMETYPE
+- labels: Watch `MailSettings` as well
+- [ET-4297] Fix invalid order_field scroller records
+- [ET-4297] Fix missing message snooze notifications
+- Ensure fresh auth info is cached
+- Validate queue action state
+- Fix typo on Fido2 observability events
 - Only issue rollback if there are things to rollback
 - Less strict matching for TOTP error
 - vcard: Support empty `;TYPE=`
@@ -1313,9 +1367,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scroller will finish refresh update correctly
 - [ET-4412] Update text signatures generated from web
 - When scroller finds out on refresh that the label has items to display but they are not currently retivable it will queue `FetchMore` task
-- Correct expected input json for PUT /mobilesettings
-- remote images correctly get proxied
-- Excessive Ping
 
 
 ## [mail-uniffi-v0.136.0] - 2025-08-21
@@ -1339,43 +1390,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.135.0] - 2025-08-21
 
-### Changed
-
-- Extend MobileActions implementation with methods allowing to access any toolbar settings available
-- (breaking) Change `all_available_bottom_bar_actions_for_xyz` to `all_available_list_actions_for_xyz`
-- uniffi: Remove unused `label_type` argument for `watch_labels()`
-
 ### Features
 
-- [ET-4017] Run post login validations after signup too
-- Introduce `generate_csp_nonce()`
-- Add `AllMessageActions` mechanism based upon `AllListActions`
-- Add MessageActionSheet type build in the same way as message toolbars are
-- [ET-1307] Introduce Unleash API endpoint to mail-api
-- Unsubscribe to newsletter via HTTP request
-- [breaking change] Use load_image instead of load_embedded_attachment and force remote images to use https
-- Add AllConversationActions and ConversationActionSheet types & methods analogical to the message features
-- Add API integration for changing API settings
-- Add UpdateMobileActions action and all uniffi bindings required to customize toolbar feature to work
-- Bye Bye PDFs
 - Scroller now has `get_items` method returning the current state without reading database
-
-### Fixes
-
-- [ET-4235] Stanitize and hide css remote/embedded content
-- [ET-4235] Best attempt at sanitizing  css variables
-- [ET-4235] Only convert http and https links to href
-- [ET-4328] Ensure LabelAs and Move work correctly offline
-- [ET-4298] Fix mime type inference for replies
-- [ET-4260] Improve alternative routing for Human Verification
-- Correct resolved host for challenge server
-- [ET-4298] Parse X-PM-MIMETYPE
-- labels: Watch `MailSettings` as well
-- [ET-4297] Fix invalid order_field scroller records
-- [ET-4297] Fix missing message snooze notifications
-- Ensure fresh auth info is cached
-- Validate queue action state
-- Fix typo on Fido2 observability events
 
 
 ## [mail-uniffi-v0.125.8] - 2025-08-20
