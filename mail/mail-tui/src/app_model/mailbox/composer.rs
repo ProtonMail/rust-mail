@@ -698,11 +698,6 @@ impl Composer {
         frame.render_widget(Clear {}, area);
         frame.render_widget(Block::new().title("Composer").borders(Borders::ALL), area);
 
-        if let Some(recipient_list) = &mut self.recipient_view {
-            recipient_list.view(frame, area);
-            return;
-        }
-
         let area = area.inner(Margin {
             horizontal: 1,
             vertical: 1,
@@ -786,7 +781,8 @@ impl Composer {
             ),
         ] {
             frame.render_stateful_widget(TextInput::new(title), area, state);
-            if let Some(input_selection) = input_selection
+            if self.recipient_view.is_none()
+                && let Some(input_selection) = input_selection
                 && input_selection == self.selected_input
             {
                 let (x, y) = state.frame_cursor();
@@ -855,6 +851,24 @@ impl Composer {
         ];
         frame.render_widget(Block::new().style(Style::new().reversed()), footer);
         frame.render_widget(Line::from(help_text), footer);
+
+        // Render recipient list as overlay LAST so it appears on top of everything
+        if let Some(recipient_list) = &mut self.recipient_view {
+            let field_area = match recipient_list.group_id() {
+                RecipientGroupId::To => to_area,
+                RecipientGroupId::Cc => cc_area,
+                RecipientGroupId::Bcc => bcc_area,
+            };
+            // Start overlay at the field, extend into message area
+            let overlay_bottom = message_area.y + message_area.height / 2;
+            let overlay_area = Rect::new(
+                field_area.x,
+                field_area.y,
+                field_area.width,
+                overlay_bottom - field_area.y,
+            );
+            recipient_list.view(frame, overlay_area);
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -955,12 +969,12 @@ impl Composer {
                     }
                 }
                 KeyCode::Char('r') => {
-                    if self.selected_input == SelectedInput::Attachments {
-                        if let Some(index) = self.attachment_list_state.selected() {
-                            return Command::message(ComposerMessage::RetryAttachmentOp(
-                                self.attachment_infos[index].id,
-                            ));
-                        }
+                    if self.selected_input == SelectedInput::Attachments
+                        && let Some(index) = self.attachment_list_state.selected()
+                    {
+                        return Command::message(ComposerMessage::RetryAttachmentOp(
+                            self.attachment_infos[index].id,
+                        ));
                     }
                 }
                 KeyCode::Char('k') => {
@@ -983,23 +997,41 @@ impl Composer {
         }
         match self.selected_input {
             SelectedInput::To => {
-                if matches!(event, Event::Key(_)) {
+                if let Event::Key(key) = &event {
+                    let initial_char = if let KeyCode::Char(c) = key.code {
+                        Some(c)
+                    } else {
+                        None
+                    };
                     return Command::message(ComposerMessage::OpenRecipientList(
                         RecipientGroupId::To,
+                        initial_char,
                     ));
                 }
             }
             SelectedInput::Cc => {
-                if matches!(event, Event::Key(_)) {
+                if let Event::Key(key) = &event {
+                    let initial_char = if let KeyCode::Char(c) = key.code {
+                        Some(c)
+                    } else {
+                        None
+                    };
                     return Command::message(ComposerMessage::OpenRecipientList(
                         RecipientGroupId::Cc,
+                        initial_char,
                     ));
                 }
             }
             SelectedInput::Bcc => {
-                if matches!(event, Event::Key(_)) {
+                if let Event::Key(key) = &event {
+                    let initial_char = if let KeyCode::Char(c) = key.code {
+                        Some(c)
+                    } else {
+                        None
+                    };
                     return Command::message(ComposerMessage::OpenRecipientList(
                         RecipientGroupId::Bcc,
+                        initial_char,
                     ));
                 }
             }
@@ -1059,8 +1091,8 @@ impl Composer {
             ComposerMessage::SwapDisposition(id) => {
                 self.swap_attachment_disposition(user_ctx.to_owned(), id)
             }
-            ComposerMessage::OpenRecipientList(recipient_group_id) => {
-                TuiRecipientList::open(self.draft.clone(), recipient_group_id)
+            ComposerMessage::OpenRecipientList(recipient_group_id, initial_char) => {
+                TuiRecipientList::open(self.draft.clone(), recipient_group_id, initial_char)
             }
             ComposerMessage::ShowRecipientList(tui_recipient_list) => {
                 self.recipient_view = Some(tui_recipient_list);
