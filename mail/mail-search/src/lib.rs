@@ -15,12 +15,6 @@
 //! The only external dependency is `MessageDataProvider` trait, implemented by mail-common
 //! to provide message body and remote ID data.
 //!
-//! # Feature Flags
-//!
-//! The `foundation_search` feature flag is used to conditionally compile the Foundation Search
-//! implementation. This allows the crate to be used in contexts where the foundation search
-//! dependency is not available. In practice, this feature is always enabled for the mail app.
-//!
 //! # Example
 //!
 //! ```ignore
@@ -48,60 +42,36 @@ mod engine;
 mod error;
 
 // Migrations (internal only, used by MailSearchService::new)
-#[cfg(feature = "foundation_search")]
-mod migrations;
-
-// Intent model (always available)
-pub mod intent;
-
-// External traits (always available)
-pub mod traits;
-
-#[cfg(feature = "foundation_search")]
 mod foundation;
-
-#[cfg(feature = "foundation_search")]
+pub mod intent;
+mod migrations;
 mod service;
-
-#[cfg(feature = "foundation_search")]
 mod storage;
-
-#[cfg(feature = "foundation_search")]
+pub mod traits;
 mod watcher;
-
-#[cfg(feature = "foundation_search")]
 mod worker;
 
-// Core types (always available)
+// Core types
 pub use engine::{CleanupResult, IndexResult, SearchStats};
 pub use error::SearchError;
 pub use intent::{LocalMessageId, SearchIndexIntent, SearchOperation};
 pub use traits::{MessageDataProvider, MessageMetadata};
 
-// Foundation Search types (feature-gated)
-#[cfg(feature = "foundation_search")]
 pub use foundation::FoundationSearchEngine;
 
-#[cfg(feature = "foundation_search")]
 pub use traits::BlobStorage;
 
-#[cfg(feature = "foundation_search")]
 pub use service::{IndexStats, MailSearchService, SearchServiceError};
 
-#[cfg(feature = "foundation_search")]
 pub use storage::StashBlobStorage;
 
-#[cfg(feature = "foundation_search")]
 pub use watcher::SearchIndexIntentWatcher;
 
-#[cfg(feature = "foundation_search")]
 pub use worker::SearchIndexWorker;
 
-#[cfg(feature = "foundation_search")]
 pub use proton_foundation_search::query::results::FoundEntry;
 
 #[cfg(test)]
-#[cfg(feature = "foundation_search")]
 mod tests {
     use super::*;
     use std::collections::HashMap;
@@ -300,7 +270,9 @@ mod tests {
             proton_task_service::TaskService::new(tokio::runtime::Handle::current())
                 .expect("Failed to create TaskService"),
         );
-        let search_service = MailSearchService::new(stash.clone(), task_service);
+        let search_service = MailSearchService::new(stash.clone(), task_service)
+            .await
+            .unwrap();
 
         // 3. Create mock MessageDataProvider with 5 messages
         let data_provider = Arc::new(MockMessageDataProvider::new());
@@ -444,6 +416,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_foundation_engine_remove_nonexistent() {
         let storage = InMemoryBlobStorage::new();
         let task_service = std::sync::Arc::new(

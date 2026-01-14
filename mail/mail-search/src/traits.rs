@@ -7,10 +7,8 @@
 use async_trait::async_trait;
 use proton_mail_api::services::proton::common::MessageId;
 
-use crate::intent::LocalMessageId;
-
-#[cfg(feature = "foundation_search")]
 use crate::error::SearchError;
+use crate::intent::LocalMessageId;
 
 /// Provides message data for search indexing
 ///
@@ -119,7 +117,6 @@ impl MessageMetadata {
 /// the trait enables unit testing with mock storage if needed.
 ///
 /// Implementations must provide async load/save operations for index blobs.
-#[cfg(feature = "foundation_search")]
 #[async_trait]
 pub trait BlobStorage: Send + Sync {
     /// Load a blob by name, returning None if not found

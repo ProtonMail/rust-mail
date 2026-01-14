@@ -5,11 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 description = "Self-contained search engine for Proton Mail local search"
 
-[features]
-default = []
-# Enable Foundation Search engine implementation
-foundation_search = ["dep:proton-foundation-search"]
-
 [dependencies]
 # Core dependencies (always needed)
 anyhow = { workspace = true }
@@ -39,8 +34,8 @@ proton-mail-html-transformer = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 
-# Foundation Search (optional, behind feature flag)
-proton-foundation-search = { workspace = true, optional = true }
+# Foundation Search engine
+proton-foundation-search = { workspace = true }
 
 [lints]
 workspace = true
