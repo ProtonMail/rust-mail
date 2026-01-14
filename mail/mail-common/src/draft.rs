@@ -1702,7 +1702,7 @@ impl DraftActor {
         mut draft: draft_v1::Draft,
         event_sender: broadcast::Sender<DraftEvent>,
         options: DraftActorOptions,
-        cancellation_token: CancellationToken,
+        draft_cancellation_token: CancellationToken,
     ) {
         let publish_event = |event: DraftEvent| {
             // sending on broadcast only fails if there are no receivers
@@ -1710,6 +1710,14 @@ impl DraftActor {
         };
 
         let mut auto_saver = DraftAutoSaver::default();
+
+        let mut lock_cancellation_token = draft_cancellation_token.child_token();
+        let mut recipient_validation_token = draft_cancellation_token.child_token();
+
+        let reset_ctoken = |token: &mut CancellationToken| {
+            token.cancel();
+            *token = draft_cancellation_token.child_token();
+        };
 
         tracing::info!("Starting");
         let draft_id = draft.metadata_id;
@@ -1748,22 +1756,16 @@ impl DraftActor {
                     .await;
                     // We need to recalculate the locks when password is set or removed.
                     if options.address_validation_enabled {
-                        for group in [
-                            RecipientGroupId::To,
-                            RecipientGroupId::Cc,
-                            RecipientGroupId::Bcc,
-                        ] {
-                            let mime_type = draft.mime_type().into();
-                            let list = recipient_group_from_draft(&mut draft, group);
-                            DraftOnRecipientValidation::new_list(
+                        reset_ctoken(&mut lock_cancellation_token);
+                        for group in RecipientGroupId::all() {
+                            let mut list = new_validating_list(
+                                &mut draft,
                                 group,
                                 actor_sender.clone(),
-                                list,
-                                cancellation_token.clone(),
-                                draft_id,
-                                mime_type,
-                            )
-                            .recalculate_all_privacy_locks(&ctx);
+                                recipient_validation_token.clone(),
+                                lock_cancellation_token.clone(),
+                            );
+                            list.recalculate_all_privacy_locks(&ctx);
                         }
                     }
                     let _ = sender.send(r);
@@ -1779,22 +1781,16 @@ impl DraftActor {
                         .await;
                     // We need to recalculate the locks when password is set or removed.
                     if options.address_validation_enabled {
-                        for group in [
-                            RecipientGroupId::To,
-                            RecipientGroupId::Cc,
-                            RecipientGroupId::Bcc,
-                        ] {
-                            let mime_type = draft.mime_type().into();
-                            let list = recipient_group_from_draft(&mut draft, group);
-                            DraftOnRecipientValidation::new_list(
+                        reset_ctoken(&mut lock_cancellation_token);
+                        for group in RecipientGroupId::all() {
+                            let mut list = new_validating_list(
+                                &mut draft,
                                 group,
                                 actor_sender.clone(),
-                                list,
-                                cancellation_token.clone(),
-                                draft_id,
-                                mime_type,
-                            )
-                            .recalculate_all_privacy_locks(&ctx);
+                                recipient_validation_token.clone(),
+                                lock_cancellation_token.clone(),
+                            );
+                            list.recalculate_all_privacy_locks(&ctx);
                         }
                     }
                     let _ = sender.send(r);
@@ -1820,6 +1816,22 @@ impl DraftActor {
                         .await
                         .map(|_| draft.body().to_owned());
                     let r = auto_saver.map_save(r, &ctx, &mut draft, &options).await;
+                    if r.is_ok() {
+                        // We need to recalculate the locks when the asddress has changed
+                        if options.address_validation_enabled {
+                            reset_ctoken(&mut lock_cancellation_token);
+                            for group in RecipientGroupId::all() {
+                                let mut list = new_validating_list(
+                                    &mut draft,
+                                    group,
+                                    actor_sender.clone(),
+                                    recipient_validation_token.clone(),
+                                    lock_cancellation_token.clone(),
+                                );
+                                list.recalculate_all_privacy_locks(&ctx);
+                            }
+                        }
+                    }
                     let _ = sender.send(r);
                 }
 
@@ -1937,7 +1949,7 @@ impl DraftActor {
                     let r = draft.discard(ctx.action_queue(), ctx.origin()).await;
                     if r.is_ok() {
                         // cancel pending validation task
-                        cancellation_token.cancel();
+                        draft_cancellation_token.cancel();
                         publish_event(DraftEvent::Discarded);
                     }
                     let _ = sender.send(r);
@@ -1973,7 +1985,8 @@ impl DraftActor {
                         // sending currently always saves
                         auto_saver.reset_save_state();
                         // cancel pending validation task
-                        cancellation_token.cancel();
+                        draft_cancellation_token.cancel();
+                        lock_cancellation_token.cancel();
                         publish_event(DraftEvent::Sent);
                     }
                     let _ = sender.send(r);
@@ -2029,6 +2042,7 @@ impl DraftActor {
                 } => {
                     let email = recipient.email.clone();
                     let mime_type = draft.mime_type().into();
+                    let is_byoe = draft.is_byoe;
                     let r = {
                         let list = recipient_group_from_draft(&mut draft, group);
                         if options.address_validation_enabled {
@@ -2036,9 +2050,11 @@ impl DraftActor {
                                 group,
                                 actor_sender.clone(),
                                 list,
-                                cancellation_token.clone(),
+                                recipient_validation_token.clone(),
+                                lock_cancellation_token.clone(),
                                 draft_id,
                                 mime_type,
+                                is_byoe,
                             )
                             .add_single(&ctx, recipient)
                         } else {
@@ -2079,15 +2095,18 @@ impl DraftActor {
                         .map(|e| e.email.clone().into_clear_text_string())
                         .collect::<Vec<_>>();
                     let duplicates = {
+                        let is_byoe = draft.is_byoe;
                         let list = recipient_group_from_draft(&mut draft, group);
                         if options.address_validation_enabled {
                             DraftOnRecipientValidation::new_list(
                                 group,
                                 actor_sender.clone(),
                                 list,
-                                cancellation_token.clone(),
+                                recipient_validation_token.clone(),
+                                lock_cancellation_token.clone(),
                                 draft_id,
                                 mime_type,
+                                is_byoe,
                             )
                             .add_group(
                                 &ctx,
@@ -2130,18 +2149,17 @@ impl DraftActor {
                     draft.bcc_list = bcc;
 
                     if options.address_validation_enabled {
-                        let mime_type = draft.mime_type().into();
+                        reset_ctoken(&mut recipient_validation_token);
+                        reset_ctoken(&mut lock_cancellation_token);
                         for id in RecipientGroupId::all() {
-                            let list = recipient_group_from_draft(&mut draft, id);
-                            DraftOnRecipientValidation::new_list(
+                            let mut list = new_validating_list(
+                                &mut draft,
                                 id,
                                 actor_sender.clone(),
-                                list,
-                                cancellation_token.clone(),
-                                draft_id,
-                                mime_type,
-                            )
-                            .check_all(&ctx);
+                                recipient_validation_token.clone(),
+                                lock_cancellation_token.clone(),
+                            );
+                            list.check_all(&ctx);
                         }
                     }
                     let r = auto_saver.save(&ctx, &mut draft, &options).await;
@@ -2264,6 +2282,7 @@ impl DraftActor {
                 } => {
                     {
                         let mime_type = draft.mime_type().into();
+                        let is_byoe = draft.is_byoe;
                         let list = recipient_group_from_draft(&mut draft, group);
                         std::mem::swap(list, &mut recipients);
                         if options.address_validation_enabled {
@@ -2271,9 +2290,11 @@ impl DraftActor {
                                 group,
                                 actor_sender.clone(),
                                 list,
-                                cancellation_token.clone(),
+                                recipient_validation_token.clone(),
+                                lock_cancellation_token.clone(),
                                 draft_id,
                                 mime_type,
+                                is_byoe,
                             )
                             .check_all(&ctx);
                         }
@@ -2313,18 +2334,17 @@ impl DraftActor {
 
                 DraftActorMessage::RevalidateAllRecipients => {
                     if options.address_validation_enabled {
-                        let mime_type = draft.mime_type().into();
+                        reset_ctoken(&mut recipient_validation_token);
+                        reset_ctoken(&mut lock_cancellation_token);
                         for id in RecipientGroupId::all() {
-                            let list = recipient_group_from_draft(&mut draft, id);
-                            DraftOnRecipientValidation::new_list(
+                            let mut list = new_validating_list(
+                                &mut draft,
                                 id,
                                 actor_sender.clone(),
-                                list,
-                                cancellation_token.clone(),
-                                draft_id,
-                                mime_type,
-                            )
-                            .check_all(&ctx);
+                                recipient_validation_token.clone(),
+                                lock_cancellation_token.clone(),
+                            );
+                            list.check_all(&ctx);
                         }
                     }
                 }
@@ -2403,6 +2423,29 @@ fn recipient_group_from_draft(
     }
 }
 
+fn new_validating_list<'d>(
+    draft: &'d mut draft_v1::Draft,
+    group: RecipientGroupId,
+    actor_sender: mpsc::Sender<DraftActorMessage>,
+    token: CancellationToken,
+    lock_token: CancellationToken,
+) -> DraftValidatingRecipientList<'d> {
+    let mime_type = draft.mime_type().into();
+    let draft_id = draft.metadata_id;
+    let is_byoe = draft.is_byoe;
+    let list = recipient_group_from_draft(draft, group);
+    DraftOnRecipientValidation::new_list(
+        group,
+        actor_sender,
+        list,
+        token,
+        lock_token,
+        draft_id,
+        mime_type,
+        is_byoe,
+    )
+}
+
 pub type Draft = DraftActor;
 
 #[derive(Clone)]
@@ -2411,21 +2454,26 @@ struct DraftOnRecipientValidation {
     sender: mpsc::Sender<DraftActorMessage>,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl DraftOnRecipientValidation {
     fn new_list(
         group: RecipientGroupId,
         sender: mpsc::Sender<DraftActorMessage>,
         list: &mut RecipientList,
         cancellation_token: CancellationToken,
+        lock_cancellation_token: CancellationToken,
         draft_id: MetadataId,
         mime_type: EmailMimeType,
+        is_byoe: bool,
     ) -> DraftValidatingRecipientList<'_> {
         ValidatingRecipientList::new(
             cancellation_token,
+            lock_cancellation_token,
             list,
             DraftOnRecipientValidation { group, sender },
             draft_id,
             mime_type,
+            is_byoe,
         )
     }
 }

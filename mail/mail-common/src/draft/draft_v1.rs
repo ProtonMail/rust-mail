@@ -89,6 +89,9 @@ pub struct Draft {
     sender_alias: Option<String>,
 
     last_draft_save_action_id: Option<ActionId>,
+
+    /// Wether this is a bring your own email address
+    pub is_byoe: bool,
 }
 
 impl Draft {
@@ -264,6 +267,12 @@ impl Draft {
         let sender_alias = get_alias_component(message.sender.address.as_clear_text_str())
             .map(|_| message.sender.address.as_clear_text_str().to_owned());
 
+        let address = Address::find_by_remote_id(message.remote_address_id.clone(), tether)
+            .await?
+            .ok_or(OpenError::AddressNotFound(
+                message.remote_address_id.clone(),
+            ))?;
+
         let mut draft = Self {
             metadata_id: metadata.id.unwrap(),
             sender: message.sender.address.into_clear_text_string(),
@@ -278,6 +287,7 @@ impl Draft {
             address_validation_result: None,
             sender_alias,
             last_draft_save_action_id: metadata.save_action_id,
+            is_byoe: address.is_byoe(),
         };
 
         draft.sanitize_body();
@@ -285,10 +295,6 @@ impl Draft {
         // When syncing the draft from the server  we need to re-check address validity in
         // case something changes.
         if sync_status == DraftSyncStatus::Synced {
-            let address = Address::find_by_remote_id(draft.address_id.clone(), tether)
-                .await?
-                .ok_or(OpenError::AddressNotFound(draft.address_id.clone()))?;
-
             let user = context.user().await?;
 
             if let Some(result) = validate_sender_address(&address, &user) {
@@ -421,6 +427,7 @@ impl Draft {
             address_validation_result: None,
             sender_alias: None,
             last_draft_save_action_id: None,
+            is_byoe: address.is_byoe(),
         }
     }
 
@@ -684,6 +691,7 @@ impl Draft {
             address_validation_result,
             sender_alias,
             last_draft_save_action_id: None,
+            is_byoe: address.is_byoe(),
         };
 
         patch_draft_with_reply_mode(
@@ -1286,6 +1294,7 @@ impl Draft {
                         .replace(&output.old_signature, &output.new_signature);
                     self.body = new_body;
                 }
+                self.is_byoe = output.is_byoe
             }
         }
     }

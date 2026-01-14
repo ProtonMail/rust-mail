@@ -187,6 +187,11 @@ impl Address {
         }
         Ok(())
     }
+
+    #[must_use]
+    pub fn is_byoe(&self) -> bool {
+        self.flags.is_some_and(|v| v.is_byoe())
+    }
 }
 
 impl From<ApiAddress> for Address {
