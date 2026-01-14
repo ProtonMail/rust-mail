@@ -81,9 +81,19 @@ impl MessageOrConversationDependencyFetcher {
         &self,
         api: &Session,
         tx: &mut impl RunTransaction,
-    ) -> Result<(), MailContextError> {
+    ) -> Result<HashSet<LabelId>, MailContextError> {
+        let mut unresolved_labels = HashSet::new();
         if !self.label_ids.is_empty() {
             let missing_labels = self.fetch_missing_labels(api, tx).await?;
+            unresolved_labels = missing_labels
+                .iter()
+                .filter_map(|l| {
+                    (!self
+                        .label_ids
+                        .contains(l.remote_id.as_ref().expect("Should be set")))
+                    .then_some(l.remote_id.clone().expect("Should be set"))
+                })
+                .collect::<HashSet<_>>();
 
             tx.run_tx(async |tx| {
                 Label::store_labels_async(tx, missing_labels.clone())
@@ -130,7 +140,11 @@ impl MessageOrConversationDependencyFetcher {
             .map_err(MailContextError::Other)?;
         }
 
-        Ok(())
+        if !unresolved_labels.is_empty() {
+            tracing::warn!("Unresolved labels in dependencies {unresolved_labels:?}");
+        }
+
+        Ok(unresolved_labels)
     }
 
     pub async fn check_label_ids(

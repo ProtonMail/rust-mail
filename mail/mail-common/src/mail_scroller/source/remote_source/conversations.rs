@@ -536,7 +536,10 @@ impl RemoteConversationScrollerSource {
                 .check_api_message_metadata(message, tether)
                 .await?;
         }
-        dependency_fetcher.fetch_and_store(api, tether).await?;
+        let unresolved_label_ids = dependency_fetcher.fetch_and_store(api, tether).await?;
+        for conversation in conversations.iter_mut() {
+            conversation.prune_unresolved_labels(&unresolved_label_ids);
+        }
 
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
@@ -572,6 +575,7 @@ impl RemoteConversationScrollerSource {
                     message_metadata,
                     &mut rebase_change_set,
                     queue.is_rebase_enabled(),
+                    &unresolved_label_ids,
                     tx,
                 )
                 .await?;

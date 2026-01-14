@@ -83,6 +83,7 @@ use stash::macros::{DbRecord, Model};
 use stash::orm::{Model, ModelHooks};
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
+use std::collections::HashSet;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
@@ -1927,6 +1928,7 @@ impl Message {
         api_messages: Vec<ApiMessageMetadata>,
         rebase_change_set: &mut RebaseChangeSet,
         has_rebase_feature: bool,
+        unresoled_label_ids: &HashSet<LabelId>,
         tx: &Bond<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
         let mut messages = Vec::with_capacity(api_messages.len());
@@ -1937,6 +1939,7 @@ impl Message {
                 Message::find_by_remote_id(api_message.id.clone(), tx).await?
             } else {
                 let mut message = Message::from_api_metadata(api_message, tx).await?;
+                message.prune_unresolved_labels(unresoled_label_ids);
                 message
                     .create_or_get_local(rebase_change_set, has_rebase_feature, tx)
                     .await?;
@@ -2022,6 +2025,7 @@ impl Message {
         action: Action,
         message: Option<&MessageMetadata>,
         changeset: &mut RebaseChangeSet,
+        unresolved_label_ids: &HashSet<LabelId>,
     ) -> Result<Option<LocalMessageId>, AppError> {
         action
             .log_entry(id, async |remote_id| {
@@ -2055,6 +2059,7 @@ impl Message {
                     return Ok(None);
                 }
                 let mut message = Message::from_api_metadata(message_metadata.clone(), tx).await?;
+                message.prune_unresolved_labels(unresolved_label_ids);
                 Message::save(&mut message, tx).await?;
 
                 tracing::info!("Created with {:?}", message.id());
@@ -2075,11 +2080,20 @@ impl Message {
                     return Ok(None);
                 }
                 let mut message = Message::from_api_metadata(message_metadata.clone(), tx).await?;
+                message.prune_unresolved_labels(unresolved_label_ids);
                 Message::save(&mut message, tx).await?;
                 changeset.add(message.id());
                 Ok(None)
             }
         }
+    }
+
+    pub fn prune_unresolved_labels(&mut self, label_ids: &HashSet<LabelId>) {
+        if label_ids.is_empty() {
+            return;
+        }
+        self.label_ids
+            .retain(|label_id| !label_ids.contains(label_id));
     }
 }
 
