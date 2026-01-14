@@ -4,13 +4,9 @@
 //!
 //! ## Usage
 //!
-//! Applications that want to use mail-search functionality should call
-//! `run()` after initializing their databse context:
-//!
-//! ```rust,ignore
-//! // After creating MailContext and getting a user stash
-//! proton_mail_search::migrations::run(&user_stash).await?;
-//! ```
+//! Migrations are automatically run when `MailSearchService::new()` is called.
+//! Applications do not need to call these migrations directly - they are handled
+//! internally by the mail-search crate during service initialization.
 //!
 //! ## Migration Versioning
 //!
@@ -24,9 +20,10 @@ use stash::stash::Stash;
 
 /// Run search-related database migrations
 ///
-/// Applications using mail-search should call this function after
-/// initializing the user database.
-pub async fn run(stash: &Stash) -> Result<usize, MigratorError> {
+/// This function is called internally by `MailSearchService::new()`.
+/// Applications should not call this directly - it's automatically handled
+/// during service initialization.
+pub(crate) async fn run(stash: &Stash) -> Result<usize, MigratorError> {
     const TABLE: &str = "proton_mail_search_version";
     const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/migrations");
 

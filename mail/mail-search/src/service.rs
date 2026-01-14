@@ -37,6 +37,10 @@ pub enum SearchServiceError {
     /// Error clearing the index
     #[error("Clear failed: {0}")]
     Clear(SearchError),
+
+    /// Error running database migrations
+    #[error("Migration failed: {0}")]
+    Migration(String),
 }
 
 impl SearchServiceError {
@@ -67,19 +71,32 @@ impl MailSearchService {
     /// - Text index for trigram-based full-text search
     /// - Built-in processor for tokenization
     /// - Persistent blob storage via Stash
+    /// - Runs database migrations for search tables
     ///
     /// The `task_service` is used to spawn background tasks that can be paused
     /// when the app goes into the background.
-    pub fn new(stash: Stash, task_service: Arc<TaskService>) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if database migrations fail.
+    pub async fn new(
+        stash: Stash,
+        task_service: Arc<TaskService>,
+    ) -> Result<Self, SearchServiceError> {
         info!("Initializing Foundation Search engine with Stash");
+
+        // Run migrtions first to ensure database schema is up to date
+        crate::migrations::run(&stash)
+            .await
+            .map_err(|e| SearchServiceError::Migration(e.to_string()))?;
 
         let storage = StashBlobStorage::new(stash.clone());
         let engine = FoundationSearchEngine::new(storage, task_service);
 
-        Self {
+        Ok(Self {
             engine: Arc::new(RwLock::new(engine)),
             stash,
-        }
+        })
     }
 
     /// Get a reference to the underlying Stash connection pool

@@ -47,8 +47,9 @@
 mod engine;
 mod error;
 
-// Migrations (always available)
-pub mod migrations;
+// Migrations (internal only, used by MailSearchService::new)
+#[cfg(feature = "foundation_search")]
+mod migrations;
 
 // Intent model (always available)
 pub mod intent;
