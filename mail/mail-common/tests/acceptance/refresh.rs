@@ -7,6 +7,7 @@ use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_core_common::test_utils::account::test_api_address;
 use proton_core_common::test_utils::addresses::MY_ADDRESS_ID;
+use proton_event_loop::EventLoopError;
 use proton_mail_api::services::proton::prelude::ViewMode;
 use proton_mail_common::actions::refresh::ActionRefresh;
 use proton_mail_common::models::{Conversation, DraftMetadata, Message};
@@ -159,7 +160,10 @@ async fn test_on_refresh_impl_contacts_network_error() {
 
     assert!(matches!(
         err,
-        ActionError::Action(ActionEventLoopError::Subscriber(_))
+        ActionError::Action(ActionEventLoopError::EventLoop(EventLoopError::Subscriber(
+            _,
+            _
+        )))
     ));
 }
 
