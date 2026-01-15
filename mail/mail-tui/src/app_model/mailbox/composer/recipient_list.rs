@@ -9,10 +9,10 @@ use crossterm::event::{Event, KeyCode};
 use proton_mail_common::draft::recipients::{Recipient, RecipientEntry, RecipientList};
 use proton_mail_common::draft::{Draft, RecipientGroupId, recipients};
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
-use ratatui::style::{Color, Style};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, List, ListItem};
+use ratatui::widgets::{Block, Clear, List, ListItem};
 
 enum Selection {
     Text,
@@ -29,19 +29,37 @@ pub struct TuiRecipientList {
 }
 
 impl TuiRecipientList {
-    fn new(draft: Draft, recipients: Vec<Recipient>, group_id: RecipientGroupId) -> Self {
+    pub fn group_id(&self) -> RecipientGroupId {
+        self.group_id
+    }
+
+    fn new(
+        draft: Draft,
+        recipients: Vec<Recipient>,
+        group_id: RecipientGroupId,
+        initial_char: Option<char>,
+    ) -> Self {
         let scrollable_list_state = ScrollableListState::new((!recipients.is_empty()).then_some(0));
+        let text_state = if let Some(c) = initial_char {
+            TextInputState::with_value(c.to_string()).selected(true)
+        } else {
+            TextInputState::new().selected(true)
+        };
         Self {
             draft,
             recipients: RecipientList::with(recipients),
             group_id,
-            text_state: TextInputState::new().selected(true),
+            text_state,
             scrollable_list_state,
             selection: Selection::Text,
         }
     }
 
-    pub fn open(draft: Draft, group_id: RecipientGroupId) -> Command<Messages> {
+    pub fn open(
+        draft: Draft,
+        group_id: RecipientGroupId,
+        initial_char: Option<char>,
+    ) -> Command<Messages> {
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Loading Recipient List".to_owned(),
@@ -49,7 +67,7 @@ impl TuiRecipientList {
             Command::task(async move {
                 let cmd = match draft.recipients(group_id).await {
                     Ok(recipients) => Command::message(ComposerMessage::ShowRecipientList(
-                        Self::new(draft, recipients, group_id),
+                        Self::new(draft, recipients, group_id, initial_char),
                     )),
                     Err(e) => Command::message(Messages::DisplayError(
                         None,
@@ -169,16 +187,28 @@ impl TuiRecipientList {
     }
 
     pub fn view(&mut self, frame: &mut Frame, area: Rect) {
-        let area = area.inner(Margin::new(1, 1));
+        // Clear to hide content behind the overlay
+        frame.render_widget(Clear, area);
 
         let [input_area, list_area] =
-            Layout::vertical([Constraint::Length(3), Constraint::Fill(3)]).areas(area);
+            Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).areas(area);
 
-        frame.render_stateful_widget(TextInput::new("email:"), input_area, &mut self.text_state);
+        let input_label = match self.group_id {
+            RecipientGroupId::To => "To: ",
+            RecipientGroupId::Cc => "CC: ",
+            RecipientGroupId::Bcc => "BCC: ",
+        };
+        frame.render_stateful_widget(
+            TextInput::new(input_label),
+            input_area,
+            &mut self.text_state,
+        );
         if let Selection::Text = self.selection {
             let (x, y) = self.text_state.frame_cursor();
             frame.set_cursor_position(Position { x, y });
         }
+
+        let list_area = Rect::new(list_area.x, list_area.y, list_area.width, list_area.height);
 
         let list = ScrollableList::new(
             List::new(
@@ -210,11 +240,21 @@ impl TuiRecipientList {
                             let (lock_str, lock_style) =
                                 lock_icon_to_text(single.privacy_lock.as_ui_lock());
 
-                            let text = Text::from(Line::from(vec![
+                            let tooltip = single
+                                .privacy_lock
+                                .as_ui_lock()
+                                .map(|lock| lock.tooltip.to_string());
+
+                            let mut spans = vec![
                                 Span::from(lock_str).style(lock_style),
                                 Span::from(" "),
                                 Span::from(single.email.as_clear_text_str()).style(span_style),
-                            ]));
+                            ];
+                            if let Some(tooltip) = tooltip {
+                                spans.push(Span::from(" "));
+                                spans.push(Span::from(tooltip).style(Style::new().dim()));
+                            }
+                            let text = Text::from(Line::from(spans));
 
                             ListItem::new(text)
                         }

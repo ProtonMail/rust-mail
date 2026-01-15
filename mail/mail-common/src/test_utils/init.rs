@@ -184,6 +184,23 @@ impl MailTestContext {
     ///
     #[allow(clippy::too_many_lines)]
     pub async fn setup_user_repeated(&self, mut params: Params, number_of_calls: u64) {
+        #[cfg(feature = "events-v6")]
+        {
+            self.core_test_context()
+                .mock_last_event_id_core_v6(
+                    params.last_event_id.clone().unwrap_or(EventId::from("0")),
+                )
+                .await;
+            self.core_test_context()
+                .mock_last_event_id_contacts_v6(
+                    params.last_event_id.clone().unwrap_or(EventId::from("0")),
+                )
+                .await;
+            self.mock_last_event_id_mail_v6(params.last_event_id.unwrap_or(EventId::from("0")))
+                .await;
+        }
+
+        #[cfg(not(feature = "events-v6"))]
         self.core_test_context()
             .mock_last_event_id(params.last_event_id.unwrap_or(EventId::from("0")))
             .await;

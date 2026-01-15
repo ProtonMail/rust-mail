@@ -66,7 +66,7 @@ use stash::params;
 use stash::rusqlite::{OptionalExtension, params_from_iter};
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{ConnectionExt, IterMapToSql, MapToSql as _, placeholders, placeholders_n};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::ops::{AddAssign, Deref, DerefMut};
 use std::sync::Arc;
@@ -2188,6 +2188,7 @@ impl Conversation {
         action: Action,
         conversation: Option<&mut Conversation>,
         changeset: &mut RebaseChangeSet,
+        unresolved_label_ids: &HashSet<LabelId>,
     ) -> Result<Option<LocalConversationId>, AppError> {
         action
             .log_entry(id, async |remote_id| {
@@ -2214,6 +2215,7 @@ impl Conversation {
                     return Ok(None);
                 };
 
+                cnv.prune_unresolved_labels(unresolved_label_ids);
                 cnv.save(tx).await?;
                 tracing::info!("Created with {:?}", cnv.id());
                 changeset.add(cnv.id());
@@ -2226,11 +2228,22 @@ impl Conversation {
                     return Ok(None);
                 };
 
+                cnv.prune_unresolved_labels(unresolved_label_ids);
                 cnv.save(tx).await?;
                 changeset.add(cnv.id());
                 Ok(None)
             }
         }
+    }
+
+    pub fn prune_unresolved_labels(&mut self, label_ids: &HashSet<LabelId>) {
+        self.labels.retain(|label| {
+            let Some(remote_id) = &label.remote_label_id else {
+                return true;
+            };
+
+            !label_ids.contains(remote_id)
+        });
     }
 }
 

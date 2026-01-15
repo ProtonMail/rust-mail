@@ -177,7 +177,7 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
             // Check for missing dependencies. Sometimes when lot of messages/conversations get moved
             // to newly created label the items can have the new label before the label create event.
 
-            calculate_missing_dependencies(&event, &tether)
+            let unresolved_label_ids = calculate_missing_dependencies(&event, &tether)
                 .await
                 .context("Failed to calculate dependencies")?
                 .fetch_and_store(ctx.session(), &mut tether)
@@ -202,6 +202,7 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
                             conversations,
                             &mut rebase_change_set,
                             &mut data,
+                            &unresolved_label_ids,
                         )
                         .await
                         .context("Error handling conversation events")?;
@@ -209,9 +210,15 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
 
                     if let Some(ref mut messages) = event.messages {
                         debug!("Handling message events");
-                        handle_message_events(tx, messages, &mut rebase_change_set, &mut data)
-                            .await
-                            .context("Error handling message events")?;
+                        handle_message_events(
+                            tx,
+                            messages,
+                            &mut rebase_change_set,
+                            &mut data,
+                            &unresolved_label_ids,
+                        )
+                        .await
+                        .context("Error handling message events")?;
                     }
 
                     if let Some(conversation_counts) = &event.conversation_counts {
