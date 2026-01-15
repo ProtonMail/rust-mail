@@ -1,4 +1,5 @@
 #![allow(clippy::large_enum_variant)]
+#![allow(clippy::result_large_err)]
 
 use crate::prelude::*;
 use derive_more::Display;

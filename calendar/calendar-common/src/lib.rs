@@ -1,4 +1,5 @@
 #![allow(clippy::wildcard_imports)]
+#![allow(clippy::result_large_err)]
 
 mod ext;
 mod rsvp;
