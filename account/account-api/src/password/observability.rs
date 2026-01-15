@@ -127,10 +127,11 @@ mod tests {
         .unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
-        assert_eq!(
-            serialized,
+        let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        let expected: serde_json::Value = serde_json::from_str(
             r#"{"Name":"core_change_password_update_password_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"fido":"disabled","mbp":"enabled","status":"success","totp":"disabled"},"Value":1}}"#
-        );
+        ).unwrap();
+        assert_eq!(parsed, expected);
         assert_eq!(
             PostMetricsRequestElement {
                 name: String::from("core_change_password_update_password_total"),
@@ -167,10 +168,11 @@ mod tests {
         .unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
-        assert_eq!(
-            serialized,
+        let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        let expected: serde_json::Value = serde_json::from_str(
             r#"{"Name":"core_change_password_update_password_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"fido":"disabled","mbp":"disabled","status":"network_error","totp":"enabled"},"Value":1}}"#
-        );
+        ).unwrap();
+        assert_eq!(parsed, expected);
         assert_eq!(
             PostMetricsRequestElement {
                 name: String::from("core_change_password_update_password_total"),
