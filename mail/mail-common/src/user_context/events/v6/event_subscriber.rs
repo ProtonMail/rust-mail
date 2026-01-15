@@ -54,7 +54,7 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
             let mut tether = ctx.user_stash().connection().await?;
 
             //TODO: missing dependencies should check the cache?
-            cache
+            let unresolved_label_ids = cache
                 .calculate_missing_dependencies(&tether)
                 .await?
                 .fetch_and_store(ctx.session(), &mut tether)
@@ -101,6 +101,7 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
                                 event.action.into(),
                                 cache.get_conversation_mut(&event.id),
                                 &mut changeset,
+                                &unresolved_label_ids,
                             )
                             .await?
                             {
@@ -118,6 +119,7 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
                                 event.action.into(),
                                 cache.get_message(&event.id),
                                 &mut changeset,
+                                &unresolved_label_ids,
                             )
                             .await?
                             {

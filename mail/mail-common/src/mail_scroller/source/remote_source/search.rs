@@ -266,7 +266,7 @@ impl SearchScrollerSource {
                 .check_api_message_metadata(message, tether)
                 .await?;
         }
-        dependency_fetcher.fetch_and_store(api, tether).await?;
+        let unresolved_label_ids = dependency_fetcher.fetch_and_store(api, tether).await?;
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
 
@@ -282,6 +282,7 @@ impl SearchScrollerSource {
                     api_messages,
                     &mut rebase_change_set,
                     queue.is_rebase_enabled(),
+                    &unresolved_label_ids,
                     tx,
                 )
                 .await?;
