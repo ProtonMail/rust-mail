@@ -7,6 +7,7 @@ use super::{
         ADDRESS_KEY_LIFETIME, CacheOption, CachedAddressKey, CachedUserKey, USER_KEY_LIFETIME,
     },
 };
+use crate::datatypes::UnixTimestamp;
 use crate::models::Address;
 use crate::models::{ModelIdExtension, User};
 use crate::{CoreContextError, CoreContextResult, UserContext};
@@ -25,6 +26,7 @@ use proton_crypto_account::keys::{
 };
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use serde::{Deserialize, Serialize};
+use stash::macros::DbRecord;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
 use stash::{params, sql_using_serde};
@@ -141,67 +143,77 @@ impl CryptoKeyManager {
     where
         P: PGPProviderSync,
     {
-        // TODO: A limited TTL cache would make sense here for active keys.
-        let api_keys = match user_context
-            .session()
-            .get_keys_all(GetKeysAllOptions {
-                email: email.to_owned(),
-                internal_only: Some(internal_only),
-            })
-            .await
-        {
-            Ok(api_keys) => {
-                Self::store_public_key_request(user_context, &email, internal_only, &api_keys)
-                    .await;
-                api_keys
-            }
-            Err(e)
-                if matches!(
-                    fetch_policy,
-                    PublicAddressKeyFetchPolicy::AllowCachedFallback
-                ) && e.is_network_failure() =>
+        let tether = user_context.user_stash.connection().await?;
+
+        let cached_value = PublicAddressKeysResponseCache::get(
+            email.as_clear_text_str().into(),
+            internal_only,
+            &tether,
+        )
+        .await?;
+
+        let api_keys = match (cached_value, fetch_policy) {
+            (Some(cached_response), PublicAddressKeyFetchPolicy::AllowCachedFallback)
+                if cached_response.is_valid() =>
             {
-                match async {
-                    let tether = user_context.user_stash.connection().await?;
-                    PublicAddressKeysResponseCache::get(
-                        email.as_clear_text_str().into(),
-                        internal_only,
-                        &tether,
-                    )
+                cached_response.into_response()
+            }
+            (v, policy) =>
+            // Invalid or does not exist, we need to fetch
+            {
+                match user_context
+                    .session()
+                    .get_keys_all(GetKeysAllOptions {
+                        email: email.to_owned(),
+                        internal_only: Some(internal_only),
+                    })
                     .await
-                }
-                .await
                 {
-                    Ok(Some(api_keys)) => api_keys,
-                    Ok(None) => {
-                        tracing::warn!("No cached keys available");
-                        return Err(e.into());
+                    Ok(api_keys) => {
+                        Self::store_public_key_request(
+                            user_context,
+                            &email,
+                            internal_only,
+                            &api_keys,
+                        )
+                        .await;
+                        api_keys
                     }
-                    Err(err) => {
-                        tracing::error!("Failed to load cached api keys: {err}");
-                        return Err(e.into());
+                    Err(e)
+                        if matches!(policy, PublicAddressKeyFetchPolicy::AllowCachedFallback)
+                            && v.is_some()
+                            && e.is_network_failure() =>
+                    {
+                        tracing::debug!("Using cached value due to network failure");
+                        v.expect("validated as some").into_response()
                     }
+                    // We need treat these specific errors when doing internal only queries as
+                    // if they have no keys.
+                    Err(ApiServiceError::UnprocessableEntity(_, Some(error)))
+                        if internal_only
+                            && error.code == CoreBundle::KeyGetAddressMissing as u32
+                            || error.code == CoreBundle::KeyGetDomainExternal as u32 =>
+                    {
+                        let response = APIPublicAddressKeys {
+                            address_keys: APIPublicAddressKeyGroup::default(),
+                            catch_all_keys: None,
+                            unverified_keys: None,
+                            warnings: vec![],
+                            proton_mx: false,
+                            is_proton: false,
+                        };
+                        Self::store_public_key_request(
+                            user_context,
+                            &email,
+                            internal_only,
+                            &response,
+                        )
+                        .await;
+                        response
+                    }
+                    Err(e) => return Err(e.into()),
                 }
             }
-            // We need treat these specific errors when doing internal only queries as
-            // if they have no keys.
-            Err(ApiServiceError::UnprocessableEntity(_, Some(error)))
-                if internal_only && error.code == CoreBundle::KeyGetAddressMissing as u32
-                    || error.code == CoreBundle::KeyGetDomainExternal as u32 =>
-            {
-                let response = APIPublicAddressKeys {
-                    address_keys: APIPublicAddressKeyGroup::default(),
-                    catch_all_keys: None,
-                    unverified_keys: None,
-                    warnings: vec![],
-                    proton_mx: false,
-                    is_proton: false,
-                };
-                Self::store_public_key_request(user_context, &email, internal_only, &response)
-                    .await;
-                response
-            }
-            Err(e) => return Err(e.into()),
         };
 
         api_keys.import(pgp).map_err(|e| {
@@ -397,7 +409,7 @@ impl CryptoKeyManager {
 
     /// Helper function to load and unlock user keys from the DB.
     ///
-    /// This function acquires a write lock on `self.user_keys` to update the cache.
+    /// This function acquires a write  lock on `self.user_keys` to update the cache.
     async fn load_user_keys_db<P>(
         &self,
         pgp: &P,
@@ -442,6 +454,29 @@ sql_using_serde!(PublicKeyResponseCacheValue);
 
 pub struct PublicAddressKeysResponseCache;
 
+#[derive(Debug, DbRecord, PartialEq, Clone)]
+pub struct PublickeyResponseCacheEntry {
+    #[DbField]
+    response: PublicKeyResponseCacheValue,
+    #[DbField]
+    timestamp: UnixTimestamp,
+}
+
+const PUBLIC_RESPONSE_KEY_RESPONSE_TTL_SEC: u64 = 60 * 60; //1h
+impl PublickeyResponseCacheEntry {
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.timestamp
+            .saturating_add(PUBLIC_RESPONSE_KEY_RESPONSE_TTL_SEC)
+            >= UnixTimestamp::now()
+    }
+
+    #[must_use]
+    pub fn into_response(self) -> APIPublicAddressKeys {
+        self.response.0
+    }
+}
+
 impl PublicAddressKeysResponseCache {
     pub async fn store(
         email: String,
@@ -451,12 +486,13 @@ impl PublicAddressKeysResponseCache {
     ) -> Result<(), StashError> {
         tx.execute(
             indoc! {"
-            INSERT INTO public_address_key_response_cache (email, internal_only, response)
-            VALUES (?,?,?)
+            INSERT INTO public_address_key_response_cache (email, internal_only, response, timestamp)
+            VALUES (?,?,?, ?)
             ON CONFLICT (email, internal_only) DO UPDATE SET
-                response=excluded.response
+                response=excluded.response,
+                timestamp=excluded.timestamp
         "},
-            params![email, internal_only, PublicKeyResponseCacheValue(response)],
+            params![email, internal_only, PublicKeyResponseCacheValue(response), UnixTimestamp::now()],
         )
         .await?;
         Ok(())
@@ -466,8 +502,8 @@ impl PublicAddressKeysResponseCache {
         email: String,
         internal_only: bool,
         tether: &Tether,
-    ) -> Result<Option<APIPublicAddressKeys>, StashError> {
-        tether.query_value_opt::<PublicKeyResponseCacheValue>("SELECT response FROM public_address_key_response_cache WHERE email=? AND internal_only=?",
-       params![email, internal_only]).await.map(|v| v.map(|v| v.0))
+    ) -> Result<Option<PublickeyResponseCacheEntry>, StashError> {
+        Ok(tether.query::<_,PublickeyResponseCacheEntry>("SELECT response, timestamp FROM public_address_key_response_cache WHERE email=? AND internal_only=?",
+       params![email, internal_only]).await?.into_iter().next())
     }
 }

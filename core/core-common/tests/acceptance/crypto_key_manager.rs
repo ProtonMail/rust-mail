@@ -76,7 +76,7 @@ async fn fetch_public_keys_stores_in_cache() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(cached, response);
+    assert_eq!(cached.into_response(), response);
 }
 
 #[tokio::test]
