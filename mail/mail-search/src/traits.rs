@@ -131,7 +131,7 @@ pub trait BlobStorage: Send + Sync {
     /// Clear all blobs from storage
     ///
     /// Removes all stored blobs, effectively clearing the entire index.
-    /// Used by the clear() method to reset the search index.
+    /// Used by the `clear()` method to reset the search index.
     async fn clear_all(&self) -> Result<(), SearchError>;
 
     /// Save multiple blobs atomically in a single transaction

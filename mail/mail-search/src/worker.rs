@@ -60,7 +60,7 @@ pub struct SearchIndexWorker<P: MessageDataProvider> {
     stash: Stash,
     search_service: MailSearchService,
     data_provider: Arc<P>,
-    /// Watcher handle for receiving notifications when search_index_intents table changes
+    /// Watcher handle for receiving notifications when `search_index_intents` table changes
     /// The watcher automatically detects changes after transactions commit, eliminating
     /// race conditions and supporting multi-account scenarios.
     watcher_handle: WatcherHandle,
@@ -103,19 +103,16 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
     ///
     /// Returns `true` if notification received, `false` if watcher closed (worker should exit)
     async fn wait_for_watcher_notification(&self, context: &str) -> bool {
-        match self.watcher_handle.receiver.recv_async().await {
-            Ok(()) => {
-                debug!(
-                    "Worker woken up by table watcher notification ({})",
-                    context
-                );
-                true
-            }
-            Err(_) => {
-                // Watcher closed - database watcher has been closed, exit worker
-                error!("Database watcher closed ({}), exiting worker", context);
-                false
-            }
+        if let Ok(()) = self.watcher_handle.receiver.recv_async().await {
+            debug!(
+                "Worker woken up by table watcher notification ({})",
+                context
+            );
+            true
+        } else {
+            // Watcher closed - database watcher has been closed, exit worker
+            error!("Database watcher closed ({}), exiting worker", context);
+            false
         }
     }
 
@@ -387,6 +384,7 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
     }
 
     /// Process a batch of index intents
+    #[allow(clippy::too_many_lines)]
     async fn process_index_batch(&self, intents: Vec<SearchIndexIntent>) -> Result<(), StashError> {
         let batch_start = Instant::now();
         info!(
@@ -478,10 +476,11 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
             .await;
 
         let index_elapsed = index_start.elapsed().as_secs_f64();
+        #[allow(clippy::cast_precision_loss)]
+        let rate = messages_to_index.len() as f64 / index_elapsed;
         info!(
             "   Indexing phase complete in {:.2}s ({:.1} messages/s)",
-            index_elapsed,
-            messages_to_index.len() as f64 / index_elapsed
+            index_elapsed, rate
         );
 
         // Handle results - delete successful intents, mark failed ones
@@ -512,11 +511,13 @@ impl<P: MessageDataProvider> SearchIndexWorker<P> {
                     .await?;
 
                 let batch_elapsed = batch_start.elapsed();
+                #[allow(clippy::cast_precision_loss)]
+                let rate = messages_to_index.len() as f64 / batch_elapsed.as_secs_f64();
                 info!(
                     "Completed batch index: {} messages in {:.2}s ({:.1} messages/s)",
                     messages_to_index.len(),
                     batch_elapsed.as_secs_f64(),
-                    messages_to_index.len() as f64 / batch_elapsed.as_secs_f64()
+                    rate
                 );
             }
             Err(e) => {

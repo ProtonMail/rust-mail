@@ -40,6 +40,7 @@
 use proton_foundation_search::document::{Document, Value};
 use proton_foundation_search::engine::{CleanupEvent, Engine, QueryEvent, WriteEvent};
 use proton_foundation_search::index::text::TextIndexSansIo;
+use proton_foundation_search::processor::ProcessorConfig;
 use proton_foundation_search::query::option::QueryOptions;
 use proton_foundation_search::query::results::FoundEntry;
 use proton_foundation_search::query::stats::CollectionStats;
@@ -80,7 +81,7 @@ struct BlockingTaskGuard<T: Send + 'static> {
 }
 
 impl<T: Send + 'static> BlockingTaskGuard<T> {
-    /// Create a new guard wrapping a JoinHandle
+    /// Create a new guard wrapping a `JoinHandle`
     fn new(handle: tokio::task::JoinHandle<Result<T, SearchError>>) -> Self {
         Self {
             handle: Some(handle),
@@ -107,8 +108,7 @@ impl<T: Send + 'static> BlockingTaskGuard<T> {
                     "Task cancelled".to_string()
                 };
                 Err(SearchError::Panic(format!(
-                    "Commit iterator task failed: {}",
-                    msg
+                    "Commit iterator task failed: {msg}"
                 )))
             }
         }
@@ -126,7 +126,7 @@ impl<T: Send + 'static> Drop for BlockingTaskGuard<T> {
             if let Ok(runtime_handle) = tokio::runtime::Handle::try_current() {
                 // Spawn a task to await the blocking thread
                 // The join_handle from spawn_blocking is Send, so this async block is Send
-                let _ = runtime_handle.spawn(async move {
+                runtime_handle.spawn(async move {
                     let _ = join_handle.await;
                 });
             } else {
@@ -178,7 +178,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         info!("Initializing Foundation Search engine");
 
         let engine = Engine::builder()
-            .with_builtin_processor(Default::default())
+            .with_builtin_processor(ProcessorConfig::default())
             .with_index(TextIndexSansIo::default())
             .build();
 
@@ -204,7 +204,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         body: &str,
         metadata: &crate::traits::MessageMetadata,
     ) -> Document {
-        let body_doc_id = format!("{}_body", message_id);
+        let body_doc_id = format!("{message_id}_body");
         Document::new(&body_doc_id)
             .with_attribute(field::BODY, Value::text(body))
             .with_attribute(field::SUBJECT, Value::text(metadata.subject.as_str()))
@@ -214,7 +214,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
             .with_attribute(field::BCC, Value::text(metadata.bcc.as_str()))
     }
 
-    /// Process commit iterator using channels to keep I/O async while iterator runs in spawn_blocking
+    /// Process commit iterator using channels to keep I/O async while iterator runs in `spawn_blocking`
     ///
     /// This function processes the commit iterator interactively:
     /// - Iterator runs in `spawn_blocking` (CPU-bound work, must stay on one thread)
@@ -252,9 +252,9 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                         .load(&name)
                         .await
                         .map_err(|e| {
-                            SearchError::BlobStorage(format!("Failed to load '{}': {}", name, e))
+                            SearchError::BlobStorage(format!("Failed to load '{name}': {e}"))
                         })
-                        .map(|opt| opt.unwrap_or_default());
+                        .map(Option::unwrap_or_default);
                     let _ = response_tx.send(blob_result);
                 }
             }
@@ -290,18 +290,12 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                         };
 
                         send(&serdes, blob).map_err(|e| {
-                            SearchError::Serialization(format!(
-                                "Failed to send '{}': {:?}",
-                                name, e
-                            ))
+                            SearchError::Serialization(format!("Failed to send '{name}': {e:?}"))
                         })?;
                     }
                     WriteEvent::Save(SaveEvent { name, recv }) => {
                         let blob = recv(&serdes).map_err(|e| {
-                            SearchError::Serialization(format!(
-                                "Failed to recv '{}': {:?}",
-                                name, e
-                            ))
+                            SearchError::Serialization(format!("Failed to recv '{name}': {e:?}"))
                         })?;
                         save_ops.push((name.to_string(), blob));
                     }
@@ -329,7 +323,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                     "Indexing operation was cancelled".to_string(),
                 ));
             };
-            return Err(SearchError::Panic(format!("Load task panicked: {}", msg)));
+            return Err(SearchError::Panic(format!("Load task panicked: {msg}")));
         }
 
         // Return a guard that ensures the blocking thread completes even if dropped
@@ -370,7 +364,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                     let mut writer = engine.write().expect("Engine write lock should always succeed - writes are serialized by service-level RwLock");
 
                     writer.insert(doc).map_err(|e| {
-                        SearchError::Internal(format!("Failed to insert document: {:?}", e))
+                        SearchError::Internal(format!("Failed to insert document: {e:?}"))
                     })?;
 
                     Ok(writer.commit())
@@ -425,7 +419,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                     // Insert all documents before committing
                     for doc in docs {
                         writer.insert(doc).map_err(|e| {
-                            SearchError::Internal(format!("Failed to insert document: {:?}", e))
+                            SearchError::Internal(format!("Failed to insert document: {e:?}"))
                         })?;
                     }
 
@@ -561,7 +555,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         debug!("Removing message {:?} from search index", message_id);
 
         let metadata_doc_id = message_id.to_string();
-        let body_doc_id = format!("{}_body", message_id);
+        let body_doc_id = format!("{message_id}_body");
 
         self.remove_documents(&[&metadata_doc_id, &body_doc_id])
             .await
@@ -613,15 +607,13 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                             .block_on(storage.load(&name))
                             .map_err(|e| {
                                 SearchError::BlobStorage(format!(
-                                    "Failed to load '{}': {}",
-                                    name, e
+                                    "Failed to load '{name}': {e}"
                                 ))
                             })?
                             .unwrap_or_default();
                         send(&serdes, blob).map_err(|e| {
                             SearchError::Serialization(format!(
-                                "Failed to send '{}': {:?}",
-                                name, e
+                                "Failed to send '{name}': {e:?}"
                             ))
                         })?;
                     }
@@ -629,12 +621,11 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                         debug!("Cleanup: saving blob '{}'", name);
                         let blob = recv(&serdes).map_err(|e| {
                             SearchError::Serialization(format!(
-                                "Failed to recv '{}': {:?}",
-                                name, e
+                                "Failed to recv '{name}': {e:?}"
                             ))
                         })?;
                         handle.block_on(storage.save(&name, &blob)).map_err(|e| {
-                            SearchError::BlobStorage(format!("Failed to save '{}': {}", name, e))
+                            SearchError::BlobStorage(format!("Failed to save '{name}': {e}"))
                         })?;
                     }
                     CleanupEvent::Release(blob_name) => {
@@ -718,16 +709,16 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
     // --- Search Methods ---
 
-    /// Search and return raw FoundEntry objects for full access to match metadata
+    /// Search and return raw `FoundEntry` objects for full access to match metadata
     ///
-    /// This method provides direct access to Foundation Search's FoundEntry,
+    /// This method provides direct access to Foundation Search's `FoundEntry`,
     /// which includes document IDs, scores, and match positions for highlighting.
     /// Use this when you need full access to match positions for UI highlighting.
     pub async fn search_raw(&self, query: &str) -> Result<Vec<FoundEntry>, SearchError> {
         debug!("Searching local index (raw): {}", query);
 
         let expression = query.parse().map_err(|e| {
-            SearchError::InvalidQuery(format!("Failed to parse query '{}': {:?}", query, e))
+            SearchError::InvalidQuery(format!("Failed to parse query '{query}': {e:?}"))
         })?;
 
         let options = QueryOptions::default();
@@ -747,10 +738,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                 QueryEvent::Load(LoadEvent { name, send }) => {
                     let blob = self.storage.load(&name).await?.unwrap_or_default();
                     send(&self.serdes, blob).map_err(|e| {
-                        SearchError::Serialization(format!(
-                            "Failed to send blob '{}': {:?}",
-                            name, e
-                        ))
+                        SearchError::Serialization(format!("Failed to send blob '{name}': {e:?}"))
                     })?;
                 }
                 QueryEvent::Found(found) => {

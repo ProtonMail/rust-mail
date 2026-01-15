@@ -15,9 +15,9 @@ const SEARCH_INDEX_INTENTS_TABLE: &str = "search_index_intents";
 pub struct SearchIndexIntentWatcher;
 
 impl SearchIndexIntentWatcher {
-    /// Create a watcher for the search_index_intents table
+    /// Create a watcher for the `search_index_intents` table
     ///
-    /// Returns a WatcherHandle that can be used to receive notifications
+    /// Returns a `WatcherHandle` that can be used to receive notifications
     /// when the table changes. The watcher automatically detects which
     /// Stash instance (account) the change belongs to.
     pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
@@ -43,7 +43,7 @@ impl TableObserver for SearchIndexIntentTableWatcher {
                 tracing::error!(
                     "Failed to send notification for SearchIndexIntentWatcher: {:?}",
                     e
-                )
+                );
             })
             .ok();
     }

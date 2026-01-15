@@ -5,7 +5,7 @@
 //!
 //! Key features:
 //! - Local trigram-based full-text search of message bodies
-//! - Persistent storage of index blobs in SQLite
+//! - Persistent storage of index blobs in `SQLite`
 //! - Privacy-preserving design (only decrypted on device)
 
 use std::sync::Arc;
@@ -44,6 +44,7 @@ pub enum SearchServiceError {
 }
 
 impl SearchServiceError {
+    #[must_use]
     pub fn into_inner(self) -> anyhow::Error {
         anyhow::Error::new(self)
     }
@@ -100,6 +101,7 @@ impl MailSearchService {
     }
 
     /// Get a reference to the underlying Stash connection pool
+    #[must_use]
     pub fn stash(&self) -> &Stash {
         &self.stash
     }

@@ -1,7 +1,7 @@
 //! Stash-based blob storage for Foundation Search
 //!
 //! This module provides a `BlobStorage` implementation that uses Stash
-//! (SQLite) for persisting search index blobs.
+//! (`SQLite`) for persisting search index blobs.
 
 use async_trait::async_trait;
 use stash::stash::Stash;
@@ -12,7 +12,7 @@ use crate::traits::BlobStorage;
 
 /// Stash-based implementation of `BlobStorage`
 ///
-/// Stores search index blobs in SQLite via the Stash connection pool.
+/// Stores search index blobs in `SQLite` via the Stash connection pool.
 #[derive(Clone)]
 pub struct StashBlobStorage {
     stash: Stash,
@@ -20,11 +20,13 @@ pub struct StashBlobStorage {
 
 impl StashBlobStorage {
     /// Create a new Stash-based blob storage
+    #[must_use]
     pub fn new(stash: Stash) -> Self {
         Self { stash }
     }
 
     /// Get a reference to the underlying Stash instance
+    #[must_use]
     pub fn stash(&self) -> &Stash {
         &self.stash
     }
@@ -37,17 +39,18 @@ impl StashBlobStorage {
         &self,
         blobs: Vec<(String, Vec<u8>)>,
     ) -> Result<(), SearchError> {
+        use stash::params;
+        use stash::stash::StashError as SE;
+
         if blobs.is_empty() {
             return Ok(());
         }
 
-        use stash::params;
-        use stash::stash::StashError as SE;
-
-        let mut tether =
-            self.stash.connection().await.map_err(|e| {
-                SearchError::BlobStorage(format!("Failed to get connection: {}", e))
-            })?;
+        let mut tether = self
+            .stash
+            .connection()
+            .await
+            .map_err(|e| SearchError::BlobStorage(format!("Failed to get connection: {e}")))?;
 
         let timestamp = chrono::Utc::now().timestamp();
         let count = blobs.len();
@@ -64,7 +67,7 @@ impl StashBlobStorage {
                 Ok(())
             })
             .await
-            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {}", e)))?;
+            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {e}")))?;
 
         debug!("Saved {} blobs atomically", count);
         Ok(())
@@ -75,10 +78,11 @@ impl StashBlobStorage {
 impl BlobStorage for StashBlobStorage {
     async fn load(&self, name: &str) -> Result<Option<Vec<u8>>, SearchError> {
         let name_owned = name.to_owned();
-        let tether =
-            self.stash.connection().await.map_err(|e| {
-                SearchError::BlobStorage(format!("Failed to get connection: {}", e))
-            })?;
+        let tether = self
+            .stash
+            .connection()
+            .await
+            .map_err(|e| SearchError::BlobStorage(format!("Failed to get connection: {e}")))?;
 
         let blob = tether
             .sync_query(move |conn| {
@@ -98,12 +102,12 @@ impl BlobStorage for StashBlobStorage {
                 })
             })
             .await
-            .map_err(|e| SearchError::BlobStorage(format!("Query failed: {}", e)))?;
+            .map_err(|e| SearchError::BlobStorage(format!("Query failed: {e}")))?;
 
         debug!(
             "Loaded blob '{}' ({} bytes)",
             name,
-            blob.as_ref().map(|b| b.len()).unwrap_or(0)
+            blob.as_ref().map_or(0, Vec::len)
         );
         Ok(blob)
     }
@@ -117,10 +121,11 @@ impl BlobStorage for StashBlobStorage {
         let data_owned = data.to_vec();
         let timestamp = chrono::Utc::now().timestamp();
 
-        let mut tether =
-            self.stash.connection().await.map_err(|e| {
-                SearchError::BlobStorage(format!("Failed to get connection: {}", e))
-            })?;
+        let mut tether = self
+            .stash
+            .connection()
+            .await
+            .map_err(|e| SearchError::BlobStorage(format!("Failed to get connection: {e}")))?;
 
         tether
             .tx::<_, (), SE>(async |bond| {
@@ -133,7 +138,7 @@ impl BlobStorage for StashBlobStorage {
                 Ok(())
             })
             .await
-            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {}", e)))?;
+            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {e}")))?;
 
         debug!("Saved blob '{}' ({} bytes)", name, data_len);
         Ok(())
@@ -145,10 +150,11 @@ impl BlobStorage for StashBlobStorage {
 
         let name_owned = name.to_owned();
 
-        let mut tether =
-            self.stash.connection().await.map_err(|e| {
-                SearchError::BlobStorage(format!("Failed to get connection: {}", e))
-            })?;
+        let mut tether = self
+            .stash
+            .connection()
+            .await
+            .map_err(|e| SearchError::BlobStorage(format!("Failed to get connection: {e}")))?;
 
         let deleted = tether
             .tx::<_, bool, SE>(async |bond| {
@@ -161,7 +167,7 @@ impl BlobStorage for StashBlobStorage {
                 Ok(rows > 0)
             })
             .await
-            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {}", e)))?;
+            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {e}")))?;
 
         if deleted {
             debug!("Deleted blob '{}'", name);
@@ -173,10 +179,11 @@ impl BlobStorage for StashBlobStorage {
     async fn clear_all(&self) -> Result<(), SearchError> {
         use stash::stash::StashError as SE;
 
-        let mut tether =
-            self.stash.connection().await.map_err(|e| {
-                SearchError::BlobStorage(format!("Failed to get connection: {}", e))
-            })?;
+        let mut tether = self
+            .stash
+            .connection()
+            .await
+            .map_err(|e| SearchError::BlobStorage(format!("Failed to get connection: {e}")))?;
 
         let deleted_count = tether
             .tx::<_, usize, SE>(async |bond| {
@@ -186,7 +193,7 @@ impl BlobStorage for StashBlobStorage {
                 Ok(count)
             })
             .await
-            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {}", e)))?;
+            .map_err(|e| SearchError::BlobStorage(format!("Transaction failed: {e}")))?;
 
         debug!("Cleared all {} blobs from storage", deleted_count);
         Ok(())

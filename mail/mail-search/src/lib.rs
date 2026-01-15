@@ -79,10 +79,10 @@ mod tests {
 
     /// In-memory blob storage for testing
     ///
-    /// Uses Arc<RwLock<...>> so clones share the same underlying data.
-    /// This is important because FoundationSearchEngine clones storage
+    /// Uses `Arc<RwLock<...>>` so clones share the same underlying data.
+    /// This is important because `FoundationSearchEngine` clones storage
     /// when spawning blocking tasks.
-    /// RwLock allows concurrent reads, which is more appropriate for test storage.
+    /// `RwLock` allows concurrent reads, which is more appropriate for test storage.
     #[derive(Clone)]
     struct InMemoryBlobStorage {
         blobs: Arc<RwLock<HashMap<String, Vec<u8>>>>,
@@ -154,20 +154,22 @@ mod tests {
         assert_eq!(results.len(), 1, "Should find 1 matching document");
     }
 
-    /// Mock MessageDataProvider for testing
-    struct MockMessageDataProvider {
-        messages: Arc<
-            RwLock<
-                HashMap<
-                    LocalMessageId,
-                    (
-                        proton_mail_api::services::proton::common::MessageId,
-                        String,
-                        MessageMetadata,
-                    ),
-                >,
+    /// Mock `MessageDataProvider` for testing
+    type MockMessageMap = Arc<
+        RwLock<
+            HashMap<
+                LocalMessageId,
+                (
+                    proton_mail_api::services::proton::common::MessageId,
+                    String,
+                    MessageMetadata,
+                ),
             >,
         >,
+    >;
+
+    struct MockMessageDataProvider {
+        messages: MockMessageMap,
     }
 
     impl MockMessageDataProvider {
@@ -249,17 +251,17 @@ mod tests {
     ///
     /// This test exercises the complete end-to-end flow:
     /// - Intent system (queueing intents in transaction)
-    /// - Worker processing (prepare_message_for_indexing, batch preparation)
+    /// - Worker processing (`prepare_message_for_indexing`, batch preparation)
     /// - Service layer batch indexing
     /// - Foundation engine batch commit
-    /// - spawn_blocking for CPU-bound tokenization
+    /// - `spawn_blocking` for CPU-bound tokenization
     /// - Channel-based async I/O (mpsc + oneshot channels for blob loads)
     /// - Atomic blob saves in transaction
     /// - Intent cleanup (content hash saved, intents deleted)
     #[tokio::test]
     async fn test_full_indexing_flow_with_intent_system() {
         use proton_mail_api::services::proton::common::MessageId;
-        use stash::stash::{Stash, StashConfiguration};
+        use stash::stash::{Stash, StashConfiguration, StashError as SE};
 
         // 1. Set up Stash with migrations
         let stash = Stash::new(StashConfiguration::test()).unwrap();
@@ -277,14 +279,14 @@ mod tests {
         // 3. Create mock MessageDataProvider with 5 messages
         let data_provider = Arc::new(MockMessageDataProvider::new());
         let message_ids = vec![1, 2, 3, 4, 5];
-        let remote_ids = vec![
+        let remote_ids = [
             MessageId::from("remote-1"),
             MessageId::from("remote-2"),
             MessageId::from("remote-3"),
             MessageId::from("remote-4"),
             MessageId::from("remote-5"),
         ];
-        let bodies = vec![
+        let bodies = [
             "Let's discuss the project timeline tomorrow at 10am.",
             "The quarterly report shows strong growth in Q4.",
             "Meeting scheduled for next week to review the budget.",
@@ -303,11 +305,10 @@ mod tests {
 
         // 4. Queue intents in a transaction (simulating MessageBody::store)
         let mut tether = stash.connection().await.unwrap();
-        use stash::stash::StashError as SE;
         tether
             .tx::<_, (), SE>(async |bond| {
                 for &local_id in &message_ids {
-                    MailSearchService::queue_index(local_id, &bond).await?;
+                    MailSearchService::queue_index(local_id, bond).await?;
                 }
                 Ok(())
             })
@@ -369,7 +370,7 @@ mod tests {
             .unwrap();
         // "Meeting" appears in msg-3, "meeting" might be case-sensitive
         assert!(
-            results.len() >= 1,
+            !results.is_empty(),
             "Should find at least 1 message with 'meeting'"
         );
 
@@ -416,7 +417,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "Long-running integration test"]
     async fn test_foundation_engine_remove_nonexistent() {
         let storage = InMemoryBlobStorage::new();
         let task_service = std::sync::Arc::new(
