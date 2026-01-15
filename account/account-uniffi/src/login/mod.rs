@@ -412,9 +412,6 @@ pub enum LoginError {
 
 #[derive(Debug, UniffiEnum)]
 pub enum PostLoginValidationError {
-    /// Returned when login is aborted due to a delinquent user
-    DelinquentUser,
-
     /// Returned when login is aborted when the limit of free accounts is exceeded. Contains the max number of free accounts allowed.
     FreeAccountLimitExceeded(u64),
 }
@@ -471,9 +468,6 @@ impl From<login_api::LoginError> for LoginError {
 
             login_api::LoginError::QRLoginEncoding => Self::QRLoginEncoding,
 
-            login_api::LoginError::PostLoginCheckFailed(
-                RealPostLoginValidationError::DelinquentUser,
-            ) => Self::PostLoginValidationFailed(PostLoginValidationError::DelinquentUser),
             login_api::LoginError::PostLoginCheckFailed(
                 RealPostLoginValidationError::FreeAccountLimitExceeded(limit),
             ) => Self::PostLoginValidationFailed(

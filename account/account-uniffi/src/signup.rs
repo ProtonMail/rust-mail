@@ -100,9 +100,6 @@ impl From<RealSignupError> for SignupError {
             RealSignupError::InvalidState => Self::Internal,
             RealSignupError::RecoveryEmailInvalid => Self::RecoveryEmailInvalid,
             RealSignupError::RecoveryPhoneNumberInvalid => Self::RecoveryPhoneNumberInvalid,
-            RealSignupError::PostLoginCheckFailed(RealPostLoginValidationError::DelinquentUser) => {
-                Self::PostLoginValidationError(PostLoginValidationError::DelinquentUser)
-            }
             RealSignupError::PostLoginCheckFailed(
                 RealPostLoginValidationError::FreeAccountLimitExceeded(limit),
             ) => Self::PostLoginValidationError(

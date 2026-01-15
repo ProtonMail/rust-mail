@@ -4,7 +4,7 @@ use crate::datatypes::UserType;
 use crate::models::User as UserTable;
 use crate::{Context, CoreAccountState};
 use async_trait::async_trait;
-use proton_core_api::services::proton::{DelinquentState, User, UserId};
+use proton_core_api::services::proton::{User, UserId};
 use proton_observability::metric;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model as _;
@@ -19,9 +19,6 @@ pub enum PostLoginValidationError {
     /// Indicates that the maximum number of free accounts has been exceeded. Contains the max number of free accounts allowed.
     #[error("The maximum number of free accounts has been exceeded.")]
     FreeAccountLimitExceeded(u64),
-
-    #[error("The account is currently on hold due to an overdue invoice.")]
-    DelinquentUser,
 
     #[error("Error during post login check: {0}")]
     Other(#[from] anyhow::Error),
@@ -64,17 +61,6 @@ impl PostLoginValidator for DefaultPostLoginValidator {
 
 impl DefaultPostLoginValidator {
     async fn do_validate(&self, user: &User) -> Result<(), PostLoginValidationError> {
-        if matches!(
-            user.delinquent,
-            DelinquentState::Delinquent | DelinquentState::NotReceived
-        ) {
-            trace!(
-                "Post login check failed, delinquent state is {:?}",
-                user.delinquent
-            );
-            return Err(PostLoginValidationError::DelinquentUser);
-        }
-
         let has_subscription = user.subscribed > 0;
         if !has_subscription
             && let Some(logged_in_free_account_count) =
