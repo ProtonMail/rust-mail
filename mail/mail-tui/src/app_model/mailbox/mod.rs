@@ -162,7 +162,7 @@ pub enum ComposerMessage {
     FinishChangeAddress { sender: String, body: String },
     SetPasswordProtection(SecretString, Option<String>),
     SetExpirationTime(DateTime<Local>),
-    OpenRecipientList(RecipientGroupId),
+    OpenRecipientList(RecipientGroupId, Option<char>),
     ShowRecipientList(TuiRecipientList),
     RecipientList(RecipientListMessage),
     CloseRecipientList,
