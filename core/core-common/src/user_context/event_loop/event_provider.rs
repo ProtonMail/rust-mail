@@ -20,13 +20,6 @@ impl EventProviderError for CoreEventProviderError {
             CoreEventProviderError::Other(_) => false,
         }
     }
-
-    fn is_auth_failure(&self) -> bool {
-        match self {
-            CoreEventProviderError::Api(e) => e.is_auth_failure(),
-            CoreEventProviderError::Other(_) => false,
-        }
-    }
 }
 
 #[async_trait]

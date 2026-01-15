@@ -15,8 +15,7 @@ use proton_mail_api::services::proton::response_data::{MailEvent, MessageEvent, 
 use proton_mail_common::models::LabelWithCounters;
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
-use wiremock::matchers::{method, path, query_param};
-use wiremock::{Mock, ResponseTemplate};
+use wiremock::matchers::query_param;
 
 #[tokio::test]
 async fn event_fetches_missing_dependencies() {
@@ -188,40 +187,65 @@ async fn event_fetches_missing_dependencies() {
     );
 }
 
-#[tokio::test]
-async fn test_event_poll_forbidden_forces_local_logout() {
-    let ctx = MailTestContext::new().await;
-    let mut params = Params::default_basic();
-    params.last_event_id = Some(EventId::from("1"));
-    ctx.setup_user(params).await;
+#[tokio::test(flavor = "multi_thread")]
+async fn test_session_deletion_cleans_mail_caches() {
+    // This test verifies that when a session is remotely terminated (e.g., "log out from all devices"),
+    // the mail layer properly cleans up mail-specific cache directories.
+    use proton_core_common::db::account::CoreSession;
+    use proton_core_common::models::ModelExtension;
+    use std::time::Duration;
 
-    // Simulate production failure on event fetch:
-    // Forbidden: 403 Forbidden. Some(ApiErrorInfo { code: 9106, error: "...", details: {"MissingScopes":["user"]} })
-    Mock::given(method("GET"))
-        .and(path("/api/core/v5/events/1"))
-        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
-            "Code": 9106,
-            "Error": "Access token does not have sufficient scope",
-            "Details": { "MissingScopes": ["user"] }
-        })))
-        .mount(ctx.mock_server())
-        .await;
+    let ctx = MailTestContext::new().await;
+    let params = Params::default_basic();
+    ctx.setup_user(params).await;
 
     let mail_user_ctx = ctx.mail_user_context().await;
     let user_id = mail_user_ctx.user_id().clone();
+    let session_id = mail_user_ctx.session_id().clone();
 
-    // Trigger the event loop via the action queue (as other acceptance tests do).
-    mail_user_ctx.poll_event_loop().await.unwrap();
+    // Get the mail cache path for this user
+    let mail_cache_path = ctx.mail_context.mail_cache_path_for(&user_id);
 
-    // Event polling is expected to fail (403), but must still invalidate the local session.
-    let _ = mail_user_ctx.execute_all_actions().await;
+    // Create a test file in the mail cache to verify cleanup
+    tokio::fs::create_dir_all(&mail_cache_path)
+        .await
+        .expect("Failed to create mail cache directory");
+    let test_file = mail_cache_path.join("test_cache.dat");
+    tokio::fs::write(&test_file, b"test data")
+        .await
+        .expect("Failed to write test cache file");
 
-    let acc_sessions = ctx
-        .context
-        .get_account_sessions(user_id.clone())
+    assert!(test_file.exists(), "Test cache file should exist");
+
+    // Delete the session from the database (simulating remote logout)
+    ctx.context
+        .account_stash()
+        .connection()
+        .await
+        .unwrap()
+        .tx(async |tx| {
+            CoreSession::delete_by_id(session_id.clone(), tx).await?;
+            Ok::<_, stash::stash::StashError>(())
+        })
         .await
         .unwrap();
-    assert_eq!(acc_sessions.len(), 0);
+
+    // Give the SessionObserver time to detect the change and trigger cleanup
+    // Need more time for the observer to pick up the change, run the hook, and complete cleanup
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    assert!(
+        !test_file.exists(),
+        "Mail cache file should be cleaned up after session deletion"
+    );
+    assert!(
+        !mail_cache_path.exists()
+            || mail_cache_path
+                .read_dir()
+                .map(|mut d| d.next().is_none())
+                .unwrap_or(true),
+        "Mail cache directory should be empty or removed"
+    );
 }
 
 #[tokio::test]

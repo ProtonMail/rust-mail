@@ -749,21 +749,47 @@ impl Context {
         tracing::info!("Kill all background tasks for this user");
         self.cancel_user_tasks(&user_id).await;
 
-        let session = self
-            .get_account_sessions(user_id.clone())
-            .await?
-            .into_iter()
-            .find(|session| CoreSessionState::Authenticated == CoreSessionState::of(session));
+        // Try to get user context from cache first (handles case where sessions are already deleted),
+        // otherwise fall back to creating from session
+        let user_ctx_opt = {
+            let ctx_from_cache = self
+                .active_user_contexts
+                .lock()
+                .await
+                .get(&user_id)
+                .and_then(Weak::upgrade);
 
-        if let Some(session) = session {
+            if let Some(ctx) = ctx_from_cache {
+                Some(ctx)
+            } else {
+                // Fall back to creating from session if not in cache
+                let session = self
+                    .get_account_sessions(user_id.clone())
+                    .await?
+                    .into_iter()
+                    .find(|session| {
+                        CoreSessionState::Authenticated == CoreSessionState::of(session)
+                    });
+
+                if let Some(session) = session {
+                    self.user_context_from_session(&session).await.ok()
+                } else {
+                    None
+                }
+            }
+        };
+
+        if let Some(user_ctx) = user_ctx_opt {
             tracing::info!("Clear all user data from database");
-            if let Ok(user_ctx) = self.user_context_from_session(&session).await {
-                let tether = user_ctx.stash().connection().await?;
-
+            if let Ok(tether) = user_ctx.stash().connection().await {
                 if let Err(e) = nuke::drop_database_tables(tether).await {
                     tracing::error!("Could not clean user database, details: `{e}`");
                 }
             }
+        } else {
+            tracing::warn!(
+                "Could not obtain user context to nuke database tables for user {user_id}"
+            );
         }
 
         tracing::info!("Logout user");

@@ -334,10 +334,6 @@ mod tests {
             self.is_network
         }
 
-        fn is_auth_failure(&self) -> bool {
-            false
-        }
-
         fn is_retryable(&self) -> bool {
             self.is_retryable
         }

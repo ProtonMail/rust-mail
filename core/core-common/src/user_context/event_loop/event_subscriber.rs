@@ -102,13 +102,6 @@ impl EventSubscriberError for CoreEventSubscriberError {
         }
     }
 
-    fn is_auth_failure(&self) -> bool {
-        match self {
-            CoreEventSubscriberError::Api(e) => e.is_auth_failure(),
-            CoreEventSubscriberError::Stash(_) | CoreEventSubscriberError::Other(_) => false,
-        }
-    }
-
     fn is_retryable(&self) -> bool {
         match self {
             CoreEventSubscriberError::Api(e) => e.is_network_failure() || e.is_server_failure(),
@@ -375,32 +368,7 @@ impl UserContext {
     ///
     pub async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
         let event_loop_service = self.event_loop_service();
-        match event_loop_service.event_poll().poll().await {
-            Ok(()) => Ok(()),
-            Err(err) => {
-                // If the session was invalidated remotely (e.g. "log out from all devices"),
-                // API calls start failing with 401. In that case, immediately force-logout
-                // locally so the app stops exposing cached/decrypted data.
-                if is_auth_failure_event_loop_error(&err) {
-                    warn!(
-                        user_id = %self.user_id(),
-                        session_id = %self.session_id(),
-                        api_error = %err.to_string(),
-                        "Auth failure while polling event loop; forcing local logout"
-                    );
-
-                    if let Err(e) = self
-                        .context
-                        .invalidate_user_session(self.user_id().clone())
-                        .await
-                    {
-                        error!("Failed to invalidate user session after auth failure: {e:?}");
-                    }
-                }
-
-                Err(err)
-            }
-        }
+        event_loop_service.event_poll().poll().await
     }
 
     #[must_use]
@@ -434,14 +402,6 @@ impl UserContext {
         self: &Arc<Self>,
     ) -> impl EventSubscriber<CoreEventSource> + 'static {
         AccountEventSubscriber::from(Arc::downgrade(self))
-    }
-}
-
-fn is_auth_failure_event_loop_error(err: &EventLoopError) -> bool {
-    match err {
-        EventLoopError::Provider(e) => e.is_auth_failure(),
-        EventLoopError::Subscriber(_, e) | EventLoopError::Refresh(_, e) => e.is_auth_failure(),
-        _ => false,
     }
 }
 
