@@ -41,7 +41,6 @@ use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
 use std::any::Any;
-use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::{self};
@@ -1244,11 +1243,10 @@ impl<'tether> Bond<'tether> {
     ///
     async fn commit_(self, policy: TransactionTrackingPolicy) -> Result<(), StashError> {
         // drop() has an auto-rollback code we don't want to run here:
-        let this = ManuallyDrop::new(self);
         let (sender, receiver) = oneshot::channel();
         let operation = Operation::Transaction(OperationTransaction::Commit(policy, sender));
 
-        this.connection
+        self.connection
             .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
@@ -1259,9 +1257,10 @@ impl<'tether> Bond<'tether> {
         {
             error!("Commit error: {e:}");
 
-            return ManuallyDrop::into_inner(this).rollback().await;
+            return self.rollback().await;
         }
 
+        std::mem::forget(self);
         Ok(())
     }
 
@@ -1272,11 +1271,10 @@ impl<'tether> Bond<'tether> {
     ///
     async fn rollback(self) -> Result<(), StashError> {
         // drop() has an auto-rollback code we don't want to run here:
-        let this = ManuallyDrop::new(self);
         let (sender, receiver) = oneshot::channel();
         let operation = Operation::Transaction(OperationTransaction::Rollback(sender));
 
-        this.connection
+        self.connection
             .send_async(operation.into())
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?;
@@ -1284,6 +1282,8 @@ impl<'tether> Bond<'tether> {
         receiver
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))??;
+
+        std::mem::forget(self);
 
         Ok(())
     }
