@@ -4,6 +4,8 @@
 #[path = "tests/message_detector.rs"]
 mod tests;
 
+use std::rc::Rc;
+
 use kuchikiki::{
     NodeData, NodeRef,
     iter::{NodeEdge, NodeIterator},
@@ -65,6 +67,8 @@ pub fn strip_blockquote(message: NodeRef) -> SplitDoc {
 }
 
 fn strip_blockquote_inner(message: &NodeRef) -> Option<NodeRef> {
+    let mut visited_outer_quotes = vec![];
+
     let blockquote = message
         .inclusive_descendants()
         .select(&BLOCKQUOTE_SELECTOR)
@@ -76,14 +80,15 @@ fn strip_blockquote_inner(message: &NodeRef) -> Option<NodeRef> {
         // replace that ancestor traversal with `:not(:is(BLOCKQUOTE_SELECTOR) :is(BLOCKQUOTE_SELECTOR))
         .filter(move |quote| {
             // We want to filter out all quotes that are already inside of a quote.
-            quote
-                .as_node()
-                .ancestors()
-                // Select on an iterator acts like a filter. It does not traverse its descendants
-                .select(&BLOCKQUOTE_SELECTOR)
-                .ok()
-                .and_then(|mut i| i.next())
-                .is_none()
+            let is_outer = !quote.as_node().ancestors().any(|ancestor| {
+                visited_outer_quotes
+                    .iter()
+                    .any(|visited| Rc::ptr_eq(visited, &ancestor.0))
+            });
+            if is_outer {
+                visited_outer_quotes.push(quote.as_node().0.clone());
+            }
+            is_outer
         })
         // We first focus on last blockquote, because the next step iterates on following nodes.
         // And only last blockquote can possibly have NO following nodes ;)
