@@ -361,25 +361,8 @@ impl MailContext {
             http_client: OnceLock::new(),
         });
 
-        let ctx_weak = Arc::downgrade(&ctx);
-
-        if let Some(session_service) = ctx.core_context.get_service_opt::<SessionObserverService>()
-        {
-            let event_service = ctx.core_context.event_service();
-            session_service.on_session_deleted(event_service, move |_, user_id| {
-                let ctx_weak = ctx_weak.clone();
-                async move {
-                    let Some(ctx) = ctx_weak.upgrade() else {
-                        return OnSessionDeletedResponse::Terminate;
-                    };
-
-                    tracing::info!("Removing `{user_id}`, from active contexts");
-                    ctx.active_user_contexts.lock().await.remove(&user_id);
-
-                    OnSessionDeletedResponse::Continue
-                }
-            });
-        }
+        // Register mail-specific session deletion hook
+        Self::register_session_deletion_hook(Arc::downgrade(&ctx), &ctx.core_context);
 
         Ok(ctx)
     }
@@ -389,13 +372,60 @@ impl MailContext {
         mail_cache_path: PathBuf,
         mail_cache_size: u64,
     ) -> Result<Arc<Self>, MailContextError> {
-        Ok(Arc::new(Self {
+        let ctx = Arc::new(Self {
             core_context,
             mail_cache_path,
             attachment_cache_size: mail_cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
             http_client: OnceLock::new(),
-        }))
+        });
+
+        // Register mail-specific session deletion hook
+        Self::register_session_deletion_hook(Arc::downgrade(&ctx), &ctx.core_context);
+
+        Ok(ctx)
+    }
+
+    /// Register a hook to clean up mail-specific caches when a session is deleted.
+    ///
+    /// This is called during MailContext initialization to ensure that when a user session
+    /// is remotely terminated (e.g., "log out from all devices"), the mail cache files are
+    /// cleaned up in addition to the database cleanup performed by core.
+    fn register_session_deletion_hook(ctx_weak: Weak<Self>, core_context: &Arc<Context>) {
+        tracing::info!("Attempting to register mail session deletion hook");
+        if let Some(session_service) = core_context.get_service_opt::<SessionObserverService>() {
+            tracing::info!("Mail layer registering session deletion hook");
+            let event_service = core_context.event_service();
+            session_service.on_session_deleted(event_service, move |session_id, user_id| {
+                let ctx_weak = ctx_weak.clone();
+                async move {
+                    tracing::info!(
+                        "Mail layer received session deleted event for user {user_id}, session {session_id}"
+                    );
+
+                    let Some(ctx) = ctx_weak.upgrade() else {
+                        tracing::warn!("Mail context no longer available, cannot clean caches");
+                        return OnSessionDeletedResponse::Terminate;
+                    };
+
+                    // Core's SessionObserverService handles database cleanup.
+                    // Mail layer only needs to clean up mail-specific cache files.
+                    tracing::info!("Cleaning mail caches for user {user_id}");
+                    ctx.active_user_contexts.lock().await.remove(&user_id);
+
+                    let mail_cache_path = ctx.mail_cache_path_for(&user_id);
+                    tracing::info!("Removing mail cache directory: {:?}", mail_cache_path);
+                    proton_core_common::nuke::remove_dir(&mail_cache_path).await;
+                    tracing::info!("Mail cache cleanup completed for user {user_id}");
+
+                    OnSessionDeletedResponse::Continue
+                }
+            });
+        } else {
+            tracing::warn!(
+                "SessionObserverService not available, mail cache cleanup on session deletion will not work"
+            );
+        }
     }
 
     /// Begin a login flow.

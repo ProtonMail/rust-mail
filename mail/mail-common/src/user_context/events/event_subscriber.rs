@@ -143,6 +143,7 @@ impl EventSubscriberError for MailEventSubscriberError {
             MailEventSubscriberError::Stash(_) | MailEventSubscriberError::Other(_) => false,
         }
     }
+
     fn is_retryable(&self) -> bool {
         match self {
             MailEventSubscriberError::Api(e) => e.is_network_failure() || e.is_server_failure(),

@@ -187,6 +187,67 @@ async fn event_fetches_missing_dependencies() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_session_deletion_cleans_mail_caches() {
+    // This test verifies that when a session is remotely terminated (e.g., "log out from all devices"),
+    // the mail layer properly cleans up mail-specific cache directories.
+    use proton_core_common::db::account::CoreSession;
+    use proton_core_common::models::ModelExtension;
+    use std::time::Duration;
+
+    let ctx = MailTestContext::new().await;
+    let params = Params::default_basic();
+    ctx.setup_user(params).await;
+
+    let mail_user_ctx = ctx.mail_user_context().await;
+    let user_id = mail_user_ctx.user_id().clone();
+    let session_id = mail_user_ctx.session_id().clone();
+
+    // Get the mail cache path for this user
+    let mail_cache_path = ctx.mail_context.mail_cache_path_for(&user_id);
+
+    // Create a test file in the mail cache to verify cleanup
+    tokio::fs::create_dir_all(&mail_cache_path)
+        .await
+        .expect("Failed to create mail cache directory");
+    let test_file = mail_cache_path.join("test_cache.dat");
+    tokio::fs::write(&test_file, b"test data")
+        .await
+        .expect("Failed to write test cache file");
+
+    assert!(test_file.exists(), "Test cache file should exist");
+
+    // Delete the session from the database (simulating remote logout)
+    ctx.context
+        .account_stash()
+        .connection()
+        .await
+        .unwrap()
+        .tx(async |tx| {
+            CoreSession::delete_by_id(session_id.clone(), tx).await?;
+            Ok::<_, stash::stash::StashError>(())
+        })
+        .await
+        .unwrap();
+
+    // Give the SessionObserver time to detect the change and trigger cleanup
+    // Need more time for the observer to pick up the change, run the hook, and complete cleanup
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    assert!(
+        !test_file.exists(),
+        "Mail cache file should be cleaned up after session deletion"
+    );
+    assert!(
+        !mail_cache_path.exists()
+            || mail_cache_path
+                .read_dir()
+                .map(|mut d| d.next().is_none())
+                .unwrap_or(true),
+        "Mail cache directory should be empty or removed"
+    );
+}
+
 #[tokio::test]
 async fn event_fetches_missing_nested_dependencies() {
     let ctx = MailTestContext::new().await;

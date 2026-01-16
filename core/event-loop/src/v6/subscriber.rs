@@ -168,7 +168,6 @@ where
 
 pub trait EventSubscriberError: Error + Send + Sync + 'static {
     fn is_network_failure(&self) -> bool;
-
     fn is_retryable(&self) -> bool {
         self.is_network_failure()
     }

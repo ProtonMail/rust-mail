@@ -254,7 +254,21 @@ async fn register_sessions(
 ) -> Result<(), RegisteredDeviceTaskError> {
     tracing::debug!("Registering sessions: {}", sessions.len());
     for session in sessions {
-        register_session(ctx, session, registered_sessions, &device).await?;
+        match register_session(ctx, session, registered_sessions, &device).await {
+            Ok(()) => {}
+            Err(RegisteredDeviceTaskError::CreateContext(CoreContextError::DuplicateContext(
+                user_id,
+            ))) => {
+                // This can happen transiently if the stored session was rotated/replaced while a
+                // UserContext is still alive in memory. Device registration should not crash the
+                // whole background task in that case; we'll retry on the next session change.
+                tracing::warn!(
+                    %user_id,
+                    "Skipping device registration because another context is already active for this user"
+                );
+            }
+            Err(e) => return Err(e),
+        }
     }
     tracing::debug!("Registered successfully");
     Ok(())
