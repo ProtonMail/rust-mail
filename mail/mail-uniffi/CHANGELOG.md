@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.8] - 2026-01-16
+
+### Changed
+
+- [ET-5706] Improve offline lock calculation
+- Event loop error reporting
+
+### Fixes
+
+- [ET-5689] Calculate composer locks for replied messages
+
+
 ## [mail-uniffi-v0.161.7] - 2026-01-15
 
 ### Fixes
