@@ -368,7 +368,6 @@ impl UserContext {
     ///
     pub async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
         let event_loop_service = self.event_loop_service();
-
         event_loop_service.event_poll().poll().await
     }
 

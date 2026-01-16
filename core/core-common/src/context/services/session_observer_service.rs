@@ -131,10 +131,20 @@ impl Service for SessionObserverService {
                 let Some(ctx) = ctx_weak.upgrade() else {
                     return OnSessionDeletedResponse::Terminate;
                 };
-                ctx.active_user_contexts
-                    .lock()
-                    .await
-                    .remove(&user_id, ctx.event_service());
+
+                // When a session is remotely terminated (e.g., "log out from all devices"),
+                // we must immediately clear all user data to prevent access to cached/decrypted content.
+                // In other cases like local log-out or token refresh failure it will either run this code from here
+                // or try to run logout algorithm again which is safe because all the code
+                // takes into account double invocation
+                tracing::warn!(
+                    "Session deleted for user {user_id}, performing full logout and data cleanup"
+                );
+
+                if let Err(e) = ctx.logout_and_delete_user_data(user_id, vec![]).await {
+                    tracing::error!("Failed to logout and delete user data: {e:?}");
+                }
+
                 OnSessionDeletedResponse::Continue
             }
         });

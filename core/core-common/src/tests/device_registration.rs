@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use proton_core_api::services::proton::{SessionId, UserId};
+use proton_core_common::models::ModelExtension;
 use proton_core_common::test_utils::test_context::TestContext;
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
@@ -124,6 +125,75 @@ async fn initial_registration_when_device_key_already_exist_in_keychain() {
 
     // It used previously generated key
     assert_eq!(*used_device_key.lock().unwrap(), Some(stored_public_key));
+}
+
+#[tokio::test]
+async fn skip_registration_when_session_rotated_but_old_context_still_alive() {
+    let ctx = TestContext::new().await;
+
+    // Keep an active UserContext alive for the original session_id.
+    let _active_user_ctx = ctx.user_context().await;
+
+    // Rotate/replace the session row in the DB to a new session_id (same user).
+    // This mimics scenarios like re-auth / session replacement while in-memory context still exists.
+    let core_ctx = ctx.context();
+    let user_id = UserId::from(proton_core_common::test_utils::account::TEST_USER_ID);
+    let old_session_id = SessionId::from("TEST_UID");
+    let new_session_id = SessionId::from("NEW_UID");
+
+    let db_key = core_ctx.get_encryption_key().unwrap();
+    let tokens = proton_core_api::auth::Tokens::access(
+        "NEWACCESSTOKEN",
+        "NEWREFRESHTOKEN",
+        Vec::<&str>::new(),
+    );
+
+    let mut tether = core_ctx.account_stash().connection().await.unwrap();
+    tether
+        .tx(async |tx| {
+            let _ = proton_core_common::db::account::CoreSession::delete_by_id(
+                old_session_id.clone(),
+                tx,
+            )
+            .await?;
+
+            let new_session = proton_core_common::db::account::CoreSession::new(
+                user_id.clone(),
+                new_session_id.clone(),
+                &tokens,
+                &db_key,
+            )
+            .unwrap();
+
+            new_session.with_insert(tx).await?;
+            Ok::<_, stash::stash::StashError>(())
+        })
+        .await
+        .unwrap();
+
+    // Now run the registration step: it will see the new session, but creating a UserContext for it
+    // would hit DuplicateContext. We should skip (not fail the task).
+    let mut background_task_state = RegisteredDeviceTaskState::default();
+    let (sessions_tx, sessions_rx) = flume::bounded::<()>(16);
+    let (_device_tx, mut device_rx) =
+        watch::channel::<Option<RegisteredDevice>>(Some(RegisteredDevice {
+            device_token: "ABCD".to_string(),
+            environment: DeviceEnvironment::Google,
+            ping_notification_status: None,
+            push_notification_status: None,
+        }));
+    let mut sessions_stream = sessions_rx.into_stream();
+
+    sessions_tx.send(()).unwrap();
+
+    registered_device_task_step(
+        core_ctx,
+        &mut background_task_state,
+        &mut sessions_stream,
+        &mut device_rx,
+    )
+    .await
+    .expect("step should not fail on DuplicateContext");
 }
 
 #[tokio::test]

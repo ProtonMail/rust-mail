@@ -674,6 +674,17 @@ impl Context {
             info!("logged out session {}", session.remote_id);
         }
 
+        self.force_logout_account_locally(user_id.clone()).await?;
+        info!("logged out all sessions for account {user_id}");
+        Ok(())
+    }
+
+    /// Force-logout an account **locally** by deleting all stored sessions for the account.
+    ///
+    /// This is intended for cases where the server-side session has already been invalidated
+    /// (e.g. "log out from all devices"), so API calls start returning 401 and we need to
+    /// immediately stop allowing access to cached/decrypted data.
+    pub async fn force_logout_account_locally(&self, user_id: UserId) -> CoreContextResult<()> {
         let orphaned_sessions = self
             .get_account_sessions(user_id.clone())
             .await?
@@ -700,9 +711,23 @@ impl Context {
                 .map_err(|e| anyhow!("Could not remove PIN, details: `{e}`"))?;
         }
 
-        info!("logged out all sessions for account {user_id}");
-
         Ok(())
+    }
+
+    /// Force-invalidate a user session locally.
+    ///
+    /// This is intended for auth failures where the server-side session was invalidated remotely
+    /// (e.g. "log out from all devices") and we must immediately lock down local access by:
+    /// - cancelling background work for that user
+    /// - removing the active in-memory `UserContext` from the context map
+    /// - deleting stored sessions from the account DB
+    pub async fn invalidate_user_session(&self, user_id: UserId) -> CoreContextResult<()> {
+        self.cancel_user_tasks(&user_id).await;
+        self.active_user_contexts
+            .lock()
+            .await
+            .remove(&user_id, self.event_service());
+        self.force_logout_account_locally(user_id).await
     }
 
     /// Log out and delete all associated user data.
@@ -724,21 +749,47 @@ impl Context {
         tracing::info!("Kill all background tasks for this user");
         self.cancel_user_tasks(&user_id).await;
 
-        let session = self
-            .get_account_sessions(user_id.clone())
-            .await?
-            .into_iter()
-            .find(|session| CoreSessionState::Authenticated == CoreSessionState::of(session));
+        // Try to get user context from cache first (handles case where sessions are already deleted),
+        // otherwise fall back to creating from session
+        let user_ctx_opt = {
+            let ctx_from_cache = self
+                .active_user_contexts
+                .lock()
+                .await
+                .get(&user_id)
+                .and_then(Weak::upgrade);
 
-        if let Some(session) = session {
+            if let Some(ctx) = ctx_from_cache {
+                Some(ctx)
+            } else {
+                // Fall back to creating from session if not in cache
+                let session = self
+                    .get_account_sessions(user_id.clone())
+                    .await?
+                    .into_iter()
+                    .find(|session| {
+                        CoreSessionState::Authenticated == CoreSessionState::of(session)
+                    });
+
+                if let Some(session) = session {
+                    self.user_context_from_session(&session).await.ok()
+                } else {
+                    None
+                }
+            }
+        };
+
+        if let Some(user_ctx) = user_ctx_opt {
             tracing::info!("Clear all user data from database");
-            if let Ok(user_ctx) = self.user_context_from_session(&session).await {
-                let tether = user_ctx.stash().connection().await?;
-
+            if let Ok(tether) = user_ctx.stash().connection().await {
                 if let Err(e) = nuke::drop_database_tables(tether).await {
                     tracing::error!("Could not clean user database, details: `{e}`");
                 }
             }
+        } else {
+            tracing::warn!(
+                "Could not obtain user context to nuke database tables for user {user_id}"
+            );
         }
 
         tracing::info!("Logout user");
