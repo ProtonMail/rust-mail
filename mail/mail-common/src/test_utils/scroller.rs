@@ -467,7 +467,7 @@ where
 
     fn assert_single_update(actual: &ScrollerUpdate<T>, expected: &TestUpdate) -> bool {
         match (actual, expected) {
-            (ScrollerUpdate::List(ScrollerListUpdate::None(_)), TestUpdate::None) => true,
+            (ScrollerUpdate::List(ScrollerListUpdate::None { .. }), TestUpdate::None) => true,
             (
                 ScrollerUpdate::List(ScrollerListUpdate::Append {
                     items: actual_items,
@@ -539,24 +539,21 @@ where
 
         match update {
             ScrollerUpdate::List(update) => match update {
-                ScrollerListUpdate::None(_) => Ok(None),
-                ScrollerListUpdate::Append { src: _, items } => {
+                ScrollerListUpdate::None { .. } => Ok(None),
+                ScrollerListUpdate::Append { items, .. } => {
                     self.collected_items.extend(items.clone());
                     Ok(Some(items))
                 }
-                ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => {
+                ScrollerListUpdate::ReplaceFrom { idx, items, .. } => {
                     self.collected_items.splice(idx.., items.clone());
                     Ok(Some(items))
                 }
-                ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => {
+                ScrollerListUpdate::ReplaceBefore { idx, items, .. } => {
                     self.collected_items.splice(..idx, items.clone());
                     Ok(Some(items))
                 }
                 ScrollerListUpdate::ReplaceRange {
-                    src: _,
-                    from,
-                    to,
-                    items,
+                    from, to, items, ..
                 } => {
                     self.collected_items.splice(from..to, items.clone());
                     Ok(Some(items))

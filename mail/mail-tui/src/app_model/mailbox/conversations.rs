@@ -72,21 +72,18 @@ impl ConversationsState {
 
         let (scroller, command) = MailScroller::new(scroller, handle, |update| match update {
             ScrollerUpdate::List(update) => match update {
-                ScrollerListUpdate::None(_) => ConversationMessage::NextPage(vec![]).into(),
-                ScrollerListUpdate::Append { src: _, items } => {
+                ScrollerListUpdate::None { .. } => ConversationMessage::NextPage(vec![]).into(),
+                ScrollerListUpdate::Append { items, .. } => {
                     ConversationMessage::NextPage(items).into()
                 }
-                ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => {
+                ScrollerListUpdate::ReplaceFrom { idx, items, .. } => {
                     ConversationMessage::ReplaceFrom(idx, items).into()
                 }
-                ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => {
+                ScrollerListUpdate::ReplaceBefore { idx, items, .. } => {
                     ConversationMessage::ReplaceBefore(idx, items).into()
                 }
                 ScrollerListUpdate::ReplaceRange {
-                    src: _,
-                    from,
-                    to,
-                    items,
+                    from, to, items, ..
                 } => ConversationMessage::ReplaceRange(from, to, items).into(),
             },
             ScrollerUpdate::Error { src, error } => {

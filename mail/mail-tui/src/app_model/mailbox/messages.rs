@@ -99,20 +99,17 @@ impl Mode {
 fn handle_scroller_update(update: ScrollerUpdate<MailMessage>) -> Messages {
     match update {
         ScrollerUpdate::List(update) => match update {
-            ScrollerListUpdate::Append { src: _, items } => MessageMessage::NextPage(items).into(),
-            ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => {
+            ScrollerListUpdate::Append { items, .. } => MessageMessage::NextPage(items).into(),
+            ScrollerListUpdate::ReplaceFrom { idx, items, .. } => {
                 MessageMessage::ReplaceFrom(idx, items).into()
             }
-            ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => {
+            ScrollerListUpdate::ReplaceBefore { idx, items, .. } => {
                 MessageMessage::ReplaceBefore(idx, items).into()
             }
             ScrollerListUpdate::ReplaceRange {
-                src: _,
-                from,
-                to,
-                items,
+                from, to, items, ..
             } => MessageMessage::ReplaceRange(from, to, items).into(),
-            ScrollerListUpdate::None(_) => MessageMessage::NextPage(vec![]).into(),
+            ScrollerListUpdate::None { .. } => MessageMessage::NextPage(vec![]).into(),
         },
         ScrollerUpdate::Error { src, error } => {
             let e = anyhow!("Message Reload Query src: {src:?}, error: {error}");

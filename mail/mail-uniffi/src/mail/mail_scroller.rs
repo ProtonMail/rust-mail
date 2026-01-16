@@ -46,10 +46,13 @@ impl From<ScrollerStatusUpdate> for ConversationScrollerStatusUpdate {
 #[derive(Debug, uniffi::Enum)]
 pub enum ConversationScrollerListUpdate {
     /// No update has occurred. It will be returned only for client-side requests.
-    None,
+    None { scroller_id: String },
 
     /// A new page of conversations needs to be appended to the end of the list.
-    Append(Vec<Conversation>),
+    Append {
+        scroller_id: String,
+        items: Vec<Conversation>,
+    },
 
     /// A page of conversations needs to be replaced at the given index
     /// replacing everything forwards with the new items.
@@ -60,7 +63,11 @@ pub enum ConversationScrollerListUpdate {
     /// [0, 1, 2, 3] -> ReplaceFrom { idx: 2, items: [5, 6, 7] } -> [0, 1, 5, 6, 7]
     /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceFrom { idx: 2, items: [5, 6, 7] } -> [0, 1, 5, 6, 7]
     /// [0, 1, 2, 3] -> ReplaceFrom { idx: 0, items: [5, 6, 7] } -> [5, 6, 7]
-    ReplaceFrom { idx: u64, items: Vec<Conversation> },
+    ReplaceFrom {
+        scroller_id: String,
+        idx: u64,
+        items: Vec<Conversation>,
+    },
 
     /// A page of conversations needs to be replaced before the given index
     /// replacing everything before the index with the new items.
@@ -71,7 +78,11 @@ pub enum ConversationScrollerListUpdate {
     /// [0, 1, 2, 3] -> ReplaceBefore { idx: 2, items: [5, 6, 7] } -> [5, 6, 7, 3]
     /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceBefore { idx: 2, items: [5, 6, 7] } -> [5, 6, 7, 3, 4, 8, 9]
     /// [0, 1, 2, 3] -> ReplaceBefore { idx: 0, items: [5, 6, 7] } -> [5, 6, 7, 0, 1, 2, 3]
-    ReplaceBefore { idx: u64, items: Vec<Conversation> },
+    ReplaceBefore {
+        scroller_id: String,
+        idx: u64,
+        items: Vec<Conversation>,
+    },
 
     /// A page of conversations needs to be replaced at the given index
     /// replacing everything between the given index and the end with the new items.
@@ -89,6 +100,7 @@ pub enum ConversationScrollerListUpdate {
     /// Swift: collected_items.replaceSubrange(from..<to, with: items)
     /// Kotlin: collected_items.subList(from, to).clear(); collected_items.addAll(from, items)
     ReplaceRange {
+        scroller_id: String,
         from: u64, // inclusive
         to: u64,   // exclusive
         items: Vec<Conversation>,
@@ -98,24 +110,43 @@ pub enum ConversationScrollerListUpdate {
 impl From<ScrollerListUpdate<RealContextualConversation>> for ConversationScrollerListUpdate {
     fn from(update: ScrollerListUpdate<RealContextualConversation>) -> Self {
         match update {
-            ScrollerListUpdate::None(_) => Self::None,
-            ScrollerListUpdate::Append { src: _, items } => {
-                Self::Append(items.into_iter().map(Conversation::from).collect())
-            }
-            ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => Self::ReplaceFrom {
+            ScrollerListUpdate::None { scroller_id, .. } => Self::None {
+                scroller_id: scroller_id.to_string(),
+            },
+            ScrollerListUpdate::Append {
+                scroller_id, items, ..
+            } => Self::Append {
+                scroller_id: scroller_id.to_string(),
+                items: items.into_iter().map(Conversation::from).collect(),
+            },
+            ScrollerListUpdate::ReplaceFrom {
+                scroller_id,
+                idx,
+                items,
+                ..
+            } => Self::ReplaceFrom {
+                scroller_id: scroller_id.to_string(),
                 idx: u64::try_from(idx).unwrap(),
                 items: items.into_iter().map(Conversation::from).collect(),
             },
-            ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => Self::ReplaceBefore {
+            ScrollerListUpdate::ReplaceBefore {
+                scroller_id,
+                idx,
+                items,
+                ..
+            } => Self::ReplaceBefore {
+                scroller_id: scroller_id.to_string(),
                 idx: u64::try_from(idx).unwrap(),
                 items: items.into_iter().map(Conversation::from).collect(),
             },
             ScrollerListUpdate::ReplaceRange {
-                src: _,
+                scroller_id,
                 from,
                 to,
                 items,
+                ..
             } => Self::ReplaceRange {
+                scroller_id: scroller_id.to_string(),
                 from: u64::try_from(from).unwrap(),
                 to: u64::try_from(to).unwrap(),
                 items: items.into_iter().map(Conversation::from).collect(),
@@ -181,17 +212,25 @@ impl From<ScrollerStatusUpdate> for MessageScrollerStatusUpdate {
 /// Like [`ConversationScrollerListUpdate`], but for messages.
 #[derive(Debug, uniffi::Enum)]
 pub enum MessageScrollerListUpdate {
-    None,
-    Append(Vec<Message>),
+    None {
+        scroller_id: String,
+    },
+    Append {
+        scroller_id: String,
+        items: Vec<Message>,
+    },
     ReplaceFrom {
+        scroller_id: String,
         idx: u64,
         items: Vec<Message>,
     },
     ReplaceBefore {
+        scroller_id: String,
         idx: u64,
         items: Vec<Message>,
     },
     ReplaceRange {
+        scroller_id: String,
         from: u64,
         to: u64,
         items: Vec<Message>,
@@ -201,26 +240,43 @@ pub enum MessageScrollerListUpdate {
 impl From<ScrollerListUpdate<RealMessage>> for MessageScrollerListUpdate {
     fn from(update: ScrollerListUpdate<RealMessage>) -> Self {
         match update {
-            ScrollerListUpdate::None(_) => Self::None,
-            ScrollerListUpdate::Append { src: _, items } => {
-                Self::Append(items.into_iter().map(Message::from).collect())
-            }
-            ScrollerListUpdate::ReplaceFrom { src: _, idx, items } => {
-                Self::ReplaceFrom {
-                    idx: u64::try_from(idx).unwrap(), // good luck not fitting in a u64
-                    items: items.into_iter().map(Message::from).collect(),
-                }
-            }
-            ScrollerListUpdate::ReplaceBefore { src: _, idx, items } => Self::ReplaceBefore {
+            ScrollerListUpdate::None { scroller_id, .. } => Self::None {
+                scroller_id: scroller_id.to_string(),
+            },
+            ScrollerListUpdate::Append {
+                scroller_id, items, ..
+            } => Self::Append {
+                scroller_id: scroller_id.to_string(),
+                items: items.into_iter().map(Message::from).collect(),
+            },
+            ScrollerListUpdate::ReplaceFrom {
+                scroller_id,
+                idx,
+                items,
+                ..
+            } => Self::ReplaceFrom {
+                scroller_id: scroller_id.to_string(),
+                idx: u64::try_from(idx).unwrap(), // good luck not fitting in a u64
+                items: items.into_iter().map(Message::from).collect(),
+            },
+            ScrollerListUpdate::ReplaceBefore {
+                scroller_id,
+                idx,
+                items,
+                ..
+            } => Self::ReplaceBefore {
+                scroller_id: scroller_id.to_string(),
                 idx: u64::try_from(idx).unwrap(),
                 items: items.into_iter().map(Message::from).collect(),
             },
             ScrollerListUpdate::ReplaceRange {
-                src: _,
+                scroller_id,
                 from,
                 to,
                 items,
+                ..
             } => Self::ReplaceRange {
+                scroller_id: scroller_id.to_string(),
                 from: u64::try_from(from).unwrap(),
                 to: u64::try_from(to).unwrap(),
                 items: items.into_iter().map(Message::from).collect(),
@@ -329,6 +385,12 @@ impl ConversationScroller {
     #[must_use]
     pub fn handle(&self) -> Arc<WatchHandle> {
         Arc::clone(&self.handle)
+    }
+
+    /// Returns the unique identifier for this scroller instance.
+    #[must_use]
+    pub fn id(&self) -> String {
+        self.scroller.id().to_string()
     }
 
     /// Forces a refresh of the scroller. The callback will receive the full
@@ -467,6 +529,12 @@ impl MessageScroller {
         Arc::clone(&self.handle)
     }
 
+    /// Returns the unique identifier for this scroller instance.
+    #[must_use]
+    pub fn id(&self) -> String {
+        self.scroller.id().to_string()
+    }
+
     /// Forces a refresh of the scroller. The callback will receive the full
     /// list of items.
     pub fn force_refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
@@ -602,6 +670,12 @@ impl SearchScroller {
     #[must_use]
     pub fn handle(&self) -> Arc<WatchHandle> {
         Arc::clone(&self.handle)
+    }
+
+    /// Returns the unique identifier for this scroller instance.
+    #[must_use]
+    pub fn id(&self) -> String {
+        self.scroller.id().to_string()
     }
 
     /// Forces a refresh of the scroller. The callback will receive the full
