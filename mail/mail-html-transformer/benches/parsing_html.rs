@@ -28,7 +28,7 @@ pub fn current_benchmark(c: &mut Criterion) {
         c.bench_function("current benchmark", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                message_detector::locate_blockquote(tr.document())
+                message_detector::strip_blockquote(tr.document())
             })
         });
     }
@@ -122,7 +122,7 @@ pub fn parse(c: &mut Criterion) {
     c.bench_function("insert 100 links", |b| {
         b.iter(|| {
             let tr = tr.clone();
-            message_detector::locate_blockquote(tr.document())
+            message_detector::strip_blockquote(tr.document())
         })
     });
 
