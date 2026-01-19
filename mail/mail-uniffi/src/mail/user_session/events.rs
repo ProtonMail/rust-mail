@@ -90,8 +90,17 @@ impl MailUserSession {
             while let Ok(v) = observer.next().await {
                 if let ActionFailureReason::Error(err, _) = v {
                     let err = if let Some(details) = err.as_action_error::<EventPoll>() {
+                        tracing::error!(?details, "Reporting event loop error");
                         match details {
                             ActionError::Action(e) => match e {
+                                ActionEventLoopError::EventLoop(
+                                    EventLoopError::Refresh(_, e)
+                                    | EventLoopError::Subscriber(_, e),
+                                ) if e.is_retryable() => {
+                                    // if the error is retryable do not communicate this to the
+                                    // user.
+                                    continue;
+                                }
                                 ActionEventLoopError::EventLoop(EventLoopError::Refresh(_, _)) => {
                                     EventError::Reason(EventErrorReason::Refresh)
                                 }
@@ -108,9 +117,9 @@ impl MailUserSession {
                             }
                         }
                     } else {
+                        tracing::error!(?err, "Reporting event loop error");
                         EventError::Other(ProtonError::Unexpected(UnexpectedError::Unknown))
                     };
-
                     callback.on_event_loop_error(err).await;
                 }
             }

@@ -81,8 +81,39 @@ pub fn select_all_with_any_attribute(
     })
 }
 
+pub trait NodeRefExt {
+    /// Returns all following nodes. Not just siblings (See [`NodeRef::following_siblings`])
+    /// but also following "uncles" - siblings of parents
+    ///
+    /// Note: It does not traverse inside of those siblings and uncles.
+    /// If you need such a behaviour you can do
+    /// ```ignore
+    ///     .following_nodes()
+    ///     .flat_map(|n| n.inclusive_descendants())
+    /// ```
+    fn following_nodes(&self) -> impl Iterator<Item = NodeRef>;
+}
+
+impl NodeRefExt for NodeRef {
+    fn following_nodes(&self) -> impl Iterator<Item = NodeRef> {
+        let mut current: Option<NodeRef> = Some(self.clone());
+        std::iter::from_fn(move || {
+            loop {
+                let c = current.take()?;
+                if let Some(next) = c.next_sibling() {
+                    current = Some(next.clone());
+                    return Some(next);
+                }
+                current = c.parent();
+            }
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use insta::assert_debug_snapshot;
+
     use super::*;
 
     #[test]
@@ -149,5 +180,39 @@ mod tests {
             vec!["a".to_string(), "span".to_string(), "marquee".to_string(),],
             result
         );
+    }
+
+    #[test]
+    fn test_following_nodes() {
+        let input = r#"
+            <div class="bar">
+                preceding text uncle
+                <div class="preceding-element-uncle"></div>
+                <div class="foo">
+                    preceding text sibling
+                    <div class="preceding-element-sibling"></div>
+                    <div class="anchor">
+                        My anchor
+                    </div>
+                    following text sibling
+                    <div class="following-element-sibling"></div>
+                </div>
+                following text uncle
+                <div class="following-element-uncle"></div>
+            </div>
+        "#;
+
+        let document = kuchikiki::parse_html().one(input);
+
+        let anchor = document.select_first(".anchor").unwrap();
+
+        let result = anchor
+            .as_node()
+            .following_nodes()
+            .map(|node| node.to_string().trim().to_owned())
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>();
+
+        assert_debug_snapshot!(result);
     }
 }

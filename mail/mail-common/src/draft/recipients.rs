@@ -1085,6 +1085,7 @@ async fn calculate_privacy_locks(
     RecipientPrivacyLockUpdate { updates }
 }
 
+#[tracing::instrument(skip_all, fields(email=%email))]
 async fn calculate_privacy_lock(
     ctx: &MailUserContext,
     email: PrivateEmailRef<'_>,
@@ -1104,7 +1105,10 @@ async fn calculate_privacy_lock(
         )
         .await
     {
-        Ok(send_prefs) => PrivacyLockState::Calculated(UiLock::for_composer(&send_prefs)),
+        Ok(send_prefs) => {
+            tracing::debug!("Privacy lock calculated");
+            PrivacyLockState::Calculated(UiLock::for_composer(&send_prefs))
+        }
         Err(e) => {
             warn!("Failed to fetch sender preferences: {e}");
             PrivacyLockState::Default

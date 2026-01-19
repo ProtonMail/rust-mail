@@ -819,7 +819,15 @@ impl DraftActor {
     ) -> Result<Self, MailContextError> {
         let draft = draft_v1::Draft::reply(context, message_id, reply_mode, use_utc).await?;
 
-        Ok(Self::create(context, draft, options))
+        let draft = Self::create(context, draft, options);
+
+        draft
+            .sender
+            .send(DraftActorMessage::RevalidateAllRecipients)
+            .await
+            .map_err(|_| Error::Actor)?;
+
+        Ok(draft)
     }
 
     pub async fn save(&self) -> Result<QueuedActionOutput<Save>, MailContextError> {

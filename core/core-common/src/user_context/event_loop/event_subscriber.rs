@@ -105,6 +105,7 @@ impl EventSubscriberError for CoreEventSubscriberError {
     fn is_retryable(&self) -> bool {
         match self {
             CoreEventSubscriberError::Api(e) => e.is_network_failure() || e.is_server_failure(),
+            CoreEventSubscriberError::Stash(StashError::ConnectionAcquireTimedOut) => true,
             CoreEventSubscriberError::Stash(_) | CoreEventSubscriberError::Other(_) => false,
         }
     }
@@ -368,7 +369,26 @@ impl UserContext {
     ///
     pub async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
         let event_loop_service = self.event_loop_service();
-        event_loop_service.event_poll().poll().await
+
+        let result = event_loop_service.event_poll().poll().await;
+        if let Err(e) = &result {
+            match e {
+                EventLoopError::Subscriber(_, e) | EventLoopError::Refresh(_, e)
+                    if e.is_retryable() =>
+                {
+                    // do no report, this error is retryable
+                }
+                e => {
+                    self.issue_reporter_service().report(
+                        IssueLevel::Critical,
+                        "Failed to poll for events".into(),
+                        issue_report_keys_from_error(e),
+                    );
+                }
+            }
+        }
+
+        result
     }
 
     #[must_use]
