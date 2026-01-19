@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.12] - 2026-01-19
+
+### Features
+
+- [ET-5359] Add `DomainAuthFail` message banner which is activated on `DMARC_FAIL` flag.
+
+
 ## [mail-uniffi-v0.161.11] - 2026-01-19
 
 ### Fixes
