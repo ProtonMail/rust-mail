@@ -1,5 +1,5 @@
 #![allow(clippy::wildcard_imports)]
-#![allow(clippy::result_large_err)]
+#![allow(clippy::result_large_err)] // TODO(ET-5588): address growing Error size
 
 mod ext;
 mod rsvp;

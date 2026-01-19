@@ -1,5 +1,5 @@
 #![allow(clippy::large_enum_variant)]
-#![allow(clippy::result_large_err)]
+#![allow(clippy::result_large_err)] // TODO(ET-5588): address growing Error size
 
 use crate::prelude::*;
 use derive_more::Display;
