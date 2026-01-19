@@ -52,10 +52,9 @@ pub fn strip(document: NodeRef) -> BTreeSet<StrippedUTM> {
         };
 
         let original = url.clone();
-        let cleaned = strip_from_url(url);
-        if cleaned == original {
+        let Some(cleaned) = strip_from_url(url) else {
             continue;
-        }
+        };
         *value = cleaned.to_string();
         res.insert(StrippedUTM { original, cleaned });
     }
@@ -63,6 +62,7 @@ pub fn strip(document: NodeRef) -> BTreeSet<StrippedUTM> {
 }
 
 /// Removes UTM parameters from a given `url`.
+/// Returns new URL if anything was stripped.
 ///
 /// # Example
 ///
@@ -72,33 +72,36 @@ pub fn strip(document: NodeRef) -> BTreeSet<StrippedUTM> {
 ///
 /// if let Ok(url) = Url::parse("https://example.com/?utm_source=example") {
 ///     let new_url  = strip_from_url(url);
-///     assert_eq!(new_url.as_str(), "https://example.com/");
+///     assert_eq!(new_url.unwrap().as_str(), "https://example.com/");
 /// }
 /// ```
 ///
 #[must_use]
-pub fn strip_from_url(url: Url) -> Url {
+pub fn strip_from_url(url: Url) -> Option<Url> {
     // TODO: [ET-84] We should not clone the URL, but we need to do it for now.
     let mut stripped_url = url.clone();
     stripped_url.set_query(None);
 
+    let mut stripped_anything = false;
     for (key, value) in url.query_pairs() {
-        if !GLOBAL_RULES.contains(&key.to_lowercase().as_ref()) {
-            let mut query_pairs = stripped_url.query_pairs_mut();
+        if GLOBAL_RULES.contains(&key.to_lowercase().as_ref()) {
+            stripped_anything = true;
+            continue;
+        }
+        let mut query_pairs = stripped_url.query_pairs_mut();
 
-            if value.is_empty() {
-                query_pairs.append_key_only(&key);
-            } else {
-                query_pairs.append_pair(&key, &value);
-            }
+        if value.is_empty() {
+            query_pairs.append_key_only(&key);
+        } else {
+            query_pairs.append_pair(&key, &value);
         }
     }
 
-    stripped_url
+    stripped_anything.then_some(stripped_url)
 }
 
 /// Removes UTM parameters from an `url` defined as a string.
-pub fn strip_from_string(url: &str) -> Result<Url, url::ParseError> {
+pub fn strip_from_string(url: &str) -> Result<Option<Url>, url::ParseError> {
     let url = Url::parse(url)?;
     Ok(strip_from_url(url))
 }
