@@ -19,6 +19,7 @@ static AMOS_HTTP: &str = include_str!("./amos_http.html");
 static AMOS_LANDING: &str = include_str!("./amos_landing.html");
 static _IMGS: &str = include_str!("./100_imgs.html");
 static LINKS: &str = include_str!("./100_links.html");
+static PATHOLOGICAL_BLOCKQUOTES: &str = include_str!("./pathological_blockquotes.html");
 
 // This is for new features we're currently benchmarking so that we don't have to run every bench
 pub fn current_benchmark(c: &mut Criterion) {
@@ -27,7 +28,7 @@ pub fn current_benchmark(c: &mut Criterion) {
         c.bench_function("current benchmark", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                message_detector::locate_blockquote(tr.document())
+                message_detector::strip_blockquote(tr.document())
             })
         });
     }
@@ -35,6 +36,7 @@ pub fn current_benchmark(c: &mut Criterion) {
     // parse_inner(c, LINKS);
     parse_inner(c, AMOS_HTTP);
     parse_inner(c, AMOS_LANDING);
+    parse_inner(c, PATHOLOGICAL_BLOCKQUOTES);
 }
 
 pub fn parse(c: &mut Criterion) {
@@ -120,7 +122,7 @@ pub fn parse(c: &mut Criterion) {
     c.bench_function("insert 100 links", |b| {
         b.iter(|| {
             let tr = tr.clone();
-            message_detector::locate_blockquote(tr.document())
+            message_detector::strip_blockquote(tr.document())
         })
     });
 

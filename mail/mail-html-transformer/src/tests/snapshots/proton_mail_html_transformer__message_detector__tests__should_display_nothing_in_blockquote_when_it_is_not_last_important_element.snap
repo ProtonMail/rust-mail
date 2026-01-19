@@ -1,0 +1,26 @@
+---
+source: mail/mail-html-transformer/src/tests/message_detector.rs
+expression: sanitized
+---
+<html><head></head><body><div dir="auto">
+    First
+    <div dir="auto"><br></div>
+    <div dir="auto">Second</div>
+    <div dir="auto">
+        <div class="gmail_quote" dir="auto">
+            <div dir="ltr" class="gmail_attr">Third</div>
+            <div dir="ltr" class="gmail_attr"><br></div>
+            <div dir="ltr" class="gmail_attr">Fourth</div>
+            <blockquote class="gmail_quote" style="
+                    margin: 0 0 0 0.8ex;
+                    border-left: 1px #ccc solid;
+                    padding-left: 1ex;
+                ">
+                <div style="font-family: Arial, sans-serif; font-size: 14px"></div>
+            </blockquote>
+        </div>
+    </div>
+    <div dir="auto"><br></div>
+    <div dir="auto">Fifth</div>
+</div>
+</body></html>

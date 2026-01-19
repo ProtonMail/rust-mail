@@ -39,7 +39,6 @@ use crate::transforms::styles::{IncludeFullStaticCss, InjectDarkModeOptions};
 pub use html2text::Html2TextOptions;
 use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
-use message_detector::SplitDoc;
 use sanitizer::StripStyleSheets;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
@@ -250,12 +249,8 @@ impl Transformer {
     #[tracing::instrument(skip_all)]
     pub fn strip_blockquote(&mut self) -> bool {
         message_detector::strip_blockquote(self.document().clone())
-    }
-
-    /// Try to locate and extract the eventual blockquote present in the document no matter the expeditor of the mail
-    #[tracing::instrument(skip_all)]
-    pub fn extract_blockquote(&mut self) -> SplitDoc {
-        message_detector::locate_blockquote(self.document().clone())
+            .blockquote
+            .is_some()
     }
 
     /// Moves every `<style>` from `<head>` into `<body>`.

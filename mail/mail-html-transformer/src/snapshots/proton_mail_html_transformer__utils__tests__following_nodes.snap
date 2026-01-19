@@ -1,0 +1,10 @@
+---
+source: mail/mail-html-transformer/src/utils.rs
+expression: result
+---
+[
+    "following text sibling",
+    "<div class=\"following-element-sibling\"></div>",
+    "following text uncle",
+    "<div class=\"following-element-uncle\"></div>",
+]
