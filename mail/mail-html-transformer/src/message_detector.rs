@@ -4,12 +4,7 @@
 #[path = "tests/message_detector.rs"]
 mod tests;
 
-use std::rc::Rc;
-
-use kuchikiki::{
-    NodeData, NodeRef,
-    iter::{NodeEdge, NodeIterator},
-};
+use kuchikiki::{NodeData, NodeRef, Selectors, iter::NodeEdge};
 
 use crate::utils::NodeRefExt;
 
@@ -42,11 +37,18 @@ const BLOCKQUOTE_SELECTORS: [&str; 22] = [
     r#"[name="quote"]"#, // gmx
 ];
 
-static BLOCKQUOTE_SELECTOR: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
-    BLOCKQUOTE_SELECTORS
-        .map(|v| format!("{v}:not(:empty)"))
-        .join(",")
-});
+static BLOCKQUOTE_SELECTOR: std::sync::LazyLock<Option<Selectors>> =
+    std::sync::LazyLock::new(|| {
+        let selectors_string = BLOCKQUOTE_SELECTORS
+            .map(|v| format!("{v}:not(:empty)"))
+            .join(",");
+
+        Selectors::compile(&selectors_string)
+            .inspect_err(|()| {
+                tracing::warn!("Could not compile selector");
+            })
+            .ok()
+    });
 
 /// This is the result of calling [`locate_blockquote`].
 pub struct SplitDoc {
@@ -66,52 +68,54 @@ pub fn strip_blockquote(message: NodeRef) -> SplitDoc {
     }
 }
 
-fn strip_blockquote_inner(message: &NodeRef) -> Option<NodeRef> {
-    let mut visited_outer_quotes = vec![];
+fn traverse_blockquotes(message: NodeRef, selectors: &Selectors) -> impl Iterator<Item = NodeRef> {
+    let mut node = Some(message);
 
-    let blockquote = message
-        .inclusive_descendants()
-        .select(&BLOCKQUOTE_SELECTOR)
-        .inspect_err(|()| {
-            tracing::warn!("Could not compile selector");
-        })
-        .ok()?
-        // TODO: Whenever we update kuchikiki to a version that supports `:is` selector,
-        // replace that ancestor traversal with `:not(:is(BLOCKQUOTE_SELECTOR) :is(BLOCKQUOTE_SELECTOR))
-        .filter(move |quote| {
-            // We want to filter out all quotes that are already inside of a quote.
-            let is_outer = !quote.as_node().ancestors().any(|ancestor| {
-                visited_outer_quotes
-                    .iter()
-                    .any(|visited| Rc::ptr_eq(visited, &ancestor.0))
-            });
-            if is_outer {
-                visited_outer_quotes.push(quote.as_node().0.clone());
+    std::iter::from_fn(move || {
+        loop {
+            let current = node.take()?;
+            if matches_node_ref(current.clone(), selectors) {
+                // Its a match, we dont want to go deeper, so we take next node instead
+                node = current.following_nodes().next();
+                return Some(current);
+            } else if let Some(child) = current.first_child() {
+                node = Some(child);
+            } else {
+                // Node was childless, we need to process next nodes
+                node = current.following_nodes().next();
             }
-            is_outer
-        })
+        }
+    })
+}
+
+fn matches_node_ref(node_ref: NodeRef, selectors: &Selectors) -> bool {
+    let Some(element_ref) = node_ref.into_element_ref() else {
+        return false;
+    };
+    selectors.matches(&element_ref)
+}
+
+fn strip_blockquote_inner(message: &NodeRef) -> Option<NodeRef> {
+    let selectors = BLOCKQUOTE_SELECTOR.as_ref()?;
+
+    let blockquote = traverse_blockquotes(message.clone(), selectors)
         // We first focus on last blockquote, because the next step iterates on following nodes.
         // And only last blockquote can possibly have NO following nodes ;)
         .last()
         .and_then(move |last_blockquote| {
-            if last_blockquote
-                .as_node()
-                .following_nodes()
-                .any(|following_node| {
-                    // If there is any text content - its not our blockquote
-                    if !following_node.text_contents().trim().is_empty() {
-                        return true;
-                    }
-                    // And if there is any image - then again its not our blockquote
-                    // At this point we already replaced images with an anchor, but we want to keep them
-                    following_node.select_first(".proton-image-anchor").is_ok()
-                })
-            {
+            if last_blockquote.following_nodes().any(|following_node| {
+                // If there is any text content - its not our blockquote
+                if !following_node.text_contents().trim().is_empty() {
+                    return true;
+                }
+                // And if there is any image - then again its not our blockquote
+                // At this point we already replaced images with an anchor, but we want to keep them
+                following_node.select_first(".proton-image-anchor").is_ok()
+            }) {
                 return None;
             }
             Some(last_blockquote)
-        })
-        .map(|n| n.as_node().to_owned());
+        });
 
     // First let's find an element with a well known selector
     // such as an element with class `protonmail_quote
