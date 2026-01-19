@@ -57,23 +57,30 @@ impl<T> From<ScrollerStatusUpdate> for ScrollerUpdate<T> {
 
 #[derive(Debug)]
 pub enum ScrollerListUpdate<T> {
-    None(ScrollerSource),
+    None {
+        src: ScrollerSource,
+        scroller_id: Uuid,
+    },
     Append {
         src: ScrollerSource,
+        scroller_id: Uuid,
         items: Vec<T>,
     },
     ReplaceFrom {
         src: ScrollerSource,
+        scroller_id: Uuid,
         idx: usize,
         items: Vec<T>,
     },
     ReplaceBefore {
         src: ScrollerSource,
+        scroller_id: Uuid,
         idx: usize,
         items: Vec<T>,
     },
     ReplaceRange {
         src: ScrollerSource,
+        scroller_id: Uuid,
         from: usize,
         to: usize,
         items: Vec<T>,
@@ -98,7 +105,7 @@ pub enum ScrollerUpdate<T> {
 
 impl<T> ScrollerUpdate<T> {
     pub fn is_none(&self) -> bool {
-        matches!(self, ScrollerUpdate::List(ScrollerListUpdate::None(_)))
+        matches!(self, ScrollerUpdate::List(ScrollerListUpdate::None { .. }))
     }
 
     pub fn is_error(&self) -> bool {
@@ -116,7 +123,7 @@ impl<T> ScrollerUpdate<T> {
     pub fn src(&self) -> &ScrollerSource {
         match self {
             ScrollerUpdate::List(update) => match update {
-                ScrollerListUpdate::None(src) => src,
+                ScrollerListUpdate::None { src, .. } => src,
                 ScrollerListUpdate::Append { src, .. } => src,
                 ScrollerListUpdate::ReplaceFrom { src, .. } => src,
                 ScrollerListUpdate::ReplaceBefore { src, .. } => src,
@@ -127,6 +134,19 @@ impl<T> ScrollerUpdate<T> {
                 ScrollerStatusUpdate::FetchNewEnd(src) => src,
             },
             ScrollerUpdate::Error { src, .. } => src,
+        }
+    }
+
+    pub fn scroller_id(&self) -> Option<&Uuid> {
+        match self {
+            ScrollerUpdate::List(update) => match update {
+                ScrollerListUpdate::None { scroller_id, .. } => Some(scroller_id),
+                ScrollerListUpdate::Append { scroller_id, .. } => Some(scroller_id),
+                ScrollerListUpdate::ReplaceFrom { scroller_id, .. } => Some(scroller_id),
+                ScrollerListUpdate::ReplaceBefore { scroller_id, .. } => Some(scroller_id),
+                ScrollerListUpdate::ReplaceRange { scroller_id, .. } => Some(scroller_id),
+            },
+            ScrollerUpdate::Status(_) | ScrollerUpdate::Error { .. } => None,
         }
     }
 
@@ -267,7 +287,7 @@ where
             updates,
             handle,
             tasks,
-        } = ScrollerWorker::run(ctx_weak.clone(), source, page_size, label).await?;
+        } = ScrollerWorker::run(id, ctx_weak.clone(), source, page_size, label).await?;
 
         let events = ctx.core_context().event_service();
 
@@ -316,6 +336,11 @@ where
             },
             MailScrollerHandle { updates, handle },
         ))
+    }
+
+    /// Returns the unique identifier for this scroller instance.
+    pub fn id(&self) -> &Uuid {
+        &self.id
     }
 
     #[instrument(skip_all, fields(id = ?self.id))]
@@ -602,6 +627,7 @@ struct ScrollerWorker<S>
 where
     S: MailScrollerSource,
 {
+    scroller_id: Uuid,
     ctx: Weak<MailUserContext>,
     source: Arc<RwLock<S>>,
     task: MailPaginatorJoinHandle,
@@ -630,6 +656,7 @@ where
     S: MailScrollerSource,
 {
     async fn run(
+        scroller_id: Uuid,
         ctx: Weak<MailUserContext>,
         mut source: S,
         page_size: usize,
@@ -656,6 +683,7 @@ where
         let items = Arc::new(SyncRwLock::new(vec![]));
 
         let this = Self {
+            scroller_id,
             ctx,
             source,
             page_size,
@@ -1006,7 +1034,7 @@ where
         Ok(())
     }
 
-    #[instrument(skip_all, fields(src=%call_src))]
+    #[instrument(skip_all, fields(scroller=%self.scroller_id, src=%call_src))]
     async fn fetch_more(
         &mut self,
         call_src: ScrollerSource,
@@ -1062,25 +1090,30 @@ where
         if items.is_empty() {
             debug!("No new items fetched");
 
-            Ok(ScrollerListUpdate::None(call_src).into())
+            Ok(ScrollerListUpdate::None {
+                src: call_src,
+                scroller_id: self.scroller_id,
+            }
+            .into())
         } else {
             if let Some(handle) = self.execute_on_online.take() {
                 handle.abort();
             }
 
-            debug!("Append: items number: {}", items.len());
+            debug!(scroller_id = %self.scroller_id, items = items.len(), "Append items");
 
             self.items.write().extend(items.clone());
 
             Ok(ScrollerListUpdate::Append {
                 src: call_src,
+                scroller_id: self.scroller_id,
                 items,
             }
             .into())
         }
     }
 
-    #[instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(scroller=%self.scroller_id, src=%src))]
     async fn fetch_new(
         &mut self,
         src: ScrollerSource,
@@ -1092,7 +1125,7 @@ where
         self.refresh(false, src).await
     }
 
-    #[instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(scroller=%self.scroller_id, src=%src))]
     async fn refresh(
         &mut self,
         force: bool,
@@ -1112,6 +1145,7 @@ where
 
             ScrollerListUpdate::ReplaceFrom {
                 src,
+                scroller_id: self.scroller_id,
                 idx: 0,
                 items: visible_items,
             }
@@ -1119,7 +1153,12 @@ where
         } else {
             debug!("Calculating diff...");
 
-            let update = calculate_scroller_update(&self.items.read(), &visible_items, src);
+            let update = calculate_scroller_update(
+                &self.items.read(),
+                &visible_items,
+                src,
+                self.scroller_id,
+            );
 
             *self.items.write() = visible_items;
 
@@ -1134,10 +1173,16 @@ where
     fn get_items(&self, src: ScrollerSource) -> ScrollerUpdate<S::Item> {
         let items = self.items.read().clone();
 
-        ScrollerListUpdate::ReplaceFrom { src, idx: 0, items }.into()
+        ScrollerListUpdate::ReplaceFrom {
+            src,
+            scroller_id: self.scroller_id,
+            idx: 0,
+            items,
+        }
+        .into()
     }
 
-    #[instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(scroller=%self.scroller_id, src=%src))]
     async fn change_filter(
         &mut self,
         src: ScrollerSource,
@@ -1155,7 +1200,7 @@ where
         self.reset(src).await
     }
 
-    #[instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(scroller=%self.scroller_id, src=%src))]
     async fn change_label(
         &mut self,
         src: ScrollerSource,
@@ -1177,7 +1222,7 @@ where
         self.reset(src).await
     }
 
-    #[instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(scroller=%self.scroller_id, src=%src))]
     async fn change_keywords(
         &mut self,
         src: ScrollerSource,
@@ -1199,7 +1244,7 @@ where
         self.reset(src).await
     }
 
-    #[instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(scroller=%self.scroller_id, src=%src))]
     async fn clear(
         &mut self,
         src: ScrollerSource,
@@ -1213,7 +1258,7 @@ where
         self.reset(src).await
     }
 
-    #[instrument(skip_all, fields(src=%src))]
+    #[instrument(skip_all, fields(scroller=%self.scroller_id, src=%src))]
     async fn change_include(
         &mut self,
         src: ScrollerSource,
@@ -1224,7 +1269,11 @@ where
             let label = self.include_to_label(include).await;
             self.change_label(src, label, None).await
         } else {
-            Ok(ScrollerListUpdate::None(src).into())
+            Ok(ScrollerListUpdate::None {
+                src,
+                scroller_id: self.scroller_id,
+            }
+            .into())
         }
     }
 
@@ -1431,7 +1480,12 @@ enum ScrollerCommand {
     AlternativeLabels(#[derivative(PartialEq = "ignore")] oneshot::Sender<AlternativeLabels>),
 }
 
-fn calculate_scroller_update<T>(old: &[T], new: &[T], src: ScrollerSource) -> ScrollerUpdate<T>
+fn calculate_scroller_update<T>(
+    old: &[T],
+    new: &[T],
+    src: ScrollerSource,
+    scroller_id: Uuid,
+) -> ScrollerUpdate<T>
 where
     T: ScrollerEq + Clone,
 {
@@ -1445,11 +1499,16 @@ where
 
     if old.len() == new.len() && prefix_count == old.len() {
         debug!("No update required");
-        return ScrollerListUpdate::None(src).into();
+        return ScrollerListUpdate::None { src, scroller_id }.into();
     } else if prefix_count == old.len() {
         let items = new[prefix_count..].to_vec();
         debug!("Append: items number: {}", items.len());
-        return ScrollerListUpdate::Append { src, items }.into();
+        return ScrollerListUpdate::Append {
+            src,
+            scroller_id,
+            items,
+        }
+        .into();
     }
 
     let suffix_count = old
@@ -1468,7 +1527,13 @@ where
 
             debug!("Replace from: {idx}, items number: {}", items.len());
 
-            ScrollerListUpdate::ReplaceFrom { src, idx, items }.into()
+            ScrollerListUpdate::ReplaceFrom {
+                src,
+                scroller_id,
+                idx,
+                items,
+            }
+            .into()
         }
 
         (0, suffix_count) => {
@@ -1482,7 +1547,13 @@ where
 
             debug!("Replace before: {idx}, items number: {}", items.len());
 
-            ScrollerListUpdate::ReplaceBefore { src, idx, items }.into()
+            ScrollerListUpdate::ReplaceBefore {
+                src,
+                scroller_id,
+                idx,
+                items,
+            }
+            .into()
         }
 
         (prefix_count, suffix_count) => {
@@ -1495,6 +1566,7 @@ where
                 if from > to {
                     return ScrollerListUpdate::ReplaceFrom {
                         src,
+                        scroller_id,
                         idx: 0,
                         items: new.to_vec(),
                     }
@@ -1508,6 +1580,7 @@ where
 
             ScrollerListUpdate::ReplaceRange {
                 src,
+                scroller_id,
                 from,
                 to,
                 items,
@@ -1522,35 +1595,54 @@ impl<T: Clone> Clone for ScrollerUpdate<T> {
     fn clone(&self) -> Self {
         match self {
             ScrollerUpdate::List(update) => match update {
-                ScrollerListUpdate::None(src) => ScrollerListUpdate::None(*src).into(),
-                ScrollerListUpdate::Append { src, items } => ScrollerListUpdate::Append {
+                ScrollerListUpdate::None { src, scroller_id } => ScrollerListUpdate::None {
                     src: *src,
+                    scroller_id: *scroller_id,
+                }
+                .into(),
+                ScrollerListUpdate::Append {
+                    src,
+                    scroller_id,
+                    items,
+                } => ScrollerListUpdate::Append {
+                    src: *src,
+                    scroller_id: *scroller_id,
                     items: items.clone(),
                 }
                 .into(),
-                ScrollerListUpdate::ReplaceFrom { src, idx, items } => {
-                    ScrollerListUpdate::ReplaceFrom {
-                        src: *src,
-                        idx: *idx,
-                        items: items.clone(),
-                    }
-                    .into()
+                ScrollerListUpdate::ReplaceFrom {
+                    src,
+                    scroller_id,
+                    idx,
+                    items,
+                } => ScrollerListUpdate::ReplaceFrom {
+                    src: *src,
+                    scroller_id: *scroller_id,
+                    idx: *idx,
+                    items: items.clone(),
                 }
-                ScrollerListUpdate::ReplaceBefore { src, idx, items } => {
-                    ScrollerListUpdate::ReplaceBefore {
-                        src: *src,
-                        idx: *idx,
-                        items: items.clone(),
-                    }
-                    .into()
+                .into(),
+                ScrollerListUpdate::ReplaceBefore {
+                    src,
+                    scroller_id,
+                    idx,
+                    items,
+                } => ScrollerListUpdate::ReplaceBefore {
+                    src: *src,
+                    scroller_id: *scroller_id,
+                    idx: *idx,
+                    items: items.clone(),
                 }
+                .into(),
                 ScrollerListUpdate::ReplaceRange {
                     src,
+                    scroller_id,
                     from,
                     to,
                     items,
                 } => ScrollerListUpdate::ReplaceRange {
                     src: *src,
+                    scroller_id: *scroller_id,
                     from: *from,
                     to: *to,
                     items: items.clone(),
@@ -1579,19 +1671,23 @@ mod tests {
         ScrollerSource::ScrollEvent(Uuid::new_v4())
     }
 
+    fn test_scroller_id() -> Uuid {
+        Uuid::new_v4()
+    }
+
     impl ScrollerEq for i32 {
         fn scroller_eq(&self, other: &Self) -> bool {
             *self == *other
         }
     }
 
-    #[test_case(vec![], vec![] => matches ScrollerUpdate::List(ScrollerListUpdate::None(_)); "Test 1: empty to empty")]
+    #[test_case(vec![], vec![] => matches ScrollerUpdate::List(ScrollerListUpdate::None { .. }); "Test 1: empty to empty")]
     #[test_case(vec![], vec![1] => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![1]; "Test 2: empty to single item")]
     #[test_case(vec![], vec![1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::Append { items, .. }) if items == vec![1, 2, 3]; "Test 3: empty to multiple items")]
     #[test_case(vec![1], vec![] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items.is_empty(); "Test 4: single item to empty")]
     #[test_case(vec![1, 2, 3], vec![] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items.is_empty(); "Test 5: multiple items to empty")]
-    #[test_case(vec![1], vec![1] => matches ScrollerUpdate::List(ScrollerListUpdate::None(_)); "Test 6: same single item")]
-    #[test_case(vec![1, 2, 3], vec![1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::None(_)); "Test 7: same multiple items")]
+    #[test_case(vec![1], vec![1] => matches ScrollerUpdate::List(ScrollerListUpdate::None { .. }); "Test 6: same single item")]
+    #[test_case(vec![1, 2, 3], vec![1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::None { .. }); "Test 7: same multiple items")]
     // Items added at the beginning
     #[test_case(vec![1, 2, 3], vec![0, 1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![0]; "Test 8: add one item at beginning")]
     #[test_case(vec![1, 2, 3], vec![0, -1, 1, 2, 3] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx: 0, items, .. }) if items == vec![0, -1]; "Test 9: add two items at beginning")]
@@ -1643,7 +1739,7 @@ mod tests {
     // Miscellaneous
     #[test_case(vec![1, 2, 3, 3, 4, 5], vec![1, 2, 3, 4, 5] => matches ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx: 0, items, .. }) if items.len() == 5; "Test 36: duplicates")]
     fn test_calculate_scroller_update(old: Vec<i32>, new: Vec<i32>) -> ScrollerUpdate<i32> {
-        let result = calculate_scroller_update(&old, &new, test_source());
+        let result = calculate_scroller_update(&old, &new, test_source(), test_scroller_id());
         let actual = apply_scroller_update(old, &result);
         assert_eq!(actual, new);
         result
@@ -1652,7 +1748,7 @@ mod tests {
     fn apply_scroller_update(mut current: Vec<i32>, update: &ScrollerUpdate<i32>) -> Vec<i32> {
         match update {
             ScrollerUpdate::List(update) => match update {
-                ScrollerListUpdate::None(_) => current,
+                ScrollerListUpdate::None { .. } => current,
                 ScrollerListUpdate::Append { items, .. } => {
                     current.extend(items.clone());
                     current
@@ -1680,7 +1776,7 @@ mod tests {
     #[test]
     fn test_scroller_source_is_preserved() {
         let src = ScrollerSource::Database;
-        let result = calculate_scroller_update(&[1, 2], &[1, 2, 3], src);
+        let result = calculate_scroller_update(&[1, 2], &[1, 2, 3], src, test_scroller_id());
 
         match result {
             ScrollerUpdate::List(ScrollerListUpdate::Append {
@@ -1696,7 +1792,7 @@ mod tests {
     fn test_edge_case_all_common_suffix() {
         let old = vec![1, 2, 3, 4];
         let new = vec![0, 1, 2, 3, 4];
-        let result = calculate_scroller_update(&old, &new, test_source());
+        let result = calculate_scroller_update(&old, &new, test_source(), test_scroller_id());
 
         match result {
             ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx, items, .. }) => {
@@ -1711,7 +1807,7 @@ mod tests {
     fn test_edge_case_no_common_elements() {
         let old = vec![1, 2, 3];
         let new = vec![4, 5, 6, 7];
-        let result = calculate_scroller_update(&old, &new, test_source());
+        let result = calculate_scroller_update(&old, &new, test_source(), test_scroller_id());
 
         match result {
             ScrollerUpdate::List(ScrollerListUpdate::ReplaceFrom { idx, items, .. }) => {
@@ -1727,7 +1823,7 @@ mod tests {
         // Simulate a real-world scenario: some items added at beginning, some modified
         let old = vec![10, 20, 30, 40, 50];
         let new = vec![5, 15, 20, 35, 40, 50]; // Added 5, changed 10->15, changed 30->35
-        let result = calculate_scroller_update(&old, &new, test_source());
+        let result = calculate_scroller_update(&old, &new, test_source(), test_scroller_id());
 
         match result {
             ScrollerUpdate::List(ScrollerListUpdate::ReplaceBefore { idx, items, .. }) => {
