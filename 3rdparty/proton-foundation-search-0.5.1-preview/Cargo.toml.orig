@@ -1,0 +1,90 @@
+[package]
+name = "proton-foundation-search"
+readme = "./README.md"
+version = "0.5.1-preview"
+authors.workspace = true
+keywords.workspace = true
+edition.workspace = true
+repository.workspace = true
+publish = true
+resolver = "2"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bench]]
+name = "insert"
+harness = false
+
+[[bench]]
+name = "search"
+harness = false
+
+[[bench]]
+name = "flattened_text_index"
+harness = false
+
+[[bench]]
+name = "text_insert"
+harness = false
+
+[features]
+default = ["compile-time-tracing-filters", "facet", "wasm-bindgen"]
+# feature flag for heavy end to end tests
+heavy-e2e = []
+compile-time-tracing-filters = ["tracing/release_max_level_warn"]
+facet = ["dep:facet"]
+wasm-bindgen = [
+    "dep:wasm-bindgen",
+    "dep:tracing-subscriber",
+    "dep:tracing-web",
+    "dep:console_error_panic_hook",
+]
+
+[dependencies]
+facet = { workspace = true, optional = true }
+derive_more = { workspace = true, features = ["display", "from", "is_variant"] }
+itertools = { version = "0.14" }
+indexmap = { workspace = true, features = ["serde"] }
+pest = { version = "2.7" }
+pest_derive = { version = "2.7" }
+serde = { workspace = true, features = ["derive", "rc"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+ciborium = { version = "0.2" }
+arc-swap = "1.7.1"
+
+# text
+distance = { version = "0.4" }
+zstd = "0.13"
+
+# wasm
+wasm-bindgen = { version = "0.2", optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+tracing-web = { version = "0.1", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+unic-emoji = "0.9.0"
+
+[dev-dependencies]
+regex = { version = "1.11" }
+test-log.workspace = true
+insta = "*"
+search-internal-helper = { path = "../../tools/search-internal-helper" }
+zstd = "0.13"
+chrono = "*"
+tracing-subscriber.workspace = true
+
+# text
+maplit = { workspace = true }
+
+
+[target.'cfg(not(target_family= "wasm"))'.dev-dependencies]
+criterion = { workspace = true }
+
+[target.'cfg(target_family= "wasm")'.dev-dependencies]
+wasm-bindgen-test = { version = "0.3" }
+
+[lints.clippy]
+expect_used = "deny"
+unwrap_used = "deny"

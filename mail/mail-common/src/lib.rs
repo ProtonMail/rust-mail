@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)] // TODO(ET-5588): address growing Error size
+
 pub mod actions;
 mod background_execution;
 mod context;

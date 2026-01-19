@@ -1,0 +1,23 @@
+---
+source: packages/search/src/query/expression/pest_test.rs
+expression: tree
+---
+query: 'amd64 64bit'
+  expression: 'amd64 64bit'
+    or_seq: 'amd64 64bit'
+      and_seq: 'amd64 64bit'
+        primary_expr: 'amd64'
+          term_expr: 'amd64'
+            simple_term: 'amd64'
+              value: 'amd64'
+                STRING: 'amd64'
+                  UNQUOTED_STRING: 'amd64'
+                    USTRING: 'amd64'
+        primary_expr: '64bit'
+          term_expr: '64bit'
+            simple_term: '64bit'
+              value: '64bit'
+                STRING: '64bit'
+                  UNQUOTED_STRING: '64bit'
+                    USTRING: '64bit'
+  EOI: ''

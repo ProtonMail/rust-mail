@@ -338,12 +338,12 @@ mod tests {
         let metric = into_metrics_element(UserStatus { status, kind }, 1_741_021_308, 1).unwrap();
 
         let serialized = serde_json::to_string(&metric).unwrap();
-
+        let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
         let expected_json = format!(
             r#"{{"Name":"core_signup_account_creation_total","Version":1,"Timestamp":1741021308,"Data":{{"Labels":{{"kind":"{expected_kind}","status":"{expected_status}"}},"Value":1}}}}"#
         );
-
-        assert_eq!(serialized, expected_json);
+        let expected: serde_json::Value = serde_json::from_str(&expected_json).unwrap();
+        assert_eq!(parsed, expected);
 
         assert_eq!(
             PostMetricsRequestElement {

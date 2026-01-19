@@ -1,0 +1,39 @@
+[package]
+name = "unsynn"
+version = "0.1.1"
+edition = "2021"
+authors = ["Christian Thäter <ct@pipapo.org>"]
+description = "(Proc-macro) parsing made easy"
+documentation = "https://docs.rs/unsynn"
+license = "MIT OR Apache-2.0"
+repository = "https://git.pipapo.org/cehteh/unsynn.git"
+keywords = ["parser", "macros", "proc_macro"]
+categories = ["development-tools::procedural-macro-helpers", "parser-implementations"]
+readme = "README.md"
+rust-version = "1.80.1"
+include = ["src/**/*", "LICENSE-*", "README.md", "ROADMAP.md", "COOKBOOK.md"]
+
+[dependencies]
+mutants = "0.0.3"
+proc-macro2 = { version = "1.0.81", features = ["proc-macro", "span-locations"]}
+shadow_counted = "0.4.0"
+fxhash = { version = "0.2.1", optional = true }
+
+[features]
+default = ["hash_keywords", "docgen"]
+hash_keywords = ["dep:fxhash"]
+docgen = []
+
+[lints.rust]
+missing_docs = "warn"
+unknown_lints = "allow"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_const_for_fn = "warn"
+unwrap_used = "deny"
+dbg_macro = "forbid"
+
+[lints.rustdoc]
+missing_crate_level_docs = "warn"
+missing_doc_code_examples = "warn"

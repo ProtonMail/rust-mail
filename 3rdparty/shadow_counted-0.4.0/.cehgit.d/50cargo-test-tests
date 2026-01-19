@@ -1,0 +1,13 @@
+#!/bin/bash
+# shellcheck disable=SC2046
+## checks with 'cargo test --tests', backgrounds
+require git cargo
+
+git_branch_matches "master" "main" "devel" || return 0
+is_cargo_project || return 0
+
+git_hook_matches "pre-commit" "pre-merge-commit" "commit-msg" || return 0
+git_hook_matches "pre-commit" "pre-merge-commit" && background_schedule && return 0
+git_hook_matches "commit-msg" && background_wait && return $(background_result)
+
+run_test cargo test --tests

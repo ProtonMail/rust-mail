@@ -1,0 +1,6 @@
+---
+source: packages/search/src/query/expression/pest_test.rs
+expression: tree
+---
+query: '   '
+  EOI: ''

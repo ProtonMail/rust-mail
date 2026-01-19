@@ -1,0 +1,181 @@
+---
+source: packages/search/src/engine/reset.rs
+expression: sut
+---
+Engine {
+    inner: InnerEngine {
+        collection: CollectionSansIo {
+            reader: ArcSwapAny(
+                None,
+            ),
+            writer: ArcSwapAny(
+                Some(
+                    (
+                        1,
+                        CollectionContent {
+                            attributes: {
+                                "i",
+                                "t",
+                            },
+                            entries: {
+                                "abc": EntryIndex(
+                                    0,
+                                ),
+                            },
+                            identifiers: {
+                                EntryIndex(
+                                    0,
+                                ): "abc",
+                            },
+                        },
+                    ),
+                ),
+            ),
+        },
+        indices: {
+            "bool": Trivial {
+                reader: ArcSwapAny(
+                    None,
+                ),
+                writer: ArcSwapAny(
+                    None,
+                ),
+            },
+            "tag": Trivial {
+                reader: ArcSwapAny(
+                    None,
+                ),
+                writer: ArcSwapAny(
+                    None,
+                ),
+            },
+            "text": TextIndexSansIo {
+                reader: ArcSwapAny(
+                    None,
+                ),
+                writer: ArcSwapAny(
+                    Some(
+                        (
+                            1,
+                            TextIndex {
+                                occurrences: {
+                                    (
+                                        EntryIndex(
+                                            0,
+                                        ),
+                                        AttributeIndex(
+                                            1,
+                                        ),
+                                    ),
+                                },
+                                tokens: [
+                                    (
+                                        "abc",
+                                        {
+                                            OccurrenceRef(
+                                                0,
+                                            ): {
+                                                ValueIndex(
+                                                    0,
+                                                ): {
+                                                    TokenPosition(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    (
+                                        "xyz",
+                                        {
+                                            OccurrenceRef(
+                                                0,
+                                            ): {
+                                                ValueIndex(
+                                                    0,
+                                                ): {
+                                                    TokenPosition(
+                                                        5,
+                                                    ),
+                                                },
+                                            },
+                                        },
+                                    ),
+                                ],
+                                trigrams: {
+                                    "abc": {
+                                        TrigramPosition(
+                                            0,
+                                        ): {
+                                            TokenRef(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                    "xyz": {
+                                        TrigramPosition(
+                                            0,
+                                        ): {
+                                            TokenRef(
+                                                1,
+                                            ),
+                                        },
+                                    },
+                                },
+                                stats: Stats {
+                                    sizes: {
+                                        AttributeIndex(
+                                            1,
+                                        ): {
+                                            EntryIndex(
+                                                0,
+                                            ): (
+                                                6,
+                                                2,
+                                            ),
+                                        },
+                                    },
+                                },
+                            },
+                        ),
+                    ),
+                ),
+            },
+            "u64": Trivial {
+                reader: ArcSwapAny(
+                    None,
+                ),
+                writer: ArcSwapAny(
+                    Some(
+                        (
+                            1,
+                            {
+                                1: {
+                                    AttributeIndex(
+                                        0,
+                                    ): {
+                                        EntryIndex(
+                                            0,
+                                        ): {
+                                            ValueIndex(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                },
+                            },
+                        ),
+                    ),
+                ),
+            },
+        },
+        processor: Processor {
+            text: Processor {
+                min_length: 3,
+                max_length: 20,
+            },
+        },
+        writer: false,
+        current_batch: 0,
+    },
+}

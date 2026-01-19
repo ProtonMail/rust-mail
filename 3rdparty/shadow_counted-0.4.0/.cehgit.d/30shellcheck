@@ -1,0 +1,8 @@
+#!/bin/bash
+## linter for shell scripts
+require shellcheck
+shellcheck_installed || return 0
+git_hook_matches "pre-commit" "pre-merge-commit" || return 0
+git_branch_matches "master" "main" "devel" || return 0
+
+run_test shellcheck_lint

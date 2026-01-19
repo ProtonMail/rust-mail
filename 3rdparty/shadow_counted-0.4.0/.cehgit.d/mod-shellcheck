@@ -1,0 +1,34 @@
+#!/bin/bash
+## shellcheck
+
+require git
+
+function shellcheck_installed {
+    if command -v shellcheck >/dev/null; then
+        debug "shellcheck is installed"
+        return 0
+    else
+        note "shellcheck is not installed"
+        return 1
+    fi
+}
+
+function shellcheck_is_shscript {
+    [[ -f "$1" ]] && { head -1 "$1" | grep -q "^#!.*sh" ; }
+}
+
+function shellcheck_list_shscripts
+{
+    for file in $(git ls-files); do
+        if shellcheck_is_shscript "$file"; then
+            echo "$file"
+        fi
+    done
+}
+
+function shellcheck_lint
+{
+    # shellcheck disable=SC2046
+    shellcheck $(shellcheck_list_shscripts)
+}
+

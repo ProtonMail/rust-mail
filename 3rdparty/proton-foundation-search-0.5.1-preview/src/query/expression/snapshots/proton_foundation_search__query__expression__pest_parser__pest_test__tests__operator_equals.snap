@@ -1,0 +1,18 @@
+---
+source: packages/search/src/query/expression/pest_test.rs
+expression: tree
+---
+query: 'status=active'
+  expression: 'status=active'
+    or_seq: 'status=active'
+      and_seq: 'status=active'
+        primary_expr: 'status=active'
+          term_expr: 'status=active'
+            field_term: 'status=active'
+              FIELD: 'status'
+              OPERATOR: '='
+              value: 'active'
+                STRING: 'active'
+                  UNQUOTED_STRING: 'active'
+                    USTRING: 'active'
+  EOI: ''
