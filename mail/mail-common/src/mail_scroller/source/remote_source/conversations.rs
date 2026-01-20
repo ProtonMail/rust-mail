@@ -1,8 +1,10 @@
 use super::{MailPaginatorJoinHandle, RemoteSource, utils};
 use crate::datatypes::ConversationLabelsCount;
+use crate::datatypes::DeletedItemType;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
+use crate::models::DeletedItem;
 use crate::models::LabelExt;
 use crate::models::Message;
 use crate::prefetch::PrefetchJob;
@@ -537,6 +539,17 @@ impl RemoteConversationScrollerSource {
             conversation.prune_unresolved_labels(&unresolved_label_ids);
         }
 
+        // Batch check for deleted conversations
+        let remote_ids = conversations
+            .iter()
+            .filter_map(|c| c.remote_id.as_ref().map(|id| id.as_str()));
+        let deleted_ids = DeletedItem::find_deleted_by_remote_ids(
+            remote_ids,
+            DeletedItemType::Conversation,
+            tether,
+        )
+        .await?;
+
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
         tether
@@ -555,6 +568,17 @@ impl RemoteConversationScrollerSource {
                 // Save all conversations.
                 for conversation in conversations.iter_mut() {
                     use stash::orm::Model;
+
+                    // Skip conversations that have been deleted
+                    if let Some(remote_id) = &conversation.remote_id {
+                        if deleted_ids.contains(&remote_id.to_string()) {
+                            tracing::debug!(
+                                "Skipping scrolled conversation {} - already deleted",
+                                remote_id
+                            );
+                            continue;
+                        }
+                    }
 
                     // since we now fetch the messages, this should be set to true.
                     conversation.has_messages = true;

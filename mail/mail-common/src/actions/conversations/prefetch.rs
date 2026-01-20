@@ -1,14 +1,15 @@
 use crate::actions::{MailActionError, PREFETCH_ROLLBACK_ACTION_GROUP};
-use crate::datatypes::{ConversationViewOptions, LocalConversationId};
-use crate::models::{Conversation, Message};
+use crate::datatypes::{ConversationViewOptions, DeletedItemType, LocalConversationId};
+use crate::models::{Conversation, DeletedItem, Message};
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
     Action, ActionDependencyKeys, ActionGroup, ActionId, DefaultVersionConverter, Handler,
     Priority, Type, WriterGuard,
 };
+
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::Label;
+use proton_core_common::models::{Label, ModelIdExtension};
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
@@ -90,6 +91,26 @@ impl Handler for PrefetchHandler {
                 action.local_id
             );
             return Ok(());
+        }
+
+        // Check if conversation is in deleted_items tombstone table
+        if let Some(remote_id) =
+            Conversation::local_id_counterpart(action.local_id, guard.tether()).await?
+        {
+            let deleted_tombstones = DeletedItem::find_deleted_by_remote_ids(
+                std::iter::once(remote_id.as_str()),
+                DeletedItemType::Conversation,
+                guard.tether(),
+            )
+            .await?;
+
+            if !deleted_tombstones.is_empty() {
+                tracing::debug!(
+                    "Conversation is in deleted_items, skipping prefetch action, conversation_id: `{}`",
+                    action.local_id
+                );
+                return Ok(());
+            }
         }
 
         let _ = Conversation::sync_conversation_messages(

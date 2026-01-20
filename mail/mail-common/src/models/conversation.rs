@@ -16,7 +16,7 @@ use crate::datatypes::{
     LocalMessageId, MessageAttachmentInfos, MessageLabelsCount, MessageRecipients, MessageSenders,
     ReadFilter, SystemLabelId,
 };
-use crate::datatypes::{LocalConversationId, RollbackItemType};
+use crate::datatypes::{DeletedItemType, LocalConversationId, RollbackItemType};
 use crate::models::*;
 use crate::snooze::SnoozeOptions;
 use crate::{AppError, actions::conversations::Delete};
@@ -2200,11 +2200,36 @@ impl Conversation {
 
         match action {
             Action::Delete => {
+                // Track conversation deletion
+                DeletedItem::new(id.to_string(), DeletedItemType::Conversation)
+                    .save(tx)
+                    .await?;
+
+                // Track all messages in this conversation BEFORE cascade delete
+                // Insert directly from SELECT to avoid allocating intermediate Vec
+                let now = UnixTimestamp::now();
+                tx.execute(
+                    format!(
+                        "INSERT INTO {} (remote_id, item_type, deleted_at)
+                         SELECT remote_id, ?, ?
+                         FROM messages
+                         WHERE local_conversation_id = (
+                             SELECT local_id FROM conversations WHERE remote_id = ?
+                         )
+                         ON CONFLICT (remote_id, item_type) DO NOTHING",
+                        DeletedItem::table_name()
+                    ),
+                    params![DeletedItemType::Message, now, id.clone()],
+                )
+                .await?;
+
+                // Delete conversation (messages cascade via FK constraint)
                 tx.execute(
                     "DELETE FROM conversations WHERE remote_id = ?",
                     params![id.clone()],
                 )
                 .await?;
+
                 Ok(None)
             }
 

@@ -96,6 +96,27 @@ impl Handler for PrefetchHandler {
             return Ok(());
         }
 
+        // Check if message is in deleted_items tombstone table
+        if let Some(ref remote_id) = local_message.remote_id {
+            use crate::datatypes::DeletedItemType;
+            use crate::models::DeletedItem;
+
+            let deleted_tombstones = DeletedItem::find_deleted_by_remote_ids(
+                std::iter::once(remote_id.as_str()),
+                DeletedItemType::Message,
+                guard.tether(),
+            )
+            .await?;
+
+            if !deleted_tombstones.is_empty() {
+                tracing::debug!(
+                    "Message is in deleted_items, skipping prefetch action, message_id: `{}`",
+                    action.local_id
+                );
+                return Ok(());
+            }
+        }
+
         if let Err(e) = local_message.prefetch_message_body(&ctx, &mut guard).await {
             match e {
                 MailContextError::Api(network_error) => {

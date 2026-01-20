@@ -1,5 +1,5 @@
 use crate::actions::rollback::RollbackAction;
-use crate::models::RollbackItem;
+use crate::models::{DeletedItem, RollbackItem};
 use crate::user_context::EventSubscriberList;
 use crate::{MailContextError, MailUserContext};
 use anyhow::anyhow;
@@ -8,6 +8,7 @@ use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::app_events::OnEnterForegroundEvent;
 use proton_core_common::services::InitializationService;
 use stash::orm::Model;
+use stash::stash::RunTransaction;
 use std::time::Duration;
 use tokio::time;
 use tracing::{Instrument, error};
@@ -82,6 +83,10 @@ impl MailUserContext {
                     if let Err(e) = ctx.queue_item_rollback().await {
                         error!("Failed to queue item rollback action: {e:?}")
                     }
+
+                    if let Err(e) = ctx.verify_and_cleanup_deleted_items().await {
+                        error!("Failed to verify and cleanup deleted items: {e:?}")
+                    }
                 }
             }
             .instrument(tracing::debug_span!("event_loop"))
@@ -141,6 +146,17 @@ impl MailUserContext {
             };
             last_action_ids.last_rollback_action_id = Some(output.id);
         }
+        Ok(())
+    }
+
+    async fn verify_and_cleanup_deleted_items(&self) -> Result<(), MailContextError> {
+        let mut tether = self.user_stash().connection().await?;
+        tether
+            .run_tx(async |tx| {
+                DeletedItem::verify_and_cleanup(tx).await?;
+                Ok(())
+            })
+            .await?;
         Ok(())
     }
 

@@ -44,9 +44,9 @@ use crate::actions::{
     ConversationOrMessage, LabelAsAction, MessageActionSheet, MoveAction, filter_responses,
 };
 use crate::datatypes::{
-    AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageSender,
-    MobileAction, ParsedHeaders, ReadFilter, RollbackItemType, SystemLabelId,
+    AttachmentMetadata, CustomLabel, DeletedItemType, Disposition, EncryptedMessageBody,
+    ExclusiveLocation, LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients,
+    MessageSender, MobileAction, ParsedHeaders, ReadFilter, RollbackItemType, SystemLabelId,
 };
 use crate::datatypes::{LocalConversationId, ParsedHeaderValue};
 use crate::decrypted_message::ThemeOpts;
@@ -642,6 +642,15 @@ impl Message {
                 let mut conversation = Conversation::unknown(remote_conversation_id.clone());
                 conversation.save_sync(tx)?;
                 self.local_conversation_id = conversation.local_id;
+
+                // Remove conversation tombstone from deleted_items if it exists.
+                // This allows new messages to revive a deleted conversation and
+                // allows Scroller to immediately update it with real API data.
+                DeletedItem::remove_tombstone_sync(
+                    remote_conversation_id.as_ref(),
+                    DeletedItemType::Conversation,
+                    tx,
+                )?;
             }
         }
 
@@ -1906,8 +1915,24 @@ impl Message {
         unresoled_label_ids: &HashSet<LabelId>,
         tx: &Bond<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
+        let remote_ids = api_messages.iter().map(|m| m.id.as_str());
+        let deleted_ids = DeletedItem::find_deleted_by_remote_ids(
+            remote_ids,
+            DeletedItemType::Message,
+            tx.tether(),
+        )
+        .await?;
+
         let mut messages = Vec::with_capacity(api_messages.len());
         for api_message in api_messages {
+            // Skip messages that have been deleted
+            if deleted_ids.contains(&api_message.id.to_string()) {
+                tracing::warn!(
+                    "Skipping scrolled message {} - already deleted",
+                    api_message.id
+                );
+                continue;
+            }
             let Some(message) = (if Message::sync_decision(&api_message, None, tx).await?
                 == MessageSyncDecision::Skip
             {
@@ -2016,6 +2041,11 @@ impl Message {
                     params![id.clone()],
                 )
                 .await?;
+
+                DeletedItem::new(id.to_string(), DeletedItemType::Message)
+                    .save(tx)
+                    .await?;
+
                 Ok(None)
             }
 

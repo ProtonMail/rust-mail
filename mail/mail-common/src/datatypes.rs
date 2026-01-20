@@ -1,6 +1,7 @@
 mod assigned_actions;
 pub mod attachment;
 pub(crate) mod contextual_conversation;
+mod deleted_item_type;
 pub mod dependencies;
 pub mod exclusive_location;
 pub mod folder_banner;
@@ -23,6 +24,7 @@ use stash::orm::Model;
 
 pub use assigned_actions::*;
 pub use contextual_conversation::*;
+pub use deleted_item_type::DeletedItemType;
 use derive_more::derive::TryFrom;
 pub use exclusive_location::ExclusiveLocation;
 pub use ids::*;
