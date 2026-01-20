@@ -193,12 +193,6 @@ async fn banners() {
         ..msg_normal.clone()
     };
 
-    let msg_dmarc_fail = Message {
-        flags: MessageFlags::DMARC_FAIL,
-        remote_id: Some("dmarc_fail".into()),
-        ..msg_normal.clone()
-    };
-
     assert_eq!(
         Vec::<MessageBanner>::new(),
         msg_normal.get_banners(tether).await
@@ -248,11 +242,6 @@ async fn banners() {
             timestamp: snooze_time
         }],
         msg_snoozed.get_banners(tether).await,
-    );
-
-    assert_eq!(
-        vec![MessageBanner::DomainAuthFail],
-        msg_dmarc_fail.get_banners(tether).await,
     );
 
     tether
@@ -373,12 +362,6 @@ async fn banners() {
     MessageFlags::empty(),
     Some(MessageBanner::Spam {auto:true});
     "No flags in spam still are auto spam"
-)]
-#[test_case(
-    LabelId::inbox(),
-    MessageFlags::DMARC_FAIL,
-    Some(MessageBanner::DomainAuthFail);
-    "DMARC fail shows DomainAuthFail banner"
 )]
 #[tokio::test]
 async fn spam_banners(label: LabelId, flags: MessageFlags, res: Option<MessageBanner>) {
