@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["sql"]
+default = ["sql", "events-v6"]
 gtk = []
 test-utils = [
   "dep:wiremock",
