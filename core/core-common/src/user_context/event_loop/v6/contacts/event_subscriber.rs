@@ -74,8 +74,7 @@ impl EventSubscriber<ContactEventSourceV6> for ContactEventV6Subscriber {
                     }
 
                     if let Err(e) = ctx
-                        .rebaseable_queue()
-                        .await
+                        .queue()
                         .rebase_in(ActionGroup::default(), &changeset, tx)
                         .await
                     {

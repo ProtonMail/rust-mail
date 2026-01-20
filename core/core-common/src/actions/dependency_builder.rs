@@ -1,4 +1,3 @@
-use crate::actions::event_poll::EventPoll;
 use proton_action_queue::action::{ActionDependencyKey, ActionDependencyKeys};
 use std::fmt::Debug;
 
@@ -12,13 +11,6 @@ pub struct ActionDependencyKeysBuilder(ActionDependencyKeys);
 impl ActionDependencyKeysBuilder {
     #[must_use]
     pub fn new() -> Self {
-        let mut keys = ActionDependencyKeys::default();
-        keys.record.push(EventPoll::dependency_key());
-        Self(keys)
-    }
-
-    #[must_use]
-    pub fn without_event_loop_dependency() -> Self {
         Self(ActionDependencyKeys::default())
     }
 

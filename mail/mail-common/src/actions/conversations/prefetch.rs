@@ -7,7 +7,6 @@ use proton_action_queue::action::{
     Priority, Type, WriterGuard,
 };
 use proton_action_queue::rebase::RebaseChangeSet;
-use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use serde::{self, Deserialize, Serialize};
@@ -45,7 +44,7 @@ impl Action for Prefetch {
     type Error = MailActionError;
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
-        ActionDependencyKeysBuilder::default().build()
+        ActionDependencyKeys::default()
     }
 }
 
@@ -99,7 +98,7 @@ impl Handler for PrefetchHandler {
             &mut guard,
             ctx.session(),
             false,
-            ctx.rebaseable_queue().await,
+            ctx.action_queue(),
         )
         .await;
 

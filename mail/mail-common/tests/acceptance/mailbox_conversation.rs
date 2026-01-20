@@ -1,6 +1,5 @@
 use proton_core_api::services::proton::Label as ApiLabel;
 use proton_core_api::services::proton::{LabelId, LabelType as ApiLabelType};
-use proton_core_common::RebasableQueue;
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::response_data::ConversationLabel as ApiConversationLabel;
@@ -97,7 +96,7 @@ async fn test_new_mailbox_sync_conversations() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
-        RebasableQueue::default(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -115,7 +114,7 @@ async fn test_new_mailbox_sync_conversations() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
-        RebasableQueue::default(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -255,7 +254,7 @@ async fn test_new_mailbox_syncs_new_conversation_messages_on_push_notification()
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
-        RebasableQueue::default(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -276,7 +275,7 @@ async fn test_new_mailbox_syncs_new_conversation_messages_on_push_notification()
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
-        RebasableQueue::default(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -397,7 +396,7 @@ async fn test_opening_conversation_with_trashed_message() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
-        RebasableQueue::default(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -416,7 +415,7 @@ async fn test_opening_conversation_with_trashed_message() {
         ConversationViewOptions::NonTrashed,
         user_ctx.user_stash(),
         user_ctx.session(),
-        RebasableQueue::default(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -439,7 +438,7 @@ async fn test_opening_conversation_with_trashed_message() {
         ConversationViewOptions::Trashed,
         user_ctx.user_stash(),
         user_ctx.session(),
-        RebasableQueue::default(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -582,7 +581,7 @@ async fn test_new_mailbox_syncs_new_conversation_if_total_does_not_add_up() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
-        RebasableQueue::default(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()
@@ -616,7 +615,7 @@ async fn test_new_mailbox_syncs_new_conversation_if_total_does_not_add_up() {
         ConversationViewOptions::All,
         user_ctx.user_stash(),
         user_ctx.session(),
-        RebasableQueue::default(),
+        user_ctx.action_queue(),
     )
     .await
     .unwrap()

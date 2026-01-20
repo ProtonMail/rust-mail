@@ -48,7 +48,7 @@ use proton_core_common::services::{
 };
 use proton_core_common::{
     AddressKeysContactFetchPolicy, ContactError, Context as CoreContext, CoreContextError,
-    KeyHandlingError, Origin, RebasableQueue, UserContext, services::UserMetricService,
+    KeyHandlingError, Origin, UserContext, services::UserMetricService,
 };
 use proton_crypto_account::keys::{PinnedPublicKeys, PublicAddressKeys};
 use proton_crypto_inbox::keys::{
@@ -424,28 +424,6 @@ impl MailUserContext {
             // avoid it, we start our queues as paused and resume once everything
             // has been initialized, i.e. here:
             this.queues().resume();
-
-            // This section is just for us to have clues in the logs on whether the feature got enabled
-            // disabled for this user at some point. To be removed after it becomes permament.
-            let weak_this = this.this.clone();
-            let mut rebase_enabled = this.user_context().has_rebase_feature().await;
-            let user_id = this.user_id().clone();
-            tracing::info!("Rebase feature = {}", rebase_enabled);
-            if let Ok(watcher) = this.mail_context.core_context().feature_flags().watch().await.inspect_err(|e| error!("Failed to watch feature flags :{e}")) {
-                this.spawn(async move {
-                  while let Ok(()) = watcher.receiver.recv_async().await {
-                      let Some(ctx) = weak_this.upgrade() else {
-                          return;
-                      };
-
-                      let new_value = ctx.user_context().has_rebase_feature().await;
-                      if new_value != rebase_enabled {
-                          tracing::info!(?user_id, "Rebase feature updated = {}", rebase_enabled);
-                          rebase_enabled = new_value;
-                      }
-                  }
-                });
-            }
 
             tracing::info!("Creating MailUserContext...Done");
             Ok(this)
@@ -1060,10 +1038,6 @@ impl MailUserContext {
 
     pub fn image_loader(&self) -> &ImageLoader {
         self.get_service()
-    }
-
-    pub async fn rebaseable_queue(&self) -> RebasableQueue {
-        self.user_context.rebaseable_queue().await
     }
 }
 

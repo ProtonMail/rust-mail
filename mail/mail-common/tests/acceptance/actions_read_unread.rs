@@ -327,7 +327,6 @@ mod rebase {
     use proton_action_queue::rebase::RebaseChangeSet;
     use proton_core_api::services::proton::{Action, AddressId, EventId};
     use proton_core_common::models::{Address, ModelExtension};
-    use proton_core_common::services::global_feature_flags::MAIL_ET_REBASE_FEATURE_KEY;
     use proton_core_common::test_utils::account::TEST_ADDRESS_ID;
     use proton_mail_api::services::proton::common::ConversationId;
     use proton_mail_api::services::proton::prelude::{ConversationEvent, MailEvent, MessageEvent};
@@ -556,12 +555,6 @@ mod rebase {
         assert_eq!(updated_conversation.num_unread, 0);
         assert_eq!(updated_conversation.labels[0].context_num_unread, 0);
 
-        user_ctx
-            .core_context()
-            .feature_flags()
-            .test_override(MAIL_ET_REBASE_FEATURE_KEY, true)
-            .await
-            .unwrap();
         user_ctx
             .apply_event(MailEvent {
                 event_id: EventId::from("MyEvent"),

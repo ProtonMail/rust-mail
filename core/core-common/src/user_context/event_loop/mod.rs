@@ -1,6 +1,6 @@
 use crate::UserContext;
 use anyhow::Context;
-use proton_action_queue::action::{Action, Metadata, Priority};
+use proton_action_queue::action::{Metadata, Priority};
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::QueuedError;
 use proton_action_queue::{action::ActionId, queue::ActionError};
@@ -119,14 +119,7 @@ impl UserContext {
         let (action, priority) = if intent == EventPollIntent::Forced {
             (EventPoll::forced(), Priority::Highest)
         } else {
-            (
-                EventPoll::default(),
-                if self.has_rebase_feature().await {
-                    Priority::Normal
-                } else {
-                    EventPoll::PRIORITY
-                },
-            )
+            (EventPoll::default(), Priority::Normal)
         };
         let metadata = Metadata::builder().with_priority_override(priority).build();
         let last_action_id = if intent == EventPollIntent::Forced {

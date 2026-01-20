@@ -19,8 +19,6 @@ pub enum FeatureFlagsBackgroundTask {
     Disabled,
 }
 
-pub const MAIL_ET_REBASE_FEATURE_KEY: &str = "MailETRebaseExperiment";
-
 #[derive(Clone)]
 pub struct FeatureFlagsService {
     ctx: Weak<Context>,

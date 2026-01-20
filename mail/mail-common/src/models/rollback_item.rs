@@ -3,13 +3,13 @@ use crate::datatypes::RollbackItemType;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::models::{Conversation, Message, MessageSyncDecision};
 use futures::stream::{FuturesOrdered, FuturesUnordered, StreamExt};
+use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
 use proton_core_api::session::Session;
-use proton_core_common::RebasableQueue;
 use proton_core_common::models::Label;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
@@ -88,7 +88,7 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
-        queue: &RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>> + Copy,
@@ -105,7 +105,7 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
-        queue: &RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
@@ -118,7 +118,7 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
-        queue: &RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
@@ -131,7 +131,7 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
-        queue: &RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
@@ -189,7 +189,7 @@ impl RollbackItem {
         api: &Session,
         tx_runner: &mut T,
         batch: Option<usize>,
-        queue: &RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<(), MailContextError> {
         let items: Vec<H::RemoteId> =
             Self::find_remote_ids_by_kind(H::item_type(), tx_runner.tether())
