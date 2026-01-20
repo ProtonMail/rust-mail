@@ -1287,11 +1287,6 @@ impl DecryptedMessage {
                         .bold()
                         .fg(Color::Red),
                 ),
-                MessageBanner::DomainAuthFail => ListItem::from(
-                    Span::from("> This message failed DMARC authentication.")
-                        .bold()
-                        .fg(Color::Yellow),
-                ),
             })
             .collect();
 

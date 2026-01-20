@@ -400,7 +400,6 @@ pub enum MessageBanner {
     EmbeddedImages,
     RemoteContent,
     UnableToDecrypt,
-    DomainAuthFail,
 }
 
 impl From<RealMessageBanner> for MessageBanner {
@@ -429,7 +428,6 @@ impl From<RealMessageBanner> for MessageBanner {
             RealMessageBanner::EmbeddedImages => Self::EmbeddedImages,
             RealMessageBanner::RemoteContent => Self::RemoteContent,
             RealMessageBanner::UnableToDecrypt => Self::UnableToDecrypt,
-            RealMessageBanner::DomainAuthFail => Self::DomainAuthFail,
         }
     }
 }
