@@ -14,10 +14,10 @@ use crate::{
 use anyhow::anyhow;
 use itertools::Itertools;
 use proton_action_queue::action::ActionGroup;
+use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::{services::proton::LabelId, session::Session};
-use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::Label;
 use proton_core_common::models::ModelExtension;
@@ -252,7 +252,6 @@ impl RemoteConversationScrollerSource {
 
         Self::save_conversations(
             local_label_id,
-            &remote_label_id,
             &mut conversations,
             message_metadata,
             unread,
@@ -263,7 +262,7 @@ impl RemoteConversationScrollerSource {
             vec![],
             ctx.session(),
             &mut tether,
-            ctx.rebaseable_queue().await,
+            ctx.action_queue(),
         )
         .await?;
 
@@ -357,7 +356,6 @@ impl RemoteConversationScrollerSource {
 
         Self::save_conversations(
             local_label_id,
-            &remote_label_id,
             &mut conversations,
             message_metadata,
             unread,
@@ -368,7 +366,7 @@ impl RemoteConversationScrollerSource {
             conversation_counts,
             ctx.session(),
             &mut tether,
-            ctx.rebaseable_queue().await,
+            ctx.action_queue(),
         )
         .await?;
 
@@ -460,7 +458,6 @@ impl RemoteConversationScrollerSource {
 
         Self::save_conversations(
             local_label_id,
-            &remote_label_id,
             &mut conversations,
             message_metadata,
             unread,
@@ -471,7 +468,7 @@ impl RemoteConversationScrollerSource {
             vec![],
             ctx.session(),
             &mut tether,
-            ctx.rebaseable_queue().await,
+            ctx.action_queue(),
         )
         .await?;
 
@@ -511,7 +508,6 @@ impl RemoteConversationScrollerSource {
     #[allow(clippy::too_many_arguments)]
     async fn save_conversations(
         local_label_id: LocalLabelId,
-        remote_label_id: &LabelId,
         conversations: &mut [Conversation],
         message_metadata: Vec<ApiMessageMetadata>,
         unread: ReadFilter,
@@ -522,7 +518,7 @@ impl RemoteConversationScrollerSource {
         conversation_labels_count: Vec<ConversationLabelsCount>,
         api: &Session,
         tether: &mut Tether,
-        queue: RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<(), MailContextError> {
         // Resolve missing dependencies.
         let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
@@ -558,23 +554,17 @@ impl RemoteConversationScrollerSource {
                 let mut rebase_change_set = RebaseChangeSet::default();
                 // Save all conversations.
                 for conversation in conversations.iter_mut() {
+                    use stash::orm::Model;
+
                     // since we now fetch the messages, this should be set to true.
                     conversation.has_messages = true;
-                    if queue.is_rebase_enabled() {
-                        use stash::orm::Model;
-                        conversation.save(tx).await?;
-                        rebase_change_set.add(conversation.id());
-                    } else {
-                        conversation
-                            .create_or_get_local(remote_label_id, &mut rebase_change_set, tx)
-                            .await?;
-                    }
+                    conversation.save(tx).await?;
+                    rebase_change_set.add(conversation.id());
                 }
 
                 Message::save_scroller_messages(
                     message_metadata,
                     &mut rebase_change_set,
-                    queue.is_rebase_enabled(),
                     &unresolved_label_ids,
                     tx,
                 )

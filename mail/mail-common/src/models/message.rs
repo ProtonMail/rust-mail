@@ -58,7 +58,6 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_api::services::proton::{PrivateEmail, PrivateString};
-use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{
     LabelType, LocalAddressId, LocalLabelId, SystemLabel, UnixTimestamp,
 };
@@ -623,23 +622,8 @@ impl Message {
     pub async fn create_or_get_local(
         &mut self,
         rebase_change_set: &mut RebaseChangeSet,
-        rebase_feature_enabled: bool,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        if !rebase_feature_enabled
-            && let Some(remote_id) = self.remote_id.clone()
-            && let Some(existing) = Self::find_by_remote_id(remote_id, bond).await?
-        {
-            *self = existing;
-
-            tracing::trace!(
-                remote_id = ?self.remote_id,
-                "Skipping saving message, we already have it in the local DB"
-            );
-
-            return Ok(());
-        }
-
         self.save(bond).await?;
         rebase_change_set.add(self.id());
         Ok(())
@@ -1081,13 +1065,9 @@ impl Message {
             )));
         }
 
-        let (_, encrypted_body) = Self::sync_message_and_body(
-            remote_id,
-            ctx.session(),
-            &mut tx,
-            ctx.rebaseable_queue().await,
-        )
-        .await?;
+        let (_, encrypted_body) =
+            Self::sync_message_and_body(remote_id, ctx.session(), &mut tx, ctx.action_queue())
+                .await?;
 
         trace!("Message successfully downloaded. Decrypting...");
 
@@ -1565,13 +1545,9 @@ impl Message {
     ) -> MailContextResult<(Message, DecryptedMessageBody)> {
         tracing::info!("Force syncing");
 
-        let (message, encrypted) = Self::sync_message_and_body(
-            message_id,
-            ctx.session(),
-            tether,
-            ctx.rebaseable_queue().await,
-        )
-        .await?;
+        let (message, encrypted) =
+            Self::sync_message_and_body(message_id, ctx.session(), tether, ctx.action_queue())
+                .await?;
 
         let decrypted = Self::decrypt_message_body(
             ctx,
@@ -1590,7 +1566,7 @@ impl Message {
         message_id: MessageId,
         api: &Session,
         tx: &mut impl RunTransaction,
-        queue: RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         info!("Fetching message");
         let message = api.get_message(message_id).await.map(|v| v.message)?;
@@ -1927,7 +1903,6 @@ impl Message {
     pub(crate) async fn save_scroller_messages(
         api_messages: Vec<ApiMessageMetadata>,
         rebase_change_set: &mut RebaseChangeSet,
-        has_rebase_feature: bool,
         unresoled_label_ids: &HashSet<LabelId>,
         tx: &Bond<'_>,
     ) -> Result<Vec<Message>, MailContextError> {
@@ -1940,9 +1915,7 @@ impl Message {
             } else {
                 let mut message = Message::from_api_metadata(api_message, tx).await?;
                 message.prune_unresolved_labels(unresoled_label_ids);
-                message
-                    .create_or_get_local(rebase_change_set, has_rebase_feature, tx)
-                    .await?;
+                message.create_or_get_local(rebase_change_set, tx).await?;
                 Some(message)
             }) else {
                 continue;

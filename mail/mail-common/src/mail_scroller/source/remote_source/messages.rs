@@ -13,9 +13,9 @@ use crate::{
 use anyhow::anyhow;
 use itertools::Itertools;
 use proton_action_queue::action::ActionGroup;
+use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
-use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::Label;
 use proton_core_common::models::ModelExtension;
@@ -245,7 +245,7 @@ impl RemoteMessageScrollerSource {
             vec![],
             ctx.session(),
             &mut tether,
-            ctx.rebaseable_queue().await,
+            ctx.action_queue(),
         )
         .await
     }
@@ -331,7 +331,7 @@ impl RemoteMessageScrollerSource {
             vec![],
             ctx.session(),
             &mut tether,
-            ctx.rebaseable_queue().await,
+            ctx.action_queue(),
         )
         .await
     }
@@ -411,7 +411,7 @@ impl RemoteMessageScrollerSource {
             message_label_counts.counts.into_iter().map_into().collect(),
             ctx.session(),
             &mut tether,
-            ctx.rebaseable_queue().await,
+            ctx.action_queue(),
         )
         .await?;
 
@@ -429,7 +429,7 @@ impl RemoteMessageScrollerSource {
         message_labels_count: Vec<MessageLabelsCount>,
         api: &Session,
         tether: &mut Tether,
-        queue: RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         // Resolve missing dependencies.
         let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
@@ -460,7 +460,6 @@ impl RemoteMessageScrollerSource {
                 let messages = Message::save_scroller_messages(
                     api_messages,
                     &mut rebase_change_set,
-                    queue.is_rebase_enabled(),
                     &unresolved_label_ids,
                     tx,
                 )

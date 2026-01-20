@@ -269,7 +269,7 @@ pub async fn conversation(
                 view_options,
                 &stash,
                 &session,
-                ctx.rebaseable_queue().await,
+                ctx.action_queue(),
             )
             .await?
             .map(Into::into),

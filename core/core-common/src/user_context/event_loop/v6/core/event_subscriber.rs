@@ -78,8 +78,7 @@ impl EventSubscriber<CoreEventSourceV6> for CoreEventV6Subscriber {
                         }
 
                         if let Err(e) = ctx
-                            .rebaseable_queue()
-                            .await
+                            .queue()
                             .rebase_in(ActionGroup::default(), &changeset, tx)
                             .await
                         {

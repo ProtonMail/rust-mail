@@ -9,9 +9,9 @@ use crate::{
     mail_scroller::MailScrollerSource,
     models::{Message, MessageCounter, MessageLabel, SearchScrollData},
 };
+use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::{services::proton::LabelId, session::Session};
-use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::{
@@ -111,7 +111,7 @@ impl SearchScrollerSource {
                 remote_label_id,
                 search,
                 page_size,
-                ctx.rebaseable_queue().await,
+                ctx.action_queue(),
             )
             .await?;
 
@@ -144,7 +144,7 @@ impl SearchScrollerSource {
                     time,
                     search,
                     page_size,
-                    ctx.rebaseable_queue().await,
+                    ctx.action_queue(),
                 )
                 .await?;
             }
@@ -163,7 +163,7 @@ impl SearchScrollerSource {
         remote_label_id: LabelId,
         search: SearchOptions,
         page_size: usize,
-        queue: RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         info!("Syncing first page in {remote_label_id:?}");
 
@@ -207,7 +207,7 @@ impl SearchScrollerSource {
         last_time: UnixTimestamp,
         search: SearchOptions,
         page_size: usize,
-        queue: RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_time}"
@@ -253,7 +253,7 @@ impl SearchScrollerSource {
         api_messages: Vec<ApiMessageMetadata>,
         api: &Session,
         tether: &mut Tether,
-        queue: RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         if api_messages.is_empty() {
             return Ok(vec![]);
@@ -281,7 +281,6 @@ impl SearchScrollerSource {
                 let mut messages = Message::save_scroller_messages(
                     api_messages,
                     &mut rebase_change_set,
-                    queue.is_rebase_enabled(),
                     &unresolved_label_ids,
                     tx,
                 )

@@ -36,7 +36,6 @@ use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
 use proton_core_api::session::Session;
-use proton_core_common::RebasableQueue;
 use proton_core_common::datatypes::{
     InitializationKey, LabelType, LocalLabelId, SystemLabel, UnixTimestamp, WeekStart,
 };
@@ -1804,7 +1803,7 @@ impl Conversation {
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
         session: &Session,
-        queue: RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<Conversation, AppError> {
         let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
@@ -1926,7 +1925,7 @@ impl Conversation {
         tx: &mut impl RunTransaction,
         session: &Session,
         extra_sync_allowed: bool,
-        queue: RebasableQueue<'_>,
+        queue: &Queue,
     ) -> Result<(), AppError> {
         let Some(mut conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await?
         else {

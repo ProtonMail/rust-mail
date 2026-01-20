@@ -244,8 +244,7 @@ impl EventSubscriber<MailEventSourceV5> for MailEventV5Subscriber {
                         data.update_incoming_default()
                     }
 
-                    ctx.rebaseable_queue()
-                        .await
+                    ctx.action_queue()
                         .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                         .await
                         .context("Failed to rebase")?;

@@ -7,7 +7,6 @@ use proton_action_queue::action::{
     Priority, Type, WriterGuard,
 };
 use proton_action_queue::rebase::RebaseChangeSet;
-use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
@@ -38,7 +37,7 @@ impl Action for Prefetch {
     type Error = MailActionError;
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
-        ActionDependencyKeysBuilder::new().build()
+        ActionDependencyKeys::default()
     }
 }
 

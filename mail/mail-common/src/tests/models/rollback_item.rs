@@ -106,6 +106,7 @@ async fn test_store_and_delete_remote_items(
     // * RollbackItem is correctly stored *
     let (stash, _tempdir) = new_test_connection_file().await;
     let mut tether = stash.connection().await.unwrap();
+    let queue = Queue::new(stash.clone()).await.unwrap();
     tether
         .tx::<_, _, StashError>(async |tx| {
             if let Some(items) = &mut expected {
@@ -136,7 +137,7 @@ async fn test_store_and_delete_remote_items(
     let (_mock, api) = start_server(&tether, BATCH_SIZE).await;
 
     let mut tether = stash.connection().await.unwrap();
-    RollbackItem::sync_all(&api, &mut tether, BATCH_SIZE, &RebasableQueue::default())
+    RollbackItem::sync_all(&api, &mut tether, BATCH_SIZE, &queue)
         .await
         .unwrap();
 
@@ -146,7 +147,7 @@ async fn test_store_and_delete_remote_items(
     assert_eq!(actual.len(), 0);
 
     // * RollbackItems with no limit for empty stash *
-    RollbackItem::sync_all(&api, &mut tether, None, &RebasableQueue::default())
+    RollbackItem::sync_all(&api, &mut tether, None, &queue)
         .await
         .unwrap();
 }
@@ -383,6 +384,7 @@ async fn mock_label(mock_server: &MockServer, items: Vec<RollbackItem>) {
 async fn test_rollback_skips_nonexistent_conversation() {
     let (stash, _tempdir) = new_test_connection_file().await;
     let mut tether = stash.connection().await.unwrap();
+    let queue = Queue::new(stash.clone()).await.unwrap();
 
     let existing_conv_id = "existing_conv_123";
     let deleted_conv_id = "deleted_conv_456";
@@ -458,7 +460,7 @@ async fn test_rollback_skips_nonexistent_conversation() {
         .mount(&mock_server)
         .await;
 
-    let result = RollbackItem::sync_all(&api, &mut tether, None, &RebasableQueue::default()).await;
+    let result = RollbackItem::sync_all(&api, &mut tether, None, &queue).await;
     assert!(result.is_ok(), "sync_all should succeed: {result:?}");
 
     let remaining = RollbackItem::all(&tether).await.unwrap();

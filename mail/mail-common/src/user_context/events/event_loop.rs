@@ -3,14 +3,12 @@ use crate::models::RollbackItem;
 use crate::user_context::EventSubscriberList;
 use crate::{MailContextError, MailUserContext};
 use anyhow::anyhow;
-use proton_action_queue::action::{Action, ActionGroup};
-use proton_action_queue::queue::{ActionError, BroadcastMessage};
+use proton_action_queue::queue::ActionError;
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::app_events::OnEnterForegroundEvent;
 use proton_core_common::services::InitializationService;
 use stash::orm::Model;
 use std::time::Duration;
-use tokio::sync::broadcast::error::RecvError;
 use tokio::time;
 use tracing::{Instrument, error};
 
@@ -38,7 +36,6 @@ impl MailUserContext {
             .ok_or(MailContextError::Other(anyhow!(
                 "Missing on foreground event"
             )))?;
-        let mut queue_observer = self.user_context().queue().new_broadcast_receiver();
         let watcher = self
             .user_context
             .get_service::<InitializationService>()
@@ -74,52 +71,6 @@ impl MailUserContext {
                             if event.is_ok() {
                                tracing::info!("Queuing event poll from enter foreground");
                                 interval.reset();
-                            }
-                        }
-                        r = queue_observer.recv() => {
-                            let msg = match r {
-                                Ok(msg) => msg,
-                                Err(e) => {
-                                    match e {
-                                        RecvError::Closed => {
-                                            return;
-                                        }
-                                        RecvError::Lagged(_) => {
-                                            continue;
-                                        }
-                                    }
-                                }
-                            };
-
-                            // Skip this logic if the rebase feature is enabled.
-                            if ctx.user_context.has_rebase_feature().await {
-                                continue;
-                            }
-
-                            // if we have queued an action in this process in the default group
-                            // that is not the event loop, reset the timer and replace
-                            // the event poll so it runs after this action. We also want to
-                            // reset the timer and cancel the event poll after some action
-                            // has executed on the server to allow for more time to for the data
-                            // to be processed and not accidentally bring back old state.
-                            match msg {
-                                BroadcastMessage::Queued(_, metadata) | BroadcastMessage::Success(_, metadata) => {
-                                    if metadata.action_group == ActionGroup::default().as_ref() {
-                                        interval.reset();
-                                        if metadata.action_type == EventPoll::TYPE.as_ref() {
-                                            continue;
-                                        }
-                                        if let Err(e) = ctx.user_context().cancel_event_poll().await {
-                                            tracing::error!("Failed to cancel queued event poll: {e}");
-                                        }
-                                        continue;
-                                    } else {
-                                        continue;
-                                    }
-                                },
-                                _ => {
-                                    continue
-                                },
                             }
                         }
                     };

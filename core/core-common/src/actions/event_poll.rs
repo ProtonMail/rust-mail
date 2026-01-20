@@ -1,5 +1,4 @@
 use crate::UserContext;
-use crate::actions::dependency_builder::ActionDependencyKeysBuilder;
 use proton_action_queue::action::{
     ActionDependencyKey, ActionDependencyKeys, FactoryResult, VersionConverter,
     VersionConverterError, deserialize,
@@ -40,7 +39,7 @@ impl EventPoll {
 impl Action for EventPoll {
     const TYPE: Type = Type("event_poll");
     const VERSION: u32 = 2;
-    const PRIORITY: Priority = Priority::Low;
+    const PRIORITY: Priority = Priority::Normal;
 
     type VersionConverter = EventPollVersionConverter;
     type Handler = EventPollHandler;
@@ -49,14 +48,7 @@ impl Action for EventPoll {
     type Error = ActionEventLoopError;
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
-        if self.force {
-            ActionDependencyKeys::default()
-        } else {
-            ActionDependencyKeysBuilder::new()
-                .record(Self::dependency_key())
-                .with_optional(Self::dependency_key())
-                .build()
-        }
+        ActionDependencyKeys::default()
     }
 }
 

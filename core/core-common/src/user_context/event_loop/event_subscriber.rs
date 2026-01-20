@@ -154,8 +154,7 @@ impl EventSubscriber<CoreEventSource> for CoreEventSubscriber {
             conn.tx::<_, _, StashError>(async |tx| {
                 handle_event(event, tx, &user_id, &mut rebase_change_set).await?;
 
-                ctx.rebaseable_queue()
-                    .await
+                ctx.queue()
                     .rebase_in(ActionGroup::default(), &rebase_change_set, tx)
                     .await
                     .context("Failed to rebase")?;
