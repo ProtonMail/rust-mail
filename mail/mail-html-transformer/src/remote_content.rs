@@ -24,7 +24,7 @@ pub enum Error {
     Url(#[from] url::ParseError),
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RemoteContentOutput {
     pub remote_urls: HashSet<String>,
     pub embedded_urls: HashSet<String>,
@@ -35,13 +35,8 @@ pub fn remote_content(
     hide_remote: bool,
     hide_embedded: bool,
 ) -> RemoteContentOutput {
-    if !hide_remote && !hide_embedded {
-        return RemoteContentOutput::default();
-    }
-
     let mut remote_urls = HashSet::new();
     let mut embedded_urls = HashSet::new();
-    let should_check_css = hide_remote || hide_embedded;
 
     let style_attribute = crate::utils::attribute_name("style");
 
@@ -72,7 +67,7 @@ pub fn remote_content(
             continue;
         };
 
-        if should_check_css && element.name.local.as_ref() == "style" {
+        if element.name.local.as_ref() == "style" {
             node_ref.children().for_each(|child| {
                 if let NodeData::Text(text) = child.data() {
                     let out =
@@ -116,7 +111,7 @@ pub fn remote_content(
         }
 
         // Check css styles
-        if should_check_css && let Some(attr) = attributes.map.get_mut(&style_attribute) {
+        if let Some(attr) = attributes.map.get_mut(&style_attribute) {
             let out = handle_style_attribute(&mut attr.value, hide_remote, hide_embedded);
             remote_urls.extend(out.remote_urls);
             embedded_urls.extend(out.embedded_urls);
