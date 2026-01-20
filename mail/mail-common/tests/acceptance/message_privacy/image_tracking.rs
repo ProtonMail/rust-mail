@@ -508,3 +508,65 @@ async fn get_tracker_info_returns_correct_data() {
     let expected_urls2 = BTreeSet::from(["https://tracker2.com/beacon.png".to_string()]);
     assert_eq!(tracker2.urls, expected_urls2);
 }
+
+#[tokio::test]
+async fn image_trackers_not_checked_when_proxy_disabled() {
+    use super::common::test_params_proxy_disabled;
+
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let html_body = r#"<html><body>
+        <img src="https://tracker.example.com/pixel.gif" alt="" />
+    </body></html>"#;
+
+    let message = create_message_with_html_body("tracker_msg_proxy_disabled", html_body);
+
+    ctx.setup_user(test_params_proxy_disabled()).await;
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let service = user_ctx.get_service::<TrackerService>();
+
+    let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
+        .await
+        .unwrap();
+    mailbox
+        .sync(&mut tether, user_ctx.session(), 10)
+        .await
+        .unwrap();
+
+    let saved_message = Message::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    let decrypted_body = saved_message
+        .fetch_message_body(&user_ctx, &mut tether)
+        .await
+        .unwrap();
+
+    let transform_opts = TransformOpts {
+        hide_remote_images: Some(true),
+        ..Default::default()
+    };
+
+    let _transformed = decrypted_body
+        .transformed("test@example.com", transform_opts, &user_ctx, &tether)
+        .await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let privacy_info = service.get_info(1.into()).await.unwrap();
+
+    assert!(privacy_info.trackers.is_none());
+}

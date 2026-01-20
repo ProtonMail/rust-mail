@@ -1,4 +1,6 @@
-use crate::acceptance::message_privacy::common::get_or_wait_for_privacy_data;
+use crate::acceptance::message_privacy::common::{
+    get_or_wait_for_only_utm_links, get_or_wait_for_privacy_data,
+};
 
 use super::common::{create_message_with_html_body, test_params};
 use proton_core_api::services::proton::{LabelId, UserId};
@@ -326,4 +328,75 @@ async fn utm_results_are_cached_in_database() {
         1,
         "Should have exactly one cached entry (not duplicated)"
     );
+}
+
+#[tokio::test]
+async fn utm_links_cleaned_even_when_proxy_disabled() {
+    use super::common::test_params_proxy_disabled;
+
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let html_body = r#"<html><body>
+        <p>Check out our <a href="https://example.com/?utm_source=newsletter&utm_medium=email&product=shoes">latest products</a>!</p>
+    </body></html>"#;
+
+    let message = create_message_with_html_body("utm_msg_proxy_disabled", html_body);
+
+    ctx.setup_user(test_params_proxy_disabled()).await;
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.mock_get_messages()
+        .respond_with(vec![message.metadata.clone()])
+        .await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let service = user_ctx.get_service::<TrackerService>();
+
+    let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox())
+        .await
+        .unwrap();
+    mailbox
+        .sync(&mut tether, user_ctx.session(), 10)
+        .await
+        .unwrap();
+
+    let saved_message = Message::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    let decrypted_body = saved_message
+        .fetch_message_body(&user_ctx, &mut tether)
+        .await
+        .unwrap();
+
+    let watch = service.watch(1.into()).await.unwrap();
+
+    let transformed = decrypted_body
+        .transformed(
+            "test@example.com",
+            TransformOpts::default(),
+            &user_ctx,
+            &tether,
+        )
+        .await;
+
+    assert!(
+        transformed
+            .body
+            .contains("https://example.com/?product=shoes"),
+        "Link should have UTM parameters stripped"
+    );
+
+    let utm_info = get_or_wait_for_only_utm_links(1.into(), service, watch)
+        .await
+        .unwrap();
+
+    assert_eq!(utm_info.links.len(), 1);
 }
