@@ -461,7 +461,7 @@ where
             let color = LockColor::Blue;
             if pinned || self_owned_keys {
                 match message_verification_status {
-                    NotVerified | SignedNoPublicKey => UiLock {
+                    NotVerified => UiLock {
                         icon: LockIcon::ClosedLock,
                         color,
                         tooltip: LockTooltip::ReceiveE2E,
@@ -476,7 +476,7 @@ where
                         color,
                         tooltip: LockTooltip::ReceiveE2EVerifiedRecipient,
                     },
-                    SignedAndInvalid => UiLock {
+                    SignedAndInvalid | SignedNoPublicKey => UiLock {
                         icon: LockIcon::ClosedLockWarning,
                         color,
                         tooltip: LockTooltip::ReceiveE2EVerificationFailed,
@@ -499,7 +499,7 @@ where
             let color = LockColor::Green;
             if pinned {
                 match message_verification_status {
-                    NotVerified | SignedNoPublicKey | NotSigned => UiLock {
+                    NotVerified | NotSigned => UiLock {
                         icon: LockIcon::ClosedLock,
                         color,
                         tooltip: LockTooltip::ReceiveE2E,
@@ -509,7 +509,7 @@ where
                         color,
                         tooltip: LockTooltip::ReceiveE2EVerifiedRecipient,
                     },
-                    SignedAndInvalid => UiLock {
+                    SignedAndInvalid | SignedNoPublicKey => UiLock {
                         icon: LockIcon::ClosedLockWarning,
                         color,
                         tooltip: LockTooltip::ReceiveE2EVerificationFailed,
@@ -526,7 +526,7 @@ where
         (XPmOrigin::External, XPmContentEncryption::OnDelivery) => {
             if pinned {
                 match message_verification_status {
-                    NotSigned | NotVerified | SignedNoPublicKey => UiLock {
+                    NotSigned | NotVerified => UiLock {
                         icon: LockIcon::ClosedLock,
                         color: LockColor::Black,
                         tooltip: LockTooltip::ZeroAccess,
@@ -536,7 +536,7 @@ where
                         color: LockColor::Green,
                         tooltip: LockTooltip::ReceiveSignOnlyVerifiedRecipient,
                     },
-                    SignedAndInvalid => UiLock {
+                    SignedAndInvalid | SignedNoPublicKey => UiLock {
                         icon: LockIcon::OpenLockWarning,
                         color: LockColor::Green,
                         tooltip: LockTooltip::ReceiveSignOnlyVerificationFailed,

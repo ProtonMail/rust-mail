@@ -246,6 +246,26 @@ fn recipient_lock_icon_internal_e2e_pinned_failed() {
 }
 
 #[test]
+fn recipient_lock_icon_internal_e2e_pinned_failed_no_matching_key() {
+    let pgp = new_pgp_provider();
+    let params = recipient_lock_icon_test_params(
+        &pgp,
+        XPmOrigin::Internal,
+        XPmContentEncryption::EndToEnd,
+        MailVerificationStatus::SignedNoPublicKey,
+        true,
+    );
+    perform_recipient_lock_icon_test(
+        &params,
+        UiLock {
+            icon: LockIcon::ClosedLockWarning,
+            color: LockColor::Blue,
+            tooltip: LockTooltip::ReceiveE2EVerificationFailed,
+        },
+    );
+}
+
+#[test]
 fn recipient_lock_icon_internal_e2e_pinned_not_signed() {
     let pgp = new_pgp_provider();
     let params = recipient_lock_icon_test_params(
@@ -346,6 +366,26 @@ fn recipient_lock_icon_external_e2e_pinned_failed() {
 }
 
 #[test]
+fn recipient_lock_icon_external_e2e_pinned_failed_no_matching_key() {
+    let pgp = new_pgp_provider();
+    let params = recipient_lock_icon_test_params(
+        &pgp,
+        XPmOrigin::External,
+        XPmContentEncryption::EndToEnd,
+        MailVerificationStatus::SignedNoPublicKey,
+        true,
+    );
+    perform_recipient_lock_icon_test(
+        &params,
+        UiLock {
+            icon: LockIcon::ClosedLockWarning,
+            color: LockColor::Green,
+            tooltip: LockTooltip::ReceiveE2EVerificationFailed,
+        },
+    );
+}
+
+#[test]
 fn recipient_lock_icon_external_sign_only_pinned() {
     let pgp = new_pgp_provider();
     let params = recipient_lock_icon_test_params(
@@ -373,6 +413,26 @@ fn recipient_lock_icon_external_sign_only_pinned_failure() {
         XPmOrigin::External,
         XPmContentEncryption::OnDelivery,
         MailVerificationStatus::SignedAndInvalid,
+        true,
+    );
+    perform_recipient_lock_icon_test(
+        &params,
+        UiLock {
+            icon: LockIcon::OpenLockWarning,
+            color: LockColor::Green,
+            tooltip: LockTooltip::ReceiveSignOnlyVerificationFailed,
+        },
+    );
+}
+
+#[test]
+fn recipient_lock_icon_external_sign_only_pinned_failure_key_missmatch() {
+    let pgp = new_pgp_provider();
+    let params = recipient_lock_icon_test_params(
+        &pgp,
+        XPmOrigin::External,
+        XPmContentEncryption::OnDelivery,
+        MailVerificationStatus::SignedNoPublicKey,
         true,
     );
     perform_recipient_lock_icon_test(
