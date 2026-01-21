@@ -1,4 +1,5 @@
 use crate::utils::{MapVec as _, Paginatable};
+use indoc::indoc;
 use std::collections::{BTreeSet, HashMap};
 use std::default::Default;
 use std::io::Cursor;
@@ -581,6 +582,12 @@ impl Contact {
             Action::UpdateFlags => (),
         }
         Ok(())
+    }
+
+    pub async fn without_emails(tether: &Tether) -> Result<Vec<LocalContactId>, StashError> {
+        tether.query_values::<_,LocalContactId>(indoc!{
+            "SELECT contacts.local_id FROM contacts WHERE contacts.remote_id NOT IN (SELECT DISTINCT remote_contact_id FROM contact_emails)"
+        }, params![]).await
     }
 }
 

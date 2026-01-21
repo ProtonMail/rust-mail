@@ -1,4 +1,5 @@
 mod fetch_address_flags;
+mod fetch_contact_emails;
 
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use anyhow::anyhow;
@@ -93,6 +94,7 @@ async fn migrate(
 ) -> MailContextResult<()> {
     match migration.name.as_str() {
         "fetch-address-flags" => fetch_address_flags::run(ctx).await?,
+        "fetch-contact-emails" => fetch_contact_emails::run(ctx).await?,
 
         #[cfg(test)]
         "test-ok" => {}
@@ -125,7 +127,16 @@ async fn migrate(
 mod tests {
     use crate::test_utils::test_context::MailTestContext;
     use parking_lot::Mutex;
-    use std::time::Duration;
+    use proton_core_api::services::proton::{
+        ContactEmail as ApiContactEmail, ContactEmailId, ContactFull, ContactId,
+        ContactSendingPreferences as ApiContactSendingPreferences, ContactUID, PrivateEmail,
+    };
+    use proton_core_common::{
+        datatypes::{ContactSendingPreferences, ContactTypes, Labels, UnixTimestamp},
+        models::{Contact, ContactEmail},
+    };
+    use stash::orm::Model;
+    use std::{time::Duration, vec};
     use tokio::{sync::oneshot, time};
 
     // Exploits the fact that `#[tokio::test]` creates a current-thread runtime
@@ -180,5 +191,133 @@ mod tests {
             .unwrap();
 
         assert_eq!(vec!["test-err".to_string()], actual);
+    }
+
+    #[tokio::test]
+    async fn missing_contacts() {
+        let ctx = MailTestContext::new().await;
+
+        let user_ctx = ctx.uninitialized_mail_user_context().await;
+        let (tx, rx) = oneshot::channel();
+
+        SIGNAL.with(|signal| {
+            *signal.lock() = Some(tx);
+        });
+        let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+        let remote_id1 = ContactId::from("Contact1");
+        let remote_id2 = ContactId::from("Contact2");
+
+        let mut contact1 = Contact {
+            local_id: None,
+            remote_id: Some(remote_id1.clone()),
+            cards: vec![],
+            contact_emails: vec![],
+            create_time: 1024,
+            label_ids: Labels::new(vec![]),
+            modify_time: 1024,
+            name: "Contact1".to_owned(),
+            size: 100,
+            uid: ContactUID::from("UID1"),
+            deleted: false,
+        };
+        let mut contact2 = Contact {
+            local_id: None,
+            remote_id: Some(remote_id2.clone()),
+            cards: vec![],
+            contact_emails: vec![ContactEmail {
+                local_id: None,
+                remote_id: Some(ContactEmailId::from("email")),
+                remote_contact_id: Some(remote_id2.clone()),
+                local_contact_id: None,
+                canonical_email: PrivateEmail::new("foo@bar.com"),
+                contact_type: ContactTypes::new(vec![]),
+                defaults: ContactSendingPreferences::Default,
+                display_order: 0,
+                email: PrivateEmail::new("foo@bar.com"),
+                is_proton: false,
+                label_ids: Labels::new(vec![]),
+                last_used_time: UnixTimestamp::now(),
+                name: "Hello".to_owned(),
+            }],
+            create_time: 1024,
+            label_ids: Labels::new(vec![]),
+            modify_time: 1024,
+            name: "Contact1".to_owned(),
+            size: 100,
+            uid: ContactUID::from("UID1"),
+            deleted: false,
+        };
+
+        let contact_ids_wihtout_email = tether
+            .tx(async |tx| {
+                contact1.save(tx).await?;
+                contact2.save(tx).await?;
+
+                Contact::without_emails(tx).await
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(contact_ids_wihtout_email, vec![contact1.id()]);
+
+        time::timeout(Duration::from_secs(10), rx)
+            .await
+            .unwrap()
+            .unwrap();
+
+        tether
+            .execute(
+                "INSERT OR IGNORE INTO pending_online_migrations (name) VALUES ('fetch-contact-emails')",
+                Vec::new(),
+            )
+            .await
+            .unwrap();
+
+        drop(tether);
+        drop(user_ctx);
+
+        // ---
+
+        ctx.core_test_context
+            .mock_get_full_contact(ContactFull {
+                id: remote_id1.clone(),
+                cards: vec![],
+                contact_emails: vec![ApiContactEmail {
+                    id: ContactEmailId::from("conact1_email"),
+                    contact_id: remote_id1.clone(),
+                    canonical_email: PrivateEmail::new("bar@bar.com"),
+                    contact_type: vec![],
+                    defaults: ApiContactSendingPreferences::Default,
+                    email: PrivateEmail::new("bar@bar.com"),
+                    is_proton: false,
+                    label_ids: vec![],
+                    last_used_time: 0,
+                    name: "Bar".to_owned(),
+                    order: 1,
+                }],
+                create_time: 1024,
+                label_ids: vec![],
+                modify_time: 1024,
+                name: "Contact1".to_owned(),
+                size: 100,
+                uid: contact1.uid.clone(),
+            })
+            .await;
+
+        let (tx, rx) = oneshot::channel();
+
+        SIGNAL.with(|signal| {
+            *signal.lock() = Some(tx);
+        });
+
+        // ---
+
+        let _muctx = ctx.uninitialized_mail_user_context().await;
+
+        time::timeout(Duration::from_secs(10), rx)
+            .await
+            .unwrap()
+            .unwrap();
     }
 }
