@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 keywords = ["proton", "rest", "api"]
 categories = ["api-bindings"]
+license.workspace = true
 
 [dependencies]
 bitflags = { workspace = true, features = ["serde"] }

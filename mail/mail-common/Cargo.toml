@@ -3,6 +3,7 @@ name = "proton-mail-common"
 version = "0.8.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [features]
 default = ["sql"]
