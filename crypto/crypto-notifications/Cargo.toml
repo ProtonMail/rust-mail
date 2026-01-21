@@ -3,6 +3,7 @@ name = "proton-crypto-notifications"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 proton-crypto-account = { workspace = true }
