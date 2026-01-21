@@ -1,6 +1,7 @@
 use crate::MailUserContext;
 use crate::datatypes::{
-    LocalMessageId, PrivacyInfo, StrippedUTMInfo, TrackerDomain, TrackerInfo, UTMLink,
+    LocalMessageId, PrivacyInfo, PrivacyInfoStatus, StrippedUTMInfo, TrackerDomain, TrackerInfo,
+    UTMLink,
 };
 use crate::models::{
     MailSettings, MessageTracker, MessageTrackerUrl, MessageUtmLink, MessageUtmLinkUrl,
@@ -172,9 +173,17 @@ impl TrackerService {
     async fn get_tracker_info(
         tether: &Tether,
         message_id: LocalMessageId,
-    ) -> Result<Option<TrackerInfo>, StashError> {
+    ) -> Result<PrivacyInfoStatus<TrackerInfo>, StashError> {
+        let use_proxy = MailSettings::get_or_default(tether)
+            .await
+            .is_proxy_enabled();
+
+        if !use_proxy {
+            return Ok(PrivacyInfoStatus::Disabled);
+        }
+
         let Some(tracked) = MessageTracker::load(message_id, tether).await? else {
-            return Ok(None);
+            return Ok(PrivacyInfoStatus::Pending);
         };
 
         let last_checked_at = tracked.last_checked_at;
@@ -195,7 +204,7 @@ impl TrackerService {
             .map(|(name, urls)| TrackerDomain { name, urls })
             .collect();
 
-        Ok(Some(TrackerInfo {
+        Ok(PrivacyInfoStatus::Detected(TrackerInfo {
             trackers,
             last_checked_at,
         }))

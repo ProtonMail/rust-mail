@@ -421,7 +421,7 @@ async fn get_tracker_info_returns_correct_data() {
         .await
         .unwrap()
         .trackers;
-    assert!(tracker_info.is_none());
+    assert!(tracker_info.is_pending());
 
     tether
         .tx(async |tx| {
@@ -441,7 +441,7 @@ async fn get_tracker_info_returns_correct_data() {
         .await
         .unwrap()
         .trackers;
-    assert!(tracker_info.unwrap().trackers.is_empty());
+    assert!(tracker_info.as_detected().unwrap().trackers.is_empty());
 
     tether
         .tx(async |tx| {
@@ -488,6 +488,7 @@ async fn get_tracker_info_returns_correct_data() {
         .await
         .unwrap()
         .trackers
+        .into_detected()
         .unwrap();
 
     assert_eq!(tracker_info.trackers.len(), 2);
@@ -568,5 +569,5 @@ async fn image_trackers_not_checked_when_proxy_disabled() {
 
     let privacy_info = service.get_info(1.into()).await.unwrap();
 
-    assert!(privacy_info.trackers.is_none());
+    assert!(privacy_info.trackers.is_disabled());
 }
