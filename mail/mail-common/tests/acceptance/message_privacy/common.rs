@@ -9,7 +9,9 @@ use proton_mail_api::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
-use proton_mail_common::datatypes::{LocalMessageId, StrippedUTMInfo, TrackerInfo};
+use proton_mail_common::datatypes::{
+    LocalMessageId, PrivacyInfoStatus, StrippedUTMInfo, TrackerInfo,
+};
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::message_body::{
     TEST_USER_ADDRESS_ID, message_body_test_addresses, message_body_test_user_info,
@@ -54,7 +56,7 @@ pub async fn get_or_wait_for_privacy_data(
     let timeout = sleep(Duration::from_secs(5));
     tokio::pin!(timeout);
     loop {
-        if let Some(trackers) = data.trackers
+        if let PrivacyInfoStatus::Detected(trackers) = data.trackers
             && let Some(utm_links) = data.utm_links
         {
             return Ok((trackers, utm_links));
