@@ -3,6 +3,7 @@ name = "proton-crypto-inbox-mime"
 version = "0.4.1"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 mail-parser = "0.10.2"

@@ -1,6 +1,7 @@
 use proton_mail_common::datatypes::{
-    PrivacyInfo as RealPrivacyInfo, StrippedUTMInfo as RealStrippedUTMInfo,
-    TrackerDomain as RealTrackerDomain, TrackerInfo as RealTrackerInfo, UTMLink as RealUTMLink,
+    PrivacyInfo as RealPrivacyInfo, PrivacyInfoStatus as RealPrivacyInfoStatus,
+    StrippedUTMInfo as RealStrippedUTMInfo, TrackerDomain as RealTrackerDomain,
+    TrackerInfo as RealTrackerInfo, UTMLink as RealUTMLink,
 };
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -62,14 +63,32 @@ impl From<RealUTMLink> for UTMLink {
 
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct PrivacyInfo {
-    pub trackers: Option<TrackerInfo>,
+    pub trackers: TrackerInfoWithStatus,
     pub utm_links: Option<StrippedUTMInfo>,
 }
 impl From<RealPrivacyInfo> for PrivacyInfo {
     fn from(info: RealPrivacyInfo) -> Self {
         Self {
-            trackers: info.trackers.map(Into::into),
+            trackers: info.trackers.into(),
             utm_links: info.utm_links.map(Into::into),
+        }
+    }
+}
+
+#[derive(Clone, Debug, uniffi::Enum)]
+pub enum TrackerInfoWithStatus {
+    Pending,
+    /// User disabled using Image Proxy
+    Disabled,
+    Detected(TrackerInfo),
+}
+
+impl From<RealPrivacyInfoStatus<RealTrackerInfo>> for TrackerInfoWithStatus {
+    fn from(value: RealPrivacyInfoStatus<RealTrackerInfo>) -> Self {
+        match value {
+            RealPrivacyInfoStatus::Pending => Self::Pending,
+            RealPrivacyInfoStatus::Disabled => Self::Disabled,
+            RealPrivacyInfoStatus::Detected(o) => Self::Detected(From::from(o)),
         }
     }
 }

@@ -3,6 +3,7 @@ name = "proton-mail-html-transformer"
 version = "0.2.3"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 # kuchikiki requires this verion of html5ever at this time.

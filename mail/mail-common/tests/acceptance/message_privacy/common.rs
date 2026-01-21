@@ -9,7 +9,9 @@ use proton_mail_api::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
-use proton_mail_common::datatypes::{LocalMessageId, StrippedUTMInfo, TrackerInfo};
+use proton_mail_common::datatypes::{
+    LocalMessageId, PrivacyInfoStatus, StrippedUTMInfo, TrackerInfo,
+};
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::message_body::{
     TEST_USER_ADDRESS_ID, message_body_test_addresses, message_body_test_user_info,
@@ -20,6 +22,31 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
 
+pub async fn get_or_wait_for_only_utm_links(
+    id: LocalMessageId,
+    service: &TrackerService,
+    PrivacyWatchData { initial, handle }: PrivacyWatchData,
+) -> anyhow::Result<StrippedUTMInfo> {
+    let mut data = initial;
+    let timeout = sleep(Duration::from_secs(5));
+    tokio::pin!(timeout);
+    loop {
+        if let Some(utm_links) = data.utm_links {
+            return Ok(utm_links);
+        }
+
+        tokio::select! {
+            _ = &mut timeout => anyhow::bail!("Timeout waiting for table changes"),
+            res = handle.receiver.recv_async() => match res {
+                Err(_) => anyhow::bail!("Channel closed"),
+                Ok(()) => {
+                    let new_data = service.get_info(id).await?;
+                    data = new_data;
+                }
+            },
+        }
+    }
+}
 pub async fn get_or_wait_for_privacy_data(
     id: LocalMessageId,
     service: &TrackerService,
@@ -29,7 +56,7 @@ pub async fn get_or_wait_for_privacy_data(
     let timeout = sleep(Duration::from_secs(5));
     tokio::pin!(timeout);
     loop {
-        if let Some(trackers) = data.trackers
+        if let PrivacyInfoStatus::Detected(trackers) = data.trackers
             && let Some(utm_links) = data.utm_links
         {
             return Ok((trackers, utm_links));
@@ -49,11 +76,26 @@ pub async fn get_or_wait_for_privacy_data(
 }
 
 pub fn test_params() -> Params {
+    use proton_core_common::datatypes::ImageProxy;
     Params {
         user_info: Some(message_body_test_user_info()),
         addresses: message_body_test_addresses(),
         mail_settings: Some(ApiMailSettings {
             view_mode: ApiViewMode::Messages,
+            image_proxy: ImageProxy::ENABLED.bits(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+pub fn test_params_proxy_disabled() -> Params {
+    Params {
+        user_info: Some(message_body_test_user_info()),
+        addresses: message_body_test_addresses(),
+        mail_settings: Some(ApiMailSettings {
+            view_mode: ApiViewMode::Messages,
+            image_proxy: 0,
             ..Default::default()
         }),
         ..Default::default()

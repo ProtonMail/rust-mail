@@ -4,6 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 categories = ["api-bindings"]
+license.workspace = true
 
 [dependencies]
 # proton deps

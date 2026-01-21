@@ -3,6 +3,7 @@ name = "proton-action-queue"
 version = "0.7.29"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }

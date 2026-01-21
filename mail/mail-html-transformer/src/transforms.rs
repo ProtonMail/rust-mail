@@ -108,7 +108,7 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
         {
             let scheme = url.scheme();
             if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
-                let url: String = strip_from_url(url).into();
+                let url: String = strip_from_url(url.clone()).unwrap_or(url).into();
                 write!(rep, r#"<a href="{url}" rel="noreferrer">{url}</a>"#)
                     .expect("Write to complete");
                 rep.push(' ');

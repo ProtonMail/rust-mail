@@ -3,6 +3,7 @@ name = "proton-network-monitor-service"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }

@@ -27,7 +27,7 @@ use derive_more::derive::TryFrom;
 pub use exclusive_location::ExclusiveLocation;
 pub use ids::*;
 pub use include_switch::IncludeSwitch;
-pub use privacy_info::PrivacyInfo;
+pub use privacy_info::{PrivacyInfo, PrivacyInfoStatus};
 use proton_core_common::models::Label;
 pub use read_filter::ReadFilter;
 pub use rollback_item_type::RollbackItemType;

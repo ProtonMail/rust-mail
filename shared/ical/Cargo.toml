@@ -3,6 +3,7 @@ name = "proton-ical"
 version = "0.1.4"
 edition.workspace = true
 rust-version = "1.85.0"
+license.workspace = true
 
 [lib]
 crate-type = ["cdylib", "lib"]

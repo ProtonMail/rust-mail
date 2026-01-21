@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.16] - 2026-01-21
+
+### Fixes
+
+- [ET-5754] Fail verification for pinned external messages with mismatched keys
+
+
+## [mail-uniffi-v0.161.15] - 2026-01-21
+
+### Fixes
+
+- Resync missing contacts emails in the background
+- [ET-5752] return Disabled status instead of Pending when user blocks image proxy
+
+
+## [mail-uniffi-v0.161.14] - 2026-01-20
+
+### Fixes
+
+- Force contact resync
+
+
+## [mail-uniffi-v0.161.13] - 2026-01-20
+
+### Fixes
+
+- [ET-5624] Collect information about trackers even if auto-show images is disabled
+
+
+## [mail-uniffi-v0.161.12] - 2026-01-19
+
+### Features
+
+- [ET-5359] Add `DomainAuthFail` message banner which is activated on `DMARC_FAIL` flag.
+
+
+## [mail-uniffi-v0.161.11] - 2026-01-19
+
+### Fixes
+
+- Mark UTM as stripped ONLY if it semantically changes
+
+
 ## [mail-uniffi-v0.161.10] - 2026-01-19
 
 ### Fixes

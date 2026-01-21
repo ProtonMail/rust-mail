@@ -35,3 +35,29 @@ fn disable_all_elements_uri_test() {
     let _ = transformer.disable_content(true, true);
     insta::assert_snapshot!(transformer.to_string());
 }
+
+#[test]
+fn count_remote_urls_without_mutation() {
+    let mut transformer = Transformer::new(TEST_DOCUMENT);
+    let disabled = transformer.disable_content(false, false);
+
+    assert_eq!(disabled.remote_urls.len(), 12);
+    assert_eq!(disabled.embedded_urls.len(), 3);
+
+    let html = transformer.to_string();
+    assert!(html.contains("https://foo.bar.com/img.png"));
+    assert!(html.contains("cid:1234"));
+}
+
+#[test]
+fn count_remote_urls_without_mutation_hide_embedded_only() {
+    let mut transformer = Transformer::new(TEST_DOCUMENT);
+    let disabled = transformer.disable_content(false, true);
+
+    assert_eq!(disabled.remote_urls.len(), 12);
+    assert_eq!(disabled.embedded_urls.len(), 3);
+
+    let html = transformer.to_string();
+    assert!(html.contains("https://foo.bar.com/img.png"));
+    assert!(!html.contains("cid:1234"));
+}

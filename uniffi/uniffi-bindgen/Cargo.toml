@@ -4,6 +4,7 @@ version = "0.1.1"
 edition.workspace = true
 rust-version.workspace = true
 publish = false
+license.workspace = true
 
 [dependencies]
 uniffi = { workspace = true, features = ["cli"] }

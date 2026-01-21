@@ -1,8 +1,11 @@
 use crate::MailUserContext;
 use crate::datatypes::{
-    LocalMessageId, PrivacyInfo, StrippedUTMInfo, TrackerDomain, TrackerInfo, UTMLink,
+    LocalMessageId, PrivacyInfo, PrivacyInfoStatus, StrippedUTMInfo, TrackerDomain, TrackerInfo,
+    UTMLink,
 };
-use crate::models::{MessageTracker, MessageTrackerUrl, MessageUtmLink, MessageUtmLinkUrl};
+use crate::models::{
+    MailSettings, MessageTracker, MessageTrackerUrl, MessageUtmLink, MessageUtmLinkUrl,
+};
 use anyhow::Context;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_common::datatypes::UnixTimestamp;
@@ -52,7 +55,10 @@ impl TrackerService {
         let mut found_trackers = Vec::new();
         let now = UnixTimestamp::now();
 
+        tracing::info!("Stripped {} UTM links", utm_stripped.len());
+
         if MessageUtmLink::load(message_id, &tether).await?.is_none() {
+            tracing::info!("Storing UTM info ({}) in cache", utm_stripped.len());
             tether
                 .tx(async |tx| {
                     MessageUtmLink {
@@ -76,6 +82,16 @@ impl TrackerService {
                 })
                 .await?;
         }
+
+        let use_proxy = MailSettings::get_or_default(&tether)
+            .await
+            .is_proxy_enabled();
+
+        if !use_proxy {
+            tracing::info!("User has Image Proxy disabled. Skipping tracker checking");
+            return Ok(());
+        }
+
         if let Some(tracker) = MessageTracker::find_by_id(message_id, &tether).await? {
             let last_checked_at = tracker.last_checked_at.to_date_time_utc();
             let now_utc = now.to_date_time_utc();
@@ -85,9 +101,11 @@ impl TrackerService {
                 && let Ok(duration) = (now_utc - last_checked_at).to_std()
                 && duration <= CHECK_INTERVAL
             {
+                tracing::info!("Message was checked recently. Skipping tracker queries.");
                 return Ok(());
             }
         }
+        tracing::info!("Found urls: {}", urls.len());
 
         for url in urls {
             match self.check_url(&url).await {
@@ -100,6 +118,8 @@ impl TrackerService {
                 }
             }
         }
+
+        tracing::info!("Found {} trackers", found_trackers.len());
 
         tether
             .tx(async |tx| {
@@ -153,9 +173,17 @@ impl TrackerService {
     async fn get_tracker_info(
         tether: &Tether,
         message_id: LocalMessageId,
-    ) -> Result<Option<TrackerInfo>, StashError> {
+    ) -> Result<PrivacyInfoStatus<TrackerInfo>, StashError> {
+        let use_proxy = MailSettings::get_or_default(tether)
+            .await
+            .is_proxy_enabled();
+
+        if !use_proxy {
+            return Ok(PrivacyInfoStatus::Disabled);
+        }
+
         let Some(tracked) = MessageTracker::load(message_id, tether).await? else {
-            return Ok(None);
+            return Ok(PrivacyInfoStatus::Pending);
         };
 
         let last_checked_at = tracked.last_checked_at;
@@ -176,7 +204,7 @@ impl TrackerService {
             .map(|(name, urls)| TrackerDomain { name, urls })
             .collect();
 
-        Ok(Some(TrackerInfo {
+        Ok(PrivacyInfoStatus::Detected(TrackerInfo {
             trackers,
             last_checked_at,
         }))

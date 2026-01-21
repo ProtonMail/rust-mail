@@ -1,8 +1,11 @@
 # Proton Mail TUI
 
-A text based interface for all the Proton Mail rust crates. It's mostly intended
-for testing, but will eventually be able to cover all the mail features that we
-are currently developing.
+A text based interface for all the Proton Mail rust crates.
+
+## Disclaimer
+
+**This is an internal testing tool and does not qualify for support or feature
+requests**.
 
 ## Logging
 

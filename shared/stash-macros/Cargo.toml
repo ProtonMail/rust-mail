@@ -3,6 +3,7 @@ name = "stash-macros"
 version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [lib]
 proc-macro = true
