@@ -101,6 +101,15 @@ impl UiLock {
             tooltip: LockTooltip::ZeroAccess,
         }
     }
+
+    #[must_use]
+    pub fn default_aggregated_sent() -> Self {
+        Self {
+            icon: LockIcon::ClosedLock,
+            color: LockColor::Black,
+            tooltip: LockTooltip::ZeroAccess,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
