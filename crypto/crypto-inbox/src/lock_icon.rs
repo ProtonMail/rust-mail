@@ -27,6 +27,8 @@ pub enum LockIcon {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LockTooltip {
     SendE2E,
+    SendE2EExternal,
+    SendE2EEo,
     SendE2EVerifiedRecipient,
     SendSignOnly,
     SendZeroAccessEncryptionDisabled,
@@ -35,6 +37,7 @@ pub enum LockTooltip {
     ZeroAccessSentByProton,
 
     ReceiveE2E,
+    ReceiveE2EExternal,
     ReceiveE2EVerifiedRecipient,
     ReceiveE2EVerificationFailed,
     ReceiveE2EVerificationFailedNoSignature,
@@ -59,11 +62,11 @@ pub enum LockTooltip {
 impl Display for LockTooltip {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LockTooltip::SendE2E | LockTooltip::SentRecipientE2E => f.write_str("End-to-end encrypted"),
+            LockTooltip::SendE2E | LockTooltip::SentRecipientE2E | LockTooltip::SendE2EExternal | LockTooltip::SendE2EEo => f.write_str("End-to-end encrypted"),
             LockTooltip::SendE2EVerifiedRecipient | LockTooltip::SentRecipientE2EVerifiedRecipient => f.write_str("End-to-end encrypted to verified recipient"),
             LockTooltip::SendZeroAccessEncryptionDisabled => f.write_str("Zero-access encrypted. Recipient has disabled end-to-end encryption on their account."),
             LockTooltip::SendSignOnly | LockTooltip::SentRecipientPGPSigned => f.write_str("PGP-signed"),
-            LockTooltip::ReceiveE2E => f.write_str("End-to-end encrypted message"),
+            LockTooltip::ReceiveE2E | LockTooltip::ReceiveE2EExternal => f.write_str("End-to-end encrypted message"),
             LockTooltip::ReceiveE2EVerifiedRecipient => f.write_str("End-to-end encrypted message from verified sender"),
             LockTooltip::ReceiveE2EVerificationFailed => f.write_str("Sender verification failed"),
             LockTooltip::ReceiveE2EVerificationFailedNoSignature => f.write_str("Sender could not be verified: Message not signed"),
@@ -95,6 +98,15 @@ pub struct UiLock {
 impl UiLock {
     #[must_use]
     pub fn default_incoming() -> Self {
+        Self {
+            icon: LockIcon::ClosedLock,
+            color: LockColor::Black,
+            tooltip: LockTooltip::ZeroAccess,
+        }
+    }
+
+    #[must_use]
+    pub fn default_aggregated_sent() -> Self {
         Self {
             icon: LockIcon::ClosedLock,
             color: LockColor::Black,
@@ -432,7 +444,7 @@ where
     Some(UiLock {
         icon,
         color,
-        tooltip: tooltip_composer(icon)?,
+        tooltip: tooltip_composer(icon, color, send_prefs.pgp_scheme)?,
     })
 }
 
@@ -502,7 +514,7 @@ where
                     NotVerified | NotSigned => UiLock {
                         icon: LockIcon::ClosedLock,
                         color,
-                        tooltip: LockTooltip::ReceiveE2E,
+                        tooltip: LockTooltip::ReceiveE2EExternal,
                     },
                     SignedAndValid => UiLock {
                         icon: LockIcon::ClosedLockWithTick,
@@ -519,7 +531,7 @@ where
                 UiLock {
                     icon: LockIcon::ClosedLock,
                     color,
-                    tooltip: LockTooltip::ReceiveE2E,
+                    tooltip: LockTooltip::ReceiveE2EExternal,
                 }
             }
         }
@@ -701,9 +713,21 @@ fn determine_sent_lock_icon_for_recipient(
     }
 }
 
-fn tooltip_composer(lock: LockIcon) -> Option<LockTooltip> {
+fn tooltip_composer(
+    lock: LockIcon,
+    color: LockColor,
+    pgp_scheme: PackageCryptoType,
+) -> Option<LockTooltip> {
     match lock {
-        LockIcon::ClosedLock => Some(LockTooltip::SendE2E),
+        LockIcon::ClosedLock => {
+            if matches!(pgp_scheme, PackageCryptoType::EncryptedOutside) {
+                Some(LockTooltip::SendE2EEo)
+            } else if color != LockColor::Blue {
+                Some(LockTooltip::SendE2EExternal)
+            } else {
+                Some(LockTooltip::SendE2E)
+            }
+        }
         LockIcon::ClosedLockWithTick => Some(LockTooltip::SendE2EVerifiedRecipient),
         LockIcon::OpenLockWithPen => Some(LockTooltip::SendSignOnly),
         _ => None,

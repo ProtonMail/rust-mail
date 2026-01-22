@@ -99,7 +99,7 @@ fn composer_lock_external_e2e() {
         Some(UiLock {
             icon: LockIcon::ClosedLock,
             color: LockColor::Green,
-            tooltip: LockTooltip::SendE2E,
+            tooltip: LockTooltip::SendE2EExternal,
         }),
     );
 }
@@ -165,7 +165,7 @@ fn composer_lock_encrypt_to_outside() {
         Some(UiLock {
             icon: LockIcon::ClosedLock,
             color: LockColor::Blue,
-            tooltip: LockTooltip::SendE2E,
+            tooltip: LockTooltip::SendE2EEo,
         }),
     );
 }
@@ -300,7 +300,7 @@ fn recipient_lock_icon_external_e2e() {
         UiLock {
             icon: LockIcon::ClosedLock,
             color: LockColor::Green,
-            tooltip: LockTooltip::ReceiveE2E,
+            tooltip: LockTooltip::ReceiveE2EExternal,
         },
     );
 }
@@ -340,7 +340,7 @@ fn recipient_lock_icon_external_e2e_pinned_no_signature() {
         UiLock {
             icon: LockIcon::ClosedLock,
             color: LockColor::Green,
-            tooltip: LockTooltip::ReceiveE2E,
+            tooltip: LockTooltip::ReceiveE2EExternal,
         },
     );
 }

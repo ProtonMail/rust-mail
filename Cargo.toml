@@ -51,7 +51,8 @@ members = [
 [workspace.package]
 edition = "2024"
 rust-version = "1.88.0"
-license = "GPL-3.0"
+license = "AGPL-3.0-only"
+#
 
 [workspace.dependencies]
 aes-gcm = { version = "0.10", features = ["zeroize", "std"] }
