@@ -62,12 +62,15 @@ impl From<LockColor> for PrivacyLockColor {
 #[derive(uniffi::Enum, Copy, Clone)]
 pub enum PrivacyLockTooltip {
     SendE2E,
+    SendE2EExternal,
+    SendE2EEo,
     SendE2EVerifiedRecipient,
     SendSignOnly,
     SendZeroAccessEncryptionDisabled,
     ZeroAccess,
     ZeroAccessSentByProton,
     ReceiveE2E,
+    ReceiveE2EExternal,
     ReceiveE2EVerifiedRecipient,
     ReceiveE2EVerificationFailed,
     ReceiveE2EVerificationFailedNoSignature,
@@ -90,6 +93,9 @@ pub enum PrivacyLockTooltip {
 impl From<LockTooltip> for PrivacyLockTooltip {
     fn from(value: LockTooltip) -> Self {
         match value {
+            LockTooltip::SendE2EExternal => Self::SendE2EExternal,
+            LockTooltip::SendE2EEo => Self::SendE2EEo,
+            LockTooltip::ReceiveE2EExternal => Self::ReceiveE2EExternal,
             LockTooltip::SendE2E => Self::SendE2E,
             LockTooltip::SendE2EVerifiedRecipient => Self::SendE2EVerifiedRecipient,
             LockTooltip::SendSignOnly => Self::SendSignOnly,
