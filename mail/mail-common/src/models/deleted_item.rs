@@ -2,7 +2,6 @@ use crate::datatypes::DeletedItemType;
 use crate::models::{Conversation, Message};
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
-use proton_sqlite3::rusqlite::Transaction;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -79,21 +78,6 @@ impl DeletedItem {
         Ok(deleted_ids.into_iter().collect())
     }
 
-    pub fn remove_tombstone_sync(
-        remote_id: &str,
-        item_type: DeletedItemType,
-        tx: &Transaction<'_>,
-    ) -> Result<(), StashError> {
-        tx.execute(
-            &format!(
-                "DELETE FROM {} WHERE remote_id = ? AND item_type = ?",
-                Self::table_name()
-            ),
-            (remote_id, item_type),
-        )?;
-        Ok(())
-    }
-
     /// Verify and cleanup deleted items.
     ///
     /// This method runs after each event poll to:
@@ -102,6 +86,13 @@ impl DeletedItem {
     ///
     pub async fn verify_and_cleanup(bond: &Bond<'_>) -> Result<(), StashError> {
         const RETENTION_SECONDS: u64 = 86400; // 1 day
+        let cutoff = UnixTimestamp::now().saturating_sub(RETENTION_SECONDS);
+
+        bond.execute(
+            format!("DELETE FROM {} WHERE deleted_at < ?", Self::table_name()),
+            params![cutoff],
+        )
+        .await?;
 
         let all_deleted_items = Self::all(bond).await?;
 
@@ -109,20 +100,7 @@ impl DeletedItem {
             return Ok(());
         }
 
-        let cutoff = UnixTimestamp::now().saturating_sub(RETENTION_SECONDS);
-
         for item in all_deleted_items {
-            if item.deleted_at < cutoff {
-                bond.execute(
-                    format!(
-                        "DELETE FROM {} WHERE remote_id = ? AND item_type = ?",
-                        Self::table_name()
-                    ),
-                    params![item.remote_id.clone(), item.item_type],
-                )
-                .await?;
-            }
-
             match item.item_type {
                 DeletedItemType::Message => {
                     Message::delete_by_remote_id(item.remote_id.clone().into(), bond).await?

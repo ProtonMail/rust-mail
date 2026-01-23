@@ -2216,6 +2216,7 @@ impl Conversation {
                          WHERE local_conversation_id = (
                              SELECT local_id FROM conversations WHERE remote_id = ?
                          )
+                         AND remote_id IS NOT NULL
                          ON CONFLICT (remote_id, item_type) DO NOTHING",
                         DeletedItem::table_name()
                     ),

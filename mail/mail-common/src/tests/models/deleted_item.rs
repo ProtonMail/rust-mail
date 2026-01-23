@@ -519,22 +519,33 @@ async fn test_conversation_delete_tracks_all_messages() {
 }
 
 #[tokio::test]
-async fn test_deleted_conversation_allows_new_messages_but_blocks_old() {
+async fn test_conversation_delete_skips_null_remote_id_messages() {
     let (stash, _tempdir) = new_test_connection_file().await;
     let mut tether = stash.connection().await.unwrap();
 
     let address = create_address(&mut tether).await;
 
-    // Step 1: Create conversation with old messages and delete it
     tether
         .tx::<_, _, StashError>(async |tx| {
-            let mut conv = conversation!(remote_id: Some("conv_deleted".into()));
+            // Create a conversation with both synced and local-only messages
+            let mut conv = conversation!(remote_id: Some("conv_mixed_messages".into()));
             conv.save(tx).await.unwrap();
 
-            // Create old messages that will be deleted
+            // Create 2 messages with remote_id (synced to server)
             for i in 1..=2 {
                 let mut msg = message!(
-                    remote_id: Some(format!("old_msg_{i}").into()),
+                    remote_id: Some(format!("msg_synced_{i}").into()),
+                    local_address_id: address.id(),
+                    remote_address_id: address.remote_id.clone().unwrap(),
+                    local_conversation_id: Some(conv.id())
+                );
+                msg.save(tx).await.unwrap();
+            }
+
+            // Create 2 messages with null remote_id (local-only, not synced)
+            for _ in 1..=2 {
+                let mut msg = message!(
+                    remote_id: None,
                     local_address_id: address.id(),
                     remote_address_id: address.remote_id.clone().unwrap(),
                     local_conversation_id: Some(conv.id())
@@ -545,7 +556,7 @@ async fn test_deleted_conversation_allows_new_messages_but_blocks_old() {
             // Simulate EventPoll conversation deletion
             Conversation::handle_event(
                 tx,
-                &"conv_deleted".to_string().into(),
+                &"conv_mixed_messages".to_string().into(),
                 Action::Delete,
                 None,
                 &mut Default::default(),
@@ -559,95 +570,56 @@ async fn test_deleted_conversation_allows_new_messages_but_blocks_old() {
         .await
         .unwrap();
 
-    // Step 2: Check that old messages are blocked but new message is not
-    let deleted_old = DeletedItem::find_deleted_by_remote_ids(
-        vec!["old_msg_1".to_string(), "old_msg_2".to_string()],
-        DeletedItemType::Message,
-        &tether,
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        deleted_old.len(),
-        2,
-        "Old messages should be in deleted_items"
-    );
-
-    let deleted_new = DeletedItem::find_deleted_by_remote_ids(
-        vec!["new_msg".to_string()],
-        DeletedItemType::Message,
-        &tether,
-    )
-    .await
-    .unwrap();
-    assert_eq!(deleted_new.len(), 0, "New message should NOT be blocked");
-
-    // Step 3: Simulate new message arriving
-    tether
-        .tx::<_, _, StashError>(async |tx| {
-            // Simulate new message arriving - conversation will be auto-created as "unknown"
-            let mut new_msg = message!(
-                remote_id: Some("new_msg".into()),
-                local_address_id: address.id(),
-                remote_address_id: address.remote_id.clone().unwrap(),
-                remote_conversation_id: Some("conv_deleted".to_string().into())
-            );
-            new_msg.save(tx).await.unwrap();
-
-            Ok(())
-        })
-        .await
-        .unwrap();
-
-    // Step 4: Verify state after new message arrives
-    // New message should exist
-    let new_msg = Message::find_by_remote_id("new_msg".to_string().into(), &tether)
-        .await
-        .unwrap();
-    assert!(new_msg.is_some(), "New message should be saved");
-
-    // Conversation should be re-created (as "unknown" placeholder)
-    let conv = Conversation::find_by_remote_id("conv_deleted".to_string().into(), &tether)
-        .await
-        .unwrap();
-    assert!(conv.is_some(), "Conversation should be re-created");
-
-    // Conversation tombstone should be removed from deleted_items
-    let conv_tombstone = DeletedItem::find_deleted_by_remote_ids(
-        vec!["conv_deleted"],
+    // Verify conversation is tracked
+    let conv_deleted = DeletedItem::find_deleted_by_remote_ids(
+        vec!["conv_mixed_messages".to_string()],
         DeletedItemType::Conversation,
         &tether,
     )
     .await
     .unwrap();
-    assert_eq!(
-        conv_tombstone.len(),
-        0,
-        "Conversation tombstone should be removed to allow Scroller to update it"
-    );
+    assert_eq!(conv_deleted.len(), 1);
 
-    // Old messages should still be absent (they were cascade-deleted)
-    let old_msg_1 = Message::find_by_remote_id("old_msg_1".to_string().into(), &tether)
-        .await
-        .unwrap();
-    assert!(old_msg_1.is_none(), "Old message 1 should remain deleted");
-
-    let old_msg_2 = Message::find_by_remote_id("old_msg_2".to_string().into(), &tether)
-        .await
-        .unwrap();
-    assert!(old_msg_2.is_none(), "Old message 2 should remain deleted");
-
-    // Old message tombstones should still exist
-    let old_msg_tombstones = DeletedItem::find_deleted_by_remote_ids(
-        vec!["old_msg_1", "old_msg_2"],
+    // Verify only the 2 synced messages are tracked (remote_id IS NOT NULL filter)
+    let msgs_deleted = DeletedItem::find_deleted_by_remote_ids(
+        vec!["msg_synced_1".to_string(), "msg_synced_2".to_string()],
         DeletedItemType::Message,
         &tether,
     )
     .await
     .unwrap();
     assert_eq!(
-        old_msg_tombstones.len(),
+        msgs_deleted.len(),
         2,
-        "Old message tombstones should remain to block re-insertion"
+        "Only messages with remote_id should be tracked"
+    );
+
+    // Verify total deleted items count (1 conversation + 2 messages = 3)
+    let all_deleted_items = DeletedItem::all(&tether).await.unwrap();
+    assert_eq!(
+        all_deleted_items.len(),
+        3,
+        "Should only track conversation and 2 synced messages, not local-only messages"
+    );
+
+    // Verify breakdown by type
+    let message_tombstones: Vec<_> = all_deleted_items
+        .iter()
+        .filter(|item| item.item_type == DeletedItemType::Message)
+        .collect();
+    assert_eq!(
+        message_tombstones.len(),
+        2,
+        "Should have exactly 2 message tombstones"
+    );
+
+    let conversation_tombstones: Vec<_> = all_deleted_items
+        .iter()
+        .filter(|item| item.item_type == DeletedItemType::Conversation)
+        .collect();
+    assert_eq!(
+        conversation_tombstones.len(),
+        1,
+        "Should have exactly 1 conversation tombstone"
     );
 }

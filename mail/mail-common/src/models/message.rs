@@ -642,15 +642,6 @@ impl Message {
                 let mut conversation = Conversation::unknown(remote_conversation_id.clone());
                 conversation.save_sync(tx)?;
                 self.local_conversation_id = conversation.local_id;
-
-                // Remove conversation tombstone from deleted_items if it exists.
-                // This allows new messages to revive a deleted conversation and
-                // allows Scroller to immediately update it with real API data.
-                DeletedItem::remove_tombstone_sync(
-                    remote_conversation_id.as_ref(),
-                    DeletedItemType::Conversation,
-                    tx,
-                )?;
             }
         }
 
