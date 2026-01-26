@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.162.0] - 2026-01-26
+
+### Changed
+
+- Permanently enable rebase feature
+
+### Features
+
+- [FOUN-281] Integrate foundation search to augment search search(mail-search create)
+- Enable v6 event loop
+- [ET-5684] Track deleted items when they could be accidentaly refeched
+- Breaking - expose TaskCancelled in uniffi
+
+### Fixes
+
+- [ET-5697] Logout on event_poll when API resp 401/403
+- [ET-5697] Prevent device_registration from failing on session operations such as refresh
+- [ET-5715] When the sender is BYOE do not display privacy locks
+- [ET-5697] Add invalidation of user session within `on_session_deleted`
+- [ET-5697] Add logout_and_clear within core context's `on_session_delete` handle
+- Remove delinquent check
+
+
 ## [mail-uniffi-v0.161.17] - 2026-01-22
 
 ### Features
@@ -45,20 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-5624] Collect information about trackers even if auto-show images is disabled
 
 
-## [mail-uniffi-v0.161.12] - 2026-01-19
-
-### Features
-
-- [ET-5359] Add `DomainAuthFail` message banner which is activated on `DMARC_FAIL` flag.
-
-
-## [mail-uniffi-v0.161.11] - 2026-01-19
-
-### Fixes
-
-- Mark UTM as stripped ONLY if it semantically changes
-
-
 ## [mail-uniffi-v0.161.10] - 2026-01-19
 
 ### Fixes
@@ -76,6 +85,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-5719] Blockquotes are now correctly detected
 - [ET-5728] Bond cancellation/Attachment upload crash
+
+
+## [mail-uniffi-v0.161.12] - 2026-01-19
+
+### Features
+
+- [ET-5359] Add `DomainAuthFail` message banner which is activated on `DMARC_FAIL` flag.
+
+
+## [mail-uniffi-v0.161.11] - 2026-01-19
+
+### Fixes
+
+- Mark UTM as stripped ONLY if it semantically changes
 
 
 ## [mail-uniffi-v0.161.8] - 2026-01-16
