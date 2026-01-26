@@ -69,6 +69,7 @@ impl WatchPrivacyInfoStream {
         self.initial_info.clone()
     }
 
+    #[tracing::instrument(name = "PrivacyInfoStream::next", skip_all)]
     pub async fn next_async(self: Arc<Self>) -> Result<PrivacyInfo, ProtonError> {
         async_runtime()
             .spawn(async move {
@@ -76,29 +77,39 @@ impl WatchPrivacyInfoStream {
                 self.token
                     .run_until_cancelled(future)
                     .await
-                    .ok_or_else(|| RealProtonMailError::from(MailContextError::TaskCancelled))?
-                    .map_err(|_| ProtonError::Unexpected(UnexpectedError::Internal))?;
+                    .ok_or_else(|| {
+                        tracing::error!("Task has been cancelled");
+                        RealProtonMailError::from(MailContextError::TaskCancelled)
+                    })?
+                    .map_err(|e| {
+                        tracing::error!("Could not receive message from watcher: {e}");
+                        ProtonError::Unexpected(UnexpectedError::Internal)
+                    })?;
 
                 // After receiving notification, fetch the updated privacy info
                 let ctx = self
                     .ctx
                     .upgrade()
-                    .ok_or_else(|| RealProtonMailError::from(MailContextError::MissingContext))?;
+                    .ok_or_else(|| RealProtonMailError::from(MailContextError::MissingContext))
+                    .inspect_err(|_| tracing::error!("MailUserContext is missing"))?;
 
                 let info = ctx
                     .get_service::<TrackerService>()
                     .get_info(self.message_id)
                     .await
+                    .inspect_err(|e| tracing::error!("Watcher error: {e}"))
                     .map_err(RealProtonMailError::from)
                     .map(Into::into)?;
 
                 Ok(info)
             })
             .await
+            .inspect_err(|e| tracing::error!("Async runtime spawn error: {e}"))
             .map_err(RealProtonMailError::from)?
     }
 
     pub fn cancel(&self) {
+        tracing::info!("Cancelling privacy info watcher");
         self.token.cancel();
     }
 }

@@ -320,5 +320,6 @@ pub enum SnoozeErrorReason {
 #[derive(Debug)]
 pub enum OtherErrorReason {
     InvalidParameter,
+    TaskCancelled,
     Other(String),
 }
