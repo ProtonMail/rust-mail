@@ -24,6 +24,7 @@ use proton_crypto_account::{
 use proton_vcard::{VCardError, vcard::VCard};
 use stash::stash::RunTransaction;
 use stash::{
+    DefaultDb,
     orm::Model,
     params,
     stash::{StashError, Tether},
@@ -150,7 +151,7 @@ impl UserContext {
     pub async fn public_address_keys_from_contacts<P>(
         &self,
         pgp: &P,
-        tx: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction<DefaultDb>,
         unlocked_user_keys: &UnlockedUserKeys<P>,
         email: PrivateEmailRef<'_>,
         fetch_policy: AddressKeysContactFetchPolicy,

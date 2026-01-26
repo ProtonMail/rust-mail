@@ -18,10 +18,14 @@
 
 // Standard modules
 pub(crate) mod connection_manager;
+pub mod marker;
 pub mod orm;
 pub mod stash;
 pub mod utils;
 pub mod watcher;
+
+#[allow(deprecated)]
+pub use marker::{AccountDb, DefaultDb, UserDb};
 
 /// Re-exported proc macros.
 ///

@@ -311,13 +311,13 @@ pub type LocalOutput<T: Action> = Result<QueuedActionOutput<T>, ActionError<T>>;
 ///
 /// Database read queries can be made over this type as it implements `Deref<Target=Tether>`.
 /// For writes use the [`transaction()`] method.
-pub struct WriterGuard<'t> {
-    tether: &'t mut Tether,
+pub struct WriterGuard<'t, Db: stash::marker::DatabaseMarker = stash::marker::DefaultDb> {
+    tether: &'t mut Tether<Db>,
     execution_guard: &'t ExecutionGuard,
 }
 
-impl<'t> WriterGuard<'t> {
-    pub(crate) fn new(tether: &'t mut Tether, execution_guard: &'t ExecutionGuard) -> Self {
+impl<'t, Db: stash::marker::DatabaseMarker> WriterGuard<'t, Db> {
+    pub(crate) fn new(tether: &'t mut Tether<Db>, execution_guard: &'t ExecutionGuard) -> Self {
         Self {
             tether,
             execution_guard,
@@ -326,7 +326,7 @@ impl<'t> WriterGuard<'t> {
 
     pub async fn tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, E>,
         E: From<WriterGuardError> + From<StashError>,
     {
         self.execution_guard.tx(self.tether, closure).await
@@ -334,20 +334,20 @@ impl<'t> WriterGuard<'t> {
 
     /// Access the tether for read only db queries.
     #[must_use]
-    pub fn tether(&self) -> &Tether {
+    pub fn tether(&self) -> &Tether<Db> {
         self.tether
     }
 }
 
-impl RunTransaction for WriterGuard<'_> {
-    fn tether(&self) -> &Tether {
+impl<Db: stash::marker::DatabaseMarker> RunTransaction<Db> for WriterGuard<'_, Db> {
+    fn tether(&self) -> &Tether<Db> {
         self.tether
     }
 
     #[allow(clippy::manual_async_fn)]
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>,
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, anyhow::Error>,
     {
         async {
             self.tether

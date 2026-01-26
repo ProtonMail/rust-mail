@@ -50,6 +50,7 @@ use proton_mail_api::services::proton::response_data::OperationResult;
 use proton_sqlite3::rusqlite::ToSql;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use stash::DefaultDb;
 use stash::exports::{Connection, Transaction};
 use stash::orm::Model;
 use stash::rusqlite::params_from_iter;
@@ -249,7 +250,10 @@ where
 
 impl<T> GenericActionData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + Hash + Into<RebaseKey>>,
+    T: ModelIdExtension<
+            IdType: Serialize + DeserializeOwned + Eq + Hash + Into<RebaseKey>,
+            Database = DefaultDb,
+        >,
 {
     pub fn new(target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
         // Filter out possible duplicates
@@ -283,7 +287,7 @@ where
     /// Resolved remote ids are stored on self.
     async fn resolve_ids_legacy(
         &mut self,
-        tether: &Tether,
+        tether: &Tether<DefaultDb>,
     ) -> Result<Vec<T::RemoteId>, MailActionError> {
         if self.target_ids.is_empty() {
             return Err(MailActionError::NoInput);
@@ -299,7 +303,10 @@ where
         Ok(remote_target_ids)
     }
 
-    async fn resolve_ids(&mut self, tether: &Tether) -> Result<Vec<T::RemoteId>, MailActionError> {
+    async fn resolve_ids(
+        &mut self,
+        tether: &Tether<DefaultDb>,
+    ) -> Result<Vec<T::RemoteId>, MailActionError> {
         if self.target_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -392,7 +399,10 @@ where
     }
 
     /// Return the ids of all the items which do not have a remote id.
-    async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, MailActionError> {
+    async fn unsynced_item_ids(
+        &self,
+        tether: &Tether<DefaultDb>,
+    ) -> Result<Vec<T::IdType>, MailActionError> {
         let placeholders = stash::utils::placeholders_n(self.target_ids.len());
         #[allow(trivial_casts)]
         let values = self
@@ -453,7 +463,10 @@ where
 
 impl<T> GenericActionData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + LocalIdActionDepExt + Eq + Hash>,
+    T: ModelIdExtension<
+            IdType: Serialize + DeserializeOwned + LocalIdActionDepExt + Eq + Hash,
+            Database = DefaultDb,
+        >,
 {
     fn read_unread_action_dependency_keys(&self) -> ActionDependencyKeysBuilder {
         ActionDependencyKeysBuilder::new()
@@ -480,7 +493,10 @@ where
 
 impl<T> GenericLabelRelatedActionData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + Hash + Into<RebaseKey>>,
+    T: ModelIdExtension<
+            IdType: Serialize + DeserializeOwned + Eq + Hash + Into<RebaseKey>,
+            Database = DefaultDb,
+        >,
 {
     /// Create a new instance with the given `label_id` and target `ids`.
     pub fn new(label_id: LocalLabelId, target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
@@ -495,7 +511,7 @@ where
     /// Resolved remote ids are stored on self.
     async fn resolve_ids_legacy(
         &mut self,
-        tether: &Tether,
+        tether: &Tether<DefaultDb>,
     ) -> Result<(Option<LabelId>, Vec<T::RemoteId>), MailActionError> {
         let remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tether).await?);
         let ids = self.data.resolve_ids_legacy(tether).await?;
@@ -504,13 +520,16 @@ where
     }
 
     /// Return the ids of all the items which do not have a remote id.
-    async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, MailActionError> {
+    async fn unsynced_item_ids(
+        &self,
+        tether: &Tether<DefaultDb>,
+    ) -> Result<Vec<T::IdType>, MailActionError> {
         self.data.unsynced_item_ids(tether).await
     }
 
     async fn resolve_ids(
         &mut self,
-        tether: &Tether,
+        tether: &Tether<DefaultDb>,
     ) -> Result<(LabelId, Vec<T::RemoteId>), MailActionError> {
         let label_id = Label::local_id_counterpart(self.label_id, tether)
             .await?
@@ -550,7 +569,10 @@ where
 
 impl<T> GenericLabelRelatedActionData<T>
 where
-    T: ModelIdExtension<IdType: LocalIdActionDepExt + Serialize + DeserializeOwned + Eq + Hash>,
+    T: ModelIdExtension<
+            IdType: LocalIdActionDepExt + Serialize + DeserializeOwned + Eq + Hash,
+            Database = DefaultDb,
+        >,
 {
     fn action_dependency_keys_builder_optional(&self) -> ActionDependencyKeysBuilder {
         ActionDependencyKeysBuilder::new()
@@ -777,7 +799,7 @@ impl ActionMoveV1Compatability for LocalConversationId {
 
 impl<T> ActionMoveData<T>
 where
-    T: ConversationOrMessage,
+    T: ConversationOrMessage<Database = DefaultDb>,
     <T as Model>::IdType: ActionMoveV1Compatability,
 {
     fn from_action_move_data(action: ActionMoveDataV1<T>) -> Self {
@@ -865,13 +887,13 @@ where
 
 impl<T> ActionMoveData<T>
 where
-    T: ConversationOrMessage,
+    T: ConversationOrMessage<Database = DefaultDb>,
     <T as Model>::IdType: Into<RebaseKey>,
 {
     /// Creates an action that moves `target_ids` from their exclusive locations
     /// into `destination`.
     pub async fn new(
-        tether: &Tether,
+        tether: &Tether<DefaultDb>,
         destination: LocalLabelId,
         target_ids: impl IntoIterator<Item = T::IdType>,
     ) -> Result<Option<Self>, StashError> {
@@ -1012,7 +1034,7 @@ where
         Ok(())
     }
 
-    async fn queue_rollback_items(&self, tx: &Bond<'_>) -> Result<(), StashError> {
+    async fn queue_rollback_items(&self, tx: &Bond<'_, DefaultDb>) -> Result<(), StashError> {
         let ids = self.entries.keys().cloned().collect();
         let ids = T::local_ids_counterpart(ids, tx).await?;
         RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
@@ -1247,7 +1269,7 @@ pub struct LabelAsData<T: ConversationOrMessage> {
 
 impl<T> LabelAsData<T>
 where
-    T: ConversationOrMessage,
+    T: ConversationOrMessage<Database = DefaultDb>,
     <T as Model>::IdType: Into<RebaseKey>,
 {
     pub fn new(

@@ -224,7 +224,7 @@ async fn test_manual_logout_with_session_observer_double_cleanup() {
         // If database file still exists and isn't archived, verify tables are dropped
         // Try to open a connection to the user database directly
         use stash::stash::{Stash, StashConfiguration};
-        let user_stash = Stash::new(StashConfiguration {
+        let user_stash: Result<Stash, _> = Stash::new(StashConfiguration {
             path: Some(&user_db_path),
             pool_size: Some(1),
             ..Default::default()

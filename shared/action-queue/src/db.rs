@@ -675,7 +675,10 @@ impl ExecutionGuard {
     }
 
     /// Release the current access privileges.
-    pub async fn release(self, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn release<Db: stash::marker::DatabaseMarker>(
+        self,
+        bond: &Bond<'_, Db>,
+    ) -> Result<(), StashError> {
         bond.execute(
             indoc! {"
             UPDATE action_queue_lock SET
@@ -697,9 +700,10 @@ impl ExecutionGuard {
     /// Every time we are able to write with a valid permit, we also update
     /// the timestamp. This allows for some longer running tasks to extend their lifetime a bit
     /// and prevent unnecessary re-runs.
-    pub async fn tx<F, T, E>(&self, tether: &mut Tether, closure: F) -> Result<T, E>
+    pub async fn tx<Db, F, T, E>(&self, tether: &mut Tether<Db>, closure: F) -> Result<T, E>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        Db: stash::marker::DatabaseMarker,
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, E>,
         E: From<WriterGuardError> + From<StashError>,
     {
         tether.tx(async |tx| {
@@ -717,13 +721,14 @@ impl ExecutionGuard {
     }
 
     /// Same as [`transaction`], but releases the guard when finished.
-    pub(crate) async fn tx_and_release<F, T>(
+    pub(crate) async fn tx_and_release<Db, F, T>(
         self,
-        tether: &mut Tether,
+        tether: &mut Tether<Db>,
         closure: F,
     ) -> Result<T, WriterGuardError>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, StashError>,
+        Db: stash::marker::DatabaseMarker,
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, StashError>,
     {
         tether
             .tx(async |tx| {
