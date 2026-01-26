@@ -498,6 +498,7 @@ impl From<RealSnoozeErrorReason> for SnoozeErrorReason {
 #[derive(Debug, UniffiEnum)]
 pub enum OtherErrorReason {
     InvalidParameter,
+    TaskCancelled,
     Other(String),
 }
 
@@ -505,6 +506,7 @@ impl From<RealOtherErrorReason> for OtherErrorReason {
     fn from(reason: RealOtherErrorReason) -> Self {
         match reason {
             RealOtherErrorReason::InvalidParameter => OtherErrorReason::InvalidParameter,
+            RealOtherErrorReason::TaskCancelled => OtherErrorReason::TaskCancelled,
             RealOtherErrorReason::Other(reason) => OtherErrorReason::Other(reason),
         }
     }
