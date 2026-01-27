@@ -4,6 +4,7 @@ use std::time::Instant;
 use crate::models::ModelExtension;
 use itertools::Itertools;
 use sqlite_watcher::watcher::TableObserver;
+use stash::UserDb;
 use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -330,7 +331,7 @@ impl std::ops::DerefMut for InitializationWatcherHandle {
 }
 
 impl InitializationWatcher {
-    pub async fn new(stash: &Stash) -> Result<Arc<Self>, StashError> {
+    pub async fn new(stash: &Stash<UserDb>) -> Result<Arc<Self>, StashError> {
         let handle = stash
             .subscribe_to(|sender| Box::new(InitializedDependenciesTableWatcher { sender }))
             .await?;

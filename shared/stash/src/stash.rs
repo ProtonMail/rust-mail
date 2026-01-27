@@ -458,7 +458,7 @@ impl<'a> From<Option<&'a PathBuf>> for StashConfiguration<'a> {
 /// This is stash's database pool. Its main use is to create [`Tether`]s.
 // Internally this spawns a task that handles all of the operations (See [`StashOperation`]).
 #[derive(Clone)]
-pub struct Stash<Db: DatabaseMarker = crate::marker::UserDb> {
+pub struct Stash<Db: DatabaseMarker> {
     /// The [`Watcher`] instance for the [`Stash`], which is used to monitor the
     /// database for changes and notify subscribers. This is used to provide
     /// real-time updates to any subscribers that have registered interest in

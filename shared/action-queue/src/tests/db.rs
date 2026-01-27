@@ -6,6 +6,7 @@ use crate::queue::ActionRequeueReason;
 use crate::tests::common::NoopActionHandler;
 use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::StashConfiguration;
 use stash::{orm::Model, stash::Stash};
 use tracing::subscriber::set_global_default;
@@ -661,7 +662,7 @@ async fn rebase_action_id_order() {
     );
 }
 
-async fn new_test_connection() -> Stash {
+async fn new_test_connection() -> Stash<UserDb> {
     _ = set_global_default(
         registry()
             .with(EnvFilter::new("debug"))

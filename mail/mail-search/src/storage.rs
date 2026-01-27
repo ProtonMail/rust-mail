@@ -4,6 +4,7 @@
 //! (`SQLite`) for persisting search index blobs.
 
 use async_trait::async_trait;
+use stash::UserDb;
 use stash::stash::Stash;
 use tracing::debug;
 
@@ -15,19 +16,19 @@ use crate::traits::BlobStorage;
 /// Stores search index blobs in `SQLite` via the Stash connection pool.
 #[derive(Clone)]
 pub struct StashBlobStorage {
-    stash: Stash,
+    stash: Stash<UserDb>,
 }
 
 impl StashBlobStorage {
     /// Create a new Stash-based blob storage
     #[must_use]
-    pub fn new(stash: Stash) -> Self {
+    pub fn new(stash: Stash<UserDb>) -> Self {
         Self { stash }
     }
 
     /// Get a reference to the underlying Stash instance
     #[must_use]
-    pub fn stash(&self) -> &Stash {
+    pub fn stash(&self) -> &Stash<UserDb> {
         &self.stash
     }
 
@@ -58,7 +59,7 @@ impl StashBlobStorage {
             .tx::<_, (), SE>(async |bond| {
                 for (name, data) in blobs {
                     bond.execute(
-                        "INSERT OR REPLACE INTO search_index_blobs (blob_name, blob_data, updated_at) 
+                        "INSERT OR REPLACE INTO search_index_blobs (blob_name, blob_data, updated_at)
                          VALUES (?1, ?2, ?3)",
                         params![name, data, timestamp],
                     )
@@ -130,7 +131,7 @@ impl BlobStorage for StashBlobStorage {
         tether
             .tx::<_, (), SE>(async |bond| {
                 bond.execute(
-                    "INSERT OR REPLACE INTO search_index_blobs (blob_name, blob_data, updated_at) 
+                    "INSERT OR REPLACE INTO search_index_blobs (blob_name, blob_data, updated_at)
                      VALUES (?1, ?2, ?3)",
                     params![name_owned, data_owned, timestamp],
                 )

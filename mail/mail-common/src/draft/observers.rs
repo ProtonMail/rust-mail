@@ -2,6 +2,7 @@ use crate::datatypes::LocalAttachmentId;
 use crate::models::{
     DraftAttachmentMetadata, DraftAttachmentUploadState, DraftSendResult, MetadataId,
 };
+use stash::UserDb;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use std::collections::HashSet;
 
@@ -15,7 +16,7 @@ mod tests;
 /// after its creation.
 pub struct DraftSendResultWatcher {
     watcher_handle: WatcherHandle,
-    stash: Stash,
+    stash: Stash<UserDb>,
     unseen: HashSet<DraftSendResult>,
     mode: DraftSendResultWatcherMode,
 }
@@ -30,7 +31,10 @@ pub enum DraftSendResultWatcherMode {
 
 impl DraftSendResultWatcher {
     /// Create a new instance with the given `stash` db pool.
-    pub async fn new(stash: Stash, mode: DraftSendResultWatcherMode) -> Result<Self, StashError> {
+    pub async fn new(
+        stash: Stash<UserDb>,
+        mode: DraftSendResultWatcherMode,
+    ) -> Result<Self, StashError> {
         let conn = stash.connection().await?;
 
         let all_unseen = Self::load_send_results(mode, &conn).await?;
@@ -94,14 +98,14 @@ impl DraftSendResultWatcher {
 /// Observe attachment state for a given draft.
 pub struct DraftAttachmentObserver {
     id: MetadataId,
-    stash: Stash,
+    stash: Stash<UserDb>,
     current: HashSet<DraftAttachmentMetadataObserverState>,
     watcher_handle: WatcherHandle,
 }
 
 impl DraftAttachmentObserver {
     /// Create new instance for the given `metadata_id`.
-    pub async fn new(metadata_id: MetadataId, stash: Stash) -> Result<Self, StashError> {
+    pub async fn new(metadata_id: MetadataId, stash: Stash<UserDb>) -> Result<Self, StashError> {
         let conn = stash.connection().await?;
 
         let current = DraftAttachmentMetadata::find_by_metadata_id(metadata_id, &conn).await?;

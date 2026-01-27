@@ -11,6 +11,7 @@
 use std::sync::Arc;
 
 use proton_mail_api::services::proton::common::MessageId;
+use stash::UserDb;
 use stash::stash::{Bond, Stash, StashError};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -62,7 +63,7 @@ impl SearchServiceError {
 #[derive(Clone)]
 pub struct MailSearchService {
     engine: Arc<RwLock<FoundationSearchEngine<StashBlobStorage>>>,
-    stash: Stash,
+    stash: Stash<UserDb>,
 }
 
 impl MailSearchService {
@@ -81,7 +82,7 @@ impl MailSearchService {
     ///
     /// Returns an error if database migrations fail.
     pub async fn new(
-        stash: Stash,
+        stash: Stash<UserDb>,
         task_service: Arc<TaskService>,
     ) -> Result<Self, SearchServiceError> {
         info!("Initializing Foundation Search engine with Stash");
@@ -102,7 +103,7 @@ impl MailSearchService {
 
     /// Get a reference to the underlying Stash connection pool
     #[must_use]
-    pub fn stash(&self) -> &Stash {
+    pub fn stash(&self) -> &Stash<UserDb> {
         &self.stash
     }
 

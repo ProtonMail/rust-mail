@@ -1,4 +1,5 @@
 use crate::db::migrations::migrate_core_db;
+use stash::UserDb;
 use stash::stash::{Stash, StashConfiguration};
 use tracing::subscriber::set_global_default;
 use tracing_subscriber::fmt::layer;
@@ -83,7 +84,7 @@ macro_rules! device_contact {
     }};
 }
 
-pub async fn new_core_test_connection() -> Stash {
+pub async fn new_core_test_connection() -> Stash<UserDb> {
     _ = set_global_default(
         registry()
             .with(EnvFilter::new("debug"))

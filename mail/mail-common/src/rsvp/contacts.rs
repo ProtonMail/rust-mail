@@ -1,15 +1,15 @@
 use proton_calendar_common as cal;
 use proton_core_common::models::ContactEmail;
-use stash::{orm::Model, stash::Stash};
+use stash::{UserDb, orm::Model, stash::Stash};
 use tracing::warn;
 
 #[derive(Debug)]
 pub struct RsvpContacts {
-    stash: Stash,
+    stash: Stash<UserDb>,
 }
 
 impl RsvpContacts {
-    pub fn new(stash: &Stash) -> Self {
+    pub fn new(stash: &Stash<UserDb>) -> Self {
         Self {
             stash: stash.clone(),
         }

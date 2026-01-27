@@ -24,8 +24,8 @@ use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_common_derive::ScrollerEq;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
+use stash::{UserDb, params};
 use std::collections::BTreeSet;
 use std::time::Instant;
 use tracing::{debug, info, warn};
@@ -210,7 +210,7 @@ impl ContextualConversation {
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         view_options: ConversationViewOptions,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
         api: &Session,
         queue: &Queue,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
@@ -282,7 +282,7 @@ impl ContextualConversation {
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         view_options: ConversationViewOptions,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
         api: &Session,
         // set to some for rebasing
         queue: &Queue,
@@ -306,7 +306,7 @@ impl ContextualConversation {
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         view_options: ConversationViewOptions,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
         api: &Session,
         queue: &Queue,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
@@ -329,7 +329,7 @@ impl ContextualConversation {
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         view_options: ConversationViewOptions,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
         api: &Session,
         extra_sync_allowed: bool,
         queue: &Queue,
@@ -389,7 +389,7 @@ impl ContextualConversation {
         }))
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(ContextualConversationWatcher { sender }))
             .await

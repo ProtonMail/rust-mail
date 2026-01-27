@@ -2,8 +2,8 @@ use proton_action_queue::action::{Action, Factory};
 use proton_action_queue::queue::Queue;
 pub use proton_action_queue::tests::common::DefaultError;
 use stash::exports::SqliteError;
-use stash::params;
 use stash::stash::{Bond, Stash, StashConfiguration, StashError, Tether};
+use stash::{UserDb, params};
 
 pub async fn new_queue(factory: Factory) -> Queue {
     Queue::with_factory(new_stash().await, factory)
@@ -11,11 +11,11 @@ pub async fn new_queue(factory: Factory) -> Queue {
         .unwrap()
 }
 
-pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
+pub async fn new_queue_with_stash(stash: Stash<UserDb>, factory: Factory) -> Queue {
     Queue::with_factory(stash, factory).await.unwrap()
 }
 
-pub async fn new_stash() -> Stash {
+pub async fn new_stash() -> Stash<UserDb> {
     let stash = Stash::new(StashConfiguration::test()).unwrap();
     let mut conn = stash.connection().await.unwrap();
 

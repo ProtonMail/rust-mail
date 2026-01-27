@@ -34,6 +34,7 @@ use proton_core_common::utils::MapVec as _;
 use proton_sqlite3::rusqlite::Transaction;
 use proton_sqlite3::rusqlite::params_from_iter;
 use sqlite_watcher::watcher::TableObserver;
+use stash::UserDb;
 use stash::exports::Connection;
 use stash::orm::DbRecord;
 use stash::rusqlite::OptionalExtension;
@@ -917,7 +918,7 @@ impl Message {
         Ok(res)
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(MessageWatcher { sender }))
             .await
@@ -2906,7 +2907,7 @@ impl MessageCounter {
         }
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(MessageCounterWatcher { sender }))
             .await

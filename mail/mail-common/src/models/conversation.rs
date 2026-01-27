@@ -61,10 +61,10 @@ use stash::exports::{SqliteError, Transaction};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::orm::ModelHooks;
-use stash::params;
 use stash::rusqlite::{OptionalExtension, params_from_iter};
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{ConnectionExt, IterMapToSql, MapToSql as _, placeholders, placeholders_n};
+use stash::{UserDb, params};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::ops::{AddAssign, Deref, DerefMut};
@@ -3323,7 +3323,7 @@ impl ConversationCounter {
         }
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(ConversationCounterWatcher { sender }))
             .await
@@ -3344,7 +3344,7 @@ impl StoreLabelCounters {
     pub async fn initialize(
         watcher: Arc<InitializationWatcher>,
         api: &impl ProtonMail,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
     ) -> Result<(), InitializationError<AppError>> {
         InitializedComponent::initialize(
             watcher,

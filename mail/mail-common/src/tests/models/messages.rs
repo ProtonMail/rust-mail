@@ -1808,7 +1808,7 @@ async fn messages_mark_read() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
 
-    let check_counters = |stash: Stash,
+    let check_counters = |stash: Stash<UserDb>,
                           read_message_count: u64,
                           read_conv_count: u64|
      -> BoxFuture<'_, ()> {
@@ -2069,7 +2069,7 @@ async fn messages_mark_unread() {
     .await
     .unwrap();
 
-    let check_counters = |stash: Stash,
+    let check_counters = |stash: Stash<UserDb>,
                           label_1_msg_diff: u64,
                           label_1_conv_diff: u64|
      -> BoxFuture<'_, ()> {
@@ -2254,7 +2254,7 @@ async fn label_messages() {
         assert_eq!(label_counts.total, 1);
     }
 
-    let check_full_conversations = |stash: &Stash| -> BoxFuture<'_, ()> {
+    let check_full_conversations = |stash: &Stash<UserDb>| -> BoxFuture<'_, ()> {
         let state = &state;
         let stash = stash.clone();
         async move {

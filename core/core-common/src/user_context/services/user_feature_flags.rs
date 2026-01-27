@@ -14,6 +14,7 @@ use proton_core_api::{
     session::Session,
 };
 use stash::{
+    UserDb,
     orm::Model,
     params,
     stash::{Stash, Tether, WatcherHandle},
@@ -160,7 +161,7 @@ impl UserFeatureFlagsService {
     async fn refresh_unleash_flags(
         &self,
         api: &Session,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
         modify_time: UnixTimestamp,
     ) -> CoreContextResult<()> {
         let response = api.get_unleash_feature_flags().await?;
@@ -187,7 +188,7 @@ impl UserFeatureFlagsService {
     async fn refresh_legacy_flags(
         &self,
         api: &Session,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
         modify_time: UnixTimestamp,
     ) -> CoreContextResult<()> {
         let initial_flags = GetLegacyFeatureFlagsOptions {

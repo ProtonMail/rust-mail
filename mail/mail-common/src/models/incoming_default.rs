@@ -5,6 +5,7 @@ use proton_mail_api::services::proton::prelude::GetIncomingDefaultResponse;
 use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;
+use stash::UserDb;
 use stash::orm::ModelHooks;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -305,7 +306,7 @@ impl IncomingDefault {
     pub async fn initialize(
         watcher: Arc<InitializationWatcher>,
         api: &Session,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
     ) -> Result<(), InitializationError<MailContextError>> {
         InitializedComponent::initialize(
             watcher,

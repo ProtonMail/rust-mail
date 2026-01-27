@@ -38,6 +38,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, List};
 use recipient_list::TuiRecipientList;
 use secrecy::{ExposeSecret, SecretString};
+use stash::UserDb;
 use stash::stash::{Stash, StashError, Tether};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -214,7 +215,7 @@ impl Composer {
     async fn create(
         draft: Draft,
         sync_status: Option<DraftSyncStatus>,
-        stash: Stash,
+        stash: Stash<UserDb>,
     ) -> Command<Messages> {
         match Self::new_impl(draft, sync_status, stash).await {
             Ok((composer, background_cmd)) => {
@@ -248,7 +249,7 @@ impl Composer {
     async fn new_impl(
         draft: Draft,
         sync_status: Option<DraftSyncStatus>,
-        stash: Stash,
+        stash: Stash<UserDb>,
     ) -> Result<(Self, Command<Messages>), MailContextError> {
         let state = draft.state().await?;
         let to_list = recipient_list_to_display_value(&state.to_list);

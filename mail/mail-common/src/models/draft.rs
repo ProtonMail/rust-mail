@@ -31,10 +31,10 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
-use stash::exports::*;
 use stash::macros::{DbRecord, Model};
 use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::{UserDb, exports::*};
 use stash::{params, sql_using_serde};
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
@@ -485,7 +485,7 @@ impl DraftSendResult {
     }
 
     /// Subscribe to changes made to this database table.
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(DraftSendResultTableObserver { sender }))
             .await
@@ -1148,7 +1148,7 @@ impl DraftAttachmentMetadata {
     }
 
     /// Subscribe to changes made to this database table.
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(DraftAttachmentMetadataTableObserver { sender }))
             .await

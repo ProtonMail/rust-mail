@@ -21,6 +21,7 @@ use proton_event_loop::v6::{EventSource, EventSubscriberResult};
 use proton_issue_reporter_service::{IssueReporter, NoopIssueReporter};
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
+use stash::UserDb;
 use stash::stash::{Stash, StashError};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -96,7 +97,7 @@ struct TestCoreDatabaseInitializer;
 
 #[async_trait::async_trait]
 impl UserDatabaseInitializer for TestCoreDatabaseInitializer {
-    async fn initialize(&self, _stash: &Stash) -> Result<(), MigratorError> {
+    async fn initialize(&self, _stash: &Stash<UserDb>) -> Result<(), MigratorError> {
         Ok(())
     }
 }

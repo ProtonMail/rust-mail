@@ -8,9 +8,9 @@ mod v046_proton_mail_android_signatures;
 
 use include_dir::{Dir, include_dir};
 use proton_sqlite3::{Migrator, MigratorError, file::embedded_migrations};
-use stash::stash::Stash;
+use stash::{UserDb, stash::Stash};
 
-pub async fn run(stash: &Stash) -> Result<usize, MigratorError> {
+pub async fn run(stash: &Stash<UserDb>) -> Result<usize, MigratorError> {
     const TABLE: &str = "proton_mail_db_version";
     const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/offline_migrations");
 

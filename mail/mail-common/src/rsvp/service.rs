@@ -1,5 +1,5 @@
 use super::{RsvpCache, RsvpContacts};
-use stash::stash::Stash;
+use stash::{UserDb, stash::Stash};
 
 pub struct RsvpService {
     cache: RsvpCache,
@@ -7,7 +7,7 @@ pub struct RsvpService {
 }
 
 impl RsvpService {
-    pub fn new(stash: &Stash) -> Self {
+    pub fn new(stash: &Stash<UserDb>) -> Self {
         Self {
             cache: Default::default(),
             contacts: RsvpContacts::new(stash),

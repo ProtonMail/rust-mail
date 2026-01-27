@@ -46,8 +46,8 @@ use proton_network_monitor_service::NetworkMonitorServiceError;
 use proton_sqlite3::MigratorError;
 use proton_task_service::Spawner;
 use secrecy::ExposeSecret;
-use stash::AccountDb;
 use stash::stash::{Stash, StashError, WatcherHandle};
+use stash::{AccountDb, UserDb};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -1030,7 +1030,7 @@ pub struct MailUserDatabaseInitializer {}
 
 #[async_trait::async_trait]
 impl UserDatabaseInitializer for MailUserDatabaseInitializer {
-    async fn initialize(&self, stash: &Stash) -> Result<(), MigratorError> {
+    async fn initialize(&self, stash: &Stash<UserDb>) -> Result<(), MigratorError> {
         crate::db::offline_migrations::run(stash).await?;
         Ok(())
     }

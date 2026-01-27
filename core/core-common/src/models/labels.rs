@@ -22,9 +22,9 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::exports::{Connection, Transaction};
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
-use stash::params;
 use stash::stash::{Bond, Stash, StashError, StashResult, Tether, WatcherHandle};
 use stash::utils::{MapToSql as _, placeholders};
+use stash::{UserDb, params};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 use topological_sort::TopologicalSort;
@@ -279,7 +279,7 @@ impl Label {
     }
 
     #[instrument(skip_all)]
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(LabelWatcher { sender }))
             .await

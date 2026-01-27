@@ -297,7 +297,7 @@ impl Contact {
     pub async fn initialize(
         watcher: Arc<InitializationWatcher>,
         api: &Session,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
     ) -> Result<(), InitializationError<CoreContextError>> {
         InitializedComponent::initialize(
             watcher,
@@ -533,7 +533,7 @@ impl Contact {
     }
 
     pub async fn watch_contact_list(
-        stash: &Stash,
+        stash: &Stash<UserDb>,
     ) -> Result<(Vec<GroupedContacts>, WatcherHandle), StashError> {
         let tether = stash.connection().await?;
         let contacts = Contact::contact_list(&tether).await?;

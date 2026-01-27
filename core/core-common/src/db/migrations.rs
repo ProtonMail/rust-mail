@@ -29,7 +29,7 @@ fn core_db() -> Migrator<UserDb> {
     Migrator::new(TABLE, embedded_migrations(&MIGRATIONS))
 }
 
-pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
+pub async fn migrate_core_db(stash: &Stash<UserDb>) -> Result<usize, MigratorError> {
     let mut tether = stash.connection().await?;
 
     // Create action queue tables first as we can have items that depend on this.
@@ -40,6 +40,6 @@ pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
     core_db().migrate(&mut tether).await
 }
 
-pub async fn verify_core_db(stash: &Stash) -> Result<(), MigratorError> {
+pub async fn verify_core_db(stash: &Stash<UserDb>) -> Result<(), MigratorError> {
     core_db().verify(&mut stash.connection().await?).await
 }

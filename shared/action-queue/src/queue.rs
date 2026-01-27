@@ -15,6 +15,7 @@ use bitflags::bitflags;
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether};
 use std::collections::HashSet;
@@ -263,7 +264,7 @@ pub struct Queue {
 
 /// Internal shared data used by the [`Queue`] and [`BackgroundWorker`].
 pub(crate) struct Shared {
-    stash: Stash,
+    stash: Stash<UserDb>,
     factory: RwLock<Factory>,
     broadcast_sender: tokio::sync::broadcast::Sender<BroadcastMessage>,
     queued_action_notifier: tokio::sync::Notify,
@@ -303,12 +304,12 @@ impl Queue {
     }
 
     /// Create a new queue with the given `stash`;
-    pub async fn new(stash: Stash) -> Result<Self> {
+    pub async fn new(stash: Stash<UserDb>) -> Result<Self> {
         Self::with_factory(stash, Factory::default()).await
     }
 
     /// Create a new queue with the given `stash` and `factory`;
-    pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
+    pub async fn with_factory(stash: Stash<UserDb>, factory: Factory) -> Result<Self> {
         let mut tether = stash.connection().await?;
 
         db::migrate(&mut tether).await?;
@@ -341,7 +342,7 @@ impl Queue {
 
     /// Return the database associated with the queue.
     #[must_use]
-    pub fn stash(&self) -> &Stash {
+    pub fn stash(&self) -> &Stash<UserDb> {
         &self.shared.stash
     }
 
