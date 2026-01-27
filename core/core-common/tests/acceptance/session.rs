@@ -4,6 +4,7 @@ use proton_core_common::db::account::CoreSession;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::services::SessionObserverService;
 use proton_core_common::test_utils::test_context::TestContext;
+use stash::AccountDb;
 use stash::stash::{Bond, StashError};
 use std::time::Duration;
 
@@ -56,7 +57,7 @@ async fn test_session_delete_subscriber() {
         .connection()
         .await
         .unwrap()
-        .tx(async |tx: &Bond<'_>| {
+        .tx(async |tx: &Bond<'_, AccountDb>| {
             assert_eq!(CoreSession::all(tx).await.unwrap().len(), 1);
             assert!(
                 CoreSession::delete_by_id(user_ctx.session_id().clone(), tx)
@@ -135,7 +136,7 @@ async fn test_session_observer_triggers_full_logout_on_session_deletion() {
         .connection()
         .await
         .unwrap()
-        .tx(async |tx: &Bond<'_>| {
+        .tx(async |tx: &Bond<'_, AccountDb>| {
             CoreSession::delete_by_id(session_id.clone(), tx).await?;
             Ok::<_, StashError>(())
         })

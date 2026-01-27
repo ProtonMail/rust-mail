@@ -10,6 +10,7 @@ use proton_core_api::{
     service::ApiServiceError,
     services::proton::{ProtonCore, SessionId, muon::Status, prelude::RegisterDeviceRequest},
 };
+use stash::AccountDb;
 use stash::{
     exports::ToSql,
     orm::Model,
@@ -227,7 +228,7 @@ pub async fn registered_device_task_step(
 ///
 #[allow(trivial_casts)]
 async fn get_unregistered_sessions(
-    tether: &Tether,
+    tether: &Tether<AccountDb>,
     registered_sessions: &HashSet<SessionId>,
 ) -> Result<Vec<CoreSession>, StashError> {
     let params = registered_sessions

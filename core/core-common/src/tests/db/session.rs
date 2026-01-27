@@ -8,6 +8,7 @@ use crate::models::ModelExtension;
 use proton_core_api::auth::{Tokens, UserKeySecret};
 use proton_core_api::services::proton::{SessionId, UserId};
 use secrecy::{ExposeSecret, SecretString};
+use stash::AccountDb;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashConfiguration, StashError, Tether};
@@ -19,21 +20,21 @@ use tracing_subscriber::{EnvFilter, registry};
 
 type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
-async fn new_test_connection() -> Stash {
+async fn new_test_connection() -> Stash<AccountDb> {
     _ = set_global_default(
         registry()
             .with(EnvFilter::new("debug"))
             .with(layer().with_test_writer()),
     );
 
-    let stash = Stash::new(StashConfiguration::test()).unwrap();
+    let stash = Stash::<AccountDb>::new(StashConfiguration::test()).unwrap();
 
     migrate_account_db(&stash).await.unwrap();
 
     stash
 }
 
-async fn new_test_account(tether: &mut Tether) -> Result<CoreAccount> {
+async fn new_test_account(tether: &mut Tether<AccountDb>) -> Result<CoreAccount> {
     Ok(tether
         .tx(async |tx| {
             CoreAccount::new(UserId::from("user_id"), String::from("name_or_addr"))

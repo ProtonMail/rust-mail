@@ -61,6 +61,7 @@ use services::{
     DeviceInfoService, EventPollConfigService, FeatureFlagsService, HvNotifierService,
     SessionObserverService,
 };
+use stash::AccountDb;
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use std::fs;
@@ -279,7 +280,7 @@ pub struct Context {
     // Configuration
     api_config: ApiConfig,
     // Essential services
-    account_stash: Stash,
+    account_stash: Stash<AccountDb>,
     key_chain: Arc<dyn KeyChain>,
     cancellation_token: CancellationToken,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
@@ -361,7 +362,7 @@ impl Context {
                 ..Default::default()
             };
 
-            let account_stash = Stash::new(stash_config)?;
+            let account_stash = Stash::<AccountDb>::new(stash_config)?;
 
             match origin {
                 Origin::App => {
@@ -1082,7 +1083,7 @@ impl Context {
     }
 
     /// Get the stash in use
-    pub fn account_stash(&self) -> &Stash {
+    pub fn account_stash(&self) -> &Stash<AccountDb> {
         &self.account_stash
     }
 

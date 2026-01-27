@@ -7,6 +7,7 @@ use crate::os::KeyChain;
 use crate::{Context, Origin, UserDatabaseInitializer};
 use indexmap::IndexMap;
 use proton_task_service::BackgroundAwareTaskService;
+use stash::AccountDb;
 use stash::stash::Stash;
 use std::any::TypeId;
 use std::path::PathBuf;
@@ -64,7 +65,7 @@ impl ContextBuilder {
         account_db_path: PathBuf,
         cache_path: PathBuf,
         api_config: ApiConfig,
-        account_stash: Stash,
+        account_stash: Stash<AccountDb>,
         key_chain: Arc<dyn KeyChain>,
         user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
         task_service: BackgroundAwareTaskService,

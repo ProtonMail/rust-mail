@@ -46,6 +46,7 @@ use proton_network_monitor_service::NetworkMonitorServiceError;
 use proton_sqlite3::MigratorError;
 use proton_task_service::Spawner;
 use secrecy::ExposeSecret;
+use stash::AccountDb;
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
@@ -894,7 +895,7 @@ impl MailContext {
     }
 
     /// Get the connection to the session database.
-    pub fn session_stash(&self) -> &Stash {
+    pub fn session_stash(&self) -> &Stash<AccountDb> {
         self.core_context.account_stash()
     }
 

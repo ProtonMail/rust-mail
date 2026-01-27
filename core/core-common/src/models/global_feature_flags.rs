@@ -1,5 +1,6 @@
 use smart_default::SmartDefault;
 use stash::{
+    AccountDb,
     macros::Model,
     orm::Model,
     stash::{Bond, StashError, Tether},
@@ -10,6 +11,7 @@ use crate::models::ModelExtension;
 
 #[derive(Debug, Clone, PartialEq, Model, SmartDefault)]
 #[TableName("feature_flags")]
+#[Database(AccountDb)]
 pub struct FeatureFlag {
     #[IdField]
     pub name: String,
@@ -24,12 +26,12 @@ pub struct FeatureFlag {
 impl FeatureFlag {
     pub async fn by_name(
         name: impl Into<String>,
-        tether: &Tether,
+        tether: &Tether<AccountDb>,
     ) -> Result<Option<Self>, StashError> {
         Self::find_by_id(name.into(), tether).await
     }
 
-    pub async fn save_all(new: Vec<Self>, tx: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn save_all(new: Vec<Self>, tx: &Bond<'_, AccountDb>) -> Result<(), StashError> {
         for mut flag in new {
             Self::save(&mut flag, tx).await?;
         }
