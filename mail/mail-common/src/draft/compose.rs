@@ -582,6 +582,7 @@ pub struct DraftAddressChangeFullAddressParams {
     pub new_signature: String,
     pub address_id: AddressId,
     pub sender: String,
+    pub is_byoe: bool,
 }
 
 impl DraftAddressChangeRequest {
@@ -704,6 +705,7 @@ impl DraftAddressChangeRequest {
         // This also more resilient to body changes after editing.
         let new_signature = prepare_signature(&address.signature, self.mime_type);
         let old_signature = prepare_signature(&old_address.signature, self.mime_type);
+        let is_byoe = address.is_byoe();
 
         Ok(Some(DraftAddressChangeOutput::Full(
             DraftAddressChangeFullAddressParams {
@@ -711,6 +713,7 @@ impl DraftAddressChangeRequest {
                 new_signature,
                 address_id: address.remote_id.expect("Should be valid"),
                 sender: sender_email,
+                is_byoe,
             },
         )))
     }
