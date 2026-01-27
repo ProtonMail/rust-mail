@@ -1,5 +1,5 @@
-use stash::params;
 use stash::stash::{Bond, StashError};
+use stash::{UserDb, params};
 
 use proton_sqlite3::Migration;
 
@@ -8,7 +8,7 @@ use super::v001_proton_mail_default_labels::default_labels;
 pub struct ConversationCountersMigration;
 
 #[async_trait::async_trait]
-impl Migration for ConversationCountersMigration {
+impl Migration<UserDb> for ConversationCountersMigration {
     fn name(&self) -> &str {
         "v005_proton_mail_conversation_counters"
     }
@@ -20,7 +20,7 @@ impl Migration for ConversationCountersMigration {
             local_label_id INTEGER PRIMARY KEY,
             total INTEGER NOT NULL DEFAULT 0,
             unread INTEGER NOT NULL DEFAULT 0,
-            
+
             CONSTRAINT create_conversation_counters_label_id
                 FOREIGN KEY (local_label_id)
                 REFERENCES labels (local_id)

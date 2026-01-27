@@ -2,8 +2,8 @@ use crate::datatypes::LocalAttachmentId;
 use crate::models::{DraftAttachmentInternalError, DraftAttachmentInternalUploadError};
 use proton_sqlite3::Migration;
 use stash::macros::DbRecord;
-use stash::params;
 use stash::stash::{Bond, StashError};
+use stash::{UserDb, params};
 
 #[derive(DbRecord, Debug, Clone, Eq, PartialEq)]
 struct V1Value {
@@ -16,7 +16,7 @@ struct V1Value {
 pub struct DraftSendResultAttachmentErrorsMigration;
 
 #[async_trait::async_trait]
-impl Migration for DraftSendResultAttachmentErrorsMigration {
+impl Migration<UserDb> for DraftSendResultAttachmentErrorsMigration {
     fn name(&self) -> &str {
         "v045_proton_mail_draft_send_result_attachment_errors"
     }

@@ -1,6 +1,6 @@
 use proton_core_api::services::proton::LabelId;
-use stash::params;
 use stash::stash::{Bond, StashError};
+use stash::{UserDb, params};
 
 use crate::datatypes::SystemLabelId;
 use proton_sqlite3::Migration;
@@ -32,7 +32,7 @@ pub(crate) fn default_labels() -> [(LabelId, &'static str); 19] {
 pub struct DefaultLabelsMigration;
 
 #[async_trait::async_trait]
-impl Migration for DefaultLabelsMigration {
+impl Migration<UserDb> for DefaultLabelsMigration {
     fn name(&self) -> &str {
         "v001_proton_mail_default_labels"
     }
