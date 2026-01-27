@@ -3,9 +3,14 @@ use std::{collections::BTreeSet, marker::PhantomData};
 use sqlite_watcher::watcher::TableObserver;
 
 use crate::{
+    marker::DatabaseMarker,
     orm::Model,
     stash::{Stash, StashError, WatcherHandle},
 };
+
+pub trait TypedTableObserver: TableObserver {
+    type Database: DatabaseMarker;
+}
 
 /// A watcher for changes to a specific database table associated with a model.
 ///
@@ -40,8 +45,12 @@ impl<M: Model> TableObserver for TableWatcher<M> {
     }
 }
 
+impl<M: Model> TypedTableObserver for TableWatcher<M> {
+    type Database = M::Database;
+}
+
 impl<M: Model> TableWatcher<M> {
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<M::Database>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| {
                 Box::new(Self {

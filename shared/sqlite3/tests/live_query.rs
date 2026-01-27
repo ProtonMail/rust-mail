@@ -34,7 +34,7 @@ impl TableObserver for FooWatcher {
 async fn test_tracker() {
     let dir = tempfile::TempDir::new().expect("failed to create temp dir");
     let db_path = dir.path().join("sqlite.db");
-    let stash = Stash::new(Some(&db_path)).expect("Failed to create Stash");
+    let stash: Stash = Stash::new(Some(&db_path)).expect("Failed to create Stash");
     let conn = stash.connection().await.unwrap();
 
     conn.execute(

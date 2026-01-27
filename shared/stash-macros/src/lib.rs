@@ -203,7 +203,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     value: i32, }
 /// ```
 ///
-#[proc_macro_derive(Model, attributes(DbField, IdField, ModelHooks, TableName))]
+#[proc_macro_derive(Model, attributes(DbField, IdField, ModelHooks, TableName, Database))]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
@@ -212,6 +212,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
     // Extract attributes
     let table_name = extract_table_name(&input);
+    let database_marker = extract_database_marker(&input);
     let fields = extract_fields(&input, "Model");
     let (id_field, id_type, is_optional, is_autoincrement) = extract_id_field(&fields);
     let db_fields = extract_db_fields(&fields, true);
@@ -304,6 +305,7 @@ WHERE {id_field} = ?
         }
 
         impl #impl_generics stash::orm::Model for #name #ty_generics #where_clause {
+            type Database = #database_marker;
             type Id = #id_field_type;
             type IdType = #id_type;
 
@@ -510,6 +512,20 @@ fn extract_table_name(input: &DeriveInput) -> LitStr {
             }
         })
         .expect("TableName attribute is missing")
+}
+
+fn extract_database_marker(input: &DeriveInput) -> TokenStream2 {
+    input
+        .attrs
+        .iter()
+        .find_map(|attr| {
+            if attr.path().is_ident("Database") {
+                attr.parse_args::<Path>().ok().map(|path| quote! { #path })
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| quote! { ::stash::marker::DefaultDb })
 }
 
 /// Extract attributes with a `via` argument from the struct fields.

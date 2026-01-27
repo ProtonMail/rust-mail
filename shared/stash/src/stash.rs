@@ -17,6 +17,7 @@
 use crate::connection_manager::{
     StashConnectionPool, StashConnectionPoolError, StashPooledConnection,
 };
+use crate::marker::DatabaseMarker;
 use crate::orm::{ConversionError, DbRecord};
 use anyhow::{Context, anyhow};
 use core::fmt;
@@ -41,6 +42,7 @@ use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
 use std::any::Any;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::{self};
@@ -456,7 +458,7 @@ impl<'a> From<Option<&'a PathBuf>> for StashConfiguration<'a> {
 /// This is stash's database pool. Its main use is to create [`Tether`]s.
 // Internally this spawns a task that handles all of the operations (See [`StashOperation`]).
 #[derive(Clone)]
-pub struct Stash {
+pub struct Stash<Db: DatabaseMarker = crate::marker::DefaultDb> {
     /// The [`Watcher`] instance for the [`Stash`], which is used to monitor the
     /// database for changes and notify subscribers. This is used to provide
     /// real-time updates to any subscribers that have registered interest in
@@ -467,9 +469,11 @@ pub struct Stash {
     pool: Arc<StashConnectionPool>,
 
     tx_lock: Arc<Mutex<()>>,
+
+    _marker: PhantomData<Db>,
 }
 
-impl Debug for Stash {
+impl<Db: DatabaseMarker> Debug for Stash<Db> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut r = f.debug_struct("Stash");
 
@@ -477,7 +481,7 @@ impl Debug for Stash {
     }
 }
 
-impl Stash {
+impl<Db: DatabaseMarker> Stash<Db> {
     /// Creates a new [`Stash`] instance.
     ///
     /// This function creates a new [`Stash`] instance with an associated
@@ -496,6 +500,7 @@ impl Stash {
             pool,
             watcher,
             tx_lock: Default::default(),
+            _marker: PhantomData,
         })
     }
 
@@ -573,7 +578,7 @@ impl Stash {
     /// * [`Stash::transaction()`]
     /// * [`Tether::transaction()`]
     ///
-    pub async fn connection(&self) -> Result<Tether, StashError> {
+    pub async fn connection(&self) -> Result<Tether<Db>, StashError> {
         Tether::new(self).await
     }
 
@@ -657,13 +662,14 @@ impl WatcherHandle {
 /// inherited limitation of the [`rusqlite`] crate.
 /// `stash` works around it by using the actor pattern and wrapping each connection in a
 /// thread, using message passing for executing the queries and waiting for the result.
-pub struct Tether {
+pub struct Tether<Db: DatabaseMarker = crate::marker::DefaultDb> {
     connection: StashPooledConnection,
     watcher: Arc<Watcher>,
     tx_lock: Arc<Mutex<()>>,
+    _marker: PhantomData<Db>,
 }
 
-impl Tether {
+impl<Db: DatabaseMarker> Tether<Db> {
     /// Subscribes to notifications of changes to a specific table.
     pub fn subscribe_to<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
     where
@@ -855,7 +861,7 @@ impl Tether {
     ///
     /// # See also
     ///
-    /// * [`Interface::query`]
+    /// * [`Tether::query`]
     ///
     pub async fn query_values<Q, T>(
         &self,
@@ -921,7 +927,7 @@ impl Tether {
     ///
     pub async fn tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, E>,
         E: From<StashError>,
     {
         self.tx_impl(TransactionTrackingPolicy::Tracking, closure)
@@ -934,7 +940,7 @@ impl Tether {
     /// It is needed for internal implementation of the watch mechanism and scrollers.
     pub async fn quiet_tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, E>,
         E: From<StashError>,
     {
         self.tx_impl(TransactionTrackingPolicy::Quiet, closure)
@@ -947,7 +953,7 @@ impl Tether {
         closure: F,
     ) -> Result<T, E>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, E>,
         E: From<StashError>,
     {
         // We acquire a lock rather than relying on the SQLite internal lock as it allows us to:
@@ -984,7 +990,7 @@ impl Tether {
     async fn transaction_impl(
         &mut self,
         policy: TransactionTrackingPolicy,
-    ) -> Result<Bond<'_>, StashError> {
+    ) -> Result<Bond<'_, Db>, StashError> {
         let (sender, receiver) = oneshot::channel();
         let operation = Operation::Transaction(OperationTransaction::Start(policy, sender));
 
@@ -1009,7 +1015,7 @@ impl Tether {
     /// they are received, and return the results via oneshot channels. In this
     /// way, it is very similar to the main worker, but is connection-specific.
     ///
-    async fn new(stash: &Stash) -> Result<Self, StashError> {
+    async fn new(stash: &Stash<Db>) -> Result<Self, StashError> {
         let span = Span::current();
         let pool = stash.pool.clone();
 
@@ -1029,6 +1035,7 @@ impl Tether {
             connection,
             watcher: stash.watcher.clone(),
             tx_lock: Arc::clone(&stash.tx_lock),
+            _marker: PhantomData,
         })
     }
 
@@ -1110,13 +1117,13 @@ impl Tether {
     }
 }
 
-impl Debug for Tether {
+impl<Db: DatabaseMarker> Debug for Tether<Db> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tether").finish_non_exhaustive()
     }
 }
 
-impl Drop for Tether {
+impl<Db: DatabaseMarker> Drop for Tether<Db> {
     fn drop(&mut self) {
         let _ = self.connection.send(Operation::ReturnToPool.into());
     }
@@ -1224,15 +1231,15 @@ struct BridgeClosure {
 /// there is only one transaction per tether.
 ///
 #[derive(Debug)]
-pub struct Bond<'tether> {
+pub struct Bond<'tether, Db: DatabaseMarker = crate::marker::DefaultDb> {
     /// The associated [`Tether`] instance.
-    tether: &'tether mut Tether,
+    tether: &'tether mut Tether<Db>,
 }
 
-impl<'tether> Bond<'tether> {
+impl<'tether, Db: DatabaseMarker> Bond<'tether, Db> {
     /// Create new instance of the Bond.
     ///
-    fn new(tether: &'tether mut Tether) -> Self {
+    fn new(tether: &'tether mut Tether<Db>) -> Self {
         Self { tether }
     }
 
@@ -1317,15 +1324,15 @@ impl<'tether> Bond<'tether> {
     }
 }
 
-impl Deref for Bond<'_> {
-    type Target = Tether;
+impl<Db: DatabaseMarker> Deref for Bond<'_, Db> {
+    type Target = Tether<Db>;
 
     fn deref(&self) -> &Self::Target {
         self.tether
     }
 }
 
-impl Drop for Bond<'_> {
+impl<Db: DatabaseMarker> Drop for Bond<'_, Db> {
     fn drop(&mut self) {
         _ = self
             .connection
@@ -1333,15 +1340,15 @@ impl Drop for Bond<'_> {
     }
 }
 
-impl RunTransaction for Tether {
-    fn tether(&self) -> &Tether {
+impl<Db: DatabaseMarker> RunTransaction<Db> for Tether<Db> {
+    fn tether(&self) -> &Tether<Db> {
         self
     }
 
     #[allow(clippy::manual_async_fn)]
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>,
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, anyhow::Error>,
     {
         async move {
             self.tx(closure)
@@ -1364,14 +1371,14 @@ impl RunTransaction for Tether {
 /// This trait should only be used in functions that have to create and commit several
 /// transactions.
 /// It exists so that you can pass either a `&mut Tether` or a `&mut WriterGuard`.
-pub trait RunTransaction {
+pub trait RunTransaction<Db: DatabaseMarker = crate::marker::DefaultDb>: Sized {
     /// Get the tether instance that powers the transaction for read only queries.
-    fn tether(&self) -> &Tether;
+    fn tether(&self) -> &Tether<Db>;
 
     /// Creates a transaction and run the given `closure`.
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>;
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, anyhow::Error>;
 
     fn run_tx_sync<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>> + Send
     where
@@ -1379,15 +1386,15 @@ pub trait RunTransaction {
         T: Send + 'static;
 }
 
-impl<RT: RunTransaction> RunTransaction for &mut RT {
-    fn tether(&self) -> &Tether {
+impl<Db: DatabaseMarker, RT: RunTransaction<Db>> RunTransaction<Db> for &mut RT {
+    fn tether(&self) -> &Tether<Db> {
         RT::tether(self)
     }
 
     #[allow(clippy::manual_async_fn)]
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where
-        F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>,
+        F: AsyncFnOnce(&Bond<'_, Db>) -> Result<T, anyhow::Error>,
     {
         RT::run_tx(self, closure)
     }

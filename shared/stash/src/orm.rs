@@ -12,6 +12,7 @@
 //! with types that are saved to the database.
 //!
 
+use crate::marker::DatabaseMarker;
 use crate::params;
 use crate::stash::{Bond, StashError, StashResult, Tether};
 use crate::utils::ConnectionExt;
@@ -190,6 +191,8 @@ where
     Self: 'static,
     <Self as Model>::Id: Send + Sync + 'static,
 {
+    type Database: DatabaseMarker;
+
     /// The ID type for the record. This is the type as stored in the struct,
     /// i.e. the field type. For an optional ID, this includes the [`Option`].
     type Id: Clone + Debug + FromSql + PartialEq + ToSql;
@@ -292,7 +295,7 @@ where
     fn find(
         query_logic: impl AsRef<str>,
         params: Vec<Box<dyn ToSql + Send>>,
-        tether: &Tether,
+        tether: &Tether<Self::Database>,
     ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send {
         let query = format!(
             "SELECT * FROM {table} {query_logic}",
@@ -330,7 +333,7 @@ where
     fn find_first(
         query_logic: impl AsRef<str>,
         params: Vec<Box<dyn ToSql + Send>>,
-        tether: &Tether,
+        tether: &Tether<Self::Database>,
     ) -> impl Future<Output = Result<Option<Self>, StashError>> + Send {
         let query = format!("{query_logic} LIMIT 1", query_logic = query_logic.as_ref());
 
@@ -338,7 +341,7 @@ where
     }
 
     async fn find_local_id_by(
-        tether: &Tether,
+        tether: &Tether<Self::Database>,
         query_logic: impl AsRef<str>,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<Vec<Self::IdType>, StashError> {
@@ -367,7 +370,10 @@ where
     fn id_field_name() -> &'static str;
 
     #[must_use]
-    async fn load(id: Self::IdType, tether: &Tether) -> Result<Option<Self>, StashError> {
+    async fn load(
+        id: Self::IdType,
+        tether: &Tether<Self::Database>,
+    ) -> Result<Option<Self>, StashError> {
         let query = formatdoc! {"
             SELECT * FROM {table}
             WHERE {id} = ?
@@ -389,7 +395,7 @@ where
     fn load_inner(
         query: impl Into<String>,
         params: Vec<Box<dyn ToSql + Send>>,
-        tether: &Tether,
+        tether: &Tether<Self::Database>,
     ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send {
         let query = query.into();
         tether.sync_query(move |tx| Self::load_sync(query, params_from_iter(params), tx))
@@ -463,7 +469,7 @@ where
         Ok(())
     }
 
-    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    async fn save(&mut self, bond: &Bond<'_, Self::Database>) -> Result<(), StashError> {
         let mut this = self.clone();
         *self = bond
             .sync_bridge(move |tx| {
@@ -474,7 +480,7 @@ where
         Ok(())
     }
 
-    async fn update(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    async fn update(&mut self, bond: &Bond<'_, Self::Database>) -> Result<(), StashError> {
         let mut this = self.clone();
         *self = bond
             .sync_bridge(move |tx| {
@@ -486,7 +492,7 @@ where
     }
 
     /// Forcefully insert, even if it has the ID set.
-    async fn insert(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    async fn insert(&mut self, bond: &Bond<'_, Self::Database>) -> Result<(), StashError> {
         let mut this = self.clone();
         *self = bond
             .sync_bridge(move |tx| {
@@ -527,7 +533,9 @@ where
     /// Gets the name of the table for the record type.
     fn table_name() -> &'static str;
 
-    fn all_count(tether: &Tether) -> impl Future<Output = Result<u64, StashError>> + Send {
+    fn all_count(
+        tether: &Tether<Self::Database>,
+    ) -> impl Future<Output = Result<u64, StashError>> + Send {
         async move { Self::count("", vec![], tether).await }
     }
 
@@ -535,7 +543,7 @@ where
     fn count<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
-        tether: &Tether,
+        tether: &Tether<Self::Database>,
     ) -> impl Future<Output = Result<u64, StashError>> + Send
     where
         Q: Into<String>,
@@ -559,7 +567,9 @@ where
 
     /// Gets the next id for the record type for manual id management.
     ///
-    fn next_id(tether: &Tether) -> impl Future<Output = Result<Self::IdType, StashError>> + Send {
+    fn next_id(
+        tether: &Tether<Self::Database>,
+    ) -> impl Future<Output = Result<Self::IdType, StashError>> + Send {
         async move {
             let query = formatdoc! {"
                 SELECT COALESCE(MAX({id}), 0) + 1
