@@ -61,3 +61,15 @@ fn count_remote_urls_without_mutation_hide_embedded_only() {
     assert!(html.contains("https://foo.bar.com/img.png"));
     assert!(!html.contains("cid:1234"));
 }
+
+#[test]
+fn block_remote_url_in_css_image_set() {
+    let input = r#"
+        <div style="background: image-set('https://tracking.com/image.png');">Hello proton user!</div>
+    "#;
+    let mut transformer = Transformer::new(input);
+    let disabled = transformer.disable_content(true, true);
+    insta::assert_snapshot!(transformer.to_string());
+    assert_eq!(disabled.remote_urls.len(), 1);
+    assert_eq!(disabled.embedded_urls.len(), 0);
+}
