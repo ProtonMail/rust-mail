@@ -24,6 +24,6 @@ NEXT="$(semver bump "$1" "$CURR")"
 toml set package.version "$NEXT" --toml-path ./mail/mail-uniffi/Cargo.toml
 
 echo "Releasing..."
-rustup run 1.88.0 cargo clippy
+cargo check
 sh ./mail/mail-uniffi/scripts/gen_changelog.sh --name "mail-uniffi-v$NEXT"
 git commit -a -m "chore: mail-uniffi v$NEXT"
