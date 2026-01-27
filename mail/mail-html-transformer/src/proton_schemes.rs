@@ -320,7 +320,7 @@ impl<'i> Visitor<'i> for ProtonSchemeVisitor {
     type Error = Infallible;
 
     fn visit_types(&self) -> VisitTypes {
-        VisitTypes::URLS
+        VisitTypes::all()
     }
 
     fn visit_url(&mut self, url: &mut Url<'i>) -> Result<(), Self::Error> {

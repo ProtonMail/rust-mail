@@ -235,7 +235,7 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
     type Error = Infallible;
 
     fn visit_types(&self) -> VisitTypes {
-        VisitTypes::URLS | VisitTypes::FUNCTIONS | VisitTypes::IMAGES
+        VisitTypes::all()
     }
 
     fn visit_url(&mut self, url: &mut Url<'i>) -> Result<(), Self::Error> {
