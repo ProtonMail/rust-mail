@@ -255,6 +255,12 @@ pub struct Session {
     network_status_observer: NetworkStatusObserver,
 }
 
+#[derive(Clone)]
+pub struct Fork {
+    pub selector: String,
+    pub id: String,
+}
+
 impl Sender<ProtonRequest, ProtonResponse> for Session {
     fn send(&self, req: ProtonRequest) -> BoxFut<'_, MuonResult<ProtonResponse>> {
         self.send_impl(req).boxed()
@@ -289,21 +295,23 @@ impl Session {
     }
 
     /// Fork the current session for a child with the given platform and product.
-    /// If successful, returns a selector by which the child can acquire the new
-    /// session. The child must present an app version that matches the platform
-    /// and product.
+    /// If successful, returns a Fork struct containing the selector and session ID.
+    /// The child must present an app version that matches the platform and product.
     ///
     pub async fn fork(
         &self,
         platform: impl AsRef<str>,
         product: impl AsRef<str>,
-    ) -> ApiServiceResult<String> {
+    ) -> ApiServiceResult<Fork> {
         let platform = platform.as_ref();
         let product = product.as_ref();
         let version = format!("{platform}-{product}");
 
         match self.client.clone().fork(version).send().await {
-            ForkFlowResult::Success(_, selector) => Ok(selector),
+            ForkFlowResult::Success(_, selector, session_id) => Ok(Fork {
+                selector,
+                id: session_id.unwrap_or_default(),
+            }),
             ForkFlowResult::Failure { reason, .. } => Err(muon::Error::from(reason))?,
         }
     }
@@ -321,13 +329,13 @@ impl Session {
         let platform = platform.as_ref();
         let product = product.as_ref();
         tracing::info!(%platform, %product, "Downgrading session to fork");
-        let selector = self.fork(platform, product).await?;
+        let fork = self.fork(platform, product).await?;
         let flow = self
             .client
             .clone()
             .auth()
             .from_fork()
-            .with_selector(selector)
+            .with_selector(fork.selector)
             .await;
 
         match flow {

@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
     };
 
     // Fork the session to a windows-vpn client.
-    let ForkFlowResult::Success(_, selector) = client
+    let ForkFlowResult::Success(_, selector, _session_id) = client
         .fork("windows-vpn")
         .payload(b"hello world")
         .send()
