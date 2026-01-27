@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+<<<<<<< HEAD
 ## [mail-uniffi-v0.162.0] - 2026-01-26
 
 ### Changed
@@ -26,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-5697] Add invalidation of user session within `on_session_deleted`
 - [ET-5697] Add logout_and_clear within core context's `on_session_delete` handle
 - Remove delinquent check
+||||||| 449dfd6b1
+=======
+## [mail-uniffi-v0.161.18] - 2026-01-27
+
+### Fixes
+
+- [ET-5715] When the sender is BYOE do not display privacy locks
+- Sanitize image-set correctly even when its malformed
+>>>>>>> origin/releases/mail-uniffi/0.161
 
 
 ## [mail-uniffi-v0.161.17] - 2026-01-22

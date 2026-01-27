@@ -533,19 +533,14 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
     type Error = Infallible;
 
     fn visit_types(&self) -> VisitTypes {
-        VisitTypes::URLS
-            | VisitTypes::IMAGES
-            | VisitTypes::FUNCTIONS
-            | VisitTypes::VARIABLES
-            | VisitTypes::PROPERTIES
-            | VisitTypes::TOKENS
+        VisitTypes::all()
     }
 
     fn visit_url(&mut self, url: &mut Url<'i>) -> Result<(), Self::Error> {
         if !is_valid_url(&url.url) {
             url.url = String::new().into();
         }
-        Ok(())
+        url.visit_children(self)
     }
 
     fn visit_image(&mut self, image: &mut Image<'i>) -> Result<(), Self::Error> {
@@ -570,10 +565,10 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
 
     fn visit_function(&mut self, function: &mut Function<'i>) -> Result<(), Self::Error> {
         if function.name.to_lowercase() == "image-set" {
-            self.visit_token_list(&mut function.arguments)?;
+            self.visit_token_list(&mut function.arguments)
+        } else {
+            function.visit_children(self)
         }
-
-        Ok(())
     }
 
     fn visit_token(&mut self, token: &mut TokenOrValue<'i>) -> Result<(), Self::Error> {
